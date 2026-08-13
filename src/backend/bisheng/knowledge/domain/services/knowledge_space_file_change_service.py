@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
@@ -7,13 +9,12 @@ from typing import Any, Protocol
 
 from loguru import logger
 
-from bisheng.approval.domain.models.approval_instance import ApprovalInstanceStatus
-from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
-from bisheng.approval.domain.services.approval_registry import (
-    SYSTEM_FILE_CHANGE_SCENARIO_CODE,
-    ensure_system_file_change_scenario,
+from bisheng.approval.domain.ports.scenario_policy import (
+    ApprovalApplicant,
+    ApprovalPostCommitCallback,
+    ApprovalSubmissionCommand,
+    ApprovalSubmissionPort,
 )
-from bisheng.approval.domain.services.approval_uow import build_post_commit_effect
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileChangeConflictError,
@@ -23,6 +24,8 @@ from bisheng.common.errcode.knowledge_space import (
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+    KNOWLEDGE_SPACE_FILE_CHANGE_REQUEST_TYPE,
+    KNOWLEDGE_SPACE_FILE_CHANGE_SCENARIO_CODE,
     KnowledgeSpaceFileChangeAction,
     KnowledgeSpaceFileChangeRequest,
     KnowledgeSpaceFileChangeResourceType,
@@ -42,6 +45,7 @@ from bisheng.knowledge.domain.services.knowledge_space_file_change_uow import (
     FileChangeRequestUnitOfWork,
     FileChangeRequestUowContext,
     SessionFactory,
+    build_file_change_post_commit_effect,
 )
 
 
@@ -87,9 +91,8 @@ class FootprintResolver(Protocol):
 MutationAuthorizer = Callable[[FileChangeRequestCommand], Awaitable[None]]
 OwnerManagerChecker = Callable[[FileChangeRequestCommand], Awaitable[bool]]
 DirectMutationExecutor = Callable[[FileChangeRequestCommand], Awaitable[Any]]
-PendingTaskNotifier = Callable[[Any], Awaitable[None]]
 StageRetainer = Callable[[str], Awaitable[Any]]
-ScenarioEnsurer = Callable[..., Awaitable[Any]]
+ApproverResolver = Callable[..., Awaitable[Sequence[int]]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,26 +136,24 @@ class KnowledgeSpaceFileChangeService:
         self,
         *,
         session_factory: SessionFactory,
-        approval_gate: Any,
+        submission_port: ApprovalSubmissionPort,
+        approver_resolver: ApproverResolver | None = None,
         mutation_authorizer: MutationAuthorizer,
         footprint_resolver: FootprintResolver,
         direct_executor: DirectMutationExecutor,
-        pending_task_notifier: PendingTaskNotifier,
         stage_retainer: StageRetainer,
         owner_manager_checker: OwnerManagerChecker | None = None,
         policy_service: KnowledgeSpaceFileChangePolicyService | None = None,
-        ensure_scenario: ScenarioEnsurer = ensure_system_file_change_scenario,
     ) -> None:
         self.session_factory = session_factory
-        self.approval_gate = approval_gate
+        self.submission_port = submission_port
+        self.approver_resolver = approver_resolver or KnowledgeSpaceFileChangeApproverResolver.resolve_approver_user_ids
         self.mutation_authorizer = mutation_authorizer
         self.owner_manager_checker = owner_manager_checker or self._is_current_owner_or_manager
         self.footprint_resolver = footprint_resolver
         self.direct_executor = direct_executor
-        self.pending_task_notifier = pending_task_notifier
         self.stage_retainer = stage_retainer
         self.policy_service = policy_service or KnowledgeSpaceFileChangePolicyService(session_factory=session_factory)
-        self.ensure_scenario = ensure_scenario
         self.uow = FileChangeRequestUnitOfWork(session_factory=session_factory)
 
     @staticmethod
@@ -259,7 +260,7 @@ class KnowledgeSpaceFileChangeService:
         self,
         *,
         context: FileChangeRequestUowContext,
-        effects: list,
+        effects: list[ApprovalPostCommitCallback],
         tenant_id: int,
         command: FileChangeRequestCommand,
     ) -> _PendingBundle:
@@ -291,23 +292,9 @@ class KnowledgeSpaceFileChangeService:
             if existing is not None:
                 if existing.approval_instance_id is None:
                     raise RuntimeError("attached upload request has no approval instance")
-                instance_status = await context.requests.get_approval_instance_status(
-                    tenant_id=tenant_id,
-                    approval_instance_id=int(existing.approval_instance_id),
-                    for_update=True,
-                )
-                if instance_status not in {
-                    ApprovalInstanceStatus.PENDING,
-                    ApprovalInstanceStatus.EXCEPTION,
-                    ApprovalInstanceStatus.APPROVED,
-                    ApprovalInstanceStatus.EXECUTING,
-                    ApprovalInstanceStatus.EXECUTE_FAILED,
-                }:
-                    raise SpaceFileChangeInvalidStateError()
                 if stage.state == KnowledgeSpaceUploadStageState.ATTACHING:
                     effects.append(
-                        build_post_commit_effect(
-                            "retain_bound_upload_stage",
+                        build_file_change_post_commit_effect(
                             self.stage_retainer,
                             str(stage.upload_id),
                         )
@@ -315,7 +302,7 @@ class KnowledgeSpaceFileChangeService:
                 return _PendingBundle(
                     request_id=int(existing.id),
                     instance_id=int(existing.approval_instance_id),
-                    approval_status=str(instance_status),
+                    approval_status="pending",
                     duplicate=True,
                 )
             if stage.state != KnowledgeSpaceUploadStageState.UPLOADED:
@@ -336,9 +323,21 @@ class KnowledgeSpaceFileChangeService:
         if blocking:
             raise SpaceFileChangeConflictError()
 
-        # Existing tenants may predate the bootstrap. Ensure the immutable F046
-        # bundle before Gate reads it, while remaining inside this transaction.
-        await self.ensure_scenario(tenant_id=tenant_id, session=context.session)
+        business_key = self._business_key(tenant_id=tenant_id, command=command)
+        action_snapshot = self._canonical_snapshot(
+            {
+                **command.action_snapshot,
+                "resource_name": command.resource_name,
+                "applicant_user_name": command.applicant_user_name,
+            }
+        )
+        request_fingerprint = self._request_fingerprint(
+            tenant_id=tenant_id,
+            business_key=business_key,
+            command=command,
+            action_snapshot=action_snapshot,
+            stage=stage,
+        )
 
         request = KnowledgeSpaceFileChangeRequest(
             tenant_id=tenant_id,
@@ -347,6 +346,8 @@ class KnowledgeSpaceFileChangeService:
             resource_type=command.resource_type,
             resource_id=command.resource_id,
             applicant_user_id=int(command.applicant_user_id),
+            business_key=business_key,
+            request_fingerprint=request_fingerprint,
             upload_stage_id=int(stage.id) if stage is not None else None,
             file_name=stage.file_name if stage is not None else command.resource_name,
             file_size=int(stage.file_size) if stage is not None else None,
@@ -354,7 +355,7 @@ class KnowledgeSpaceFileChangeService:
             source_parent_id=command.source_parent_id,
             target_space_id=command.target_space_id,
             target_parent_id=command.target_parent_id,
-            action_snapshot=dict(command.action_snapshot),
+            action_snapshot=action_snapshot,
         )
         await context.requests.add(tenant_id=tenant_id, request=request)
         await context.footprints.add_many(
@@ -366,37 +367,38 @@ class KnowledgeSpaceFileChangeService:
             stage.state = KnowledgeSpaceUploadStageState.ATTACHING
             await context.upload_stages.save(stage)
             effects.append(
-                build_post_commit_effect(
-                    "retain_bound_upload_stage",
+                build_file_change_post_commit_effect(
                     self.stage_retainer,
                     str(stage.upload_id),
                 )
             )
 
-        gate_uow_result = await self.approval_gate.request_or_pass_in_uow(
-            self._build_gate_request(tenant_id=tenant_id, request=request, command=command),
-            session=context.session,
+        initial_approvers = self._normalize_approvers(
+            await self.approver_resolver(
+                tenant_id=tenant_id,
+                space_id=int(command.space_id),
+                applicant_user_id=int(command.applicant_user_id),
+            )
         )
-        if gate_uow_result.result.decision == ApprovalGateDecision.PASS:
-            raise RuntimeError("fixed file-change approval scenario cannot use a PASS route")
+        submission_result = await self.submission_port.submit_in_uow(
+            session=context.session,
+            command=self._build_submission_command(
+                tenant_id=tenant_id,
+                request=request,
+                command=command,
+                initial_approver_user_ids=initial_approvers,
+            ),
+        )
         await context.requests.attach_approval_instance(
             tenant_id=tenant_id,
             request_id=int(request.id),
-            approval_instance_id=int(gate_uow_result.result.instance_id),
+            approval_instance_id=int(submission_result.instance_id),
         )
-        effects.extend(gate_uow_result.post_commit_effects)
-        if gate_uow_result.result.task_ids:
-            effects.append(
-                build_post_commit_effect(
-                    "notify_file_change_pending_tasks",
-                    self.pending_task_notifier,
-                    gate_uow_result.result,
-                )
-            )
+        effects.extend(submission_result.post_commit_effects)
         return _PendingBundle(
             request_id=int(request.id),
-            instance_id=int(gate_uow_result.result.instance_id),
-            approval_status=str(gate_uow_result.result.decision.value),
+            instance_id=int(submission_result.instance_id),
+            approval_status=("pending" if submission_result.task_ids else "exception"),
         )
 
     async def _lock_valid_upload_stage(
@@ -487,37 +489,122 @@ class KnowledgeSpaceFileChangeService:
             return any(cls._contains_forbidden_snapshot_key(item) for item in value)
         return False
 
-    @staticmethod
-    def _build_gate_request(
+    @classmethod
+    def _build_submission_command(
+        cls,
         *,
         tenant_id: int,
         request: KnowledgeSpaceFileChangeRequest,
         command: FileChangeRequestCommand,
-    ) -> ApprovalGateRequest:
-        payload = {
-            "change_request_id": int(request.id),
-            "space_id": int(command.space_id),
-            "action": command.action,
-            "resource_type": command.resource_type,
-            "resource_id": command.resource_id,
-            # This is the public opaque stage handle, never a MinIO object key.
-            "upload_id": command.upload_id,
-            "source_parent_id": command.source_parent_id,
-            "target_space_id": command.target_space_id,
-            "target_parent_id": command.target_parent_id,
-        }
-        return ApprovalGateRequest(
-            tenant_id=tenant_id,
-            scenario_code=SYSTEM_FILE_CHANGE_SCENARIO_CODE,
-            business_key=f"knowledge-space-change:{request.id}",
-            business_resource_type="knowledge_space_file_change",
-            business_resource_id=str(request.id),
-            business_name=command.resource_name,
-            applicant_user_id=int(command.applicant_user_id),
-            applicant_user_name=command.applicant_user_name,
-            applicant_department_id=command.applicant_department_id,
-            reason=command.reason,
-            payload_snapshot=payload,
-            detail_snapshot=dict(command.action_snapshot),
-            ip_address=command.ip_address,
+        initial_approver_user_ids: tuple[int, ...],
+    ) -> ApprovalSubmissionCommand:
+        if request.id is None:
+            raise RuntimeError("file change request id was not assigned")
+        detail = dict(request.action_snapshot or {})
+        detail.update(
+            {
+                "action": command.action,
+                "resource_type": command.resource_type,
+                "resource_id": command.resource_id,
+                "resource_name": command.resource_name,
+                "source_parent_id": command.source_parent_id,
+                "target_space_id": command.target_space_id,
+                "target_parent_id": command.target_parent_id,
+            }
         )
+        return ApprovalSubmissionCommand(
+            tenant_id=tenant_id,
+            scenario_code=KNOWLEDGE_SPACE_FILE_CHANGE_SCENARIO_CODE,
+            business_request_type=KNOWLEDGE_SPACE_FILE_CHANGE_REQUEST_TYPE,
+            business_request_id=str(request.id),
+            business_key=request.business_key,
+            request_fingerprint=request.request_fingerprint,
+            title=f"{command.action} {command.resource_name}",
+            applicant=ApprovalApplicant(
+                user_id=int(command.applicant_user_id),
+                user_name=str(command.applicant_user_name),
+                department_id=command.applicant_department_id,
+            ),
+            initial_approver_user_ids=initial_approver_user_ids,
+            detail_snapshot=detail,
+            link_snapshot={
+                "space_id": int(command.space_id),
+                "change_request_id": int(request.id),
+            },
+        )
+
+    @classmethod
+    def _business_key(cls, *, tenant_id: int, command: FileChangeRequestCommand) -> str:
+        identity = {
+            "action": command.action,
+            "resource_id": command.resource_id,
+            "resource_type": command.resource_type,
+            "space_id": int(command.space_id),
+            "tenant_id": int(tenant_id),
+            "upload_id": command.upload_id,
+        }
+        digest = hashlib.sha256(cls._canonical_json(identity).encode("utf-8")).hexdigest()
+        return f"knowledge-space-change:{digest}"
+
+    @classmethod
+    def _request_fingerprint(
+        cls,
+        *,
+        tenant_id: int,
+        business_key: str,
+        command: FileChangeRequestCommand,
+        action_snapshot: dict[str, Any],
+        stage,
+    ) -> str:
+        payload = {
+            "action": command.action,
+            "action_snapshot": action_snapshot,
+            "applicant_department_id": command.applicant_department_id,
+            "applicant_user_id": int(command.applicant_user_id),
+            "business_key": business_key,
+            "file_name": stage.file_name if stage is not None else command.resource_name,
+            "file_size": int(stage.file_size) if stage is not None else None,
+            "content_hash": stage.content_hash if stage is not None else None,
+            "reason": command.reason,
+            "resource_id": command.resource_id,
+            "resource_name": command.resource_name,
+            "resource_type": command.resource_type,
+            "source_parent_id": command.source_parent_id,
+            "space_id": int(command.space_id),
+            "target_parent_id": command.target_parent_id,
+            "target_space_id": command.target_space_id,
+            "tenant_id": int(tenant_id),
+            "upload_id": command.upload_id,
+        }
+        return hashlib.sha256(cls._canonical_json(payload).encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _canonical_snapshot(cls, snapshot: dict[str, Any]) -> dict[str, Any]:
+        normalized = json.loads(cls._canonical_json(snapshot))
+        if not isinstance(normalized, dict):
+            raise ValueError("file change action_snapshot must be a JSON object")
+        return normalized
+
+    @staticmethod
+    def _canonical_json(value: Any) -> str:
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    @staticmethod
+    def _normalize_approvers(values: Sequence[int]) -> tuple[int, ...]:
+        normalized: set[int] = set()
+        for value in values:
+            if isinstance(value, bool):
+                raise ValueError("file change approver IDs must be positive integers")
+            try:
+                user_id = int(value)
+            except (TypeError, ValueError) as error:
+                raise ValueError("file change approver IDs must be positive integers") from error
+            if user_id <= 0:
+                raise ValueError("file change approver IDs must be positive integers")
+            normalized.add(user_id)
+        return tuple(sorted(normalized))

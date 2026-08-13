@@ -1,19 +1,15 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import StaticPool
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.approval.domain.models.approval_instance import (
-    ApprovalInstance,
-    ApprovalInstanceStatus,
-    ApprovalOutbox,
-    ApprovalOutboxStatus,
-)
 from bisheng.core.context.tenant import current_tenant_id
 from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step import (
     KnowledgeSpaceFileChangeExecutionStep,
@@ -35,8 +31,16 @@ from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_compensation_repository import (
     KnowledgeSpaceFileChangeCompensationRepository,
 )
-from bisheng.knowledge.domain.services.knowledge_space_file_change_scenario_handler import (
-    FILE_CHANGE_SCENARIO_CODE,
+from bisheng.knowledge.domain.services.knowledge_space_file_change_execution_coordinator import (
+    ExecutionIdentity,
+    KnowledgeSpaceFileChangeExecutionCoordinator,
+)
+from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
+    DELETE_PHASE_CHECKPOINT_KEY,
+    DELETE_PHASE_COMPLETED,
+    DELETE_PHASE_PURGE_FAILED,
+    DELETE_PHASE_PURGING,
+    DeleteExecutionStepCode,
 )
 
 
@@ -57,8 +61,6 @@ async def compensation_engine():
         poolclass=StaticPool,
     )
     tables = [
-        ApprovalInstance.__table__,
-        ApprovalOutbox.__table__,
         KnowledgeSpaceUploadStage.__table__,
         KnowledgeSpaceFileChangeRequest.__table__,
         KnowledgeSpaceFileChangeFootprint.__table__,
@@ -70,34 +72,18 @@ async def compensation_engine():
     await engine.dispose()
 
 
-def _instance(*, row_id: int, tenant_id: int, status: str, scenario_code: str = FILE_CHANGE_SCENARIO_CODE):
-    return ApprovalInstance(
-        id=row_id,
-        tenant_id=tenant_id,
-        scenario_code=scenario_code,
-        scenario_name="file change",
-        handler_key=scenario_code,
-        business_key=f"request:{row_id}",
-        business_resource_type="knowledge_space_file_change",
-        business_resource_id=str(row_id),
-        business_name=f"request-{row_id}",
-        applicant_user_id=7,
-        applicant_user_name="applicant",
-        status=status,
-    )
-
-
 def _request(
     *,
     row_id: int,
-    tenant_id: int,
-    instance_id: int,
+    tenant_id: int = 11,
     action: str = KnowledgeSpaceFileChangeAction.RENAME,
     execution_state: str = KnowledgeSpaceFileChangeExecutionState.APPLYING,
-    execution_token: str = "generation-1",
+    execution_token: str | None = "generation-1",
     cleanup_state: str = KnowledgeSpaceFileChangeCleanupState.NONE,
     upload_stage_id: int | None = None,
     execution_checkpoint: dict | None = None,
+    result_snapshot: dict | None = None,
+    update_time: datetime | None = None,
 ):
     return KnowledgeSpaceFileChangeRequest(
         id=row_id,
@@ -111,41 +97,43 @@ def _request(
         ),
         resource_id=None if action == KnowledgeSpaceFileChangeAction.UPLOAD else 500 + row_id,
         applicant_user_id=7,
-        approval_instance_id=instance_id,
+        business_key=f"request:{row_id}",
+        request_fingerprint=f"fingerprint:{row_id}",
         upload_stage_id=upload_stage_id,
         execution_state=execution_state,
         execution_token=execution_token,
         cleanup_state=cleanup_state,
         execution_checkpoint=execution_checkpoint or {},
+        result_snapshot=result_snapshot or {},
+        update_time=update_time,
     )
 
 
-def _outbox(
+def _step(
     *,
     row_id: int,
-    tenant_id: int,
-    instance_id: int,
-    status: str = ApprovalOutboxStatus.DEFERRED,
+    request_id: int,
+    code: str,
+    state: str,
     token: str = "generation-1",
-    deadline: datetime | None = None,
-    heartbeat: datetime | None = None,
+    next_retry_at: datetime | None = None,
 ):
-    return ApprovalOutbox(
+    return KnowledgeSpaceFileChangeExecutionStep(
         id=row_id,
-        tenant_id=tenant_id,
-        instance_id=instance_id,
-        handler_key=FILE_CHANGE_SCENARIO_CODE,
-        status=status,
-        execution_token=token,
-        deferred_deadline=deadline,
-        heartbeat_at=heartbeat,
+        tenant_id=11,
+        request_id=request_id,
+        step_code=code,
+        attempt_token=token,
+        idempotency_key=f"f046:{request_id}:{code}",
+        state=state,
+        next_retry_at=next_retry_at,
     )
 
 
-def _footprint(*, row_id: int, tenant_id: int, request_id: int):
+def _footprint(*, row_id: int, request_id: int):
     return KnowledgeSpaceFileChangeFootprint(
         id=row_id,
-        tenant_id=tenant_id,
+        tenant_id=11,
         request_id=request_id,
         space_id=8,
         resource_type=KnowledgeSpaceFileChangeResourceType.KNOWLEDGE_FILE,
@@ -155,233 +143,164 @@ def _footprint(*, row_id: int, tenant_id: int, request_id: int):
     )
 
 
-async def test_deferred_watchdog_scan_is_tenant_scenario_status_and_deadline_bound(compensation_engine):
+def test_compensation_scan_source_has_no_approval_or_outbox_dependency():
+    repository_path = (
+        Path(__file__).resolve().parents[2]
+        / "bisheng"
+        / "knowledge"
+        / "domain"
+        / "repositories"
+        / "knowledge_space_file_change_compensation_repository.py"
+    )
+    source = repository_path.read_text(encoding="utf-8")
+    forbidden = (
+        "bisheng.approval",
+        "ApprovalInstance",
+        "ApprovalOutbox",
+        "ApprovalOutboxStatus",
+        "scenario_code",
+        "outbox_id",
+        "instance_id",
+    )
+    for fragment in forbidden:
+        assert fragment not in source
+
+
+async def test_watchdog_candidates_come_only_from_stale_current_knowledge_requests(compensation_engine):
     now = datetime.utcnow()
     async with AsyncSession(compensation_engine) as session:
         session.add_all(
             [
-                _instance(row_id=1, tenant_id=11, status=ApprovalInstanceStatus.EXECUTING),
-                _request(row_id=101, tenant_id=11, instance_id=1),
-                _outbox(
-                    row_id=201,
-                    tenant_id=11,
-                    instance_id=1,
-                    deadline=now - timedelta(seconds=1),
-                    heartbeat=now,
+                _request(row_id=101, update_time=now - timedelta(hours=1)),
+                _request(
+                    row_id=102,
+                    execution_state=KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
+                    execution_token="generation-2",
+                    update_time=now - timedelta(hours=1),
                 ),
-                _instance(row_id=2, tenant_id=11, status=ApprovalInstanceStatus.EXECUTING),
-                _request(row_id=102, tenant_id=11, instance_id=2),
-                _outbox(
-                    row_id=202,
-                    tenant_id=11,
-                    instance_id=2,
-                    deadline=now + timedelta(hours=1),
-                    heartbeat=now,
+                _request(row_id=103, update_time=now),
+                _request(
+                    row_id=104,
+                    execution_state=KnowledgeSpaceFileChangeExecutionState.APPLIED,
+                    update_time=now - timedelta(hours=1),
                 ),
-                _instance(row_id=3, tenant_id=12, status=ApprovalInstanceStatus.EXECUTING),
-                _request(row_id=103, tenant_id=12, instance_id=3),
-                _outbox(
-                    row_id=203,
-                    tenant_id=12,
-                    instance_id=3,
-                    deadline=now - timedelta(seconds=1),
-                ),
-                _instance(row_id=4, tenant_id=11, status=ApprovalInstanceStatus.EXECUTED),
-                _request(row_id=104, tenant_id=11, instance_id=4),
-                _outbox(
-                    row_id=204,
-                    tenant_id=11,
-                    instance_id=4,
-                    deadline=now - timedelta(seconds=1),
-                ),
+                _request(row_id=105, tenant_id=12, update_time=now - timedelta(hours=1)),
             ]
         )
         await session.commit()
 
         rows, has_more = await KnowledgeSpaceFileChangeCompensationRepository(
             session
-        ).list_deferred_watchdog_candidates(
+        ).list_watchdog_candidates(
             tenant_id=11,
-            scenario_code=FILE_CHANGE_SCENARIO_CODE,
-            after_outbox_id=0,
-            now=now,
+            after_request_id=0,
             heartbeat_before=now - timedelta(minutes=15),
-            limit=1,
+            limit=10,
         )
 
     assert not has_more
-    assert [(row.outbox_id, row.request_id, row.execution_token) for row in rows] == [(201, 101, "generation-1")]
+    assert [(row.request_id, row.execution_token) for row in rows] == [
+        (101, "generation-1"),
+        (102, "generation-2"),
+    ]
 
 
-async def test_step_scan_honors_due_retry_and_bounded_id_cursor(compensation_engine):
+async def test_step_recovery_scan_uses_current_request_token_and_due_step_cursor(compensation_engine):
     now = datetime.utcnow()
     async with AsyncSession(compensation_engine) as session:
         session.add_all(
             [
-                _instance(row_id=11, tenant_id=11, status=ApprovalInstanceStatus.EXECUTING),
-                _request(row_id=111, tenant_id=11, instance_id=11),
-                _outbox(row_id=211, tenant_id=11, instance_id=11, deadline=now + timedelta(hours=1)),
-                KnowledgeSpaceFileChangeExecutionStep(
-                    id=301,
-                    tenant_id=11,
+                _request(row_id=111),
+                _step(
+                    row_id=301,
                     request_id=111,
-                    step_code="rename.index_shadow",
-                    attempt_token="generation-1",
-                    idempotency_key="f046:111:rename.index_shadow",
+                    code="rename.index_shadow",
                     state=KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED,
                     next_retry_at=now - timedelta(seconds=1),
                 ),
-                KnowledgeSpaceFileChangeExecutionStep(
-                    id=302,
-                    tenant_id=11,
+                _step(
+                    row_id=302,
                     request_id=111,
-                    step_code="rename.db_cutover",
-                    attempt_token="generation-1",
-                    idempotency_key="f046:111:rename.db_cutover",
+                    code="rename.db_cutover",
+                    state=KnowledgeSpaceFileChangeExecutionStepState.FAILED,
+                    token="old-generation",
+                    next_retry_at=now - timedelta(seconds=1),
+                ),
+                _step(
+                    row_id=303,
+                    request_id=111,
+                    code="rename.verify",
                     state=KnowledgeSpaceFileChangeExecutionStepState.FAILED,
                     next_retry_at=now + timedelta(hours=1),
                 ),
             ]
         )
         await session.commit()
-        repository = KnowledgeSpaceFileChangeCompensationRepository(session)
-        first, has_more = await repository.list_step_recovery_candidates(
+        rows, has_more = await KnowledgeSpaceFileChangeCompensationRepository(
+            session
+        ).list_step_recovery_candidates(
             tenant_id=11,
-            scenario_code=FILE_CHANGE_SCENARIO_CODE,
             after_step_id=0,
             now=now,
-            limit=1,
-        )
-        second, second_has_more = await repository.list_step_recovery_candidates(
-            tenant_id=11,
-            scenario_code=FILE_CHANGE_SCENARIO_CODE,
-            after_step_id=301,
-            now=now,
-            limit=1,
+            limit=10,
         )
 
-    assert has_more is False
-    assert [(row.step_id, row.request_id, row.execution_state) for row in first] == [
-        (301, 111, KnowledgeSpaceFileChangeExecutionState.APPLYING)
-    ]
-    assert second == []
-    assert second_has_more is False
+    assert not has_more
+    assert [
+        (row.step_id, row.request_id, row.execution_token, row.execution_state) for row in rows
+    ] == [(301, 111, "generation-1", KnowledgeSpaceFileChangeExecutionState.APPLYING)]
+    assert not hasattr(rows[0], "instance_id")
+    assert not hasattr(rows[0], "outbox_id")
 
 
-async def test_cleanup_scan_only_returns_terminal_upload_and_active_delete_purge(compensation_engine):
+async def test_cleanup_candidates_use_business_state_step_and_footprint_only(compensation_engine):
     now = datetime.utcnow()
     async with AsyncSession(compensation_engine) as session:
         session.add_all(
             [
-                _instance(row_id=21, tenant_id=11, status=ApprovalInstanceStatus.REJECTED),
                 KnowledgeSpaceUploadStage(
                     id=401,
-                    upload_id="opaque-upload",
+                    upload_id="closed-upload",
                     tenant_id=11,
                     space_id=8,
                     uploader_user_id=7,
-                    object_name="internal/object",
-                    file_name="report.pdf",
+                    object_name="internal/closed",
+                    file_name="closed.pdf",
                     file_size=100,
-                    content_hash="hash",
-                    state=KnowledgeSpaceUploadStageState.ATTACHED,
-                    expire_at=now + timedelta(days=1),
-                ),
-                _request(
-                    row_id=121,
-                    tenant_id=11,
-                    instance_id=21,
-                    action=KnowledgeSpaceFileChangeAction.UPLOAD,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
-                    execution_token="",
-                    cleanup_state=KnowledgeSpaceFileChangeCleanupState.PENDING,
-                    upload_stage_id=401,
-                ),
-                _instance(row_id=22, tenant_id=11, status=ApprovalInstanceStatus.EXECUTING),
-                _outbox(
-                    row_id=302,
-                    tenant_id=11,
-                    instance_id=22,
-                    token="delete-generation",
-                ),
-                _request(
-                    row_id=122,
-                    tenant_id=11,
-                    instance_id=22,
-                    action=KnowledgeSpaceFileChangeAction.DELETE,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.APPLYING,
-                    execution_token="delete-generation",
-                ),
-                KnowledgeSpaceFileChangeExecutionStep(
-                    id=402,
-                    tenant_id=11,
-                    request_id=122,
-                    step_code="delete.minio_purge",
-                    attempt_token="delete-generation",
-                    idempotency_key="f046:122:delete.minio_purge",
-                    state=KnowledgeSpaceFileChangeExecutionStepState.FAILED,
-                    next_retry_at=now - timedelta(seconds=1),
-                ),
-                _instance(row_id=23, tenant_id=11, status=ApprovalInstanceStatus.EXECUTE_FAILED),
-                KnowledgeSpaceUploadStage(
-                    id=403,
-                    upload_id="failed-upload",
-                    tenant_id=11,
-                    space_id=8,
-                    uploader_user_id=7,
-                    object_name="internal/failed-object",
-                    file_name="failed.pdf",
-                    file_size=100,
-                    content_hash="failed-hash",
+                    content_hash="closed-hash",
                     state=KnowledgeSpaceUploadStageState.CLEANUP_PENDING,
                     expire_at=now + timedelta(days=1),
                 ),
                 _request(
-                    row_id=123,
-                    tenant_id=11,
-                    instance_id=23,
+                    row_id=121,
                     action=KnowledgeSpaceFileChangeAction.UPLOAD,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.FAILED,
+                    execution_state=KnowledgeSpaceFileChangeExecutionState.CLOSED,
+                    execution_token=None,
                     cleanup_state=KnowledgeSpaceFileChangeCleanupState.PENDING,
-                    upload_stage_id=403,
-                ),
-                _instance(row_id=24, tenant_id=11, status=ApprovalInstanceStatus.EXECUTE_FAILED),
-                KnowledgeSpaceUploadStage(
-                    id=404,
-                    upload_id="failed-not-requested-cleanup",
-                    tenant_id=11,
-                    space_id=8,
-                    uploader_user_id=7,
-                    object_name="internal/retained-object",
-                    file_name="retained.pdf",
-                    file_size=100,
-                    content_hash="retained-hash",
-                    state=KnowledgeSpaceUploadStageState.ATTACHED,
-                    expire_at=now + timedelta(days=1),
+                    upload_stage_id=401,
+                    result_snapshot={"decision_action": "rejected"},
                 ),
                 _request(
-                    row_id=124,
-                    tenant_id=11,
-                    instance_id=24,
-                    action=KnowledgeSpaceFileChangeAction.UPLOAD,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.FAILED,
-                    cleanup_state=KnowledgeSpaceFileChangeCleanupState.NONE,
-                    upload_stage_id=404,
-                ),
-                _instance(row_id=25, tenant_id=11, status=ApprovalInstanceStatus.EXECUTED),
-                _request(
-                    row_id=125,
-                    tenant_id=11,
-                    instance_id=25,
-                    action=KnowledgeSpaceFileChangeAction.RENAME,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.APPLIED,
-                    execution_token="rename-generation",
+                    row_id=122,
+                    action=KnowledgeSpaceFileChangeAction.DELETE,
                     execution_checkpoint={
-                        "mutation_transition_active": True,
-                        "mutation_transition_phase": "new_view",
+                        DELETE_PHASE_CHECKPOINT_KEY: DELETE_PHASE_PURGING,
+                        "deletion_cutover_active": True,
                     },
                 ),
-                _footprint(row_id=601, tenant_id=11, request_id=125),
+                _step(
+                    row_id=402,
+                    request_id=122,
+                    code=DeleteExecutionStepCode.MINIO,
+                    state=KnowledgeSpaceFileChangeExecutionStepState.FAILED,
+                    next_retry_at=now - timedelta(seconds=1),
+                ),
+                _request(
+                    row_id=123,
+                    execution_state=KnowledgeSpaceFileChangeExecutionState.APPLIED,
+                    execution_checkpoint={"mutation_transition_active": True},
+                ),
+                _footprint(row_id=601, request_id=123),
             ]
         )
         await session.commit()
@@ -390,121 +309,23 @@ async def test_cleanup_scan_only_returns_terminal_upload_and_active_delete_purge
             session
         ).list_cleanup_candidates(
             tenant_id=11,
-            scenario_code=FILE_CHANGE_SCENARIO_CODE,
             after_request_id=0,
             now=now,
             limit=10,
         )
 
     assert not has_more
-    assert next_after_id == 125
+    assert next_after_id == 123
     assert [(row.request_id, row.kind) for row in rows] == [
         (121, "stage"),
         (122, "delete_purge"),
-        (123, "stage"),
-        (125, "mutation_cleanup"),
+        (123, "mutation_cleanup"),
     ]
-    assert rows[0].upload_id == "opaque-upload"
-    assert rows[0].terminal_action == ApprovalInstanceStatus.REJECTED
-    assert rows[1].execution_token == "delete-generation"
-    assert rows[2].upload_id == "failed-upload"
-    assert rows[2].terminal_action == ApprovalInstanceStatus.EXECUTE_FAILED
-    assert rows[3].execution_token == "rename-generation"
+    assert rows[0].terminal_action == "rejected"
+    assert rows[1].execution_token == "generation-1"
 
 
-async def test_cleanup_scan_inactive_history_does_not_hide_active_projection(compensation_engine):
-    now = datetime.utcnow()
-    async with AsyncSession(compensation_engine) as session:
-        session.add_all(
-            [
-                _instance(row_id=31, tenant_id=11, status=ApprovalInstanceStatus.EXECUTED),
-                _request(
-                    row_id=130,
-                    tenant_id=11,
-                    instance_id=31,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.APPLIED,
-                    execution_checkpoint={"mutation_transition_active": False},
-                ),
-                _instance(row_id=32, tenant_id=11, status=ApprovalInstanceStatus.EXECUTED),
-                _request(
-                    row_id=131,
-                    tenant_id=11,
-                    instance_id=32,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.APPLIED,
-                    execution_checkpoint={"mutation_transition_active": True},
-                ),
-                _footprint(row_id=602, tenant_id=11, request_id=131),
-            ]
-        )
-        await session.commit()
-
-        rows, has_more, next_after_id = await KnowledgeSpaceFileChangeCompensationRepository(
-            session
-        ).list_cleanup_candidates(
-            tenant_id=11,
-            scenario_code=FILE_CHANGE_SCENARIO_CODE,
-            after_request_id=0,
-            now=now,
-            limit=1,
-        )
-
-    assert [(row.request_id, row.kind) for row in rows] == [(131, "mutation_cleanup")]
-    assert has_more is False
-    assert next_after_id == 131
-
-
-async def test_cleanup_scan_empty_filtered_page_advances_raw_cursor(compensation_engine):
-    now = datetime.utcnow()
-    async with AsyncSession(compensation_engine) as session:
-        session.add_all(
-            [
-                _instance(row_id=33, tenant_id=11, status=ApprovalInstanceStatus.EXECUTED),
-                _request(
-                    row_id=140,
-                    tenant_id=11,
-                    instance_id=33,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.APPLIED,
-                    execution_checkpoint={"mutation_transition_active": False},
-                ),
-                _footprint(row_id=603, tenant_id=11, request_id=140),
-                _instance(row_id=34, tenant_id=11, status=ApprovalInstanceStatus.EXECUTED),
-                _request(
-                    row_id=141,
-                    tenant_id=11,
-                    instance_id=34,
-                    execution_state=KnowledgeSpaceFileChangeExecutionState.APPLIED,
-                    execution_checkpoint={"mutation_transition_active": True},
-                ),
-                _footprint(row_id=604, tenant_id=11, request_id=141),
-            ]
-        )
-        await session.commit()
-        repository = KnowledgeSpaceFileChangeCompensationRepository(session)
-
-        first_rows, first_has_more, first_cursor = await repository.list_cleanup_candidates(
-            tenant_id=11,
-            scenario_code=FILE_CHANGE_SCENARIO_CODE,
-            after_request_id=0,
-            now=now,
-            limit=1,
-        )
-        second_rows, second_has_more, second_cursor = await repository.list_cleanup_candidates(
-            tenant_id=11,
-            scenario_code=FILE_CHANGE_SCENARIO_CODE,
-            after_request_id=first_cursor,
-            now=now,
-            limit=1,
-        )
-
-    assert first_rows == []
-    assert first_has_more is True
-    assert first_cursor == 140
-    assert [(row.request_id, row.kind) for row in second_rows] == [(141, "mutation_cleanup")]
-    assert second_has_more is False
-    assert second_cursor == 141
-
-
-async def test_stage_lifecycle_scan_returns_bound_attaching_and_expired_unbound_rows(compensation_engine):
+async def test_expired_orphan_stage_scan_remains_knowledge_owned(compensation_engine):
     now = datetime.utcnow()
     async with AsyncSession(compensation_engine) as session:
         session.add_all(
@@ -524,19 +345,6 @@ async def test_stage_lifecycle_scan_returns_bound_attaching_and_expired_unbound_
                 ),
                 KnowledgeSpaceUploadStage(
                     id=502,
-                    upload_id="expired-attached-state",
-                    tenant_id=11,
-                    space_id=8,
-                    uploader_user_id=7,
-                    object_name="internal/attached",
-                    file_name="attached.pdf",
-                    file_size=100,
-                    content_hash="attached-hash",
-                    state=KnowledgeSpaceUploadStageState.ATTACHED,
-                    expire_at=now - timedelta(seconds=1),
-                ),
-                KnowledgeSpaceUploadStage(
-                    id=503,
                     upload_id="future-orphan",
                     tenant_id=11,
                     space_id=8,
@@ -548,48 +356,9 @@ async def test_stage_lifecycle_scan_returns_bound_attaching_and_expired_unbound_
                     state=KnowledgeSpaceUploadStageState.UPLOADED,
                     expire_at=now + timedelta(hours=1),
                 ),
-                KnowledgeSpaceUploadStage(
-                    id=504,
-                    upload_id="other-tenant-orphan",
-                    tenant_id=12,
-                    space_id=8,
-                    uploader_user_id=7,
-                    object_name="internal/other-tenant",
-                    file_name="other.pdf",
-                    file_size=100,
-                    content_hash="other-hash",
-                    state=KnowledgeSpaceUploadStageState.UPLOADED,
-                    expire_at=now - timedelta(seconds=1),
-                ),
-                KnowledgeSpaceUploadStage(
-                    id=505,
-                    upload_id="bound-attaching",
-                    tenant_id=11,
-                    space_id=8,
-                    uploader_user_id=7,
-                    object_name="internal/bound-attaching",
-                    file_name="bound-attaching.pdf",
-                    file_size=100,
-                    content_hash="bound-attaching-hash",
-                    state=KnowledgeSpaceUploadStageState.ATTACHING,
-                    expire_at=now + timedelta(days=29),
-                ),
             ]
         )
-        await session.flush()
-        session.add(
-            KnowledgeSpaceFileChangeRequest(
-                id=601,
-                tenant_id=11,
-                space_id=8,
-                action=KnowledgeSpaceFileChangeAction.UPLOAD,
-                resource_type=KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD,
-                applicant_user_id=7,
-                upload_stage_id=505,
-            )
-        )
         await session.commit()
-
         rows, has_more = await KnowledgeSpaceFileChangeCompensationRepository(
             session
         ).list_expired_orphan_stage_candidates(
@@ -600,7 +369,103 @@ async def test_stage_lifecycle_scan_returns_bound_attaching_and_expired_unbound_
         )
 
     assert not has_more
-    assert [(row.stage_id, row.upload_id) for row in rows] == [
-        (501, "expired-orphan"),
-        (505, "bound-attaching"),
+    assert [(row.stage_id, row.upload_id) for row in rows] == [(501, "expired-orphan")]
+
+
+async def test_delete_post_cutover_retry_keeps_guard_and_rebinds_every_step(compensation_engine):
+    old_token = "delete-generation-1"
+    new_token = "delete-generation-2"
+    request = _request(
+        row_id=201,
+        action=KnowledgeSpaceFileChangeAction.DELETE,
+        execution_state=KnowledgeSpaceFileChangeExecutionState.FAILED,
+        execution_token=old_token,
+        execution_checkpoint={
+            DELETE_PHASE_CHECKPOINT_KEY: DELETE_PHASE_PURGE_FAILED,
+            "deletion_cutover_active": True,
+            "failure_reason": "purge failed",
+        },
+    )
+    rows = []
+    for index, code in enumerate(DeleteExecutionStepCode.ALL, start=701):
+        state = KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
+        if code == DeleteExecutionStepCode.MINIO:
+            state = KnowledgeSpaceFileChangeExecutionStepState.FAILED
+        rows.append(_step(row_id=index, request_id=201, code=code, state=state, token=old_token))
+    async with AsyncSession(compensation_engine) as session:
+        session.add_all([request, *rows])
+        await session.commit()
+
+    @asynccontextmanager
+    async def session_factory():
+        async with AsyncSession(compensation_engine) as session:
+            yield session
+
+    identity = await KnowledgeSpaceFileChangeExecutionCoordinator(
+        session_factory=session_factory,
+        execution_token_factory=lambda: new_token,
+    ).queue_retry(tenant_id=11, request_id=201)
+
+    assert identity == ExecutionIdentity(tenant_id=11, request_id=201, execution_token=new_token)
+    async with AsyncSession(compensation_engine) as session:
+        current = await session.get(KnowledgeSpaceFileChangeRequest, 201)
+        steps = list(
+            (
+                await session.exec(
+                    select(KnowledgeSpaceFileChangeExecutionStep).where(
+                        KnowledgeSpaceFileChangeExecutionStep.request_id == 201
+                    )
+                )
+            ).all()
+        )
+    assert current is not None
+    assert current.execution_state == KnowledgeSpaceFileChangeExecutionState.QUEUED
+    assert current.execution_checkpoint[DELETE_PHASE_CHECKPOINT_KEY] == DELETE_PHASE_PURGING
+    assert current.execution_checkpoint["deletion_cutover_active"] is True
+    assert {step.attempt_token for step in steps} == {new_token}
+    failed_purge = next(step for step in steps if step.step_code == DeleteExecutionStepCode.MINIO)
+    assert failed_purge.state == KnowledgeSpaceFileChangeExecutionStepState.PENDING
+
+
+async def test_compensation_recovered_hint_cannot_bypass_authoritative_completion_gate(compensation_engine):
+    token = "delete-generation"
+    request = _request(
+        row_id=202,
+        action=KnowledgeSpaceFileChangeAction.DELETE,
+        execution_state=KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
+        execution_token=token,
+        execution_checkpoint={
+            DELETE_PHASE_CHECKPOINT_KEY: DELETE_PHASE_COMPLETED,
+            "deletion_cutover_active": False,
+        },
+    )
+    rows = [
+        _step(
+            row_id=index,
+            request_id=202,
+            code=code,
+            state=KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED,
+            token=("stale-generation" if code == DeleteExecutionStepCode.MINIO else token),
+        )
+        for index, code in enumerate(DeleteExecutionStepCode.ALL, start=801)
     ]
+    async with AsyncSession(compensation_engine) as session:
+        session.add_all([request, *rows])
+        await session.commit()
+
+    @asynccontextmanager
+    async def session_factory():
+        async with AsyncSession(compensation_engine) as session:
+            yield session
+
+    coordinator = KnowledgeSpaceFileChangeExecutionCoordinator(session_factory=session_factory)
+    processed = await coordinator.finish_compensation(
+        identity=ExecutionIdentity(tenant_id=11, request_id=202, execution_token=token),
+        recovered=True,
+    )
+
+    assert processed is True
+    async with AsyncSession(compensation_engine) as session:
+        current = await session.get(KnowledgeSpaceFileChangeRequest, 202)
+    assert current is not None
+    assert current.execution_state == KnowledgeSpaceFileChangeExecutionState.FAILED

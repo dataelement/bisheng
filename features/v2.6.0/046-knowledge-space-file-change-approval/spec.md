@@ -8,7 +8,7 @@
 **Feature ID**: F046
 **优先级**: P0
 **所属版本**: v2.6.0
-**依赖**: F025-approval-center-unification（统一审批中心）、F027-knowledge-space-permission-integration（正式列表）、F029-knowledge-qa-permission-filter（检索与引用）、F030-knowledge-resource-unified-api（OpenAPI）、F034-knowledge-space-file-move（文件/文件夹移动能力）、F044-unified-permission-entry（统一空间设置）、现有知识空间上传、重命名与删除能力
+**依赖**: F025-approval-center-unification（统一审批中心）、F027-knowledge-space-permission-integration（正式列表）、F029-knowledge-qa-permission-filter（检索与引用）、F030-knowledge-resource-unified-api（OpenAPI）、F034-knowledge-space-file-move（文件/文件夹移动能力）、F044-unified-permission-entry（统一空间设置）、F047-f046-approval-business-decoupling、现有知识空间上传、重命名与删除能力
 
 > **范围边界**
 > - **本次纳入**：
@@ -77,10 +77,10 @@
 - **AC-12** — WHEN 编辑者提交需要审核的文件上传，THE SYSTEM SHALL 保存待审批原文件并将其展示在独立的待审批文件列表中，但不得将其作为正式文件加入知识空间文件列表。
 - **AC-13** — WHILE 上传审批未完成，THE SYSTEM SHALL 不启动内容解析、切分、Embedding、全文索引或向量入库，且该文件的文件名与内容不得出现在搜索、RAG、问答引用、知识广场或 OpenAPI 的正式文件结果中。
 - **AC-14** — WHILE 上传审批未完成，THE SYSTEM SHALL 仅允许申请人和当前有效审核人查看待审批状态、审批信息并预览原文件；其他用户不得看到该文件、文件名或内容。
-- **AC-15** — WHEN 任一当前有效审核人同意上传申请，THE SYSTEM SHALL 结束同节点其他待办并启动正式文件入库流程；只有解析及入库全部完成后，文件才按既有权限进入知识空间文件列表并可被检索和使用。
-- **AC-16** — WHILE 已通过上传审批的文件正在正式入库，THE SYSTEM SHALL 向申请人和审核人展示“解析中”，且完成前不得被其他用户检索或使用。
-- **AC-17** — IF 上传审批通过后解析或入库失败，THEN THE SYSTEM SHALL 展示“解析失败”及可用的失败原因，并保持文件不可检索、不可用于问答。
-- **AC-18** — WHEN 编辑者对同一份已通过审批且内容未变化的文件重试解析或入库，THE SYSTEM SHALL 复用原审批结果且不得重复创建上传审批。
+- **AC-15** — WHEN 任一当前有效审核人同意上传申请，THE SYSTEM SHALL 结束同节点其他待办并向 Knowledge 域可靠交付“已同意”决定；Knowledge 域随后以原业务申请启动正式文件登记流程。只有文件图谱、权限关系及普通解析任务调度均被成功接受后，文件才按既有权限进入知识空间文件列表；内容解析的后续成功或失败沿用普通解析状态，不反向改变审批决定或文件变更申请终态。
+- **AC-16** — WHILE 已通过上传审批的文件正在执行正式文件登记, THE SYSTEM SHALL 向申请人和审核人展示业务状态“执行中”且审批状态“已同意”；待审批上传在公开 API 中映射为业务状态“排队中”与审批状态“待处理”。发布门禁解除前不得被其他用户检索或使用。
+- **AC-17** — IF 上传审批通过后正式文件登记失败, THEN THE SYSTEM SHALL 展示文件变更业务状态“失败”及可用的失败原因，并保持文件不可检索、不可用于问答；审批状态仍为“已同意”。正式登记完成后的普通内容解析失败 SHALL 沿用既有文件解析失败语义，不得把文件变更申请或审批结果改回失败。
+- **AC-18** — WHEN 编辑者对同一份已通过审批且内容未变化、正式登记失败的文件发起重试, THE SYSTEM SHALL 重试原文件变更业务申请、复用原审批结果且不得重复创建上传审批；正式登记后的普通内容解析重试沿用既有解析入口。
 - **AC-19** — WHEN 编辑者变更文件内容后重新上传，THE SYSTEM SHALL 将其视为新的上传并重新执行适用的审核规则。
 - **AC-20** — WHEN 上传审批被拒绝、撤回或取消，THE SYSTEM SHALL 不启动正式入库，且该文件不得进入知识空间文件列表。
 - **AC-21** — WHEN 申请人清理被拒绝、已撤回、已取消或仍未完成审批的上传文件，THE SYSTEM SHALL 清理对应待审批文件且不得创建删除审批任务。
@@ -89,7 +89,7 @@
 
 - **AC-22** — WHEN 编辑者对需要审核的知识空间正式文件或文件夹发起删除，THE SYSTEM SHALL 在不可逆删除 cutover 提交前继续保留该资源，文件及文件夹下既有内容的目录展示、搜索、问答、引用、预览和下载保持可用；cutover 提交后即使外部 purge 尚未完成或失败，也 SHALL 由 deletion guard 在全部正式读路径持续排除该资源，且不得复活残留数据。
 - **AC-23** — WHILE 正式文件或文件夹处于“审批中”，THE SYSTEM SHALL 在资源列表中保留并展示该资源；申请人和当前有效审核人可以查看审批详情及动作“删除”，其他有权访问该资源的用户不得看到申请人、审核状态或原因。
-- **AC-24** — WHEN 任一当前有效审核人同意删除申请，THE SYSTEM SHALL 仅在正式 DB 删除已提交，且 FGA、MinIO、Elasticsearch、Milvus 四类 purge 均按本次 immutable manifest 完成权威读后验证后，才把删除申请与 F025 实例置为执行成功；任一 purge 未验证时 SHALL 保持执行中或执行失败，不得显示为执行成功。
+- **AC-24** — WHEN 任一当前有效审核人同意删除申请，THE SYSTEM SHALL 立即把 F025 实例记录为“已同意”并向 Knowledge 域可靠交付决定；Knowledge 域仅在正式 DB 删除已提交，且 FGA、MinIO、Elasticsearch、Milvus 四类 purge 均按本次 immutable manifest 完成权威读后验证、deletion guard 已退役后，才把删除业务申请置为“已生效”。任一 purge 未验证时 SHALL 保持业务状态“执行中”或“失败”，不得显示为已生效，也不得反向改变审批决定。
 - **AC-25** — WHEN 删除审批被拒绝、撤回或取消，THE SYSTEM SHALL 保持目标文件或文件夹及其内容的位置、名称、发布和可用状态不变。
 - **AC-26** — WHEN 用户批量删除多个文件或文件夹，THE SYSTEM SHALL 按资源分别判断并返回“已删除”或“审批中”，客户端仅移除已经删除成功的资源。
 - **AC-27** — WHEN 操作者清理尚未正式入库的待审批上传文件，THE SYSTEM SHALL 不适用正式文件删除审核规则。
@@ -100,12 +100,12 @@
 - **AC-29** — WHEN 任一当前有效审核人同意申请，THE SYSTEM SHALL 通过该申请并结束其余同节点待办。
 - **AC-30** — IF 审核人在处理前已失去该知识空间的所有者或管理者身份，THEN THE SYSTEM SHALL 禁止其继续处理该审批任务。
 - **AC-31** — WHILE 正式文件或文件夹存在任一未结束的变更审批，THE SYSTEM SHALL 禁止对该资源再次发起重命名、移动或删除审批，不得因操作类型不同而创建新的并行审批；目标为文件夹时，该限制同时覆盖其全部子资源。
-- **AC-32** — WHEN 审批通过后的正式上传、重命名、移动或删除执行失败，THE SYSTEM SHALL 明确展示执行失败，且不得把业务未生效或删除外部 purge 未全部验证的申请展示为执行成功。删除在 DB cutover 后失败时 SHALL 保持 deletion guard，F025/outbox 进入 `EXECUTE_FAILED/FAILED`；重新执行必须使用新 token，并仅续跑未成功的 purge step，全部验证成功后才在同一 UoW 完成 F025、request 终态并退役 guard footprint。
+- **AC-32** — WHEN 审批通过后的正式上传、重命名、移动或删除执行失败，THE SYSTEM SHALL 明确展示 Knowledge 业务状态“失败”，且不得把业务未生效或删除外部 purge 未全部验证的申请展示为已生效；F025 审批状态保持“已同意”，不得创建审批异常。删除在 DB cutover 后失败时 SHALL 保持 deletion guard；重新执行原业务申请必须使用新的 Knowledge execution token，仅续跑未成功的 purge step，并在全部权威验证成功后完成 request 终态、退役 guard footprint。
 
 ### 2.5 文件页与审批中心联动
 
 - **AC-33** — THE SYSTEM SHALL 在独立待审批文件列表中展示和筛选“上传待审核”，并在正式资源列表中将存在未结束重命名、移动或删除审批的文件和文件夹展示为“审批中”；多选状态时按并集返回，不为正常资源展示“成功”状态。
-- **AC-34** — THE SYSTEM SHALL 使文件页面与审批中心处理同一审批申请；任一入口处理后，另一入口应刷新为同一最终状态。
+- **AC-34** — THE SYSTEM SHALL 使文件页面与审批中心处理同一审批申请；任一入口完成审批决定后，文件页面应刷新并分别展示最新审批状态与 Knowledge 业务状态，审批中心只展示审批决定，不得把尚未完成的业务执行显示为审批执行中或审批异常。
 - **AC-35** — WHEN 审核人在审批中心通过当前待办，THE SYSTEM SHALL 提示审批已通过、移除当前任务并停留在待处理列表；有下一条任务时自动选中下一条，否则展示空状态，不自动切换到已处理列表。
 - **AC-36** — WHEN 当前用户在文件页面选择一条或多条仍可处理的待审核记录并执行批量通过，THE SYSTEM SHALL 仅处理所选记录中该用户当前有权处理的原审批任务。
 - **AC-37** — WHEN 批量通过全部成功，THE SYSTEM SHALL 提示成功数量；WHEN 部分任务失败或状态已变化，THE SYSTEM SHALL 分别反馈成功数与失败数、保留成功结果不回滚，并展示失败记录的最新状态以供刷新后重试。
@@ -120,10 +120,10 @@
 
 ### 2.7 重命名与移动审核
 
-- **AC-43** — WHEN 编辑者对需要审核的知识空间正式文件或文件夹发起重命名，THE SYSTEM SHALL 创建审批并在执行成功前保留原名称；资源在列表中继续可见并展示为“审批中”。
-- **AC-44** — WHEN 重命名审批通过且正式执行成功，THE SYSTEM SHALL 将目标文件或文件夹更新为申请的新名称；WHEN 审批被拒绝、撤回或取消，THE SYSTEM SHALL 保持原名称不变。
-- **AC-45** — WHEN 编辑者对需要审核的知识空间正式文件或文件夹发起移动，THE SYSTEM SHALL 创建审批并在执行成功前保留原位置；资源在原位置继续可见并展示为“审批中”。
-- **AC-46** — WHEN 移动审批通过且正式执行成功，THE SYSTEM SHALL 按既有移动规则将目标文件或文件夹移动到申请的目标位置；WHEN 审批被拒绝、撤回或取消，THE SYSTEM SHALL 保持原位置不变。
+- **AC-43** — WHEN 编辑者对需要审核的知识空间正式文件或文件夹发起重命名，THE SYSTEM SHALL 创建审批并在 Knowledge 业务变更生效前保留原名称；资源在列表中继续可见并展示为“审批中”。
+- **AC-44** — WHEN 重命名审批通过且 Knowledge 业务变更成功生效，THE SYSTEM SHALL 将目标文件或文件夹更新为申请的新名称；WHEN 审批被拒绝、撤回或取消，THE SYSTEM SHALL 保持原名称不变。
+- **AC-45** — WHEN 编辑者对需要审核的知识空间正式文件或文件夹发起移动，THE SYSTEM SHALL 创建审批并在 Knowledge 业务变更生效前保留原位置；资源在原位置继续可见并展示为“审批中”。
+- **AC-46** — WHEN 移动审批通过且 Knowledge 业务变更成功生效，THE SYSTEM SHALL 按既有移动规则将目标文件或文件夹移动到申请的目标位置；WHEN 审批被拒绝、撤回或取消，THE SYSTEM SHALL 保持原位置不变。
 - **AC-47** — WHILE 重命名或移动审批未结束，THE SYSTEM SHALL 继续按资源当前正式名称、当前位置及既有权限提供目录展示、搜索、问答、引用、预览和下载能力。
 - **AC-48** — WHEN 正式执行重命名或移动前目标位置、目标名称、资源权限或结构约束已经变化，THE SYSTEM SHALL 重新执行现有业务校验；校验失败时不得部分执行，并应展示明确的执行失败结果。
 - **AC-49** — WHEN 用户批量重命名、移动或删除多个资源，THE SYSTEM SHALL 按资源分别返回直接执行、审批中或失败结果，单个资源失败不得回滚其他资源已经完成的结果。
@@ -143,23 +143,23 @@
 - 租户尚无配置时，仅对该租户应用默认审核规则，不得复用其他租户的配置。
 - 知识空间在审批等待期间变更为私密时，既有审批不得被自动放行或取消；私密免审仅适用于状态变更后新发起的操作。
 - 待审批上传文件不是正式知识空间文件；其预览、清理和审批状态展示不得使其进入正式文件列表、检索链路或正式文件删除审核。
-- 正式删除执行失败时，原文件应保持或恢复为可用状态，不得出现审批显示执行成功但文件处于部分删除状态的假成功。
+- 正式删除在 DB cutover 前失败时，原文件保持可用；cutover 后失败时，deletion guard 必须在全部正式读路径继续屏蔽残留资源直至 purge 完成，不得为了“恢复可用”而复活已切断的业务事实。审批“已同意”与 Knowledge 业务“失败”可以同时存在，界面必须分开展示。
 - 用户对同一正式文件或文件夹连续提交相同或不同变更时，只要已有未结束审批，就不得产生新的并行待办。
-- 文件夹审批覆盖整个子树；子资源不得重复创建审批，但其既有正式展示和使用能力在审批执行成功前保持不变。
+- 文件夹审批覆盖整个子树；子资源不得重复创建审批，但其既有正式展示和使用能力在 Knowledge 业务 cutover 前保持不变。
 
 ---
 
 ## 4. 设计与实现（指针，不复制）
 
-> 本节刻意不写实现内容。统一审批中心接入、待审批文件存储、正式入库衔接、重命名/移动/删除执行、状态协议及页面改动均在后续 `design.md` 中确定。
+> 本节刻意不写实现内容。已确认的现态设计、F047 解耦约束与任务追踪由对应文档维护。
 
 | 你想知道 | 去哪看 |
 |---|---|
-| 为什么选择当前方案、备选方案及推翻条件 | `design.md` §3 |
+| 当前核心决策及推翻旧方案的边界 | `design.md` §3 / §10 / §11 |
 | 双数据库、多租户、权限和审批执行约束 | `design.md` §2 |
-| 当前数据流、模块职责、状态、接口和文件清单 | `design.md` §4 |
-| 已知风险与反直觉行为 | `design.md` §5 |
-| 对外契约及依赖关系 | `design.md` §6 |
+| 当前数据流、模块职责、状态、接口和文件清单 | `design.md` §4 / §5 / §6 / §8 |
+| 已知风险与反直觉行为 | `design.md` §4 / §9 / §10 |
+| 对外契约及依赖关系 | `design.md` §2 / §6 / §7 |
 | 任务拆解和验收追踪 | `tasks.md` |
 
 ---
@@ -167,7 +167,8 @@
 ## 相关文档
 
 - 设计真相: [design.md](./design.md)
-- 执行与落档: `tasks.md`（设计审查通过后创建）
+- 解耦基线: [F047 design](../047-f046-approval-business-decoupling/design.md)
+- 执行与落档: [tasks.md](./tasks.md)
 - 版本契约: [features/v2.6.0/release-contract.md](../release-contract.md)
 - 架构约束: [docs/constitution.md](../../../docs/constitution.md)
 - 审批中心基线: [F025 spec](../025-approval-center-unification/spec.md)

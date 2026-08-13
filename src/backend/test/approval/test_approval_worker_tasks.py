@@ -54,6 +54,7 @@ from bisheng.approval.domain.models.approval_instance import (
 )
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.services.approval_outbox_service import ApprovalOutboxService
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 
 _TASKS_PATH = Path(__file__).resolve().parents[2] / "bisheng" / "worker" / "approval" / "tasks.py"
 _TASKS_SPEC = importlib.util.spec_from_file_location("approval_worker_tasks_test_module", _TASKS_PATH)
@@ -64,6 +65,15 @@ _TASKS_SPEC.loader.exec_module(_TASKS_MODULE)
 _build_outbox_executor = _TASKS_MODULE._build_outbox_executor
 _execute_approval_outbox_async = _TASKS_MODULE._execute_approval_outbox_async
 _retry_approval_outbox_async = _TASKS_MODULE._retry_approval_outbox_async
+
+
+@pytest.fixture(autouse=True)
+def _tenant_context():
+    token = set_current_tenant_id(1)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(token)
 
 
 def _instance() -> ApprovalInstance:
@@ -189,3 +199,17 @@ async def test_retry_approval_outbox_async_invokes_retry_service(monkeypatch: py
 
     assert result is True
     handler.on_approved.assert_awaited_once_with(1, {"menu_key": "knowledge"})
+
+
+@pytest.mark.asyncio
+async def test_worker_rejects_outbox_from_a_different_tenant(monkeypatch: pytest.MonkeyPatch):
+    outbox = _outbox()
+    outbox.tenant_id = 2
+    build_handler = AsyncMock()
+    monkeypatch.setattr(ApprovalInstanceRepository, "get_outbox", AsyncMock(return_value=outbox))
+    monkeypatch.setattr(_TASKS_MODULE, "build_runtime_handler", build_handler)
+
+    with pytest.raises(ValueError, match="does not match"):
+        await _execute_approval_outbox_async(1)
+
+    build_handler.assert_not_awaited()

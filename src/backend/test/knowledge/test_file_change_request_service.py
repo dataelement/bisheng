@@ -13,11 +13,12 @@ from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.approval.domain.models.approval_instance import ApprovalInstance, ApprovalInstanceStatus
-from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateResult
-from bisheng.approval.domain.services.approval_uow import ApprovalGateUowResult, build_post_commit_effect
+from bisheng.approval.domain.ports.scenario_policy import (
+    ApprovalSubmissionCommand,
+    ApprovalSubmissionResult,
+)
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileChangeConflictError,
-    SpaceFileChangeInvalidStateError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
@@ -141,54 +142,47 @@ class _Policy:
         return self.required
 
 
-class _Gate:
+class _SubmissionPort:
     def __init__(
         self,
         events: list[str],
         *,
         fail: bool = False,
-        decision: ApprovalGateDecision = ApprovalGateDecision.PENDING,
+        exception: bool = False,
     ) -> None:
         self.events = events
         self.fail = fail
-        self.decision = decision
+        self.exception = exception
         self.calls = []
 
-    async def request_or_pass_in_uow(self, req, *, session):
-        self.events.append("gate")
-        self.calls.append(req)
+    async def submit_in_uow(self, *, session, command: ApprovalSubmissionCommand):
+        self.events.append("submission")
+        self.calls.append(command)
         instance = ApprovalInstance(
-            tenant_id=req.tenant_id,
-            scenario_code=req.scenario_code,
+            tenant_id=command.tenant_id,
+            scenario_code=command.scenario_code,
             scenario_name="file change",
-            handler_key=req.scenario_code,
-            business_key=req.business_key,
-            business_resource_type=req.business_resource_type,
-            business_resource_id=req.business_resource_id,
-            business_name=req.business_name,
-            applicant_user_id=req.applicant_user_id,
-            applicant_user_name=req.applicant_user_name,
-            status=(
-                ApprovalInstanceStatus.APPROVED
-                if self.decision == ApprovalGateDecision.PASS
-                else ApprovalInstanceStatus.EXCEPTION
-                if self.decision == ApprovalGateDecision.EXCEPTION
-                else ApprovalInstanceStatus.PENDING
-            ),
+            handler_key=command.scenario_code,
+            business_key=command.business_key,
+            business_resource_type=command.business_request_type,
+            business_resource_id=command.business_request_id,
+            business_name=command.title,
+            applicant_user_id=command.applicant.user_id,
+            applicant_user_name=command.applicant.user_name,
+            status=(ApprovalInstanceStatus.EXCEPTION if self.exception else ApprovalInstanceStatus.PENDING),
         )
         session.add(instance)
         await session.flush()
         if self.fail:
-            raise RuntimeError("gate failed")
-        return ApprovalGateUowResult(
-            result=ApprovalGateResult(
-                decision=self.decision,
-                instance_id=instance.id,
-                task_ids=[701] if self.decision == ApprovalGateDecision.PENDING else [],
-                exception_type="approver_empty" if self.decision == ApprovalGateDecision.EXCEPTION else None,
-            ),
-            post_commit_effects=[build_post_commit_effect("gate.effect", self.events.append, "gate.effect")],
-            transaction_is_active=session.in_transaction,
+            raise RuntimeError("submission failed")
+
+        async def effect() -> None:
+            self.events.append("submission.effect")
+
+        return ApprovalSubmissionResult(
+            instance_id=int(instance.id),
+            task_ids=() if self.exception else (701,),
+            post_commit_effects=(effect,),
         )
 
 
@@ -214,7 +208,7 @@ def _service(
     authorized: bool = True,
     privileged: bool = False,
     approval_required: bool = True,
-    gate: _Gate | None = None,
+    submission_port: _SubmissionPort | None = None,
     footprint_resolver=None,
     retain_failures: list[bool] | None = None,
 ):
@@ -243,12 +237,8 @@ def _service(
         events.append("direct")
         return {"id": command.resource_id or command.upload_id}
 
-    async def ensure(*, tenant_id: int, session):
-        assert session.in_transaction()
-        events.append(f"ensure:{tenant_id}")
-
-    async def notify(result):
-        events.append(f"notify:{result.instance_id}")
+    async def resolve_approvers(**_identity):
+        return [201]
 
     async def retain_stage(upload_id: str):
         events.append(f"retain:{upload_id}")
@@ -268,14 +258,13 @@ def _service(
 
     return KnowledgeSpaceFileChangeService(
         session_factory=_session_factory(engine),
-        approval_gate=gate or _Gate(events),
+        submission_port=submission_port or _SubmissionPort(events),
+        approver_resolver=resolve_approvers,
         policy_service=_Policy(approval_required, events),
         mutation_authorizer=authorize,
         owner_manager_checker=is_owner_or_manager,
         footprint_resolver=footprint_resolver or resolve,
         direct_executor=direct,
-        ensure_scenario=ensure,
-        pending_task_notifier=notify,
         stage_retainer=retain_stage,
     )
 
@@ -300,7 +289,7 @@ async def test_permission_failure_is_first_and_creates_no_business_or_approval_r
 
 
 @pytest.mark.parametrize(("private", "privileged"), [(True, False), (False, True)])
-async def test_private_space_or_current_owner_manager_executes_directly_without_gate(
+async def test_private_space_or_current_owner_manager_executes_directly_without_submission(
     request_engine,
     private,
     privileged,
@@ -324,7 +313,7 @@ async def test_private_space_or_current_owner_manager_executes_directly_without_
 
     assert result.decision == "direct"
     assert result.resource == {"id": 501}
-    assert "gate" not in events
+    assert "submission" not in events
     assert events == (["permission", "direct"] if private else ["permission", "owner-manager", "direct"])
     assert await _count_rows(request_engine, KnowledgeSpaceFileChangeRequest) == 0
 
@@ -345,7 +334,7 @@ async def test_public_non_manager_with_approval_disabled_executes_directly_witho
     assert result.decision == "direct"
     assert result.resource == {"id": 501}
     assert events == ["permission", "owner-manager", "policy:101", "direct"]
-    assert "gate" not in events
+    assert "submission" not in events
     assert await _count_rows(request_engine, KnowledgeSpaceFileChangeRequest) == 0
     assert await _count_rows(request_engine, ApprovalInstance) == 0
 
@@ -435,42 +424,27 @@ async def test_pending_upload_only_attaches_stage_and_never_creates_formal_knowl
         assert stage.state == KnowledgeSpaceUploadStageState.ATTACHED
         assert request.upload_stage_id == stage.id
         assert request.resource_id is None
-    assert events.index("ensure:17") < events.index("gate")
-    assert events[-3:] == ["retain:upload-1", "gate.effect", f"notify:{result.approval_instance_id}"]
+    assert events.index("footprint") < events.index("submission")
+    assert events[-2:] == ["retain:upload-1", "submission.effect"]
 
 
-async def test_request_footprint_and_gate_bundle_roll_back_together_on_gate_failure(request_engine):
-    set_current_tenant_id(17)
-    await _seed_space(request_engine, tenant_id=17, space_id=101)
-    events: list[str] = []
-    service = _service(request_engine, events=events, gate=_Gate(events, fail=True))
-
-    with pytest.raises(RuntimeError, match="gate failed"):
-        await service.request_change(_command())
-
-    assert await _count_rows(request_engine, KnowledgeSpaceFileChangeRequest) == 0
-    assert await _count_rows(request_engine, KnowledgeSpaceFileChangeFootprint) == 0
-    assert await _count_rows(request_engine, ApprovalInstance) == 0
-    assert "gate.effect" not in events
-
-
-async def test_fixed_scenario_pass_fails_closed_and_rolls_back_entire_bundle(request_engine):
+async def test_request_footprint_and_submission_bundle_roll_back_together_on_failure(request_engine):
     set_current_tenant_id(17)
     await _seed_space(request_engine, tenant_id=17, space_id=101)
     events: list[str] = []
     service = _service(
         request_engine,
         events=events,
-        gate=_Gate(events, decision=ApprovalGateDecision.PASS),
+        submission_port=_SubmissionPort(events, fail=True),
     )
 
-    with pytest.raises(RuntimeError, match="cannot use a PASS route"):
+    with pytest.raises(RuntimeError, match="submission failed"):
         await service.request_change(_command())
 
     assert await _count_rows(request_engine, KnowledgeSpaceFileChangeRequest) == 0
     assert await _count_rows(request_engine, KnowledgeSpaceFileChangeFootprint) == 0
     assert await _count_rows(request_engine, ApprovalInstance) == 0
-    assert "gate.effect" not in events
+    assert "submission.effect" not in events
 
 
 async def test_approver_empty_exception_persists_and_projects_as_pending_without_task_notification(request_engine):
@@ -480,15 +454,14 @@ async def test_approver_empty_exception_persists_and_projects_as_pending_without
     service = _service(
         request_engine,
         events=events,
-        gate=_Gate(events, decision=ApprovalGateDecision.EXCEPTION),
+        submission_port=_SubmissionPort(events, exception=True),
     )
 
     result = await service.request_change(_command())
 
     assert result.decision == "pending"
     assert result.change_request_id is not None
-    assert events[-1] == "gate.effect"
-    assert not any(event.startswith("notify:") for event in events)
+    assert events[-1] == "submission.effect"
     async with AsyncSession(bind=request_engine) as session:
         instance = (await session.exec(select(ApprovalInstance))).one()
         assert instance.status == ApprovalInstanceStatus.EXCEPTION
@@ -601,13 +574,13 @@ async def test_conflict_blocks_second_request_and_is_tenant_isolated(request_eng
     assert first.change_request_id != foreign.change_request_id
 
 
-async def test_same_upload_retry_returns_original_ids_without_second_gate_call(request_engine):
+async def test_same_upload_retry_returns_original_ids_without_second_submission(request_engine):
     set_current_tenant_id(17)
     await _seed_space(request_engine, tenant_id=17, space_id=101)
     await _seed_stage(request_engine, tenant_id=17, space_id=101, uploader_user_id=9, upload_id="upload-2")
     events: list[str] = []
-    gate = _Gate(events)
-    service = _service(request_engine, events=events, gate=gate)
+    submission_port = _SubmissionPort(events)
+    service = _service(request_engine, events=events, submission_port=submission_port)
     command = _command(
         action=KnowledgeSpaceFileChangeAction.UPLOAD,
         resource_type=KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD,
@@ -620,7 +593,7 @@ async def test_same_upload_retry_returns_original_ids_without_second_gate_call(r
 
     assert retried.change_request_id == first.change_request_id
     assert retried.approval_instance_id == first.approval_instance_id
-    assert len(gate.calls) == 1
+    assert len(submission_port.calls) == 1
 
 
 async def test_same_upload_retry_repairs_failed_post_commit_stage_retention(request_engine):
@@ -628,11 +601,11 @@ async def test_same_upload_retry_repairs_failed_post_commit_stage_retention(requ
     await _seed_space(request_engine, tenant_id=17, space_id=101)
     await _seed_stage(request_engine, tenant_id=17, space_id=101, uploader_user_id=9, upload_id="upload-repair")
     events: list[str] = []
-    gate = _Gate(events)
+    submission_port = _SubmissionPort(events)
     service = _service(
         request_engine,
         events=events,
-        gate=gate,
+        submission_port=submission_port,
         retain_failures=[True, False],
     )
     command = _command(
@@ -651,33 +624,20 @@ async def test_same_upload_retry_repairs_failed_post_commit_stage_retention(requ
 
     assert retried.change_request_id == first.change_request_id
     assert retried.approval_instance_id == first.approval_instance_id
-    assert len(gate.calls) == 1
+    assert len(submission_port.calls) == 1
     assert events.count("retain:upload-repair") == 2
     async with AsyncSession(bind=request_engine) as session:
         stage = (await session.exec(select(KnowledgeSpaceUploadStage))).one()
         assert stage.state == KnowledgeSpaceUploadStageState.ATTACHED
 
 
-@pytest.mark.parametrize(
-    "instance_status",
-    [
-        ApprovalInstanceStatus.PENDING,
-        ApprovalInstanceStatus.EXCEPTION,
-        ApprovalInstanceStatus.APPROVED,
-        ApprovalInstanceStatus.EXECUTING,
-        ApprovalInstanceStatus.EXECUTE_FAILED,
-    ],
-)
-async def test_same_upload_retry_reports_the_current_active_instance_status(
-    request_engine,
-    instance_status: str,
-):
+async def test_same_upload_retry_reuses_knowledge_request_without_reading_approval_storage(request_engine):
     set_current_tenant_id(17)
     await _seed_space(request_engine, tenant_id=17, space_id=101)
     await _seed_stage(request_engine, tenant_id=17, space_id=101, uploader_user_id=9, upload_id="upload-2")
     events: list[str] = []
-    gate = _Gate(events)
-    service = _service(request_engine, events=events, gate=gate)
+    submission_port = _SubmissionPort(events)
+    service = _service(request_engine, events=events, submission_port=submission_port)
     command = _command(
         action=KnowledgeSpaceFileChangeAction.UPLOAD,
         resource_type=KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD,
@@ -688,53 +648,15 @@ async def test_same_upload_retry_reports_the_current_active_instance_status(
     async with AsyncSession(bind=request_engine, expire_on_commit=False) as session:
         async with session.begin():
             instance = await session.get(ApprovalInstance, first.approval_instance_id)
-            instance.status = instance_status
+            instance.status = ApprovalInstanceStatus.REJECTED
             session.add(instance)
 
     retried = await service.request_change(command)
 
     assert retried.change_request_id == first.change_request_id
     assert retried.approval_instance_id == first.approval_instance_id
-    assert retried.approval_status == instance_status
-    assert len(gate.calls) == 1
-
-
-@pytest.mark.parametrize(
-    "instance_status",
-    [
-        ApprovalInstanceStatus.EXECUTED,
-        ApprovalInstanceStatus.REJECTED,
-        ApprovalInstanceStatus.WITHDRAWN,
-        ApprovalInstanceStatus.CANCELLED,
-    ],
-)
-async def test_same_upload_retry_rejects_a_terminal_instance_instead_of_returning_pending(
-    request_engine,
-    instance_status: str,
-):
-    set_current_tenant_id(17)
-    await _seed_space(request_engine, tenant_id=17, space_id=101)
-    await _seed_stage(request_engine, tenant_id=17, space_id=101, uploader_user_id=9, upload_id="upload-2")
-    events: list[str] = []
-    gate = _Gate(events)
-    service = _service(request_engine, events=events, gate=gate)
-    command = _command(
-        action=KnowledgeSpaceFileChangeAction.UPLOAD,
-        resource_type=KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD,
-        resource_id=None,
-        upload_id="upload-2",
-    )
-    first = await service.request_change(command)
-    async with AsyncSession(bind=request_engine, expire_on_commit=False) as session:
-        async with session.begin():
-            instance = await session.get(ApprovalInstance, first.approval_instance_id)
-            instance.status = instance_status
-            session.add(instance)
-
-    with pytest.raises(SpaceFileChangeInvalidStateError):
-        await service.request_change(command)
-
-    assert len(gate.calls) == 1
+    assert retried.approval_status == "pending"
+    assert len(submission_port.calls) == 1
 
 
 async def test_batch_items_commit_independently_and_keep_direct_pending_invalid_results(request_engine):

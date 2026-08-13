@@ -13,6 +13,16 @@ from bisheng.approval.domain.models.approval_scenario import (
     ApprovalRouteRule,
     ApprovalScenario,
 )
+from bisheng.approval.domain.ports.decision_subscriber import (
+    APPROVAL_DECISION_EVENT_VERSION,
+    APPROVAL_DECISION_SUBSCRIBER_PROTOCOL_VERSION,
+    ApprovalDecisionSubscriber,
+)
+from bisheng.approval.domain.ports.scenario_policy import (
+    APPROVAL_SCENARIO_POLICY_PROTOCOL_VERSION,
+    DECISION_DELIVERY_COMPLETION_MODE,
+    ApprovalScenarioPolicy,
+)
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalScenarioPreset
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
@@ -149,6 +159,9 @@ class ApprovalRegistry:
         self._presets: dict[str, ApprovalScenarioPreset] = {}
         self._hidden_preset_codes: set[str] = set()
         self._handlers: dict[str, Any] = {}
+        self._policies: dict[str, ApprovalScenarioPolicy] = {}
+        self._subscribers: dict[str, ApprovalDecisionSubscriber] = {}
+        self._decision_delivery_frozen = False
 
     @classmethod
     def with_default_presets(cls) -> ApprovalRegistry:
@@ -230,3 +243,54 @@ class ApprovalRegistry:
         if handler is None:
             raise KeyError(f"handler not registered for scenario_code={scenario_code}")
         return handler
+
+    def register_policy(self, policy: ApprovalScenarioPolicy) -> None:
+        if self._decision_delivery_frozen:
+            raise RuntimeError("approval decision-delivery registry is frozen")
+        scenario_code = policy.scenario_code
+        if scenario_code in self._policies:
+            raise ValueError(f"approval policy already registered for scenario_code={scenario_code}")
+        self._policies[scenario_code] = policy
+
+    def register_subscriber(self, subscriber: ApprovalDecisionSubscriber) -> None:
+        if self._decision_delivery_frozen:
+            raise RuntimeError("approval decision-delivery registry is frozen")
+        scenario_code = subscriber.scenario_code
+        if scenario_code in self._subscribers:
+            raise ValueError(f"approval subscriber already registered for scenario_code={scenario_code}")
+        self._subscribers[scenario_code] = subscriber
+
+    def get_policy(self, scenario_code: str) -> ApprovalScenarioPolicy:
+        policy = self._policies.get(scenario_code)
+        if policy is None:
+            raise KeyError(f"policy not registered for scenario_code={scenario_code}")
+        return policy
+
+    def get_subscriber(self, scenario_code: str) -> ApprovalDecisionSubscriber:
+        subscriber = self._subscribers.get(scenario_code)
+        if subscriber is None:
+            raise KeyError(f"subscriber not registered for scenario_code={scenario_code}")
+        return subscriber
+
+    def freeze_decision_delivery(self, *, required_scenario_codes: set[str]) -> None:
+        scenario_codes = required_scenario_codes | self._policies.keys() | self._subscribers.keys()
+        for scenario_code in sorted(scenario_codes):
+            policy = self._policies.get(scenario_code)
+            if policy is None:
+                raise ValueError(f"approval policy missing for scenario_code={scenario_code}")
+            subscriber = self._subscribers.get(scenario_code)
+            if subscriber is None:
+                raise ValueError(f"approval subscriber missing for scenario_code={scenario_code}")
+            if (
+                policy.completion_mode != DECISION_DELIVERY_COMPLETION_MODE
+                or subscriber.completion_mode != DECISION_DELIVERY_COMPLETION_MODE
+                or policy.completion_mode != subscriber.completion_mode
+            ):
+                raise ValueError(f"approval completion mode mismatch for scenario_code={scenario_code}")
+            if policy.protocol_version != APPROVAL_SCENARIO_POLICY_PROTOCOL_VERSION:
+                raise ValueError(f"approval policy protocol version mismatch for scenario_code={scenario_code}")
+            if subscriber.protocol_version != APPROVAL_DECISION_SUBSCRIBER_PROTOCOL_VERSION:
+                raise ValueError(f"approval subscriber protocol version mismatch for scenario_code={scenario_code}")
+            if subscriber.event_version != APPROVAL_DECISION_EVENT_VERSION:
+                raise ValueError(f"approval subscriber event version mismatch for scenario_code={scenario_code}")
+        self._decision_delivery_frozen = True

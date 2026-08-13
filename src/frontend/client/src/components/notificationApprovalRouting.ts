@@ -9,10 +9,7 @@ const APPROVAL_CENTER_ACTION_CODES = new Set([
   "approval_exception_cancelled",
   "approval_exception_route_missing",
   "approval_exception_approver_empty",
-  "approval_execute_failed",
   "resource_user_invite_pending",
-  "resource_user_invite_effective",
-  "resource_user_invite_failed",
   "menu_grant_revoked",
 ]);
 

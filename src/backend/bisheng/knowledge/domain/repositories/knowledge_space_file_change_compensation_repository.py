@@ -7,12 +7,6 @@ from sqlalchemy import and_, exists, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.approval.domain.models.approval_instance import (
-    ApprovalInstance,
-    ApprovalInstanceStatus,
-    ApprovalOutbox,
-    ApprovalOutboxStatus,
-)
 from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step import (
     KnowledgeSpaceFileChangeExecutionStep,
     KnowledgeSpaceFileChangeExecutionStepState,
@@ -31,8 +25,7 @@ from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
 
 
 @dataclass(frozen=True, slots=True)
-class DeferredWatchdogCandidate:
-    outbox_id: int
+class ExecutionWatchdogCandidate:
     request_id: int
     execution_token: str
 
@@ -41,8 +34,6 @@ class DeferredWatchdogCandidate:
 class ExecutionStepRecoveryCandidate:
     step_id: int
     request_id: int
-    instance_id: int
-    outbox_id: int
     execution_token: str
     execution_state: str
 
@@ -72,11 +63,6 @@ class KnowledgeSpaceFileChangeCompensationRepository:
         KnowledgeSpaceFileChangeExecutionStepState.FAILED,
         KnowledgeSpaceFileChangeExecutionStepState.COMPENSATING,
     )
-    TERMINAL_UPLOAD_INSTANCE_STATES = (
-        ApprovalInstanceStatus.REJECTED,
-        ApprovalInstanceStatus.WITHDRAWN,
-        ApprovalInstanceStatus.CANCELLED,
-    )
     DELETE_PURGE_STEP_CODES = (
         "delete.fga_purge",
         "delete.minio_purge",
@@ -91,77 +77,47 @@ class KnowledgeSpaceFileChangeCompensationRepository:
     def _bounded_limit(cls, limit: int) -> int:
         return max(1, min(int(limit), cls.MAX_BATCH_SIZE))
 
-    async def list_deferred_watchdog_candidates(
+    async def list_watchdog_candidates(
         self,
         *,
         tenant_id: int,
-        scenario_code: str,
-        after_outbox_id: int,
-        now: datetime,
+        after_request_id: int,
         heartbeat_before: datetime,
         limit: int,
-    ) -> tuple[list[DeferredWatchdogCandidate], bool]:
-        """Return expired current Deferred generations using an outbox-id keyset."""
+    ) -> tuple[list[ExecutionWatchdogCandidate], bool]:
+        """Return expired current Knowledge generations using a request-id keyset."""
 
         tenant_id = int(tenant_id)
         bounded_limit = self._bounded_limit(limit)
-        heartbeat_expired = or_(
-            ApprovalOutbox.heartbeat_at <= heartbeat_before,
-            and_(
-                ApprovalOutbox.heartbeat_at.is_(None),
-                ApprovalOutbox.update_time <= heartbeat_before,
-            ),
-        )
         statement = (
             select(
-                ApprovalOutbox.id,
                 KnowledgeSpaceFileChangeRequest.id,
-                ApprovalOutbox.execution_token,
-            )
-            .join(
-                ApprovalInstance,
-                and_(
-                    ApprovalInstance.tenant_id == tenant_id,
-                    ApprovalInstance.id == ApprovalOutbox.instance_id,
-                ),
-            )
-            .join(
-                KnowledgeSpaceFileChangeRequest,
-                and_(
-                    KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
-                    KnowledgeSpaceFileChangeRequest.approval_instance_id == ApprovalInstance.id,
-                ),
+                KnowledgeSpaceFileChangeRequest.execution_token,
             )
             .where(
-                ApprovalOutbox.tenant_id == tenant_id,
-                ApprovalOutbox.id > int(after_outbox_id),
-                ApprovalOutbox.handler_key == str(scenario_code),
-                ApprovalOutbox.status == ApprovalOutboxStatus.DEFERRED,
-                ApprovalOutbox.execution_token.is_not(None),
-                ApprovalOutbox.execution_token != "",
-                ApprovalInstance.scenario_code == str(scenario_code),
-                ApprovalInstance.status == ApprovalInstanceStatus.EXECUTING,
-                KnowledgeSpaceFileChangeRequest.execution_token == ApprovalOutbox.execution_token,
+                KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
+                KnowledgeSpaceFileChangeRequest.id > int(after_request_id),
+                KnowledgeSpaceFileChangeRequest.execution_token.is_not(None),
+                KnowledgeSpaceFileChangeRequest.execution_token != "",
                 KnowledgeSpaceFileChangeRequest.execution_state.in_(
                     (
                         KnowledgeSpaceFileChangeExecutionState.APPLYING,
                         KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
                     )
                 ),
-                or_(ApprovalOutbox.deferred_deadline <= now, heartbeat_expired),
+                KnowledgeSpaceFileChangeRequest.update_time <= heartbeat_before,
             )
-            .order_by(ApprovalOutbox.id.asc())
+            .order_by(KnowledgeSpaceFileChangeRequest.id.asc())
             .limit(bounded_limit + 1)
         )
         rows = list((await self.session.exec(statement)).all())
         has_more = len(rows) > bounded_limit
         candidates = [
-            DeferredWatchdogCandidate(
-                outbox_id=int(outbox_id),
+            ExecutionWatchdogCandidate(
                 request_id=int(request_id),
                 execution_token=str(execution_token),
             )
-            for outbox_id, request_id, execution_token in rows[:bounded_limit]
+            for request_id, execution_token in rows[:bounded_limit]
         ]
         return candidates, has_more
 
@@ -169,12 +125,11 @@ class KnowledgeSpaceFileChangeCompensationRepository:
         self,
         *,
         tenant_id: int,
-        scenario_code: str,
         after_step_id: int,
         now: datetime,
         limit: int,
     ) -> tuple[list[ExecutionStepRecoveryCandidate], bool]:
-        """Return due durable steps bound to the current Deferred token."""
+        """Return due durable steps bound to the current Knowledge token."""
 
         tenant_id = int(tenant_id)
         bounded_limit = self._bounded_limit(limit)
@@ -182,8 +137,6 @@ class KnowledgeSpaceFileChangeCompensationRepository:
             select(
                 KnowledgeSpaceFileChangeExecutionStep.id,
                 KnowledgeSpaceFileChangeRequest.id,
-                ApprovalInstance.id,
-                ApprovalOutbox.id,
                 KnowledgeSpaceFileChangeRequest.execution_token,
                 KnowledgeSpaceFileChangeRequest.execution_state,
             )
@@ -192,21 +145,6 @@ class KnowledgeSpaceFileChangeCompensationRepository:
                 and_(
                     KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
                     KnowledgeSpaceFileChangeRequest.id == KnowledgeSpaceFileChangeExecutionStep.request_id,
-                ),
-            )
-            .join(
-                ApprovalInstance,
-                and_(
-                    ApprovalInstance.tenant_id == tenant_id,
-                    ApprovalInstance.id == KnowledgeSpaceFileChangeRequest.approval_instance_id,
-                ),
-            )
-            .join(
-                ApprovalOutbox,
-                and_(
-                    ApprovalOutbox.tenant_id == tenant_id,
-                    ApprovalOutbox.instance_id == ApprovalInstance.id,
-                    ApprovalOutbox.execution_token == KnowledgeSpaceFileChangeRequest.execution_token,
                 ),
             )
             .where(
@@ -226,10 +164,6 @@ class KnowledgeSpaceFileChangeCompensationRepository:
                         KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
                     )
                 ),
-                ApprovalInstance.scenario_code == str(scenario_code),
-                ApprovalInstance.status == ApprovalInstanceStatus.EXECUTING,
-                ApprovalOutbox.handler_key == str(scenario_code),
-                ApprovalOutbox.status == ApprovalOutboxStatus.DEFERRED,
             )
             .order_by(KnowledgeSpaceFileChangeExecutionStep.id.asc())
             .limit(bounded_limit + 1)
@@ -240,12 +174,10 @@ class KnowledgeSpaceFileChangeCompensationRepository:
             ExecutionStepRecoveryCandidate(
                 step_id=int(step_id),
                 request_id=int(request_id),
-                instance_id=int(instance_id),
-                outbox_id=int(outbox_id),
                 execution_token=str(execution_token),
                 execution_state=str(execution_state),
             )
-            for step_id, request_id, instance_id, outbox_id, execution_token, execution_state in rows[:bounded_limit]
+            for step_id, request_id, execution_token, execution_state in rows[:bounded_limit]
         ]
         return candidates, has_more
 
@@ -253,7 +185,6 @@ class KnowledgeSpaceFileChangeCompensationRepository:
         self,
         *,
         tenant_id: int,
-        scenario_code: str,
         after_request_id: int,
         now: datetime,
         limit: int,
@@ -283,38 +214,25 @@ class KnowledgeSpaceFileChangeCompensationRepository:
                 ),
             )
         )
-        active_delete_deferred = exists(
-            select(ApprovalOutbox.id).where(
-                ApprovalOutbox.tenant_id == tenant_id,
-                ApprovalOutbox.instance_id == ApprovalInstance.id,
-                ApprovalOutbox.execution_token == KnowledgeSpaceFileChangeRequest.execution_token,
-                ApprovalOutbox.status == ApprovalOutboxStatus.DEFERRED,
-            )
-        )
         cleanup_retry_requested = KnowledgeSpaceFileChangeRequest.cleanup_state.in_(
             (
                 KnowledgeSpaceFileChangeCleanupState.PENDING,
                 KnowledgeSpaceFileChangeCleanupState.FAILED,
             )
         )
-        terminal_hook_missed = and_(
-            KnowledgeSpaceFileChangeRequest.cleanup_state == KnowledgeSpaceFileChangeCleanupState.NONE,
-            ApprovalInstance.status.in_(self.TERMINAL_UPLOAD_INSTANCE_STATES),
-        )
         terminal_upload = and_(
             KnowledgeSpaceFileChangeRequest.action == KnowledgeSpaceFileChangeAction.UPLOAD,
             KnowledgeSpaceFileChangeRequest.upload_stage_id.is_not(None),
             tenant_upload_stages.c.stage_id.is_not(None),
-            or_(cleanup_retry_requested, terminal_hook_missed),
+            KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.CLOSED,
+            cleanup_retry_requested,
         )
         delete_purge = and_(
             KnowledgeSpaceFileChangeRequest.action == KnowledgeSpaceFileChangeAction.DELETE,
             KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING,
             KnowledgeSpaceFileChangeRequest.execution_token.is_not(None),
             KnowledgeSpaceFileChangeRequest.execution_token != "",
-            ApprovalInstance.status == ApprovalInstanceStatus.EXECUTING,
             active_delete_purge,
-            active_delete_deferred,
         )
         active_mutation_projection = exists(
             select(KnowledgeSpaceFileChangeFootprint.id).where(
@@ -332,7 +250,6 @@ class KnowledgeSpaceFileChangeCompensationRepository:
             KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED,
             KnowledgeSpaceFileChangeRequest.execution_token.is_not(None),
             KnowledgeSpaceFileChangeRequest.execution_token != "",
-            ApprovalInstance.status == ApprovalInstanceStatus.EXECUTED,
             active_mutation_projection,
         )
         statement = (
@@ -340,16 +257,9 @@ class KnowledgeSpaceFileChangeCompensationRepository:
                 KnowledgeSpaceFileChangeRequest.id,
                 KnowledgeSpaceFileChangeRequest.action,
                 tenant_upload_stages.c.upload_id,
-                ApprovalInstance.status,
+                KnowledgeSpaceFileChangeRequest.result_snapshot,
                 KnowledgeSpaceFileChangeRequest.execution_token,
                 KnowledgeSpaceFileChangeRequest.execution_checkpoint,
-            )
-            .join(
-                ApprovalInstance,
-                and_(
-                    ApprovalInstance.tenant_id == tenant_id,
-                    ApprovalInstance.id == KnowledgeSpaceFileChangeRequest.approval_instance_id,
-                ),
             )
             .outerjoin(
                 tenant_upload_stages,
@@ -358,7 +268,6 @@ class KnowledgeSpaceFileChangeCompensationRepository:
             .where(
                 KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
                 KnowledgeSpaceFileChangeRequest.id > int(after_request_id),
-                ApprovalInstance.scenario_code == str(scenario_code),
                 or_(terminal_upload, delete_purge, mutation_cleanup),
             )
             .order_by(KnowledgeSpaceFileChangeRequest.id.asc())
@@ -369,7 +278,7 @@ class KnowledgeSpaceFileChangeCompensationRepository:
         page_rows = rows[:bounded_limit]
         next_after_request_id = int(page_rows[-1][0]) if page_rows else int(after_request_id)
         candidates: list[FileChangeCleanupCandidate] = []
-        for request_id, action, upload_id, instance_status, execution_token, checkpoint in page_rows:
+        for request_id, action, upload_id, result_snapshot, execution_token, checkpoint in page_rows:
             if action == KnowledgeSpaceFileChangeAction.UPLOAD:
                 if upload_id is None:
                     continue
@@ -378,7 +287,7 @@ class KnowledgeSpaceFileChangeCompensationRepository:
                         request_id=int(request_id),
                         kind="stage",
                         upload_id=str(upload_id),
-                        terminal_action=str(instance_status),
+                        terminal_action=str((result_snapshot or {}).get("decision_action") or "closed"),
                     )
                 )
             elif action == KnowledgeSpaceFileChangeAction.DELETE:

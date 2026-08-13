@@ -5,6 +5,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from bisheng.approval.api.dependencies import (
+    get_approval_decision_application_service,
+    get_approval_status_read_port,
+)
+from bisheng.approval.domain.ports.approval_status_reader import ApprovalStatusReadPort
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import SpaceFileChangeRequestNotFoundError
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
@@ -51,19 +56,22 @@ def get_file_change_policy_service() -> KnowledgeSpaceFileChangePolicyService:
 async def get_file_change_application_service(
     owner_service=Depends(get_knowledge_space_service),
     stage_service=Depends(get_knowledge_space_upload_stage_service),
+    approval_decision_service=Depends(get_approval_decision_application_service),
+    approval_status_port: ApprovalStatusReadPort = Depends(get_approval_status_read_port),
 ) -> KnowledgeSpaceFileChangeApplicationService:
     """Compose F046 views with Knowledge owners and F025 public commands."""
 
-    from bisheng.approval.domain.repositories.approval_instance_repository import (
-        ApprovalInstanceRepository,
-    )
-    from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
-    from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
     from bisheng.knowledge.domain.services.knowledge_space_file_change_approver_resolver import (
         KnowledgeSpaceFileChangeApproverResolver,
     )
-    from bisheng.knowledge.domain.services.knowledge_space_file_change_scenario_handler import (
+    from bisheng.knowledge.domain.services.knowledge_space_file_change_execution_coordinator import (
+        KnowledgeSpaceFileChangeExecutionCoordinator,
+    )
+    from bisheng.knowledge.domain.services.knowledge_space_file_change_terminal_cleanup_service import (
         KnowledgeSpaceFileChangeTerminalCleanupService,
+    )
+    from bisheng.worker.knowledge.file_change_tasks import (
+        CeleryKnowledgeSpaceFileChangeDispatcher,
     )
 
     async def cleanup_failed_upload(
@@ -85,8 +93,10 @@ async def get_file_change_application_service(
         projection_loader=None,
         stage_preview=stage_service.create_preview_url,
         formal_preview=owner_service.get_file_preview,
-        approval_center=ApprovalCenterService(instance_repository=ApprovalInstanceRepository),
-        approval_exception=ApprovalExceptionService(instance_repository=ApprovalInstanceRepository),
+        approval_center=approval_decision_service,
+        approval_status_port=approval_status_port,
+        execution_coordinator=KnowledgeSpaceFileChangeExecutionCoordinator(),
+        execution_dispatcher=CeleryKnowledgeSpaceFileChangeDispatcher(),
         terminal_cleanup=KnowledgeSpaceFileChangeTerminalCleanupService().cleanup,
         failed_upload_cleanup=cleanup_failed_upload,
     )

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.approval.domain.models.approval_decision_outbox import (
+    ApprovalDecisionOutbox,
+    ApprovalDecisionOutboxStatus,
+)
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
     ApprovalException,
@@ -17,7 +21,14 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalTask,
     ApprovalTaskStatus,
 )
-from bisheng.approval.domain.models.approval_scenario import ApprovalNodeDefinition
+from bisheng.approval.domain.models.approval_scenario import (
+    ApprovalFlowVersion,
+    ApprovalNodeDefinition,
+    ApprovalRouteRule,
+    ApprovalScenario,
+)
+from bisheng.approval.domain.ports.decision_subscriber import APPROVAL_DECISION_EVENT_VERSION
+from bisheng.approval.domain.ports.scenario_policy import DECISION_DELIVERY_COMPLETION_MODE
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 
@@ -178,6 +189,184 @@ class ApprovalInstanceRepository:
             .order_by(ApprovalNodeDefinition.node_order.asc(), ApprovalNodeDefinition.id.asc())
         )
         return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def get_submission_scenario_in_session(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        scenario_code: str,
+    ) -> ApprovalScenario | None:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        statement = select(ApprovalScenario).where(
+            ApprovalScenario.tenant_id == resolved_tenant_id,
+            ApprovalScenario.scenario_code == scenario_code,
+        )
+        return (await session.exec(statement)).first()
+
+    @classmethod
+    async def lock_submission_scenario_in_session(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        scenario_code: str,
+    ) -> ApprovalScenario | None:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        statement = (
+            select(ApprovalScenario)
+            .where(
+                ApprovalScenario.tenant_id == resolved_tenant_id,
+                ApprovalScenario.scenario_code == scenario_code,
+            )
+            .with_for_update()
+        )
+        return (await session.exec(statement)).first()
+
+    @classmethod
+    async def list_submission_routes_in_session(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        scenario_id: int,
+    ) -> list[ApprovalRouteRule]:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        statement = (
+            select(ApprovalRouteRule)
+            .where(
+                ApprovalRouteRule.tenant_id == resolved_tenant_id,
+                ApprovalRouteRule.scenario_id == scenario_id,
+                ApprovalRouteRule.enabled == True,  # noqa: E712 — DM8 rejects `IS 1`
+            )
+            .order_by(ApprovalRouteRule.sort_order.asc(), ApprovalRouteRule.id.asc())
+        )
+        return list((await session.exec(statement)).all())
+
+    @classmethod
+    async def get_submission_flow_version_in_session(
+        cls,
+        session: AsyncSession,
+        *,
+        tenant_id: int,
+        flow_definition_id: int,
+    ) -> ApprovalFlowVersion | None:
+        resolved_tenant_id = cls._resolve_lock_tenant_id(tenant_id)
+        statement = (
+            select(ApprovalFlowVersion)
+            .where(
+                ApprovalFlowVersion.tenant_id == resolved_tenant_id,
+                ApprovalFlowVersion.flow_definition_id == flow_definition_id,
+                ApprovalFlowVersion.is_active == True,  # noqa: E712 — DM8 rejects `IS 1`
+            )
+            .order_by(ApprovalFlowVersion.version_no.desc(), ApprovalFlowVersion.id.desc())
+        )
+        return (await session.exec(statement)).first()
+
+    @classmethod
+    async def create_submission_bundle_in_session(
+        cls,
+        session: AsyncSession,
+        *,
+        instance: ApprovalInstance,
+        tasks: list[ApprovalTask],
+        action_log: ApprovalActionLog,
+        exception: ApprovalException | None = None,
+    ) -> tuple[ApprovalInstance, list[ApprovalTask]]:
+        session.add(instance)
+        await session.flush()
+        if instance.id is None:
+            raise RuntimeError("approval instance id was not assigned during submission")
+        for task in tasks:
+            task.instance_id = instance.id
+            session.add(task)
+        action_log.instance_id = instance.id
+        session.add(action_log)
+        if exception is not None:
+            exception.instance_id = instance.id
+            session.add(exception)
+        await session.flush()
+        return instance, tasks
+
+    @staticmethod
+    def is_decision_delivery_instance(instance: ApprovalInstance) -> bool:
+        payload = instance.payload_snapshot or {}
+        return payload.get("completion_mode") == DECISION_DELIVERY_COMPLETION_MODE
+
+    @classmethod
+    def require_decision_delivery_binding(cls, instance: ApprovalInstance) -> tuple[str, str, str]:
+        if not cls.is_decision_delivery_instance(instance):
+            raise ValueError(f"approval instance is not a decision-delivery instance: {instance.id}")
+        payload = instance.payload_snapshot or {}
+        business_request_type = str(payload.get("business_request_type") or "").strip()
+        business_request_id = str(payload.get("business_request_id") or "").strip()
+        request_fingerprint = str(payload.get("request_fingerprint") or "").strip()
+        if not business_request_type or not business_request_id or not request_fingerprint:
+            raise ValueError(f"approval decision binding is incomplete: instance_id={instance.id}")
+        if business_request_type != instance.business_resource_type:
+            raise ValueError(f"approval decision request type mismatch: instance_id={instance.id}")
+        if business_request_id != str(instance.business_resource_id):
+            raise ValueError(f"approval decision request id mismatch: instance_id={instance.id}")
+        return business_request_type, business_request_id, request_fingerprint
+
+    @classmethod
+    async def create_terminal_decision_event_in_session(
+        cls,
+        session: AsyncSession,
+        *,
+        instance: ApprovalInstance,
+        decision: str,
+        operator_user_id: int | None,
+    ) -> ApprovalDecisionOutbox | None:
+        """Write one terminal decision fact without committing the caller UoW."""
+
+        if not cls.is_decision_delivery_instance(instance):
+            return None
+        if instance.id is None or instance.tenant_id is None:
+            raise ValueError("persisted approval instance identity is required for a terminal decision")
+        if decision not in {"approved", "rejected", "withdrawn", "cancelled"}:
+            raise ValueError(f"unsupported approval terminal decision: {decision}")
+        business_request_type, business_request_id, request_fingerprint = cls.require_decision_delivery_binding(
+            instance
+        )
+        existing = (
+            await session.exec(
+                select(ApprovalDecisionOutbox)
+                .where(
+                    ApprovalDecisionOutbox.tenant_id == int(instance.tenant_id),
+                    ApprovalDecisionOutbox.instance_id == int(instance.id),
+                    ApprovalDecisionOutbox.decision_version == 1,
+                )
+                .with_for_update()
+            )
+        ).first()
+        if existing is not None:
+            if existing.decision != decision:
+                raise ValueError(f"approval terminal decision conflicts with existing event: instance_id={instance.id}")
+            return existing
+        subscriber_key = str(instance.handler_key or "").strip()
+        if not subscriber_key:
+            raise ValueError(f"approval decision subscriber key is missing: instance_id={instance.id}")
+        event = ApprovalDecisionOutbox(
+            tenant_id=int(instance.tenant_id),
+            instance_id=int(instance.id),
+            scenario_code=instance.scenario_code,
+            subscriber_key=subscriber_key,
+            business_request_type=business_request_type,
+            business_request_id=business_request_id,
+            business_key=instance.business_key,
+            request_fingerprint=request_fingerprint,
+            decision=decision,
+            decision_version=1,
+            event_version=APPROVAL_DECISION_EVENT_VERSION,
+            decided_at=datetime.utcnow(),
+            operator_user_id=operator_user_id,
+            status=ApprovalDecisionOutboxStatus.PENDING,
+        )
+        session.add(event)
+        await session.flush()
+        return event
 
     @classmethod
     async def flush_decision_in_session(cls, session: AsyncSession) -> None:
@@ -471,116 +660,87 @@ class ApprovalInstanceRepository:
             await session.refresh(instance)
         return instance
 
-    @classmethod
-    async def claim_outbox(
-        cls,
+    @staticmethod
+    async def _lock_instance_and_outbox_by_outbox_id(
+        session: AsyncSession,
         *,
         outbox_id: int,
-        claim_ttl_seconds: int,
-    ) -> ApprovalOutbox | None:
-        now = datetime.utcnow()
-        stale_before = now - timedelta(seconds=claim_ttl_seconds)
-        async with get_async_db_session() as session:
-            async with session.begin():
-                outbox = (
-                    await session.exec(select(ApprovalOutbox).where(ApprovalOutbox.id == outbox_id).with_for_update())
-                ).first()
-                if outbox is None or outbox.status == ApprovalOutboxStatus.SUCCESS:
-                    return None
-                claimable = outbox.status in (ApprovalOutboxStatus.PENDING, ApprovalOutboxStatus.FAILED)
-                if outbox.status == ApprovalOutboxStatus.PROCESSING:
-                    claimable = outbox.update_time is None or outbox.update_time < stale_before
-                if not claimable:
-                    return None
-                instance = (
-                    await session.exec(
-                        select(ApprovalInstance).where(ApprovalInstance.id == outbox.instance_id).with_for_update()
-                    )
-                ).first()
-                if instance is None or instance.status not in (
-                    ApprovalInstanceStatus.APPROVED,
-                    ApprovalInstanceStatus.EXECUTE_FAILED,
-                    ApprovalInstanceStatus.EXECUTING,
-                ):
-                    return None
-                outbox.status = ApprovalOutboxStatus.PROCESSING
-                outbox.update_time = now
-                instance.status = ApprovalInstanceStatus.EXECUTING
-                session.add(outbox)
-                session.add(instance)
-                await session.flush()
-            await session.refresh(outbox)
-        return outbox
-
-    @classmethod
-    async def release_outbox_claim(
-        cls,
-        *,
-        outbox_id: int,
-        claim_ttl_seconds: int,
-        error_summary: str | None,
-    ) -> bool:
-        """Keep uncertain execution in-flight while making its claim immediately stale."""
-
-        stale_time = datetime.utcnow() - timedelta(seconds=claim_ttl_seconds + 1)
-        async with get_async_db_session() as session:
-            async with session.begin():
-                outbox = (
-                    await session.exec(select(ApprovalOutbox).where(ApprovalOutbox.id == outbox_id).with_for_update())
-                ).first()
-                if outbox is None or outbox.status != ApprovalOutboxStatus.PROCESSING:
-                    return False
-                instance = (
-                    await session.exec(
-                        select(ApprovalInstance).where(ApprovalInstance.id == outbox.instance_id).with_for_update()
-                    )
-                ).first()
-                if instance is None or instance.status != ApprovalInstanceStatus.EXECUTING:
-                    return False
-                outbox.retry_count += 1
-                outbox.error_summary = error_summary
-                outbox.update_time = stale_time
-                session.add(outbox)
-                session.add(instance)
-                await session.flush()
-        return True
+    ) -> tuple[ApprovalInstance | None, ApprovalOutbox | None]:
+        identity = (
+            await session.exec(
+                select(ApprovalOutbox.tenant_id, ApprovalOutbox.instance_id).where(ApprovalOutbox.id == outbox_id)
+            )
+        ).first()
+        if identity is None:
+            return None, None
+        tenant_id, instance_id = int(identity[0]), int(identity[1])
+        instance = (
+            await session.exec(
+                select(ApprovalInstance)
+                .where(
+                    ApprovalInstance.tenant_id == tenant_id,
+                    ApprovalInstance.id == instance_id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).first()
+        outbox = (
+            await session.exec(
+                select(ApprovalOutbox)
+                .where(
+                    ApprovalOutbox.tenant_id == tenant_id,
+                    ApprovalOutbox.instance_id == instance_id,
+                    ApprovalOutbox.id == outbox_id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).first()
+        return instance, outbox
 
     @classmethod
     async def finalize_outbox_success(
         cls,
         *,
         outbox_id: int,
+        expected_claimed_at: datetime | None = None,
     ) -> tuple[ApprovalOutbox, ApprovalInstance]:
         """Commit the outbox and instance success terminals together."""
 
         async with get_async_db_session() as session:
             async with session.begin():
-                outbox = (
-                    await session.exec(select(ApprovalOutbox).where(ApprovalOutbox.id == outbox_id).with_for_update())
-                ).first()
+                instance, outbox = await cls._lock_instance_and_outbox_by_outbox_id(
+                    session,
+                    outbox_id=outbox_id,
+                )
                 if outbox is None:
                     raise ValueError(f"approval outbox not found: {outbox_id}")
-                if outbox.status not in (ApprovalOutboxStatus.PROCESSING, ApprovalOutboxStatus.SUCCESS):
-                    raise ValueError(f"approval outbox is not executing: {outbox_id}")
-                instance = (
-                    await session.exec(
-                        select(ApprovalInstance).where(ApprovalInstance.id == outbox.instance_id).with_for_update()
-                    )
-                ).first()
                 if instance is None:
-                    raise ValueError(f"approval instance not found: {outbox.instance_id}")
-                outbox.status = ApprovalOutboxStatus.SUCCESS
-                outbox.error_summary = None
-                if instance.status not in (
-                    ApprovalInstanceStatus.EXECUTED,
-                    ApprovalInstanceStatus.CANCELLED,
-                    ApprovalInstanceStatus.REJECTED,
-                    ApprovalInstanceStatus.WITHDRAWN,
+                    raise ValueError(f"approval instance not found for outbox: {outbox_id}")
+                if outbox.status == ApprovalOutboxStatus.SUCCESS:
+                    if instance.status not in (
+                        ApprovalInstanceStatus.CANCELLED,
+                        ApprovalInstanceStatus.REJECTED,
+                        ApprovalInstanceStatus.WITHDRAWN,
+                    ):
+                        instance.status = ApprovalInstanceStatus.EXECUTED
+                    session.add(instance)
+                    await session.flush()
+                elif (
+                    outbox.status not in (ApprovalOutboxStatus.PENDING, ApprovalOutboxStatus.FAILED)
+                    or instance.status != ApprovalInstanceStatus.EXECUTING
+                    or expected_claimed_at is None
+                    or outbox.update_time != expected_claimed_at
                 ):
+                    raise ValueError(f"approval outbox claim is no longer owned: {outbox_id}")
+                else:
+                    outbox.status = ApprovalOutboxStatus.SUCCESS
+                    outbox.error_summary = None
                     instance.status = ApprovalInstanceStatus.EXECUTED
-                session.add(outbox)
-                session.add(instance)
-                await session.flush()
+                    session.add(outbox)
+                    session.add(instance)
+                    await session.flush()
             await session.refresh(outbox)
             await session.refresh(instance)
         return outbox, instance
@@ -591,27 +751,29 @@ class ApprovalInstanceRepository:
         *,
         outbox_id: int,
         error_summary: str | None,
+        expected_claimed_at: datetime | None = None,
     ) -> tuple[ApprovalOutbox, ApprovalInstance]:
         """Commit the outbox, instance, and exception failure facts together."""
 
         async with get_async_db_session() as session:
             async with session.begin():
-                outbox = (
-                    await session.exec(select(ApprovalOutbox).where(ApprovalOutbox.id == outbox_id).with_for_update())
-                ).first()
+                instance, outbox = await cls._lock_instance_and_outbox_by_outbox_id(
+                    session,
+                    outbox_id=outbox_id,
+                )
                 if outbox is None:
                     raise ValueError(f"approval outbox not found: {outbox_id}")
                 if outbox.status == ApprovalOutboxStatus.SUCCESS:
                     raise ValueError(f"successful approval outbox cannot be failed: {outbox_id}")
-                if outbox.status != ApprovalOutboxStatus.PROCESSING:
-                    raise ValueError(f"approval outbox is not executing: {outbox_id}")
-                instance = (
-                    await session.exec(
-                        select(ApprovalInstance).where(ApprovalInstance.id == outbox.instance_id).with_for_update()
-                    )
-                ).first()
                 if instance is None:
-                    raise ValueError(f"approval instance not found: {outbox.instance_id}")
+                    raise ValueError(f"approval instance not found for outbox: {outbox_id}")
+                if (
+                    outbox.status not in (ApprovalOutboxStatus.PENDING, ApprovalOutboxStatus.FAILED)
+                    or instance.status != ApprovalInstanceStatus.EXECUTING
+                    or expected_claimed_at is None
+                    or outbox.update_time != expected_claimed_at
+                ):
+                    raise ValueError(f"approval outbox claim is no longer owned: {outbox_id}")
                 if instance.status in (
                     ApprovalInstanceStatus.EXECUTED,
                     ApprovalInstanceStatus.CANCELLED,
@@ -644,19 +806,15 @@ class ApprovalInstanceRepository:
 
         async with get_async_db_session() as session:
             async with session.begin():
-                outbox = (
-                    await session.exec(select(ApprovalOutbox).where(ApprovalOutbox.id == outbox_id).with_for_update())
-                ).first()
+                instance, outbox = await cls._lock_instance_and_outbox_by_outbox_id(
+                    session,
+                    outbox_id=outbox_id,
+                )
                 if outbox is None or outbox.status not in (
                     ApprovalOutboxStatus.PENDING,
                     ApprovalOutboxStatus.FAILED,
                 ):
                     return False
-                instance = (
-                    await session.exec(
-                        select(ApprovalInstance).where(ApprovalInstance.id == outbox.instance_id).with_for_update()
-                    )
-                ).first()
                 outbox.status = ApprovalOutboxStatus.FAILED
                 outbox.retry_count += 1
                 outbox.error_summary = error_summary

@@ -51,12 +51,14 @@ def _make_app(user_factory):
 @pytest.fixture(autouse=True)
 def _stub_invitation_dependencies():
     """Keep legacy API contract tests focused on their original permission concern."""
+    invite_application_service = SimpleNamespace(
+        list_pending_invite_items=AsyncMock(return_value=[]),
+    )
     with (
         patch(
-            "bisheng.approval.domain.services.resource_user_invite_service."
-            "ResourceUserInviteService.list_pending_invites",
-            new_callable=AsyncMock,
-            return_value=[],
+            "bisheng.permission.domain.services.resource_user_invite_application_service."
+            "build_runtime_resource_user_invite_application_service",
+            return_value=invite_application_service,
         ),
         patch(
             "bisheng.permission.domain.services.relation_binding_mutation_service."

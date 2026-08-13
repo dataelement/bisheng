@@ -67,7 +67,7 @@ export function getFileChangeLockState(file: KnowledgeFile): FileChangeLockState
 export function selectApprovablePendingUploads(
     items: PendingUploadFileChange[],
 ): PendingUploadFileChange[] {
-    return items.filter((item) => item.status === "pending" && item.canApprove);
+    return items.filter((item) => item.approvalStatus === "pending" && item.canApprove);
 }
 
 export function projectPendingUploadAsKnowledgeFile(

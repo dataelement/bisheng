@@ -6,12 +6,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from bisheng.approval.domain.services.resource_user_invite_scenario_handler import (
-    ApprovalInviteRetryableExecutionError,
-)
-from bisheng.approval.domain.services.resource_user_invite_service import (
-    ResourceUserInviteService,
-)
 from bisheng.channel.domain.schemas.channel_authorization_schema import (
     ChannelAuthorizeRequest,
     ChannelAuthorizeResponse,
@@ -21,11 +15,22 @@ from bisheng.channel.domain.schemas.channel_authorization_schema import (
 from bisheng.channel.domain.services.channel_authorization_service import (
     ChannelAuthorizationService,
     ChannelAuthorizationSyncError,
+    _canonical_role_snapshot,
 )
 from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.common.errcode.channel import ChannelPermissionDeniedError
 from bisheng.common.models.space_channel_member import ChannelRelationEnum
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.core.openfga.exceptions import FGAWriteError
+
+
+@pytest.fixture(autouse=True)
+def tenant_context():
+    token = set_current_tenant_id(1)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(token)
 
 
 class _User:
@@ -126,7 +131,7 @@ def _service(actor_relation: ChannelRelationEnum, sync_service=None) -> ChannelA
         channel_repository=_ChannelRepo(),
         space_channel_member_repository=_MemberRepo(actor_relation),
         membership_sync_service=sync_service or _SyncService(),
-        resource_user_invite_service=invite_service,
+        invite_application_service=invite_service,
         relation_binding_mutation_service=_BindingMutationService(),
     )
     service._validate_subjects_belong_to_channel_tenant = AsyncMock(return_value=None)
@@ -173,8 +178,8 @@ async def test_channel_new_user_becomes_invite():
         result = await service.authorize_channel("channel-1", request, _User())
 
     mock_authorize.assert_not_awaited()
-    service.resource_user_invite_service.ensure_scenario_available.assert_awaited_once_with(tenant_id=1)
-    invite_kwargs = service.resource_user_invite_service.request_invite.await_args.kwargs
+    service._invite_application_service.ensure_scenario_available.assert_awaited_once_with(tenant_id=1)
+    invite_kwargs = service._invite_application_service.request_invite.await_args.kwargs
     assert invite_kwargs["resource_type"] == "channel"
     assert invite_kwargs["resource_id"] == "channel-1"
     assert invite_kwargs["target_user_id"] == 11
@@ -227,8 +232,8 @@ async def test_channel_direct_operations_unchanged():
     ):
         result = await service.authorize_channel("channel-1", request, _User())
 
-    service.resource_user_invite_service.ensure_scenario_available.assert_not_awaited()
-    service.resource_user_invite_service.request_invite.assert_not_awaited()
+    service._invite_application_service.ensure_scenario_available.assert_not_awaited()
+    service._invite_application_service.request_invite.assert_not_awaited()
     assert len(mock_authorize.await_args.kwargs["grants"]) == 2
     assert len(mock_authorize.await_args.kwargs["revokes"]) == 1
     assert result.direct_applied_count == 3
@@ -239,7 +244,7 @@ async def test_channel_direct_operations_unchanged():
 async def test_channel_disabled_scenario_zero_side_effect():
     service = _service(ChannelRelationEnum.OWNER)
     service._active_explicit_user_ids.return_value = set()
-    service.resource_user_invite_service.ensure_scenario_available.side_effect = ApprovalScenarioDisabledError(
+    service._invite_application_service.ensure_scenario_available.side_effect = ApprovalScenarioDisabledError(
         msg="个人用户邀请确认场景未启用，无法新增个人用户权限"  # noqa: RUF001
     )
     request = ChannelAuthorizeRequest(
@@ -265,7 +270,7 @@ async def test_channel_disabled_scenario_zero_side_effect():
             await service.authorize_channel("channel-1", request, _User())
 
     mock_authorize.assert_not_awaited()
-    service.resource_user_invite_service.request_invite.assert_not_awaited()
+    service._invite_application_service.request_invite.assert_not_awaited()
     service._save_bindings.assert_not_awaited()
 
 
@@ -284,16 +289,15 @@ async def test_channel_pending_projection():
             }
         ]
     )
-    service.resource_user_invite_service.list_pending_invites.return_value = [
+    service._invite_application_service.list_pending_invites.return_value = [
         SimpleNamespace(
             id=1201,
-            payload_snapshot={
-                "target_user_id": 11,
-                "target_user_name": "Alice",
-                "relation": "viewer",
-                "model_id": "viewer",
-                "include_children": False,
-            },
+            approval_instance_id=1201,
+            target_user_id=11,
+            target_user_name="Alice",
+            relation="viewer",
+            model_id="viewer",
+            include_children=False,
         )
     ]
 
@@ -319,9 +323,10 @@ def test_channel_counts_compatible():
 
 
 @pytest.mark.asyncio
-async def test_channel_confirmed_grant_compensates():
+async def test_channel_confirmed_invisible_write_failure_restores_binding_without_revoke():
     service = _service(None)
     service._users_belong_to_tenant = AsyncMock(return_value=True)
+    service._actor_grant_permissions = AsyncMock(return_value={"manage_channel_user"})
     role_snapshot = await service._role_snapshot(
         ChannelGrantItem(
             subject_type="user",
@@ -330,7 +335,7 @@ async def test_channel_confirmed_grant_compensates():
             model_id="viewer",
         )
     )
-    _, role_fingerprint = ResourceUserInviteService.normalize_role_snapshot(role_snapshot)
+    _, role_fingerprint = _canonical_role_snapshot(role_snapshot)
 
     class _Transaction:
         snapshot = []
@@ -389,9 +394,8 @@ async def test_channel_confirmed_grant_compensates():
                 approval_instance_id=1201,
             )
 
-    assert mock_authorize.await_count == 2
+    assert mock_authorize.await_count == 1
     assert mock_authorize.await_args_list[0].kwargs["recovery_owner"] == "caller"
-    assert mock_authorize.await_args_list[1].kwargs["revokes"][0].subject_id == 11
     assert transaction.restored is True
 
 
@@ -407,7 +411,7 @@ async def test_channel_confirmed_binding_restore_failure_is_retryable():
             model_id="viewer",
         )
     )
-    _, role_fingerprint = ResourceUserInviteService.normalize_role_snapshot(role_snapshot)
+    _, role_fingerprint = _canonical_role_snapshot(role_snapshot)
 
     class _Transaction:
         bindings = []
@@ -446,7 +450,7 @@ async def test_channel_confirmed_binding_restore_failure_is_retryable():
             new=AsyncMock(return_value=None),
         ),
     ):
-        with pytest.raises(ApprovalInviteRetryableExecutionError):
+        with pytest.raises(ChannelAuthorizationSyncError):
             await service.apply_confirmed_personal_user_grant(
                 tenant_id=1,
                 resource_id="channel-1",
@@ -473,7 +477,7 @@ async def test_channel_confirmed_notification_failure_is_best_effort():
             model_id="viewer",
         )
     )
-    _, role_fingerprint = ResourceUserInviteService.normalize_role_snapshot(role_snapshot)
+    _, role_fingerprint = _canonical_role_snapshot(role_snapshot)
 
     class _Transaction:
         bindings = []
@@ -541,7 +545,7 @@ async def test_channel_confirmed_exact_effect_is_idempotent():
         model_id="viewer",
     )
     role_snapshot = await service._role_snapshot(grant)
-    _, role_fingerprint = ResourceUserInviteService.normalize_role_snapshot(role_snapshot)
+    _, role_fingerprint = _canonical_role_snapshot(role_snapshot)
 
     class _Transaction:
         bindings = [
@@ -1064,7 +1068,7 @@ async def test_cross_tenant_subject_validation_rejects_before_fga_write():
         channel_repository=_ChannelRepo(),
         space_channel_member_repository=_MemberRepo(ChannelRelationEnum.OWNER),
         membership_sync_service=_SyncService(),
-        resource_user_invite_service=_InviteService(),
+        invite_application_service=_InviteService(),
         relation_binding_mutation_service=_BindingMutationService(),
     )
     service._active_explicit_user_ids = AsyncMock(return_value=set())

@@ -19,6 +19,7 @@ from bisheng.approval.domain.models.approval_instance import (
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.services.approval_exception_service import ApprovalExceptionService
 from bisheng.approval.domain.services.approval_uow import ApprovalPostCommitEffect, build_post_commit_effect
+from bisheng.core.context.tenant import get_current_tenant_id
 
 ApproverResolver = Callable[[ApprovalInstance], Awaitable[Sequence[int]] | Sequence[int]]
 
@@ -54,6 +55,46 @@ class ApprovalDynamicAssigneeService:
     """Reconcile materialized approval tasks with a dynamic source of truth."""
 
     @classmethod
+    async def reconcile_assignees(
+        cls,
+        *,
+        tenant_id: int,
+        instance_id: int,
+        approver_user_ids: Sequence[int],
+        reason: str,
+    ) -> ApprovalDynamicAssigneeResult:
+        """Reconcile business-precomputed assignees in an Approval-owned UoW."""
+
+        normalized_tenant_id = int(tenant_id)
+        current_tenant_id = get_current_tenant_id()
+        if normalized_tenant_id <= 0 or current_tenant_id is None or int(current_tenant_id) != normalized_tenant_id:
+            raise ValueError("approval assignee reconciliation requires the matching tenant context")
+        normalized_instance_id = int(instance_id)
+        if normalized_instance_id <= 0:
+            raise ValueError("approval assignee reconciliation requires a positive instance_id")
+        normalized_reason = str(reason).strip()
+        if not normalized_reason:
+            raise ValueError("approval assignee reconciliation reason must not be empty")
+        normalized_user_ids: list[int] = []
+        for user_id in approver_user_ids:
+            if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
+                raise ValueError("approval assignee reconciliation accepts only positive integer user IDs")
+            normalized_user_ids.append(user_id)
+
+        async with ApprovalInstanceRepository.decision_session() as session:
+            async with session.begin():
+                result = await cls.reconcile_resolved_in_uow(
+                    session=session,
+                    instance_id=normalized_instance_id,
+                    approver_user_ids=normalized_user_ids,
+                    trigger=normalized_reason,
+                    tenant_id=normalized_tenant_id,
+                )
+                await ApprovalInstanceRepository.flush_decision_in_session(session)
+        await result.run_post_commit_effects()
+        return result
+
+    @classmethod
     async def reconcile_instance(
         cls,
         *,
@@ -86,6 +127,7 @@ class ApprovalDynamicAssigneeService:
         resolver: ApproverResolver,
         trigger: str,
         operator_user_id: int | None = None,
+        tenant_id: int | None = None,
     ) -> ApprovalDynamicAssigneeResult:
         """Lock instance-first, resolve strictly, and reconcile without commit.
 
@@ -93,13 +135,22 @@ class ApprovalDynamicAssigneeService:
         transaction owns rollback and the returned post-commit effects.
         """
 
-        instance = await ApprovalInstanceRepository.lock_instance_in_session(session, instance_id)
+        instance = await ApprovalInstanceRepository.lock_instance_in_session(
+            session,
+            instance_id,
+            tenant_id=tenant_id,
+        )
         if instance is None:
             raise ValueError(f"approval instance not found: {instance_id}")
-        tasks = await ApprovalInstanceRepository.lock_tasks_in_session(session, instance_id)
+        tasks = await ApprovalInstanceRepository.lock_tasks_in_session(
+            session,
+            instance_id,
+            tenant_id=tenant_id,
+        )
         open_exceptions, _ = await ApprovalInstanceRepository.lock_open_exceptions_and_outboxes_in_session(
             session,
             instance_id,
+            tenant_id=tenant_id,
         )
         node = cls._find_current_node(instance, tasks, open_exceptions)
         if not cls._is_reconcilable(instance, node, open_exceptions):
@@ -128,6 +179,7 @@ class ApprovalDynamicAssigneeService:
         approver_user_ids: Sequence[int],
         trigger: str,
         operator_user_id: int | None = None,
+        tenant_id: int | None = None,
     ) -> ApprovalDynamicAssigneeResult:
         """Reconcile pre-resolved users under the same instance-first lock."""
 
@@ -137,6 +189,7 @@ class ApprovalDynamicAssigneeService:
             resolver=lambda _instance: approver_user_ids,
             trigger=trigger,
             operator_user_id=operator_user_id,
+            tenant_id=tenant_id,
         )
 
     @classmethod

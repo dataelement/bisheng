@@ -35,13 +35,11 @@ const rowLabelKeys = {
 } as const;
 
 function canRetry(detail: FileChangeDetail): boolean {
-    return detail.action === "upload" && detail.status === "execute_failed";
+    return detail.action === "upload" && detail.status === "failed";
 }
 
 function canCleanup(detail: FileChangeDetail): boolean {
-    return detail.action === "upload" && [
-        "pending", "approver_empty", "execute_failed",
-    ].includes(detail.status);
+    return detail.action === "upload" && detail.status === "failed";
 }
 
 export function FileChangeApprovalDetail({
@@ -79,7 +77,16 @@ export function FileChangeApprovalDetail({
                                 </h3>
                                 <DetailRow label={localize("com_knowledge.file_name")} value={detail.resourceName} />
                                 <DetailRow label={localize("com_knowledge.file_change_action")} value={localize(`com_knowledge.file_change_action_${detail.action}`)} />
-                                <DetailRow label={localize("com_approval_status_label")} value={localize(`com_knowledge.file_change_status_${detail.status}`)} />
+                                <DetailRow
+                                    label={localize("com_knowledge.file_change_business_status")}
+                                    value={localize(`com_knowledge.file_change_status_${detail.status}`)}
+                                />
+                                {detail.approvalStatus && (
+                                    <DetailRow
+                                        label={localize("com_approval_status_label")}
+                                        value={localize(`com_approval_status_${detail.approvalStatus}`)}
+                                    />
+                                )}
                                 <DetailRow label={localize("com_approval_field_applicant")} value={detail.applicantUserName || String(detail.applicantUserId)} />
                             </section>
                             <section className="space-y-3">
@@ -127,7 +134,7 @@ export function FileChangeApprovalDetail({
                                 {localize("com_knowledge.retry")}
                             </Button>
                         )}
-                        {detail.canApprove && detail.status === "pending" && onApprove && (
+                        {detail.canApprove && detail.approvalStatus === "pending" && onApprove && (
                             <Button loading={approving} onClick={() => onApprove(detail.requestId)}>
                                 {localize("com_approval_action_approve")}
                             </Button>

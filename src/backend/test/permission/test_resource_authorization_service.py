@@ -443,19 +443,27 @@ async def test_department_and_existing_explicit_user_stay_direct():
 
 async def test_list_merges_pending_instances_and_active_wins():
     invite_service = SimpleNamespace(
-        list_pending_invites=AsyncMock(
+        list_pending_invite_items=AsyncMock(
             return_value=[
                 SimpleNamespace(
-                    id=5,
-                    payload_snapshot={
-                        "target_user_id": 42,
-                        "target_user_name": "Pending",
-                        "relation": "viewer",
-                        "model_id": "viewer",
-                        "role_snapshot": {"name": "Viewer"},
-                    },
+                    business_request_id=5,
+                    approval_instance_id=5,
+                    subject_type="user",
+                    subject_id=42,
+                    subject_name="Pending",
+                    relation="viewer",
+                    model_id="viewer",
+                    model_name="Viewer",
+                    authorization_status="pending",
                 ),
-                SimpleNamespace(id=6, payload_snapshot={"target_user_id": 7, "relation": "viewer"}),
+                SimpleNamespace(
+                    business_request_id=6,
+                    approval_instance_id=6,
+                    subject_type="user",
+                    subject_id=7,
+                    relation="viewer",
+                    authorization_status="pending",
+                ),
             ]
         )
     )
@@ -476,8 +484,6 @@ async def test_list_merges_pending_instances_and_active_wins():
 
 
 async def test_confirmed_grant_precommits_binding_and_uses_caller_recovery():
-    from bisheng.approval.domain.services.resource_user_invite_service import ResourceUserInviteService
-
     role = {
         "id": "viewer",
         "name": "Viewer",
@@ -487,17 +493,27 @@ async def test_confirmed_grant_precommits_binding_and_uses_caller_recovery():
         "is_system": True,
         "grant_tier": "usage",
     }
-    normalized_role, fingerprint = ResourceUserInviteService.normalize_role_snapshot(role)
     events = []
     service = ResourceAuthorizationService(
         get_relation_models=AsyncMock(return_value=[role]),
         grant_subject_query_service=SimpleNamespace(validate_resource_grants=AsyncMock()),
         binding_mutation_service=_BindingMutationService(events),
     )
+    normalized_role = role
+    fingerprint = service._role_snapshot_fingerprint(normalized_role)
+    active_permissions = []
 
     async def authorize(*args, **kwargs):
         events.append("fga_write")
         assert kwargs["recovery_owner"] == "caller"
+        grant = kwargs["grants"][0]
+        active_permissions.append(
+            SimpleNamespace(
+                subject_type=grant.subject_type,
+                subject_id=grant.subject_id,
+                relation=grant.relation,
+            )
+        )
 
     async def resolve_permissions(login_user, *_args, **_kwargs):
         assert login_user.user_role == [1, 9]
@@ -537,24 +553,30 @@ async def test_confirmed_grant_precommits_binding_and_uses_caller_recovery():
         ),
         patch(
             "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
-            new=AsyncMock(return_value=[]),
+            new=AsyncMock(side_effect=lambda *_args, **_kwargs: list(active_permissions)),
         ),
         patch(
             "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
             new=AsyncMock(side_effect=authorize),
         ),
     ):
-        await service.apply_confirmed_personal_user_grant(
-            tenant_id=1,
-            resource_id="11",
-            inviter_user_id=7,
-            target_user_id=42,
-            relation="viewer",
-            model_id="viewer",
-            role_snapshot=normalized_role,
-            role_fingerprint=fingerprint,
-            include_children=False,
-            approval_instance_id=88,
-        )
+        from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 
-    assert events == ["binding_commit", "fga_write"]
+        tenant_token = set_current_tenant_id(1)
+        try:
+            await service.apply_confirmed_personal_user_grant(
+                tenant_id=1,
+                resource_id="11",
+                inviter_user_id=7,
+                target_user_id=42,
+                relation="viewer",
+                model_id="viewer",
+                role_snapshot=normalized_role,
+                role_fingerprint=fingerprint,
+                include_children=False,
+                approval_instance_id=88,
+            )
+        finally:
+            current_tenant_id.reset(tenant_token)
+
+    assert events == ["fga_write", "binding_commit"]

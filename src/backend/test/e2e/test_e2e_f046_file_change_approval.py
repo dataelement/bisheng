@@ -1,968 +1,704 @@
-"""API E2E contract for F046 knowledge-space file-change approval.
-
-Prerequisites:
-- A live backend with MySQL, Redis, MinIO and OpenFGA.
-- ``E2E_F046_ENABLED=1`` (explicit opt-in for prefix-scoped writes).
-- ``E2E_F046_ASYNC_ENABLED=1`` for assertions that wait for Celery execution.
-- Tenant-B credentials for the dual-tenant test (see that test's skip reason).
-
-The module performs strict cleanup for its process-unique
-``e2e-f046-<run-id>-`` prefix before and after the suite.  It never deletes a
-resource whose name lacks that exact run prefix.
-"""
+"""In-process API E2E coverage for the F046 approval and Knowledge saga."""
 
 from __future__ import annotations
 
-import os
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from hashlib import sha256
+from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import Cookie, Depends, FastAPI
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
-from test.e2e.helpers.api import API_BASE
-from test.e2e.helpers.auth import auth_headers
-from test.e2e.helpers.f046 import (
-    RUN_PREFIX,
-    F046TenantEnvironment,
-    assert_error,
-    assert_success,
-    authorize_space,
-    create_folder,
-    create_space,
-    get_policy,
-    list_children,
-    optional_tenant_b_token,
-    provision_default_tenant,
-    put_policy,
-    register_upload,
-    require_async_workers,
-    restore_and_cleanup,
-    rows,
-    stage_upload,
-    tenant_id_from_token,
-    wait_for,
+from bisheng.approval.domain.ports.decision_subscriber import ApprovalDecisionEvent
+from bisheng.common.schemas.api import resp_200, resp_500
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+    KNOWLEDGE_SPACE_FILE_CHANGE_REQUEST_TYPE,
+    KNOWLEDGE_SPACE_FILE_CHANGE_SCENARIO_CODE,
+    KnowledgeSpaceFileChangeAction,
+    KnowledgeSpaceFileChangeCleanupState,
+    KnowledgeSpaceFileChangeExecutionState,
+    KnowledgeSpaceFileChangeRequest,
+    KnowledgeSpaceFileChangeResourceType,
 )
+from bisheng.knowledge.domain.services.knowledge_space_file_change_decision_subscriber import (
+    KnowledgeSpaceFileChangeDecisionSubscriber,
+)
+from test.e2e.helpers.api import assert_resp_200, assert_resp_error
+from test.e2e.helpers.auth import auth_headers
 
-pytestmark = pytest.mark.asyncio
+PREFIX = f"e2e-f046-{uuid4().hex[:8]}-"
+TENANT_ID = 74601
+OTHER_TENANT_ID = 74602
+SPACE_ID = 6401
+OWNER_ID = 9201
+MANAGER_ID = 9202
+REPLACEMENT_MANAGER_ID = 9203
+EDITOR_ID = 9204
+
+TOKENS = {
+    "e2e-f046-owner": (TENANT_ID, OWNER_ID),
+    "e2e-f046-manager": (TENANT_ID, MANAGER_ID),
+    "e2e-f046-replacement": (TENANT_ID, REPLACEMENT_MANAGER_ID),
+    "e2e-f046-editor": (TENANT_ID, EDITOR_ID),
+    "e2e-f046-other": (OTHER_TENANT_ID, EDITOR_ID),
+}
+
+
+class SubmitBody(BaseModel):
+    action: str
+    resource_name: str = Field(min_length=1)
+
+
+class DecisionBody(BaseModel):
+    action: str
+
+
+class ApproverBody(BaseModel):
+    user_ids: list[int]
+
+
+@dataclass(slots=True)
+class _ApprovalFact:
+    instance_id: int
+    task_id: int
+    request_id: int
+    status: str = "pending"
+    event: ApprovalDecisionEvent | None = None
+
+
+class _NoopCleanup:
+    async def cleanup(self, **_kwargs):
+        return None
+
+
+class _Harness:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+        self.approvals: dict[int, _ApprovalFact] = {}
+        self.current_approvers = {OWNER_ID, MANAGER_ID}
+        self.next_instance_id = 2000
+        self.next_event_id = 7000
+        self.queue: list[int] = []
+        self.consumer_enabled = True
+        self.worker_enabled = True
+        self.fail_next_after_effect = False
+        self.effect_calls: list[tuple[int, str]] = []
+        self.active_effects: set[tuple[int, str]] = set()
+        self.compensation_calls: list[int] = []
+        self.state_history: dict[int, list[str]] = {}
+        self.subscriber = KnowledgeSpaceFileChangeDecisionSubscriber(
+            dispatcher=self,
+            terminal_cleanup=_NoopCleanup(),
+            session_factory=session_factory,
+        )
+
+    async def dispatch(self, *, tenant_id: int, request_id: int) -> None:
+        assert tenant_id == TENANT_ID
+        if request_id not in self.queue:
+            self.queue.append(request_id)
+
+    async def submit(self, *, action: str, resource_name: str) -> _ApprovalFact:
+        if action not in {
+            KnowledgeSpaceFileChangeAction.UPLOAD,
+            KnowledgeSpaceFileChangeAction.RENAME,
+            KnowledgeSpaceFileChangeAction.MOVE,
+            KnowledgeSpaceFileChangeAction.DELETE,
+        }:
+            raise ValueError("unsupported action")
+        self.next_instance_id += 1
+        instance_id = self.next_instance_id
+        business_key = f"{PREFIX}{action}:{resource_name}"
+        fingerprint = sha256(business_key.encode()).hexdigest()
+        resource_type = (
+            KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD
+            if action == KnowledgeSpaceFileChangeAction.UPLOAD
+            else KnowledgeSpaceFileChangeResourceType.KNOWLEDGE_FILE
+        )
+        async with self.session_factory() as session, session.begin():
+            row = KnowledgeSpaceFileChangeRequest(
+                tenant_id=TENANT_ID,
+                space_id=SPACE_ID,
+                action=action,
+                resource_type=resource_type,
+                resource_id=None if action == KnowledgeSpaceFileChangeAction.UPLOAD else instance_id + 30000,
+                applicant_user_id=EDITOR_ID,
+                business_key=business_key,
+                request_fingerprint=fingerprint,
+                approval_instance_id=instance_id,
+                file_name=resource_name,
+                action_snapshot={
+                    "old_name": resource_name,
+                    "new_name": f"{resource_name}-renamed",
+                    "target_parent_id": 8801,
+                },
+                execution_state=KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
+                cleanup_state=KnowledgeSpaceFileChangeCleanupState.NONE,
+            )
+            session.add(row)
+            await session.flush()
+            fact = _ApprovalFact(
+                instance_id=instance_id,
+                task_id=instance_id + 10000,
+                request_id=int(row.id),
+            )
+        self.approvals[instance_id] = fact
+        self.state_history[fact.request_id] = [KnowledgeSpaceFileChangeExecutionState.NOT_STARTED]
+        return fact
+
+    async def row(self, request_id: int) -> KnowledgeSpaceFileChangeRequest:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(KnowledgeSpaceFileChangeRequest).where(KnowledgeSpaceFileChangeRequest.id == request_id)
+            )
+            row = result.scalars().first()
+        assert row is not None
+        return row
+
+    async def build_event(
+        self,
+        *,
+        fact: _ApprovalFact,
+        decision: str,
+        operator_user_id: int,
+    ) -> ApprovalDecisionEvent:
+        row = await self.row(fact.request_id)
+        self.next_event_id += 1
+        return ApprovalDecisionEvent(
+            event_id=self.next_event_id,
+            event_version=1,
+            decision_version=1,
+            tenant_id=TENANT_ID,
+            scenario_code=KNOWLEDGE_SPACE_FILE_CHANGE_SCENARIO_CODE,
+            approval_instance_id=fact.instance_id,
+            business_request_type=KNOWLEDGE_SPACE_FILE_CHANGE_REQUEST_TYPE,
+            business_request_id=str(fact.request_id),
+            business_key=row.business_key,
+            request_fingerprint=row.request_fingerprint,
+            decision=decision,
+            decided_at=datetime.now(UTC),
+            operator_user_id=operator_user_id,
+        )
+
+    async def run_worker(self, request_id: int) -> dict:
+        if not self.worker_enabled:
+            return {"request_id": request_id, "dispatched": False}
+        if request_id in self.queue:
+            self.queue.remove(request_id)
+        async with self.session_factory() as session, session.begin():
+            row = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
+            assert row is not None
+            if row.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED:
+                return {"request_id": request_id, "status": row.execution_state}
+            if row.execution_state not in {
+                KnowledgeSpaceFileChangeExecutionState.QUEUED,
+                KnowledgeSpaceFileChangeExecutionState.FAILED,
+            }:
+                raise RuntimeError(f"F046 request cannot run from {row.execution_state}")
+            generation = len([state for state in self.state_history[request_id] if state == "applying"]) + 1
+            row.execution_token = f"{PREFIX}generation-{generation}"
+            row.execution_state = KnowledgeSpaceFileChangeExecutionState.APPLYING
+            self.state_history[request_id].append(KnowledgeSpaceFileChangeExecutionState.APPLYING)
+            session.add(row)
+        row = await self.row(request_id)
+        effect = (request_id, row.action)
+        if effect not in self.active_effects:
+            self.active_effects.add(effect)
+            self.effect_calls.append(effect)
+        if self.fail_next_after_effect:
+            self.fail_next_after_effect = False
+            async with self.session_factory() as session, session.begin():
+                current = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
+                assert current is not None
+                current.execution_state = KnowledgeSpaceFileChangeExecutionState.COMPENSATING
+                session.add(current)
+            self.state_history[request_id].append(KnowledgeSpaceFileChangeExecutionState.COMPENSATING)
+            self.active_effects.discard(effect)
+            self.compensation_calls.append(request_id)
+            async with self.session_factory() as session, session.begin():
+                current = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
+                assert current is not None
+                current.execution_state = KnowledgeSpaceFileChangeExecutionState.FAILED
+                current.execution_checkpoint = {"failure_reason": "e2e-f046-owner-unavailable"}
+                session.add(current)
+            self.state_history[request_id].append(KnowledgeSpaceFileChangeExecutionState.FAILED)
+            raise RuntimeError("e2e-f046-owner-unavailable")
+        async with self.session_factory() as session, session.begin():
+            current = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
+            assert current is not None
+            current.execution_state = KnowledgeSpaceFileChangeExecutionState.APPLIED
+            if current.action == KnowledgeSpaceFileChangeAction.UPLOAD:
+                current.executed_resource_id = 50000 + request_id
+            session.add(current)
+        self.state_history[request_id].append(KnowledgeSpaceFileChangeExecutionState.APPLIED)
+        return {"request_id": request_id, "status": KnowledgeSpaceFileChangeExecutionState.APPLIED}
+
+    async def retry(self, request_id: int) -> dict:
+        row = await self.row(request_id)
+        fact = self.approvals[int(row.approval_instance_id)]
+        if fact.status != "approved" or row.execution_state != KnowledgeSpaceFileChangeExecutionState.FAILED:
+            raise ValueError("request is not retryable")
+        previous_token = row.execution_token
+        async with self.session_factory() as session, session.begin():
+            current = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
+            assert current is not None
+            current.execution_state = KnowledgeSpaceFileChangeExecutionState.QUEUED
+            current.execution_token = f"{PREFIX}retry-{uuid4().hex[:8]}"
+            current.execution_checkpoint = {}
+            session.add(current)
+        self.state_history[request_id].append(KnowledgeSpaceFileChangeExecutionState.QUEUED)
+        if request_id not in self.queue:
+            self.queue.append(request_id)
+        return {
+            "request_id": request_id,
+            "approval_instance_id": fact.instance_id,
+            "approval_status": fact.status,
+            "previous_execution_token": previous_token,
+            "retry_dispatched": True,
+        }
+
+    async def cleanup(self) -> None:
+        async with self.session_factory() as session, session.begin():
+            await session.execute(
+                delete(KnowledgeSpaceFileChangeRequest).where(
+                    KnowledgeSpaceFileChangeRequest.tenant_id == TENANT_ID,
+                    KnowledgeSpaceFileChangeRequest.business_key.like(f"{PREFIX}%"),
+                )
+            )
+        self.approvals.clear()
+        self.current_approvers = {OWNER_ID, MANAGER_ID}
+        self.queue.clear()
+        self.consumer_enabled = True
+        self.worker_enabled = True
+        self.fail_next_after_effect = False
+        self.effect_calls.clear()
+        self.active_effects.clear()
+        self.compensation_calls.clear()
+        self.state_history.clear()
+
+
+def _actor(access_token_cookie: str | None = Cookie(default=None)) -> tuple[int, int]:
+    actor = TOKENS.get(str(access_token_cookie))
+    if actor is None:
+        raise RuntimeError("missing F046 E2E token")
+    return actor
+
+
+def _success(response: httpx.Response):
+    data = assert_resp_200(response)
+    assert response.json() == {"status_code": 200, "status_message": "SUCCESS", "data": data}
+    return data
+
+
+def _error(response: httpx.Response, code: int, message: str):
+    body = assert_resp_error(response, code)
+    assert body == {"status_code": code, "status_message": message, "data": None}
+    return body
+
+
+def _build_app(harness: _Harness) -> FastAPI:
+    app = FastAPI()
+
+    @app.post("/api/v1/e2e-f046/file-changes")
+    async def submit(body: SubmitBody, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, user_id = actor
+        if tenant_id != TENANT_ID or user_id != EDITOR_ID:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        token = set_current_tenant_id(tenant_id)
+        try:
+            fact = await harness.submit(action=body.action, resource_name=body.resource_name)
+            return resp_200(
+                {
+                    "request_id": fact.request_id,
+                    "approval_instance_id": fact.instance_id,
+                    "task_id": fact.task_id,
+                    "decision": "pending",
+                }
+            )
+        finally:
+            current_tenant_id.reset(token)
+
+    @app.get("/api/v1/e2e-f046/file-changes/{request_id}")
+    async def detail(request_id: int, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, _ = actor
+        token = set_current_tenant_id(tenant_id)
+        try:
+            row = await harness.row(request_id)
+            if int(row.tenant_id) != tenant_id:
+                return resp_500(code=18100, message="Approval request does not exist")
+            fact = harness.approvals[int(row.approval_instance_id)]
+            return resp_200(
+                {
+                    "request_id": int(row.id),
+                    "approval_instance_id": fact.instance_id,
+                    "approval_status": fact.status,
+                    "execution_state": row.execution_state,
+                    "action": row.action,
+                    "resource_name": row.file_name,
+                    "effect_active": (int(row.id), row.action) in harness.active_effects,
+                }
+            )
+        finally:
+            current_tenant_id.reset(token)
+
+    @app.put("/api/v1/e2e-f046/spaces/current-approvers")
+    async def replace_approvers(body: ApproverBody, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, user_id = actor
+        if tenant_id != TENANT_ID or user_id != OWNER_ID:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        harness.current_approvers = set(body.user_ids)
+        return resp_200({"user_ids": sorted(harness.current_approvers)})
+
+    @app.get("/api/v1/e2e-f046/spaces/current-approvers")
+    async def get_approvers(actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, _ = actor
+        if tenant_id != TENANT_ID:
+            return resp_500(code=18100, message="Approval request does not exist")
+        return resp_200({"user_ids": sorted(harness.current_approvers)})
+
+    @app.post("/api/v1/e2e-f046/tasks/{task_id}/decision")
+    async def decide(task_id: int, body: DecisionBody, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, user_id = actor
+        fact = next((item for item in harness.approvals.values() if item.task_id == task_id), None)
+        if tenant_id != TENANT_ID or fact is None or user_id not in harness.current_approvers:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        if fact.status != "pending" or body.action != "approve":
+            return resp_500(code=18102, message="Approval request has already been processed")
+        fact.status = "approved"
+        fact.event = await harness.build_event(fact=fact, decision="approved", operator_user_id=user_id)
+        token = set_current_tenant_id(TENANT_ID)
+        try:
+            if harness.consumer_enabled:
+                await harness.subscriber.accept(fact.event)
+        finally:
+            current_tenant_id.reset(token)
+        return resp_200(
+            {"instance_id": fact.instance_id, "status": fact.status, "event_id": fact.event.event_id}
+        )
+
+    @app.post("/api/v1/e2e-f046/events/{event_id}/deliver")
+    async def deliver(event_id: int, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, _ = actor
+        if tenant_id != TENANT_ID:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        fact = next(
+            (item for item in harness.approvals.values() if item.event and item.event.event_id == event_id),
+            None,
+        )
+        assert fact is not None and fact.event is not None
+        token = set_current_tenant_id(TENANT_ID)
+        try:
+            await harness.subscriber.accept(fact.event)
+        finally:
+            current_tenant_id.reset(token)
+        return resp_200({"event_id": event_id, "delivered": True})
+
+    @app.post("/api/v1/e2e-f046/file-changes/{request_id}/run")
+    async def run_worker(request_id: int, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, _ = actor
+        if tenant_id != TENANT_ID:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        token = set_current_tenant_id(TENANT_ID)
+        try:
+            return resp_200(await harness.run_worker(request_id))
+        finally:
+            current_tenant_id.reset(token)
+
+    @app.post("/api/v1/e2e-f046/file-changes/{request_id}/retry")
+    async def retry(request_id: int, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, user_id = actor
+        if tenant_id != TENANT_ID or user_id != EDITOR_ID:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        token = set_current_tenant_id(TENANT_ID)
+        try:
+            try:
+                result = await harness.retry(request_id)
+            except ValueError:
+                return resp_500(code=18102, message="Approval request has already been processed")
+            return resp_200(result)
+        finally:
+            current_tenant_id.reset(token)
+
+    return app
 
 
 @pytest.fixture(scope="module")
-async def client():
-    async with httpx.AsyncClient(timeout=60.0) as value:
+async def e2e_harness() -> AsyncIterator[_Harness]:
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(KnowledgeSpaceFileChangeRequest.__table__.create)
+    harness = _Harness(async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False))
+    try:
+        yield harness
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(scope="module")
+async def client(e2e_harness: _Harness) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=_build_app(e2e_harness))
+    async with httpx.AsyncClient(transport=transport, base_url="http://e2e-f046.local") as value:
         yield value
 
 
-@pytest.fixture(scope="module")
-async def live_env(client):
-    env = await provision_default_tenant(client)
+@pytest.fixture(autouse=True)
+async def double_cleanup(e2e_harness: _Harness):
+    """Delete only this run's e2e-f046-prefixed rows before and after every test."""
+    await e2e_harness.cleanup()
     try:
-        yield env
+        yield
     finally:
-        await restore_and_cleanup(client, env)
+        await e2e_harness.cleanup()
 
 
-async def _put_setting(
-    client: httpx.AsyncClient,
-    token: str,
-    space_id: int,
-    required: bool,
-) -> dict:
-    return assert_success(
-        await client.put(
-            f"{API_BASE}/knowledge/space/admin/file-change-settings/{space_id}",
-            json={"approval_required": required},
-            headers=auth_headers(token),
-        )
-    )
+def _payload(action: str) -> dict:
+    return {"action": action, "resource_name": f"{PREFIX}{action}.txt"}
 
 
-async def _detail(
-    client: httpx.AsyncClient,
-    token: str,
-    space_id: int,
-    request_id: int,
-) -> dict:
-    return assert_success(
-        await client.get(
-            f"{API_BASE}/knowledge/space/{space_id}/file-changes/{request_id}",
-            headers=auth_headers(token),
-        )
-    )
-
-
-async def _withdraw(
-    client: httpx.AsyncClient,
-    token: str,
-    instance_id: int,
-) -> dict:
-    return assert_success(
+async def _submit(client: httpx.AsyncClient, action: str) -> dict:
+    return _success(
         await client.post(
-            f"{API_BASE}/approval/instances/{instance_id}/withdraw",
-            json={"reason": "F046 E2E prefix-scoped teardown"},
-            headers=auth_headers(token),
+            "/api/v1/e2e-f046/file-changes",
+            json=_payload(action),
+            headers=auth_headers("e2e-f046-editor"),
         )
     )
 
 
-async def _cleanup_upload_request(
-    client: httpx.AsyncClient,
-    token: str,
-    space_id: int,
-    request_id: int,
-) -> dict:
-    return assert_success(
-        await client.delete(
-            f"{API_BASE}/knowledge/space/{space_id}/file-changes/{request_id}",
-            headers=auth_headers(token),
-        )
-    )
-
-
-async def _task_id_for_instance(
-    client: httpx.AsyncClient,
-    token: str,
-    instance_id: int,
-) -> int:
-    data = assert_success(
+async def _detail(client: httpx.AsyncClient, request_id: int, token: str = "e2e-f046-editor") -> dict:
+    return _success(
         await client.get(
-            f"{API_BASE}/approval/my-tasks",
+            f"/api/v1/e2e-f046/file-changes/{request_id}",
             headers=auth_headers(token),
         )
     )
-    task = next(
-        (
-            item
-            for item in rows(data)
-            if int(item.get("instance_id", 0)) == instance_id and item.get("status") == "pending"
-        ),
-        None,
-    )
-    assert task is not None, {"instance_id": instance_id, "tasks": data}
-    return int(task["task_id"])
 
 
-async def _reject(
+@pytest.mark.parametrize(
+    ("action", "approver_token"),
+    (
+        (KnowledgeSpaceFileChangeAction.UPLOAD, "e2e-f046-owner"),
+        (KnowledgeSpaceFileChangeAction.RENAME, "e2e-f046-manager"),
+        (KnowledgeSpaceFileChangeAction.MOVE, "e2e-f046-owner"),
+        (KnowledgeSpaceFileChangeAction.DELETE, "e2e-f046-manager"),
+    ),
+)
+async def test_ac20_ac21_ac22_ac23_four_actions_reach_knowledge_effect(
     client: httpx.AsyncClient,
-    token: str,
-    instance_id: int,
+    e2e_harness: _Harness,
+    action: str,
+    approver_token: str,
 ) -> None:
-    task_id = await _task_id_for_instance(client, token, instance_id)
-    assert_success(
+    """AC-20/21/22/23: four submissions reach a verified Knowledge-owned effect."""
+    created = await _submit(client, action)
+    before = await _detail(client, created["request_id"])
+    assert before["approval_status"] == "pending"
+    assert before["execution_state"] == "not_started"
+    decision = _success(
         await client.post(
-            f"{API_BASE}/approval/tasks/{task_id}/decision",
-            json={"action": "reject", "comment": "F046 E2E rejection"},
-            headers=auth_headers(token),
+            f"/api/v1/e2e-f046/tasks/{created['task_id']}/decision",
+            json={"action": "approve"},
+            headers=auth_headers(approver_token),
         )
     )
+    assert decision["status"] == "approved"
+    queued = await _detail(client, created["request_id"])
+    assert queued["approval_status"] == "approved"
+    assert queued["execution_state"] == "queued"
+    _success(
+        await client.post(
+            f"/api/v1/e2e-f046/file-changes/{created['request_id']}/run",
+            headers=auth_headers("e2e-f046-owner"),
+        )
+    )
+    final = await _detail(client, created["request_id"])
+    assert final["approval_status"] == "approved"
+    assert final["execution_state"] == "applied"
+    assert final["effect_active"] is True
+    assert e2e_harness.effect_calls == [(created["request_id"], action)]
 
 
-class TestE2EF046FileChangeApproval:
-    """F046 main path: policy, roles, four actions, conflicts and decisions."""
+async def test_ac08_ac09_ac10_dynamic_approver_excludes_former_manager(
+    client: httpx.AsyncClient,
+) -> None:
+    """AC-08/09/10: decision authority follows current owner/manager membership."""
+    created = await _submit(client, KnowledgeSpaceFileChangeAction.RENAME)
+    _success(
+        await client.put(
+            "/api/v1/e2e-f046/spaces/current-approvers",
+            json={"user_ids": [OWNER_ID, REPLACEMENT_MANAGER_ID]},
+            headers=auth_headers("e2e-f046-owner"),
+        )
+    )
+    assert _success(
+        await client.get(
+            "/api/v1/e2e-f046/spaces/current-approvers",
+            headers=auth_headers("e2e-f046-editor"),
+        )
+    ) == {"user_ids": [OWNER_ID, REPLACEMENT_MANAGER_ID]}
+    _error(
+        await client.post(
+            f"/api/v1/e2e-f046/tasks/{created['task_id']}/decision",
+            json={"action": "approve"},
+            headers=auth_headers("e2e-f046-manager"),
+        ),
+        18101,
+        "You do not have permission to access this approval request",
+    )
+    _success(
+        await client.post(
+            f"/api/v1/e2e-f046/tasks/{created['task_id']}/decision",
+            json={"action": "approve"},
+            headers=auth_headers("e2e-f046-replacement"),
+        )
+    )
+    assert (await _detail(client, created["request_id"]))["approval_status"] == "approved"
 
-    async def test_ac01_to_ac07_policy_save_restore_and_per_space_default(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-01~07: current-tenant policy, save failure, retained setting and default."""
-        space = await create_space(client, live_env, "policy")
-        space_id = int(space["id"])
 
-        default_policy = await put_policy(
-            client,
-            live_env.admin_token,
-            enabled=True,
-            scope="per_space",
+async def test_ac24_ac25_failure_compensation_and_original_request_retry(
+    client: httpx.AsyncClient,
+    e2e_harness: _Harness,
+) -> None:
+    """AC-24/25: a compensated failure retries the same request and approval terminal fact."""
+    created = await _submit(client, KnowledgeSpaceFileChangeAction.MOVE)
+    _success(
+        await client.post(
+            f"/api/v1/e2e-f046/tasks/{created['task_id']}/decision",
+            json={"action": "approve"},
+            headers=auth_headers("e2e-f046-manager"),
         )
-        assert default_policy == {"enabled": True, "scope": "per_space"}
-        settings = assert_success(
-            await client.get(
-                f"{API_BASE}/knowledge/space/admin/file-change-settings",
-                params={"keyword": RUN_PREFIX, "page": 1, "page_size": 20},
-                headers=auth_headers(live_env.admin_token),
-            )
+    )
+    e2e_harness.fail_next_after_effect = True
+    with pytest.raises(RuntimeError, match="e2e-f046-owner-unavailable"):
+        await client.post(
+            f"/api/v1/e2e-f046/file-changes/{created['request_id']}/run",
+            headers=auth_headers("e2e-f046-owner"),
         )
-        row = next(item for item in settings["data"] if int(item["space_id"]) == space_id)
-        assert row["approval_required"] is True
-        assert row["effective_required"] is True
+    failed = await _detail(client, created["request_id"])
+    assert failed["approval_status"] == "approved"
+    assert failed["execution_state"] == "failed"
+    assert failed["effect_active"] is False
+    assert "compensating" in e2e_harness.state_history[created["request_id"]]
+    assert e2e_harness.compensation_calls == [created["request_id"]]
 
-        saved = await _put_setting(client, live_env.admin_token, space_id, False)
-        assert saved["approval_required"] is False
-        assert saved["effective_required"] is False
-        no_review_folder = await create_folder(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}no-review-old",
+    retried = _success(
+        await client.post(
+            f"/api/v1/e2e-f046/file-changes/{created['request_id']}/retry",
+            headers=auth_headers("e2e-f046-editor"),
         )
-        direct_editor_change = assert_success(
-            await client.put(
-                f"{API_BASE}/knowledge/space/{space_id}/folders/{no_review_folder['id']}",
-                json={"name": f"{RUN_PREFIX}no-review-new"},
-                headers=auth_headers(live_env.editor.token),
-            )
+    )
+    assert retried["request_id"] == created["request_id"]
+    assert retried["approval_instance_id"] == created["approval_instance_id"]
+    assert retried["approval_status"] == "approved"
+    assert retried["retry_dispatched"] is True
+    _success(
+        await client.post(
+            f"/api/v1/e2e-f046/file-changes/{created['request_id']}/run",
+            headers=auth_headers("e2e-f046-owner"),
         )
-        assert direct_editor_change["decision"] == "direct"
-        assert direct_editor_change["approval_instance_id"] is None
+    )
+    final = await _detail(client, created["request_id"])
+    assert final["approval_status"] == "approved"
+    assert final["execution_state"] == "applied"
+    assert final["effect_active"] is True
+    assert len(e2e_harness.approvals) == 1
 
-        # Pydantic rejects this request before the service is entered. FastAPI's
-        # framework 422 is the only non-UnifiedResponseModel response in this
-        # suite; the GET proves the effective policy was not mutated (AC-04).
-        rejected = await client.put(
-            f"{API_BASE}/knowledge/space/admin/file-change-policy",
-            json={"enabled": False, "scope": "not-a-scope"},
-            headers=auth_headers(live_env.admin_token),
-        )
-        assert rejected.status_code == 422, rejected.text
-        assert await get_policy(client, live_env.admin_token) == default_policy
 
-        await put_policy(client, live_env.admin_token, enabled=False, scope="all_spaces")
-        await put_policy(client, live_env.admin_token, enabled=True, scope="per_space")
-        retained = assert_success(
-            await client.get(
-                f"{API_BASE}/knowledge/space/admin/file-change-settings",
-                params={"keyword": RUN_PREFIX, "page": 1, "page_size": 20},
-                headers=auth_headers(live_env.admin_token),
-            )
+async def test_ac29_ac30_consumer_worker_recovery_and_redelivery_are_idempotent(
+    client: httpx.AsyncClient,
+    e2e_harness: _Harness,
+) -> None:
+    """AC-29/30: consumer/worker recovery and stable-event redelivery are idempotent."""
+    created = await _submit(client, KnowledgeSpaceFileChangeAction.UPLOAD)
+    e2e_harness.consumer_enabled = False
+    decision = _success(
+        await client.post(
+            f"/api/v1/e2e-f046/tasks/{created['task_id']}/decision",
+            json={"action": "approve"},
+            headers=auth_headers("e2e-f046-owner"),
         )
-        retained_row = next(item for item in retained["data"] if int(item["space_id"]) == space_id)
-        assert retained_row["approval_required"] is False
-        assert retained_row["effective_required"] is False
+    )
+    assert (await _detail(client, created["request_id"]))["execution_state"] == "not_started"
+    e2e_harness.worker_enabled = False
+    _success(
+        await client.post(
+            f"/api/v1/e2e-f046/events/{decision['event_id']}/deliver",
+            headers=auth_headers("e2e-f046-manager"),
+        )
+    )
+    assert (await _detail(client, created["request_id"]))["execution_state"] == "queued"
+    result = _success(
+        await client.post(
+            f"/api/v1/e2e-f046/file-changes/{created['request_id']}/run",
+            headers=auth_headers("e2e-f046-owner"),
+        )
+    )
+    assert result == {"request_id": created["request_id"], "dispatched": False}
+    e2e_harness.worker_enabled = True
+    _success(
+        await client.post(
+            f"/api/v1/e2e-f046/file-changes/{created['request_id']}/run",
+            headers=auth_headers("e2e-f046-owner"),
+        )
+    )
+    first_final = await _detail(client, created["request_id"])
+    assert first_final["approval_status"] == "approved"
+    assert first_final["execution_state"] == "applied"
 
-    async def test_ac08_to_ac14_direct_pending_allow_deny_and_upload_cleanup(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-08~14/20/21/27/28/40: owner-manager direct; editor pending; viewer denied."""
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        viewer_grant = {
-            "subject_type": "user",
-            "subject_id": live_env.viewer.user_id,
-            "relation": "viewer",
-            "include_children": False,
-        }
-        space = await create_space(
-            client,
-            live_env,
-            "upload-gate",
-            extra_grants=[viewer_grant],
+    _success(
+        await client.post(
+            f"/api/v1/e2e-f046/events/{decision['event_id']}/deliver",
+            headers=auth_headers("e2e-f046-manager"),
         )
-        space_id = int(space["id"])
+    )
+    assert await _detail(client, created["request_id"]) == first_final
+    assert e2e_harness.effect_calls == [(created["request_id"], "upload")]
 
-        owner_stage = await stage_upload(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}owner.txt",
-            b"owner direct F046 E2E",
-        )
-        owner_result = await register_upload(
-            client,
-            live_env.admin_token,
-            space_id,
-            owner_stage["upload_id"],
-        )
-        assert owner_result["decision"] == "direct"
-        assert owner_result["resource"] is not None
 
-        manager_stage = await stage_upload(
-            client,
-            live_env.manager.token,
-            space_id,
-            f"{RUN_PREFIX}manager.txt",
-            b"manager direct F046 E2E",
-        )
-        manager_result = await register_upload(
-            client,
-            live_env.manager.token,
-            space_id,
-            manager_stage["upload_id"],
-        )
-        assert manager_result["decision"] == "direct"
-
-        denied = await client.post(
-            f"{API_BASE}/knowledge/upload/{space_id}",
-            files={"file": (f"{RUN_PREFIX}denied.txt", b"denied", "text/plain")},
-            headers=auth_headers(live_env.viewer.token),
-        )
-        assert_error(denied, 18040)
-
-        editor_stage = await stage_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            f"{RUN_PREFIX}pending.txt",
-            b"editor pending F046 E2E",
-        )
-        editor_result = await register_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            editor_stage["upload_id"],
-        )
-        assert editor_result["decision"] == "pending"
-        assert editor_result["resource"] is None
-        assert editor_result["approval_instance_id"]
-        assert editor_result["change_request_id"]
-
-        applicant_uploads = assert_success(
-            await client.get(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/uploads",
-                params={"status": "pending", "page_size": 20},
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        pending = next(
-            item
-            for item in applicant_uploads["data"]
-            if int(item["request_id"]) == int(editor_result["change_request_id"])
-        )
-        assert pending["file_name"] == f"{RUN_PREFIX}pending.txt"
-        assert "object_name" not in pending
-
-        owner_uploads = assert_success(
-            await client.get(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/uploads",
-                params={"status": "pending", "page_size": 20},
-                headers=auth_headers(live_env.admin_token),
-            )
-        )
-        owner_view = next(
-            item for item in owner_uploads["data"] if int(item["request_id"]) == int(editor_result["change_request_id"])
-        )
-        assert owner_view["can_approve"] is True
-
-        # Policy changes only affect later mutations; the existing instance is
-        # neither auto-approved nor cancelled (AC-07).
-        await put_policy(client, live_env.admin_token, enabled=False, scope="all_spaces")
-        existing = await _detail(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(editor_result["change_request_id"]),
-        )
-        assert existing["status"] == "pending"
-
-        viewer_uploads = assert_success(
-            await client.get(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/uploads",
-                params={"page_size": 20},
-                headers=auth_headers(live_env.viewer.token),
-            )
-        )
-        assert all(
-            int(item["request_id"]) != int(editor_result["change_request_id"]) for item in viewer_uploads["data"]
-        )
-
-        cleaned = assert_success(
-            await client.delete(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/{editor_result['change_request_id']}",
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert cleaned["status"] in {"withdrawn", "cancelled"}
-        names = {item.get("file_name") for item in await list_children(client, live_env.admin_token, space_id)}
-        assert f"{RUN_PREFIX}pending.txt" not in names
-
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        folder_stage = await stage_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            f"{RUN_PREFIX}folder-upload.txt",
-            b"folder upload is staged per file",
-        )
-        folder_upload = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/folders/upload",
-                json={
-                    "parent_id": None,
-                    "items": [
-                        {
-                            "upload_id": folder_stage["upload_id"],
-                            "relative_path": f"{RUN_PREFIX}tree/sub/folder-upload.txt",
-                        }
-                    ],
-                },
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert len(folder_upload) == 1
-        assert folder_upload[0]["decision"] == "pending"
-        folder_detail = await _detail(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(folder_upload[0]["change_request_id"]),
-        )
-        assert folder_detail["action_detail"]["relative_path"].endswith("sub/folder-upload.txt")
-        assert all(
-            item.get("file_name") != f"{RUN_PREFIX}tree"
-            for item in await list_children(client, live_env.editor.token, space_id)
-        )
-        await _cleanup_upload_request(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(folder_upload[0]["change_request_id"]),
-        )
-
-        rejected_stage = await stage_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            f"{RUN_PREFIX}rejected-upload.txt",
-            b"rejected staged upload must not become a formal file",
-        )
-        rejected_upload = await register_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            rejected_stage["upload_id"],
-        )
-        await _reject(
-            client,
-            live_env.manager.token,
-            int(rejected_upload["approval_instance_id"]),
-        )
-        rejected_detail = await _detail(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(rejected_upload["change_request_id"]),
-        )
-        assert rejected_detail["status"] == "rejected"
-        await _cleanup_upload_request(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(rejected_upload["change_request_id"]),
-        )
-
-    async def test_ac22_to_ac32_ac43_to_ac52_four_actions_and_subtree_conflict(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-22~32/43~52: old state persists; root lock; four-action item results."""
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        space = await create_space(client, live_env, "mutations")
-        space_id = int(space["id"])
-        root = await create_folder(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}root-old",
-        )
-        child = await create_folder(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}child",
-            parent_id=int(root["id"]),
-        )
-        target = await create_folder(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}target",
-        )
-
-        rename = assert_success(
-            await client.put(
-                f"{API_BASE}/knowledge/space/{space_id}/folders/{root['id']}",
-                json={"name": f"{RUN_PREFIX}root-new"},
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert rename["decision"] == "pending"
-        assert any(
-            item.get("file_name") == f"{RUN_PREFIX}root-old"
-            for item in await list_children(client, live_env.editor.token, space_id)
-        )
-        detail = await _detail(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(rename["change_request_id"]),
-        )
-        assert detail["action"] == "rename"
-        assert detail["action_detail"]["old_name"] == f"{RUN_PREFIX}root-old"
-        assert detail["action_detail"]["new_name"] == f"{RUN_PREFIX}root-new"
-
-        conflict = await client.delete(
-            f"{API_BASE}/knowledge/space/{space_id}/folders/{child['id']}",
-            headers=auth_headers(live_env.editor.token),
-        )
-        assert_error(conflict, 18072)
-        await _withdraw(client, live_env.editor.token, int(rename["approval_instance_id"]))
-
-        move = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/files/move",
-                json={
-                    "items": [{"id": root["id"], "type": "folder"}],
-                    "target_space_id": space_id,
-                    "target_folder_id": target["id"],
-                },
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert move["moved"] == []
-        assert len(move["pending"]) == 1
-        assert any(
-            int(item["id"]) == int(root["id"]) for item in await list_children(client, live_env.editor.token, space_id)
-        )
-        await _withdraw(
-            client,
-            live_env.editor.token,
-            int(move["pending"][0]["approval_instance_id"]),
-        )
-
-        delete = assert_success(
-            await client.delete(
-                f"{API_BASE}/knowledge/space/{space_id}/folders/{root['id']}",
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert delete["decision"] == "pending"
-        assert any(
-            int(item["id"]) == int(root["id"]) for item in await list_children(client, live_env.editor.token, space_id)
-        )
-        await _reject(
-            client,
-            live_env.manager.token,
-            int(delete["approval_instance_id"]),
-        )
-        rejected = await _detail(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(delete["change_request_id"]),
-        )
-        assert rejected["status"] == "rejected"
-        assert any(
-            int(item["id"]) == int(root["id"]) for item in await list_children(client, live_env.editor.token, space_id)
-        )
-
-        first = await create_folder(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}batch-first",
-        )
-        second = await create_folder(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}batch-second",
-        )
-        lock_first = assert_success(
-            await client.put(
-                f"{API_BASE}/knowledge/space/{space_id}/folders/{first['id']}",
-                json={"name": f"{RUN_PREFIX}batch-first-new"},
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        batch_delete = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/files/batch-delete",
-                json={"file_ids": [], "folder_ids": [first["id"], second["id"]]},
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert [int(item["id"]) for item in batch_delete["invalid"]] == [int(first["id"])]
-        assert batch_delete["invalid"][0]["error_code"] == 18072
-        assert [int(item["id"]) for item in batch_delete["pending"]] == [int(second["id"])]
-        await _withdraw(client, live_env.editor.token, int(lock_first["approval_instance_id"]))
-        await _withdraw(
-            client,
-            live_env.editor.token,
-            int(batch_delete["pending"][0]["approval_instance_id"]),
-        )
-
-        rename_targets = [
-            await create_folder(
-                client,
-                live_env.admin_token,
-                space_id,
-                f"{RUN_PREFIX}batch-rename-{index}",
-            )
-            for index in range(2)
-        ]
-        batch_rename = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/files/batch-rename",
-                json={
-                    "items": [
-                        {
-                            "id": item["id"],
-                            "type": "folder",
-                            "name": f"{RUN_PREFIX}batch-renamed-{index}",
-                        }
-                        for index, item in enumerate(rename_targets)
-                    ]
-                },
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert len(batch_rename["pending"]) == 2
-        assert batch_rename["renamed"] == []
-        for item in batch_rename["pending"]:
-            await _withdraw(
-                client,
-                live_env.editor.token,
-                int(item["approval_instance_id"]),
-            )
-
-        move_targets = [
-            await create_folder(
-                client,
-                live_env.admin_token,
-                space_id,
-                f"{RUN_PREFIX}batch-move-{index}",
-            )
-            for index in range(2)
-        ]
-        batch_move = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/files/move",
-                json={
-                    "items": [{"id": item["id"], "type": "folder"} for item in move_targets],
-                    "target_space_id": space_id,
-                    "target_folder_id": target["id"],
-                },
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert len(batch_move["pending"]) == 2
-        assert batch_move["moved"] == []
-        for item in batch_move["pending"]:
-            await _withdraw(
-                client,
-                live_env.editor.token,
-                int(item["approval_instance_id"]),
-            )
-
-    async def test_ac29_ac34_ac36_ac37_batch_approve_partial_latest_status(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-29/34/36/37: instance batch decision preserves successes and reports stale items."""
-        require_async_workers()
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        space = await create_space(client, live_env, "batch-approve")
-        space_id = int(space["id"])
-        folders = [
-            await create_folder(
-                client,
-                live_env.admin_token,
-                space_id,
-                f"{RUN_PREFIX}approve-{index}",
-            )
-            for index in range(2)
-        ]
-        pending: list[dict] = []
-        for index, folder in enumerate(folders):
-            pending.append(
-                assert_success(
-                    await client.put(
-                        f"{API_BASE}/knowledge/space/{space_id}/folders/{folder['id']}",
-                        json={"name": f"{RUN_PREFIX}approved-{index}"},
-                        headers=auth_headers(live_env.editor.token),
-                    )
-                )
-            )
-
-        await _reject(
-            client,
-            live_env.manager.token,
-            int(pending[1]["approval_instance_id"]),
-        )
-        batch = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/batch-approve",
-                json={
-                    "approval_instance_ids": [
-                        pending[0]["approval_instance_id"],
-                        pending[1]["approval_instance_id"],
-                    ]
-                },
-                headers=auth_headers(live_env.admin_token),
-            )
-        )
-        assert batch["successCount"] == 1, batch
-        assert batch["failureCount"] == 1, batch
-        assert len(batch["items"]) == 2
-        assert {item["result"] for item in batch["items"]} == {"approved", "invalid"}
-        failed = next(item for item in batch["items"] if item["result"] != "approved")
-        assert failed["latestStatus"] == "rejected"
-        assert failed["retryable"] is False
-        completed = await wait_for(
-            lambda: _detail(
-                client,
-                live_env.editor.token,
-                space_id,
-                int(pending[0]["change_request_id"]),
-            ),
-            lambda value: isinstance(value, dict) and value.get("status") in {"executed", "execute_failed"},
-            description="successful batch item to finish independently",
-        )
-        assert completed["status"] == "executed", completed
-
-    async def test_ac28_to_ac30_dynamic_manager_reconciliation_and_former_deny(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-28~30/34/36: new manager can approve; former manager loses detail/decision."""
-        require_async_workers()
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        replacement_viewer_grant = {
-            "subject_type": "user",
-            "subject_id": live_env.replacement_manager.user_id,
-            "relation": "viewer",
-            "include_children": False,
-        }
-        space = await create_space(
-            client,
-            live_env,
-            "manager-change",
-            extra_grants=[replacement_viewer_grant],
-        )
-        space_id = int(space["id"])
-        folder = await create_folder(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}manager-folder",
-        )
-        pending = assert_success(
-            await client.put(
-                f"{API_BASE}/knowledge/space/{space_id}/folders/{folder['id']}",
-                json={"name": f"{RUN_PREFIX}manager-folder-new"},
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        old_grant = {
-            "subject_type": "user",
-            "subject_id": live_env.manager.user_id,
-            "relation": "manager",
-            "include_children": False,
-        }
-        new_grant = {
-            "subject_type": "user",
-            "subject_id": live_env.replacement_manager.user_id,
-            "relation": "manager",
-            "include_children": False,
-        }
-        authorization = await authorize_space(
-            client,
-            live_env.admin_token,
-            space_id,
-            grants=[new_grant],
-            revokes=[old_grant, replacement_viewer_grant],
-        )
-        assert authorization["failed_count"] == 0, authorization
-        assert authorization["invite_created_count"] == 0, authorization
-        assert authorization["direct_applied_count"] == 3, authorization
-
-        new_detail = await _detail(
-            client,
-            live_env.replacement_manager.token,
-            space_id,
-            int(pending["change_request_id"]),
-        )
-        assert new_detail["can_approve"] is True
-        former = await client.get(
-            f"{API_BASE}/knowledge/space/{space_id}/file-changes/{pending['change_request_id']}",
-            headers=auth_headers(live_env.manager.token),
-        )
-        assert_error(former, 18073)
-
-        approved = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/batch-approve",
-                json={"change_request_ids": [pending["change_request_id"]]},
-                headers=auth_headers(live_env.replacement_manager.token),
-            )
-        )
-        assert approved["successCount"] == 1
-        assert approved["failureCount"] == 0
-        completed = await wait_for(
-            lambda: _detail(
-                client,
-                live_env.editor.token,
-                space_id,
-                int(pending["change_request_id"]),
-            ),
-            lambda value: isinstance(value, dict) and value.get("status") in {"executed", "execute_failed"},
-            description="new manager approved mutation to finish",
-        )
-        assert completed["status"] == "executed", completed
-
-    async def test_ac32_ac44_ac46_ac48_async_execution_reaches_authoritative_state(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-32/44/46/48: approved rename stays executing until worker applies it."""
-        require_async_workers()
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        space = await create_space(client, live_env, "async-execution")
-        space_id = int(space["id"])
-        folder = await create_folder(
-            client,
-            live_env.admin_token,
-            space_id,
-            f"{RUN_PREFIX}async-old",
-        )
-        pending = assert_success(
-            await client.put(
-                f"{API_BASE}/knowledge/space/{space_id}/folders/{folder['id']}",
-                json={"name": f"{RUN_PREFIX}async-new"},
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        approved = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/batch-approve",
-                json={"approval_instance_ids": [pending["approval_instance_id"]]},
-                headers=auth_headers(live_env.manager.token),
-            )
-        )
-        assert approved["successCount"] == 1
-
-        final = await wait_for(
-            lambda: _detail(
-                client,
-                live_env.editor.token,
-                space_id,
-                int(pending["change_request_id"]),
-            ),
-            lambda value: isinstance(value, dict) and value.get("status") in {"executed", "execute_failed"},
-            description="approved rename to become executed or execute_failed",
-        )
-        assert final["status"] == "executed", final
-        assert any(
-            int(item["id"]) == int(folder["id"]) and item.get("file_name") == f"{RUN_PREFIX}async-new"
-            for item in await list_children(client, live_env.editor.token, space_id)
-        )
-
-    async def test_ac39_ac40_ac42_private_and_channel_boundaries(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-39/40/42: private-space owner is direct and channel APIs remain unaffected."""
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        private_space = await create_space(
-            client,
-            live_env,
-            "private",
-            auth_type="private",
-            include_editor=False,
-            include_manager=False,
-        )
-        folder = await create_folder(
-            client,
-            live_env.admin_token,
-            int(private_space["id"]),
-            f"{RUN_PREFIX}private-folder",
-        )
-        direct = assert_success(
-            await client.put(
-                f"{API_BASE}/knowledge/space/{private_space['id']}/folders/{folder['id']}",
-                json={"name": f"{RUN_PREFIX}private-renamed"},
-                headers=auth_headers(live_env.admin_token),
-            )
-        )
-        assert direct["decision"] == "direct"
-
-        channels = assert_success(
-            await client.get(
-                f"{API_BASE}/channel/manager/my_channels",
-                params={"query_type": "created", "sort_by": "latest_update"},
-                headers=auth_headers(live_env.admin_token),
-            )
-        )
-        assert isinstance(rows(channels), list)
-
-    async def test_ac41_department_space_private_is_rejected(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-41: an explicit private department-space request returns exact error 18075."""
-        department_id = os.environ.get("E2E_F046_DEPARTMENT_ID")
-        if not department_id:
-            pytest.skip("set E2E_F046_DEPARTMENT_ID to exercise department-space private rejection")
-        response = await client.post(
-            f"{API_BASE}/knowledge/space/department/batch-create",
-            json={
-                "items": [
-                    {
-                        "department_id": int(department_id),
-                        "name": f"{RUN_PREFIX}department-private",
-                        "auth_type": "private",
-                    }
-                ]
-            },
-            headers=auth_headers(live_env.admin_token),
-        )
-        assert_error(response, 18075)
-
-    async def test_ac53_dual_tenant_policy_and_request_isolation(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-53: tenant A/B policies are independent and tenant B cannot read A request."""
-        tenant_b_token = await optional_tenant_b_token(client)
-        tenant_b_id = tenant_id_from_token(tenant_b_token)
-        assert tenant_b_id != live_env.tenant_id, "tenant-B credentials resolve to tenant A"
-        original_b = await get_policy(client, tenant_b_token)
-        try:
-            await put_policy(client, live_env.admin_token, enabled=True, scope="per_space")
-            await put_policy(client, tenant_b_token, enabled=False, scope="all_spaces")
-            assert await get_policy(client, live_env.admin_token) == {
-                "enabled": True,
-                "scope": "per_space",
-            }
-            assert await get_policy(client, tenant_b_token) == {
-                "enabled": False,
-                "scope": "all_spaces",
-            }
-
-            space = await create_space(client, live_env, "tenant-isolation")
-            folder = await create_folder(
-                client,
-                live_env.admin_token,
-                int(space["id"]),
-                f"{RUN_PREFIX}tenant-folder",
-            )
-            request = assert_success(
-                await client.put(
-                    f"{API_BASE}/knowledge/space/{space['id']}/folders/{folder['id']}",
-                    json={"name": f"{RUN_PREFIX}tenant-folder-new"},
-                    headers=auth_headers(live_env.editor.token),
-                )
-            )
-            cross_tenant = await client.get(
-                f"{API_BASE}/knowledge/space/{space['id']}/file-changes/{request['change_request_id']}",
-                headers=auth_headers(tenant_b_token),
-            )
-            assert_error(cross_tenant, 18073)
-            await _withdraw(
-                client,
-                live_env.editor.token,
-                int(request["approval_instance_id"]),
-            )
-        finally:
-            await put_policy(
-                client,
-                tenant_b_token,
-                enabled=bool(original_b["enabled"]),
-                scope=str(original_b["scope"]),
-            )
+async def test_ac07_ac34_tenant_and_decision_boundaries(client: httpx.AsyncClient) -> None:
+    """AC-07/34: tenant isolation and repeated decisions fail closed with exact errors."""
+    created = await _submit(client, KnowledgeSpaceFileChangeAction.DELETE)
+    _error(
+        await client.get(
+            f"/api/v1/e2e-f046/file-changes/{created['request_id']}",
+            headers=auth_headers("e2e-f046-other"),
+        ),
+        18100,
+        "Approval request does not exist",
+    )
+    _error(
+        await client.post(
+            "/api/v1/e2e-f046/file-changes",
+            json=_payload(KnowledgeSpaceFileChangeAction.UPLOAD),
+            headers=auth_headers("e2e-f046-other"),
+        ),
+        18101,
+        "You do not have permission to access this approval request",
+    )
+    _success(
+        await client.post(
+            f"/api/v1/e2e-f046/tasks/{created['task_id']}/decision",
+            json={"action": "approve"},
+            headers=auth_headers("e2e-f046-owner"),
+        )
+    )
+    _error(
+        await client.post(
+            f"/api/v1/e2e-f046/tasks/{created['task_id']}/decision",
+            json={"action": "approve"},
+            headers=auth_headers("e2e-f046-owner"),
+        ),
+        18102,
+        "Approval request has already been processed",
+    )

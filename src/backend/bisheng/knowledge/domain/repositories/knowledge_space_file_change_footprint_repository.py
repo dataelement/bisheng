@@ -7,7 +7,6 @@ from sqlalchemy import and_, delete, false, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.approval.domain.models.approval_instance import ApprovalInstance
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
     KnowledgeSpaceFileChangeAction,
     KnowledgeSpaceFileChangeExecutionState,
@@ -15,8 +14,15 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
     KnowledgeSpaceFileChangeLockScope,
     KnowledgeSpaceFileChangeRequest,
 )
-from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
-    RESOURCE_LOCK_BLOCKING_STATUSES,
+
+RESOURCE_LOCK_BLOCKING_EXECUTION_STATES = frozenset(
+    {
+        KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
+        KnowledgeSpaceFileChangeExecutionState.QUEUED,
+        KnowledgeSpaceFileChangeExecutionState.APPLYING,
+        KnowledgeSpaceFileChangeExecutionState.FAILED,
+        KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
+    }
 )
 
 
@@ -42,9 +48,8 @@ class MutationReadProjection:
 
 
 @dataclass(frozen=True, slots=True)
-class ResourceApprovalMatch:
+class ResourceMutationMatch:
     request: KnowledgeSpaceFileChangeRequest
-    instance: ApprovalInstance
     path_root: str | None
     lock_scope: str
 
@@ -245,15 +250,11 @@ class KnowledgeSpaceFileChangeFootprintRepository:
                 KnowledgeSpaceFileChangeFootprint,
                 KnowledgeSpaceFileChangeFootprint.request_id == KnowledgeSpaceFileChangeRequest.id,
             )
-            .join(
-                ApprovalInstance,
-                ApprovalInstance.id == KnowledgeSpaceFileChangeRequest.approval_instance_id,
-            )
             .where(
                 KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
                 KnowledgeSpaceFileChangeFootprint.tenant_id == tenant_id,
-                ApprovalInstance.tenant_id == tenant_id,
-                ApprovalInstance.status.in_(RESOURCE_LOCK_BLOCKING_STATUSES),
+                KnowledgeSpaceFileChangeRequest.approval_instance_id.is_not(None),
+                KnowledgeSpaceFileChangeRequest.execution_state.in_(RESOURCE_LOCK_BLOCKING_EXECUTION_STATES),
                 or_(*overlap_conditions) if overlap_conditions else false(),
             )
             .distinct()
@@ -281,8 +282,8 @@ class KnowledgeSpaceFileChangeFootprintRepository:
         tenant_id: int,
         space_id: int,
         resources: Sequence[FootprintEntry],
-    ) -> list[ResourceApprovalMatch]:
-        """Batch-load active formal-resource approvals for one visible page.
+    ) -> list[ResourceMutationMatch]:
+        """Batch-load active formal-resource mutations for one visible page.
 
         Only the request's authoritative source root footprint participates in
         display projection. Destination and target-ancestor conflict markers
@@ -297,15 +298,7 @@ class KnowledgeSpaceFileChangeFootprintRepository:
         statement = (
             select(
                 KnowledgeSpaceFileChangeRequest,
-                ApprovalInstance,
                 KnowledgeSpaceFileChangeFootprint,
-            )
-            .join(
-                ApprovalInstance,
-                and_(
-                    ApprovalInstance.tenant_id == tenant_id,
-                    ApprovalInstance.id == KnowledgeSpaceFileChangeRequest.approval_instance_id,
-                ),
             )
             .join(
                 KnowledgeSpaceFileChangeFootprint,
@@ -333,19 +326,18 @@ class KnowledgeSpaceFileChangeFootprintRepository:
                         KnowledgeSpaceFileChangeAction.DELETE,
                     )
                 ),
-                ApprovalInstance.status.in_(RESOURCE_LOCK_BLOCKING_STATUSES),
+                KnowledgeSpaceFileChangeRequest.execution_state.in_(RESOURCE_LOCK_BLOCKING_EXECUTION_STATES),
                 or_(*overlap_conditions),
             )
             .order_by(KnowledgeSpaceFileChangeRequest.id.asc())
         )
         return [
-            ResourceApprovalMatch(
+            ResourceMutationMatch(
                 request=request,
-                instance=instance,
                 path_root=footprint.path_root,
                 lock_scope=str(footprint.lock_scope),
             )
-            for request, instance, footprint in (await self.session.exec(statement)).all()
+            for request, footprint in (await self.session.exec(statement)).all()
         ]
 
     async def list_by_request_id(

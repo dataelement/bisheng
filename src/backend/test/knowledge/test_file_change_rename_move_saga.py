@@ -11,7 +11,6 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.approval.domain.services.approval_outbox_service import Completed, Deferred
 from bisheng.common.errcode.knowledge_space import SpaceNotFoundError, SpacePermissionDeniedError
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.database.models.group_resource import ResourceTypeEnum
@@ -44,6 +43,8 @@ from bisheng.knowledge.domain.services.knowledge_space_file_change_execution_coo
 from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
     KnowledgeSpaceMutationExecutor,
     MoveExecutionStepCode,
+    MutationExecutionCompleted,
+    MutationExecutionDispatch,
     MutationStepContext,
     RenameExecutionStepCode,
     VerifiedMutationStepResult,
@@ -159,6 +160,8 @@ async def _seed_rename(engine, *, resource_type=KnowledgeSpaceFileChangeResource
                 resource_type=resource_type,
                 resource_id=row.id,
                 applicant_user_id=7,
+                business_key="knowledge-space-change:rename-saga",
+                request_fingerprint="rename-saga-fingerprint",
                 approval_instance_id=501,
                 file_name=row.file_name,
                 action_snapshot={"old_name": row.file_name, "new_name": "new.pdf" if row.file_type else "new-folder"},
@@ -226,6 +229,8 @@ async def _seed_cross_space_folder_move(engine) -> int:
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=101,
                 applicant_user_id=7,
+                business_key="knowledge-space-change:move-saga",
+                request_fingerprint="move-saga-fingerprint",
                 approval_instance_id=502,
                 file_name="folder",
                 source_parent_id=None,
@@ -348,7 +353,6 @@ def _executor(engine, effects, *, after_step_effect=None):
         mutation_step_compensator=effects.compensate if effects is not None else None,
         after_step_effect=after_step_effect,
         mutation_step_owner=owner,
-        mutation_deferred_completion=_complete_execution,
     )
 
 
@@ -358,12 +362,10 @@ async def test_rename_prepares_and_verifies_indexes_before_atomic_name_cutover(s
     effects = _VerifiedEffects(saga_engine)
 
     result = await _executor(saga_engine, effects).execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
 
-    assert isinstance(result, Completed)
+    assert isinstance(result, MutationExecutionCompleted)
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "new.pdf"
     request = await _row(saga_engine, KnowledgeSpaceFileChangeRequest, request_id)
     assert request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED
@@ -384,11 +386,9 @@ async def test_public_verified_mutation_cutover_finishes_coordinator_driven_rena
     executor = _executor(saga_engine, None)
 
     deferred = await executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
-    assert isinstance(deferred, Deferred)
+    assert isinstance(deferred, MutationExecutionDispatch)
     async with AsyncSession(bind=saga_engine, expire_on_commit=False) as session:
         async with session.begin():
             steps = list(
@@ -407,7 +407,6 @@ async def test_public_verified_mutation_cutover_finishes_coordinator_driven_rena
                     session.add(step)
 
     assert await executor.cutover_verified_mutation(
-        instance_id=501,
         request_id=request_id,
         execution_token=deferred.execution_token,
     )
@@ -430,12 +429,9 @@ async def test_cutover_replays_cleanup_after_atomic_db_phase_and_approval_commit
         deadline_factory=lambda: datetime(2026, 8, 11, tzinfo=UTC),
         mutation_execution_validator=_allow_execution,
         mutation_step_owner=owner,
-        mutation_deferred_completion=_complete_execution,
     )
     deferred = await executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
     async with AsyncSession(bind=saga_engine, expire_on_commit=False) as session:
         async with session.begin():
@@ -456,7 +452,6 @@ async def test_cutover_replays_cleanup_after_atomic_db_phase_and_approval_commit
 
     with pytest.raises(RuntimeError, match="cleanup crash"):
         await executor.cutover_verified_mutation(
-            instance_id=501,
             request_id=request_id,
             execution_token=deferred.execution_token,
         )
@@ -491,7 +486,7 @@ async def test_cutover_replays_cleanup_after_atomic_db_phase_and_approval_commit
     assert footprints == []
 
 
-async def test_cutover_lock_order_is_approval_request_resource_then_steps(saga_engine):
+async def test_cutover_uses_only_knowledge_resource_and_step_locks(saga_engine):
     set_current_tenant_id(42)
     request_id = await _seed_rename(saga_engine)
     events: list[str] = []
@@ -524,12 +519,9 @@ async def test_cutover_lock_order_is_approval_request_resource_then_steps(saga_e
         execution_token_factory=lambda: "lock-order-token",
         mutation_execution_validator=validate,
         mutation_step_owner=_AuthoritativeOwner(),
-        mutation_deferred_completion=complete,
     )
     deferred = await executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
     async with AsyncSession(bind=saga_engine, expire_on_commit=False) as session:
         async with session.begin():
@@ -549,12 +541,12 @@ async def test_cutover_lock_order_is_approval_request_resource_then_steps(saga_e
         patch.object(KnowledgeSpaceFileChangeExecutionStepRepository, "list_by_request", new=observed_steps),
     ):
         assert await executor.cutover_verified_mutation(
-            instance_id=501,
             request_id=request_id,
             execution_token=deferred.execution_token,
         )
 
-    assert events[:4] == ["instance/outbox", "request", "resource", "steps"]
+    assert events[0] == "resource"
+    assert "instance/outbox" not in events
 
 
 async def test_cutover_commit_ack_loss_reloads_new_view_and_never_rolls_back(saga_engine):
@@ -600,12 +592,9 @@ async def test_cutover_commit_ack_loss_reloads_new_view_and_never_rolls_back(sag
         execution_token_factory=lambda: "ack-loss-token",
         mutation_execution_validator=_allow_execution,
         mutation_step_owner=owner,
-        mutation_deferred_completion=_complete_execution,
     )
     deferred = await executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
     async with AsyncSession(bind=saga_engine, expire_on_commit=False) as session:
         async with session.begin():
@@ -620,7 +609,6 @@ async def test_cutover_commit_ack_loss_reloads_new_view_and_never_rolls_back(sag
                     session.add(step)
 
     assert await executor.cutover_verified_mutation(
-        instance_id=501,
         request_id=request_id,
         execution_token=deferred.execution_token,
     )
@@ -646,12 +634,9 @@ async def test_parent_boundary_process_crash_keeps_old_view_and_hides_target(sag
         deadline_factory=lambda: datetime(2026, 8, 11, tzinfo=UTC),
         mutation_execution_validator=_allow_execution,
         mutation_step_owner=owner,
-        mutation_deferred_completion=_complete_execution,
     )
     deferred = await executor.execute(
-        instance_id=502,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
     )
     async with AsyncSession(bind=saga_engine, expire_on_commit=False) as session:
         async with session.begin():
@@ -671,7 +656,6 @@ async def test_parent_boundary_process_crash_keeps_old_view_and_hides_target(sag
 
     with pytest.raises(SimulatedProcessCrash):
         await executor.cutover_verified_mutation(
-            instance_id=502,
             request_id=request_id,
             execution_token=deferred.execution_token,
         )
@@ -706,12 +690,9 @@ async def test_catchable_db_cutover_failure_restores_old_visibility_fence(saga_e
         deadline_factory=lambda: datetime(2026, 8, 11, tzinfo=UTC),
         mutation_execution_validator=reject_cutover,
         mutation_step_owner=owner,
-        mutation_deferred_completion=_complete_execution,
     )
     deferred = await executor.execute(
-        instance_id=502,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
     )
     async with AsyncSession(bind=saga_engine, expire_on_commit=False) as session:
         async with session.begin():
@@ -731,7 +712,6 @@ async def test_catchable_db_cutover_failure_restores_old_visibility_fence(saga_e
 
     with pytest.raises(RuntimeError, match="DB validation rollback"):
         await executor.cutover_verified_mutation(
-            instance_id=502,
             request_id=request_id,
             execution_token=deferred.execution_token,
         )
@@ -748,12 +728,10 @@ async def test_folder_rename_is_one_root_cutover_and_does_not_rewrite_descendant
     effects = _VerifiedEffects(saga_engine)
 
     result = await _executor(saga_engine, effects).execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
 
-    assert isinstance(result, Completed)
+    assert isinstance(result, MutationExecutionCompleted)
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "new-folder"
     child = await _row(saga_engine, KnowledgeFile, 102)
     assert child.file_name == "child.pdf"
@@ -768,9 +746,7 @@ async def test_external_failure_compensates_prepared_steps_and_keeps_old_name(sa
 
     with pytest.raises(RuntimeError, match="injected external failure"):
         await _executor(saga_engine, effects).execute(
-            instance_id=501,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
         )
 
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "old.pdf"
@@ -787,9 +763,7 @@ async def test_partial_move_step_failure_compensates_the_failed_step_and_prior_p
 
     with pytest.raises(RuntimeError, match="injected external failure"):
         await _executor(saga_engine, effects).execute(
-            instance_id=502,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
         )
 
     assert [context.step_code for context in effects.compensated] == [
@@ -810,9 +784,7 @@ async def test_failed_rename_resumes_with_new_token_and_stable_step_idempotency_
     executor = _executor(saga_engine, first_effects)
     with pytest.raises(RuntimeError, match="injected external failure"):
         await executor.execute(
-            instance_id=501,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
         )
     original_keys = {step.step_code: step.idempotency_key for step in await _steps(saga_engine, request_id)}
 
@@ -823,7 +795,7 @@ async def test_failed_rename_resumes_with_new_token_and_stable_step_idempotency_
                 request_id=request_id,
                 new_token="second-generation",
             )
-    assert isinstance(resumed, Deferred)
+    assert isinstance(resumed, MutationExecutionDispatch)
     assert resumed.execution_token == "second-generation"
 
     second_effects = _VerifiedEffects(saga_engine)
@@ -837,12 +809,10 @@ async def test_failed_rename_resumes_with_new_token_and_stable_step_idempotency_
         mutation_step_owner=_AuthoritativeOwner(),
     )
     result = await resumed_executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
 
-    assert isinstance(result, Completed)
+    assert isinstance(result, MutationExecutionCompleted)
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "new.pdf"
     resumed_steps = await _steps(saga_engine, request_id)
     assert {step.step_code: step.idempotency_key for step in resumed_steps} == original_keys
@@ -868,18 +838,14 @@ async def test_crash_after_effect_before_ack_replays_same_idempotency_key_withou
     executor = _executor(saga_engine, effects, after_step_effect=crash_after_first_effect)
     with pytest.raises(SimulatedProcessCrash):
         await executor.execute(
-            instance_id=501,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
         )
 
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "old.pdf"
     result = await executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
-    assert isinstance(result, Completed)
+    assert isinstance(result, MutationExecutionCompleted)
     shadow_keys = [
         context.idempotency_key
         for context in effects.applied
@@ -904,9 +870,7 @@ async def test_executor_never_treats_enqueue_ack_as_verified_side_effect_complet
     )
     with pytest.raises(TypeError, match="verified mutation step result"):
         await executor.execute(
-            instance_id=501,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
         )
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "old.pdf"
 
@@ -923,17 +887,13 @@ async def test_worker_owner_step_reloads_current_durable_context_and_returns_ver
         mutation_step_owner=owner,
     )
     deferred = await executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
 
     result = await executor.execute_and_verify_step(
         ExecutionStepContext(
             tenant_id=42,
             request_id=request_id,
-            instance_id=501,
-            outbox_id=601,
             execution_token=deferred.execution_token,
             action="rename",
             step_code=RenameExecutionStepCode.INDEX_SHADOW,
@@ -962,9 +922,7 @@ async def test_worker_owner_step_rejects_forged_broker_identity_before_side_effe
         mutation_step_owner=owner,
     )
     await executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
 
     with pytest.raises(RuntimeError, match="durable step identity"):
@@ -972,8 +930,6 @@ async def test_worker_owner_step_rejects_forged_broker_identity_before_side_effe
             ExecutionStepContext(
                 tenant_id=42,
                 request_id=request_id,
-                instance_id=501,
-                outbox_id=601,
                 execution_token="owner-token",
                 action="move",
                 step_code=RenameExecutionStepCode.INDEX_SHADOW,
@@ -997,9 +953,7 @@ async def test_public_compensation_reloads_manifest_and_reverses_durable_steps(s
         mutation_step_owner=owner,
     )
     await executor.execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
     async with AsyncSession(bind=saga_engine, expire_on_commit=False) as session:
         async with session.begin():
@@ -1035,12 +989,10 @@ async def test_cross_space_folder_move_cuts_over_subtree_version_chain_and_docum
     effects = _VerifiedEffects(saga_engine)
 
     result = await _executor(saga_engine, effects).execute(
-        instance_id=502,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
     )
 
-    assert isinstance(result, Completed)
+    assert isinstance(result, MutationExecutionCompleted)
     folder = await _row(saga_engine, KnowledgeFile, 101)
     child = await _row(saga_engine, KnowledgeFile, 102)
     historical = await _row(saga_engine, KnowledgeFile, 103)
@@ -1070,9 +1022,7 @@ async def test_move_target_removed_after_approval_fails_before_steps_and_keeps_s
 
     with pytest.raises(LookupError, match="target folder"):
         await _executor(saga_engine, effects).execute(
-            instance_id=502,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
         )
 
     folder = await _row(saga_engine, KnowledgeFile, 101)
@@ -1107,9 +1057,7 @@ async def test_move_version_chain_fails_closed_when_a_sibling_crosses_tenant_bou
 
     with pytest.raises(ValueError, match="version chain crosses the tenant"):
         await _executor(saga_engine, effects).execute(
-            instance_id=502,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
         )
 
     assert await _steps(saga_engine, request_id) == []
@@ -1146,9 +1094,7 @@ async def test_move_rechecks_target_name_after_external_preparation_and_compensa
             effects,
             after_step_effect=create_conflict_after_verify,
         ).execute(
-            instance_id=502,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
         )
 
     folder = await _row(saga_engine, KnowledgeFile, 101)
@@ -1187,9 +1133,7 @@ async def test_runtime_revalidation_rejects_revoked_rename_permission_before_ste
     ):
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
-                instance_id=501,
                 request_id=request_id,
-                payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
             )
 
     permission_check.assert_awaited_once()
@@ -1231,9 +1175,7 @@ async def test_runtime_revalidation_rejects_unpublished_move_target_before_steps
     ):
         with pytest.raises(SpaceNotFoundError):
             await executor.execute(
-                instance_id=502,
                 request_id=request_id,
-                payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
             )
 
     assert await _steps(saga_engine, request_id) == []
@@ -1277,9 +1219,7 @@ async def test_cutover_revalidates_revoked_permission_and_compensates_old_name(s
     ):
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
-                instance_id=501,
                 request_id=request_id,
-                payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
             )
 
     assert permission_check.await_count == 2
@@ -1328,9 +1268,7 @@ async def test_cutover_revalidates_target_space_state_and_compensates_old_positi
     ):
         with pytest.raises(SpaceNotFoundError):
             await executor.execute(
-                instance_id=502,
                 request_id=request_id,
-                payload_snapshot={"change_request_id": request_id, "action": "move", "space_id": 10},
             )
 
     folder = await _row(saga_engine, KnowledgeFile, 101)
@@ -1350,12 +1288,10 @@ async def test_without_inline_runner_rename_is_deferred_and_never_cuts_over(saga
     request_id = await _seed_rename(saga_engine)
 
     result = await _executor(saga_engine, None).execute(
-        instance_id=501,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
     )
 
-    assert isinstance(result, Deferred)
+    assert isinstance(result, MutationExecutionDispatch)
     assert (await _row(saga_engine, KnowledgeFile, 101)).file_name == "old.pdf"
     assert {step.state for step in await _steps(saga_engine, request_id)} == {
         KnowledgeSpaceFileChangeExecutionStepState.PENDING
@@ -1369,9 +1305,7 @@ async def test_rename_executor_never_falls_back_to_another_tenant(saga_engine):
 
     with pytest.raises(LookupError, match="request not found"):
         await _executor(saga_engine, effects).execute(
-            instance_id=501,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "rename", "space_id": 10},
         )
 
     set_current_tenant_id(42)

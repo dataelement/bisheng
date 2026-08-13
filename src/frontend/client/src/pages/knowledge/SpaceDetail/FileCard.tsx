@@ -208,7 +208,7 @@ export function FileCard({
      */
     const renderStatusOverlayTag = (inline = false) => {
         if (pendingUpload) {
-            const failed = pendingUpload.status === "execute_failed";
+            const failed = pendingUpload.status === "failed";
             const pill = (
                 <button
                     type="button"

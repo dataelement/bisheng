@@ -25,10 +25,10 @@ import { ExpandableSearchField } from "../ui/ExpandableSearchField";
 import {
   FILE_CHANGE_SCENARIO_CODE,
   resolveApprovalTaskSelection,
+  resolveFileChangeSpaceId,
   type ApprovalTaskFilter,
 } from "./approvalCenterFileChangeUtils";
 import { FileChangeBusinessContent } from "./FileChangeBusinessContent";
-import { FileChangeBusinessProjection } from "./FileChangeBusinessProjection";
 import {
   RESOURCE_USER_INVITE_SCENARIO_CODE,
   ResourceUserInviteBusinessContent,
@@ -47,14 +47,7 @@ export interface ApprovalCenterDialogProps {
 }
 
 type RequestsFilter = "in_progress" | "completed";
-const IN_PROGRESS_STATUSES = new Set(["pending", "exception", "execute_failed"]);
-
-function fileChangeSpaceId(detail: ApprovalTaskDetail | ApprovalInstanceDetail | null): number | undefined {
-  if (detail?.scenario_code !== FILE_CHANGE_SCENARIO_CODE) return undefined;
-  const rawSpaceId = detail.payload_snapshot?.space_id;
-  const spaceId = Number(rawSpaceId);
-  return Number.isSafeInteger(spaceId) && spaceId > 0 ? spaceId : undefined;
-}
+const IN_PROGRESS_STATUSES = new Set(["pending", "exception"]);
 
 function getId(item: { task_id?: number; id?: number; instance_id?: number } | null | undefined, type: "task" | "instance"): number | null {
   const raw = type === "task" ? (item?.task_id ?? item?.id) : ((item as any)?.instance_id ?? item?.id);
@@ -74,18 +67,14 @@ function formatTime(ts?: string | Date | null): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-function StatusBadge({ status, instanceStatus, scope, localize }: { status?: string | null; instanceStatus?: string | null; scope: "task" | "instance"; localize: ReturnType<typeof useLocalize> }) {
+function StatusBadge({ status, scope, localize }: { status?: string | null; scope: "task" | "instance"; localize: ReturnType<typeof useLocalize> }) {
   const s = String(status || "").toLowerCase();
-  const is = String(instanceStatus || "").toLowerCase();
-  // Task scope: if my task is approved but instance execution failed, surface the failure.
-  const effective = scope === "task" && s === "approved" && is === "execute_failed" ? "execute_failed" : s;
   const TASK_MAP: Record<string, { text: string; cls: string }> = {
     pending:        { text: localize("com_approval_task_badge_pending"),    cls: "bg-[#e8f3ff] text-[#165dff]" },
     approved:       { text: localize("com_approval_task_badge_approved"),   cls: "bg-[#e8ffea] text-[#00b42a]" },
     rejected:       { text: localize("com_approval_task_badge_rejected"),   cls: "bg-[#fff2f0] text-[#f53f3f]" },
     cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
     skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-[#f7f8fa] text-[#86909c]" },
-    execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
     exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
   };
   const INSTANCE_MAP: Record<string, { text: string; cls: string }> = {
@@ -96,11 +85,10 @@ function StatusBadge({ status, instanceStatus, scope, localize }: { status?: str
     withdrawn:      { text: localize("com_approval_status_withdrawn"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
     cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
     skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-[#f7f8fa] text-[#86909c]" },
-    execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
     exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
   };
   const MAP = scope === "instance" ? INSTANCE_MAP : TASK_MAP;
-  const { text, cls } = MAP[effective] ?? MAP[s] ?? { text: status ?? "--", cls: "bg-[#f7f8fa] text-[#86909c]" };
+  const { text, cls } = MAP[s] ?? { text: status ?? "--", cls: "bg-[#f7f8fa] text-[#86909c]" };
   return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", cls)}>{text}</span>;
 }
 
@@ -343,7 +331,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     if (!selectedTaskId) return;
     setActionLoading(true);
     const comment = decisionComment.trim() || (action === "approve" ? "同意" : "驳回");
-    const refreshSpaceId = fileChangeSpaceId(taskDetail);
+    const refreshSpaceId = resolveFileChangeSpaceId(taskDetail);
     try {
       await decideApprovalTaskApi(selectedTaskId, { action, comment });
       setDecisionComment("");
@@ -363,7 +351,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
     if (!selectedInstanceId) return;
     setWithdrawDialogOpen(false);
     setActionLoading(true);
-    const refreshSpaceId = fileChangeSpaceId(requestDetail);
+    const refreshSpaceId = resolveFileChangeSpaceId(requestDetail);
     try {
       await withdrawApprovalInstanceApi(selectedInstanceId, { reason: withdrawReason.trim() || undefined });
       if (refreshSpaceId != null) dispatchFileChangeApprovalRefresh(refreshSpaceId);
@@ -514,7 +502,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                                     {localize("com_approval_grant_revoked")}
                                   </span>
                                 )}
-                                <StatusBadge status={item.status} instanceStatus={item.instance_status} scope="task" localize={localize} />
+                                <StatusBadge status={item.status} scope="task" localize={localize} />
                               </div>
                             </div>
                             <div className={cn("mt-1.5 flex items-center justify-between text-[12px]", selectedTaskId === id ? "text-[#86909c]" : "text-[#c9cdd4]")}>
@@ -672,8 +660,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   );
 }
 
-function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenarioName, createTime, localize, onBack }: {
-  title?: string; status?: string; instanceStatus?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>; onBack?: () => void;
+function DetailHeader({ title, status, scope, serialNo, scenarioName, createTime, localize, onBack }: {
+  title?: string; status?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>; onBack?: () => void;
 }) {
   return (
     // Pinned to the top of the scrolling detail pane so the title/status/serial stay visible while the body scrolls.
@@ -693,7 +681,7 @@ function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenario
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
             <h3 className="min-w-0 flex-1 text-[16px] font-semibold text-text-primary leading-snug">{title || "--"}</h3>
-            <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} />
+            <StatusBadge status={status} scope={scope} localize={localize} />
           </div>
           <p className="mt-1.5 text-[13px] text-[#86909c]">
             {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
@@ -727,7 +715,7 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="task"
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
 
       <div>
@@ -735,7 +723,6 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
         <InfoGrid rows={basicRows} />
       </div>
 
-      <FileChangeBusinessProjection detail={detail} localize={localize} />
       <FileChangeBusinessContent detail={detail} localize={localize} />
       <ResourceUserInviteBusinessContent detail={detail} localize={localize} />
 
@@ -913,7 +900,6 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
         <InfoGrid rows={basicRows} />
       </div>
 
-      <FileChangeBusinessProjection detail={detail} localize={localize} />
       <FileChangeBusinessContent detail={detail} localize={localize} />
       <ResourceUserInviteBusinessContent detail={detail} localize={localize} />
 

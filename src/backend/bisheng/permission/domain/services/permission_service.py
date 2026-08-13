@@ -404,25 +404,24 @@ class PermissionService:
         )
 
         if enforce_fga_success and dispatch_file_change_approver_reconcile:
-            try:
-                from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
-                    dispatch_file_change_approver_reconcile_for_permission_change,
-                )
+            from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                dispatch_file_change_approver_reconcile_for_permission_change,
+            )
 
-                resource_tenant_id = await cls.resolve_resource_tenant_id(
-                    object_type,
-                    object_id,
-                )
-                await dispatch_file_change_approver_reconcile_for_permission_change(
-                    resource_type=object_type,
-                    resource_id=object_id,
-                    grants=grants or (),
-                    revokes=revokes or (),
-                    tenant_id=resource_tenant_id,
-                )
-            except Exception:
-                # Beat/lazy reconciliation repairs a missed permission-event dispatch.
-                logger.exception("post-authorize F046 approver reconcile dispatch failed")
+            resource_tenant_id = await cls.resolve_resource_tenant_id(
+                object_type,
+                object_id,
+            )
+            # This runs only after the authoritative OpenFGA write succeeds.
+            # Strict resolver failures propagate so callers cannot mistake an
+            # unavailable approver source for an authoritative empty set.
+            await dispatch_file_change_approver_reconcile_for_permission_change(
+                resource_type=object_type,
+                resource_id=object_id,
+                grants=grants or (),
+                revokes=revokes or (),
+                tenant_id=resource_tenant_id,
+            )
 
         # Invalidate cache for directly affected users
         if affected_user_ids:

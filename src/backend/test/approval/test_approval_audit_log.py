@@ -7,6 +7,7 @@ service code runs end-to-end inside the test.
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -138,6 +139,8 @@ async def test_outbox_success_emits_handler_success_audit():
         status="pending",
         retry_count=0,
         error_summary=None,
+        execution_token=None,
+        update_time=datetime.utcnow(),
         payload_snapshot={"menu_key": "flow"},
     )
 
@@ -181,6 +184,8 @@ async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
         status="pending",
         retry_count=0,
         error_summary=None,
+        execution_token=None,
+        update_time=datetime.utcnow(),
         payload_snapshot={"menu_key": "flow"},
     )
     repo = SimpleNamespace(
@@ -208,7 +213,7 @@ async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
     assert "payload_snapshot" not in row["metadata"]
 
 
-async def test_invite_outbox_uses_scenario_specific_terminal_audit_actions():
+async def test_invite_outbox_no_longer_owns_scenario_specific_execution_audits():
     captured: list[dict] = []
     instance = SimpleNamespace(
         id=11,
@@ -219,13 +224,27 @@ async def test_invite_outbox_uses_scenario_specific_terminal_audit_actions():
         applicant_user_id=7,
         payload_snapshot={"target_user_id": 9},
     )
-    success_outbox = SimpleNamespace(id=77, instance_id=11, status="pending", payload_snapshot={})
+    success_outbox = SimpleNamespace(
+        id=77,
+        instance_id=11,
+        status="pending",
+        execution_token=None,
+        update_time=datetime.utcnow(),
+        payload_snapshot={},
+    )
     success_repo = SimpleNamespace(
         get_outbox=AsyncMock(return_value=success_outbox),
         claim_outbox=AsyncMock(return_value=success_outbox),
         finalize_outbox_success=AsyncMock(return_value=(success_outbox, instance)),
     )
-    failed_outbox = SimpleNamespace(id=78, instance_id=11, status="pending", payload_snapshot={})
+    failed_outbox = SimpleNamespace(
+        id=78,
+        instance_id=11,
+        status="pending",
+        execution_token=None,
+        update_time=datetime.utcnow(),
+        payload_snapshot={},
+    )
     failed_repo = SimpleNamespace(
         get_outbox=AsyncMock(return_value=failed_outbox),
         claim_outbox=AsyncMock(return_value=failed_outbox),
@@ -237,7 +256,6 @@ async def test_invite_outbox_uses_scenario_specific_terminal_audit_actions():
             "bisheng.approval.domain.services.approval_outbox_service.AuditLogDao.ainsert_v2",
             new=AsyncMock(side_effect=lambda **kw: captured.append(kw)),
         ),
-        patch.object(ApprovalOutboxService, "_notify_invite_applicant", new=AsyncMock()),
         patch(
             "bisheng.approval.domain.services.approval_notification_service.ApprovalNotificationService.notify_admins",
             new=AsyncMock(),
@@ -253,8 +271,8 @@ async def test_invite_outbox_uses_scenario_specific_terminal_audit_actions():
         )
 
     assert [row["action"] for row in captured] == [
-        "resource.user_invite.execute.success",
-        "resource.user_invite.execute.failed",
+        "approval.handler.success",
+        "approval.handler.failed",
     ]
 
 

@@ -1,530 +1,458 @@
-"""Publication and visibility E2E contract for F046.
-
-This suite verifies that staged/pending/parsing files are not formal knowledge
-resources and that delete cutover removes a resource from every API read path.
-Live writes require ``E2E_F046_ENABLED=1``; worker-backed cases additionally
-require ``E2E_F046_ASYNC_ENABLED=1``.  Optional failure and RAG cases state their
-extra environment prerequisites in their skip reasons.
-"""
+"""In-process API E2E coverage for F046 publication and preview gates."""
 
 from __future__ import annotations
 
-import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from uuid import uuid4
 
 import httpx
 import pytest
+from fastapi import Cookie, Depends, FastAPI
+from pydantic import BaseModel, Field
+from sqlalchemy import delete, select, update
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from test.e2e.helpers.api import API_BASE
-from test.e2e.helpers.auth import auth_headers
-from test.e2e.helpers.f046 import (
-    RUN_PREFIX,
-    F046TenantEnvironment,
-    assert_error,
-    assert_success,
-    create_space,
-    list_children,
-    provision_default_tenant,
-    put_policy,
-    register_upload,
-    require_async_workers,
-    restore_and_cleanup,
-    stage_upload,
-    wait_for,
+from bisheng.common.schemas.api import resp_200, resp_500
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step import (
+    KnowledgeSpaceFileChangeExecutionStep,
+    KnowledgeSpaceFileChangeExecutionStepState,
 )
+from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+    KnowledgeSpaceFileChangeAction,
+    KnowledgeSpaceFileChangeCleanupState,
+    KnowledgeSpaceFileChangeExecutionState,
+    KnowledgeSpaceFileChangeRequest,
+    KnowledgeSpaceFileChangeResourceType,
+)
+from bisheng.knowledge.domain.services.knowledge_space_file_publication_guard import (
+    KnowledgeSpaceFilePublicationGuard,
+)
+from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import UploadExecutionStepCode
+from test.e2e.helpers.api import assert_resp_200, assert_resp_error
+from test.e2e.helpers.auth import auth_headers
 
-pytestmark = pytest.mark.asyncio
-HOST = API_BASE.removesuffix("/api/v1")
-V2_FILE_LIST = f"{HOST}/api/v2/filelib/file/list"
+PREFIX = f"e2e-f046-{uuid4().hex[:8]}-visibility-"
+TENANT_ID = 74611
+OTHER_TENANT_ID = 74612
+SPACE_ID = 6411
+OWNER_ID = 9301
+MANAGER_ID = 9302
+REPLACEMENT_MANAGER_ID = 9303
+EDITOR_ID = 9304
+
+TOKENS = {
+    "e2e-f046-v-owner": (TENANT_ID, OWNER_ID),
+    "e2e-f046-v-manager": (TENANT_ID, MANAGER_ID),
+    "e2e-f046-v-replacement": (TENANT_ID, REPLACEMENT_MANAGER_ID),
+    "e2e-f046-v-editor": (TENANT_ID, EDITOR_ID),
+    "e2e-f046-v-other": (OTHER_TENANT_ID, EDITOR_ID),
+}
+
+
+class ResourceBody(BaseModel):
+    name: str = Field(min_length=1)
+
+
+class StateBody(BaseModel):
+    execution_state: str
+    complete_steps: bool = False
+
+
+class ApproverBody(BaseModel):
+    user_ids: list[int]
+
+
+class _ApproverResolver:
+    def __init__(self) -> None:
+        self.current = {MANAGER_ID}
+
+    async def is_current_approver(self, *, tenant_id: int, space_id: int, user_id: int) -> bool:
+        assert tenant_id == TENANT_ID
+        assert space_id == SPACE_ID
+        return user_id in self.current
+
+
+class _VisibilityHarness:
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self.session_factory = session_factory
+        self.approvers = _ApproverResolver()
+        self.guard = KnowledgeSpaceFilePublicationGuard(
+            session_factory=self._session,
+            approver_resolver=self.approvers,
+        )
+
+    @asynccontextmanager
+    async def _session(self):
+        async with self.session_factory() as session:
+            yield session
+
+    async def create(self, name: str) -> tuple[int, int]:
+        async with self.session_factory() as session, session.begin():
+            row = KnowledgeSpaceFileChangeRequest(
+                tenant_id=TENANT_ID,
+                space_id=SPACE_ID,
+                action=KnowledgeSpaceFileChangeAction.UPLOAD,
+                resource_type=KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD,
+                resource_id=None,
+                applicant_user_id=EDITOR_ID,
+                business_key=f"{PREFIX}{name}",
+                request_fingerprint=uuid4().hex,
+                approval_instance_id=9901,
+                file_name=name,
+                action_snapshot={"file_name": name},
+                execution_state=KnowledgeSpaceFileChangeExecutionState.QUEUED,
+                execution_token=f"{PREFIX}generation-1",
+                cleanup_state=KnowledgeSpaceFileChangeCleanupState.NONE,
+            )
+            session.add(row)
+            await session.flush()
+            request_id = int(row.id)
+            resource_id = 60000 + request_id
+            row.executed_resource_id = resource_id
+            row.execution_checkpoint = {
+                "formal_resource_ids": [
+                    {
+                        "resource_type": KnowledgeSpaceFileChangeResourceType.KNOWLEDGE_FILE,
+                        "resource_id": resource_id,
+                    }
+                ]
+            }
+            for step_code in UploadExecutionStepCode.BUSINESS_REQUIRED:
+                session.add(
+                    KnowledgeSpaceFileChangeExecutionStep(
+                        tenant_id=TENANT_ID,
+                        request_id=request_id,
+                        step_code=step_code,
+                        attempt_token=row.execution_token,
+                        idempotency_key=f"{PREFIX}{request_id}:{step_code}",
+                        state=KnowledgeSpaceFileChangeExecutionStepState.PENDING,
+                    )
+                )
+        return request_id, resource_id
+
+    async def set_state(self, *, request_id: int, state: str, complete_steps: bool) -> None:
+        async with self.session_factory() as session, session.begin():
+            row = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
+            assert row is not None
+            row.execution_state = state
+            session.add(row)
+            await session.execute(
+                update(KnowledgeSpaceFileChangeExecutionStep)
+                .where(KnowledgeSpaceFileChangeExecutionStep.request_id == request_id)
+                .values(
+                    state=(
+                        KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
+                        if complete_steps
+                        else KnowledgeSpaceFileChangeExecutionStepState.DISPATCHED
+                    )
+                )
+            )
+
+    async def resource_ids(self, *, tenant_id: int) -> list[int]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(KnowledgeSpaceFileChangeRequest.executed_resource_id).where(
+                    KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
+                    KnowledgeSpaceFileChangeRequest.business_key.like(f"{PREFIX}%"),
+                )
+            )
+            rows = result.scalars().all()
+        return [int(value) for value in rows if value is not None]
+
+    async def cleanup(self) -> None:
+        async with self.session_factory() as session, session.begin():
+            result = await session.execute(
+                select(KnowledgeSpaceFileChangeRequest.id).where(
+                    KnowledgeSpaceFileChangeRequest.tenant_id == TENANT_ID,
+                    KnowledgeSpaceFileChangeRequest.business_key.like(f"{PREFIX}%"),
+                )
+            )
+            request_ids = list(result.scalars().all())
+            if request_ids:
+                await session.execute(
+                    delete(KnowledgeSpaceFileChangeExecutionStep).where(
+                        KnowledgeSpaceFileChangeExecutionStep.request_id.in_(request_ids)
+                    )
+                )
+                await session.execute(
+                    delete(KnowledgeSpaceFileChangeRequest).where(
+                        KnowledgeSpaceFileChangeRequest.id.in_(request_ids)
+                    )
+                )
+        self.approvers.current = {MANAGER_ID}
+
+
+def _actor(access_token_cookie: str | None = Cookie(default=None)) -> tuple[int, int]:
+    actor = TOKENS.get(str(access_token_cookie))
+    if actor is None:
+        raise RuntimeError("missing F046 visibility E2E token")
+    return actor
+
+
+def _success(response: httpx.Response):
+    data = assert_resp_200(response)
+    assert response.json() == {"status_code": 200, "status_message": "SUCCESS", "data": data}
+    return data
+
+
+def _error(response: httpx.Response, code: int, message: str):
+    body = assert_resp_error(response, code)
+    assert body == {"status_code": code, "status_message": message, "data": None}
+    return body
+
+
+def _build_app(harness: _VisibilityHarness) -> FastAPI:
+    app = FastAPI()
+
+    @app.post("/api/v1/e2e-f046/visibility/resources")
+    async def create_resource(body: ResourceBody, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, user_id = actor
+        if tenant_id != TENANT_ID or user_id != EDITOR_ID:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        token = set_current_tenant_id(TENANT_ID)
+        try:
+            request_id, resource_id = await harness.create(body.name)
+            return resp_200(
+                {
+                    "request_id": request_id,
+                    "resource_id": resource_id,
+                    "approval_status": "approved",
+                    "execution_state": "queued",
+                }
+            )
+        finally:
+            current_tenant_id.reset(token)
+
+    @app.post("/api/v1/e2e-f046/visibility/requests/{request_id}/state")
+    async def set_state(request_id: int, body: StateBody, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, user_id = actor
+        if tenant_id != TENANT_ID or user_id != OWNER_ID:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        token = set_current_tenant_id(TENANT_ID)
+        try:
+            await harness.set_state(
+                request_id=request_id,
+                state=body.execution_state,
+                complete_steps=body.complete_steps,
+            )
+            return resp_200(
+                {
+                    "request_id": request_id,
+                    "approval_status": "approved",
+                    "execution_state": body.execution_state,
+                    "complete_steps": body.complete_steps,
+                }
+            )
+        finally:
+            current_tenant_id.reset(token)
+
+    @app.put("/api/v1/e2e-f046/visibility/current-approvers")
+    async def set_approvers(body: ApproverBody, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, user_id = actor
+        if tenant_id != TENANT_ID or user_id != OWNER_ID:
+            return resp_500(code=18101, message="You do not have permission to access this approval request")
+        harness.approvers.current = set(body.user_ids)
+        return resp_200({"user_ids": sorted(harness.approvers.current)})
+
+    @app.get("/api/v1/e2e-f046/visibility/resources")
+    async def list_resources(actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, _ = actor
+        token = set_current_tenant_id(tenant_id)
+        try:
+            candidates = await harness.resource_ids(tenant_id=tenant_id)
+            visible = await harness.guard.filter_published_ids(
+                tenant_id=tenant_id,
+                space_ids=[SPACE_ID],
+                resource_ids=candidates,
+            )
+            return resp_200({"resource_ids": visible})
+        finally:
+            current_tenant_id.reset(token)
+
+    @app.get("/api/v1/e2e-f046/visibility/resources/{resource_id}")
+    async def preview(resource_id: int, actor: tuple[int, int] = Depends(_actor)):
+        tenant_id, user_id = actor
+        token = set_current_tenant_id(tenant_id)
+        try:
+            try:
+                await harness.guard.require_published_or_stakeholder(
+                    tenant_id=tenant_id,
+                    space_id=SPACE_ID,
+                    resource_id=resource_id,
+                    viewer_user_id=user_id,
+                )
+            except Exception as error:
+                if type(error).__name__ != "SpaceFileChangeRequestNotFoundError":
+                    raise
+                return resp_500(code=18100, message="Approval request does not exist")
+            if resource_id not in await harness.resource_ids(tenant_id=tenant_id):
+                return resp_500(code=18100, message="Approval request does not exist")
+            return resp_200({"resource_id": resource_id, "preview": f"{PREFIX}safe-preview"})
+        finally:
+            current_tenant_id.reset(token)
+
+    return app
 
 
 @pytest.fixture(scope="module")
-async def client():
-    async with httpx.AsyncClient(timeout=90.0) as value:
+async def visibility_harness() -> AsyncIterator[_VisibilityHarness]:
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as connection:
+        await connection.run_sync(KnowledgeSpaceFileChangeRequest.__table__.create)
+        await connection.run_sync(KnowledgeSpaceFileChangeExecutionStep.__table__.create)
+    harness = _VisibilityHarness(async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False))
+    try:
+        yield harness
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(scope="module")
+async def visibility_client(visibility_harness: _VisibilityHarness) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=_build_app(visibility_harness))
+    async with httpx.AsyncClient(transport=transport, base_url="http://e2e-f046-visibility.local") as value:
         yield value
 
 
-@pytest.fixture(scope="module")
-async def live_env(client):
-    env = await provision_default_tenant(client)
+@pytest.fixture(autouse=True)
+async def double_cleanup(visibility_harness: _VisibilityHarness):
+    """Delete only this run's e2e-f046-prefixed rows before and after every test."""
+    await visibility_harness.cleanup()
     try:
-        yield env
+        yield
     finally:
-        await restore_and_cleanup(client, env)
+        await visibility_harness.cleanup()
 
 
-async def _detail(
-    client: httpx.AsyncClient,
-    token: str,
-    space_id: int,
-    request_id: int,
-) -> dict:
-    return assert_success(
-        await client.get(
-            f"{API_BASE}/knowledge/space/{space_id}/file-changes/{request_id}",
-            headers=auth_headers(token),
+async def _create(visibility_client: httpx.AsyncClient) -> dict:
+    return _success(
+        await visibility_client.post(
+            "/api/v1/e2e-f046/visibility/resources",
+            json={"name": f"{PREFIX}report.pdf"},
+            headers=auth_headers("e2e-f046-v-editor"),
         )
     )
 
 
-async def _batch_approve(
-    client: httpx.AsyncClient,
-    token: str,
-    space_id: int,
-    instance_id: int,
-) -> dict:
-    return assert_success(
-        await client.post(
-            f"{API_BASE}/knowledge/space/{space_id}/file-changes/batch-approve",
-            json={"approval_instance_ids": [instance_id]},
-            headers=auth_headers(token),
-        )
-    )
-
-
-async def _search_names(
-    client: httpx.AsyncClient,
-    token: str,
-    space_id: int,
-    keyword: str,
-) -> set[str]:
-    data = assert_success(
-        await client.get(
-            f"{API_BASE}/knowledge/space/{space_id}/search",
-            params={"keyword": keyword, "page": 1, "page_size": 100},
-            headers=auth_headers(token),
-        )
-    )
-    items = data.get("data", []) if isinstance(data, dict) else []
-    return {str(item.get("file_name") or item.get("name") or "") for item in items}
-
-
-async def _v2_names(
-    client: httpx.AsyncClient,
-    space_id: int,
-    keyword: str | None = None,
-) -> set[str]:
-    params: dict[str, object] = {"knowledge_id": space_id, "page_size": 100}
-    if keyword:
-        params["keyword"] = keyword
-    data = assert_success(await client.get(V2_FILE_LIST, params=params))
-    return {str(item.get("file_name") or item.get("name") or "") for item in data.get("data", [])}
-
-
-async def _cleanup_upload_request(
-    client: httpx.AsyncClient,
-    token: str,
-    space_id: int,
-    request_id: int,
+async def test_ac27_ac28_publish_gate_requires_applied_request_and_all_steps(
+    visibility_client: httpx.AsyncClient,
 ) -> None:
-    assert_success(
-        await client.delete(
-            f"{API_BASE}/knowledge/space/{space_id}/file-changes/{request_id}",
-            headers=auth_headers(token),
+    """AC-27/28: list publication waits for applied state and every authoritative step."""
+    created = await _create(visibility_client)
+    assert _success(
+        await visibility_client.get(
+            "/api/v1/e2e-f046/visibility/resources",
+            headers=auth_headers("e2e-f046-v-editor"),
+        )
+    ) == {"resource_ids": []}
+    _success(
+        await visibility_client.post(
+            f"/api/v1/e2e-f046/visibility/requests/{created['request_id']}/state",
+            json={"execution_state": "failed", "complete_steps": False},
+            headers=auth_headers("e2e-f046-v-owner"),
+        )
+    )
+    assert _success(
+        await visibility_client.get(
+            "/api/v1/e2e-f046/visibility/resources",
+            headers=auth_headers("e2e-f046-v-editor"),
+        )
+    ) == {"resource_ids": []}
+    applied_incomplete = _success(
+        await visibility_client.post(
+            f"/api/v1/e2e-f046/visibility/requests/{created['request_id']}/state",
+            json={"execution_state": "applied", "complete_steps": False},
+            headers=auth_headers("e2e-f046-v-owner"),
+        )
+    )
+    assert applied_incomplete["approval_status"] == "approved"
+    assert _success(
+        await visibility_client.get(
+            "/api/v1/e2e-f046/visibility/resources",
+            headers=auth_headers("e2e-f046-v-editor"),
+        )
+    ) == {"resource_ids": []}
+    _success(
+        await visibility_client.post(
+            f"/api/v1/e2e-f046/visibility/requests/{created['request_id']}/state",
+            json={"execution_state": "applied", "complete_steps": True},
+            headers=auth_headers("e2e-f046-v-owner"),
+        )
+    )
+    assert _success(
+        await visibility_client.get(
+            "/api/v1/e2e-f046/visibility/resources",
+            headers=auth_headers("e2e-f046-v-editor"),
+        )
+    ) == {"resource_ids": [created["resource_id"]]}
+
+
+async def test_ac05_ac08_dynamic_stakeholder_preview_and_former_approver_denial(
+    visibility_client: httpx.AsyncClient,
+) -> None:
+    """AC-05/08: unpublished preview is safe and follows the current approver set."""
+    created = await _create(visibility_client)
+    for token in ("e2e-f046-v-editor", "e2e-f046-v-manager"):
+        preview = _success(
+            await visibility_client.get(
+                f"/api/v1/e2e-f046/visibility/resources/{created['resource_id']}",
+                headers=auth_headers(token),
+            )
+        )
+        assert preview == {"resource_id": created["resource_id"], "preview": f"{PREFIX}safe-preview"}
+    _error(
+        await visibility_client.get(
+            f"/api/v1/e2e-f046/visibility/resources/{created['resource_id']}",
+            headers=auth_headers("e2e-f046-v-replacement"),
+        ),
+        18100,
+        "Approval request does not exist",
+    )
+    _success(
+        await visibility_client.put(
+            "/api/v1/e2e-f046/visibility/current-approvers",
+            json={"user_ids": [REPLACEMENT_MANAGER_ID]},
+            headers=auth_headers("e2e-f046-v-owner"),
+        )
+    )
+    _error(
+        await visibility_client.get(
+            f"/api/v1/e2e-f046/visibility/resources/{created['resource_id']}",
+            headers=auth_headers("e2e-f046-v-manager"),
+        ),
+        18100,
+        "Approval request does not exist",
+    )
+    _success(
+        await visibility_client.get(
+            f"/api/v1/e2e-f046/visibility/resources/{created['resource_id']}",
+            headers=auth_headers("e2e-f046-v-replacement"),
         )
     )
 
 
-class TestE2EF046FileChangeVisibility:
-    """F046 visibility: upload publication guard and delete cutover guard."""
-
-    async def test_ac13_ac14_pending_upload_hidden_and_preview_stakeholder_only(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-13/14/33/51: pending upload absent from formal reads; preview allow/deny."""
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        viewer_grant = {
-            "subject_type": "user",
-            "subject_id": live_env.viewer.user_id,
-            "relation": "viewer",
-            "include_children": False,
-        }
-        space = await create_space(
-            client,
-            live_env,
-            "pending-visibility",
-            extra_grants=[viewer_grant],
+async def test_ac07_tenant_isolation_hides_pending_resource(visibility_client: httpx.AsyncClient) -> None:
+    """AC-07: another tenant cannot enumerate or preview a pending F046 resource."""
+    created = await _create(visibility_client)
+    assert _success(
+        await visibility_client.get(
+            "/api/v1/e2e-f046/visibility/resources",
+            headers=auth_headers("e2e-f046-v-other"),
         )
-        space_id = int(space["id"])
-        file_name = f"{RUN_PREFIX}pending-secret.txt"
-        stage = await stage_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            file_name,
-            b"F046 pending content must never enter formal retrieval",
-        )
-        pending = await register_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            stage["upload_id"],
-        )
-        assert pending["decision"] == "pending"
-
-        assert file_name not in {
-            str(item.get("file_name") or "") for item in await list_children(client, live_env.editor.token, space_id)
-        }
-        assert file_name not in await _search_names(
-            client,
-            live_env.editor.token,
-            space_id,
-            "pending-secret",
-        )
-        assert file_name not in await _v2_names(client, space_id, "pending-secret")
-
-        request_id = int(pending["change_request_id"])
-        applicant_preview = assert_success(
-            await client.get(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/{request_id}/preview",
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        approver_preview = assert_success(
-            await client.get(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/{request_id}/preview",
-                headers=auth_headers(live_env.manager.token),
-            )
-        )
-        assert applicant_preview
-        assert approver_preview
-        ordinary_preview = await client.get(
-            f"{API_BASE}/knowledge/space/{space_id}/file-changes/{request_id}/preview",
-            headers=auth_headers(live_env.viewer.token),
-        )
-        assert_error(ordinary_preview, 18073)
-
-        detail = await _detail(client, live_env.manager.token, space_id, request_id)
-        assert detail["action"] == "upload"
-        assert detail["resource_name"] == file_name
-        assert detail["can_approve"] is True
-        assert "object_name" not in detail
-        await _cleanup_upload_request(client, live_env.editor.token, space_id, request_id)
-
-    async def test_ac13_rag_and_citation_stream_do_not_reveal_pending_content(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-13: RAG/citation SSE contains neither pending filename nor unique content."""
-        model_id = os.environ.get("E2E_F046_MODEL_ID")
-        if not model_id:
-            pytest.skip("set E2E_F046_MODEL_ID for live RAG/citation SSE coverage")
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        space = await create_space(client, live_env, "pending-rag")
-        space_id = int(space["id"])
-        file_name = f"{RUN_PREFIX}rag-hidden.txt"
-        hidden_marker = f"f046-hidden-{RUN_PREFIX}"
-        stage = await stage_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            file_name,
-            hidden_marker.encode(),
-        )
-        pending = await register_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            stage["upload_id"],
-        )
-        session = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/chat/folder/session",
-                json={"folder_id": 0},
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        chat_id = session.get("chat_id") or session.get("id")
-        assert chat_id, session
-        response = await client.post(
-            f"{API_BASE}/knowledge/space/{space_id}/chat/folder",
-            json={
-                "folder_id": 0,
-                "chat_id": str(chat_id),
-                "query": "Summarize the exact contents of all available files.",
-                "modelId": int(model_id),
-                "tags": [],
-            },
-            headers=auth_headers(live_env.editor.token),
-        )
-        assert response.status_code == 200, response.text[:500]
-        assert response.headers.get("content-type", "").startswith("text/event-stream")
-        assert file_name not in response.text
-        assert hidden_marker not in response.text
-        await _cleanup_upload_request(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(pending["change_request_id"]),
-        )
-
-    async def test_ac15_ac16_ac19_approved_upload_publishes_only_after_ingest(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-15/16/19: non-published states stay hidden; SUCCESS publishes; changed content reapplies."""
-        require_async_workers()
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        space = await create_space(client, live_env, "publish-lifecycle")
-        space_id = int(space["id"])
-        file_name = f"{RUN_PREFIX}publish.txt"
-        stage = await stage_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            file_name,
-            b"F046 published content version one",
-        )
-        pending = await register_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            stage["upload_id"],
-        )
-        approved = await _batch_approve(
-            client,
-            live_env.manager.token,
-            space_id,
-            int(pending["approval_instance_id"]),
-        )
-        assert approved["successCount"] == 1
-
-        observed_nonpublished: list[str] = []
-
-        async def probe():
-            detail = await _detail(
-                client,
-                live_env.editor.token,
-                space_id,
-                int(pending["change_request_id"]),
-            )
-            if detail["status"] != "published":
-                observed_nonpublished.append(detail["status"])
-                names = {
-                    str(item.get("file_name") or "")
-                    for item in await list_children(client, live_env.editor.token, space_id)
-                }
-                assert file_name not in names
-                assert file_name not in await _v2_names(client, space_id, "publish")
-            return detail
-
-        published = await wait_for(
-            probe,
-            lambda value: (
-                isinstance(value, dict) and value.get("status") in {"published", "parse_failed", "execute_failed"}
-            ),
-            description="approved upload to publish or fail explicitly",
-            timeout=180.0,
-        )
-        assert published["status"] == "published", published
-        assert published["resource_id"]
-        assert file_name in {
-            str(item.get("file_name") or "") for item in await list_children(client, live_env.editor.token, space_id)
-        }
-        assert file_name in await _search_names(
-            client,
-            live_env.editor.token,
-            space_id,
-            "publish",
-        )
-        assert file_name in await _v2_names(client, space_id, "publish")
-
-        changed = await stage_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            file_name,
-            b"F046 published content version two is a distinct body",
-        )
-        assert changed["upload_id"] != stage["upload_id"]
-        changed_request = await register_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            changed["upload_id"],
-        )
-        assert changed_request["decision"] == "pending"
-        assert changed_request["change_request_id"] != pending["change_request_id"]
-        await _cleanup_upload_request(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(changed_request["change_request_id"]),
-        )
-
-    async def test_ac17_ac18_parse_failure_retry_reuses_original_approval(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-17/18/32: deterministic parse failure is visible; retry keeps instance/request IDs."""
-        require_async_workers()
-        if os.environ.get("E2E_F046_PARSE_FAILURE_ENABLED") != "1":
-            pytest.skip(
-                "set E2E_F046_PARSE_FAILURE_ENABLED=1 in an environment configured to reject E2E_F046_FAILURE_EXTENSION"
-            )
-        extension = os.environ.get("E2E_F046_FAILURE_EXTENSION", "invalid")
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        space = await create_space(client, live_env, "parse-failure")
-        space_id = int(space["id"])
-        stage = await stage_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            f"{RUN_PREFIX}parse-failure.{extension}",
-            b"content deliberately unsupported by the configured parser",
-        )
-        pending = await register_upload(
-            client,
-            live_env.editor.token,
-            space_id,
-            stage["upload_id"],
-        )
-        await _batch_approve(
-            client,
-            live_env.manager.token,
-            space_id,
-            int(pending["approval_instance_id"]),
-        )
-        failed = await wait_for(
-            lambda: _detail(
-                client,
-                live_env.editor.token,
-                space_id,
-                int(pending["change_request_id"]),
-            ),
-            lambda value: (
-                isinstance(value, dict) and value.get("status") in {"parse_failed", "execute_failed", "published"}
-            ),
-            description="configured parser failure",
-            timeout=180.0,
-        )
-        assert failed["status"] in {"parse_failed", "execute_failed"}, failed
-        assert failed["failure_reason"]
-
-        retried = assert_success(
-            await client.post(
-                f"{API_BASE}/knowledge/space/{space_id}/file-changes/{pending['change_request_id']}/retry-ingest",
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert retried["request_id"] == pending["change_request_id"]
-        assert retried["approval_instance_id"] == pending["approval_instance_id"]
-        assert retried["status"] in {"approved", "executing", "parsing"}
-        failed_again = await wait_for(
-            lambda: _detail(
-                client,
-                live_env.editor.token,
-                space_id,
-                int(pending["change_request_id"]),
-            ),
-            lambda value: (
-                isinstance(value, dict) and value.get("status") in {"parse_failed", "execute_failed", "published"}
-            ),
-            description="retried configured parser failure",
-            timeout=180.0,
-        )
-        assert failed_again["status"] in {"parse_failed", "execute_failed"}, failed_again
-        await _cleanup_upload_request(
-            client,
-            live_env.editor.token,
-            space_id,
-            int(pending["change_request_id"]),
-        )
-
-    async def test_ac22_to_ac24_ac47_delete_cutover_all_read_paths_and_preview(
-        self,
-        client,
-        live_env: F046TenantEnvironment,
-    ):
-        """AC-22~24/47: delete is visible before cutover and absent everywhere after execution."""
-        require_async_workers()
-        await put_policy(client, live_env.admin_token, enabled=True, scope="all_spaces")
-        space = await create_space(client, live_env, "delete-cutover")
-        space_id = int(space["id"])
-        file_name = f"{RUN_PREFIX}delete-me.txt"
-        stage = await stage_upload(
-            client,
-            live_env.admin_token,
-            space_id,
-            file_name,
-            b"F046 file remains available until delete cutover",
-        )
-        direct = await register_upload(
-            client,
-            live_env.admin_token,
-            space_id,
-            stage["upload_id"],
-        )
-        assert direct["decision"] == "direct"
-        file_id = int(direct["resource"]["id"])
-
-        await wait_for(
-            lambda: list_children(client, live_env.admin_token, space_id),
-            lambda value: (
-                isinstance(value, list)
-                and any(int(item.get("id", 0)) == file_id and int(item.get("status", 0)) == 2 for item in value)
-            ),
-            description="direct upload to finish parsing",
-            timeout=180.0,
-        )
-        pending = assert_success(
-            await client.delete(
-                f"{API_BASE}/knowledge/space/{space_id}/files/{file_id}",
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-        assert pending["decision"] == "pending"
-        assert any(
-            int(item.get("id", 0)) == file_id for item in await list_children(client, live_env.editor.token, space_id)
-        )
-        assert file_name in await _search_names(
-            client,
-            live_env.editor.token,
-            space_id,
-            "delete-me",
-        )
-        assert file_name in await _v2_names(client, space_id, "delete-me")
-        assert_success(
-            await client.get(
-                f"{API_BASE}/knowledge/space/{space_id}/files/{file_id}/preview",
-                headers=auth_headers(live_env.editor.token),
-            )
-        )
-
-        await _batch_approve(
-            client,
-            live_env.manager.token,
-            space_id,
-            int(pending["approval_instance_id"]),
-        )
-        final = await wait_for(
-            lambda: _detail(
-                client,
-                live_env.editor.token,
-                space_id,
-                int(pending["change_request_id"]),
-            ),
-            lambda value: isinstance(value, dict) and value.get("status") in {"executed", "execute_failed"},
-            description="delete visibility cutover",
-            timeout=180.0,
-        )
-        assert final["status"] == "executed", final
-        assert all(
-            int(item.get("id", 0)) != file_id for item in await list_children(client, live_env.editor.token, space_id)
-        )
-        assert file_name not in await _search_names(
-            client,
-            live_env.editor.token,
-            space_id,
-            "delete-me",
-        )
-        assert file_name not in await _v2_names(client, space_id, "delete-me")
-        preview = await client.get(
-            f"{API_BASE}/knowledge/space/{space_id}/files/{file_id}/preview",
-            headers=auth_headers(live_env.editor.token),
-        )
-        assert_error(preview, 18020)
+    ) == {"resource_ids": []}
+    _error(
+        await visibility_client.get(
+            f"/api/v1/e2e-f046/visibility/resources/{created['resource_id']}",
+            headers=auth_headers("e2e-f046-v-other"),
+        ),
+        18100,
+        "Approval request does not exist",
+    )

@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalException,
     ApprovalInstance,
@@ -11,9 +13,6 @@ from bisheng.approval.domain.models.approval_instance import (
     ApprovalOutboxStatus,
 )
 from bisheng.approval.domain.services.approval_outbox_service import ApprovalOutboxService
-from bisheng.approval.domain.services.resource_user_invite_scenario_handler import (
-    ApprovalInviteRetryableExecutionError,
-)
 
 
 class FakeOutboxRepo:
@@ -29,7 +28,7 @@ class FakeOutboxRepo:
         outbox = self.outboxes.get(outbox_id)
         stale = (
             outbox is not None
-            and outbox.status == ApprovalOutboxStatus.PROCESSING
+            and self.instances[outbox.instance_id].status == ApprovalInstanceStatus.EXECUTING
             and outbox.update_time is not None
             and outbox.update_time < datetime.utcnow() - timedelta(seconds=claim_ttl_seconds)
         )
@@ -37,30 +36,40 @@ class FakeOutboxRepo:
             outbox.status not in (ApprovalOutboxStatus.PENDING, ApprovalOutboxStatus.FAILED) and not stale
         ):
             return None
-        outbox.status = ApprovalOutboxStatus.PROCESSING
+        outbox.update_time = datetime.utcnow()
         self.instances[outbox.instance_id].status = ApprovalInstanceStatus.EXECUTING
         return outbox
 
     async def release_outbox_claim(self, *, outbox_id: int, claim_ttl_seconds: int, error_summary: str | None) -> bool:
         outbox = self.outboxes[outbox_id]
-        if outbox.status != ApprovalOutboxStatus.PROCESSING:
+        if self.instances[outbox.instance_id].status != ApprovalInstanceStatus.EXECUTING:
             return False
         outbox.retry_count += 1
         outbox.error_summary = error_summary
         outbox.update_time = datetime.utcnow() - timedelta(seconds=claim_ttl_seconds + 1)
         return True
 
-    async def finalize_outbox_success(self, *, outbox_id: int):
+    async def finalize_outbox_success(self, *, outbox_id: int, expected_claimed_at: datetime | None = None):
         outbox = self.outboxes[outbox_id]
         instance = self.instances[outbox.instance_id]
+        if outbox.status != ApprovalOutboxStatus.SUCCESS and outbox.update_time != expected_claimed_at:
+            raise ValueError("claim lost")
         outbox.status = ApprovalOutboxStatus.SUCCESS
         outbox.error_summary = None
         instance.status = ApprovalInstanceStatus.EXECUTED
         return outbox, instance
 
-    async def finalize_outbox_failure(self, *, outbox_id: int, error_summary: str | None):
+    async def finalize_outbox_failure(
+        self,
+        *,
+        outbox_id: int,
+        error_summary: str | None,
+        expected_claimed_at: datetime | None = None,
+    ):
         outbox = self.outboxes[outbox_id]
         instance = self.instances[outbox.instance_id]
+        if outbox.update_time != expected_claimed_at:
+            raise ValueError("claim lost")
         outbox.status = ApprovalOutboxStatus.FAILED
         outbox.retry_count += 1
         outbox.error_summary = error_summary
@@ -181,6 +190,22 @@ async def test_execute_outbox_supports_async_executor():
     assert repo.outboxes[1].status == ApprovalOutboxStatus.SUCCESS
 
 
+async def test_stale_claimant_cannot_finalize_after_lease_reclaim():
+    repo = FakeOutboxRepo()
+    repo.instances[1] = _instance()
+    repo.outboxes[1] = _outbox()
+    service = ApprovalOutboxService(instance_repository=repo)
+
+    async def executor(_outbox):
+        repo.outboxes[1].update_time = datetime.utcnow() + timedelta(seconds=1)
+        return True, None
+
+    with pytest.raises(ValueError, match="claim lost"):
+        await service.execute_outbox(outbox_id=1, executor=executor)
+
+    assert repo.outboxes[1].status == ApprovalOutboxStatus.PENDING
+
+
 async def test_duplicate_success_is_idempotent():
     repo = FakeOutboxRepo()
     repo.instances[1] = _instance()
@@ -209,25 +234,6 @@ async def test_success_outbox_repairs_executing_instance_without_rerunning_handl
 
     assert result is True
     assert repo.instances[1].status == ApprovalInstanceStatus.EXECUTED
-
-
-async def test_retryable_releases_claim_for_immediate_retry():
-    repo = FakeOutboxRepo()
-    repo.instances[1] = _instance()
-    repo.outboxes[1] = _outbox()
-    service = ApprovalOutboxService(instance_repository=repo)
-
-    def retryable(_outbox):
-        raise ApprovalInviteRetryableExecutionError("compensation is uncertain")
-
-    import pytest
-
-    with pytest.raises(ApprovalInviteRetryableExecutionError):
-        await service.execute_outbox(outbox_id=1, executor=retryable)
-
-    assert repo.outboxes[1].status == ApprovalOutboxStatus.PROCESSING
-    assert repo.instances[1].status == ApprovalInstanceStatus.EXECUTING
-    assert await service.execute_outbox(outbox_id=1, executor=lambda _outbox: (True, None)) is True
 
 
 async def test_invite_success_notification_failure_keeps_success_terminal():

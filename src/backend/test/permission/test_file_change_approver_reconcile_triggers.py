@@ -80,36 +80,64 @@ async def test_dispatcher_missing_tenant_fails_closed_without_root_fallback():
     dispatch.assert_not_called()
 
 
-async def test_dispatcher_broker_failure_is_best_effort():
+async def test_dispatcher_failure_propagates_for_bounded_compensation_retry():
     from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
         dispatch_file_change_approver_reconcile_for_spaces,
     )
 
     dispatch = Mock(side_effect=RuntimeError("broker unavailable"))
-    await dispatch_file_change_approver_reconcile_for_spaces(
-        space_ids=[11],
-        tenant_id=7,
-        dispatch=dispatch,
-    )
+    with pytest.raises(RuntimeError, match="broker unavailable"):
+        await dispatch_file_change_approver_reconcile_for_spaces(
+            space_ids=[11],
+            tenant_id=7,
+            dispatch=dispatch,
+        )
 
     dispatch.assert_called_once_with(11, tenant_id=7)
 
 
-async def test_default_dispatcher_uses_celery_header_not_task_kwargs():
+async def test_default_dispatcher_uses_public_resolver_and_application_port():
+    from bisheng.approval.domain.services.approval_dynamic_assignee_service import (
+        ApprovalDynamicAssigneeService,
+    )
+    from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+    from bisheng.knowledge.domain.services.knowledge_space_file_change_approver_resolver import (
+        KnowledgeSpaceFileChangeApproverResolver,
+    )
     from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
         dispatch_file_change_approver_reconcile_for_spaces,
     )
-    from bisheng.worker.approval.file_change_tasks import reconcile_space_file_change_approvers
 
-    with patch.object(reconcile_space_file_change_approvers, "apply_async") as apply_async:
-        await dispatch_file_change_approver_reconcile_for_spaces(
-            space_ids=[11],
-            tenant_id=7,
-        )
+    resolve = AsyncMock(return_value=[SimpleNamespace(instance_id=501, approver_user_ids=(201, 202))])
+    reconcile = AsyncMock()
+    tenant_token = set_current_tenant_id(7)
+    try:
+        with (
+            patch.object(
+                KnowledgeSpaceFileChangeApproverResolver,
+                "resolve_reconciliation_targets",
+                new=resolve,
+            ),
+            patch.object(
+                ApprovalDynamicAssigneeService,
+                "reconcile_assignees",
+                new=reconcile,
+            ),
+        ):
+            await dispatch_file_change_approver_reconcile_for_spaces(
+                space_ids=[11],
+                tenant_id=7,
+                reason="beat",
+            )
+    finally:
+        current_tenant_id.reset(tenant_token)
 
-    apply_async.assert_called_once_with(
-        args=[11],
-        headers={"tenant_id": 7},
+    resolve.assert_awaited_once_with(tenant_id=7, space_id=11)
+    reconcile.assert_awaited_once_with(
+        tenant_id=7,
+        instance_id=501,
+        approver_user_ids=(201, 202),
+        reason="beat",
     )
 
 
@@ -178,6 +206,44 @@ async def test_permission_service_fga_failure_does_not_dispatch():
         )
 
     reconcile.assert_not_awaited()
+
+
+async def test_permission_service_propagates_reconcile_failure_after_fga_commit():
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    events: list[str] = []
+    grant = AuthorizeGrantItem(subject_type="user", subject_id=2, relation="manager")
+    reconcile_failure = RuntimeError("strict OpenFGA resolver unavailable")
+
+    async def fail_reconcile(**_kwargs):
+        events.append("reconcile")
+        raise reconcile_failure
+
+    with (
+        patch.object(PermissionService, "_legacy_alias_object_types", new=AsyncMock(return_value=[])),
+        patch.object(PermissionService, "_expand_subject", new=AsyncMock(return_value=["user:2"])),
+        patch.object(PermissionService, "_affected_user_ids_for_subject", new=AsyncMock(return_value=set())),
+        patch.object(
+            PermissionService,
+            "batch_write_tuples",
+            new=AsyncMock(side_effect=lambda *_args, **_kwargs: events.append("fga_committed")),
+        ),
+        patch.object(PermissionService, "resolve_resource_tenant_id", new=AsyncMock(return_value=7)),
+        patch(
+            "bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher."
+            "dispatch_file_change_approver_reconcile_for_permission_change",
+            new=AsyncMock(side_effect=fail_reconcile),
+        ),
+        pytest.raises(RuntimeError, match="strict OpenFGA resolver unavailable"),
+    ):
+        await PermissionService.authorize(
+            object_type="knowledge_space",
+            object_id="11",
+            grants=[grant],
+            enforce_fga_success=True,
+        )
+
+    assert events == ["fga_committed", "reconcile"]
 
 
 async def test_generic_resource_authorize_uses_common_fga_success_boundary():

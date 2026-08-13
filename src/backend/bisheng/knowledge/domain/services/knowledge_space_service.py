@@ -2787,9 +2787,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not inherited and int(row.id) != root_resource_id:
                     continue
                 item["file_change_approval"] = {
-                    "status": str(match.instance.status),
+                    "status": str(request.execution_state),
                     "action": str(request.action),
-                    "instance_id": int(match.instance.id),
+                    "instance_id": int(request.approval_instance_id),
                     "request_id": int(request.id),
                     "can_approve": bool(is_current_approver and not applicant),
                     "inherited": inherited,
@@ -5611,27 +5611,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         instance_id: int,
         task_ids: list[int],
     ) -> None:
-        from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+        from bisheng.approval.domain.services.approval_notification_service import (
+            ApprovalNotificationService,
+        )
 
-        approver_user_ids: list[int] = []
-        seen: set[int] = set()
-        for task_id in task_ids:
-            task = await ApprovalInstanceRepository.get_task(task_id)
-            if task and task.approver_user_id not in seen:
-                seen.add(task.approver_user_id)
-                approver_user_ids.append(task.approver_user_id)
-        if not approver_user_ids:
-            return
-        await self.message_service.send_generic_approval(
-            applicant_user_id=self.login_user.user_id,
-            applicant_user_name=self.login_user.user_name,
-            action_code="request_knowledge_space",
-            business_type="approval_instance_id",
-            business_id=str(instance_id),
-            business_name=space.name,
-            button_action_code="request_knowledge_space",
-            receiver_user_ids=approver_user_ids,
-            scenario_code="knowledge_space_subscribe_request",
+        del space
+        await ApprovalNotificationService.notify_pending_tasks(
+            instance_id=int(instance_id),
+            task_ids=[int(task_id) for task_id in task_ids],
         )
 
     async def _send_subscription_notification(self, space: Knowledge):

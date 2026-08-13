@@ -8,6 +8,9 @@ from sqlmodel import Field
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 
+KNOWLEDGE_SPACE_FILE_CHANGE_SCENARIO_CODE = "knowledge_space_file_change_request"
+KNOWLEDGE_SPACE_FILE_CHANGE_REQUEST_TYPE = "knowledge_space_file_change_request"
+
 
 class KnowledgeSpaceFileChangeAction:
     UPLOAD = "upload"
@@ -25,10 +28,12 @@ class KnowledgeSpaceFileChangeResourceType:
 
 class KnowledgeSpaceFileChangeExecutionState:
     NOT_STARTED = "not_started"
+    QUEUED = "queued"
     APPLYING = "applying"
     APPLIED = "applied"
     FAILED = "failed"
     COMPENSATING = "compensating"
+    CLOSED = "closed"
 
 
 class KnowledgeSpaceFileChangeCleanupState:
@@ -54,7 +59,13 @@ class KnowledgeSpaceFileChangeRequestBase(SQLModelSerializable):
     resource_type: str = Field(sa_column=Column(String(32), nullable=False))
     resource_id: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     applicant_user_id: int = Field(sa_column=Column(BigInteger, nullable=False))
+    business_key: str = Field(sa_column=Column(String(255), nullable=False))
+    request_fingerprint: str = Field(sa_column=Column(String(128), nullable=False))
     approval_instance_id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger, nullable=True),
+    )
+    decision_event_id: int | None = Field(
         default=None,
         sa_column=Column(BigInteger, nullable=True),
     )
@@ -69,6 +80,7 @@ class KnowledgeSpaceFileChangeRequestBase(SQLModelSerializable):
     target_space_id: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     target_parent_id: int | None = Field(default=None, sa_column=Column(BigInteger, nullable=True))
     action_snapshot: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
+    result_snapshot: dict = Field(default_factory=dict, sa_column=Column(JsonType, nullable=False))
     executed_resource_id: int | None = Field(
         default=None,
         sa_column=Column(BigInteger, nullable=True),
@@ -109,6 +121,16 @@ class KnowledgeSpaceFileChangeRequest(KnowledgeSpaceFileChangeRequestBase, table
             "tenant_id",
             "upload_stage_id",
             name="uq_ks_change_request_upload",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "decision_event_id",
+            name="uq_ks_change_request_event",
+        ),
+        Index(
+            "idx_ks_change_request_business_key",
+            "tenant_id",
+            "business_key",
         ),
         Index(
             "idx_ks_change_request_space_created",

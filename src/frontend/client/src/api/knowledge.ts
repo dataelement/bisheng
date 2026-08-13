@@ -327,19 +327,12 @@ export type FileChangeDecision = "direct" | "pending" | "invalid";
 export type FileChangeAction = "upload" | "rename" | "move" | "delete";
 export type FileChangeResourceType = "staged_upload" | "file" | "folder";
 export type FileChangeApprovalStatus =
-    | "pending"
-    | "approver_empty"
-    | "exception"
-    | "approved"
-    | "rejected"
-    | "withdrawn"
-    | "cancelled"
-    | "executing"
-    | "parsing"
-    | "parse_failed"
-    | "execute_failed"
-    | "executed"
-    | "published";
+    | "queued"
+    | "applying"
+    | "applied"
+    | "failed"
+    | "compensating"
+    | "closed";
 
 export interface FileMutationItemResult {
     inputId: string;
@@ -412,6 +405,7 @@ export interface FileChangeDetail {
     applicantUserName?: string;
     approvalInstanceId?: number;
     status: FileChangeApprovalStatus;
+    approvalStatus?: string;
     actionDetail: FileChangeActionDetail;
     canApprove: boolean;
     failureReason?: string;
@@ -430,6 +424,7 @@ export interface PendingUploadFileChange {
     applicantUserId: number;
     applicantUserName?: string;
     status: FileChangeApprovalStatus;
+    approvalStatus?: string;
     canApprove: boolean;
     failureReason?: string;
     createTime?: string;
@@ -508,6 +503,7 @@ interface RawFileChangeDetail {
     applicant_user_name?: string | null;
     approval_instance_id?: number | null;
     status: FileChangeApprovalStatus;
+    approval_status?: string | null;
     action_detail?: RawFileChangeActionDetail;
     can_approve?: boolean;
     failure_reason?: string | null;
@@ -526,6 +522,7 @@ interface RawPendingUploadFileChange {
     applicant_user_id: number;
     applicant_user_name?: string | null;
     status: FileChangeApprovalStatus;
+    approval_status?: string | null;
     can_approve?: boolean;
     failure_reason?: string | null;
     create_time?: string | null;
@@ -1840,6 +1837,7 @@ function mapFileChangeDetail(raw: RawFileChangeDetail): FileChangeDetail {
         applicantUserName: raw.applicant_user_name ?? undefined,
         approvalInstanceId: raw.approval_instance_id ?? undefined,
         status: raw.status,
+        approvalStatus: raw.approval_status ?? undefined,
         actionDetail: mapFileChangeActionDetail(raw.action_detail),
         canApprove: Boolean(raw.can_approve),
         failureReason: raw.failure_reason ?? undefined,
@@ -1860,6 +1858,7 @@ function mapPendingUploadFileChange(raw: RawPendingUploadFileChange): PendingUpl
         applicantUserId: raw.applicant_user_id,
         applicantUserName: raw.applicant_user_name ?? undefined,
         status: raw.status,
+        approvalStatus: raw.approval_status ?? undefined,
         canApprove: Boolean(raw.can_approve),
         failureReason: raw.failure_reason ?? undefined,
         createTime: raw.create_time ?? undefined,

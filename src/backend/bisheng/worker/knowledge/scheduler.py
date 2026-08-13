@@ -152,8 +152,6 @@ class FileScheduler:
         file_ext: str,
         tenant_id: int | str | None = None,
         idempotency_key: str | None = None,
-        file_change_request_id: int | None = None,
-        file_change_execution_token: str | None = None,
         ttl_seconds: int | None = None,
     ) -> bool:
         result = int(
@@ -167,8 +165,8 @@ class FileScheduler:
                     ttl_seconds or self._PAYLOAD_TTL_SECONDS,
                     "" if tenant_id is None else str(tenant_id),
                     idempotency_key or "",
-                    "" if file_change_request_id is None else str(file_change_request_id),
-                    file_change_execution_token or "",
+                    "",
+                    "",
                 ],
             )
         )
@@ -229,8 +227,6 @@ class FileScheduler:
         file_ext: str,
         tenant_id: int | str | None,
         idempotency_key: str | None = None,
-        file_change_request_id: int | None = None,
-        file_change_execution_token: str | None = None,
         ttl_seconds: int,
     ) -> None:
         """(Re)write a file's payload hash with a fresh TTL.
@@ -248,11 +244,6 @@ class FileScheduler:
             "tenant_id": "" if tenant_id is None else str(tenant_id),
             "idempotency_key": idempotency_key or "",
         }
-        if file_change_request_id is not None:
-            mapping.update(
-                file_change_request_id=str(file_change_request_id),
-                file_change_execution_token=file_change_execution_token or "",
-            )
         self._conn.hset(key, mapping=mapping)
         self._conn.expire(key, ttl_seconds)
 
@@ -543,13 +534,6 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
                     payload.get("preview_cache_key", ""),
                     payload.get("callback_url", ""),
                 ]
-                if payload.get("file_change_request_id"):
-                    parse_args.extend(
-                        [
-                            int(payload["file_change_request_id"]),
-                            payload.get("file_change_execution_token") or None,
-                        ]
-                    )
                 dispatch_options = {"args": parse_args, "queue": queue}
                 idempotency_key = payload.get("idempotency_key") or ""
                 if idempotency_key:
@@ -604,8 +588,6 @@ def enqueue_or_dispatch(
     preview_cache_key: str | None,
     callback_url: str | None,
     idempotency_key: str | None = None,
-    file_change_request_id: int | None = None,
-    file_change_execution_token: str | None = None,
 ) -> None:
     """Single dispatch entry point used by service-layer callers.
 
@@ -619,16 +601,10 @@ def enqueue_or_dispatch(
     tenant_id = get_current_tenant_id()
     if idempotency_key is not None and tenant_id is None:
         raise RuntimeError("tenant context is required for idempotent parse dispatch")
-    if (file_change_request_id is None) != (file_change_execution_token is None):
-        raise ValueError("F046 parse dispatch requires request id and execution token together")
-    if file_change_request_id is not None and (int(file_change_request_id) <= 0 or not file_change_execution_token):
-        raise ValueError("F046 parse dispatch requires a positive request id and execution token")
 
     if not _fair_scheduler_enabled():
         queue = decide_queue(file_name)
         parse_args = [int(file_id), preview_cache_key, callback_url]
-        if file_change_request_id is not None:
-            parse_args.extend([int(file_change_request_id), str(file_change_execution_token)])
         dispatch_options = {"args": parse_args, "queue": queue}
         if idempotency_key is not None:
             dispatch_options.update(
@@ -649,8 +625,6 @@ def enqueue_or_dispatch(
         # dispatch round can parse the file under its owning tenant.
         tenant_id=tenant_id,
         idempotency_key=idempotency_key,
-        file_change_request_id=file_change_request_id,
-        file_change_execution_token=file_change_execution_token,
         ttl_seconds=_fair_scheduler_conf().payload_ttl_seconds,
     )
     try:

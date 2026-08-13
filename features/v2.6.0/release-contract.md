@@ -14,7 +14,8 @@
 | 领域对象 | Owner Feature | 说明 |
 |---------|--------------|------|
 | ApprovalScenario / ApprovalRouteRule / ApprovalFlowDefinition / ApprovalFlowVersion / ApprovalNodeDefinition | F025-approval-center-unification | 审批场景配置、条件分支、流程定义、流程版本与顺序节点 |
-| ApprovalInstance / ApprovalTask / ApprovalException / ApprovalOutbox / ApprovalActionLog | F025-approval-center-unification | 审批实例、审批任务、异常、业务执行队列、审批时间线 |
+| ApprovalInstance / ApprovalTask / ApprovalException / ApprovalOutbox / ApprovalActionLog | F025-approval-center-unification | 审批实例、审批任务、异常、审批时间线；`ApprovalOutbox` 仅承载菜单申请、频道订阅、知识空间加入三个已上线 legacy 场景的业务执行，不再接入 F045/F046 |
+| ApprovalDecisionOutbox | F025-approval-center-unification（由 F047 解耦设计引入） | 向 F045/F046 可靠交付版本化终态决定；唯一键保证一个审批终态一个事件。它只表达审批决定已可靠落盘，不表达 Permission/Knowledge 业务执行成功 |
 | UserMenuAccess | F025-approval-center-unification | 菜单权限申请通过后的用户级菜单授权与撤回记录 |
 | ChannelAuthorizationWrite | F026-channel-active-authorization | 频道资源主动授权、撤销授权、频道 relation-model binding 写入与清理行为 |
 | SpaceChannelMember(channel relation/source fields) | F026-channel-active-authorization | `space_channel_member` 中 `business_type='channel'` 的四档关系与授权来源字段；不拥有知识空间成员关系 |
@@ -29,8 +30,8 @@
 | —（无新增；新增对外 API `GET /channel/manager/{id}/unread-counts`） | F040-rebac-read-path-perf-rollout | 性能优化型；不引入新领域对象/表/DAO 入口。仅改读路径"怎么算/怎么取"：频道详情拆出独立未读端点 + 上下文复用 + 文章总数 Redis 短 TTL 缓存；空间广场批量化权限检查（保持全返回）；工作台/应用列表优先 cursor，遗留 `/chat/online`·`/workstation/app/uncategorized` 在兼容窗口内保留页码但内部 keyset 有界扫描；侧边栏权限懒加载；E 组按数据版本派生 key 缓存权限"名册"。只读既有 Service/DAO，不改 F026/F031/F033/F037 的授权·订阅语义 |
 | —（无新增领域对象；在 F029 拥有的 citation 链路上叠加 `accessScope` 分级） | F041-knowledge-space-select-flow-assistant | 4 入口（助手应用、工作流助手/知识库问答/知识库检索节点）知识库选择器新增「知识空间」tab + 检索；仅读取 / 调用现有 `KnowledgeSpaceService` / `KnowledgeSpaceChatService`（多态检索）/ F029 `KnowledgeFileVisibilityService`（`view_file` 双层过滤）/ 工作流节点 / 助手检索链路；两节点仅改**显示名**；在 F029 拥有的 `MessageCitation` / citation registry 上新增 `accessScope`（`per_user` / `shared`）字段与 resolve 分支（属 INV-7 例外的协同改动，经 F029 owner 认可）；不新增领域对象 / 表 / DAO 入口 / 对外 API / 错误码 |
 | —（无新增领域对象；统一资源设置与授权 UI 编排） | F044-unified-permission-entry | 知识空间与频道的新建/设置改为统一完整页面；扩展现有创建请求携带初始授权，资源创建后调用两类资源现有授权 Service 批量写入；新增一个创建阶段只读候选查询路径。频道授权写行为仍归 F026，部门空间授权范围仍归 F033；不新增权限写路径、角色、权限 ID、可见性状态、表、迁移或错误码 |
-| —（无新增领域对象；ApprovalInstance/Task 投影为个人邀请事实） | F045-personal-user-invite-confirmation | 复用 F025 Approval* 聚合实现知识空间/频道新增个人用户的一人一单本人确认，并在 F044 client 权限页投影待生效状态；Approval* 写行为仍归 F025，频道授权写行为仍归 F026，统一创建/设置 UI 仍归 F044。F045 不新增邀请表、权限角色、权限 ID 或迁移；协同扩展 F025 错误码 18118 |
-| KnowledgeSpaceFileChangePolicy / KnowledgeSpaceFileChangeSetting / KnowledgeSpaceUploadStage / KnowledgeSpaceFileChangeRequest / KnowledgeSpaceFileChangeFootprint / KnowledgeSpaceFileChangeExecutionStep | F046-knowledge-space-file-change-approval | 拥有租户文件变更审核策略、单空间配置、上传对象暂存、正式资源变更申请、真实执行 footprint 与 durable saga step 生命周期。正式 `KnowledgeFile` / `KnowledgeDocument` 的上传、重命名、移动、删除仍只调用 Knowledge/F034 权威 Service；Approval* 写行为仍归 F025，F046 仅通过 F025 新增的原子动态审批人/实例决策/Deferred 执行 Service 协同扩展，不直接写 Approval* 表 |
+| ResourceUserInviteRequest | F045-personal-user-invite-confirmation | Permission/资源授权域拥有个人邀请申请、角色快照、业务去重、待生效投影、授权执行状态及失败重试；知识空间/频道实际授权仍调用各自 owner Service。F025 只拥有审批事实与决定交付，Approval payload 不再作为邀请事实源 |
+| KnowledgeSpaceFileChangePolicy / KnowledgeSpaceFileChangeSetting / KnowledgeSpaceUploadStage / KnowledgeSpaceFileChangeRequest / KnowledgeSpaceFileChangeFootprint / KnowledgeSpaceFileChangeExecutionStep | F046-knowledge-space-file-change-approval | Knowledge 域拥有租户文件变更审核策略、单空间配置、上传暂存、正式资源变更申请、footprint、durable saga step、执行状态、失败与补偿。F025 只交付审批决定，不再以 Deferred/outbox/instance 表达文件业务执行 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -44,14 +45,14 @@
 
 | ID | 不变量描述 | 涉及领域对象 | 来源 spec |
 |----|-----------|------------|---------|
-| INV-1 | 审批事实源统一为 `approval_instance` / `approval_task`；站内信只负责提醒和跳转，不作为审批状态真相来源 | ApprovalInstance, ApprovalTask, InboxMessage | F025 |
+| INV-1 | 审批事实源统一为 `approval_instance` / `approval_task`；`approval_decision_outbox` 只可靠交付审批终态，不能作为业务状态；站内信只负责提醒和跳转，不作为审批或业务状态真相来源 | ApprovalInstance, ApprovalTask, ApprovalDecisionOutbox, InboxMessage | F025/F047 |
 | INV-2 | 审批中心所有新表都必须带 `tenant_id`，并遵守现有多租户隔离规则；申请人/审批人/管理员的数据可见性不能跨租户 | Approval* | F025 |
-| INV-3 | 审批通过不等于绕过业务安全检查；handler 执行业务动作前仍需复用原业务校验逻辑 | ApprovalOutbox, 业务资源模块 | F025 |
+| INV-3 | 审批通过不等于业务成功，也不得绕过业务安全检查。菜单申请、频道订阅、知识空间加入三个 legacy 场景继续由 `ApprovalOutbox` handler 执行业务；F045/F046 只消费 `ApprovalDecisionOutbox` 决定事件，并由 Permission/Knowledge 自有 policy、subscriber、worker/executor 在执行时重新校验权威业务事实 | ApprovalOutbox, ApprovalDecisionOutbox, 业务资源模块 | F025/F047 |
 | INV-4 | 菜单权限申请通过后只写用户级菜单授权，不修改角色菜单权限；用户有效菜单 = 角色菜单 ∪ 个人授权 ∪ 管理员权限 | UserMenuAccess, RoleAccess | F025 |
 | INV-5 | 流程变更采用版本快照模型；已发起实例继续使用其创建时的流程版本，新配置仅影响后续新申请 | ApprovalFlowVersion, ApprovalInstance | F025 |
 | INV-6 | 走 ReBAC 过滤的高频列表接口采用 cursor-based 分页：请求用 `cursor` 透传上一页位置，响应含 `has_more: bool` 与 `next_cursor: string\|null`，**不再返 `total` / `page_num`**；后端不得为算 total 而扫描全部 batch；cursor 编码统一走 `common/cursor.py`（schema `{"v":1, "k":[...]}`，base64url）；cursor 解析失败必须明确报错（`*InvalidCursorError`），不得静默 fallback 首页。**例外（F040 登记）**：① WHERE 列表结果集由 per-user 成员关系 / 部门子树天然有界且**无深翻语义**（如 `/space/joined`·`/space/department`），可保留全返回、不强制 cursor，但其逐项 N+1 权限检查必须批量化；② 遗留多端消费的 `/chat/online`·`/workstation/app/uncategorized` 在兼容窗口内保留 `page/limit` 裸列表，但内部必须使用 keyset 有界扫描、不得 count/fetch-all、仅扫描到目标页可见前缀；未来 cursor 化须另立契约迁移全部调用方 | 所有走 ReBAC 过滤的列表接口 | F027（例外 F040） |
 | INV-7 | 知识空间内容的"AI 问答可检索可见性"必须是"列表 UI 可见性"的子集；即对任意 `(user, space, file)`，若用户在列表 UI 中不可见该 `file`（`view_file ∉ effective_permissions`），则任何 AI 问答入口都不得让该 `file` 的 chunk / 文件名 / 来源出现在模型上下文、回答引用、角标溯源 `/api/v1/citations/resolve` 响应的结构化字段中。**例外（F041 登记）**：**工作流 / 助手应用入口**的知识空间检索由「用户知识库权限校验」开关控制（4 入口统一，默认关）——开关 OFF 时该入口按**配置者** `view_file` 过滤检索（共享配置者可见范围、**永不越过配置者本人的可见边界**），其产生的 citation 标为 `shared`，溯源解析**不整条剔除**且返回来源元数据（文件名 / 知识库名 / snippet / 可点角标），但完整文件预览 / 下载 URL 仍按**运行使用者** `view_file` 把关；开关 ON（按运行使用者 `view_file`，`per_user`）及**直接空间 AI 问答入口（F029）**维持本不变量的强制语义完全不变 | KnowledgeSpace, Folder, KnowledgeFile, MessageCitation | F029（例外 F041） |
-| INV-8 | 经文件变更审批上传的原文件在审批完成前不得创建正式 `KnowledgeFile`；审批通过后创建的处理中文件在解析成功前仍属于 F046 的未发布资源，只能出现在独立变更列表且仅申请人/当前有效审核人可见。所有正式列表、搜索、F030 OpenAPI、RAG 检索和 citation 链路必须排除未发布资源；解析成功后才解除发布门禁，解析重试复用原审批 | KnowledgeSpaceUploadStage, KnowledgeSpaceFileChangeRequest, KnowledgeFile, KnowledgeDocument, MessageCitation | F046（协同影响 F029/F030） |
+| INV-8 | 经文件变更审批上传的原文件在审批完成前不得创建正式 `KnowledgeFile`；审批同意后，Knowledge saga 只有在文件图谱、FGA 权限关系及普通解析任务调度均成功接受后才解除 F046 发布门禁。门禁解除前只能出现在独立变更列表且仅申请人/当前有效审核人可见，所有正式列表、搜索、F030 OpenAPI、RAG 检索和 citation 链路必须排除它；门禁解除后的内容解析状态与重试沿用普通文件语义，不反向改写审批或 F046 业务终态 | KnowledgeSpaceUploadStage, KnowledgeSpaceFileChangeRequest, KnowledgeFile, KnowledgeDocument, MessageCitation | F046（协同影响 F029/F030） |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -78,8 +79,8 @@
 | F040-rebac-read-path-perf-rollout | F004, F008, F027（cursor 协议 INV-6 + `common/cursor.py`）, F036（细粒度评估范式）, F037（频道权限上下文复用） | 性能优化型；收尾 F027/F036/F037 读路径主线。新增对外 API `GET /channel/manager/{id}/unread-counts`（未读从详情拆出）、`GET /channel/manager/{id}` 响应去 `sub_channel_unread_counts`；C 组列表复用 F027 cursor（不新增错误码）；**援引 INV-6 例外**（见表 2）保持 `/space/joined`·`/space/department` 全返回，并给遗留 `/chat/online`·`/workstation/app/uncategorized` 登记页码兼容窗口（内部 keyset、不得 count/fetch-all）；E 组按数据版本派生 key 缓存；不新增表/迁移/领域对象 |
 | F041-knowledge-space-select-flow-assistant | F029, F030 | 接盘 F029 明确排除的「工作流节点 / 运行用户身份」检索权限过滤遗留项；4 入口知识库选择器新增知识空间 tab、两节点仅改显示名；「用户知识库权限校验」开关（4 入口统一、默认关）**ON** 时按**运行使用者** `view_file` 双层过滤、**OFF** 时按**配置者** `view_file` 过滤（借用配置者可见范围、不越其边界；均复用 F029 `KnowledgeFileVisibilityService`）；复用 F030 `type=3` 同表多态 + `row.type` 分派；**登记 INV-7 例外**（工作流/助手入口开关可选、默认关，含检索侧与溯源侧 `shared` 分级）；在 F029 citation 链路新增 `accessScope` 分级 + resolve 分支；不新增领域对象 / 表 / 对外 API / 错误码 |
 | F044-unified-permission-entry | F026, F033 | 统一知识空间与频道的新建/设置入口；现有创建请求增加可选初始授权参数，创建完成后复用 F026 频道授权写行为及现有知识空间授权服务；仅新增一个创建阶段只读候选查询路径，不新增权限写路径、领域对象、表、迁移、权限 ID、错误码或不变量 |
-| F045-personal-user-invite-confirmation | F025, F026, F033, F044 | 仅处理知识空间/频道新增个人用户：复用 F044 create/settings 与 `initial_permissions`，按用户进入 F025 本人确认并由 outbox 调用知识空间/F026 频道授权 Service；部门/用户组及已有个人授权修改/移除保持直接授权；不新增邀请表或不变量，协同扩展 approval 错误码 18118 |
-| F046-knowledge-space-file-change-approval | F025, F027, F029, F030, F034, F044 | 新增租户/单空间文件变更审核策略、上传对象暂存、真实执行 footprint、durable execution step、正式资源重命名/移动/删除审批、动态 owner/manager 待办对账及私密/部门空间边界；列表沿用 F027 cursor，发布门禁协同 F029/F030，移动/文件夹上传复用 F034，策略 UI 落在 F044 统一知识空间配置入口；新增 6 个 F046 领域对象，不新增 Approval* 对象 |
+| F045-personal-user-invite-confirmation | F025, F026, F033, F044, F047 | 仅处理知识空间/频道新增个人用户：Permission/资源授权域先创建 `ResourceUserInviteRequest`，再经 F025 本人确认；审批决定可靠交付后由业务 consumer 调用知识空间/F026 授权 owner Service。部门/用户组及已有个人授权修改/移除保持直接授权；协同扩展 approval 错误码 18118 |
+| F046-knowledge-space-file-change-approval | F025, F027, F029, F030, F034, F044, F047 | 新增租户/单空间文件变更审核策略、上传对象暂存、真实执行 footprint、durable execution step、正式资源重命名/移动/删除审批、动态 owner/manager 待办对账及私密/部门空间边界；F025 只管理审批事实并交付决定，Knowledge 独立推进文件业务状态、失败、重试和补偿 |
 
 ---
 
@@ -123,5 +124,7 @@
 | 2026-07-01 | 登记 F041 工作流 / 助手应用支持选择知识空间（首钢合入需求）：表 1 标注"无新增领域对象"（4 入口知识库选择器新增知识空间 tab、两工作流节点仅改显示名、复用 F029 双层 `view_file` 过滤 + F030 `type=3` 多态检索）、表 3 追加依赖 F029/F030；**INV-7 新增例外**——工作流 / 助手入口知识空间检索由「用户知识库权限校验」开关控制（4 入口统一、默认关，维持线上现状），开关 OFF 按**配置者** `view_file` 过滤（借用配置者可见范围、永不越其边界）、citation 标 `shared`（溯源不整条剔除、返回来源元数据，完整文件预览/下载仍按运行使用者 `view_file`），F029 直接入口 + 开关 ON（按运行使用者，`per_user`）维持强制；在 F029 拥有的 citation 链路新增 `accessScope` 分级 + resolve 分支（经 F029 owner 认可的协同改动）；不新增表 / 对外 API / 错误码 / 领域对象 | F041（含 INV-7 例外 + F029 citation 链路协同改动） |
 | 2026-07-13 | F040 增补应用列表性能兼容窗口：`/chat/online` 与 `/workstation/app/uncategorized` 保留既有 `page/limit` 裸列表契约，内部改 DM8-safe keyset 有界扫描、权限预过滤 + 精确复核、页内装饰；INV-6 例外补充“不得 count/fetch-all、仅扫描到目标页可见前缀”；无表/迁移/API/错误码变化 | F040 |
 | 2026-08-07 | 登记 F044 统一权限设置入口：表 1 标注无新增领域对象（统一 UI 编排，现有创建请求携带初始授权并在创建后调用两类资源现有授权 Service；新增一个创建阶段只读候选查询路径），表 3 追加依赖 F026/F033；资源 CRUD、频道授权、部门空间范围继续由原 owner 负责；不新增权限写路径、表、迁移、权限 ID、错误码或不变量 | F044 |
-| 2026-08-10 | 登记 F045 个人用户邀请本人确认：不新增邀请表，以 F025 ApprovalInstance/Task 为邀请事实并由 outbox 执行；依赖 F025/F026/F033/F044，复用 F044 client 统一创建/设置入口；Approval*、频道授权与 UI 所有权不变；协同占用 approval 错误码 18118 | F045 |
-| 2026-08-10 | 登记 F046 知识空间文件与文件夹变更审核：新增租户策略/单空间配置/上传暂存/变更申请/footprint/execution step 六个领域对象，依赖 F025/F027/F029/F030/F034/F044；新增 INV-8 未发布文件门禁，协同扩展 F025 动态审批人原子 Service 与 Deferred 执行契约，预留 18072–18076 | F046（协同影响 F025/F029/F030/F044） |
+| 2026-08-10 | 登记 F045 个人用户邀请本人确认；原“Approval payload 为邀请事实、ApprovalOutbox 执行业务”方案已由 F047 替代。现由 `ResourceUserInviteRequest` 保存 Permission 业务事实，经 public submission port 发起审批，决定交付后由 Permission worker / `ResourceGrantExecutor` 执行与重试 | F045（现态以 2026-08-12 F047 为准） |
+| 2026-08-10 | 登记 F046 知识空间文件与文件夹变更审核；原 Gate/Deferred/runtime handler 与 F025 执行业务方案已由 F047 替代。现由 Knowledge request、policy/subscriber 与 durable saga 独立推进，F025 只交付审批决定 | F046（协同影响 F025/F029/F030/F044；现态以 2026-08-12 F047 为准） |
+| 2026-08-12 | F047 推翻 F045/F046 未上线实现的跨域职责：F045 新增 `ResourceUserInviteRequest` 作为邀请业务事实；F046 saga 完全归 Knowledge；F025 对两个场景只管理审批事实和可靠交付决定，不再执行授权或文件业务。线上 v2.6.0 无两场景数据，停服发布时直接替换，不提供开发实现兼容层 | F047（覆盖 F045/F046 的跨域执行口径） |
+| 2026-08-13 | 明确 v2.6.0 发布指针：发布前同时停止 API、默认 Celery、`knowledge_celery` 与 Beat，完成未发布 F045/F046 DDL/代码直接替换后整组启动；不迁移 F045/F046 开发期旧数据，不保留旧 handler/Gate/Deferred/outbox 兼容路径，也不允许新旧 worker 混跑。三个已上线 legacy 审批场景继续使用 `ApprovalOutbox`，F045/F046 使用 `ApprovalDecisionOutbox` | F045/F046/F047 |

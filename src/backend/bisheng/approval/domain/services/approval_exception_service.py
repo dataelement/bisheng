@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 
 
 class ApprovalExceptionService:
-    def __init__(self, *, instance_repository) -> None:
+    def __init__(self, *, instance_repository, registry=None) -> None:
         self.instance_repository = instance_repository
+        self.registry = registry
 
     @staticmethod
     async def ensure_approver_empty_locked(
@@ -278,6 +279,13 @@ class ApprovalExceptionService:
         service = cls(instance_repository=ApprovalInstanceRepository)
         exception = await service._get_exception(exception_id)
         instance = await service._get_instance(exception.instance_id)
+        if service.instance_repository.is_decision_delivery_instance(instance):
+            return await service._cancel_dynamic_exception_in_uow(
+                exception_id=exception_id,
+                operator_user_id=operator_user_id,
+                reason=reason.strip(),
+                ip_address=ip_address,
+            )
         runtime_handler = await service._build_handler(instance.handler_key or instance.scenario_code)
         policy = getattr(runtime_handler, "exception_action_policy", None)
         if policy is not None:
@@ -422,6 +430,7 @@ class ApprovalExceptionService:
         """Cancel a dynamic instance atomically after its scenario policy allows it."""
 
         lookup = await self._get_exception(exception_id)
+        handler = None
         async with self.instance_repository.decision_session() as session:
             async with session.begin():
                 instance = await self.instance_repository.lock_instance_in_session(session, lookup.instance_id)
@@ -435,15 +444,16 @@ class ApprovalExceptionService:
                 exception = next((row for row in exceptions if row.id == exception_id), None)
                 if exception is None:
                     raise ValueError(f"open exception not found: {exception_id}")
-                handler = await self._build_handler(instance.handler_key or instance.scenario_code)
-                policy = getattr(handler, "exception_action_policy", None)
-                if policy is None or not await policy(
-                    action="cancel",
-                    instance=instance,
-                    exception=exception,
-                    operator_user_id=operator_user_id,
-                ):
-                    raise PermissionError(f"exception action not allowed for {instance.scenario_code}: cancel")
+                if not self.instance_repository.is_decision_delivery_instance(instance):
+                    handler = await self._build_handler(instance.handler_key or instance.scenario_code)
+                    policy = getattr(handler, "exception_action_policy", None)
+                    if policy is None or not await policy(
+                        action="cancel",
+                        instance=instance,
+                        exception=exception,
+                        operator_user_id=operator_user_id,
+                    ):
+                        raise PermissionError(f"exception action not allowed for {instance.scenario_code}: cancel")
 
                 now = datetime.utcnow()
                 for task in tasks:
@@ -468,32 +478,46 @@ class ApprovalExceptionService:
                         detail={"reason": reason, "exception_id": exception_id},
                     )
                 )
+                await self.instance_repository.create_terminal_decision_event_in_session(
+                    session,
+                    instance=instance,
+                    decision="cancelled",
+                    operator_user_id=operator_user_id,
+                )
                 await self.instance_repository.flush_decision_in_session(session)
+
+                instance_id = int(instance.id)
+                tenant_id = int(instance.tenant_id)
+                applicant_user_id = int(instance.applicant_user_id)
+                business_name = instance.business_name
+                scenario_code = instance.scenario_code
+                payload_snapshot = dict(instance.payload_snapshot or {})
+                exception_type = exception.exception_type
 
         await self._write_audit_log(
             action="approval.exception.cancel",
-            tenant_id=instance.tenant_id,
+            tenant_id=tenant_id,
             operator_user_id=operator_user_id,
-            operator_tenant_id=instance.tenant_id,
+            operator_tenant_id=tenant_id,
             exception_id=exception_id,
-            instance_id=instance.id,
-            exception_type=exception.exception_type,
+            instance_id=instance_id,
+            exception_type=exception_type,
             reason=reason,
             ip_address=ip_address,
         )
-        on_cancelled = getattr(handler, "on_cancelled", None)
+        on_cancelled = getattr(handler, "on_cancelled", None) if handler is not None else None
         if callable(on_cancelled):
-            await on_cancelled(instance.id, instance.payload_snapshot or {}, reason)
+            await on_cancelled(instance_id, payload_snapshot, reason)
         await self._notify_user(
             sender=operator_user_id,
-            receiver_user_id=instance.applicant_user_id,
+            receiver_user_id=applicant_user_id,
             action_code="approval_exception_cancelled",
-            business_name=instance.business_name,
-            instance_id=instance.id,
-            scenario_code=instance.scenario_code,
+            business_name=business_name,
+            instance_id=instance_id,
+            scenario_code=scenario_code,
             reason=reason,
         )
-        return {"exception_id": exception_id, "instance_id": instance.id, "status": "cancelled"}
+        return {"exception_id": exception_id, "instance_id": instance_id, "status": "cancelled"}
 
     async def assign_flow(
         self,
@@ -793,30 +817,6 @@ class ApprovalExceptionService:
             raise ValueError(f"outbox not found for instance: {instance.id}")
         outbox = outboxes[-1]
         handler = await self._build_handler(scenario_code)
-        if scenario_code == "knowledge_space_file_change_request":
-            from bisheng.approval.domain.services.approval_outbox_service import ApprovalOutboxService
-
-            dispatch_resumed_execution = getattr(handler, "dispatch_resumed_execution", None)
-            if dispatch_resumed_execution is None:
-                raise TypeError("F046 deferred handler must implement post-commit resume dispatch")
-
-            async def dispatch_after_commit(outbox_id: int, execution_token: str):
-                return await dispatch_resumed_execution(
-                    outbox_id=int(outbox_id),
-                    execution_token=str(execution_token),
-                    tenant_id=int(instance.tenant_id),
-                )
-
-            resumed_token = await ApprovalOutboxService(
-                instance_repository=self.instance_repository
-            ).resume_deferred_execution(
-                tenant_id=int(instance.tenant_id),
-                instance_id=int(instance.id),
-                outbox_id=int(outbox.id),
-                handler=handler,
-                post_commit_dispatch=dispatch_after_commit,
-            )
-            return resumed_token is not None
         try:
             await handler.on_approved(instance.id, outbox.payload_snapshot)
         except Exception as exc:

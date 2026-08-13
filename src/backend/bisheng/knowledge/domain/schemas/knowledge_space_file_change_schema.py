@@ -34,19 +34,12 @@ class FileChangeDecision(StrEnum):
 
 
 class FileChangeApprovalStatus(StrEnum):
-    PENDING = "pending"
-    APPROVER_EMPTY = "approver_empty"
-    EXCEPTION = "exception"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    WITHDRAWN = "withdrawn"
-    CANCELLED = "cancelled"
-    EXECUTING = "executing"
-    PARSING = "parsing"
-    PARSE_FAILED = "parse_failed"
-    EXECUTE_FAILED = "execute_failed"
-    EXECUTED = "executed"
-    PUBLISHED = "published"
+    QUEUED = "queued"
+    APPLYING = "applying"
+    APPLIED = "applied"
+    FAILED = "failed"
+    COMPENSATING = "compensating"
+    CLOSED = "closed"
 
 
 class UploadStageState(StrEnum):
@@ -207,7 +200,7 @@ class FileBatchRenameMutationResp(_FileChangeOutput):
 
 
 class FileChangeApprovalView(_FileChangeOutput):
-    status: Literal["pending", "exception", "approved", "executing", "execute_failed"]
+    status: FileChangeApprovalStatus
     action: Literal[FileChangeAction.RENAME, FileChangeAction.MOVE, FileChangeAction.DELETE]
     instance_id: int
     request_id: int
@@ -241,6 +234,7 @@ class KnowledgeSpaceFileChangeDetailResp(_FileChangeOutput):
     applicant_user_name: str | None = None
     approval_instance_id: int | None = None
     status: FileChangeApprovalStatus
+    approval_status: str | None = None
     action_detail: FileChangeActionDetail = Field(default_factory=FileChangeActionDetail)
     can_approve: bool = False
     failure_reason: str | None = None
@@ -267,6 +261,7 @@ class KnowledgeSpacePendingUploadItemResp(_FileChangeOutput):
     applicant_user_id: int
     applicant_user_name: str | None = None
     status: FileChangeApprovalStatus
+    approval_status: str | None = None
     can_approve: bool = False
     failure_reason: str | None = None
     create_time: datetime | None = None

@@ -9,20 +9,8 @@ from inspect import isawaitable
 from typing import Any
 from uuid import uuid4
 
-from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.approval.domain.models.approval_instance import (
-    ApprovalInstance,
-    ApprovalInstanceStatus,
-    ApprovalOutbox,
-    ApprovalOutboxStatus,
-)
-from bisheng.approval.domain.services.approval_outbox_service import (
-    ApprovalOutboxService,
-    Completed,
-    Deferred,
-)
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge_space_file_change_execution_step import (
@@ -64,7 +52,6 @@ class UploadExecutionStepCode:
 class UploadStepDispatchContext:
     tenant_id: int
     request_id: int
-    instance_id: int
     execution_token: str
     step_code: str
     idempotency_key: str
@@ -123,7 +110,6 @@ class VerifiedMutationStepResult:
 class MutationStepContext:
     tenant_id: int
     request_id: int
-    instance_id: int
     execution_token: str
     action: str
     step_code: str
@@ -142,13 +128,24 @@ MutationStepEffect = Callable[
 ]
 MutationExecutionValidator = Callable[..., Awaitable[None] | None]
 AfterStepEffect = Callable[[MutationStepContext], Any]
-DeleteDeferredCompletion = Callable[..., Awaitable[bool] | bool]
-
 DELETE_PHASE_CHECKPOINT_KEY = "delete_phase"
 DELETE_PHASE_PREPARED = "prepared"
 DELETE_PHASE_PURGING = "purging"
 DELETE_PHASE_PURGE_FAILED = "purge_failed"
 DELETE_PHASE_COMPLETED = "completed"
+
+
+@dataclass(frozen=True, slots=True)
+class MutationExecutionCompleted:
+    """The Knowledge mutation is already durably complete."""
+
+
+@dataclass(frozen=True, slots=True)
+class MutationExecutionDispatch:
+    """A Knowledge-owned generation that durable workers must continue."""
+
+    execution_token: str
+    deadline: datetime
 
 
 class KnowledgeSpaceMutationExecutor:
@@ -157,9 +154,9 @@ class KnowledgeSpaceMutationExecutor:
     Formal Knowledge rows, their request link and the four durable steps share
     one DB commit. OpenFGA and parser dispatch only start after that commit.
     For uploads, successful OpenFGA writes plus scheduler acceptance complete
-    the approval-owned business handoff; parsing/indexing/vectorization then
+    the Knowledge-owned business handoff; parsing/indexing/vectorization then
     follow the ordinary file lifecycle. Rename/move external steps only accept
-    read-after-verified results; absent a runner they remain Deferred, and the
+    read-after-verified results; absent a runner they remain pending, and the
     user-visible DB name/location is cut over last.
     """
 
@@ -179,10 +176,6 @@ class KnowledgeSpaceMutationExecutor:
         mutation_step_owner: MutationStepOwner | None = None,
         after_step_effect: AfterStepEffect | None = None,
         delete_purge_applier: MutationStepEffect | None = None,
-        delete_deferred_validator: DeleteDeferredCompletion | None = None,
-        delete_deferred_completion: DeleteDeferredCompletion | None = None,
-        delete_deferred_failure: DeleteDeferredCompletion | None = None,
-        mutation_deferred_completion: DeleteDeferredCompletion | None = None,
     ) -> None:
         self.session_factory = session_factory
         self.authorize_file = authorize_file or self._authorize_file
@@ -197,23 +190,30 @@ class KnowledgeSpaceMutationExecutor:
         self.mutation_step_owner = mutation_step_owner or ProductionMutationStepOwner()
         self.after_step_effect = after_step_effect
         self.delete_purge_applier = delete_purge_applier or self._apply_delete_purge_step
-        self.delete_deferred_validator = delete_deferred_validator or self._require_delete_approval_in_uow
-        self.delete_deferred_completion = delete_deferred_completion or self._complete_delete_approval_in_uow
-        self.delete_deferred_failure = delete_deferred_failure or self._fail_delete_approval_in_uow
-        self.mutation_deferred_completion = mutation_deferred_completion or self._complete_delete_approval_in_uow
-        self._mutation_completion_is_default = mutation_deferred_completion is None
 
     async def execute(
         self,
         *,
-        instance_id: int,
         request_id: int,
-        payload_snapshot: dict,
-    ) -> Completed | Deferred:
-        action = payload_snapshot.get("action")
+    ) -> MutationExecutionCompleted | MutationExecutionDispatch:
+        tenant_id = self._tenant_id()
+        async with self.session_factory() as session:
+            request = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_id(
+                tenant_id=tenant_id,
+                request_id=int(request_id),
+            )
+        if request is None:
+            raise LookupError(f"F046 request not found: {request_id}")
+        action = request.action
+        payload_snapshot = {
+            **dict(request.action_snapshot or {}),
+            "action": str(request.action),
+            "change_request_id": int(request.id),
+            "space_id": int(request.space_id),
+            "applicant_user_name": str(request.applicant_user_id),
+        }
         if action == KnowledgeSpaceFileChangeAction.UPLOAD:
             return await self._execute_upload(
-                instance_id=instance_id,
                 request_id=request_id,
                 payload_snapshot=payload_snapshot,
             )
@@ -222,13 +222,11 @@ class KnowledgeSpaceMutationExecutor:
             KnowledgeSpaceFileChangeAction.MOVE,
         }:
             return await self._execute_rename_or_move(
-                instance_id=instance_id,
                 request_id=request_id,
                 payload_snapshot=payload_snapshot,
             )
         if action == KnowledgeSpaceFileChangeAction.DELETE:
             return await self._execute_delete_prepare(
-                instance_id=instance_id,
                 request_id=request_id,
                 payload_snapshot=payload_snapshot,
             )
@@ -237,10 +235,9 @@ class KnowledgeSpaceMutationExecutor:
     async def _execute_upload(
         self,
         *,
-        instance_id: int,
         request_id: int,
         payload_snapshot: dict,
-    ) -> Completed | Deferred:
+    ) -> MutationExecutionCompleted | MutationExecutionDispatch:
         tenant_id = self._tenant_id()
         dispatch_context: UploadStepDispatchContext | None = None
         async with self.session_factory() as session:
@@ -253,13 +250,9 @@ class KnowledgeSpaceMutationExecutor:
                 )
                 if request is None:
                     raise LookupError(f"F046 request not found: {request_id}")
-                self._validate_request_binding(
-                    request=request,
-                    instance_id=instance_id,
-                    payload_snapshot=payload_snapshot,
-                )
+                self._validate_upload_request(request=request)
                 if request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED:
-                    return Completed()
+                    return MutationExecutionCompleted()
                 if request.execution_state == KnowledgeSpaceFileChangeExecutionState.FAILED:
                     raise RuntimeError("failed F046 upload requires the token-bound resume path")
 
@@ -332,7 +325,6 @@ class KnowledgeSpaceMutationExecutor:
                 dispatch_context = UploadStepDispatchContext(
                     tenant_id=tenant_id,
                     request_id=int(request.id),
-                    instance_id=int(instance_id),
                     execution_token=token,
                     step_code="",
                     idempotency_key="",
@@ -362,15 +354,14 @@ class KnowledgeSpaceMutationExecutor:
                 error_summary=str(exc),
             )
             raise
-        return Deferred(execution_token=dispatch_context.execution_token, deadline=deadline)
+        return MutationExecutionDispatch(execution_token=dispatch_context.execution_token, deadline=deadline)
 
     async def _execute_rename_or_move(
         self,
         *,
-        instance_id: int,
         request_id: int,
         payload_snapshot: dict,
-    ) -> Completed | Deferred:
+    ) -> MutationExecutionCompleted | MutationExecutionDispatch:
         tenant_id = self._tenant_id()
         context: MutationStepContext | None = None
         deadline: datetime | None = None
@@ -388,13 +379,9 @@ class KnowledgeSpaceMutationExecutor:
                 )
                 if request is None:
                     raise LookupError(f"F046 request not found: {request_id}")
-                self._validate_non_upload_request_binding(
-                    request=request,
-                    instance_id=instance_id,
-                    payload_snapshot=payload_snapshot,
-                )
+                self._validate_non_upload_request(request=request)
                 if request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED:
-                    return Completed()
+                    return MutationExecutionCompleted()
                 if request.execution_state in {
                     KnowledgeSpaceFileChangeExecutionState.FAILED,
                     KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
@@ -466,7 +453,6 @@ class KnowledgeSpaceMutationExecutor:
                 context = MutationStepContext(
                     tenant_id=tenant_id,
                     request_id=int(request.id),
-                    instance_id=int(instance_id),
                     execution_token=str(token),
                     action=str(request.action),
                     step_code="",
@@ -486,7 +472,7 @@ class KnowledgeSpaceMutationExecutor:
         if context is None or deadline is None:
             raise RuntimeError("F046 mutation preparation did not produce an execution context")
         if self.mutation_step_applier is None:
-            return Deferred(execution_token=context.execution_token, deadline=deadline)
+            return MutationExecutionDispatch(execution_token=context.execution_token, deadline=deadline)
 
         active_step: str | None = None
         try:
@@ -533,9 +519,8 @@ class KnowledgeSpaceMutationExecutor:
                 all_steps=all_steps,
                 external_steps=external_steps,
                 payload_snapshot=payload_snapshot,
-                complete_approval_in_uow=False,
             )
-            return Completed()
+            return MutationExecutionCompleted()
         except Exception as exc:
             if active_step is not None:
                 await self._mark_mutation_step_failed(
@@ -563,10 +548,9 @@ class KnowledgeSpaceMutationExecutor:
     async def _execute_delete_prepare(
         self,
         *,
-        instance_id: int,
         request_id: int,
         payload_snapshot: dict,
-    ) -> Completed | Deferred:
+    ) -> MutationExecutionCompleted | MutationExecutionDispatch:
         """Persist a complete delete manifest without destructive side effects."""
 
         tenant_id = self._tenant_id()
@@ -580,13 +564,9 @@ class KnowledgeSpaceMutationExecutor:
                 )
                 if request is None:
                     raise LookupError(f"F046 request not found: {request_id}")
-                self._validate_non_upload_request_binding(
-                    request=request,
-                    instance_id=instance_id,
-                    payload_snapshot=payload_snapshot,
-                )
+                self._validate_non_upload_request(request=request)
                 if request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED:
-                    return Completed()
+                    return MutationExecutionCompleted()
                 if request.execution_state in {
                     KnowledgeSpaceFileChangeExecutionState.FAILED,
                     KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
@@ -663,16 +643,15 @@ class KnowledgeSpaceMutationExecutor:
                     )
                     if not marked:
                         raise RuntimeError("stale F046 delete prepare acknowledgement")
-        return Deferred(execution_token=str(token), deadline=deadline)
+        return MutationExecutionDispatch(execution_token=str(token), deadline=deadline)
 
     async def cutover_delete(
         self,
         *,
-        instance_id: int,
         request_id: int,
         execution_token: str,
     ) -> bool:
-        """Atomically apply logical deletion while F025 remains Deferred."""
+        """Atomically apply the Knowledge logical deletion cutover."""
 
         tenant_id = self._tenant_id()
         async with self.session_factory() as session:
@@ -683,7 +662,7 @@ class KnowledgeSpaceMutationExecutor:
                     request_id=int(request_id),
                     for_update=False,
                 )
-                if observed is None or int(observed.approval_instance_id or 0) != int(instance_id):
+                if observed is None:
                     raise LookupError(f"F046 delete request not found: {request_id}")
                 if observed.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED:
                     return True
@@ -691,21 +670,6 @@ class KnowledgeSpaceMutationExecutor:
                     raise ValueError("F046 delete cutover received a non-delete request")
                 if observed.execution_token != str(execution_token):
                     raise RuntimeError("stale F046 delete cutover attempt")
-
-                # Global lock order is F025 instance -> outbox -> F046 request
-                # -> spaces/resources/steps. Cutover is the irreversible point,
-                # but F025 remains Deferred until every physical purge is
-                # authoritatively verified.
-                deferred = self.delete_deferred_validator(
-                    session=session,
-                    tenant_id=tenant_id,
-                    instance_id=int(instance_id),
-                    execution_token=str(execution_token),
-                )
-                if isawaitable(deferred):
-                    deferred = await deferred
-                if deferred is not True:
-                    raise RuntimeError("F046 delete cutover requires the current deferred approval")
 
                 request = await request_repository.get_by_id(
                     tenant_id=tenant_id,
@@ -798,7 +762,7 @@ class KnowledgeSpaceMutationExecutor:
                 or checkpoint.get(DELETE_PHASE_CHECKPOINT_KEY) != DELETE_PHASE_PURGING
                 or not bool(checkpoint.get("deletion_cutover_active"))
             ):
-                raise RuntimeError("F046 delete purge requires a cut-over deferred delete")
+                raise RuntimeError("F046 delete purge requires a cut-over delete")
             if request.execution_token != str(execution_token):
                 raise RuntimeError("stale F046 delete purge attempt")
             manifest = checkpoint.get("delete_manifest")
@@ -807,7 +771,6 @@ class KnowledgeSpaceMutationExecutor:
             context = MutationStepContext(
                 tenant_id=tenant_id,
                 request_id=int(request.id),
-                instance_id=int(request.approval_instance_id),
                 execution_token=str(execution_token),
                 action=KnowledgeSpaceFileChangeAction.DELETE,
                 step_code="",
@@ -870,7 +833,6 @@ class KnowledgeSpaceMutationExecutor:
                         raise RuntimeError("stale F046 delete purge acknowledgement")
 
         return await self.finalize_delete_execution(
-            instance_id=context.instance_id,
             request_id=int(request_id),
             execution_token=str(execution_token),
         )
@@ -883,17 +845,6 @@ class KnowledgeSpaceMutationExecutor:
     ) -> None:
         async with self.session_factory() as session:
             async with session.begin():
-                failed = self.delete_deferred_failure(
-                    session=session,
-                    tenant_id=context.tenant_id,
-                    instance_id=context.instance_id,
-                    execution_token=context.execution_token,
-                    error_summary=str(error_summary),
-                )
-                if isawaitable(failed):
-                    failed = await failed
-                if failed is not True:
-                    raise RuntimeError("F046 delete purge could not fail the current deferred approval")
                 repository = KnowledgeSpaceFileChangeRequestRepository(session)
                 request = await repository.get_by_id(
                     tenant_id=context.tenant_id,
@@ -913,33 +864,21 @@ class KnowledgeSpaceMutationExecutor:
     async def finalize_delete_execution(
         self,
         *,
-        instance_id: int,
         request_id: int,
         execution_token: str,
     ) -> bool:
-        """Atomically publish F025 success only after every purge is verified."""
+        """Publish Knowledge success only after every purge is verified."""
 
         tenant_id = self._tenant_id()
         async with self.session_factory() as session:
             async with session.begin():
-                completion = self.delete_deferred_completion(
-                    session=session,
-                    tenant_id=tenant_id,
-                    instance_id=int(instance_id),
-                    execution_token=str(execution_token),
-                )
-                if isawaitable(completion):
-                    completion = await completion
-                if completion is not True:
-                    raise RuntimeError("F046 delete finalization could not complete deferred approval")
-
                 request_repository = KnowledgeSpaceFileChangeRequestRepository(session)
                 request = await request_repository.get_by_id(
                     tenant_id=tenant_id,
                     request_id=int(request_id),
                     for_update=True,
                 )
-                if request is None or int(request.approval_instance_id or 0) != int(instance_id):
+                if request is None:
                     raise RuntimeError("stale F046 delete finalization")
                 if request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED:
                     return True
@@ -951,7 +890,7 @@ class KnowledgeSpaceMutationExecutor:
                     or checkpoint.get(DELETE_PHASE_CHECKPOINT_KEY) != DELETE_PHASE_PURGING
                     or not bool(checkpoint.get("deletion_cutover_active"))
                 ):
-                    raise RuntimeError("F046 delete finalization requires a cut-over deferred delete")
+                    raise RuntimeError("F046 delete finalization requires a cut-over delete")
 
                 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_footprint_repository import (
                     KnowledgeSpaceFileChangeFootprintRepository,
@@ -989,53 +928,6 @@ class KnowledgeSpaceMutationExecutor:
                 request.execution_state = KnowledgeSpaceFileChangeExecutionState.APPLIED
                 await request_repository.save(request)
         return True
-
-    @staticmethod
-    async def _require_delete_approval_in_uow(
-        *,
-        session: AsyncSession,
-        tenant_id: int,
-        instance_id: int,
-        execution_token: str,
-    ) -> bool:
-        return await ApprovalOutboxService.require_deferred_execution_in_uow(
-            session=session,
-            tenant_id=tenant_id,
-            instance_id=instance_id,
-            execution_token=execution_token,
-        )
-
-    @staticmethod
-    async def _fail_delete_approval_in_uow(
-        *,
-        session: AsyncSession,
-        tenant_id: int,
-        instance_id: int,
-        execution_token: str,
-        error_summary: str,
-    ) -> bool:
-        return await ApprovalOutboxService.fail_deferred_execution_in_uow(
-            session=session,
-            tenant_id=tenant_id,
-            instance_id=instance_id,
-            execution_token=execution_token,
-            error_summary=error_summary,
-        )
-
-    @staticmethod
-    async def _complete_delete_approval_in_uow(
-        *,
-        session: AsyncSession,
-        tenant_id: int,
-        instance_id: int,
-        execution_token: str,
-    ) -> bool:
-        return await ApprovalOutboxService.complete_deferred_execution_in_uow(
-            session=session,
-            tenant_id=tenant_id,
-            instance_id=instance_id,
-            execution_token=execution_token,
-        )
 
     @staticmethod
     async def _apply_delete_purge_step(context: MutationStepContext) -> VerifiedMutationStepResult:
@@ -1167,7 +1059,6 @@ class KnowledgeSpaceMutationExecutor:
         all_steps: tuple[str, ...],
         external_steps: tuple[str, ...],
         payload_snapshot: dict,
-        complete_approval_in_uow: bool,
     ) -> None:
         cutover_step = all_steps[-1]
         prepared = False
@@ -1183,22 +1074,6 @@ class KnowledgeSpaceMutationExecutor:
             target_ready = True
             async with self.session_factory() as session:
                 async with session.begin():
-                    # Global decision lock order is instance -> outbox ->
-                    # request -> resources -> execution steps. Completion is
-                    # part of this transaction, so acquire its two locks before
-                    # the business aggregate locks; a later failure rolls all
-                    # status changes back together.
-                    if complete_approval_in_uow:
-                        completion = self.mutation_deferred_completion(
-                            session=session,
-                            tenant_id=context.tenant_id,
-                            instance_id=context.instance_id,
-                            execution_token=context.execution_token,
-                        )
-                        if isawaitable(completion):
-                            completion = await completion
-                        if completion is not True:
-                            raise RuntimeError("F046 mutation cutover could not lock/complete deferred approval")
                     request_repository = KnowledgeSpaceFileChangeRequestRepository(session)
                     request = await request_repository.get_by_id(
                         tenant_id=context.tenant_id,
@@ -1288,7 +1163,6 @@ class KnowledgeSpaceMutationExecutor:
         except Exception:
             commit_state = await self._read_mutation_cutover_commit_state(
                 context=context,
-                require_approval_terminal=complete_approval_in_uow,
             )
             if commit_state == "committed":
                 await self._continue_post_cutover_cleanup(context)
@@ -1304,7 +1178,6 @@ class KnowledgeSpaceMutationExecutor:
         self,
         *,
         context: MutationStepContext,
-        require_approval_terminal: bool,
     ) -> str:
         """Resolve commit-ACK ambiguity without undoing a committed NEW_VIEW.
 
@@ -1338,31 +1211,6 @@ class KnowledgeSpaceMutationExecutor:
                         tenant_id=context.tenant_id,
                         manifest=context.manifest,
                     )
-                    if require_approval_terminal and self._mutation_completion_is_default:
-                        instance = (
-                            await session.exec(
-                                select(ApprovalInstance).where(
-                                    ApprovalInstance.tenant_id == context.tenant_id,
-                                    ApprovalInstance.id == context.instance_id,
-                                )
-                            )
-                        ).first()
-                        outbox = (
-                            await session.exec(
-                                select(ApprovalOutbox).where(
-                                    ApprovalOutbox.tenant_id == context.tenant_id,
-                                    ApprovalOutbox.instance_id == context.instance_id,
-                                    ApprovalOutbox.execution_token == context.execution_token,
-                                )
-                            )
-                        ).first()
-                        if (
-                            instance is None
-                            or outbox is None
-                            or instance.status != ApprovalInstanceStatus.EXECUTED
-                            or outbox.status != ApprovalOutboxStatus.SUCCESS
-                        ):
-                            return "unknown"
                     return "committed"
                 if (
                     request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING
@@ -1605,7 +1453,6 @@ class KnowledgeSpaceMutationExecutor:
         return MutationStepContext(
             tenant_id=base.tenant_id,
             request_id=base.request_id,
-            instance_id=base.instance_id,
             execution_token=base.execution_token,
             action=base.action,
             step_code=step_code,
@@ -1677,7 +1524,6 @@ class KnowledgeSpaceMutationExecutor:
             )
             base = self._mutation_context_from_request(
                 request=request,
-                instance_id=int(request.approval_instance_id),
                 manifest=manifest,
             )
             states = {row.step_code: row.state for row in steps}
@@ -1792,7 +1638,6 @@ class KnowledgeSpaceMutationExecutor:
                 raise RuntimeError("F046 post-cutover cleanup requires a durable mutation manifest")
             context = self._mutation_context_from_request(
                 request=request,
-                instance_id=int(request.approval_instance_id),
                 manifest=manifest,
             )
         await self._continue_post_cutover_cleanup(context)
@@ -1811,7 +1656,6 @@ class KnowledgeSpaceMutationExecutor:
                 )
                 if (
                     request is None
-                    or int(request.approval_instance_id or 0) != int(broker_context.instance_id)
                     or request.execution_token != str(broker_context.execution_token)
                     or request.execution_state != KnowledgeSpaceFileChangeExecutionState.APPLYING
                     or request.action
@@ -1850,7 +1694,6 @@ class KnowledgeSpaceMutationExecutor:
                 return self._mutation_step_context(
                     self._mutation_context_from_request(
                         request=request,
-                        instance_id=int(request.approval_instance_id),
                         manifest=manifest,
                     ),
                     str(row.step_code),
@@ -1870,7 +1713,6 @@ class KnowledgeSpaceMutationExecutor:
                 )
                 if (
                     request is None
-                    or int(request.approval_instance_id or 0) != int(broker_context.instance_id)
                     or request.execution_token != str(broker_context.execution_token)
                     or request.execution_state != KnowledgeSpaceFileChangeExecutionState.APPLYING
                     or request.action != KnowledgeSpaceFileChangeAction.UPLOAD
@@ -1899,7 +1741,6 @@ class KnowledgeSpaceMutationExecutor:
                 return UploadStepDispatchContext(
                     tenant_id=tenant_id,
                     request_id=int(request.id),
-                    instance_id=int(request.approval_instance_id),
                     execution_token=str(request.execution_token),
                     step_code=str(row.step_code),
                     idempotency_key=str(row.idempotency_key),
@@ -1911,12 +1752,11 @@ class KnowledgeSpaceMutationExecutor:
                 )
 
     @staticmethod
-    def _mutation_context_from_request(*, request, instance_id: int, manifest: dict) -> MutationStepContext:
+    def _mutation_context_from_request(*, request, manifest: dict) -> MutationStepContext:
         root = manifest["root"]
         return MutationStepContext(
             tenant_id=int(request.tenant_id),
             request_id=int(request.id),
-            instance_id=int(instance_id),
             execution_token=str(request.execution_token),
             action=str(request.action),
             step_code="",
@@ -1942,7 +1782,6 @@ class KnowledgeSpaceMutationExecutor:
     async def cutover_verified_mutation(
         self,
         *,
-        instance_id: int,
         request_id: int,
         execution_token: str,
     ) -> bool:
@@ -1954,7 +1793,7 @@ class KnowledgeSpaceMutationExecutor:
                 tenant_id=tenant_id,
                 request_id=int(request_id),
             )
-            if request is None or int(request.approval_instance_id or 0) != int(instance_id):
+            if request is None:
                 raise LookupError(f"F046 rename/move request not found: {request_id}")
             if request.action not in {
                 KnowledgeSpaceFileChangeAction.RENAME,
@@ -1976,7 +1815,6 @@ class KnowledgeSpaceMutationExecutor:
             context = MutationStepContext(
                 tenant_id=tenant_id,
                 request_id=int(request.id),
-                instance_id=int(instance_id),
                 execution_token=str(execution_token),
                 action=str(request.action),
                 step_code="",
@@ -2011,7 +1849,6 @@ class KnowledgeSpaceMutationExecutor:
                 all_steps=all_steps,
                 external_steps=external_steps,
                 payload_snapshot=payload_snapshot,
-                complete_approval_in_uow=True,
             )
         return True
 
@@ -2021,8 +1858,8 @@ class KnowledgeSpaceMutationExecutor:
         session: AsyncSession,
         request_id: int,
         new_token: str,
-    ) -> Deferred:
-        """Reset a failed rename/move generation in the caller-owned F025 UoW."""
+    ) -> MutationExecutionDispatch:
+        """Reset a failed rename/move generation in a Knowledge-owned UoW."""
         tenant_id = self._tenant_id()
         request_repository = KnowledgeSpaceFileChangeRequestRepository(session)
         request = await request_repository.get_by_id(
@@ -2063,7 +1900,7 @@ class KnowledgeSpaceMutationExecutor:
             # retain its stable idempotency result.
             reset_succeeded_step_codes=(verify_step,),
         )
-        return Deferred(execution_token=str(new_token), deadline=deadline)
+        return MutationExecutionDispatch(execution_token=str(new_token), deadline=deadline)
 
     async def prepare_delete_resume_in_uow(
         self,
@@ -2071,7 +1908,7 @@ class KnowledgeSpaceMutationExecutor:
         session: AsyncSession,
         request_id: int,
         new_token: str,
-    ) -> Deferred:
+    ) -> MutationExecutionDispatch:
         """Resume only the irreversible post-cutover purge with a fresh token."""
 
         tenant_id = self._tenant_id()
@@ -2127,7 +1964,7 @@ class KnowledgeSpaceMutationExecutor:
         request.execution_token = str(new_token)
         await request_repository.save(request)
         await session.flush()
-        return Deferred(execution_token=str(new_token), deadline=deadline)
+        return MutationExecutionDispatch(execution_token=str(new_token), deadline=deadline)
 
     async def prepare_upload_resume_in_uow(
         self,
@@ -2135,13 +1972,8 @@ class KnowledgeSpaceMutationExecutor:
         session: AsyncSession,
         request_id: int,
         new_token: str,
-    ) -> Deferred:
-        """Reset an upload generation inside the future F025 resume UoW.
-
-        T088 wires this primitive into the runtime handler. Keeping this method
-        session-bound avoids creating a second approval or a split F025/F046
-        commit while still making the new-token contract executable today.
-        """
+    ) -> MutationExecutionDispatch:
+        """Reset an upload generation inside a Knowledge-owned resume UoW."""
         tenant_id = self._tenant_id()
         request_repository = KnowledgeSpaceFileChangeRequestRepository(session)
         request = await request_repository.get_by_id(
@@ -2170,7 +2002,7 @@ class KnowledgeSpaceMutationExecutor:
             request_id=int(request.id),
             new_token=str(new_token),
         )
-        return Deferred(execution_token=str(new_token), deadline=deadline)
+        return MutationExecutionDispatch(execution_token=str(new_token), deadline=deadline)
 
     async def _dispatch_after_commit(
         self,
@@ -2452,7 +2284,6 @@ class KnowledgeSpaceMutationExecutor:
         return UploadStepDispatchContext(
             tenant_id=base.tenant_id,
             request_id=base.request_id,
-            instance_id=base.instance_id,
             execution_token=base.execution_token,
             step_code=step_code,
             idempotency_key=idempotency_key,
@@ -2464,40 +2295,22 @@ class KnowledgeSpaceMutationExecutor:
         )
 
     @staticmethod
-    def _validate_request_binding(*, request, instance_id: int, payload_snapshot: dict) -> None:
+    def _validate_upload_request(*, request) -> None:
         if request.action != KnowledgeSpaceFileChangeAction.UPLOAD:
             raise ValueError("F046 upload executor received a non-upload request")
-        if request.approval_instance_id is None or int(request.approval_instance_id) != int(instance_id):
-            raise ValueError("F046 request does not belong to the approval instance")
-        snapshot_request_id = payload_snapshot.get("change_request_id")
-        if snapshot_request_id is None or int(snapshot_request_id) != int(request.id):
-            raise ValueError("F046 snapshot request binding is stale")
-        snapshot_space_id = payload_snapshot.get("space_id")
-        if snapshot_space_id is None or int(snapshot_space_id) != int(request.space_id):
-            raise ValueError("F046 snapshot space binding is stale")
         if request.upload_stage_id is None:
             raise ValueError("F046 upload request has no stage")
 
     @staticmethod
-    def _validate_non_upload_request_binding(*, request, instance_id: int, payload_snapshot: dict) -> None:
+    def _validate_non_upload_request(*, request) -> None:
         if request.action not in {
             KnowledgeSpaceFileChangeAction.RENAME,
             KnowledgeSpaceFileChangeAction.MOVE,
             KnowledgeSpaceFileChangeAction.DELETE,
         }:
             raise ValueError("F046 formal mutation executor received an unsupported request")
-        if request.approval_instance_id is None or int(request.approval_instance_id) != int(instance_id):
-            raise ValueError("F046 request does not belong to the approval instance")
         if request.resource_id is None:
             raise ValueError("F046 formal mutation request has no resource")
-        if payload_snapshot.get("change_request_id") is None or int(payload_snapshot["change_request_id"]) != int(
-            request.id
-        ):
-            raise ValueError("F046 snapshot request binding is stale")
-        if payload_snapshot.get("space_id") is None or int(payload_snapshot["space_id"]) != int(request.space_id):
-            raise ValueError("F046 snapshot space binding is stale")
-        if str(payload_snapshot.get("action")) != str(request.action):
-            raise ValueError("F046 snapshot action binding is stale")
 
     @classmethod
     def _build_upload_checkpoint(cls, *, request, file, created_folders, deadline: datetime) -> dict[str, Any]:

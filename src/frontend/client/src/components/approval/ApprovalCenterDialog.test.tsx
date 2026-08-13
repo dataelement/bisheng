@@ -51,10 +51,6 @@ function detail(item: ApprovalTaskItem): ApprovalTaskDetail {
   return {
     ...item,
     payload_snapshot: { space_id: 101 },
-    business_status_projection: {
-      status: "parse_failed",
-      failure_reason: "parser unavailable",
-    },
   };
 }
 
@@ -84,8 +80,6 @@ describe("ApprovalCenterDialog F046 interactions", () => {
     expect(screen.queryAllByText("file-1.pdf")).toHaveLength(0);
     expect(screen.getAllByText("file-2.pdf").length).toBeGreaterThan(0);
     expect(screen.getByText("com_approval_task_filter_pending").className).toContain("font-medium");
-    expect(screen.getByText("com_knowledge.file_change_status_parse_failed")).toBeTruthy();
-    expect(screen.getByText("parser unavailable")).toBeTruthy();
   });
 
   it("dispatches a targeted formal-list refresh after a successful F046 decision", async () => {
@@ -171,4 +165,63 @@ describe("ApprovalCenterDialog F046 interactions", () => {
     expect(screen.queryByText("RAW_UPLOAD_LABEL")).toBeNull();
     expect(screen.queryByText("[object Object]")).toBeNull();
   });
+
+  it.each([
+    {
+      scenarioCode: "knowledge_space_file_change_request",
+      businessName: "report.pdf",
+      detailSnapshot: {
+        action: "upload",
+        resource_name: "report.pdf",
+        change: { relative_path: "reports/report.pdf" },
+      },
+      safeValues: ["report.pdf", "reports/report.pdf"],
+    },
+    {
+      scenarioCode: "resource_user_invite_confirmation",
+      businessName: "Docs",
+      detailSnapshot: {
+        resource_type: "knowledge_space",
+        resource_name: "Docs",
+        target_user_name: "alice",
+        role_name: "Editor",
+      },
+      safeValues: ["Docs", "alice", "Editor"],
+    },
+  ])(
+    "shows only approval terminal facts and safe snapshots for $scenarioCode",
+    async ({ scenarioCode, businessName, detailSnapshot, safeValues }) => {
+      const only: ApprovalTaskItem = {
+        ...task(1),
+        scenario_code: scenarioCode,
+        business_name: businessName,
+      };
+      mockedListTasks.mockResolvedValue({ data: [only], total: 1 });
+      mockedGetTask.mockResolvedValue({
+        ...detail(only),
+        status: "approved",
+        instance_status: "approved",
+        detail_snapshot: detailSnapshot,
+        // Legacy/untrusted response fields must be ignored even during a
+        // staggered client/server rollout; they are not Approval facts.
+        business_status_projection: {
+          status: "execute_failed",
+          failure_reason: "SECRET_BUSINESS_FAILURE",
+          retryable: true,
+          outbox_id: 991,
+          execution_token: "SECRET_EXECUTION_TOKEN",
+        },
+      } as unknown as ApprovalTaskDetail);
+
+      render(<ApprovalCenterDialog open onOpenChange={jest.fn()} />);
+
+      expect(await screen.findByText("com_approval_task_badge_approved")).toBeTruthy();
+      safeValues.forEach((value) => expect(screen.getAllByText(value).length).toBeGreaterThan(0));
+      expect(screen.queryByText("com_knowledge.file_change_business_status")).toBeNull();
+      expect(screen.queryByText("com_knowledge.file_change_status_execute_failed")).toBeNull();
+      expect(screen.queryByText("SECRET_BUSINESS_FAILURE")).toBeNull();
+      expect(screen.queryByText("SECRET_EXECUTION_TOKEN")).toBeNull();
+      expect(screen.queryByText("com_unified_permission.retry_permission")).toBeNull();
+    },
+  );
 });

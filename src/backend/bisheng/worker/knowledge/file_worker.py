@@ -13,7 +13,6 @@ from bisheng.api.services.knowledge_imp import (
 from bisheng.api.v1.schemas import FileProcessBase
 from bisheng.common.errcode.knowledge import KnowledgeFileFailedError
 from bisheng.core.ai import FakeEmbeddings
-from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
@@ -297,32 +296,8 @@ def parse_knowledge_file_celery(
     file_id: int,
     preview_cache_key: str | None = None,
     callback_url: str | None = None,
-    file_change_request_id: int | None = None,
-    file_change_execution_token: str | None = None,
 ):
-    headers = getattr(getattr(parse_knowledge_file_celery, "request", None), "headers", None) or {}
-    file_change_context = None
-    if file_change_request_id is not None or file_change_execution_token is not None:
-        file_change_context = _file_change_parse_context(
-            headers=headers,
-            request_id=file_change_request_id,
-            execution_token=file_change_execution_token,
-        )
-    tenant_token = set_current_tenant_id(file_change_context[0]) if file_change_context is not None else None
-    try:
-        return _parse_knowledge_file_task_body(file_id, preview_cache_key, callback_url)
-    finally:
-        try:
-            if file_change_context is not None:
-                _dispatch_file_change_upload_pipeline_callback(
-                    tenant_id=file_change_context[0],
-                    request_id=file_change_context[1],
-                    execution_token=file_change_context[2],
-                    file_id=int(file_id),
-                )
-        finally:
-            if tenant_token is not None:
-                current_tenant_id.reset(tenant_token)
+    return _parse_knowledge_file_task_body(file_id, preview_cache_key, callback_url)
 
 
 def _parse_knowledge_file_task_body(
@@ -393,50 +368,6 @@ def _parse_knowledge_file_task_body(
             # Always release the token-checked lock last, including direct mode.
             if lock_token is not None:
                 sched.release_parse_lock(file_id=str(file_id), token=lock_token)
-
-
-def _file_change_parse_context(
-    *,
-    headers: dict,
-    request_id: int | None,
-    execution_token: str | None,
-) -> tuple[int, int, str]:
-    raw_tenant_id = (headers or {}).get("tenant_id")
-    if (
-        raw_tenant_id is None
-        or isinstance(raw_tenant_id, bool)
-        or request_id is None
-        or isinstance(request_id, bool)
-        or not execution_token
-    ):
-        raise ValueError("file change parse requires tenant header, request id and execution token")
-    try:
-        tenant_id = int(raw_tenant_id)
-        normalized_request_id = int(request_id)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("file change parse requires positive tenant and request ids") from exc
-    if tenant_id <= 0 or normalized_request_id <= 0 or len(str(execution_token)) > 64:
-        raise ValueError("file change parse requires positive ids and a valid execution token")
-    return tenant_id, normalized_request_id, str(execution_token)
-
-
-def _dispatch_file_change_upload_pipeline_callback(
-    *,
-    tenant_id: int,
-    request_id: int,
-    execution_token: str,
-    file_id: int,
-) -> None:
-    from bisheng.worker.approval.file_change_tasks import acknowledge_file_change_upload_pipeline
-
-    acknowledge_file_change_upload_pipeline.apply_async(
-        kwargs={
-            "request_id": int(request_id),
-            "execution_token": str(execution_token),
-            "file_id": int(file_id),
-        },
-        headers={"tenant_id": int(tenant_id)},
-    )
 
 
 def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):

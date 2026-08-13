@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -24,6 +26,10 @@ from bisheng.permission.domain.knowledge_library_permission_template import (
 )
 from bisheng.permission.domain.knowledge_space_permission_template import (
     default_permission_ids_for_relation as default_knowledge_space_permissions,
+)
+from bisheng.permission.domain.ports.resource_grant_executor import (
+    ResourceGrantCommand,
+    ResourceGrantVerificationResult,
 )
 from bisheng.permission.domain.schemas.permission_schema import (
     VALID_RESOURCE_TYPES,
@@ -151,6 +157,7 @@ class ResourceAuthorizationService:
         save_bindings: Callable[[list[dict]], Awaitable[None]] | None = None,
         dispatch_notifications: Callable[..., None] | None = None,
         grant_subject_query_service=None,
+        invite_application_service=None,
         invite_service=None,
         binding_mutation_service=None,
     ):
@@ -159,18 +166,18 @@ class ResourceAuthorizationService:
         self._save_bindings_callback = save_bindings
         self._dispatch_notifications_callback = dispatch_notifications
         self._grant_subject_query_service = grant_subject_query_service
-        self._invite_service = invite_service
+        self._invite_application_service = invite_application_service or invite_service
         self._binding_mutation_service = binding_mutation_service
 
-    def _get_invite_service(self):
-        if self._invite_service is not None:
-            return self._invite_service
-        from bisheng.approval.domain.services.resource_user_invite_service import (
-            ResourceUserInviteService,
+    def _get_invite_application_service(self):
+        if self._invite_application_service is not None:
+            return self._invite_application_service
+        from bisheng.permission.domain.services.resource_user_invite_application_service import (
+            build_runtime_resource_user_invite_application_service,
         )
 
-        self._invite_service = ResourceUserInviteService()
-        return self._invite_service
+        self._invite_application_service = build_runtime_resource_user_invite_application_service()
+        return self._invite_application_service
 
     def _get_binding_mutation_service(self):
         if self._binding_mutation_service is not None:
@@ -187,10 +194,13 @@ class ResourceAuthorizationService:
 
     @asynccontextmanager
     async def _invite_scenario_guard(self, *, tenant_id: int):
-        invite_service = self._get_invite_service()
+        invite_service = self._get_invite_application_service()
         guard_factory = getattr(invite_service, "scenario_guard", None)
         if guard_factory is None:
-            await invite_service.ensure_scenario_available(tenant_id=int(tenant_id))
+            availability_check = getattr(invite_service, "ensure_scenario_available", None)
+            if availability_check is None:
+                raise RuntimeError("resource user invite scenario guard is not configured")
+            await availability_check(tenant_id=int(tenant_id))
             yield
             return
         async with guard_factory(tenant_id=int(tenant_id)):
@@ -379,8 +389,14 @@ class ResourceAuthorizationService:
             return result if resource_type == "knowledge_space" else None
 
     async def ensure_invite_scenario_available_for_grants(self, *, grants, tenant_id: int) -> None:
-        if any(item.subject_type == "user" for item in grants or []):
-            await self._get_invite_service().ensure_scenario_available(tenant_id=int(tenant_id))
+        if not any(item.subject_type == "user" for item in grants or []):
+            return
+        invite_service = self._get_invite_application_service()
+        availability_check = getattr(invite_service, "ensure_scenario_available", None)
+        if availability_check is None:
+            async with self._invite_scenario_guard(tenant_id=int(tenant_id)):
+                return
+        await availability_check(tenant_id=int(tenant_id))
 
     async def _validate_invite_request_access(
         self,
@@ -440,7 +456,7 @@ class ResourceAuthorizationService:
                 inviter_user_id=int(login_user.user_id),
             )
             model_id, role_snapshot = await self._resolve_role_snapshot(grant)
-            result = await self._get_invite_service().request_invite(
+            result = await self._get_invite_application_service().request_invite(
                 tenant_id=int(tenant_id),
                 resource_type=resource_type,
                 resource_id=str(resource_id),
@@ -812,33 +828,289 @@ class ResourceAuthorizationService:
         """Merge approval-backed pending rows without weakening active FGA truth."""
         if resource_type != "knowledge_space":
             return active_permissions
-        instances = await self._get_invite_service().list_pending_invites(
-            tenant_id=int(tenant_id),
-            resource_type=resource_type,
-            resource_id=str(resource_id),
-        )
+        invite_service = self._get_invite_application_service()
+        list_pending_items = getattr(invite_service, "list_pending_invite_items", None)
+        if list_pending_items is not None:
+            pending_items = await list_pending_items(
+                tenant_id=int(tenant_id),
+                resource_type=resource_type,
+                resource_id=str(resource_id),
+            )
+        else:
+            # Transitional adapter for injected legacy fakes/implementations.
+            rows = await invite_service.list_pending_invites(
+                tenant_id=int(tenant_id),
+                resource_type=resource_type,
+                resource_id=str(resource_id),
+            )
+            pending_items = [
+                ResourcePermissionItem(
+                    subject_type="user",
+                    subject_id=int(row.target_user_id),
+                    subject_name=getattr(row, "target_user_name", None),
+                    relation=row.relation,
+                    model_id=getattr(row, "model_id", None),
+                    model_name=(getattr(row, "role_snapshot", None) or {}).get("name"),
+                    authorization_status="pending",
+                    approval_instance_id=row.approval_instance_id,
+                )
+                for row in rows
+            ]
         active_users = {int(item.subject_id) for item in active_permissions if item.subject_type == "user"}
         merged = list(active_permissions)
         seen_pending: set[int] = set()
-        for instance in instances:
-            payload = getattr(instance, "payload_snapshot", None) or {}
-            target_user_id = int(payload.get("target_user_id") or 0)
+        for item in pending_items:
+            target_user_id = int(item.subject_id)
             if not target_user_id or target_user_id in active_users or target_user_id in seen_pending:
                 continue
             seen_pending.add(target_user_id)
-            merged.append(
-                ResourcePermissionItem(
-                    subject_type="user",
-                    subject_id=target_user_id,
-                    subject_name=payload.get("target_user_name"),
-                    relation=payload.get("relation") or "viewer",
-                    model_id=payload.get("model_id"),
-                    model_name=(payload.get("role_snapshot") or {}).get("name"),
-                    authorization_status="pending",
-                    approval_instance_id=getattr(instance, "id", None),
-                )
-            )
+            merged.append(item)
         return merged
+
+    async def _validate_confirmed_grant_command(
+        self,
+        command: ResourceGrantCommand,
+    ) -> AuthorizeGrantItem:
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        from bisheng.permission.domain.services.fine_grained_permission_service import (
+            FineGrainedPermissionService,
+        )
+        from bisheng.permission.domain.services.grant_subject_query_service import (
+            GrantSubjectQueryService,
+        )
+        from bisheng.user.domain.models.user import UserDao
+        from bisheng.user.domain.models.user_role import UserRoleDao
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != command.tenant_id:
+            raise PermissionDeniedError()
+        if command.resource_type != "knowledge_space" or not command.resource_id.isdigit():
+            raise PermissionInvalidResourceError()
+        resource = await KnowledgeDao.aquery_by_id(int(command.resource_id))
+        if resource is None:
+            raise PermissionInvalidResourceError()
+        resource_tenant_id = getattr(resource, "tenant_id", None)
+        if resource_tenant_id is not None and int(resource_tenant_id) != command.tenant_id:
+            raise PermissionDeniedError()
+        if command.inviter_user_id == command.target_user_id:
+            raise PermissionDeniedError(msg="不能修改自己的权限")
+
+        model_id = command.model_id or command.relation
+        normalized_snapshot = _normalize_model(dict(command.role_snapshot))
+        snapshot_fingerprint = self._role_snapshot_fingerprint(normalized_snapshot)
+        if snapshot_fingerprint != command.role_fingerprint:
+            raise PermissionDeniedError(msg="邀请角色快照已变化")
+        current_models = [_normalize_model(item) for item in await self.get_relation_models()]
+        current_model = next((item for item in current_models if item.get("id") == model_id), None)
+        if (
+            current_model is None
+            or self._role_snapshot_fingerprint(current_model) != command.role_fingerprint
+            or current_model.get("relation") != command.relation
+        ):
+            raise PermissionDeniedError(msg="邀请角色已变更, 请重新邀请")
+
+        grant = AuthorizeGrantItem(
+            subject_type="user",
+            subject_id=command.target_user_id,
+            relation=command.relation,
+            model_id=model_id,
+            include_children=command.include_children,
+        )
+        await self._validate_department_space_grants("knowledge_space", command.resource_id, [grant])
+        query_service = self._grant_subject_query_service or GrantSubjectQueryService()
+        await query_service.validate_resource_grants(
+            resource_type="knowledge_space",
+            resource_id=command.resource_id,
+            grants=[grant],
+        )
+
+        inviter = await UserDao.aget_user(command.inviter_user_id)
+        if inviter is None or getattr(inviter, "delete", 0):
+            raise PermissionDeniedError(msg="邀请人已失效")
+        target = await UserDao.aget_user(command.target_user_id)
+        if target is None or getattr(target, "delete", 0):
+            raise PermissionDeniedError(msg="被邀请人已失效")
+        for user in (inviter, target):
+            user_tenant_id = getattr(user, "tenant_id", None)
+            if user_tenant_id is not None and int(user_tenant_id) != command.tenant_id:
+                raise PermissionDeniedError()
+        inviter_roles = await UserRoleDao.aget_user_roles(command.inviter_user_id)
+        inviter_payload = UserPayload(
+            user_id=command.inviter_user_id,
+            user_name=getattr(inviter, "user_name", "") or "",
+            tenant_id=command.tenant_id,
+            user_role=[int(item.role_id) for item in inviter_roles],
+        )
+        caller_permissions = await FineGrainedPermissionService.get_effective_permission_ids_async(
+            inviter_payload,
+            "knowledge_space",
+            command.resource_id,
+        )
+        if not (_management_permission_ids("knowledge_space") & set(caller_permissions)):
+            raise PermissionDeniedError()
+        await self.validate_grants_for_permissions(
+            resource_type="knowledge_space",
+            grants=[grant],
+            caller_permission_ids=set(caller_permissions),
+            relation_models=current_models,
+        )
+        return grant
+
+    async def execute_confirmed_grant(self, command: ResourceGrantCommand) -> None:
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        grant = await self._validate_confirmed_grant_command(command)
+        active = await PermissionService.get_resource_permissions(
+            "knowledge_space",
+            command.resource_id,
+        )
+        active_for_target = [
+            item for item in active if item.subject_type == "user" and int(item.subject_id) == command.target_user_id
+        ]
+        exact = next(
+            (item for item in active_for_target if item.relation == command.relation),
+            None,
+        )
+        request = AuthorizeRequest(grants=[grant], revokes=[])
+        async with self._get_binding_mutation_service().transaction() as transaction:
+            desired_bindings = self._updated_bindings(
+                "knowledge_space",
+                command.resource_id,
+                request,
+                transaction.bindings,
+            )
+            if exact is not None and desired_bindings == transaction.bindings:
+                return
+            if active_for_target:
+                raise PermissionDeniedError(msg="目标用户已有生效权限, 请重新发起授权")
+            write_error: Exception | None = None
+            try:
+                await PermissionService.authorize(
+                    object_type="knowledge_space",
+                    object_id=command.resource_id,
+                    grants=[grant],
+                    revokes=[],
+                    enforce_fga_success=True,
+                    recovery_owner="caller",
+                )
+            except Exception as error:
+                write_error = error
+
+            if not await self._confirmed_grant_visible(command):
+                await transaction.restore()
+                if write_error is not None:
+                    raise write_error
+                raise PermissionTupleWriteError(exception=RuntimeError("confirmed grant is not authoritative"))
+
+            try:
+                await transaction.commit(desired_bindings)
+            except Exception as binding_error:
+                await self._compensate_confirmed_grant(
+                    command=command,
+                    grant=grant,
+                    transaction=transaction,
+                    binding_error=binding_error,
+                )
+            if write_error is not None:
+                raise write_error
+
+    @staticmethod
+    async def _confirmed_grant_visible(command: ResourceGrantCommand) -> bool:
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        active = await PermissionService.get_resource_permissions(
+            "knowledge_space",
+            command.resource_id,
+        )
+        return any(
+            item.subject_type == "user"
+            and int(item.subject_id) == command.target_user_id
+            and item.relation == command.relation
+            for item in active
+        )
+
+    @staticmethod
+    async def _compensate_confirmed_grant(
+        *,
+        command: ResourceGrantCommand,
+        grant: AuthorizeGrantItem,
+        transaction,
+        binding_error: Exception,
+    ) -> None:
+        from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        compensation_error: Exception | None = None
+        try:
+            await PermissionService.authorize(
+                object_type="knowledge_space",
+                object_id=command.resource_id,
+                grants=[],
+                revokes=[
+                    AuthorizeRevokeItem(
+                        subject_type="user",
+                        subject_id=command.target_user_id,
+                        relation=command.relation,
+                        include_children=command.include_children,
+                        model_id=grant.model_id,
+                    )
+                ],
+                enforce_fga_success=True,
+                recovery_owner="caller",
+            )
+        except Exception as error:
+            compensation_error = error
+            logger.exception("confirmed grant tuple compensation failed")
+        restore_error: Exception | None = None
+        try:
+            await transaction.restore()
+        except Exception as error:
+            restore_error = error
+            logger.exception("confirmed grant binding restore failed")
+        if compensation_error is not None or restore_error is not None:
+            raise RuntimeError("confirmed grant compensation did not converge") from (
+                compensation_error or restore_error
+            )
+        raise PermissionTupleWriteError(exception=binding_error) from binding_error
+
+    async def verify_confirmed_grant(
+        self,
+        command: ResourceGrantCommand,
+    ) -> ResourceGrantVerificationResult:
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        grant = await self._validate_confirmed_grant_command(command)
+        active = await PermissionService.get_resource_permissions(
+            "knowledge_space",
+            command.resource_id,
+        )
+        exact = any(
+            item.subject_type == "user"
+            and int(item.subject_id) == command.target_user_id
+            and item.relation == command.relation
+            for item in active
+        )
+        bindings = await self._get_bindings_for_authorize()
+        desired_bindings = self._updated_bindings(
+            "knowledge_space",
+            command.resource_id,
+            AuthorizeRequest(grants=[grant], revokes=[]),
+            bindings,
+        )
+        applied = exact and desired_bindings == bindings
+        return ResourceGrantVerificationResult(
+            applied=applied,
+            result_snapshot={
+                "request_id": command.request_id,
+                "resource_type": command.resource_type,
+                "resource_id": command.resource_id,
+                "target_user_id": command.target_user_id,
+                "relation": command.relation,
+                "model_id": command.model_id,
+                "grant_visible": applied,
+            },
+        )
 
     async def apply_confirmed_personal_user_grant(
         self,
@@ -854,150 +1126,32 @@ class ResourceAuthorizationService:
         include_children: bool,
         approval_instance_id: int,
     ) -> None:
-        """Apply one confirmed user grant without re-entering invitation routing."""
-        del approval_instance_id
-        from bisheng.core.context.tenant import get_current_tenant_id
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-        from bisheng.permission.domain.services.fine_grained_permission_service import (
-            FineGrainedPermissionService,
-        )
-        from bisheng.permission.domain.services.grant_subject_query_service import (
-            GrantSubjectQueryService,
-        )
-        from bisheng.permission.domain.services.permission_service import PermissionService
-        from bisheng.user.domain.models.user import UserDao
-        from bisheng.user.domain.models.user_role import UserRoleDao
-
-        current_tenant_id = get_current_tenant_id()
-        if current_tenant_id is not None and int(current_tenant_id) != int(tenant_id):
-            raise PermissionDeniedError()
-        resource = await KnowledgeDao.aquery_by_id(int(resource_id))
-        if resource is None:
-            raise PermissionInvalidResourceError()
-        if inviter_user_id == target_user_id:
-            raise PermissionDeniedError(msg="不能修改自己的权限")
-
-        model_id = model_id or relation
-        normalized_snapshot = _normalize_model(role_snapshot)
-        from bisheng.approval.domain.services.resource_user_invite_service import ResourceUserInviteService
-
-        _, snapshot_fingerprint = ResourceUserInviteService.normalize_role_snapshot(normalized_snapshot)
-        if snapshot_fingerprint != role_fingerprint:
-            raise PermissionDeniedError(msg="邀请角色快照已变化")
-        current_models = [_normalize_model(item) for item in await self.get_relation_models()]
-        current_model = next((item for item in current_models if item.get("id") == model_id), None)
-        if current_model is None or current_model != normalized_snapshot or current_model.get("relation") != relation:
-            raise PermissionDeniedError(msg="邀请角色已变更, 请重新邀请")
-
-        grant = AuthorizeGrantItem(
-            subject_type="user",
-            subject_id=target_user_id,
-            relation=relation,
-            model_id=model_id,
-            include_children=include_children,
-        )
-        await self._validate_department_space_grants("knowledge_space", resource_id, [grant])
-        query_service = self._grant_subject_query_service or GrantSubjectQueryService()
-        await query_service.validate_resource_grants(
-            resource_type="knowledge_space",
-            resource_id=str(resource_id),
-            grants=[grant],
-        )
-
-        inviter = await UserDao.aget_user(inviter_user_id)
-        if inviter is None or getattr(inviter, "delete", 0):
-            raise PermissionDeniedError(msg="邀请人已失效")
-        inviter_roles = await UserRoleDao.aget_user_roles(inviter_user_id)
-        inviter_payload = UserPayload(
-            user_id=inviter_user_id,
-            user_name=getattr(inviter, "user_name", "") or "",
-            tenant_id=tenant_id,
-            user_role=[int(item.role_id) for item in inviter_roles],
-        )
-        caller_permissions = await FineGrainedPermissionService.get_effective_permission_ids_async(
-            inviter_payload,
-            "knowledge_space",
-            str(resource_id),
-        )
-        if not (_management_permission_ids("knowledge_space") & set(caller_permissions)):
-            raise PermissionDeniedError()
-        await self.validate_grants_for_permissions(
-            resource_type="knowledge_space",
-            grants=[grant],
-            caller_permission_ids=set(caller_permissions),
-            relation_models=current_models,
-        )
-
-        active = await PermissionService.get_resource_permissions("knowledge_space", str(resource_id))
-        active_for_target = [
-            item for item in active if item.subject_type == "user" and int(item.subject_id) == target_user_id
-        ]
-        exact = next(
-            (item for item in active_for_target if item.relation == relation),
-            None,
-        )
-        request = AuthorizeRequest(grants=[grant], revokes=[])
-        mutation_service = self._get_binding_mutation_service()
-        async with mutation_service.transaction() as transaction:
-            desired_bindings = self._updated_bindings(
-                "knowledge_space",
-                str(resource_id),
-                request,
-                transaction.bindings,
+        await self.execute_confirmed_grant(
+            ResourceGrantCommand(
+                tenant_id=tenant_id,
+                request_id=approval_instance_id,
+                request_fingerprint=f"legacy-approval-instance:{approval_instance_id}",
+                resource_type="knowledge_space",
+                resource_id=resource_id,
+                inviter_user_id=inviter_user_id,
+                target_user_id=target_user_id,
+                relation=relation,
+                model_id=model_id,
+                include_children=include_children,
+                role_snapshot=role_snapshot,
+                role_fingerprint=role_fingerprint,
             )
-            if exact is not None and desired_bindings == transaction.bindings:
-                return
-            if active_for_target:
-                raise PermissionDeniedError(msg="目标用户已有生效权限, 请重新发起授权")
-            await transaction.commit(desired_bindings)
-            try:
-                await PermissionService.authorize(
-                    object_type="knowledge_space",
-                    object_id=str(resource_id),
-                    grants=[grant],
-                    revokes=[],
-                    enforce_fga_success=True,
-                    recovery_owner="caller",
-                )
-            except Exception as write_error:
-                compensation_error = None
-                try:
-                    from bisheng.permission.domain.schemas.permission_schema import AuthorizeRevokeItem
+        )
 
-                    await PermissionService.authorize(
-                        object_type="knowledge_space",
-                        object_id=str(resource_id),
-                        grants=[],
-                        revokes=[
-                            AuthorizeRevokeItem(
-                                subject_type="user",
-                                subject_id=target_user_id,
-                                relation=relation,
-                                include_children=False,
-                                model_id=model_id,
-                            )
-                        ],
-                        enforce_fga_success=True,
-                        recovery_owner="caller",
-                    )
-                except Exception as error:
-                    compensation_error = error
-                    logger.exception("confirmed user grant compensation failed")
-                restore_error = None
-                try:
-                    await transaction.restore()
-                except Exception as error:
-                    restore_error = error
-                    logger.exception("confirmed user grant binding restore failed")
-                if compensation_error is not None or restore_error is not None:
-                    from bisheng.approval.domain.services.resource_user_invite_scenario_handler import (
-                        ApprovalInviteRetryableExecutionError,
-                    )
-
-                    raise ApprovalInviteRetryableExecutionError("confirmed grant compensation did not converge") from (
-                        compensation_error or restore_error
-                    )
-                raise PermissionTupleWriteError(exception=write_error) from write_error
+    @staticmethod
+    def _role_snapshot_fingerprint(snapshot: Mapping[str, object]) -> str:
+        canonical = json.dumps(
+            snapshot,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def _dispatch_notifications(self, **kwargs) -> None:
         if self._dispatch_notifications_callback:
@@ -1018,3 +1172,38 @@ class ResourceAuthorizationService:
         task = asyncio.create_task(runner())
         _PENDING_NOTIFICATION_TASKS.add(task)
         task.add_done_callback(_PENDING_NOTIFICATION_TASKS.discard)
+
+
+class KnowledgeSpaceResourceGrantExecutor:
+    """Resource owner adapter for confirmed knowledge-space user grants."""
+
+    resource_type = "knowledge_space"
+
+    def __init__(
+        self,
+        *,
+        authorization_service: ResourceAuthorizationService | None = None,
+    ) -> None:
+        self.authorization_service = authorization_service or ResourceAuthorizationService()
+
+    async def execute(self, command: ResourceGrantCommand) -> None:
+        self._validate_type(command)
+        await self.authorization_service.execute_confirmed_grant(command)
+
+    async def verify(
+        self,
+        command: ResourceGrantCommand,
+    ) -> ResourceGrantVerificationResult:
+        self._validate_type(command)
+        return await self.authorization_service.verify_confirmed_grant(command)
+
+    @classmethod
+    def _validate_type(cls, command: ResourceGrantCommand) -> None:
+        if command.resource_type != cls.resource_type:
+            raise PermissionInvalidResourceError()
+
+
+__all__ = [
+    "KnowledgeSpaceResourceGrantExecutor",
+    "ResourceAuthorizationService",
+]

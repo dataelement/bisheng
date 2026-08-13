@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+import hashlib
+import json
+from collections.abc import Iterable, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from loguru import logger
@@ -36,6 +38,10 @@ from bisheng.permission.domain.channel_permission_template import (
     default_permission_ids_for_relation,
     relation_from_channel_permission_ids,
     validate_channel_grant_subject,
+)
+from bisheng.permission.domain.ports.resource_grant_executor import (
+    ResourceGrantCommand,
+    ResourceGrantVerificationResult,
 )
 from bisheng.permission.domain.schemas.permission_schema import (
     AuthorizeGrantItem,
@@ -74,6 +80,28 @@ _GRANT_TIER_TO_MANAGE_PERMISSION = {
 _CHANNEL_MANAGE_PERMISSION_IDS = frozenset(_GRANT_TIER_TO_MANAGE_PERMISSION.values())
 
 
+def _canonical_role_snapshot(snapshot) -> tuple[dict, str]:
+    def thaw(value):
+        if isinstance(value, Mapping):
+            return {str(key): thaw(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [thaw(item) for item in value]
+        if isinstance(value, (set, frozenset)):
+            return [thaw(item) for item in sorted(value, key=repr)]
+        return value
+
+    canonical = json.dumps(
+        thaw(snapshot),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    normalized = json.loads(canonical)
+    if not isinstance(normalized, dict):
+        raise ChannelPermissionDeniedError(msg="邀请角色快照无效")
+    return normalized, hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def _grant_tier_for_relation(relation: str) -> str:
     if relation == "owner":
         return "owner"
@@ -89,7 +117,7 @@ class ChannelAuthorizationService:
         space_channel_member_repository: SpaceChannelMemberRepository,
         membership_sync_service: ChannelMembershipSyncService | None = None,
         grant_subject_query_service: GrantSubjectQueryService | None = None,
-        resource_user_invite_service=None,
+        invite_application_service=None,
         relation_binding_mutation_service: RelationBindingMutationService | None = None,
     ):
         self.channel_repository = channel_repository
@@ -98,25 +126,31 @@ class ChannelAuthorizationService:
             space_channel_member_repository,
         )
         self.grant_subject_query_service = grant_subject_query_service or GrantSubjectQueryService()
-        if resource_user_invite_service is None:
-            from bisheng.approval.domain.services.resource_user_invite_service import (
-                ResourceUserInviteService,
-            )
-
-            resource_user_invite_service = ResourceUserInviteService()
-        self.resource_user_invite_service = resource_user_invite_service
+        self._invite_application_service = invite_application_service
         self.relation_binding_mutation_service = relation_binding_mutation_service or RelationBindingMutationService(
             get_bindings=self._load_bindings_for_mutation,
             save_bindings=self._save_bindings_for_mutation,
         )
 
+    def _get_invite_application_service(self):
+        if self._invite_application_service is not None:
+            return self._invite_application_service
+        from bisheng.permission.domain.services.resource_user_invite_application_service import (
+            build_runtime_resource_user_invite_application_service,
+        )
+
+        self._invite_application_service = build_runtime_resource_user_invite_application_service()
+        return self._invite_application_service
+
     @asynccontextmanager
     async def _invite_scenario_guard(self, *, tenant_id: int):
-        guard_factory = getattr(self.resource_user_invite_service, "scenario_guard", None)
+        invite_service = self._get_invite_application_service()
+        guard_factory = getattr(invite_service, "scenario_guard", None)
         if guard_factory is None:
-            await self.resource_user_invite_service.ensure_scenario_available(
-                tenant_id=int(tenant_id),
-            )
+            availability_check = getattr(invite_service, "ensure_scenario_available", None)
+            if availability_check is None:
+                raise RuntimeError("resource user invite scenario guard is not configured")
+            await availability_check(tenant_id=int(tenant_id))
             yield
             return
         async with guard_factory(tenant_id=int(tenant_id)):
@@ -281,9 +315,13 @@ class ChannelAuthorizationService:
         tenant_id: int,
     ) -> None:
         if any(item.subject_type == "user" for item in grants):
-            await self.resource_user_invite_service.ensure_scenario_available(
-                tenant_id=tenant_id,
-            )
+            invite_service = self._get_invite_application_service()
+            availability_check = getattr(invite_service, "ensure_scenario_available", None)
+            if availability_check is not None:
+                await availability_check(tenant_id=tenant_id)
+                return
+            async with self._invite_scenario_guard(tenant_id=tenant_id):
+                return
 
     async def _active_explicit_user_ids(self, channel_id: str) -> set[int]:
         permissions = await PermissionService.get_resource_permissions("channel", channel_id)
@@ -303,7 +341,7 @@ class ChannelAuthorizationService:
                 raise ChannelPermissionDeniedError()
             target_name = await self._target_user_name(int(grant.subject_id))
             role_snapshot = await self._role_snapshot(grant)
-            outcome = await self.resource_user_invite_service.request_invite(
+            outcome = await self._get_invite_application_service().request_invite(
                 tenant_id=tenant_id,
                 resource_type="channel",
                 resource_id=str(channel_id),
@@ -364,6 +402,11 @@ class ChannelAuthorizationService:
         include_children: bool,
         approval_instance_id: int,
     ) -> None:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            raise ValueError("channel resource grant requires the matching tenant context")
         channel = await self._ensure_channel(resource_id)
         channel_tenant_id = await self._channel_tenant_id(
             channel,
@@ -388,14 +431,13 @@ class ChannelAuthorizationService:
             raise ChannelPermissionDeniedError()
 
         inviter_name = await self._target_user_name(int(inviter_user_id))
-        from bisheng.user.domain.models.user_role import UserRoleDao
+        await self._target_user_name(int(target_user_id))
 
-        inviter_roles = await UserRoleDao.aget_user_roles(int(inviter_user_id))
         inviter = UserPayload(
             user_id=int(inviter_user_id),
             user_name=inviter_name,
             tenant_id=int(tenant_id),
-            user_role=[int(item.role_id) for item in inviter_roles],
+            user_role=[],
         )
         actor_permissions = await self._actor_grant_permissions(resource_id, inviter)
         grant = ChannelGrantItem(
@@ -409,11 +451,7 @@ class ChannelAuthorizationService:
         self._validate_request(actor_permissions, confirmed_request)
 
         current_snapshot = await self._role_snapshot(grant)
-        from bisheng.approval.domain.services.resource_user_invite_service import (
-            ResourceUserInviteService,
-        )
-
-        normalized_snapshot, snapshot_fingerprint = ResourceUserInviteService.normalize_role_snapshot(role_snapshot)
+        normalized_snapshot, snapshot_fingerprint = _canonical_role_snapshot(role_snapshot)
         if snapshot_fingerprint != role_fingerprint or current_snapshot != normalized_snapshot:
             raise ChannelPermissionDeniedError(msg="邀请角色已变更, 请重新邀请")
 
@@ -446,7 +484,8 @@ class ChannelAuthorizationService:
             )
             if existing_target_permissions:
                 is_exact = (
-                    all(item.relation == relation for item in existing_target_permissions)
+                    len(existing_target_permissions) == 1
+                    and existing_target_permissions[0].relation == relation
                     and existing_binding is not None
                     and (existing_binding.get("model_id") == (model_id or relation))
                 )
@@ -458,7 +497,6 @@ class ChannelAuthorizationService:
                 confirmed_request,
                 transaction.bindings,
             )
-            await transaction.commit(updated)
             try:
                 await PermissionService.authorize(
                     object_type="channel",
@@ -469,48 +507,37 @@ class ChannelAuthorizationService:
                     recovery_owner="caller",
                 )
             except Exception as write_error:
-                from bisheng.approval.domain.services.resource_user_invite_scenario_handler import (
-                    ApprovalInviteRetryableExecutionError,
-                )
-
-                try:
-                    await PermissionService.authorize(
-                        object_type="channel",
-                        object_id=resource_id,
-                        grants=[],
-                        revokes=[
-                            AuthorizeRevokeItem(
-                                subject_type="user",
-                                subject_id=int(target_user_id),
-                                relation=relation,
-                                include_children=False,
-                                model_id=model_id,
-                            )
-                        ],
-                        enforce_fga_success=True,
-                        recovery_owner="caller",
+                refreshed = await PermissionService.get_resource_permissions("channel", resource_id)
+                refreshed_target = [
+                    item
+                    for item in refreshed
+                    if item.subject_type == "user" and int(item.subject_id) == int(target_user_id)
+                ]
+                if len(refreshed_target) == 1 and refreshed_target[0].relation == relation:
+                    await self._commit_confirmed_grant_binding(
+                        transaction=transaction,
+                        updated=updated,
+                        resource_id=resource_id,
+                        target_user_id=target_user_id,
+                        relation=relation,
+                        model_id=model_id,
+                        approval_instance_id=approval_instance_id,
                     )
-                except Exception as compensation_error:
-                    logger.exception(
-                        "confirmed channel grant compensation is not verified: channel_id={} instance_id={}",
-                        resource_id,
-                        approval_instance_id,
-                    )
-                    raise ApprovalInviteRetryableExecutionError(
-                        "confirmed channel grant compensation is not verified"
-                    ) from compensation_error
-                try:
-                    await transaction.restore()
-                except Exception as restore_error:
-                    logger.exception(
-                        "confirmed channel grant binding restore is not verified: channel_id={} instance_id={}",
-                        resource_id,
-                        approval_instance_id,
-                    )
-                    raise ApprovalInviteRetryableExecutionError(
-                        "confirmed channel grant binding restore is not verified"
-                    ) from restore_error
+                else:
+                    try:
+                        await transaction.restore()
+                    except Exception as recovery_error:
+                        raise ChannelAuthorizationSyncError(exception=recovery_error) from recovery_error
                 raise write_error
+            await self._commit_confirmed_grant_binding(
+                transaction=transaction,
+                updated=updated,
+                resource_id=resource_id,
+                target_user_id=target_user_id,
+                relation=relation,
+                model_id=model_id,
+                approval_instance_id=approval_instance_id,
+            )
 
         try:
             await ResourcePermissionNotificationService.dispatch_after_authorize(
@@ -525,6 +552,59 @@ class ChannelAuthorizationService:
                 resource_id,
                 approval_instance_id,
             )
+
+    @staticmethod
+    async def _commit_confirmed_grant_binding(
+        *,
+        transaction,
+        updated: list[dict],
+        resource_id: str,
+        target_user_id: int,
+        relation: str,
+        model_id: str | None,
+        approval_instance_id: int,
+    ) -> None:
+        try:
+            await transaction.commit(updated)
+            return
+        except Exception as binding_error:
+            compensation_error = None
+            try:
+                await PermissionService.authorize(
+                    object_type="channel",
+                    object_id=resource_id,
+                    grants=[],
+                    revokes=[
+                        AuthorizeRevokeItem(
+                            subject_type="user",
+                            subject_id=int(target_user_id),
+                            relation=relation,
+                            include_children=False,
+                            model_id=model_id,
+                        )
+                    ],
+                    enforce_fga_success=True,
+                    recovery_owner="caller",
+                )
+            except Exception as error:
+                compensation_error = error
+                logger.exception(
+                    "confirmed channel grant compensation failed: channel_id={} instance_id={}",
+                    resource_id,
+                    approval_instance_id,
+                )
+            restore_error = None
+            try:
+                await transaction.restore()
+            except Exception as error:
+                restore_error = error
+                logger.exception(
+                    "confirmed channel grant binding restore failed: channel_id={} instance_id={}",
+                    resource_id,
+                    approval_instance_id,
+                )
+            failure = compensation_error or restore_error or binding_error
+            raise ChannelAuthorizationSyncError(exception=failure) from failure
 
     async def _role_snapshot(self, grant: ChannelGrantItem) -> dict:
         model_id = grant.model_id or ChannelRelationEnum(grant.relation).value
@@ -633,17 +713,16 @@ class ChannelAuthorizationService:
         if tenant_id is None:
             raise ChannelPermissionDeniedError()
         active_user_ids = {item.subject_id for item in out if item.subject_type == "user"}
-        pending_instances = await self.resource_user_invite_service.list_pending_invites(
+        pending_instances = await self._get_invite_application_service().list_pending_invites(
             tenant_id=tenant_id,
             resource_type="channel",
             resource_id=str(channel_id),
         )
         for instance in pending_instances:
-            payload = dict(getattr(instance, "payload_snapshot", None) or {})
             try:
-                target_user_id = int(payload["target_user_id"])
-                relation = ChannelRelationEnum(payload["relation"])
-            except (KeyError, TypeError, ValueError):
+                target_user_id = int(instance.target_user_id)
+                relation = ChannelRelationEnum(instance.relation)
+            except (AttributeError, TypeError, ValueError):
                 logger.warning(
                     "ignored malformed pending channel invite: channel_id={} instance_id={}",
                     channel_id,
@@ -657,22 +736,24 @@ class ChannelAuthorizationService:
                     target_user_id,
                 )
                 continue
-            pending_model_id = payload.get("model_id") or relation.value
+            pending_model_id = getattr(instance, "model_id", None) or relation.value
             pending_model = model_map.get(pending_model_id)
             out.append(
                 ChannelPermissionEntry(
                     subject_type="user",
                     subject_id=target_user_id,
-                    subject_name=payload.get("target_user_name"),
+                    subject_name=getattr(instance, "target_user_name", None),
                     relation=relation,
                     include_children=None,
                     model_id=pending_model_id,
                     model_name=(
-                        pending_model.get("name") if pending_model else (payload.get("role_snapshot") or {}).get("name")
+                        pending_model.get("name")
+                        if pending_model
+                        else (getattr(instance, "role_snapshot", None) or {}).get("name")
                     ),
                     is_creator=False,
                     authorization_status="pending",
-                    approval_instance_id=int(instance.id),
+                    approval_instance_id=getattr(instance, "approval_instance_id", None),
                 )
             )
         return out
@@ -1357,3 +1438,127 @@ class ChannelAuthorizationService:
         if tenant is None or getattr(tenant, "status", None) != "active":
             return None
         return resolved_id
+
+
+class ChannelResourceGrantExecutor:
+    """Channel owner adapter for Permission's stable resource grant port."""
+
+    resource_type = "channel"
+
+    def __init__(self, *, authorization_service: ChannelAuthorizationService) -> None:
+        self.authorization_service = authorization_service
+
+    async def execute(self, command: ResourceGrantCommand) -> None:
+        self._require_command_context(command)
+        await self.authorization_service.apply_confirmed_personal_user_grant(
+            tenant_id=command.tenant_id,
+            resource_id=command.resource_id,
+            inviter_user_id=command.inviter_user_id,
+            target_user_id=command.target_user_id,
+            relation=command.relation,
+            model_id=command.model_id,
+            role_snapshot=dict(command.role_snapshot),
+            role_fingerprint=command.role_fingerprint,
+            include_children=command.include_children,
+            approval_instance_id=command.request_id,
+        )
+
+    async def verify(
+        self,
+        command: ResourceGrantCommand,
+    ) -> ResourceGrantVerificationResult:
+        self._require_command_context(command)
+        service = self.authorization_service
+        channel = await service._ensure_channel(command.resource_id)
+        tenant_id = await service._channel_tenant_id(
+            channel,
+            UserPayload(
+                user_id=command.inviter_user_id,
+                user_name="",
+                tenant_id=command.tenant_id,
+                user_role=[],
+            ),
+        )
+        if tenant_id != command.tenant_id:
+            raise ChannelPermissionDeniedError()
+        if str(getattr(channel, "visibility", "public")) in {
+            "private",
+            "ChannelVisibilityEnum.PRIVATE",
+        }:
+            raise ChannelPermissionDeniedError()
+        creator_id = getattr(channel, "user_id", None)
+        if creator_id is not None and int(creator_id) == command.target_user_id:
+            raise ChannelPermissionDeniedError(msg="无法修改频道创建人的权限")
+        if not await service._users_belong_to_tenant(
+            {command.inviter_user_id, command.target_user_id},
+            command.tenant_id,
+        ):
+            raise ChannelPermissionDeniedError()
+
+        inviter_name = await service._target_user_name(command.inviter_user_id)
+        await service._target_user_name(command.target_user_id)
+        inviter = UserPayload(
+            user_id=command.inviter_user_id,
+            user_name=inviter_name,
+            tenant_id=command.tenant_id,
+            user_role=[],
+        )
+        actor_permissions = await service._actor_grant_permissions(command.resource_id, inviter)
+        grant = ChannelGrantItem(
+            subject_type="user",
+            subject_id=command.target_user_id,
+            relation=ChannelRelationEnum(command.relation),
+            include_children=command.include_children,
+            model_id=command.model_id or command.relation,
+        )
+        service._validate_request(
+            actor_permissions,
+            ChannelAuthorizeRequest(grants=[grant], revokes=[]),
+        )
+        normalized_snapshot, fingerprint = _canonical_role_snapshot(command.role_snapshot)
+        current_snapshot = await service._role_snapshot(grant)
+        if fingerprint != command.role_fingerprint or normalized_snapshot != current_snapshot:
+            raise ChannelPermissionDeniedError(msg="邀请角色已变更, 请重新邀请")
+
+        permissions = await PermissionService.get_resource_permissions("channel", command.resource_id)
+        target_permissions = [
+            item
+            for item in permissions
+            if item.subject_type == "user" and int(item.subject_id) == command.target_user_id
+        ]
+        bindings = await service._get_bindings()
+        binding_map = {item.get("key"): item for item in bindings if item.get("key")}
+        binding = service._binding_from_map(
+            binding_map,
+            command.resource_id,
+            "user",
+            command.target_user_id,
+            command.relation,
+            False,
+        )
+        applied = (
+            len(target_permissions) == 1
+            and target_permissions[0].relation == command.relation
+            and binding is not None
+            and binding.get("model_id") == (command.model_id or command.relation)
+        )
+        return ResourceGrantVerificationResult(
+            applied=applied,
+            result_snapshot={
+                "request_id": command.request_id,
+                "resource_type": self.resource_type,
+                "resource_id": command.resource_id,
+                "target_user_id": command.target_user_id,
+                "relation": command.relation,
+                "model_id": command.model_id or command.relation,
+            },
+        )
+
+    def _require_command_context(self, command: ResourceGrantCommand) -> None:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        if command.resource_type != self.resource_type:
+            raise ValueError("channel resource grant resource_type mismatch")
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None or int(tenant_id) != command.tenant_id:
+            raise ValueError("channel resource grant requires the matching tenant context")

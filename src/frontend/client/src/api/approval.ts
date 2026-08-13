@@ -3,7 +3,6 @@ import request from "./request";
 import {
   FileStatus,
   FileType,
-  type FileChangeApprovalStatus,
   type KnowledgeFile,
 } from "./knowledge";
 
@@ -63,7 +62,6 @@ export interface ApprovalTaskDetail extends ApprovalTaskItem {
   detail_snapshot?: Record<string, any>;
   payload_snapshot?: Record<string, any>;
   detail?: Record<string, any>;
-  business_status_projection?: FileChangeBusinessStatusProjection | Record<string, unknown>;
   flow_nodes?: ApprovalFlowNode[];
   tasks?: ApprovalTaskItem[];
   action_logs?: Array<{
@@ -88,7 +86,6 @@ export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
   revoked_keys?: string[];
   payload_snapshot?: Record<string, any>;
   detail_snapshot?: Record<string, any>;
-  business_status_projection?: FileChangeBusinessStatusProjection | Record<string, unknown>;
   tasks?: ApprovalTaskItem[];
   flow_nodes?: ApprovalFlowNode[];
   action_logs?: Array<{
@@ -98,13 +95,6 @@ export interface ApprovalInstanceDetail extends ApprovalInstanceItem {
     create_time?: string;
     detail?: Record<string, any>;
   }>;
-}
-
-export interface FileChangeBusinessStatusProjection {
-  status: FileChangeApprovalStatus;
-  failure_reason?: string | null;
-  request_id?: number;
-  executed_resource_id?: number | null;
 }
 
 export interface BatchFileChangeApprovalItemResult {

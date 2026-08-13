@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import sys
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 import pytest_asyncio
@@ -12,7 +13,6 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.approval.domain.services.approval_outbox_service import Deferred
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileSizeLimitError,
     SpaceFolderNotFoundError,
@@ -41,6 +41,7 @@ from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
 )
 from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
     KnowledgeSpaceMutationExecutor,
+    MutationExecutionDispatch,
     UploadExecutionStepCode,
     UploadStepDispatchContext,
 )
@@ -149,6 +150,8 @@ async def _seed_upload_bundle(
                 action=KnowledgeSpaceFileChangeAction.UPLOAD,
                 resource_type=KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD,
                 applicant_user_id=7,
+                business_key="knowledge-space-change:upload-executor",
+                request_fingerprint="upload-executor-fingerprint",
                 approval_instance_id=101,
                 upload_stage_id=stage.id,
                 source_parent_id=source_parent_id,
@@ -230,12 +233,10 @@ async def test_formal_file_document_version_request_link_and_steps_commit_before
     side_effects = _SideEffects(upload_engine)
 
     result = await _executor(upload_engine, side_effects).execute(
-        instance_id=101,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
     )
 
-    assert isinstance(result, Deferred)
+    assert isinstance(result, MutationExecutionDispatch)
     assert result.execution_token == "attempt-token-1"
     files = await _rows(upload_engine, KnowledgeFile)
     documents = await _rows(upload_engine, KnowledgeDocument)
@@ -289,9 +290,7 @@ async def test_failure_after_formal_rows_flush_rolls_back_every_database_row(upl
     )
     with pytest.raises(RuntimeError, match="fault after formal rows flush"):
         await executor.execute(
-            instance_id=101,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
         )
 
     assert await _rows(upload_engine, KnowledgeFile) == []
@@ -313,14 +312,10 @@ async def test_duplicate_execution_reuses_file_token_and_stable_steps_without_re
     executor = _executor(upload_engine, side_effects, tokens=["attempt-token-1", "must-not-be-used"])
 
     first = await executor.execute(
-        instance_id=101,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
     )
     second = await executor.execute(
-        instance_id=101,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
     )
 
     assert second == first
@@ -338,9 +333,7 @@ async def test_executor_never_falls_back_to_a_request_from_another_tenant(upload
 
     with pytest.raises(LookupError, match="request not found"):
         await _executor(upload_engine, side_effects).execute(
-            instance_id=101,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
         )
 
     request = (await _rows(upload_engine, KnowledgeSpaceFileChangeRequest))[0]
@@ -361,9 +354,7 @@ async def test_approved_upload_rejects_stage_metadata_drift_before_formal_rows(u
 
     with pytest.raises(ValueError, match="metadata changed"):
         await _executor(upload_engine, side_effects).execute(
-            instance_id=101,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
         )
 
     assert await _rows(upload_engine, KnowledgeFile) == []
@@ -384,9 +375,7 @@ async def test_runtime_validator_rejects_permission_revoked_after_approval(uploa
     ) as permission_id_check:
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
-                instance_id=101,
                 request_id=request_id,
-                payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
             )
 
     permission_id_check.assert_awaited_once()
@@ -408,9 +397,7 @@ async def test_runtime_validator_rejects_space_unpublished_after_approval(upload
 
     with pytest.raises(SpaceNotFoundError):
         await executor.execute(
-            instance_id=101,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
         )
 
     assert await _rows(upload_engine, KnowledgeFile) == []
@@ -435,9 +422,7 @@ async def test_runtime_validator_checks_locked_source_folder_permission(upload_e
     ) as permission_check:
         with pytest.raises(SpacePermissionDeniedError):
             await executor.execute(
-                instance_id=101,
                 request_id=request_id,
-                payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
             )
 
     assert permission_check.await_args.args == ("folder", 33, "upload_file")
@@ -457,9 +442,7 @@ async def test_runtime_validator_rejects_source_folder_deleted_after_approval(up
 
     with pytest.raises(SpaceFolderNotFoundError):
         await executor.execute(
-            instance_id=101,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
         )
 
     assert await _rows(upload_engine, KnowledgeFile) == []
@@ -486,9 +469,7 @@ async def test_runtime_validator_rejects_role_quota_tightened_below_reserved_sta
     ):
         with pytest.raises(SpaceFileSizeLimitError):
             await executor.execute(
-                instance_id=101,
                 request_id=request_id,
-                payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
             )
 
     assert await _rows(upload_engine, KnowledgeFile) == []
@@ -548,12 +529,10 @@ async def test_parse_scheduler_handoff_completes_business_step_while_pipeline_st
     side_effects = _SideEffects(upload_engine)
 
     result = await _executor(upload_engine, side_effects).execute(
-        instance_id=101,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
     )
 
-    assert isinstance(result, Deferred)
+    assert isinstance(result, MutationExecutionDispatch)
     step_by_code = {step.step_code: step for step in await _rows(upload_engine, KnowledgeSpaceFileChangeExecutionStep)}
     assert step_by_code[UploadExecutionStepCode.FGA].state == KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
     assert step_by_code[UploadExecutionStepCode.PARSE].state == KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
@@ -563,11 +542,10 @@ async def test_parse_scheduler_handoff_completes_business_step_while_pipeline_st
     assert request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING
 
 
-async def test_parse_dispatch_hands_off_to_regular_upload_without_approval_callback():
+async def test_parse_dispatch_hands_off_to_regular_upload_without_business_callback(monkeypatch):
     context = UploadStepDispatchContext(
         tenant_id=42,
         request_id=41,
-        instance_id=31,
         execution_token="attempt-token-1",
         step_code=UploadExecutionStepCode.PARSE,
         idempotency_key="f046:41:upload.parse",
@@ -578,14 +556,28 @@ async def test_parse_dispatch_hands_off_to_regular_upload_without_approval_callb
         checkpoint={},
     )
 
-    with (
-        patch("bisheng.worker.knowledge.scheduler.enqueue_or_dispatch") as enqueue,
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceService.get_preview_cache_key",
-            return_value="preview-cache",
+    enqueue = Mock()
+    scheduler_module = SimpleNamespace(enqueue_or_dispatch=enqueue)
+    monkeypatch.setitem(
+        sys.modules,
+        "bisheng.worker.knowledge.scheduler",
+        scheduler_module,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "bisheng.worker.knowledge",
+        SimpleNamespace(scheduler=scheduler_module),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "bisheng.knowledge.domain.services.knowledge_space_service",
+        SimpleNamespace(
+            KnowledgeSpaceService=SimpleNamespace(
+                get_preview_cache_key=lambda *_args: "preview-cache",
+            )
         ),
-    ):
-        result = await KnowledgeSpaceMutationExecutor._dispatch_parse(context)
+    )
+    result = await KnowledgeSpaceMutationExecutor._dispatch_parse(context)
 
     assert result == "scheduler:f046:41:upload.parse"
     enqueue.assert_called_once_with(
@@ -609,9 +601,7 @@ async def test_folder_upload_checkpoint_has_guard_manifest_for_new_directories_a
     side_effects = _SideEffects(upload_engine)
 
     await _executor(upload_engine, side_effects).execute(
-        instance_id=101,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
     )
 
     request = (await _rows(upload_engine, KnowledgeSpaceFileChangeRequest))[0]
@@ -627,15 +617,13 @@ async def test_folder_upload_checkpoint_has_guard_manifest_for_new_directories_a
     assert "owner_user_id" not in resources[0]
 
 
-async def test_prepare_resume_uses_new_token_without_new_file_or_approval_request(upload_engine):
+async def test_prepare_resume_uses_new_token_without_new_file_or_business_request(upload_engine):
     set_current_tenant_id(42)
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)
     side_effects = _SideEffects(upload_engine)
     executor = _executor(upload_engine, side_effects)
     first = await executor.execute(
-        instance_id=101,
         request_id=request_id,
-        payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
     )
 
     async with AsyncSession(bind=upload_engine, expire_on_commit=False) as session:
@@ -657,7 +645,7 @@ async def test_prepare_resume_uses_new_token_without_new_file_or_approval_reques
                 new_token="attempt-token-2",
             )
 
-    assert isinstance(resumed, Deferred)
+    assert isinstance(resumed, MutationExecutionDispatch)
     assert first.execution_token != resumed.execution_token == "attempt-token-2"
     assert len(await _rows(upload_engine, KnowledgeFile)) == 1
     assert len(await _rows(upload_engine, KnowledgeSpaceFileChangeRequest)) == 1
@@ -689,9 +677,7 @@ async def test_post_commit_dispatch_failure_marks_request_failed_for_token_bound
     )
     with pytest.raises(RuntimeError, match="broker unavailable"):
         await executor.execute(
-            instance_id=101,
             request_id=request_id,
-            payload_snapshot={"change_request_id": request_id, "action": "upload", "space_id": 8},
         )
 
     request = (await _rows(upload_engine, KnowledgeSpaceFileChangeRequest))[0]
@@ -700,40 +686,3 @@ async def test_post_commit_dispatch_failure_marks_request_failed_for_token_bound
     assert request.execution_checkpoint["failure_reason"] == "broker unavailable"
     assert request.executed_resource_id is not None
     assert len(await _rows(upload_engine, KnowledgeFile)) == 1
-
-
-async def test_runtime_handler_resume_requires_and_uses_locked_instance_binding(monkeypatch):
-    from bisheng.knowledge.domain.services import knowledge_space_mutation_executor as executor_module
-    from bisheng.knowledge.domain.services.knowledge_space_file_change_scenario_handler import (
-        KnowledgeSpaceFileChangeScenarioHandler,
-    )
-
-    execute = AsyncMock(return_value=Deferred("attempt-token-1", datetime(2026, 8, 11, tzinfo=UTC)))
-    monkeypatch.setattr(executor_module.KnowledgeSpaceMutationExecutor, "execute", execute)
-    resume = AsyncMock(return_value=Deferred("attempt-token-2", datetime(2026, 8, 12, tzinfo=UTC)))
-    coordinator = SimpleNamespace(prepare_resume_in_uow=resume)
-    handler = KnowledgeSpaceFileChangeScenarioHandler(execution_coordinator=coordinator)
-
-    result = await handler.on_approved(101, {"change_request_id": 81, "space_id": 8, "action": "upload"})
-
-    assert isinstance(result, Deferred)
-    execute.assert_awaited_once()
-    with pytest.raises(RuntimeError, match="must be bound"):
-        await handler.prepare_resume(SimpleNamespace(), "attempt-token-2")
-    handler.bind_deferred_execution(
-        instance=SimpleNamespace(
-            id=101,
-            business_resource_id="81",
-            payload_snapshot={"change_request_id": 81},
-        ),
-        outbox=SimpleNamespace(instance_id=101),
-    )
-
-    resumed = await handler.prepare_resume("locked-session", "attempt-token-2")
-
-    assert resumed.execution_token == "attempt-token-2"
-    resume.assert_awaited_once_with(
-        session="locked-session",
-        request_id=81,
-        new_token="attempt-token-2",
-    )

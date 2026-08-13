@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -445,104 +444,3 @@ async def test_retry_execute_failed_api_marks_outbox_success_or_failure():
     assert repo.outboxes[2].status == ApprovalOutboxStatus.FAILED
     assert repo.outboxes[2].error_summary == "retry failed"
     assert repo.exceptions[2].status == "open"
-
-
-@pytest.mark.asyncio
-async def test_f046_execute_failed_retry_uses_token_bound_deferred_resume(monkeypatch):
-    repo = FakeApprovalRepo()
-    repo.instances[1] = _build_instance(status=ApprovalInstanceStatus.EXECUTE_FAILED)
-    repo.instances[1].scenario_code = "knowledge_space_file_change_request"
-    repo.exceptions[1] = ApprovalException(
-        id=1,
-        tenant_id=1,
-        instance_id=1,
-        exception_type=ApprovalExceptionType.EXECUTE_FAILED,
-        status="open",
-        detail={},
-    )
-    repo.outboxes[1] = ApprovalOutbox(
-        id=1,
-        tenant_id=1,
-        instance_id=1,
-        handler_key="knowledge_space_file_change_request",
-        status=ApprovalOutboxStatus.FAILED,
-        execution_token="generation-1",
-        payload_snapshot={"change_request_id": 88},
-    )
-    service = ApprovalExceptionService(instance_repository=repo)
-    dispatch = AsyncMock()
-    handler = SimpleNamespace(
-        prepare_resume=AsyncMock(),
-        dispatch_resumed_execution=dispatch,
-    )
-    service._build_handler = AsyncMock(return_value=handler)  # type: ignore[method-assign]
-
-    async def resume_after_commit(**kwargs):
-        await kwargs["post_commit_dispatch"](kwargs["outbox_id"], "generation-2")
-        return "generation-2"
-
-    resume = AsyncMock(side_effect=resume_after_commit)
-    monkeypatch.setattr(
-        "bisheng.approval.domain.services.approval_outbox_service.ApprovalOutboxService.resume_deferred_execution",
-        resume,
-    )
-
-    retried = await service.retry_execute_failed_api(
-        exception_id=1,
-        resolved_by_user_id=9,
-        scenario_code="knowledge_space_file_change_request",
-    )
-
-    assert retried is True
-    resume.assert_awaited_once_with(
-        tenant_id=1,
-        instance_id=1,
-        outbox_id=1,
-        handler=handler,
-        post_commit_dispatch=ANY,
-    )
-    dispatch.assert_awaited_once_with(
-        outbox_id=1,
-        execution_token="generation-2",
-        tenant_id=1,
-    )
-    assert repo.instances[1].status == ApprovalInstanceStatus.EXECUTE_FAILED
-    assert repo.outboxes[1].status == ApprovalOutboxStatus.FAILED
-
-
-@pytest.mark.asyncio
-async def test_f046_exception_retry_routes_execute_failed_away_from_dynamic_reconcile(monkeypatch):
-    exception = ApprovalException(
-        id=9,
-        tenant_id=1,
-        instance_id=11,
-        exception_type=ApprovalExceptionType.EXECUTE_FAILED,
-        status="open",
-        detail={},
-    )
-    instance = _build_instance(status=ApprovalInstanceStatus.EXECUTE_FAILED)
-    instance.id = 11
-    instance.scenario_code = "knowledge_space_file_change_request"
-    handler = SimpleNamespace(exception_action_policy=AsyncMock(return_value=True))
-    monkeypatch.setattr(ApprovalExceptionService, "_get_exception", AsyncMock(return_value=exception))
-    monkeypatch.setattr(ApprovalExceptionService, "_get_instance", AsyncMock(return_value=instance))
-    monkeypatch.setattr(ApprovalExceptionService, "_build_handler", AsyncMock(return_value=handler))
-    dynamic_retry = AsyncMock(side_effect=AssertionError("execute_failed must not reconcile approvers"))
-    deferred_retry = AsyncMock(return_value=True)
-    monkeypatch.setattr(ApprovalExceptionService, "_retry_dynamic_exception_in_uow", dynamic_retry)
-    monkeypatch.setattr(ApprovalExceptionService, "retry_execute_failed_api", deferred_retry)
-    monkeypatch.setattr(ApprovalExceptionService, "_write_audit_log", AsyncMock())
-
-    result = await ApprovalExceptionService.retry_exception_api(
-        exception_id=9,
-        action="retry",
-        operator_user_id=7,
-    )
-
-    assert result == {"exception_id": 9, "instance_id": 11, "status": "resolved"}
-    dynamic_retry.assert_not_awaited()
-    deferred_retry.assert_awaited_once_with(
-        exception_id=9,
-        resolved_by_user_id=7,
-        scenario_code="knowledge_space_file_change_request",
-    )

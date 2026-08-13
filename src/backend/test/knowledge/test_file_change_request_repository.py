@@ -7,16 +7,11 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.approval.domain.models.approval_instance import (
-    ApprovalException,
-    ApprovalExceptionType,
-    ApprovalInstance,
-    ApprovalInstanceStatus,
-)
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
     KnowledgeSpaceFileChangeAction,
+    KnowledgeSpaceFileChangeExecutionState,
     KnowledgeSpaceFileChangeFootprint,
     KnowledgeSpaceFileChangeLockScope,
     KnowledgeSpaceFileChangeRequest,
@@ -42,8 +37,6 @@ async def repository_engine():
     )
     tables = [
         Knowledge.__table__,
-        ApprovalInstance.__table__,
-        ApprovalException.__table__,
         KnowledgeSpaceFileChangeRequest.__table__,
         KnowledgeSpaceFileChangeFootprint.__table__,
     ]
@@ -85,21 +78,10 @@ async def _insert_request(
     path_root: str | None = None,
     lock_scope: str = KnowledgeSpaceFileChangeLockScope.EXACT,
 ) -> int:
-    session.add(
-        ApprovalInstance(
-            id=instance_id,
-            tenant_id=tenant_id,
-            scenario_code="knowledge_space_file_change_request",
-            scenario_name="file change",
-            handler_key="knowledge_space_file_change_request",
-            business_key=f"knowledge-space-change:{instance_id}",
-            business_resource_type="knowledge_space_file_change",
-            business_resource_id=str(instance_id),
-            business_name=f"request-{instance_id}",
-            applicant_user_id=9,
-            applicant_user_name="editor",
-            status=status,
-        )
+    execution_state = (
+        KnowledgeSpaceFileChangeExecutionState.APPLIED
+        if status == "executed"
+        else KnowledgeSpaceFileChangeExecutionState.NOT_STARTED
     )
     request = KnowledgeSpaceFileChangeRequest(
         tenant_id=tenant_id,
@@ -108,7 +90,10 @@ async def _insert_request(
         resource_type=resource_type,
         resource_id=resource_id,
         applicant_user_id=9,
+        business_key=f"knowledge-space-change:{instance_id}",
+        request_fingerprint=f"fingerprint-{instance_id}",
         approval_instance_id=instance_id,
+        execution_state=execution_state,
     )
     session.add(request)
     await session.flush()
@@ -137,14 +122,14 @@ async def test_request_repository_always_scopes_reads_and_updates_by_tenant(repo
                 tenant_id=17,
                 space_id=101,
                 instance_id=1001,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
             )
             foreign_id = await _insert_request(
                 session,
                 tenant_id=18,
                 space_id=101,
                 instance_id=1002,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
             )
 
         repository = KnowledgeSpaceFileChangeRequestRepository(session)
@@ -179,7 +164,7 @@ async def test_active_resource_matches_use_only_authoritative_root_footprint(rep
                 tenant_id=17,
                 space_id=101,
                 instance_id=1003,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=501,
                 path_root="/501/",
@@ -245,21 +230,21 @@ async def test_resource_conflict_joins_only_same_tenant_active_instances(reposit
                 tenant_id=17,
                 space_id=101,
                 instance_id=1101,
-                status=ApprovalInstanceStatus.APPROVED,
+                status="approved",
             )
             await _insert_request(
                 session,
                 tenant_id=17,
                 space_id=101,
                 instance_id=1102,
-                status=ApprovalInstanceStatus.EXECUTED,
+                status="executed",
             )
             await _insert_request(
                 session,
                 tenant_id=18,
                 space_id=101,
                 instance_id=1103,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
             )
             orphan = KnowledgeSpaceFileChangeRequest(
                 tenant_id=17,
@@ -268,6 +253,8 @@ async def test_resource_conflict_joins_only_same_tenant_active_instances(reposit
                 resource_type=KnowledgeSpaceFileChangeResourceType.KNOWLEDGE_FILE,
                 resource_id=501,
                 applicant_user_id=9,
+                business_key="orphan-request",
+                request_fingerprint="orphan-fingerprint",
             )
             session.add(orphan)
             await session.flush()
@@ -307,7 +294,7 @@ async def test_root_subtree_conflicts_with_every_descendant(repository_engine):
                 tenant_id=17,
                 space_id=101,
                 instance_id=1151,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=1,
                 path_root="/",
@@ -340,7 +327,7 @@ async def test_version_sibling_expansion_conflicts_through_shared_version_footpr
                 tenant_id=17,
                 space_id=101,
                 instance_id=1201,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.KNOWLEDGE_FILE_VERSION,
                 resource_id=7002,
             )
@@ -410,7 +397,7 @@ async def test_path_conflict_is_bidirectional_for_parent_child_and_destination_a
                 tenant_id=17,
                 space_id=101,
                 instance_id=1301,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=10,
                 path_root=existing_path,
@@ -443,7 +430,7 @@ async def test_exact_sibling_resources_with_same_parent_marker_do_not_conflict(r
                 tenant_id=17,
                 space_id=101,
                 instance_id=1351,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_id=501,
                 path_root="/10/",
                 lock_scope=KnowledgeSpaceFileChangeLockScope.EXACT,
@@ -475,7 +462,7 @@ async def test_independent_subtrees_with_shared_root_ancestor_do_not_conflict(re
                 tenant_id=17,
                 space_id=101,
                 instance_id=1361,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=20,
                 path_root="/10/20/",
@@ -508,7 +495,7 @@ async def test_independent_destination_markers_do_not_conflict_on_shared_parent(
                 tenant_id=17,
                 space_id=101,
                 instance_id=1371,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=10,
                 path_root="/10/",
@@ -541,7 +528,7 @@ async def test_destination_conflicts_with_exact_change_to_same_directory(reposit
                 tenant_id=17,
                 space_id=101,
                 instance_id=1381,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=10,
                 path_root="/10/",
@@ -574,7 +561,7 @@ async def test_path_like_treats_percent_and_underscore_as_literal_characters(rep
                 tenant_id=17,
                 space_id=101,
                 instance_id=1401,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=41,
                 path_root="/literal%_folder\\name/child/",
@@ -585,7 +572,7 @@ async def test_path_like_treats_percent_and_underscore_as_literal_characters(rep
                 tenant_id=17,
                 space_id=101,
                 instance_id=1402,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
                 resource_type=KnowledgeSpaceFileChangeResourceType.FOLDER,
                 resource_id=42,
                 path_root="/literalXXfolderZname/child/",
@@ -618,7 +605,7 @@ async def test_add_many_normalizes_paths_deduplicates_and_never_queries_action_j
                 tenant_id=17,
                 space_id=101,
                 instance_id=1501,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
             )
             repository = KnowledgeSpaceFileChangeFootprintRepository(session)
             rows = await repository.add_many(
@@ -656,17 +643,17 @@ async def test_add_many_normalizes_paths_deduplicates_and_never_queries_action_j
 async def test_resource_lock_and_approver_reconciliation_status_sets_are_separate(repository_engine):
     assert RESOURCE_LOCK_BLOCKING_STATUSES == frozenset(
         {
-            ApprovalInstanceStatus.PENDING,
-            ApprovalInstanceStatus.EXCEPTION,
-            ApprovalInstanceStatus.APPROVED,
-            ApprovalInstanceStatus.EXECUTING,
-            ApprovalInstanceStatus.EXECUTE_FAILED,
+            KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
+            KnowledgeSpaceFileChangeExecutionState.QUEUED,
+            KnowledgeSpaceFileChangeExecutionState.APPLYING,
+            KnowledgeSpaceFileChangeExecutionState.FAILED,
+            KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
         }
     )
     assert APPROVER_RECONCILABLE_STATUSES == frozenset(
-        {ApprovalInstanceStatus.PENDING, ApprovalInstanceStatus.EXCEPTION}
+        {KnowledgeSpaceFileChangeExecutionState.NOT_STARTED}
     )
-    assert ApprovalInstanceStatus.APPROVED not in APPROVER_RECONCILABLE_STATUSES
+    assert KnowledgeSpaceFileChangeExecutionState.APPLIED not in APPROVER_RECONCILABLE_STATUSES
 
     set_current_tenant_id(17)
     async with AsyncSession(bind=repository_engine, expire_on_commit=False) as session:
@@ -676,44 +663,28 @@ async def test_resource_lock_and_approver_reconciliation_status_sets_are_separat
                 tenant_id=17,
                 space_id=101,
                 instance_id=1601,
-                status=ApprovalInstanceStatus.PENDING,
+                status="pending",
             )
             empty_exception_id = await _insert_request(
                 session,
                 tenant_id=17,
                 space_id=101,
                 instance_id=1602,
-                status=ApprovalInstanceStatus.EXCEPTION,
+                status="exception",
             )
             other_exception_id = await _insert_request(
                 session,
                 tenant_id=17,
                 space_id=101,
                 instance_id=1603,
-                status=ApprovalInstanceStatus.EXCEPTION,
+                status="exception",
             )
             await _insert_request(
                 session,
                 tenant_id=17,
                 space_id=101,
                 instance_id=1604,
-                status=ApprovalInstanceStatus.APPROVED,
-            )
-            session.add_all(
-                [
-                    ApprovalException(
-                        tenant_id=17,
-                        instance_id=1602,
-                        exception_type=ApprovalExceptionType.APPROVER_EMPTY,
-                        status="open",
-                    ),
-                    ApprovalException(
-                        tenant_id=17,
-                        instance_id=1603,
-                        exception_type=ApprovalExceptionType.ROUTE_MISSING,
-                        status="open",
-                    ),
-                ]
+                status="approved",
             )
 
         repository = KnowledgeSpaceFileChangeRequestRepository(session)
@@ -725,5 +696,5 @@ async def test_resource_lock_and_approver_reconciliation_status_sets_are_separat
         )
 
         # API returns instance IDs, not request IDs.
-        assert ids == [1601, 1602]
+        assert ids == [1601, 1602, 1603, 1604]
         assert pending_id != empty_exception_id != other_exception_id

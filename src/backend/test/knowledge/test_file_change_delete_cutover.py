@@ -8,13 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.approval.domain.models.approval_instance import (
-    ApprovalException,
-    ApprovalInstance,
-    ApprovalInstanceStatus,
-    ApprovalOutbox,
-    ApprovalOutboxStatus,
-)
 from bisheng.core.context.tenant import set_current_tenant_id
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
@@ -42,6 +35,9 @@ from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_r
     KnowledgeSpaceFileChangeRequestRepository,
 )
 from bisheng.knowledge.domain.services.knowledge_space_deletion_guard import KnowledgeSpaceDeletionGuard
+from bisheng.knowledge.domain.services.knowledge_space_file_change_execution_coordinator import (
+    KnowledgeSpaceFileChangeExecutionCoordinator,
+)
 from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
     DeleteExecutionStepCode,
     KnowledgeSpaceMutationExecutor,
@@ -64,9 +60,6 @@ async def delete_engine() -> AsyncIterator[AsyncEngine]:
                 KnowledgeSpaceFileChangeRequest.__table__,
                 KnowledgeSpaceFileChangeFootprint.__table__,
                 KnowledgeSpaceFileChangeExecutionStep.__table__,
-                ApprovalInstance.__table__,
-                ApprovalOutbox.__table__,
-                ApprovalException.__table__,
             ],
         )
     yield engine
@@ -164,21 +157,6 @@ async def _seed_delete(
                         status=KnowledgeFileStatus.SUCCESS.value,
                     )
                 )
-            instance = ApprovalInstance(
-                tenant_id=42,
-                scenario_code="knowledge_space_file_change_request",
-                scenario_name="file change",
-                handler_key="knowledge_space_file_change_request",
-                business_key="pending",
-                business_resource_type="knowledge_space_file_change",
-                business_resource_id="pending",
-                business_name=root.file_name,
-                applicant_user_id=7,
-                applicant_user_name="editor",
-                status=ApprovalInstanceStatus.EXECUTING,
-            )
-            session.add(instance)
-            await session.flush()
             request = KnowledgeSpaceFileChangeRequest(
                 tenant_id=42,
                 space_id=int(space.id),
@@ -190,7 +168,9 @@ async def _seed_delete(
                 ),
                 resource_id=int(root.id),
                 applicant_user_id=7,
-                approval_instance_id=int(instance.id),
+                business_key="knowledge-space-change:delete-cutover",
+                request_fingerprint="delete-cutover-fingerprint",
+                approval_instance_id=501,
                 file_name=root.file_name,
                 source_parent_id=int(parent.id),
                 action_snapshot={
@@ -201,9 +181,6 @@ async def _seed_delete(
             )
             session.add(request)
             await session.flush()
-            instance.business_key = f"knowledge-space-change:{request.id}"
-            instance.business_resource_id = str(request.id)
-            session.add(instance)
             session.add(
                 KnowledgeSpaceFileChangeFootprint(
                     tenant_id=42,
@@ -217,14 +194,6 @@ async def _seed_delete(
                     ),
                 )
             )
-            outbox = ApprovalOutbox(
-                tenant_id=42,
-                instance_id=int(instance.id),
-                handler_key="knowledge_space_file_change_request",
-                status=ApprovalOutboxStatus.DEFERRED,
-                execution_token="delete-token",
-            )
-            session.add(outbox)
     return int(space.id), int(parent.id), int(root.id), int(request.id)
 
 
@@ -239,7 +208,7 @@ async def _get_request(engine: AsyncEngine, request_id: int):
 
 async def test_delete_prepare_is_durable_and_zero_destructive(delete_engine):
     set_current_tenant_id(42)
-    space_id, parent_id, root_id, request_id = await _seed_delete(delete_engine, folder=True)
+    _, parent_id, root_id, request_id = await _seed_delete(delete_engine, folder=True)
     executor = KnowledgeSpaceMutationExecutor(
         session_factory=_session_factory(delete_engine),
         execution_token_factory=lambda: "delete-token",
@@ -247,14 +216,7 @@ async def test_delete_prepare_is_durable_and_zero_destructive(delete_engine):
     )
 
     result = await executor.execute(
-        instance_id=(await _get_request(delete_engine, request_id)).approval_instance_id,
         request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
     )
 
     assert result.execution_token == "delete-token"
@@ -280,7 +242,7 @@ async def test_delete_prepare_is_durable_and_zero_destructive(delete_engine):
         assert all(step.idempotency_key == f"f046:{request_id}:{step.step_code}" for step in steps)
 
 
-async def test_delete_cutover_atomically_deletes_db_activates_guard_and_keeps_approval_deferred(delete_engine):
+async def test_delete_cutover_atomically_deletes_db_and_activates_guard(delete_engine):
     set_current_tenant_id(42)
     space_id, parent_id, root_id, request_id = await _seed_delete(delete_engine)
     executor = KnowledgeSpaceMutationExecutor(
@@ -290,18 +252,10 @@ async def test_delete_cutover_atomically_deletes_db_activates_guard_and_keeps_ap
     )
     request = await _get_request(delete_engine, request_id)
     await executor.execute(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
     )
 
     assert await executor.cutover_delete(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
         execution_token="delete-token",
     )
@@ -314,10 +268,6 @@ async def test_delete_cutover_atomically_deletes_db_activates_guard_and_keeps_ap
         request = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
         assert request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING
         assert request.execution_checkpoint["delete_phase"] == "purging"
-        instance = await session.get(ApprovalInstance, request.approval_instance_id)
-        assert instance.status == ApprovalInstanceStatus.EXECUTING
-        outbox = (await session.exec(select(ApprovalOutbox))).one()
-        assert outbox.status == ApprovalOutboxStatus.DEFERRED
         purge_steps = list(
             (
                 await session.exec(
@@ -333,49 +283,9 @@ async def test_delete_cutover_atomically_deletes_db_activates_guard_and_keeps_ap
     assert await guard.list_deleted_ids(tenant_id=42, space_ids=[space_id]) == {root_id}
 
 
-async def test_delete_cutover_deferred_validation_failure_rolls_back_formal_delete_and_guard(delete_engine):
-    set_current_tenant_id(42)
-    space_id, _, root_id, request_id = await _seed_delete(delete_engine)
-
-    async def fail_deferred_validation(**_kwargs):
-        raise RuntimeError("deferred approval validation failed")
-
-    executor = KnowledgeSpaceMutationExecutor(
-        session_factory=_session_factory(delete_engine),
-        execution_token_factory=lambda: "delete-token",
-        delete_deferred_validator=fail_deferred_validation,
-        mutation_execution_validator=lambda **_kwargs: None,
-    )
-    request = await _get_request(delete_engine, request_id)
-    await executor.execute(
-        instance_id=int(request.approval_instance_id),
-        request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
-    )
-
-    with pytest.raises(RuntimeError, match="deferred approval validation failed"):
-        await executor.cutover_delete(
-            instance_id=int(request.approval_instance_id),
-            request_id=request_id,
-            execution_token="delete-token",
-        )
-
-    async with AsyncSession(bind=delete_engine) as session:
-        assert await session.get(KnowledgeFile, root_id) is not None
-        request = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
-        assert request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING
-        instance = await session.get(ApprovalInstance, request.approval_instance_id)
-        assert instance.status == ApprovalInstanceStatus.EXECUTING
-
-
 async def test_delete_cutover_revalidates_permission_after_prepare_and_rolls_back_on_revoke(delete_engine):
     set_current_tenant_id(42)
-    space_id, _, root_id, request_id = await _seed_delete(delete_engine)
+    _, _, root_id, request_id = await _seed_delete(delete_engine)
     validation_calls = 0
 
     async def revoked_after_prepare(**_kwargs):
@@ -391,20 +301,11 @@ async def test_delete_cutover_revalidates_permission_after_prepare_and_rolls_bac
     )
     request = await _get_request(delete_engine, request_id)
     await executor.execute(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-            "applicant_user_name": "editor",
-        },
     )
 
     with pytest.raises(PermissionError, match="revoked"):
         await executor.cutover_delete(
-            instance_id=int(request.approval_instance_id),
             request_id=request_id,
             execution_token="delete-token",
         )
@@ -414,89 +315,32 @@ async def test_delete_cutover_revalidates_permission_after_prepare_and_rolls_bac
         assert await session.get(KnowledgeFile, root_id) is not None
         request = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
         assert request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING
-        instance = await session.get(ApprovalInstance, request.approval_instance_id)
-        assert instance.status == ApprovalInstanceStatus.EXECUTING
-        outbox = (await session.exec(select(ApprovalOutbox))).one()
-        assert outbox.status == ApprovalOutboxStatus.DEFERRED
 
 
-async def test_delete_cutover_uses_instance_outbox_before_request_resource_lock_order(delete_engine):
+async def test_delete_finalization_keeps_guard_until_all_purge_verified(delete_engine):
     set_current_tenant_id(42)
-    space_id, _, root_id, request_id = await _seed_delete(delete_engine)
-    order: list[str] = []
-
-    async def record_validation(**_kwargs):
-        order.append("validator")
-
-    async def record_deferred_validation(**kwargs):
-        order.append("instance_outbox")
-        return await KnowledgeSpaceMutationExecutor._require_delete_approval_in_uow(**kwargs)
-
-    executor = KnowledgeSpaceMutationExecutor(
-        session_factory=_session_factory(delete_engine),
-        execution_token_factory=lambda: "delete-token",
-        mutation_execution_validator=record_validation,
-        delete_deferred_validator=record_deferred_validation,
-    )
-    request = await _get_request(delete_engine, request_id)
-    await executor.execute(
-        instance_id=int(request.approval_instance_id),
-        request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
-    )
-    order.clear()
-
-    await executor.cutover_delete(
-        instance_id=int(request.approval_instance_id),
-        request_id=request_id,
-        execution_token="delete-token",
-    )
-
-    # The validator takes request/space/resource locks, so F025 must be first.
-    assert order == ["instance_outbox", "validator"]
-
-
-async def test_delete_finalization_rolls_back_f025_and_guard_retirement_until_all_purge_verified(delete_engine):
-    set_current_tenant_id(42)
-    space_id, _, root_id, request_id = await _seed_delete(delete_engine)
+    _, _, _, request_id = await _seed_delete(delete_engine)
     executor = KnowledgeSpaceMutationExecutor(
         session_factory=_session_factory(delete_engine),
         execution_token_factory=lambda: "delete-token",
         mutation_execution_validator=lambda **_kwargs: None,
     )
-    request = await _get_request(delete_engine, request_id)
     await executor.execute(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
     )
     await executor.cutover_delete(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
         execution_token="delete-token",
     )
 
     with pytest.raises(RuntimeError, match="every verified current-generation step"):
         await executor.finalize_delete_execution(
-            instance_id=int(request.approval_instance_id),
             request_id=request_id,
             execution_token="delete-token",
         )
 
     async with AsyncSession(bind=delete_engine) as session:
         current = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
-        instance = await session.get(ApprovalInstance, current.approval_instance_id)
-        outbox = (await session.exec(select(ApprovalOutbox))).one()
         footprints = list(
             (
                 await session.exec(
@@ -508,35 +352,24 @@ async def test_delete_finalization_rolls_back_f025_and_guard_retirement_until_al
         )
         assert current.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLYING
         assert current.execution_checkpoint["deletion_cutover_active"] is True
-        assert instance.status == ApprovalInstanceStatus.EXECUTING
-        assert outbox.status == ApprovalOutboxStatus.DEFERRED
         assert len(footprints) == 1
 
 
-async def test_delete_finalization_locks_instance_outbox_request_footprint_then_steps(
+async def test_delete_finalization_locks_request_footprint_then_steps(
     delete_engine,
     monkeypatch: pytest.MonkeyPatch,
 ):
     set_current_tenant_id(42)
-    space_id, _, root_id, request_id = await _seed_delete(delete_engine)
+    _, _, _, request_id = await _seed_delete(delete_engine)
     executor = KnowledgeSpaceMutationExecutor(
         session_factory=_session_factory(delete_engine),
         execution_token_factory=lambda: "delete-token",
         mutation_execution_validator=lambda **_kwargs: None,
     )
-    request = await _get_request(delete_engine, request_id)
     await executor.execute(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
     )
     await executor.cutover_delete(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
         execution_token="delete-token",
     )
@@ -561,10 +394,6 @@ async def test_delete_finalization_locks_instance_outbox_request_footprint_then_
     original_retire = KnowledgeSpaceFileChangeFootprintRepository.retire_delete_guard
     original_list = KnowledgeSpaceFileChangeExecutionStepRepository.list_by_request
 
-    async def completion(**kwargs):
-        order.append("instance_outbox")
-        return await KnowledgeSpaceMutationExecutor._complete_delete_approval_in_uow(**kwargs)
-
     async def record_get(repository, **kwargs):
         if kwargs.get("for_update"):
             order.append("request")
@@ -579,24 +408,21 @@ async def test_delete_finalization_locks_instance_outbox_request_footprint_then_
             order.append("steps")
         return await original_list(repository, **kwargs)
 
-    executor.delete_deferred_completion = completion
     monkeypatch.setattr(KnowledgeSpaceFileChangeRequestRepository, "get_by_id", record_get)
     monkeypatch.setattr(KnowledgeSpaceFileChangeFootprintRepository, "retire_delete_guard", record_retire)
     monkeypatch.setattr(KnowledgeSpaceFileChangeExecutionStepRepository, "list_by_request", record_list)
 
     assert await executor.finalize_delete_execution(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
         execution_token="delete-token",
     )
-    assert order == ["instance_outbox", "request", "footprint", "steps"]
+    assert order == ["request", "footprint", "steps"]
 
 
 def _delete_purge_context(step_code: str, *, manifest: dict | None = None) -> MutationStepContext:
     return MutationStepContext(
         tenant_id=42,
         request_id=301,
-        instance_id=401,
         execution_token="delete-token",
         action=KnowledgeSpaceFileChangeAction.DELETE,
         step_code=step_code,
@@ -656,9 +482,7 @@ async def test_delete_es_purge_fails_when_file_scoped_count_finds_residue(monkey
         indices=indices,
         delete_by_query=lambda **_kwargs: {"deleted": 1, "failures": []},
         count=lambda **kwargs: (
-            {"count": 1}
-            if kwargs["body"]["query"]["terms"]["metadata.document_id"] == [101]
-            else {"count": 0}
+            {"count": 1} if kwargs["body"]["query"]["terms"]["metadata.document_id"] == [101] else {"count": 0}
         ),
     )
     es_store = SimpleNamespace(client=client)
@@ -672,18 +496,14 @@ async def test_delete_es_purge_fails_when_file_scoped_count_finds_residue(monkey
     )
 
     with pytest.raises(RuntimeError, match="Elasticsearch purge verification found file residue"):
-        await KnowledgeSpaceMutationExecutor._apply_delete_purge_step(
-            _delete_purge_context(DeleteExecutionStepCode.ES)
-        )
+        await KnowledgeSpaceMutationExecutor._apply_delete_purge_step(_delete_purge_context(DeleteExecutionStepCode.ES))
 
 
 async def test_delete_milvus_purge_fails_when_file_scoped_count_finds_residue(monkeypatch: pytest.MonkeyPatch):
     collection = SimpleNamespace(
         delete=lambda **_kwargs: None,
         flush=lambda: None,
-        query=lambda **kwargs: (
-            [{"count(*)": 1}] if kwargs["expr"] == "document_id in [101]" else [{"count(*)": 0}]
-        ),
+        query=lambda **kwargs: [{"count(*)": 1}] if kwargs["expr"] == "document_id in [101]" else [{"count(*)": 0}],
     )
     vector_store = SimpleNamespace(col=collection)
     monkeypatch.setattr(
@@ -718,19 +538,10 @@ async def test_delete_purge_retries_without_resurrection_and_retires_guard_footp
         delete_purge_applier=purge_effect,
         mutation_execution_validator=lambda **_kwargs: None,
     )
-    request = await _get_request(delete_engine, request_id)
     await executor.execute(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
     )
     await executor.cutover_delete(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
         execution_token="delete-token",
     )
@@ -744,27 +555,24 @@ async def test_delete_purge_retries_without_resurrection_and_retires_guard_footp
         failed_request = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
         assert failed_request.execution_state == KnowledgeSpaceFileChangeExecutionState.FAILED
         assert failed_request.execution_checkpoint["delete_phase"] == "purge_failed"
-        instance = await session.get(ApprovalInstance, failed_request.approval_instance_id)
-        assert instance.status == ApprovalInstanceStatus.EXECUTE_FAILED
-        outbox = (await session.exec(select(ApprovalOutbox))).one()
-        assert outbox.status == ApprovalOutboxStatus.FAILED
 
-    async with AsyncSession(bind=delete_engine, expire_on_commit=False) as session:
-        async with session.begin():
-            instance = await session.get(ApprovalInstance, request.approval_instance_id, with_for_update=True)
-            outbox = (await session.exec(select(ApprovalOutbox).with_for_update())).one()
-            instance.status = ApprovalInstanceStatus.EXECUTING
-            outbox.status = ApprovalOutboxStatus.DEFERRED
-            outbox.execution_token = "delete-retry-token"
-            session.add(instance)
-            session.add(outbox)
-            await executor.prepare_delete_resume_in_uow(
-                session=session,
-                request_id=request_id,
-                new_token="delete-retry-token",
-            )
+    coordinator = KnowledgeSpaceFileChangeExecutionCoordinator(
+        session_factory=_session_factory(delete_engine),
+        execution_token_factory=lambda: "delete-retry-token",
+    )
+    queued = await coordinator.queue_retry(tenant_id=42, request_id=request_id)
+    _, retried_steps = await coordinator._load_current(identity=queued)
+    assert {step.attempt_token for step in retried_steps} == {"delete-retry-token"}
+    assert next(step for step in retried_steps if step.step_code == DeleteExecutionStepCode.DB_CUTOVER).state == (
+        KnowledgeSpaceFileChangeExecutionStepState.SUCCEEDED
+    )
+    assert next(step for step in retried_steps if step.step_code == DeleteExecutionStepCode.MINIO).state == (
+        KnowledgeSpaceFileChangeExecutionStepState.PENDING
+    )
+    identity = await coordinator.begin_execution(tenant_id=42, request_id=request_id)
+    assert queued.execution_token == identity.execution_token == "delete-retry-token"
 
-    assert await executor.purge_delete(request_id=request_id, execution_token="delete-retry-token")
+    assert await executor.purge_delete(request_id=request_id, execution_token=identity.execution_token)
     assert await guard.list_deleted_ids(tenant_id=42, space_ids=[space_id]) == set()
     async with AsyncSession(bind=delete_engine) as session:
         footprints = list(
@@ -781,10 +589,6 @@ async def test_delete_purge_retries_without_resurrection_and_retires_guard_footp
         applied_request = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
         assert applied_request.execution_state == KnowledgeSpaceFileChangeExecutionState.APPLIED
         assert applied_request.execution_checkpoint["delete_phase"] == "completed"
-        instance = await session.get(ApprovalInstance, applied_request.approval_instance_id)
-        assert instance.status == ApprovalInstanceStatus.EXECUTED
-        outbox = (await session.exec(select(ApprovalOutbox))).one()
-        assert outbox.status == ApprovalOutboxStatus.SUCCESS
     assert attempts.count(DeleteExecutionStepCode.FGA) == 1
 
 
@@ -801,19 +605,10 @@ async def test_delete_purge_rejects_enqueue_receipt_as_completion(delete_engine)
         delete_purge_applier=task_id_only,
         mutation_execution_validator=lambda **_kwargs: None,
     )
-    request = await _get_request(delete_engine, request_id)
     await executor.execute(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
     )
     await executor.cutover_delete(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
         execution_token="delete-token",
     )
@@ -826,25 +621,16 @@ async def test_delete_purge_rejects_enqueue_receipt_as_completion(delete_engine)
 
 async def test_delete_never_prunes_shared_parent_with_published_child(delete_engine):
     set_current_tenant_id(42)
-    space_id, parent_id, root_id, request_id = await _seed_delete(delete_engine, shared_parent=True)
+    _, parent_id, _, request_id = await _seed_delete(delete_engine, shared_parent=True)
     executor = KnowledgeSpaceMutationExecutor(
         session_factory=_session_factory(delete_engine),
         execution_token_factory=lambda: "delete-token",
         mutation_execution_validator=lambda **_kwargs: None,
     )
-    request = await _get_request(delete_engine, request_id)
     await executor.execute(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
-        payload_snapshot={
-            "action": "delete",
-            "change_request_id": request_id,
-            "space_id": space_id,
-            "resource_id": root_id,
-        },
     )
     await executor.cutover_delete(
-        instance_id=int(request.approval_instance_id),
         request_id=request_id,
         execution_token="delete-token",
     )

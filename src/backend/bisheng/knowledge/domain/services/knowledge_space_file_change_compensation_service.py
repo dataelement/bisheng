@@ -11,8 +11,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_compensation_repository import (
-    DeferredWatchdogCandidate,
     ExecutionStepRecoveryCandidate,
+    ExecutionWatchdogCandidate,
     ExpiredOrphanStageCandidate,
     FileChangeCleanupCandidate,
     KnowledgeSpaceFileChangeCompensationRepository,
@@ -51,38 +51,32 @@ class KnowledgeSpaceFileChangeCompensationService:
             raise ValueError("F046 compensation scan requires the matching tenant context")
         return normalized
 
-    async def list_deferred_watchdog_page(
+    async def list_watchdog_page(
         self,
         *,
         tenant_id: int,
-        scenario_code: str,
-        after_outbox_id: int,
+        after_request_id: int,
         limit: int,
-    ) -> CompensationPage[DeferredWatchdogCandidate]:
+    ) -> CompensationPage[ExecutionWatchdogCandidate]:
         tenant_id = self._require_tenant(tenant_id)
         now = self.now()
         async with self.session_factory() as session:
-            items, has_more = await KnowledgeSpaceFileChangeCompensationRepository(
-                session
-            ).list_deferred_watchdog_candidates(
+            items, has_more = await KnowledgeSpaceFileChangeCompensationRepository(session).list_watchdog_candidates(
                 tenant_id=tenant_id,
-                scenario_code=str(scenario_code),
-                after_outbox_id=int(after_outbox_id),
-                now=now,
+                after_request_id=int(after_request_id),
                 heartbeat_before=now - self.heartbeat_timeout,
                 limit=int(limit),
             )
         return CompensationPage(
             items=items,
             has_more=has_more,
-            next_after_id=items[-1].outbox_id if items else int(after_outbox_id),
+            next_after_id=items[-1].request_id if items else int(after_request_id),
         )
 
     async def list_step_recovery_page(
         self,
         *,
         tenant_id: int,
-        scenario_code: str,
         after_step_id: int,
         limit: int,
     ) -> CompensationPage[ExecutionStepRecoveryCandidate]:
@@ -92,7 +86,6 @@ class KnowledgeSpaceFileChangeCompensationService:
                 session
             ).list_step_recovery_candidates(
                 tenant_id=tenant_id,
-                scenario_code=str(scenario_code),
                 after_step_id=int(after_step_id),
                 now=self.now(),
                 limit=int(limit),
@@ -107,7 +100,6 @@ class KnowledgeSpaceFileChangeCompensationService:
         self,
         *,
         tenant_id: int,
-        scenario_code: str,
         after_request_id: int,
         limit: int,
     ) -> CompensationPage[FileChangeCleanupCandidate]:
@@ -117,7 +109,6 @@ class KnowledgeSpaceFileChangeCompensationService:
                 session
             ).list_cleanup_candidates(
                 tenant_id=tenant_id,
-                scenario_code=str(scenario_code),
                 after_request_id=int(after_request_id),
                 now=self.now(),
                 limit=int(limit),
