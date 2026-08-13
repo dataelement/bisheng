@@ -206,19 +206,51 @@ class PointsQueryService:
         return PointLeaderboardResponse(period=period, refreshed_at=refreshed, items=items)
 
     @staticmethod
+    def _department_path_ids(path: str | None) -> list[int]:
+        """从 materialized path 抽出部门 id，例如 ``/1/54/55/94/`` → ``[1, 54, 55, 94]``。"""
+        ids: list[int] = []
+        for part in str(path or "").strip("/").split("/"):
+            if part.isdigit():
+                ids.append(int(part))
+        return ids
+
+    @staticmethod
     async def _leaderboard_display_maps(
         user_ids: list[int],
     ) -> tuple[dict[int, str], dict[int, str]]:
-        """批量解析榜单用户名与主部门名称。"""
+        """批量解析用户名与积分部门名称。
+
+        部门名取主部门沿 path 向上最近的 ``org_level=dept`` 节点，与部门榜桶一致；
+        找不到该标签时不回退叶子部门，调用方按 ``—`` 展示。
+        """
         if not user_ids:
             return {}, {}
-        from bisheng.database.models.department import UserDepartmentDao
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+        from bisheng.points.domain.services.points_rank_service import resolve_dept_bucket_id
         from bisheng.user.domain.models.user import UserDao
 
         users = await UserDao.aget_user_by_ids(user_ids) or []
         name_by_user = {int(u.user_id): str(getattr(u, "user_name", None) or u.user_id) for u in users}
         primary_map = UserDepartmentDao.get_primary_department_map_by_user_ids(user_ids)
-        dept_by_user = {uid: str(dept.name) for uid, dept in primary_map.items() if getattr(dept, "name", None)}
+        dept_by_id: dict[int, object] = {}
+        ancestor_ids: set[int] = set()
+        for dept in primary_map.values():
+            dept_id = getattr(dept, "id", None)
+            if dept_id is not None:
+                dept_by_id[int(dept_id)] = dept
+            ancestor_ids.update(PointsQueryService._department_path_ids(getattr(dept, "path", None)))
+        missing_ids = [dept_id for dept_id in ancestor_ids if dept_id not in dept_by_id]
+        if missing_ids:
+            for row in await DepartmentDao.aget_by_ids(missing_ids):
+                if getattr(row, "id", None) is not None:
+                    dept_by_id[int(row.id)] = row
+        dept_by_user: dict[int, str] = {}
+        for uid, primary in primary_map.items():
+            bucket_id = resolve_dept_bucket_id(primary, dept_by_id)
+            node = dept_by_id.get(bucket_id) if bucket_id is not None else None
+            name = getattr(node, "name", None) if node is not None else None
+            if name:
+                dept_by_user[int(uid)] = str(name)
         return name_by_user, dept_by_user
 
     async def overview(self, tenant_id: int, user: UserPayload) -> PointOverviewResponse:
@@ -291,7 +323,7 @@ class PointsQueryService:
         page: int = 1,
         page_size: int = 20,
     ) -> PageData[PointAdminUserItem]:
-        """管理端用户积分列表（账户 + 姓名/主部门 + 本月净变动）。"""
+        """管理端用户积分列表（账户 + 姓名/积分部门桶 + 本月净变动）。"""
         require_platform_admin(user)
         page = max(int(page), 1)
         page_size = min(max(int(page_size), 1), 100)

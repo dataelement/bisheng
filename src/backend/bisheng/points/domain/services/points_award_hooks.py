@@ -6,7 +6,6 @@ import logging
 from collections.abc import Iterable
 from typing import Any
 
-from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
@@ -27,6 +26,7 @@ from bisheng.points.domain.services.points_award_facade import (
 )
 from bisheng.points.domain.services.points_ledger_service import PointsLedgerService
 from bisheng.points.domain.services.points_notify_service import build_points_notify_service
+from bisheng.points.domain.services.space_fga_roles import resolve_space_owner_manager_ids
 
 logger = logging.getLogger(__name__)
 
@@ -43,29 +43,8 @@ async def is_platform_super_admin_user(user_id: int) -> bool:
 
 
 async def resolve_space_manager_ids(*space_ids: int) -> frozenset[int]:
-    """汇总空间 creator/admin，并兜底纳入知识库 owner。"""
-    managers: set[int] = set()
-    for raw in space_ids:
-        try:
-            space_id = int(raw)
-        except (TypeError, ValueError):
-            continue
-        if space_id <= 0:
-            continue
-        try:
-            members = await SpaceChannelMemberDao.async_get_members_by_space(
-                space_id,
-                user_roles=[UserRoleEnum.CREATOR, UserRoleEnum.ADMIN],
-            )
-            for member in members or []:
-                if getattr(member, "user_id", None) is not None:
-                    managers.add(int(member.user_id))
-            space = await KnowledgeDao.aquery_by_id(space_id)
-            if space is not None and getattr(space, "user_id", None) is not None:
-                managers.add(int(space.user_id))
-        except Exception:
-            logger.exception("points.award.hooks resolve_managers_failed space_id=%s", space_id)
-    return frozenset(managers)
+    """汇总空间 OpenFGA owner∪manager（缺 owner 时含 DB 创建人），供 P7 跳过库管发分。"""
+    return await resolve_space_owner_manager_ids(*space_ids)
 
 
 async def resolve_space_level(space_id: int) -> str:

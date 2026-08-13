@@ -26,7 +26,7 @@ class SpaceFileReadyEvent:
     uploader_id: int
     publisher_id: int | None = None
     is_favorite_space: bool = False
-    # 目标库 creator + admin 用户 ID；P7=B 只看受益人是否在此集合。
+    # 目标库 OpenFGA owner∪manager（含创建人兜底）；P7=B 只看受益人是否在此集合。
     space_manager_ids: frozenset[int] = field(default_factory=frozenset)
 
 
@@ -38,7 +38,7 @@ class DocumentSharedEvent:
     share_entry_id: int
     uploader_id: int
     sharer_id: int
-    # 源库与目标库的 creator/admin 并集。
+    # 源库与目标库的 OpenFGA owner∪manager 并集（含创建人兜底）。
     related_manager_ids: frozenset[int] = field(default_factory=frozenset)
 
 
@@ -332,7 +332,7 @@ class PointsAwardFacade:
         )
 
     async def _should_skip_payee(self, payee: int, manager_ids: frozenset[int]) -> str | None:
-        """P7=B：受益人是相关库 creator/admin，或平台超管 → skip。"""
+        """P7=B：受益人是相关库 OpenFGA owner/manager（或创建人兜底），或平台超管 → skip。"""
         if payee in manager_ids:
             return "space_manager_payee"
         if await self._is_platform_super_admin(payee):
