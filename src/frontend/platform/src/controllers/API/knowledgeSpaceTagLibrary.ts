@@ -238,6 +238,10 @@ export interface TagConsoleSourceFile {
   /** 标签来源库 — the knowledge base this file lives in. */
   knowledge_name?: string | null
   parent_id?: number | null
+  /** knowledge_file.status; 7 means it failed the content-safety check. */
+  status?: number | null
+  /** JSON for a content-safety rejection, carrying the words that were hit. */
+  remark?: string | null
 }
 
 export interface TagConsoleFilterParams {

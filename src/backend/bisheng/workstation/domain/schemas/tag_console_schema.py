@@ -50,6 +50,11 @@ class TagConsoleSourceFile(BaseModel):
     # so the console does not have to resolve ids to names on the client.
     knowledge_name: str | None = None
     parent_id: int | None = None
+    # Content-safety state, so the console can refuse to preview a file that
+    # failed the check instead of opening it. ``remark`` carries the hit words
+    # the message is built from.
+    status: int | None = None
+    remark: str | None = None
 
 
 class TagConsoleFilter(BaseModel):

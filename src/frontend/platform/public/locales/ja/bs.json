@@ -1436,6 +1436,8 @@
       "batchSummary": "成功 {{ok}} 件、スキップ {{skipped}} 件、失敗 {{failed}} 件",
       "deleteConfirm": "選択したタグを削除しますか？ファイルとの関連も削除されます。",
       "moreFiles": "全 {{count}} ファイル",
+      "violationTitle": "違反の詳細",
+      "violationBlocked": "このファイルには違反コンテンツが含まれるためプレビューできません",
       "multiSpaceHint": "{{count}} 個のナレッジスペースで生成",
       "tagNamePlaceholder": "タグ名を入力",
       "selectUser": "ユーザーを選択",

@@ -25,6 +25,11 @@ import {
     distinctSourceSpaceIds,
     intersectLibraries,
 } from "@/pages/BuildPage/bench/standalone/tagConsole/useApprovableLibraries"
+import {
+    isViolationFile,
+    sensitiveViolationMessage,
+    sensitiveViolationWords,
+} from "@/util/sensitiveViolation"
 
 describe("left panel selection", () => {
     it("selecting a library toggles it and stays in library mode", () => {
@@ -219,5 +224,35 @@ describe("approvable libraries", () => {
 
         expect(distinctSourceSpaceIds([row(9, 3), row(3), row(1)])).toEqual([1, 3, 9])
         expect(distinctSourceSpaceIds([{ source_files: [] }, {}])).toEqual([])
+    })
+})
+
+describe("sensitive violation", () => {
+    // The real strings come from the knowledge namespace; a stub keeps this test
+    // about the logic rather than about translation wiring.
+    const t = (key: string) =>
+        ({
+            sensitiveViolationMessage: "GENERIC",
+            sensitiveViolationMessagePrefix: "PREFIX",
+            sensitiveViolationMessageSuffix: "SUFFIX",
+        })[key] ?? key
+
+    it("recognises only the content-safety status", () => {
+        expect(isViolationFile({ status: 7 })).toBe(true)
+        expect(isViolationFile({ status: 2 })).toBe(false)
+        expect(isViolationFile({})).toBe(false)
+    })
+
+    it("pulls the hit words out, deduplicated", () => {
+        const remark = JSON.stringify({ reason: "sensitive_check", hits: [{ word: "赌博" }, { word: "赌博" }, { word: "毒品" }] })
+        expect(sensitiveViolationWords(remark)).toEqual(["赌博", "毒品"])
+        expect(sensitiveViolationMessage(remark, t)).toBe("PREFIX{赌博,毒品}SUFFIX")
+    })
+
+    it("falls back to the generic sentence when there are no words to show", () => {
+        expect(sensitiveViolationMessage(null, t)).toBe("GENERIC")
+        expect(sensitiveViolationMessage("解析超时", t)).toBe("GENERIC")
+        expect(sensitiveViolationMessage("{not json", t)).toBe("GENERIC")
+        expect(sensitiveViolationMessage(JSON.stringify({ reason: "other" }), t)).toBe("GENERIC")
     })
 })

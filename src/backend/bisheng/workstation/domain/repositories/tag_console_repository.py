@@ -195,13 +195,15 @@ class TagConsoleRepositoryImpl:
             KnowledgeFile.file_name,
             KnowledgeFile.knowledge_id,
             KnowledgeFile.file_level_path,
+            KnowledgeFile.status,
+            KnowledgeFile.remark,
         ).where(
             KnowledgeFile.id.in_(normalized),
             KnowledgeFile.tenant_id == tenant_id,
         )
         rows = (await self.session.exec(statement)).all()
         space_names = await self.list_knowledge_names(
-            [knowledge_id for _, _, knowledge_id, _ in rows],
+            [row[2] for row in rows],
             tenant_id=tenant_id,
         )
         return {
@@ -211,8 +213,10 @@ class TagConsoleRepositoryImpl:
                 "knowledge_id": int(knowledge_id) if knowledge_id is not None else 0,
                 "knowledge_name": space_names.get(int(knowledge_id)) if knowledge_id is not None else None,
                 "parent_id": self.parent_folder_id_from_level_path(file_level_path),
+                "status": status,
+                "remark": remark,
             }
-            for file_id, file_name, knowledge_id, file_level_path in rows
+            for file_id, file_name, knowledge_id, file_level_path, status, remark in rows
         }
 
     async def list_source_knowledges(
