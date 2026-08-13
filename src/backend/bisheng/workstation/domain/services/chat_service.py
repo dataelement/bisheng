@@ -2176,6 +2176,27 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         submit_obj, login_user, display_files=data.files
     )
 
+    # Enqueue HERE, not from the browser after it receives the handoff below.
+    # submit_user_question parses every attachment inline, so this request can run
+    # for minutes on a multi-file task; a user who stops waiting (refresh, closed
+    # tab, proxy timeout) never sends the follow-up start-execute, and the session
+    # is stranded at NOT_STARTED with no one to pick it up. Enqueueing server-side
+    # decouples "the task runs" from "the client is still listening". The client's
+    # start-execute remains as a late retry and is safe to arrive after this: the
+    # executor rejects re-entry on an already-running session.
+    from bisheng.linsight.domain import utils as linsight_execute_utils
+
+    try:
+        await linsight_execute_utils.enqueue_session_for_execution(session_version)
+        await linsight_execute_utils.persist_task_turn_message(session_version)
+    except Exception:
+        # Keep streaming the handoff: the client's start-execute is the fallback
+        # path, and failing the whole submit here would lose the question too.
+        logger.exception(
+            f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
+            f"svid={session_version.id}; relying on client start-execute"
+        )
+
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode
     # title helper with the daily chat model (data.model) rather than the
