@@ -123,6 +123,7 @@ export default defineConfig({
             { text: '文字提示 Tooltip', link: '/组件-Tooltip文字提示' },
             { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
             { text: '弹窗 Modal', link: '/组件-Modal弹窗' },
+            { text: '轻提示 Toast', link: '/组件-Toast轻提示' },
           ],
         },
       ],
