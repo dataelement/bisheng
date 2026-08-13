@@ -3,3 +3,7 @@
 export { default as cn } from './utils/cn';
 export { Button, buttonVariants } from './components/Button/Button';
 export type { ButtonProps, ButtonStyleProps } from './components/Button/Button';
+// Crash screen. Shared because the identifiers, the QR payload and the log file
+// have to be identical across the apps for a support handover to work — the
+// copy and the artwork are passed in, so the contract above still holds.
+export * from './components/ErrorPage';

@@ -25,6 +25,7 @@
     "bisheng-icons": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
+    "qrcode.react": "catalog:",
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {
