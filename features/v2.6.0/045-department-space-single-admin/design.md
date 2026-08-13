@@ -126,6 +126,7 @@
 |---|---|---|---|
 | 1 | DB 与 FGA 双写无事务：`admin_user_id` UPDATE 成功但 manager tuple 写失败是可能态 | 管理员「有名无权」，且现状代码对 FGA 失败只 warning 吞掉（`_grant_department_admin_manager:130`） | 换人流程按「先写列，FGA 失败重试 + 对账兜底」；对账任务比对列与 tuple |
 | 2 | 部分读路径可能假设空间必有 CREATOR 成员/owner tuple（如 `knowledge_space_service.py:422/885/4850` 按 CREATOR 分支） | 部门空间不再有 CREATOR 后这些分支静默走空,权限判定或展示异常 | tasks 里逐处排查 CREATOR 分支对部门空间的行为 |
+| 2b | **`/permissions` 接口会从 `Knowledge.user_id` 现算合成一条不可删的「创建者=owner」行**（`resource_permission.py _add_creator_owner_entry`,knowledge_space 视创建者为永久 owner）——不是存量数据,迁移清不掉,105 走查时真实命中 | 部门空间授权面板永远显示超管创建者,AC-04/12 落空 | `_add_creator_owner_entry` 对部门空间（有 dks 绑定）直接跳过合成 |
 | 3 | `Knowledge.user_id` 不能置空（多处按 user_id 过滤/统计,含空间数上限统计 `exclude_department_spaces=True` 已豁免部门空间） | 乱动 user_id 会伤个人空间列表逻辑 | 保留 user_id=创建超管,仅不物化前台关系 |
 | 4 | 用户管理页的停用/删除今天**没有**部门空间钩子（只有 SSO/部门流程有） | 管理员被停用后空间不进待配置,AC-08 漏 | 决策 5 的新钩子必须覆盖 `user` 模块入口 |
 | 5 | 存量归一是运维脚本不是 Alembic revision;多 ADMIN 归一涉及「提升前角色回退」数据（`department_admin_promoted_from_role`） | 写进 revision 违反迁移铁律;直接删行会误伤被提升前就是成员的用户 | 脚本按 `membership_source` 与回退字段分支处理（同 `_sync_removed_admin` 现逻辑） |

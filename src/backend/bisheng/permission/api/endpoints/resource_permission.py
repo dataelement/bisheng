@@ -809,6 +809,18 @@ async def _add_creator_owner_entry(
     creator_id = int(creator_id)
     creator_is_permanent = resource_type == "knowledge_space"
 
+    # F045 AC-04/AC-12: a department knowledge space has NO front-facing creator —
+    # Knowledge.user_id records the operating super admin for auditing only, and
+    # must not be synthesized back into the permission list. The space's owner
+    # figure is its single space admin (surfaced via the manager binding).
+    if creator_is_permanent and str(resource_id).isdigit():
+        from bisheng.knowledge.domain.models.department_knowledge_space import (
+            DepartmentKnowledgeSpaceDao,
+        )
+
+        if await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id)) is not None:
+            return permissions
+
     existing_creator_owner = next(
         (
             item
