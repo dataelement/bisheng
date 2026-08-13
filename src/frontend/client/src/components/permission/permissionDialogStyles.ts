@@ -37,6 +37,15 @@ export const INCLUDE_CHILDREN_LABEL_CLASS =
 export const INCLUDE_CHILDREN_CHECKBOX_CLASS =
   "border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary";
 
+/**
+ * Footer action pair (cancel + confirm). Right-aligned at their natural width on
+ * desktop; under 768px — where the dialog becomes a full-screen sheet — the two
+ * tile across one full-width row, each taking half. Same breakpoint as the shell
+ * above so both permission dialogs bottom out identically on mobile.
+ */
+export const PERMISSION_FOOTER_ACTIONS_CLASS =
+  "flex shrink-0 gap-3 max-[768px]:[&>button]:flex-1 min-[769px]:justify-end";
+
 /** Muted caption used by the footer labels ("已选用户:", "统一授权:"). */
 export const PERMISSION_FOOTER_LABEL_CLASS =
   "shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]";
