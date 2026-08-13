@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from sqlalchemy.orm.attributes import flag_modified
+
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.points import PointsRuleConflictError, PointsRuleNotFoundError
 from bisheng.points.domain.constants.beneficiary import allowed_beneficiaries
