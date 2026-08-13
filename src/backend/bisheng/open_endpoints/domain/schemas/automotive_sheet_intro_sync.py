@@ -40,6 +40,10 @@ class AutomotiveSheetIntroSyncConfig(BaseModel):
         ge=10,
         le=600,
     )
+    api_ssl_verify: bool = Field(
+        default=True,
+        description="Verify upstream TLS certificate when api_url uses https",
+    )
     developer_token_id: int | None = Field(default=None, gt=0)
     file_name: str = DEFAULT_AUTOMOTIVE_SHEET_FILE_NAME
     external_file_id: str = DEFAULT_AUTOMOTIVE_SHEET_EXTERNAL_FILE_ID

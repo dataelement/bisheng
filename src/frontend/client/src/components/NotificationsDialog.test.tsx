@@ -292,6 +292,45 @@ describe("NotificationsDialog approval jump", () => {
     openSpy.mockRestore();
   });
 
+  it("renders points_changed message from metadata without empty @ prefix", async () => {
+    jest.mocked(getMessageListApi).mockResolvedValue({
+      total: 1,
+      data: [{
+        id: 802,
+        sender: 0,
+        sender_name: "",
+        message_type: "notify",
+        action_code: "points_changed",
+        status: "approved",
+        is_read: false,
+        create_time: "2026-08-11T10:00:00Z",
+        update_time: "2026-08-11T10:00:00Z",
+        content: [
+          {
+            type: "system_text",
+            content: "points_changed",
+            metadata: {
+              points_message: "您上传/发布文档至部门库，获得2积分，您可前往【我的积分】查看完整记录；",
+              data: {
+                points_change: {
+                  message: "您上传/发布文档至部门库，获得2积分，您可前往【我的积分】查看完整记录；",
+                  delta: 2,
+                  library_name: "部门库",
+                },
+              },
+            },
+          },
+        ],
+      }],
+    });
+
+    render(<NotificationsDialog open />);
+
+    expect(await screen.findByText("您上传/发布文档至部门库，获得2积分，您可前往【我的积分】查看完整记录；")).toBeInTheDocument();
+    expect(screen.queryByText("@")).not.toBeInTheDocument();
+    expect(screen.queryByText(/给你发送了一条通知/)).not.toBeInTheDocument();
+  });
+
   it("renders favorite change values and navigates deletion to the favorite space", async () => {
     const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
     jest.mocked(getMessageListApi).mockResolvedValue({

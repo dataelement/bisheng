@@ -29,6 +29,14 @@ interface TagLibraryPanelProps {
     onSelectReviewEntry: () => void
     /** Bubbles up so the right panel can drop a library that no longer exists. */
     onLibrariesChanged: (libraries: KnowledgeSpaceTagLibraryListItem[]) => void
+    /**
+     * Bumped by the right panel whenever it writes tags.
+     *
+     * The tag counts shown here are computed server-side, so adding, deleting
+     * or moving a tag makes them stale immediately — without this the panel
+     * kept its mount-time numbers until the page was reloaded.
+     */
+    refreshToken: number
 }
 
 export function TagLibraryPanel({
@@ -38,6 +46,7 @@ export function TagLibraryPanel({
     onSelectLibrary,
     onSelectReviewEntry,
     onLibrariesChanged,
+    refreshToken,
 }: TagLibraryPanelProps) {
     const { t } = useTranslation()
     const { toast } = useToast()
@@ -61,7 +70,7 @@ export function TagLibraryPanel({
 
     useEffect(() => {
         void loadLibraries()
-    }, [loadLibraries])
+    }, [loadLibraries, refreshToken])
 
     // Filtering is client-side so the fixed "pending review" entry never
     // disappears while the user searches for a library.

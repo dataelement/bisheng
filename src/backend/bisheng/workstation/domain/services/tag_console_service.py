@@ -1,5 +1,6 @@
 """Business logic for the F079 tag management console."""
 
+from collections.abc import Iterable
 from datetime import datetime
 
 from loguru import logger
@@ -46,6 +47,8 @@ from bisheng.workstation.domain.schemas.tag_console_schema import (
     TagConsoleSearchReq,
     TagConsoleSearchResp,
     TagConsoleSourceFile,
+    TagConsoleSourceKnowledge,
+    TagConsoleSourceKnowledgeResp,
 )
 from bisheng.workstation.domain.services.workstation_tags_service import WorkStationTagsService
 
@@ -249,6 +252,22 @@ class TagConsoleService:
         )
         return pending
 
+    async def list_source_knowledges(
+        self,
+        tenant_id: int,
+        keyword: str | None = None,
+    ) -> TagConsoleSourceKnowledgeResp:
+        """Options for the 标签来源库 filter.
+
+        Only knowledge bases that actually produced a tag, so the dropdown does
+        not fill up with every user's personal space and 『我的收藏』.
+        """
+        await self._ensure_can_manage_tags()
+        rows = await self.repository.list_source_knowledges(tenant_id=tenant_id, keyword=keyword)
+        return TagConsoleSourceKnowledgeResp(
+            data=[TagConsoleSourceKnowledge(id=knowledge_id, name=name) for knowledge_id, name in rows]
+        )
+
     async def review_detail(self, ref: TagConsoleReviewRef, tenant_id: int) -> TagConsoleReviewItem:
         space_ids = await self.tags_service.resolve_reviewable_space_ids()
         items = await self._decorate_review([(ref.name, ref.resource_type)], tenant_id=tenant_id, space_ids=space_ids)
@@ -361,7 +380,7 @@ class TagConsoleService:
             update_time=datetime.now(),
         )
         await self.repository.insert_library_tag(tag)
-        await self._commit_and_invalidate(tenant_id)
+        await self._commit_and_invalidate(tenant_id, library_ids=[req.library_id])
         return (await self._decorate([tag], tenant_id=tenant_id))[0]
 
     async def batch_delete(self, tag_ids: list[int], tenant_id: int) -> TagConsoleBatchResult:
@@ -370,9 +389,10 @@ class TagConsoleService:
         found = await self.repository.get_library_tags_by_ids(tag_ids, tenant_id)
         result = self._start_result(tag_ids, found)
         if found:
+            touched = self._library_ids_of(found)
             await self.repository.delete_library_tags([int(row.id) for row in found], tenant_id)
             result.succeeded = len(found)
-            await self._commit_and_invalidate(tenant_id)
+            await self._commit_and_invalidate(tenant_id, library_ids=touched)
         return result
 
     async def batch_move(self, tag_ids: list[int], target_library_id: int, tenant_id: int) -> TagConsoleBatchResult:
@@ -383,6 +403,9 @@ class TagConsoleService:
 
         found = await self.repository.get_library_tags_by_ids(tag_ids, tenant_id)
         result = self._start_result(tag_ids, found)
+        # Both ends of a move change: the tag leaves one library's name list and
+        # joins another's.
+        touched = self._library_ids_of(found) | {int(target_library_id)}
         # business_id is an encoded value, not a bare library id.
         target_business_id = TagLibraryTagService._business_id(target_library_id)
         moved = 0
@@ -398,7 +421,7 @@ class TagConsoleService:
             moved += 1
         result.succeeded = moved
         if moved:
-            await self._commit_and_invalidate(tenant_id)
+            await self._commit_and_invalidate(tenant_id, library_ids=touched)
         return result
 
     # ------------------------------------------------------------------
@@ -570,11 +593,23 @@ class TagConsoleService:
             failed=[TagConsoleBatchFailure(name=str(tag_id), reason="标签不存在") for tag_id in missing]
         )
 
-    async def _commit_and_invalidate(self, tenant_id: int) -> None:
-        """Persist, then drop the Link B catalog cache once per operation.
+    @staticmethod
+    def _library_ids_of(tags: list[Tag]) -> set[int]:
+        return {int(tag.business_id) for tag in tags if str(tag.business_id or "").isdigit()}
 
-        Without this the AI tagger keeps matching against tags that were just
-        deleted or moved. One call per batch, not per item.
+    async def _commit_and_invalidate(self, tenant_id: int, library_ids: Iterable[int] = ()) -> None:
+        """Persist, resync the touched libraries, then drop the Link B cache.
+
+        The resync has to run *after* the commit: it reads the tag rows back
+        through its own session and would otherwise still see the pre-write
+        state. Skipping it lets a library keep listing names it no longer has,
+        which is what made deleted tags reappear — see
+        ``TagLibraryTagService.sync_library_name_lists``.
+
+        The cache eviction is last, and once per operation rather than per item:
+        without it the AI tagger keeps matching against tags just deleted.
         """
         await self.repository.session.commit()
+        for library_id in sorted(set(library_ids)):
+            await TagLibraryTagService.sync_library_name_lists(library_id)
         await TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async(tenant_id)

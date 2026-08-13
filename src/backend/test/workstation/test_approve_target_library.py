@@ -14,7 +14,9 @@ duplicate survived because the "already exists" guard also looked in the
 proposing library and so never saw the row in the chosen one.
 """
 
+from contextlib import contextmanager
 from datetime import datetime
+from unittest.mock import patch
 
 import pytest
 from sqlmodel import select
@@ -75,6 +77,40 @@ def _placeholder_in_chosen_library(name="66"):
     )
 
 
+@contextmanager
+def _reading(session):
+    """Point the committed-row lookup at the test session.
+
+    Production reads it on a fresh connection because the row is committed by
+    another session and MySQL's REPEATABLE READ hides it from the request's
+    snapshot. A test has one session and no such split, so the lookup is aimed
+    at it — otherwise it opens a second connection to a database the test never
+    populated and always reports "no existing row".
+    """
+
+    async def _find(name, business_id, tenant_id):
+        row = (
+            await session.exec(
+                select(Tag.id).where(
+                    Tag.name == name,
+                    Tag.tenant_id == tenant_id,
+                    Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                    Tag.business_id == business_id,
+                )
+            )
+        ).first()
+        if row is None:
+            return None, set()
+        tag_id = int(row)
+        links = (
+            await session.exec(select(TagLink.resource_id, TagLink.resource_type).where(TagLink.tag_id == tag_id))
+        ).all()
+        return tag_id, set(links)
+
+    with patch.object(TagRepositoryImpl, "find_committed_library_tag", staticmethod(_find)):
+        yield
+
+
 async def _library_tags(session, name="66"):
     return (
         await session.exec(
@@ -93,13 +129,14 @@ async def test_approval_lands_in_the_chosen_library(async_db_session):
     await async_db_session.commit()
 
     repository = TagRepositoryImpl(session=async_db_session)
-    await repository.approve_tag_to_move(
-        review_tag,
-        [_link(review_tag.id, 1461)],
-        reviewer_id=REVIEWER,
-        review_time=datetime(2026, 8, 11, 16, 40),
-        target_library_id=CHOSEN_LIBRARY,
-    )
+    with _reading(async_db_session):
+        await repository.approve_tag_to_move(
+            review_tag,
+            [_link(review_tag.id, 1461)],
+            reviewer_id=REVIEWER,
+            review_time=datetime(2026, 8, 11, 16, 40),
+            target_library_id=CHOSEN_LIBRARY,
+        )
     await async_db_session.commit()
 
     rows = await _library_tags(async_db_session)
@@ -116,13 +153,14 @@ async def test_approval_corrects_the_placeholder_instead_of_inserting(async_db_s
     await async_db_session.commit()
 
     repository = TagRepositoryImpl(session=async_db_session)
-    await repository.approve_tag_to_move(
-        review_tag,
-        [_link(review_tag.id, 1461)],
-        reviewer_id=REVIEWER,
-        review_time=datetime(2026, 8, 11, 16, 40),
-        target_library_id=CHOSEN_LIBRARY,
-    )
+    with _reading(async_db_session):
+        await repository.approve_tag_to_move(
+            review_tag,
+            [_link(review_tag.id, 1461)],
+            reviewer_id=REVIEWER,
+            review_time=datetime(2026, 8, 11, 16, 40),
+            target_library_id=CHOSEN_LIBRARY,
+        )
     await async_db_session.commit()
 
     row = (await _library_tags(async_db_session))[0]
@@ -144,13 +182,14 @@ async def test_reapproving_the_same_file_does_not_stack_links(async_db_session):
 
     repository = TagRepositoryImpl(session=async_db_session)
     for _ in range(2):
-        await repository.approve_tag_to_move(
-            review_tag,
-            [_link(review_tag.id, 1461)],
-            reviewer_id=REVIEWER,
-            review_time=datetime(2026, 8, 11, 16, 40),
-            target_library_id=CHOSEN_LIBRARY,
-        )
+        with _reading(async_db_session):
+            await repository.approve_tag_to_move(
+                review_tag,
+                [_link(review_tag.id, 1461)],
+                reviewer_id=REVIEWER,
+                review_time=datetime(2026, 8, 11, 16, 40),
+                target_library_id=CHOSEN_LIBRARY,
+            )
     await async_db_session.commit()
 
     row = (await _library_tags(async_db_session))[0]
@@ -166,7 +205,8 @@ async def test_without_a_chosen_library_the_recorded_one_still_applies(async_db_
     await async_db_session.commit()
 
     repository = TagRepositoryImpl(session=async_db_session)
-    await repository.approve_tag_to_move(review_tag, [], reviewer_id=REVIEWER)
+    with _reading(async_db_session):
+        await repository.approve_tag_to_move(review_tag, [], reviewer_id=REVIEWER)
     await async_db_session.commit()
 
     rows = await _library_tags(async_db_session)

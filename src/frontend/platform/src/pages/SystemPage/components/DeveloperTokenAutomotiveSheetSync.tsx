@@ -118,7 +118,10 @@ export function DeveloperTokenAutomotiveSheetSync() {
       ])
 
       if (configResult.status === "fulfilled") {
-        setConfig(configResult.value)
+        setConfig(normalizeAutomotiveSheetIntroSyncConfig({
+          ...defaultAutomotiveSheetIntroSyncConfig(),
+          ...configResult.value,
+        }))
       }
       if (tokenResult.status === "fulfilled") {
         setTokens(tokenResult.value.data)
@@ -233,6 +236,19 @@ export function DeveloperTokenAutomotiveSheetSync() {
               ...current,
               api_url: event.target.value || null,
             }))}
+          />
+        </label>
+
+        <label className="flex items-center justify-between rounded-md border px-3 py-2 text-sm md:col-span-2">
+          <div className="space-y-0.5">
+            <span>{t("system.developerToken.automotiveSheetIntro.apiSslVerify")}</span>
+            <p className="text-xs text-muted-foreground">
+              {t("system.developerToken.automotiveSheetIntro.apiSslVerifyHint")}
+            </p>
+          </div>
+          <Switch
+            checked={config.api_ssl_verify}
+            onCheckedChange={(api_ssl_verify) => setConfig((current) => ({ ...current, api_ssl_verify }))}
           />
         </label>
 

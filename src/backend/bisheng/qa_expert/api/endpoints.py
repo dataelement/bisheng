@@ -9,15 +9,20 @@ from loguru import logger
 
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import resp_200, resp_500
 from bisheng.core.cache.utils import save_uploaded_file
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.qa_expert.domain.asset_service import infer_qa_content_type
+from bisheng.qa_expert.domain.moderate_delete_service import ModerateDeleteService
 from bisheng.qa_expert.domain.rich_text import question_description_to_plain_text
 from bisheng.qa_expert.domain.schemas import (
     AdoptAnswerRequest,
     AnswerCreateRequest,
     AnswerDetailResponse,
+    AnswerUpdateRequest,
     CommentCreateRequest,
     CommentDetailResponse,
     CommentPageData,
@@ -25,6 +30,7 @@ from bisheng.qa_expert.domain.schemas import (
     ExpertResponse,
     ExpertUpdateRequest,
     GetCommentsRequest,
+    ModerateDeleteRequest,
     QAExpertStatsResponse,
     QANotificationResponse,
     QuestionCheckRequest,
@@ -300,7 +306,7 @@ async def update_question(
             f"{request.title or ''}\n{question_description_to_plain_text(request.description)}",
         )
 
-    question = await service.update_question(question_id, request)
+    question = await service.update_question(question_id, request, tenant_id=user.tenant_id)
     return resp_200(data=question)
 
 
@@ -364,7 +370,7 @@ async def create_answer(
     if not user.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    answer = await service.create_answer(user.user_id, request)
+    answer = await service.create_answer(user.user_id, request, tenant_id=user.tenant_id)
     return resp_200(data=answer)
 
 
@@ -398,7 +404,7 @@ async def get_answersbyname(
 @router.put("/answers/{answer_id}", response_model=AnswerDetailResponse)
 async def update_answer(
     answer_id: int,
-    request: AnswerCreateRequest,
+    request: AnswerUpdateRequest,
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: AnswerService = Depends(get_answer_service),
 ):
@@ -410,6 +416,8 @@ async def update_answer(
             content=request.content,
             attachments=request.attachments,
             related_docs=request.related_docs,
+            images_url=request.images_url,
+            tenant_id=user.tenant_id,
         )
 
         return resp_200(data=answer)
@@ -453,6 +461,38 @@ async def create_comment(
     comment = await service.create_comment(user.user_id, user.user_name, request)
 
     return resp_200(data=comment)
+
+
+@router.post("/admin/moderate-delete")
+async def moderate_delete(
+    request: ModerateDeleteRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """平台超管违规删除问题/回答/评论/追问：先删内容，再按 R* 扣分（失败入补扣队列）。"""
+    try:
+        result = await ModerateDeleteService().moderate_delete(
+            operator=user,
+            target_type=request.target_type,  # type: ignore[arg-type]
+            target_id=request.target_id,
+            rule_code=request.rule_code,
+            remark=request.remark,
+        )
+        return resp_200(
+            data={
+                "deleted": result.deleted,
+                "target_type": result.target_type,
+                "target_id": result.target_id,
+                "target_user_id": result.target_user_id,
+                "deducted": result.deducted,
+                "pending_deduct": result.pending_deduct,
+                "reason": result.reason,
+            }
+        )
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        logger.exception("qa.moderate_delete.failed")
+        return resp_500(code=500, msg=str(e))
 
 
 @router.post(
@@ -558,12 +598,24 @@ async def upload_file(*, file: UploadFile = File(...)):
 
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
 
-        file_path = await save_uploaded_file(file, "bisheng", uuid_file_name)
+        file_path = await save_uploaded_file(
+            file,
+            "bisheng",
+            uuid_file_name,
+            content_type=infer_qa_content_type(uuid_file_name, file.content_type),
+        )
 
         if not isinstance(file_path, str):
             file_path = str(file_path)
+        storage = await get_minio_storage()
 
-        return resp_200(UploadFileResponse(file_path=file_path))
+        return resp_200(
+            UploadFileResponse(
+                file_path=file_path,
+                relative_path=f"{storage.tmp_bucket}/{uuid_file_name}",
+                file_name=file_name,
+            )
+        )
 
     except Exception as e:
         logger.error(f"File upload failed: {e}")

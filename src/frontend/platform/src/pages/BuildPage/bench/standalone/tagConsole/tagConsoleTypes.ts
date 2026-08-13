@@ -127,6 +127,22 @@ export function buildTagFileDetailUrl(resource: TagConsoleSourceFile): string | 
     return getWorkspaceClientUrl(`/knowledge-portal?${params.toString()}`)
 }
 
+/**
+ * 标签来源库 for a row: the knowledge bases its source files live in.
+ *
+ * A tag produced in several spaces lists all of them, deduplicated and in the
+ * order the files came back, so the column reads the same way the source-file
+ * column does.
+ */
+export function sourceLibraryNames(files: TagConsoleSourceFile[]): string[] {
+    const seen: string[] = []
+    for (const file of files || []) {
+        const name = file.knowledge_name?.trim()
+        if (name && !seen.includes(name)) seen.push(name)
+    }
+    return seen
+}
+
 export type BatchAction = "delete" | "move" | "approve" | "reject"
 
 /**

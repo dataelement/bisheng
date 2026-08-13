@@ -387,6 +387,7 @@
   "com_notifications_action_request_knowledge_space": "あなたのナレッジスペースへの参加を申請しました — {{target}}",
   "com_notifications_action_generic": "通知を送信しました",
   "com_notifications_action_generic_with_target": "通知を送信しました — {{target}}",
+  "com_notifications_action_points_changed": "{{message}}",
   "com_notifications_action_request_menu_access": "メニュー「{{target}}」へのアクセスを申請しました",
   "com_notifications_action_approval_task_pending": "「{{target}}」の審査申請を確認してください",
   "com_notifications_action_approval_task_rejected": "「{{target}}」の審査申請を却下しました",

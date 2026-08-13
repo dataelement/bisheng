@@ -17,6 +17,9 @@ interface LibraryPickerDialogProps {
     saving: boolean
     onOpenChange: (open: boolean) => void
     onConfirm: (libraryId: number) => void
+    /** Shown instead of the picker when nothing in the list is selectable. */
+    emptyHint?: string
+    loading?: boolean
 }
 
 /** Shared by "move to library" and "approve into library". */
@@ -27,6 +30,8 @@ export function LibraryPickerDialog({
     saving,
     onOpenChange,
     onConfirm,
+    emptyHint,
+    loading = false,
 }: LibraryPickerDialogProps) {
     const { t } = useTranslation()
     const [libraryId, setLibraryId] = useState("")
@@ -46,7 +51,7 @@ export function LibraryPickerDialog({
                         {t("build.reviewTagSelectLibrary", "选择标签库")}
                         <span className="bisheng-tip">*</span>
                     </Label>
-                    <Select value={libraryId} onValueChange={setLibraryId}>
+                    <Select value={libraryId} onValueChange={setLibraryId} disabled={loading}>
                         <SelectTrigger className="mt-2">
                             <SelectValue placeholder={t("build.reviewTagSelectLibraryPlaceholder", "请选择标签库")} />
                         </SelectTrigger>
@@ -58,6 +63,9 @@ export function LibraryPickerDialog({
                             ))}
                         </SelectContent>
                     </Select>
+                    {!loading && !libraries.length && emptyHint && (
+                        <p className="mt-2 text-xs text-[#F53F3F]">{emptyHint}</p>
+                    )}
                 </div>
                 <DialogFooter className="border-t border-[#EBECF0] px-6 py-3">
                     <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
@@ -65,7 +73,7 @@ export function LibraryPickerDialog({
                     </Button>
                     <Button
                         className="px-8"
-                        disabled={saving || !libraryId}
+                        disabled={saving || loading || !libraryId}
                         onClick={() => onConfirm(Number(libraryId))}
                     >
                         {t("confirm", { ns: "bs" })}
