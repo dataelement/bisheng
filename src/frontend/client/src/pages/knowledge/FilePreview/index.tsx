@@ -257,12 +257,12 @@ export default function FilePreview({
                 return <TextViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
             case "audio":
             case "video":
-                // Same split the knowledge space uses: player on the left, the
-                // transcript the answer actually quoted on the right. Stacked on
-                // narrow screens; player-only when there is no transcript.
+                // Player on top, the transcript the answer actually quoted below
+                // it. Stacked rather than split: this preview lives in a narrow
+                // citation panel, where two columns leave both halves cramped.
                 return (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fbfbfb] md:flex-row">
-                        <div className={cn("shrink-0 p-4", transcriptUrl ? "md:w-1/2 md:overflow-y-auto" : "flex-1")}>
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fbfbfb]">
+                        <div className={cn("shrink-0 p-4", transcriptUrl ? "" : "flex-1")}>
                             <MediaPlayer
                                 kind={viewerType}
                                 src={fileUrl}
@@ -272,7 +272,7 @@ export default function FilePreview({
                         </div>
                         {transcriptUrl ? (
                             <>
-                                <div className="h-px shrink-0 bg-[#e5e6eb] md:h-auto md:w-px" />
+                                <div className="h-px shrink-0 bg-[#e5e6eb]" />
                                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                                     <MediaTranscriptTabs fileUrl={transcriptUrl} />
                                 </div>
