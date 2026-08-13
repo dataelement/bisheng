@@ -123,6 +123,14 @@ module.exports = {
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
       },
+      // Two shadow tiers only (基础-圆角与阴影规范.mdx §2.1): `shadow-popup` for
+      // click-away overlays (dropdown, popover, toast), `shadow-modal` for
+      // interrupting ones (dialog, drawer). Tailwind's shadow-sm/md/lg/xl
+      // presets are off-spec and must not be used.
+      boxShadow: {
+        popup: 'var(--shadow-popup)',
+        modal: 'var(--shadow-modal)',
+      },
     },
   },
   plugins: [

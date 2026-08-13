@@ -12,6 +12,7 @@
 | [Color 色彩](/components/color) | ✅ 规范 v1 | 品牌色蓝绿双 ramp 色块 / 灰阶 1–10（实时取 var）/ semantic 层对照 + 实时示例 / 语义色四组 / 标签色 |
 | [Button 按钮](/components/button) | ✅ demo 齐全 | 常用类型 6 别名 / color×variant 3×5 全矩阵 / 尺寸三档 + iconOnly / 内容形态（纯文字、纯 icon square+circle、文字+icon、icon 在右）/ disabled + loading |
 | [Modal 弹窗](/components/modal) | 🟨 标准未定稿 | 基准候选壳（OGDialogTemplate）demo / 壳规格已定项 / 过渡期规则 / CommentDialog 共享壳 |
+| [Toast 轻提示](/components/toast) | ✅ 已落地 | 四类型 / 堆叠去重（最多 3 条）/ 操作按钮（撤销、查看）/ 动态时长 + 不自动关闭 / 规格 + 使用规则 + API |
 | [Confirm 二次确认](/components/confirm) | ✅ 已定稿 | useConfirm() destructive / default 两档可打开 demo / 规格 Anatomy / 使用规则 |
 | [Feedback 点赞点踩](/components/feedback) | ✅ 已收敛 | MessageFeedbackButtons 三种初始状态（回调可视化）/ 延迟点踩规则 |
 | [Icon 图标](/components/icon) | ✅ 规范 v1 | bisheng-icons 全量清单（遍历库导出，升版自动同步）/ 尺寸六档 + strokeWidth 补偿 / 着色 / 使用规则 |

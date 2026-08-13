@@ -136,6 +136,16 @@
   --danger-active: 208 47 51;   /* #D02F33 (= --btn-danger-active) */
   --danger-tint: 255 236 232;   /* #FFECE8 (Arco red-1) — TAG bg only; buttons
                                    use alpha over the main red (bg-danger/10 …) */
+
+  /* Shadow scale (基础-圆角与阴影规范.mdx §2.1) — only two tiers exist.
+   * popup: temporary overlays that open on click and leave on click-away
+   *        (dropdown, select panel, popover, toast) → `shadow-popup`.
+   * modal: interrupting overlays the user must dismiss (dialog, drawer)
+   *        → `shadow-modal`. Carried as vars so dark mode can retune them
+   * without touching components. Kept value-identical with
+   * packages/ui/src/styles/tokens.css. */
+  --shadow-popup: 0 2px 16px -2px rgba(0, 23, 66, 0.10);
+  --shadow-modal: 0 0 16px 0 rgba(3, 7, 117, 0.05);
 }
 
 /* Mobile (narrow viewport ≤768px) remap of the SEMANTIC layer only:
@@ -2270,76 +2280,6 @@ button.scroll-convo {
 
 .hidden-visibility {
   visibility: hidden;
-}
-
-.toast-root {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  height: 0;
-  transition: all 0.24s cubic-bezier(0, 0, 0.2, 1);
-}
-
-.toast-root[data-state='open'] {
-  -webkit-animation: toast-open 0.24s cubic-bezier(0.175, 0.885, 0.32, 1.175) both;
-  animation: toast-open 0.24s cubic-bezier(0.175, 0.885, 0.32, 1.175) both;
-}
-
-.toast-root[data-state='closed'] {
-  -webkit-animation: toast-close 0.12s cubic-bezier(0.4, 0, 1, 1) both;
-  animation: toast-close 0.12s cubic-bezier(0.4, 0, 1, 1) both;
-}
-
-.toast-root .alert-root {
-  box-shadow: 0 0 1px rgba(67, 90, 111, 0.3), 0 5px 8px -4px rgba(67, 90, 111, 0.3);
-  flex-shrink: 0;
-  pointer-events: all;
-}
-
-@-webkit-keyframes toast-open {
-  0% {
-    opacity: 0;
-    -webkit-transform: translateY(-100%);
-    transform: translateY(-100%);
-  }
-
-  to {
-    -webkit-transform: translateY(0);
-    transform: translateY(0);
-  }
-}
-
-@keyframes toast-open {
-  0% {
-    opacity: 0;
-    -webkit-transform: translateY(-100%);
-    transform: translateY(-100%);
-  }
-
-  to {
-    -webkit-transform: translateY(0);
-    transform: translateY(0);
-  }
-}
-
-@-webkit-keyframes toast-close {
-  0% {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes toast-close {
-  0% {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
 }
 
 @-webkit-keyframes pulseSize {

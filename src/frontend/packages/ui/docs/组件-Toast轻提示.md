@@ -148,6 +148,8 @@
 <!-- site-hide -->
 ## 10. 现状扫描（2026-08-13，本窗口）
 
+> **已过时**：本节是改造前的快照。2026-08-13 当天壳已按本文重写（见 §11 落地状态），10.2 的 13 项差距全部消除，10.1 的私有撤销 toast 已删除。保留原文只为存档「从哪儿来的」。
+
 > 口径：扫描 `src/frontend/client/src`，含 `.ts` / `.tsx` / `.jsx`，排除 node_modules；文件数按词边界去重计。
 
 ### 10.1 一套全局 Toast，外加一个绕开它的私有实现
@@ -187,7 +189,30 @@
 - **`hooks/Files/useDelayedUploadToast.ts` 里的 `showToast(...)` 整段被注释掉**，计时器空转，上传延迟提示实际不会出现。迁移时一并处置：要么接回来，要么连 hook 删掉。
 
 <!-- site-hide -->
-## 11. 落地（给实现窗口）
+## 11. 落地
+
+### 11.1 状态：2026-08-13 已完成
+
+组件在 `packages/ui/src/components/Toast/`（`toastStore.ts` 队列 + `Toaster.tsx` 容器），`@bisheng/ui` 导出 `toast` / `<Toaster />`；demo 页 `docs/components/toast.mdx`。client 接线：
+
+| 位置 | 改动 |
+|---|---|
+| `client/src/components/ui/Toast.tsx` | 改为挂 `<Toaster />` 的壳（关闭按钮 aria-label 走 `com_ui_close`），默认导出名不变 |
+| `client/src/hooks/useToast.ts` | `showToast({...})` 转接到 `toast.show(...)`，不再碰 recoil；`window.showToast` 保留 |
+| `client/src/store/toast.ts` | 删除（单例 atom 不再需要），`store/index.ts` 同步 |
+| `client/src/App.jsx` | 去掉 Radix Toast Provider / Viewport，只留常驻 `<Toast />` |
+| `client/src/pages/knowledge/components/moveUndoToast.tsx` | 删除，`useKnowledgeMove` 改用 `toast.success(msg, { action })` |
+| `client/src/style.css` | 删掉 `.toast-root` / `.alert-root` 与两组 keyframes |
+
+404 个 `showToast(` 调用点未改动，语义全部照旧。配套补上了两档投影 token（`--shadow-popup` / `--shadow-modal` → `shadow-popup` / `shadow-modal`），此前圆角与阴影规范 §2.1 只写在文档里、没有对应的类。
+
+实现时定下的三件事：
+
+- **容器 portal 到 `<body>`，z-index 取 `9999`**（原私有撤销 toast 的层级），Modal 期层级表定稿后回填 §3。留在挂载点原地时，容器会跟着所在页面区块一起排版——组件站上就被 z-20 的站点顶栏压住，z-index 调到 10 万也没用（层级只在自己所处的层叠上下文里比）。§3「永远在最上层」只有 portal 到 body 才成立，业务侧同理：弹窗、抽屉里带 transform 的祖先都会埋掉它。
+- **暗色底色**：功能色暂无暗色阶，浅底 + 主文字色在暗色下会白字压浅底，故暗色回退为同一个功能色 token 的 15% 透明底（仍是 token，不是裸值），待 §12 拍板。
+- **进场不用 `requestAnimationFrame`**：后台标签页里 rAF 会冻结，导致提示永远停在透明态；改为读一次布局强制刷新起始态再切类。
+
+### 11.2 落地要求（给实现窗口，已按此执行）
 
 1. 组件形态：命令式 API（`toast.success('已保存')` / `toast.error(...)`），不做 JSX 挂载式用法——轻提示由事件触发，业务不该为它维护 state。
 2. 容器单例挂在 App 根节点，常驻 DOM（呼应 §9 的 live region 要求），不随消息创建销毁。
@@ -202,10 +227,11 @@
 ## 12. 待决策清单
 
 - [x] ~~现有代码里的轻提示实现有几套、分别用在哪~~ → 2026-08-13 已扫，见 §10
-- [ ] z-index 具体数值（阻塞项在 Modal 期层级表）
-- [ ] 暗色主题下四类浅底的取值是否需要单独给（现方案：跟功能色 token 走，不单独调）
-- [ ] 是否需要「不自动关闭」这档——§6 已按需要保留，若实际场景一个都没有，下一版删掉
-- [ ] 收敛入参：`severity` 枚举与 `status` 字符串并成哪一个（§10.3 现状 72 vs 45 个文件），以及是否给旧字段留兼容期
+- [ ] z-index 具体数值（阻塞项在 Modal 期层级表）——落地暂取 `9999`，见 §11.1
+- [ ] 暗色主题下四类浅底的取值是否需要单独给——原方案「跟功能色 token 走不单独调」在暗色下不成立（白字压浅底），落地暂用同色 15% 透明底顶着，等功能色暗色阶
+- [ ] 是否需要「不自动关闭」这档——§6 已按需要保留，若实际场景一个都没有，下一版删掉。落地已实现（`duration: 0`），现有业务无人使用
+- [ ] 收敛入参：`severity` 枚举与 `status` 字符串并成哪一个（§10.3 现状 72 vs 45 个文件），以及是否给旧字段留兼容期——落地两个都留着转接，未收敛
+- [ ] `hooks/Files/useDelayedUploadToast.ts` 死代码（§10.4）：接回来还是连 hook 删掉——属产品判断，落地未动
 - [ ] 迁移节奏：404 个调用点绝大多数只传 message + 类型，壳换掉即全场生效；需设计师点名首批验收页面
 
 ## 改动记录
@@ -214,4 +240,6 @@
 |---|---|---|
 | 2026-08-13 | 建档 v1：先调研 antd / Arco / TDesign / Semi / Material / Fluent 六家，再由设计师拍板四项——四类型（不做 loading）、最多 3 条堆叠顶掉最旧、允许一个操作按钮且时长翻倍、时长按字数动态延长 3～10 秒；另拍板移动端仍在顶部、悬停暂停计时、浅语义色底无边框。共 9 节展示层 + 落地与待决策两节隐藏区 | 待 committer 窗口提交 |
 | 2026-08-13 | 站点接线（元规范 §5 上线清单）：`rspress.config.ts` 侧栏「组件规范」注册入口、00-总纲 §四 进度看板加行、01-设计规范 §0 索引加行并在 §5 层级待定稿留下指针（轻提示须盖住弹窗与抽屉，与 Tooltip 的先后待拍板）。**文档内容未改**；§11.8 的 demo 页仍未建——照 圆角与阴影 / 多端适配 的先例，规范先行、组件落地后再补 `components/toast.mdx` | 待 committer 窗口提交 |
+| 2026-08-13 | 修层级：容器改为 `createPortal` 到 `<body>`。原先容器渲染在挂载点原地，被组件站 z-20 的顶栏压住（同一层叠上下文之外，z-index 数值再大也无效），§3「盖住弹窗与抽屉」实际不成立 | 待 committer 窗口提交 |
+| 2026-08-13 | 组件落地：`@bisheng/ui` 新增 Toast（`toastStore.ts` + `Toaster.tsx`），四类型 / 3 条堆叠去重 / 动态时长 + 悬停暂停 / 操作按钮 / ESC / 分级播报全部按 §2–§9 实现；client 壳全量替换（含删掉私有撤销 toast 与旧 `.toast-root` CSS），404 个调用点未动；补 `shadow-popup` / `shadow-modal` 两档投影 token；建 `components/toast.mdx` demo 页并注册侧栏。本文改：§10 标注过时、新增 §11.1 落地状态、§12 勾注 4 条并新增 1 条 | 待 committer 窗口提交 |
 | 2026-08-13 | 补 §10 现状扫描（隐藏区）：全局 Toast 一套 135 文件 404 调用点 + 私有撤销 toast 1 处、壳解剖 13 项差距表、入参双写法 72 vs 45、两个迁移坑（`duration: 0` 语义反转、`useDelayedUploadToast` 死代码）；原 §10/§11 顺延为 §11/§12，待决策清单勾销首条并新增两条。**展示层规则未增未减未改** | 待 committer 窗口提交 |

@@ -198,6 +198,25 @@ const RADIUS = [
   { name: 'full', px: 9999, usage: '胶囊 / 圆形：头像、圆形图标按钮、pill 标签' },
 ];
 
+/* Shadow: exactly two tiers (基础-圆角与阴影规范.mdx §2.1). Anything else —
+ * including Tailwind's shadow-sm/md/lg/xl presets and `shadow-[…]` arbitrary
+ * values — is off-spec. Carried as CSS vars (tokens.css) so dark mode can
+ * retune them centrally. */
+const SHADOW = [
+  {
+    name: 'popup',
+    cssVar: '--shadow-popup',
+    value: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
+    usage: '浮层：下拉菜单、选择器面板、气泡卡片、轻提示——点开即现、点外即走',
+  },
+  {
+    name: 'modal',
+    cssVar: '--shadow-modal',
+    value: '0 0 16px 0 rgba(3, 7, 117, 0.05)',
+    usage: '模态：弹窗、抽屉——要求用户处理完才关闭的打断式浮层',
+  },
+];
+
 const ICON_SIZE = [
   { name: 'xs',  px: 12, strokeWidth: 2.5, usage: '极小标记（badge、密集表格角标），仅纯展示' },
   { name: 'sm',  px: 14, usage: 'small / medium 按钮的文字+icon' },
@@ -244,7 +263,12 @@ TYPE_SCALE.forEach((s) => {
   fontSize[s.name] = [`var(${s.cssVar})`, { lineHeight: `var(${s.leadingVar})`, fontWeight: String(s.weight) }];
 });
 
-const tailwindTheme = { colors, fontSize };
+const boxShadow = {};
+SHADOW.forEach((s) => {
+  boxShadow[s.name] = `var(${s.cssVar})`;
+});
+
+const tailwindTheme = { colors, fontSize, boxShadow };
 
 /* ================================================================== *
  * Migration map — old numeric class → new role class, for the app's
@@ -271,6 +295,7 @@ module.exports = {
   FUNCTIONAL,
   TAG,
   RADIUS,
+  SHADOW,
   ICON_SIZE,
   tailwindTheme,
   MIGRATION,

@@ -294,6 +294,14 @@ module.exports = {
         // step is 32px (design-token.cjs RADIUS) — extend so it has a class.
         '4xl': '2rem',
       },
+      // Two shadow tiers only (基础-圆角与阴影规范.mdx §2.1 / design-token.cjs
+      // SHADOW): `shadow-popup` for click-away overlays (dropdown, popover,
+      // toast), `shadow-modal` for interrupting ones (dialog, drawer).
+      // Tailwind's own shadow-sm/md/lg/xl presets are off-spec — don't use them.
+      boxShadow: {
+        popup: 'var(--shadow-popup)',
+        modal: 'var(--shadow-modal)',
+      },
     },
   },
   plugins: [
