@@ -12,11 +12,7 @@ from bisheng.points.domain.services.points_query_service import PointsQueryServi
 async def test_leaderboard_enriches_user_and_dept_names():
     repo = SimpleNamespace(
         list_top_ranks=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    rank_no=1, user_id=10, balance=100, period_score=40, dept_id=2
-                )
-            ]
+            return_value=[SimpleNamespace(rank_no=1, user_id=10, balance=100, period_score=40, dept_id=2)]
         ),
         latest_rank_refreshed_at=AsyncMock(return_value=None),
     )
@@ -61,3 +57,36 @@ async def test_leaderboard_empty_when_user_has_no_company():
 
     assert out.items == []
     repo.list_top_ranks.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_leaderboard_keeps_all_ties_at_tenth_score():
+    """第 10 名分值并列时返回超过 10 人，顺序与仓储一致。"""
+    bucket = [
+        SimpleNamespace(rank_no=i, user_id=i, balance=i, period_score=score, dept_id=1)
+        for i, score in enumerate(
+            [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 10, 10],
+            start=1,
+        )
+    ]
+    repo = SimpleNamespace(
+        list_top_ranks=AsyncMock(return_value=bucket),
+        latest_rank_refreshed_at=AsyncMock(return_value=None),
+    )
+    service = PointsQueryService(session=None, repository=repo, ledger=None)
+    with (
+        patch.object(
+            PointsQueryService,
+            "_resolve_user_company_id",
+            AsyncMock(return_value=100),
+        ),
+        patch.object(
+            PointsQueryService,
+            "_leaderboard_display_maps",
+            AsyncMock(return_value=({i: str(i) for i in range(1, 13)}, dict.fromkeys(range(1, 13), "部"))),
+        ),
+    ):
+        out = await service.leaderboard(1, "month", user_id=1)
+
+    assert len(out.items) == 12
+    assert [item.user_id for item in out.items] == list(range(1, 13))

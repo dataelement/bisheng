@@ -170,7 +170,7 @@ class PointsQueryService:
         return [self._log_response(r) for r in rows], total
 
     async def leaderboard(self, tenant_id: int, period: str, user_id: int) -> PointLeaderboardResponse:
-        """读取当前用户所属公司的小时快照 TOP10；无公司则空榜（AC-15）。"""
+        """读取当前用户所属公司的小时快照前十（算法甲含并列）；无公司则空榜（AC-15）。"""
         now = datetime.now(SHANGHAI)
         if period == "year":
             period_key = now.strftime("%Y")
@@ -183,7 +183,13 @@ class PointsQueryService:
         refreshed = await self.repository.latest_rank_refreshed_at(tenant_id, period, period_key)
         if company_id is None:
             return PointLeaderboardResponse(period=period, refreshed_at=refreshed, items=[])
-        rows = await self.repository.list_top_ranks(tenant_id, period, "global", company_id, period_key, limit=10)
+        from bisheng.points.domain.services.points_rank_service import select_top_n_with_score_ties
+
+        # 先取整桶排序结果，再按第 10 名分值阈值纳入全部并列（人数可 >10）。
+        bucket_rows = await self.repository.list_top_ranks(
+            tenant_id, period, "global", company_id, period_key, limit=10
+        )
+        rows = select_top_n_with_score_ties(bucket_rows, top_n=10)
         user_ids = [int(r.user_id) for r in rows]
         name_by_user, dept_by_user = await self._leaderboard_display_maps(user_ids)
         items = [
