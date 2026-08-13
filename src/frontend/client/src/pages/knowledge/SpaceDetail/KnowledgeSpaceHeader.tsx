@@ -314,7 +314,7 @@ export function KnowledgeSpaceHeader({
                         <button
                             type="button"
                             disabled={isSearching}
-                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-text-1 transition-colors hover:bg-fill-1 disabled:cursor-not-allowed disabled:text-text-4 disabled:hover:bg-transparent"
+                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-border-base bg-white px-4 text-sm text-text-1 transition-colors hover:bg-fill-1 disabled:cursor-not-allowed disabled:text-text-4 disabled:hover:bg-transparent"
                         >
                             {localize("com_knowledge.add_new")}
                             <Outlined.Down className="size-4" />

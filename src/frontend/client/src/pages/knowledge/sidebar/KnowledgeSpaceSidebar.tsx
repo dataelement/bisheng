@@ -353,7 +353,7 @@ export function KnowledgeSpaceSidebar({
 
     const renderEmptyState = (stretch: boolean) => (
         <div className={cn(
-            "flex items-center justify-center text-center text-sm text-[#999999]",
+            "flex items-center justify-center text-center text-sm text-text-3",
             !mobilePageMode && pinnedEmptyClassName,
             stretch ? "flex-1 py-6" : "h-24",
         )}>
@@ -470,7 +470,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {departmentSpaces.map(s => renderCompactItem(s, "department"))}
                                                 {!departmentSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-[#999999]")}>{localize("com_knowledge.no_data")}</div>
+                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -492,7 +492,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {filteredCreatedSpaces.map(s => renderCompactItem(s, "created"))}
                                                 {!filteredCreatedSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-[#999999]")}>{localize("com_knowledge.no_data")}</div>
+                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}
@@ -514,7 +514,7 @@ export function KnowledgeSpaceSidebar({
                                             <div className="space-y-1 px-3">
                                                 {filteredJoinedSpaces.map(s => renderCompactItem(s, "joined"))}
                                                 {!filteredJoinedSpaces.length && (
-                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-[#999999]")}>{localize("com_knowledge.no_data")}</div>
+                                                    <div className={cn(pinnedEmptyClassName, "py-6 text-center text-sm text-text-3")}>{localize("com_knowledge.no_data")}</div>
                                                 )}
                                             </div>
                                         )}

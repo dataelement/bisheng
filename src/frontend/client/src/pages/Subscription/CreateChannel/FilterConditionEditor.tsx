@@ -143,7 +143,7 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
                 onKeyDown={handleKeyDown}
                 onBlur={() => commit(draft)}
                 placeholder={keywords.length === 0 ? localize("com_subscription.input_keyword_press_enter") : ""}
-                className="min-w-[80px] flex-1 border-0 bg-white text-[14px] text-text-1 outline-none placeholder:text-[#999999]"
+                className="min-w-[80px] flex-1 border-0 bg-white text-[14px] text-text-1 outline-none placeholder:text-text-3"
             />
         </div>
     );

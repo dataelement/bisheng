@@ -163,7 +163,7 @@ function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1"
             title={localize('com_ui_copy')}
             aria-label={localize('com_ui_copy')}
         >
@@ -761,7 +761,7 @@ function AssistantBubble({
                                         />
                                     )}
                                     <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1"
                                         messageId={message.messageId || ""}
                                         text={regularContent}
                                     />

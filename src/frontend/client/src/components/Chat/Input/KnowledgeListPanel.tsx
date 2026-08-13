@@ -132,7 +132,7 @@ export const KnowledgeListPanel = ({
             own box, so a mathematically centred icon reads high next to the text. */}
         <Outlined.Search size={14} className="absolute left-3 top-[calc(50%+1px)] -translate-y-1/2 text-slate-400" />
         <Input
-          className="h-[28px] py-0 text-[12px] bg-white border border-[#ECECEC] rounded-lg pl-8 placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
+          className="h-[28px] py-0 text-[12px] bg-white border border-border-base rounded-lg pl-8 placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
           placeholder={placeholder}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -189,7 +189,7 @@ export const KnowledgeListPanel = ({
                       e.preventDefault();
                       onToggle(item);
                     }}
-                    className="flex h-8 items-center gap-2 px-2 cursor-pointer rounded-lg data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
+                    className="flex h-8 items-center gap-2 px-2 cursor-pointer rounded-lg data-[highlighted]:bg-fill-2 focus:bg-fill-2 outline-none transition-colors"
                   >
                     <Checkbox
                       checked={isChecked}

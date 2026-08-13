@@ -175,14 +175,14 @@ export function AppSidebarConvoItem({ conv, isActive, onClick, onDeleteSuccess, 
         <div
             className={cn(
                 "group relative w-full content-stretch flex gap-[8px] items-center mb-1 px-[12px] py-[6px] rounded-lg shrink-0 transition-colors cursor-pointer",
-                isActive ? "bg-[#EEE]" : "fine-pointer:hover:bg-[#f7f7f7] coarse-pointer:hover:bg-transparent",
+                isActive ? "bg-[#EEE]" : "fine-pointer:hover:bg-fill-1 coarse-pointer:hover:bg-transparent",
                 // Pin the hover fill while the row owns a transient UI — an open
                 // options menu or the rename input — since the pointer leaves the
                 // row (into the portaled menu) long before the interaction is over.
                 // Never promoted to the active row's fill: this row is not the open
                 // conversation. Applies on coarse pointers too, where it reads as
                 // "this row owns the menu" rather than as a hover affordance.
-                !isActive && (renaming || isPopoverActive) && "bg-[#f7f7f7]"
+                !isActive && (renaming || isPopoverActive) && "bg-fill-1"
             )}
             onClick={(e) => {
                 if (renaming) return;

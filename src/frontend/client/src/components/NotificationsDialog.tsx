@@ -1123,7 +1123,7 @@ export function NotificationsDialog({
                                             className={
                                                 onlyUnread
                                                     ? "h-8 shrink-0 rounded-md border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-4 py-[5px] text-[14px] font-normal text-blue-500"
-                                                    : "h-8 shrink-0 rounded-md border border-border-base bg-white/50 px-4 py-[5px] text-[14px] font-normal text-[#212121]"
+                                                    : "h-8 shrink-0 rounded-md border border-border-base bg-white/50 px-4 py-[5px] text-[14px] font-normal text-text-1"
                                             }
                                         >
                                             {localize("com_notifications_unread_only")}
@@ -1135,7 +1135,7 @@ export function NotificationsDialog({
                                                 handleMarkAllAsRead();
                                             }}
                                             variant="outline"
-                                            className="h-8 shrink-0 rounded-md border-transparent bg-fill-1 px-4 py-[5px] text-[14px] font-normal text-[#212121]"
+                                            className="h-8 shrink-0 rounded-md border-transparent bg-fill-1 px-4 py-[5px] text-[14px] font-normal text-text-1"
                                         >
                                             {localize("com_notifications_mark_all_read")}
                                         </Button>

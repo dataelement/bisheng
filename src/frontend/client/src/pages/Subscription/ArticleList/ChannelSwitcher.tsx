@@ -148,7 +148,7 @@ export function ChannelSwitcher({
             <button
                 type="button"
                 onClick={() => setGroup((g) => (g === "created" ? "subscribed" : "created"))}
-                className="flex items-center gap-1 rounded-md p-1 text-[12px] font-medium leading-5 text-text-3 transition-colors fine-pointer:hover:bg-[#F7F7F7]"
+                className="flex items-center gap-1 rounded-md p-1 text-[12px] font-medium leading-5 text-text-3 transition-colors fine-pointer:hover:bg-fill-1"
             >
                 <span>
                     {group === "created"
@@ -212,7 +212,7 @@ export function ChannelSwitcher({
                     return (
                         <div
                             key={c.id}
-                            className="group flex w-full shrink-0 items-center gap-1 border-b border-dashed border-border-base py-1 transition-colors last:border-b-0 fine-pointer:hover:bg-[#F7F7F7]"
+                            className="group flex w-full shrink-0 items-center gap-1 border-b border-dashed border-border-base py-1 transition-colors last:border-b-0 fine-pointer:hover:bg-fill-1"
                         >
                             <button
                                 type="button"

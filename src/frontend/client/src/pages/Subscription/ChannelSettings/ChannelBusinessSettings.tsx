@@ -116,9 +116,9 @@ export function ChannelBusinessSettings({
                 placeholder={settings.localize(
                   "com_subscription.enter_channel_name",
                 )}
-                className="h-8 rounded-md bg-white pr-14 placeholder:text-[#999999]"
+                className="h-8 rounded-md bg-white pr-14 placeholder:text-text-3"
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-[#999999]">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-body-sm text-text-3">
                 {Math.ceil(getFullWidthLength(form.channelName))}/
                 {MAX_CHANNEL_NAME}
               </span>
@@ -138,7 +138,7 @@ export function ChannelBusinessSettings({
               placeholder={settings.localize(
                 "com_subscription.enter_channel_description",
               )}
-              className="min-h-20 resize-none rounded-md bg-white shadow-none placeholder:text-[#999999]"
+              className="min-h-20 resize-none rounded-md bg-white shadow-none placeholder:text-text-3"
             />
           </div>
         </div>
@@ -220,7 +220,7 @@ export function ChannelBusinessSettings({
                   <button
                     type="button"
                     onClick={form.handleAddSubChannel}
-                    className="flex h-12 w-full items-center gap-3 bg-[#F8F8F8] px-4 text-left text-body text-text-1 transition-colors hover:bg-fill-2"
+                    className="flex h-12 w-full items-center gap-3 bg-fill-1 px-4 text-left text-body text-text-1 transition-colors hover:bg-fill-2"
                   >
                     <SquarePlus
                       className="size-4 shrink-0 text-text-2"

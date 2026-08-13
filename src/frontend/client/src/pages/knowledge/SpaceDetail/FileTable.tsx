@@ -63,7 +63,7 @@ const renderRowFileIcon = (file: KnowledgeFile) => {
 
 /** 状态列悬停：下载 / 更多 — 白底、细灰边、8px 圆角 */
 const FILE_ROW_ACTION_BTN_CLASS =
-    "size-7 shrink-0 flex items-center justify-center rounded-lg border border-border-base bg-white text-text-2 hover:bg-[#f7f7f7] transition-colors";
+    "size-7 shrink-0 flex items-center justify-center rounded-lg border border-border-base bg-white text-text-2 hover:bg-fill-1 transition-colors";
 
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
@@ -875,7 +875,7 @@ function FileRow({
         ? "bg-blue-100 transition-colors duration-150"
         : isSelected
             ? "bg-blue-50 transition-colors duration-150 group-hover:bg-fill-1"
-            : "bg-white transition-colors duration-150 group-hover:bg-[#f7f7f7]";
+            : "bg-white transition-colors duration-150 group-hover:bg-fill-1";
     const {
         isRenaming,
         renameValue,

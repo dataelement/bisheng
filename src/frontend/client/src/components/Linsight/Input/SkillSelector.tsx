@@ -76,7 +76,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                     }}
                     className={cn(
                         'flex cursor-pointer items-start gap-2 rounded-lg px-2 py-[5px] outline-none transition-colors',
-                        'data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]',
+                        'data-[highlighted]:bg-fill-2 focus:bg-fill-2',
                         // Selected rows carry the state themselves (brand tint + a
                         // trailing check) now that the leading checkbox is gone.
                         isChecked && 'bg-blue-500/[0.07] data-[highlighted]:bg-blue-500/[0.07] focus:bg-blue-500/[0.07]',
@@ -91,7 +91,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                             {skill.display_name}
                         </p>
                         {skill.description && (
-                            <p ref={descRef} className="truncate text-[12px] leading-4 text-[#999]">
+                            <p ref={descRef} className="truncate text-[12px] leading-4 text-text-3">
                                 {skill.description}
                             </p>
                         )}

@@ -82,7 +82,7 @@ export default function ChannelItem({
         <div
             className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
                 ? "bg-blue-500/[0.07] border-primary shadow-sm"
-                : "border-transparent hover:bg-[#F7F7F7]"
+                : "border-transparent hover:bg-fill-1"
                 }`}
             style={{
                 transitionProperty: 'background-color',

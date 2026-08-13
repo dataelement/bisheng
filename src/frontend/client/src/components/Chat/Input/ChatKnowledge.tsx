@@ -401,7 +401,7 @@ export const ChatKnowledge = ({
             }}
             className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <Outlined.Attachment size={16} className="text-[#4E5969]" />
+            <Outlined.Attachment size={16} className="text-text-2" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
@@ -453,7 +453,7 @@ export const ChatKnowledge = ({
               <div className="flex items-center gap-2">
                 <div className="relative">
                   {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-[#4E5969]"} />
+                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-text-2"} />
                 </div>
                 <span className="text-[14px] font-normal text-slate-700">
                   {localize('com_tools_org_knowledge')}
@@ -506,7 +506,7 @@ export const ChatKnowledge = ({
             <div className="flex min-w-0 items-center gap-2">
               <div className="relative shrink-0">
                 {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-[#4E5969]"} />
+                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-text-2"} />
               </div>
               <span className="truncate text-[14px] font-normal text-slate-700">
                 {localize('com_tools_org_knowledge')}
@@ -522,7 +522,7 @@ export const ChatKnowledge = ({
             <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[#999] hover:bg-[#f2f3f5]"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-text-3 hover:bg-fill-2"
                 aria-label={localize('com_ui_go_back')}
                 onClick={(e) => {
                   e.preventDefault();
@@ -567,7 +567,7 @@ export const ChatKnowledge = ({
               }}
               className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none"
             >
-              <Outlined.ListSuccess size={16} className={taskModeActive ? 'text-blue-500' : 'text-[#4E5969]'} />
+              <Outlined.ListSuccess size={16} className={taskModeActive ? 'text-blue-500' : 'text-text-2'} />
               <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-500' : 'text-slate-700')}>
                 {localize('com_linsight_task_mode')}
               </span>
@@ -585,7 +585,7 @@ export const ChatKnowledge = ({
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-[#4E5969]'} />
+                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
                       <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_linsight_add_skill')}
                       </span>
@@ -611,7 +611,7 @@ export const ChatKnowledge = ({
                   className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none"
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-[#4E5969]'} />
+                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
                     <span className="truncate text-[14px] font-normal text-slate-700">
                       {localize('com_linsight_add_skill')}
                     </span>
@@ -629,7 +629,7 @@ export const ChatKnowledge = ({
             <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[#999] hover:bg-[#f2f3f5]"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-text-3 hover:bg-fill-2"
                 aria-label={localize('com_ui_go_back')}
                 onClick={(e) => {
                   e.preventDefault();

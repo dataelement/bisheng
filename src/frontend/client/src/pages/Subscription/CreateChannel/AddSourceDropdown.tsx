@@ -57,7 +57,7 @@ export function WechatLinkHint({
                 {/* Size/colour live on the <p> itself, matching the sentence that
                     owns the trigger — inheriting from the panel lets the panel's
                     own text-* classes compete with them. */}
-                <p className="text-[12px] leading-5 text-[#999999]">
+                <p className="text-[12px] leading-5 text-text-3">
                     {localize("com_subscription.wechat_link_copy_tip")}
                 </p>
             </TooltipContent>
@@ -66,11 +66,11 @@ export function WechatLinkHint({
 
     // Defensive: a translation that dropped the placeholder still renders readably.
     if (splitAt === -1) {
-        return <p className={cn("text-[14px] font-normal text-[#999999]", className)}>{sentence}</p>;
+        return <p className={cn("text-[14px] font-normal text-text-3", className)}>{sentence}</p>;
     }
 
     return (
-        <p className={cn("text-[14px] font-normal leading-[22px] text-[#999999]", className)}>
+        <p className={cn("text-[14px] font-normal leading-[22px] text-text-3", className)}>
             {/* Trim the seam so `mx-1` is the only gap — languages that already
                 separate words with spaces would otherwise read as a double space. */}
             {sentence.slice(0, splitAt).replace(/\s+$/, "")}
@@ -240,10 +240,10 @@ export function AddSourceDropdown({
                     onClick={() => onExpandChange(true)}
                     onKeyDown={(e) => e.key === "Enter" && onExpandChange(true)}
                 >
-                    <div className="flex shrink-0 items-center gap-2 bg-[#F7F7F7] px-4 py-3">
-                        <Outlined.Plus className="size-4 flex-shrink-0 text-[#999999]" />
-                        <span className="flex-1 text-left text-[14px] text-[#999999]">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
-                        <span className="flex-shrink-0 text-[12px] text-[#999999]">
+                    <div className="flex shrink-0 items-center gap-2 bg-fill-1 px-4 py-3">
+                        <Outlined.Plus className="size-4 flex-shrink-0 text-text-3" />
+                        <span className="flex-1 text-left text-[14px] text-text-3">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
+                        <span className="flex-shrink-0 text-[12px] text-text-3">
                             {sources.length}/{MAX_SOURCES}
                         </span>
                     </div>
@@ -316,7 +316,7 @@ export function AddSourceDropdown({
             {expanded && (
                 <div className="flex items-center gap-2 h-[46px]">
                     <div className="flex-1" />
-                    <span className="flex-shrink-0 text-[12px] text-[#999999]">
+                    <span className="flex-shrink-0 text-[12px] text-text-3">
                         {mgr.pendingSources.length}/{MAX_SOURCES}
                     </span>
                 </div>
@@ -475,7 +475,7 @@ export function AddSourceDropdown({
                         {mgr.viewMode === "list" && (
                             <>
                                 {displayList.length === 0 ? (
-                                    <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-[#999999]">{localize("com_subscription.no_data")}</div>
+                                    <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-text-3">{localize("com_subscription.no_data")}</div>
                                 ) : (
                                     <div className="">
                                         {displayList.map((source) => {
@@ -546,7 +546,7 @@ export function AddSourceDropdown({
                     </div>
                     {mgr.viewMode === "list" && (
                         <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-border-base bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
-                            <span className="text-[12px] text-[#999999]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
+                            <span className="text-[12px] text-text-3">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2 touch-mobile:w-full">
                                 <Button

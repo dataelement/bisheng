@@ -189,10 +189,10 @@ export function ChannelSidebar({
                         </div>}
                         {!collapsed && (
                             <div className="flex items-center gap-3">
-                                <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-[#F7F7F7] hover:bg-fill-3 border-none gap-1">
+                                <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-fill-1 hover:bg-fill-3 border-none gap-1">
                                     <Plus className="size-4" />{localize("com_subscription.create")}
                                 </Button>
-                                <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F7F7F7] hover:bg-fill-3 border-none gap-1">
+                                <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-fill-1 hover:bg-fill-3 border-none gap-1">
                                     <ChannelBlocksArrowsIcon className="size-4" />
                                     {localize("com_subscription.go_to_square")}
                                 </Button>

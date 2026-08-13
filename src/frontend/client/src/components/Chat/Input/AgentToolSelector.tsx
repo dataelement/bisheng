@@ -47,8 +47,8 @@ interface Props {
 
 function iconForGroup(group: AvailableToolGroup) {
   const firstKey = group.children?.[0]?.tool_key;
-  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-[#4E5969]" />;
-  return <Outlined.Hammer className="size-4 text-[#4E5969]" />;
+  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-text-2" />;
+  return <Outlined.Hammer className="size-4 text-text-2" />;
 }
 
 export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
@@ -130,7 +130,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
               brand-blue once a tool is selected — mirrors the knowledge-space
               selector (ChatKnowledge) so both pickers signal an active selection. */}
           <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-[#4E5969]")} strokeWidth={1.5} />
+            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-text-2")} strokeWidth={1.5} />
           </div>
           {/* Compact: collapse to icon + chevron only to save horizontal space. */}
           {!compact && (
