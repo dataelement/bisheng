@@ -33,7 +33,7 @@ import {
 } from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
-import { getFileTypebyFileName, isImageFileName } from "~/components/ui/icon/File/FileIcon";
+import { getFileTypeIcon, isImageFileName } from "~/components/ui/icon/File/FileIcon";
 import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
@@ -42,35 +42,6 @@ import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 // backend, or a domain error that doesn't classify itself): a retryable code still
 // has to reach the calm "busy" card rather than the red failure one.
 const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
-
-// Map an uploaded file's extension to a bisheng outlined file-type icon.
-// Anything not listed falls back to the generic Outlined.File icon.
-const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
-    // FileExcel
-    xls: Outlined.FileExcel,
-    xlsx: Outlined.FileExcel,
-    csv: Outlined.FileExcel,
-    et: Outlined.FileExcel,
-    // FilePdf
-    pdf: Outlined.FilePdf,
-    ppt: Outlined.FilePdf,
-    dps: Outlined.FilePdf,
-    // FileTxt
-    txt: Outlined.FileTxt,
-    // FileWord
-    doc: Outlined.FileWord,
-    docx: Outlined.FileWord,
-    wps: Outlined.FileWord,
-    // FileImage
-    png: Outlined.FileImage,
-    jpg: Outlined.FileImage,
-    jpeg: Outlined.FileImage,
-    bmp: Outlined.FileImage,
-    // FileEditing
-    md: Outlined.FileEditing,
-    // File (generic)
-    html: Outlined.File,
-};
 
 /**
  * Uploaded-file list for a user message: a type icon + filename per row, never a
@@ -133,8 +104,7 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
                 >
                     {others.map((file, i) => {
                         const fileName = file.name || file.file_name || "File";
-                        const fileType = getFileTypebyFileName(fileName);
-                        const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
+                        const FileTypeIcon = getFileTypeIcon(fileName);
                         return (
                             <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
                                 <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
