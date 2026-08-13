@@ -532,11 +532,22 @@ async def test_list_permissions_marks_creator_entry():
         )
 
     with patch(
-        'bisheng.channel.domain.services.channel_authorization_service.PermissionService.get_resource_permissions',
+        'bisheng.channel.domain.services.channel_authorization_service.'
+        'PermissionService.get_resource_permissions_from_bindings',
         new=AsyncMock(return_value=[_perm(99, 'creator'), _perm(11, 'granted-owner')]),
-    ):
+    ) as list_binding_permissions:
         entries = await service.list_permissions('channel-1', _User())
 
     by_id = {e.subject_id: e for e in entries}
     assert by_id[99].is_creator is True
     assert by_id[11].is_creator is False
+    display_bindings = list_binding_permissions.await_args.args[0]
+    assert display_bindings == [
+        {
+            'subject_type': 'user',
+            'subject_id': 99,
+            'relation': 'owner',
+            'include_children': None,
+            'model_id': 'owner',
+        }
+    ]

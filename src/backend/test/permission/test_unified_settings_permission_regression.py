@@ -147,7 +147,8 @@ async def test_knowledge_space_non_manager_cannot_read_permissions():
             new=AsyncMock(return_value=False),
         ),
         patch(
-            "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+            "bisheng.permission.domain.services.permission_service."
+            "PermissionService.get_resource_permissions_from_bindings",
             new_callable=AsyncMock,
         ) as list_permissions,
     ):
@@ -168,7 +169,8 @@ async def test_channel_non_manager_cannot_read_permissions():
     service._require_manage_access = AsyncMock(side_effect=ChannelPermissionDeniedError())
 
     with patch(
-        "bisheng.channel.domain.services.channel_authorization_service.PermissionService.get_resource_permissions",
+        "bisheng.channel.domain.services.channel_authorization_service."
+        "PermissionService.get_resource_permissions_from_bindings",
         new_callable=AsyncMock,
     ) as list_permissions:
         with pytest.raises(ChannelPermissionDeniedError):
