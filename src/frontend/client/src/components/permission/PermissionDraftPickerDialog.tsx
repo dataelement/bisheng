@@ -12,6 +12,14 @@ import {
 } from "~/components/ui/Dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
 import { useLocalize } from "~/hooks";
+import {
+  INCLUDE_CHILDREN_CHECKBOX_CLASS,
+  INCLUDE_CHILDREN_LABEL_CLASS,
+  PERMISSION_DIALOG_CONTENT_CLASS,
+  PERMISSION_FOOTER_LABEL_CLASS,
+  SUBJECT_TAB_LIST_CLASS,
+  SUBJECT_TAB_TRIGGER_CLASS,
+} from "./permissionDialogStyles";
 import { RelationSelect, type RelationModelOption } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
@@ -105,28 +113,41 @@ export function PermissionDraftPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(680px,80vh)] max-w-[720px] flex-col overflow-hidden bg-surface-primary">
-        <DialogHeader>
-          <DialogTitle>{localize("com_unified_permission.add_authorization")}</DialogTitle>
+      <DialogContent className={PERMISSION_DIALOG_CONTENT_CLASS}>
+        <DialogHeader className="shrink-0 text-left">
+          <DialogTitle className="text-left">
+            {localize("com_unified_permission.add_authorization")}
+          </DialogTitle>
         </DialogHeader>
         <Tabs
           value={subjectType}
           onValueChange={handleSubjectTypeChange}
-          className="flex min-h-0 flex-1 flex-col"
+          className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <div className="flex items-center justify-between gap-3">
-            <TabsList>
-              <TabsTrigger value="user">{localize("com_permission.subject_user")}</TabsTrigger>
-              <TabsTrigger value="department" disabled={!canAddNonUserSubjects}>
+          <div className="flex items-center gap-3">
+            <TabsList className={SUBJECT_TAB_LIST_CLASS}>
+              <TabsTrigger value="user" className={SUBJECT_TAB_TRIGGER_CLASS}>
+                {localize("com_permission.subject_user")}
+              </TabsTrigger>
+              <TabsTrigger
+                value="department"
+                className={SUBJECT_TAB_TRIGGER_CLASS}
+                disabled={!canAddNonUserSubjects}
+              >
                 {localize("com_permission.subject_department")}
               </TabsTrigger>
-              <TabsTrigger value="user_group" disabled={!canAddNonUserSubjects}>
+              <TabsTrigger
+                value="user_group"
+                className={SUBJECT_TAB_TRIGGER_CLASS}
+                disabled={!canAddNonUserSubjects}
+              >
                 {localize("com_permission.subject_user_group")}
               </TabsTrigger>
             </TabsList>
             {subjectType === "department" && (
-              <label className="flex items-center gap-2 text-body text-text-2">
+              <label className={INCLUDE_CHILDREN_LABEL_CLASS}>
                 <Checkbox
+                  className={INCLUDE_CHILDREN_CHECKBOX_CLASS}
                   checked={includeChildren}
                   onCheckedChange={(checked) => setIncludeChildren(checked === true)}
                 />
@@ -134,10 +155,10 @@ export function PermissionDraftPickerDialog({
               </label>
             )}
           </div>
-          <TabsContent value="user" className="mt-4 min-h-0 flex-1">
+          <TabsContent value="user" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
             <SubjectSearchUser {...searchProps} grantUsersApi={searchApi?.grantUsersApi} />
           </TabsContent>
-          <TabsContent value="department" className="mt-4 min-h-0 flex-1">
+          <TabsContent value="department" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
             <SubjectSearchDepartment
               {...searchProps}
               includeChildren={includeChildren}
@@ -145,13 +166,15 @@ export function PermissionDraftPickerDialog({
               grantDepartmentSearchApi={searchApi?.grantDepartmentSearchApi}
             />
           </TabsContent>
-          <TabsContent value="user_group" className="mt-4 min-h-0 flex-1">
+          <TabsContent value="user_group" className="mt-3 min-h-0 flex-1 overflow-hidden p-0">
             <SubjectSearchUserGroup {...searchProps} grantUserGroupsApi={searchApi?.grantUserGroupsApi} />
           </TabsContent>
         </Tabs>
-        <DialogFooter className="items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-body-sm text-text-3">
-            <span>{localize("com_permission.uniform_grant")}</span>
+        <DialogFooter className="mt-3 shrink-0 items-center border-t pt-3 sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className={PERMISSION_FOOTER_LABEL_CLASS}>
+              {localize("com_permission.uniform_grant")}
+            </span>
             <RelationSelect
               value={activeModel?.id ?? ""}
               onChange={setSelectedModelId}

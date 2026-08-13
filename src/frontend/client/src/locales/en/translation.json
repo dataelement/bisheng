@@ -1867,6 +1867,7 @@
     "add_authorization": "Add permission",
     "advanced_settings": "Advanced settings",
     "authorization": "Permissions",
+    "authorization_empty": "No authorized subjects for this type yet",
     "basic_settings": "Basic settings",
     "cancel": "Cancel",
     "confirm_create": "Create",

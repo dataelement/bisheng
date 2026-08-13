@@ -230,7 +230,7 @@ export function KnowledgeSpaceSettingsPage() {
 
   return (
     <main
-      className="flex h-full min-h-0 bg-white p-2"
+      className="flex h-full min-h-0 bg-white"
       data-testid="knowledge-space-settings-page"
     >
       <div className="flex min-h-0 w-full flex-1 flex-col rounded-xl bg-white px-4 pt-4">
@@ -553,7 +553,7 @@ export function KnowledgeSpaceSettingsPage() {
         </div>
 
         <SettingsFooter
-          centered={settings.mode === "create"}
+          centered
           cancelLabel={localize("com_unified_permission.cancel")}
           submitLabel={localize(
             settings.mode === "create"

@@ -3,6 +3,7 @@ import * as RadioGroup from "@radix-ui/react-radio-group";
 import { Outlined } from "bisheng-icons";
 import type { ComponentType, ReactNode } from "react";
 import { Switch } from "~/components/ui/Switch";
+import { TruncatedTooltip } from "./TruncatedTooltip";
 
 export type SettingsSectionKind = "basic" | "advanced" | "permission";
 
@@ -26,7 +27,7 @@ export function SettingsSectionHeader({
 }: SettingsSectionHeaderProps) {
   const Icon = SECTION_ICONS[kind];
   return (
-    <div className="flex h-8 items-center gap-2 rounded-md bg-fill-2 px-3 text-body-sm font-medium text-text-1">
+    <div className="flex h-8 items-center gap-2 rounded-md bg-fill-1 px-3 text-body-sm font-medium text-text-1">
       <Icon className="size-4 text-blue-500" />
       <span>{title}</span>
     </div>
@@ -75,7 +76,7 @@ export function AccessModeSelector({
       {options.map((option) => (
         <label
           key={option.value}
-          className="flex min-h-12 cursor-pointer items-center gap-2 rounded-xl border border-border-base px-3 text-body text-text-1 has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-60"
+          className="flex min-h-12 cursor-pointer items-center gap-2 rounded-xl border border-border-base px-3 text-body text-text-1 transition-colors hover:bg-fill-1 has-[[data-state=checked]]:bg-blue-500/[0.07] has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-60 has-[[data-disabled]]:hover:bg-transparent"
         >
           <RadioGroup.Item
             value={option.value}
@@ -83,10 +84,13 @@ export function AccessModeSelector({
           >
             <RadioGroup.Indicator className="size-1 rounded-full bg-fill-1" />
           </RadioGroup.Item>
-          <span className="font-medium">{option.label}</span>
-          <span className="min-w-0 truncate text-[#999999]">
+          <span className="shrink-0 whitespace-nowrap font-medium">{option.label}</span>
+          <TruncatedTooltip
+            content={option.description}
+            className="min-w-0 truncate text-[#999999]"
+          >
             {option.description}
-          </span>
+          </TruncatedTooltip>
         </label>
       ))}
     </RadioGroup.Root>

@@ -1790,6 +1790,7 @@
     "add_authorization": "権限を追加",
     "advanced_settings": "詳細設定",
     "authorization": "権限",
+    "authorization_empty": "現在のタイプに権限対象はまだありません",
     "basic_settings": "基本設定",
     "cancel": "キャンセル",
     "confirm_create": "作成を確定",
