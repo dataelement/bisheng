@@ -60,6 +60,61 @@ async def test_leaderboard_empty_when_user_has_no_company():
 
 
 @pytest.mark.asyncio
+async def test_display_maps_uses_org_level_dept_not_leaf():
+    """挂在班组叶子上时，展示名取向上最近的 org_level=dept，不回退叶子名。"""
+    leaf = SimpleNamespace(id=94, path="/1/54/55/58/67/94/", name="五级积分部门1-1", org_level="squad")
+    dept = SimpleNamespace(id=55, path="/1/54/55/", name="二级积分部门1", org_level="dept")
+    company = SimpleNamespace(id=54, path="/1/54/", name="测试积分部门", org_level="company")
+    office = SimpleNamespace(id=58, path="/1/54/55/58/", name="三级积分部门1", org_level="office")
+    squad = SimpleNamespace(id=67, path="/1/54/55/58/67/", name="四级积分部门1", org_level="squad")
+
+    with (
+        patch(
+            "bisheng.user.domain.models.user.UserDao.aget_user_by_ids",
+            AsyncMock(return_value=[SimpleNamespace(user_id=423, user_name="gzx01204")]),
+        ),
+        patch(
+            "bisheng.database.models.department.UserDepartmentDao.get_primary_department_map_by_user_ids",
+            return_value={423: leaf},
+        ),
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_by_ids",
+            AsyncMock(return_value=[company, dept, office, squad]),
+        ),
+    ):
+        names, depts = await PointsQueryService._leaderboard_display_maps([423])
+
+    assert names[423] == "gzx01204"
+    assert depts[423] == "二级积分部门1"
+
+
+@pytest.mark.asyncio
+async def test_display_maps_omits_dept_when_no_org_level_dept():
+    """path 上没有 dept 标签时不回退叶子名，交给调用方展示 —。"""
+    leaf = SimpleNamespace(id=9, path="/1/9/", name="未打标叶子", org_level=None)
+    root = SimpleNamespace(id=1, path="/1/", name="默认组织", org_level=None)
+
+    with (
+        patch(
+            "bisheng.user.domain.models.user.UserDao.aget_user_by_ids",
+            AsyncMock(return_value=[SimpleNamespace(user_id=7, user_name="nobody")]),
+        ),
+        patch(
+            "bisheng.database.models.department.UserDepartmentDao.get_primary_department_map_by_user_ids",
+            return_value={7: leaf},
+        ),
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_by_ids",
+            AsyncMock(return_value=[root]),
+        ),
+    ):
+        names, depts = await PointsQueryService._leaderboard_display_maps([7])
+
+    assert names[7] == "nobody"
+    assert 7 not in depts
+
+
+@pytest.mark.asyncio
 async def test_leaderboard_keeps_all_ties_at_tenth_score():
     """第 10 名分值并列时返回超过 10 人，顺序与仓储一致。"""
     bucket = [

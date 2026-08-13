@@ -1,4 +1,7 @@
-"""管理员月奖：次月 1 日结算上月，登录≥1，多角色取最高 M*。"""
+"""管理员月奖：次月 1 日结算上月，登录≥1，多角色取最高 M*。
+
+候选人按 OpenFGA owner/manager（缺 owner 时 DB 创建人兜底）；FGA 不可用则失败告警并跳过本租户。
+"""
 
 from __future__ import annotations
 
@@ -10,12 +13,6 @@ from zoneinfo import ZoneInfo
 
 from sqlmodel import select
 
-from bisheng.common.models.space_channel_member import (
-    BusinessTypeEnum,
-    MembershipStatusEnum,
-    SpaceChannelMember,
-    UserRoleEnum,
-)
 from bisheng.core.database import get_async_db_session
 from bisheng.database.constants import AdminRole
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao
@@ -31,6 +28,10 @@ from bisheng.points.domain.services.points_ledger_service import PointsLedgerSer
 from bisheng.points.domain.services.points_notify_service import (
     PointsNotifyService,
     build_points_notify_service,
+)
+from bisheng.points.domain.services.space_fga_roles import (
+    SpaceFgaRolesError,
+    read_space_owner_manager_ids,
 )
 from bisheng.user.domain.models.user_role import UserRole
 
@@ -167,7 +168,21 @@ class PointsMonthlyRewardService:
         if not active_matchers:
             return {"tenant_id": tenant_id, "period_key": month_key, "awarded": 0, "skipped": 0}
 
-        user_candidates = await self._collect_user_candidates(active_matchers, rule_by_code)
+        try:
+            user_candidates = await self._collect_user_candidates(active_matchers, rule_by_code)
+        except SpaceFgaRolesError:
+            logger.error(
+                "points.monthly.fga_unavailable tenant_id=%s period=%s",
+                tenant_id,
+                month_key,
+            )
+            return {
+                "tenant_id": tenant_id,
+                "period_key": month_key,
+                "awarded": 0,
+                "skipped": 0,
+                "error": "fga_unavailable",
+            }
         if not user_candidates:
             return {"tenant_id": tenant_id, "period_key": month_key, "awarded": 0, "skipped": 0}
 
@@ -306,7 +321,7 @@ class PointsMonthlyRewardService:
         matchers: dict[str, MonthlyRuleMatcher],
         rule_by_code: dict,
     ) -> dict[int, tuple[str, int]]:
-        """聚合用户 → 最高分 M*。"""
+        """按 OpenFGA owner/manager 聚合用户 → 最高分 M*；FGA 失败向上抛。"""
         # level → [(rule_code, roles)]
         by_level: dict[str, list[tuple[str, set[str]]]] = {}
         for code, matcher in matchers.items():
@@ -322,16 +337,19 @@ class PointsMonthlyRewardService:
             needed_roles: set[str] = set()
             for _, roles in entries:
                 needed_roles |= roles
-            role_enums = [UserRoleEnum(role) for role in needed_roles]
-            members = await self._list_managers_for_spaces(space_ids, role_enums)
-            for member in members:
-                role_value = getattr(member.user_role, "value", member.user_role)
-                user_id = int(member.user_id)
-                for rule_code, roles in entries:
-                    if role_value not in roles:
-                        continue
-                    score = fixed_score(rule_by_code[rule_code].score_expr)
-                    raw.setdefault(user_id, []).append((rule_code, score))
+            for space_id in space_ids:
+                owners, managers = await read_space_owner_manager_ids(int(space_id))
+                role_users: dict[str, set[int]] = {
+                    "owner": owners,
+                    "manager": managers,
+                }
+                for role_name in needed_roles:
+                    for user_id in role_users.get(role_name, set()):
+                        for rule_code, roles in entries:
+                            if role_name not in roles:
+                                continue
+                            score = fixed_score(rule_by_code[rule_code].score_expr)
+                            raw.setdefault(int(user_id), []).append((rule_code, score))
 
         result: dict[int, tuple[str, int]] = {}
         for user_id, candidates in raw.items():
@@ -339,28 +357,6 @@ class PointsMonthlyRewardService:
             if best is not None:
                 result[user_id] = best
         return result
-
-    @staticmethod
-    async def _list_managers_for_spaces(
-        space_ids: list[int],
-        roles: list[UserRoleEnum],
-    ) -> list[SpaceChannelMember]:
-        """批量读取空间 creator/admin 成员。"""
-        if not space_ids or not roles:
-            return []
-        business_ids = [str(sid) for sid in space_ids]
-        async with get_async_db_session() as session:
-            rows = (
-                await session.exec(
-                    select(SpaceChannelMember).where(
-                        SpaceChannelMember.business_type == BusinessTypeEnum.SPACE,
-                        SpaceChannelMember.business_id.in_(business_ids),
-                        SpaceChannelMember.status == MembershipStatusEnum.ACTIVE,
-                        SpaceChannelMember.user_role.in_(roles),
-                    )
-                )
-            ).all()
-        return list(rows)
 
     @staticmethod
     async def _load_super_admin_ids() -> set[int]:
