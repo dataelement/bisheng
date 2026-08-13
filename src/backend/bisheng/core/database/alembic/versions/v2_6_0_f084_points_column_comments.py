@@ -1,3 +1,4 @@
+# ruff: noqa: RUF002, RUF003
 """为全部积分表列补齐中文 COMMENT（库侧字段说明）。
 
 Revision ID: f084_points_column_comments
@@ -45,47 +46,66 @@ def _escape_sql_literal(value: str) -> str:
     return value.replace("'", "''")
 
 
-def _apply_mysql_comment(bind, table: str, column: str, comment: str) -> None:
+def _column_needs_autoincrement(column) -> bool:
+    """ORM 主键是否应按自增列发出 AUTO_INCREMENT / IDENTITY。"""
+    autoincrement = getattr(column, "autoincrement", False)
+    return bool(getattr(column, "primary_key", False) and autoincrement in (True, "auto"))
+
+
+def _apply_mysql_comment(
+    bind,
+    table: str,
+    column: str,
+    comment: str,
+    *,
+    needs_autoincrement: bool = False,
+) -> None:
     """MySQL/MariaDB：用 information_schema 拼 MODIFY，避免 alter_column 二次转义 DEFAULT。
 
     inspector 返回的 default 形如 ``'1'``（已含引号）；若原样传给
     ``existing_server_default`` 会变成 ``DEFAULT '''1'''`` 并触发 1067。
-    同时保留 EXTRA（如 ON UPDATE CURRENT_TIMESTAMP / auto_increment）。
+    同时保留 EXTRA（如 ON UPDATE CURRENT_TIMESTAMP）。
+    主键自增列必须显式带 AUTO_INCREMENT：MySQL MODIFY 省略该子句会把自增剥掉；
+    COMMENT 已到位也不能跳过，否则中断重跑无法补回。
     """
-    row = bind.execute(
-        sa.text(
-            """
+    row = (
+        bind.execute(
+            sa.text(
+                """
             SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA, COLUMN_COMMENT
             FROM information_schema.COLUMNS
             WHERE TABLE_SCHEMA = DATABASE()
               AND TABLE_NAME = :table
               AND COLUMN_NAME = :column
             """
-        ),
-        {"table": table, "column": column},
-    ).mappings().first()
+            ),
+            {"table": table, "column": column},
+        )
+        .mappings()
+        .first()
+    )
     if row is None:
         return
-    # 已是目标文案则跳过，支持中断后重跑
-    if (row["COLUMN_COMMENT"] or "") == comment:
+    extra_l = (row["EXTRA"] or "").lower()
+    has_autoincrement = "auto_increment" in extra_l
+    comment_ok = (row["COLUMN_COMMENT"] or "") == comment
+    # COMMENT 已匹配且自增状态正确才跳过；缺自增时仍要 MODIFY 补回。
+    if comment_ok and (has_autoincrement or not needs_autoincrement):
         return
 
     null_sql = "NULL" if row["IS_NULLABLE"] == "YES" else "NOT NULL"
     default = row["COLUMN_DEFAULT"]
     # MySQL 8 EXTRA 可能含 DEFAULT_GENERATED，不能原样拼进 MODIFY
-    extra_l = (row["EXTRA"] or "").lower()
     parts = [f"ALTER TABLE `{table}` MODIFY COLUMN `{column}` {row['COLUMN_TYPE']} {null_sql}"]
 
     if default is not None:
         # CURRENT_TIMESTAMP 等函数默认值不能再加引号；普通标量按字符串字面量写入
         upper = str(default).upper()
-        if upper in ("CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP()", "NULL") or upper.startswith(
-            "CURRENT_TIMESTAMP"
-        ):
+        if upper in ("CURRENT_TIMESTAMP", "CURRENT_TIMESTAMP()", "NULL") or upper.startswith("CURRENT_TIMESTAMP"):
             parts.append(f"DEFAULT {default}")
         else:
             parts.append(f"DEFAULT '{_escape_sql_literal(str(default))}'")
-    if "auto_increment" in extra_l:
+    if needs_autoincrement or has_autoincrement:
         parts.append("AUTO_INCREMENT")
     if "on update current_timestamp" in extra_l:
         parts.append("ON UPDATE CURRENT_TIMESTAMP")
@@ -126,7 +146,13 @@ def upgrade() -> None:
                 _apply_dm_comment(table, name, comment)
             else:
                 # mysql / mariadb
-                _apply_mysql_comment(bind, table, name, comment)
+                _apply_mysql_comment(
+                    bind,
+                    table,
+                    name,
+                    comment,
+                    needs_autoincrement=_column_needs_autoincrement(column),
+                )
 
 
 def downgrade() -> None:
