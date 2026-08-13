@@ -65,7 +65,10 @@
 - [ ] 查看者/编辑者/管理者/所有者的 key、名称、等级、动作集合不可编辑或删除。
 - [ ] 标准模型仅在包含 `manage_permission` 时显示“允许授予同级”开关。
 - [ ] 自定义模型的等级由最高动作自动得出；空动作、未分级动作或越界动作无法保存。
-- [ ] 停用仍被 Grant 引用的模型后，其 Grant fail closed；不能直接不可恢复删除。
+- [ ] 停用仍被 Grant 引用的模型后，不能再用该模型新增或变更授权，但已有 Grant 的可见性、
+  具体动作和 `manage_permission` 保持不变；引用未清零时删除返回 `25004`。
+- [ ] 逐项撤销或替换全部 Grant/assignee 后，source projection 与 live visible tuple 对账为零，
+  此时允许删除模型；停用不是删除前置条件。
 - [ ] 模型发布前后既有 Grant ID 与 assignee 数不因动作变更发生 fan-out 重写。
 
 ## 4. 两端成员与模式界面

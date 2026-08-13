@@ -306,7 +306,8 @@ Grant、资源关联和 assignee 都不需要重写。
 
 同理：
 
-- 停用模型：移除或关闭模型的 `active` 投影；
+- 停用模型：只关闭该模型后续被选中用于新增或变更授权的能力，已有 Grant 的 OpenFGA
+  action 与 visible 投影保持不变；
 - 修改同级授权策略：只调整该模型可授予的目标等级能力；
 - 删除某动作：只更新模型自身的动作投影。
 
@@ -507,7 +508,7 @@ OpenFGA 是执行面的最终裁决者，MySQL 是控制面的业务真相。
 |---|---|
 | 动作名称、等级、适用资源 | 当前用户是否能执行具体动作 |
 | 标准/自定义模型定义 | 沿模型、Grant、主体和 parent 计算 |
-| 模型 active 与同级策略配置 | `can_edit`、`can_download` 等最终结果 |
+| 模型 active（仅控制后续可分配性）与同级策略配置 | `can_edit`、`can_download` 等既有 Grant 的最终结果 |
 | Grant、assignee 和来源明细 | 用户、部门、用户组的关系集合计算 |
 | 权限模式和界面展示 | 资源继承关系的权限传播 |
 | 审计、发布状态、迁移记录 | Check、ListObjects、ListUsers |
@@ -851,7 +852,7 @@ tuple 本身属于 Store，不属于某个 model ID：迁移器按 Store
 - `edit`、`download`、`delete`、`manage_permission`；
 - dashboard visible/edit/delete/manage_permission；
 - 文件预览不做 action Check，原件/打包下载检查 `download`；
-- 模型 active、动作等级和同级授权策略；
+- 模型 active 只影响新增/变更授权且不改变既有 Grant、动作等级和同级授权策略；
 - SQL 与现有 Store 的来源/目标计数、checksum 和 blocker；
 - 首批已迁移资源类型的旧四档/旧模型关系为零；旧 Config 原始行保留数仅用于审计，
   其运行时引用必须为零；
@@ -1042,12 +1043,15 @@ ListObjects。正式 relation `visible`（即这里讨论的 `can_view` 语义�
 
 ### 模型 active 有什么作用？
 
-它是模型的总开关：
+它是模型的“可分配”开关，不是运行时撤权总开关：
 
 - inactive 模型不能新增授权；
-- 既有 Grant 保留用于审计；
-- 既有 Grant 不再产生可见性、具体动作或授权他人的能力；
-- 不需要逐个删除所有 Grant。
+- 既有 Grant、可见性、具体动作和授权他人的能力保持不变；
+- 如果要删除模型，必须先逐项撤销或替换全部 Grant/assignee 绑定；
+- 只有引用、来源投影和残留 OpenFGA tuple 都清零后，最终删除才会成功。
+
+因此模型停用不需要 A/B 可见槽。单槽浅层 `visible` 只在 Grant/assignee 来源新增、撤销、
+替换或资源生命周期变化时更新。
 
 ### 标准模型修改“允许同级”会发布新 Authorization Model 吗？
 

@@ -11,10 +11,10 @@
 
 | 步骤 | 状态 | 备注 |
 |---|---|---|
-| spec.md | ✅ 已评审 | 用户已确认 |
-| design.md | ✅ 已评审 | 24 项复审 LGTM；用户于 2026-07-29 明确确认 Design ★ |
-| tasks.md | ✅ 已确认 | 21 项 `/sdd-review ... tasks` 评审 LGTM；用户于 2026-07-30 明确确认 Tasks ★ |
-| 实现 | ✅ 已完成 | 140 / 140 收口；功能与迁移脚本完成，本地 E2E 经用户于 2026-07-30 明确确认不执行 |
+| spec.md | ✅ 本次迭代已进入 Design | 原 Spec 已确认；用户于 2026-08-13 指示按新增可见性需求更新 Design |
+| design.md | 🔲 本次迭代待用户确认 | 单槽浅层 visible、停用保留已有授权、删除前清零绑定及旧系统单次迁移口径已完成 24 项复审，结果 LGTM；尚未取得本次 Design ★ |
+| tasks.md | ⏸ 待 Design ★ 后更新 | 原 140 项已完成；本次可见性增量任务尚未拆解 |
+| 实现 | ⏸ 本次迭代未开始 | 原 F048 功能与迁移脚本已完成；不得把 BENCH-01 原型当作本次生产实现 |
 
 ---
 
@@ -36,6 +36,9 @@
   `task_prerun` 恢复 `current_tenant_id` ContextVar 的链路；不得用默认 tenant 猜测调用范围。
 - 本计划不使用“测试降级”；需要 OpenFGA、MySQL、DM8 的测试标为中央集成环境执行，但仍保留
   自动化断言，不把本 Feature 范围内验证延迟到未来。
+- T001～T143 记录的是本次可见性增量前的已完成实现基线，其中关于 inactive fail closed、
+  深层 visible 等描述不代表本次目标语义；待 Design ★ 确认后，必须新增任务成对修改测试与
+  实现，不能把历史任务的完成标记当作单槽 visible/停用保留授权已经实现的证据。
 
 ### 跨 Feature 与共享文件影响
 
@@ -44,7 +47,7 @@
 | F004/F006/F007/F008 | F048 直接替代旧资源四档、Config 模型与成员 UI；T126～T134 必须证明旧路径对已迁移资源不可达 |
 | F017 shared resource | T063/T064 只保留精确 ID 跨 tenant 只读业务加载，不把 shared relation 改成普通 Grant |
 | F018 owner transfer | 按 OQ-07 与 INV-25，T049/T050 删除交接 API；其他 owner 仍作为 ordinary source 并存 |
-| F027/F036/F040 列表性能 | T035/T131/T132 保留业务 cursor+BatchCheck 默认路径，ListObjects 只有 BENCH-01 通过的入口可启用 |
+| F027/F036/F040 列表性能 | 原任务的“统一候选优先”结论已被本次 Design 取代；每个入口按代表性数据选择可见 ID 优先或业务候选优先，待 Design ★ 后新增任务 |
 | `core/openfga/client.py` / `discovery.py` / `manager.py` | T017～T020 是共享运行时变更；llm_server/llm_model 只保留显式 legacy allowlist，其他资源禁止 dual；latest 只用于启动发现并必须匹配 SQL CURRENT Catalog |
 | Constitution C4 | T027/T028 将 F048 原子路径切到 durable projection ledger；旧单 tuple 路径的 `failed_tuple` 不被误删 |
 
