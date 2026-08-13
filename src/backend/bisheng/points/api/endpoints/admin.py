@@ -134,9 +134,24 @@ async def deduct(
         return exc.return_resp_instance()
 
 
+@router.get("/admin/users/filter-options")
+async def list_user_filter_options(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    service: PointsQueryService = Depends(get_points_query_service),
+):
+    """用户积分列表筛选项（部门 + 角色）。"""
+    try:
+        data = await service.admin_user_filter_options(login_user)
+        return resp_200(data.model_dump())
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
 @router.get("/admin/users")
 async def list_users(
     keyword: str | None = Query(None),
+    dept_id: int | None = Query(None),
+    user_type: str | None = Query(None, description="PRD 用户类型/角色"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
@@ -148,6 +163,8 @@ async def list_users(
             resolve_tenant_id(login_user),
             login_user,
             keyword=keyword,
+            dept_id=dept_id,
+            user_type=user_type,
             page=page,
             page_size=page_size,
         )

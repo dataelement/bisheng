@@ -310,12 +310,12 @@ describe("NotificationsDialog approval jump", () => {
             type: "system_text",
             content: "points_changed",
             metadata: {
-              points_message: "你因「上传部门库文档」获得 2 积分。",
+              points_message: "您上传/发布文档至部门库，获得2积分，您可前往【我的积分】查看完整记录；",
               data: {
                 points_change: {
-                  message: "你因「上传部门库文档」获得 2 积分。",
+                  message: "您上传/发布文档至部门库，获得2积分，您可前往【我的积分】查看完整记录；",
                   delta: 2,
-                  rule_name: "上传部门库文档",
+                  library_name: "部门库",
                 },
               },
             },
@@ -326,7 +326,7 @@ describe("NotificationsDialog approval jump", () => {
 
     render(<NotificationsDialog open />);
 
-    expect(await screen.findByText("你因「上传部门库文档」获得 2 积分。")).toBeInTheDocument();
+    expect(await screen.findByText("您上传/发布文档至部门库，获得2积分，您可前往【我的积分】查看完整记录；")).toBeInTheDocument();
     expect(screen.queryByText("@")).not.toBeInTheDocument();
     expect(screen.queryByText(/给你发送了一条通知/)).not.toBeInTheDocument();
   });

@@ -77,6 +77,7 @@ class AwardOutcome:
     notify_user_id: int | None = None
     rule_code: str | None = None
     rule_name: str | None = None
+    notify_extra: dict | None = None
 
     @property
     def should_notify(self) -> bool:
@@ -94,6 +95,7 @@ class AwardOutcome:
         user_id: int,
         rule_code: str,
         rule_name: str | None,
+        notify_extra: dict | None = None,
     ) -> AwardOutcome:
         """构造可通知的成功入账结果。"""
         return AwardOutcome(
@@ -102,6 +104,7 @@ class AwardOutcome:
             notify_user_id=int(user_id),
             rule_code=rule_code,
             rule_name=rule_name or rule_code,
+            notify_extra=notify_extra,
         )
 
 
@@ -288,6 +291,7 @@ class PointsAwardFacade:
             user_id=payee,
             rule_code="G3",
             rule_name=rule.name or "G3",
+            notify_extra={"favorite_count": int(event.unique_favoriter_count)},
         )
 
     async def _award_answer_adopted(self, event: AnswerAdoptedEvent) -> AwardOutcome:

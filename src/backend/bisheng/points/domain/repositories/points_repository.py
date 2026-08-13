@@ -149,9 +149,7 @@ class PointsRepository:
             filters.append(UserPointLog.occurred_at >= from_time)
         if to_time is not None:
             filters.append(UserPointLog.occurred_at < to_time)
-        total = (
-            await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))
-        ).one()
+        total = (await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))).one()
         rows = (
             await self.session.exec(
                 select(UserPointLog)
@@ -202,9 +200,7 @@ class PointsRepository:
         """列出租户说明文案。"""
         rows = (
             await self.session.exec(
-                select(PointCopy)
-                .where(PointCopy.tenant_id == tenant_id)
-                .order_by(PointCopy.sort_order, PointCopy.id)
+                select(PointCopy).where(PointCopy.tenant_id == tenant_id).order_by(PointCopy.sort_order, PointCopy.id)
             )
         ).all()
         return list(rows)
@@ -239,9 +235,7 @@ class PointsRepository:
             self.session.add(row)
             result.append(row)
 
-        existing = (
-            await self.session.exec(select(PointCopy).where(PointCopy.tenant_id == tenant_id))
-        ).all()
+        existing = (await self.session.exec(select(PointCopy).where(PointCopy.tenant_id == tenant_id))).all()
         for row in existing:
             if row.copy_key not in keep_keys:
                 await self.session.delete(row)
@@ -344,9 +338,7 @@ class PointsRepository:
         ).all()
         return list(rows)
 
-    async def latest_rank_refreshed_at(
-        self, tenant_id: int, period: str, period_key: str
-    ) -> datetime | None:
+    async def latest_rank_refreshed_at(self, tenant_id: int, period: str, period_key: str) -> datetime | None:
         """返回指定榜单最近刷新时间。"""
         value = (
             await self.session.exec(
@@ -361,9 +353,7 @@ class PointsRepository:
             return None
         return value[0] if isinstance(value, tuple) else value
 
-    async def get_favorite_tier_award(
-        self, tenant_id: int, file_id: int
-    ) -> PointFavoriteTierAward | None:
+    async def get_favorite_tier_award(self, tenant_id: int, file_id: int) -> PointFavoriteTierAward | None:
         """读取文档已发放的 G3 最高档记录。"""
         return (
             await self.session.exec(
@@ -401,11 +391,7 @@ class PointsRepository:
 
     async def list_accounts(self, tenant_id: int) -> list[UserPointAccount]:
         """列出租户全部积分账户。"""
-        rows = (
-            await self.session.exec(
-                select(UserPointAccount).where(UserPointAccount.tenant_id == tenant_id)
-            )
-        ).all()
+        rows = (await self.session.exec(select(UserPointAccount).where(UserPointAccount.tenant_id == tenant_id))).all()
         return list(rows)
 
     async def list_accounts_page(
@@ -422,9 +408,7 @@ class PointsRepository:
             if not user_ids:
                 return [], 0
             filters.append(UserPointAccount.user_id.in_(user_ids))
-        total = (
-            await self.session.exec(select(func.count()).select_from(UserPointAccount).where(*filters))
-        ).one()
+        total = (await self.session.exec(select(func.count()).select_from(UserPointAccount).where(*filters))).one()
         rows = (
             await self.session.exec(
                 select(UserPointAccount)
@@ -435,6 +419,13 @@ class PointsRepository:
             )
         ).all()
         return list(rows), int(total[0] if isinstance(total, tuple) else total)
+
+    async def list_account_user_ids(self, tenant_id: int) -> list[int]:
+        """租户下全部积分账户 user_id（角色筛「普通用户」用）。"""
+        rows = (
+            await self.session.exec(select(UserPointAccount.user_id).where(UserPointAccount.tenant_id == tenant_id))
+        ).all()
+        return sorted({int(r[0] if isinstance(r, tuple) else r) for r in rows})
 
     async def list_audit_logs(
         self,
@@ -451,9 +442,7 @@ class PointsRepository:
             filters.append(UserPointLog.source.in_(sources))
         if user_id is not None:
             filters.append(UserPointLog.user_id == int(user_id))
-        total = (
-            await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))
-        ).one()
+        total = (await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))).one()
         rows = (
             await self.session.exec(
                 select(UserPointLog)
@@ -480,11 +469,13 @@ class PointsRepository:
         """按用户汇总时间窗内全部 delta（月/年净变动）。"""
         rows = (
             await self.session.exec(
-                select(UserPointLog.user_id, func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                select(UserPointLog.user_id, func.coalesce(func.sum(UserPointLog.delta), 0))
+                .where(
                     UserPointLog.tenant_id == tenant_id,
                     UserPointLog.occurred_at >= start,
                     UserPointLog.occurred_at < end,
-                ).group_by(UserPointLog.user_id)
+                )
+                .group_by(UserPointLog.user_id)
             )
         ).all()
         result: dict[int, int] = {}
@@ -624,9 +615,7 @@ class PointsRepository:
             return 0
         values = self._snapshot_values(rows)
         for start in range(0, len(values), RANK_SNAPSHOT_INSERT_CHUNK):
-            await self.session.execute(
-                insert(PointRankSnapshot), values[start : start + RANK_SNAPSHOT_INSERT_CHUNK]
-            )
+            await self.session.execute(insert(PointRankSnapshot), values[start : start + RANK_SNAPSHOT_INSERT_CHUNK])
         return len(rows)
 
     async def replace_rank_snapshots(
@@ -652,9 +641,7 @@ class PointsRepository:
         await self.session.exec(stmt)
         return await self.bulk_insert_rank_snapshots(rows)
 
-    async def get_pending_deduct_by_key(
-        self, tenant_id: int, idempotency_key: str
-    ) -> PointPendingDeduct | None:
+    async def get_pending_deduct_by_key(self, tenant_id: int, idempotency_key: str) -> PointPendingDeduct | None:
         """按幂等键读取补扣行。"""
         return (
             await self.session.exec(

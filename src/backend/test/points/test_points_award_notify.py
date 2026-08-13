@@ -65,7 +65,7 @@ async def test_flush_award_notifies_sends_mapped_template():
     notify.notify.assert_awaited_once_with(
         user_id=4,
         template_code="earn_publish",
-        rule_name="上传部门库文档",
+        library_name="部门库",
         delta=2,
     )
     session.commit.assert_awaited_once()
@@ -108,11 +108,13 @@ async def test_points_notify_payload_uses_action_code_in_system_text():
         await svc.notify(
             user_id=4,
             template_code="earn_publish",
-            rule_name="上传部门库文档",
+            library_name="部门库",
             delta=2,
         )
     kwargs = message.send_generic_notify.await_args.kwargs
     assert kwargs["action_code"] == "points_changed"
     item = kwargs["content_item_list"][0]
     assert item["content"] == "points_changed"
-    assert item["metadata"]["points_message"] == "你因「上传部门库文档」获得 2 积分。"
+    assert item["metadata"]["points_message"] == (
+        "您上传/发布文档至部门库，获得2积分，您可前往【我的积分】查看完整记录；"
+    )

@@ -100,8 +100,7 @@ class PointsPendingDeductService:
                     user_id=user_id,
                     template_code="deduct_admin",
                     delta=score,
-                    rule_name=rule.name or code,
-                    reason=remark or "",
+                    reason=format_deduct_notify_reason(rule_name=rule.name, remark=remark),
                 )
             except Exception:
                 logger.exception("points.pending_deduct.notify_failed user_id=%s key=%s", user_id, key)
@@ -226,8 +225,7 @@ class PointsPendingDeductService:
                         user_id=int(row.user_id),
                         template_code="deduct_admin",
                         delta=score,
-                        rule_name=rule.name or row.rule_code,
-                        reason=row.remark or "",
+                        reason=format_deduct_notify_reason(rule_name=rule.name, remark=row.remark),
                     )
                 except Exception:
                     logger.exception(
