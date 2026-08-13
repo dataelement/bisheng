@@ -37,13 +37,28 @@ export function sensitiveViolationWords(remark?: string | null): string[] {
     }
 }
 
-/** Same sentence the knowledge file list shows, with the hit words when known. */
+/**
+ * Same sentence the knowledge file list shows, with the hit words when known.
+ *
+ * Each lookup carries a default: these keys live in the knowledge namespace, and
+ * a caller that has not loaded it would otherwise render the key name at the
+ * user — which is exactly what happened the first time this shipped.
+ */
 export function sensitiveViolationMessage(remark: string | null | undefined, t: Translate): string {
     const words = sensitiveViolationWords(remark)
-    if (!words.length) return t("sensitiveViolationMessage", { ns: "knowledge" })
-    return (
-        t("sensitiveViolationMessagePrefix", { ns: "knowledge" }) +
-        `{${words.join(",")}}` +
-        t("sensitiveViolationMessageSuffix", { ns: "knowledge" })
-    )
+    if (!words.length) {
+        return t("sensitiveViolationMessage", {
+            ns: "knowledge",
+            defaultValue: "您上传的文件包含违规内容，请修改后重试",
+        })
+    }
+    const prefix = t("sensitiveViolationMessagePrefix", {
+        ns: "knowledge",
+        defaultValue: "您上传的文件包含违规内容：",
+    })
+    const suffix = t("sensitiveViolationMessageSuffix", {
+        ns: "knowledge",
+        defaultValue: "，请修改后重试",
+    })
+    return `${prefix}{${words.join(",")}}${suffix}`
 }

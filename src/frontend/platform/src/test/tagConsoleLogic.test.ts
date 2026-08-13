@@ -249,6 +249,21 @@ describe("sensitive violation", () => {
         expect(sensitiveViolationMessage(remark, t)).toBe("PREFIX{赌博,毒品}SUFFIX")
     })
 
+    it("never renders a key when the knowledge namespace is missing", () => {
+        // How i18next behaves for a namespace the page never loaded: no
+        // translation, so it returns defaultValue if given and the key if not.
+        // Without a default this rendered "sensitiveViolationMessagePrefix{21}
+        // sensitiveViolationMessageSuffix" at the user.
+        const missingNs = (key: string, options?: Record<string, any>) => options?.defaultValue ?? key
+        const remark = JSON.stringify({ reason: "sensitive_check", hits: [{ word: "21" }] })
+
+        const message = sensitiveViolationMessage(remark, missingNs)
+
+        expect(message).not.toContain("sensitiveViolationMessage")
+        expect(message).toContain("21")
+        expect(sensitiveViolationMessage(null, missingNs)).not.toContain("sensitiveViolationMessage")
+    })
+
     it("falls back to the generic sentence when there are no words to show", () => {
         expect(sensitiveViolationMessage(null, t)).toBe("GENERIC")
         expect(sensitiveViolationMessage("解析超时", t)).toBe("GENERIC")

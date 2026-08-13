@@ -16,8 +16,15 @@ import { ViolationDialog } from "./ViolationDialog"
  * rather than rendering a link that would land on a broken page.
  */
 export function SourceFileLinks({ files, max = 3 }: { files: TagConsoleSourceFile[]; max?: number }) {
-    const { t } = useTranslation()
-    const [violation, setViolation] = useState<string | null>(null)
+    // The violation wording lives in the knowledge namespace, which this page
+    // does not otherwise use. i18next only fetches namespaces that are declared
+    // or asked for by name — without this the keys never load at all and render
+    // raw. Listing "bs" first keeps it the default for every other key here.
+    const { t } = useTranslation(["bs", "knowledge"])
+    // The file, not the finished sentence: holding the string would freeze
+    // whatever the translation returned at click time, so a namespace that
+    // finished loading a moment later could never correct it.
+    const [violating, setViolating] = useState<TagConsoleSourceFile | null>(null)
 
     if (!files?.length) return <span className="text-muted-foreground">-</span>
 
@@ -34,7 +41,7 @@ export function SourceFileLinks({ files, max = 3 }: { files: TagConsoleSourceFil
                             type="button"
                             className="truncate text-left text-[#F53F3F] hover:underline"
                             title={t("build.tagConsole.violationBlocked", "该文件包含违规内容，无法预览")}
-                            onClick={() => setViolation(sensitiveViolationMessage(file.remark, t))}
+                            onClick={() => setViolating(file)}
                         >
                             {file.file_name}
                         </button>
@@ -65,7 +72,10 @@ export function SourceFileLinks({ files, max = 3 }: { files: TagConsoleSourceFil
                     {t("build.tagConsole.moreFiles", "等 {{count}} 个文件", { count: files.length })}
                 </span>
             )}
-            <ViolationDialog message={violation} onClose={() => setViolation(null)} />
+            <ViolationDialog
+                message={violating ? sensitiveViolationMessage(violating.remark, t) : null}
+                onClose={() => setViolating(null)}
+            />
         </div>
     )
 }
