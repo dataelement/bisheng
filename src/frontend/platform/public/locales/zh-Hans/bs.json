@@ -516,6 +516,8 @@
     "fileUploadFailed": "文件上传失败: {{name}}",
     "fileExceedRemoved": "文件：{{name}}超过{{size}}M，已移除",
     "fileTypeNotAllowed": "不支持文件类型：{{type}}",
+    "mediaFileTooMany": "上传文件个数不能超过5个",
+    "noFileSelected": "没有选择文件",
     "uploadFailedCheckFormat": "上传失败,请检查文件格式",
     "sourceTooltip": "来源段落",
     "filterLabel": "筛选标签",

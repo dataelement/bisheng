@@ -1,7 +1,9 @@
 // @ts-strict-ignore
 import { locationContext } from "@/contexts/locationContext";
+import { MAX_MEDIA_FILES, isMediaFileName } from "@/util/fileAcceptUtils";
 import { FileSearch2 } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { alertContext } from "../../contexts/alertContext";
 import { TabsContext } from "../../contexts/tabsContext";
 import { uploadFile } from "../../controllers/API";
@@ -23,6 +25,7 @@ export default function InputFileComponent({
   isSSO = false,
   multiple = false
 }: FileComponentType) {
+  const { t } = useTranslation();
   const [myValue, setMyValue] = useState(value);
   const [loading, setLoading] = useState(false);
   // Callers pass either a suffix array (node params) or an `.a,.b` accept string (form input).
@@ -57,7 +60,7 @@ export default function InputFileComponent({
   const checkFileSize = (file) => {
     const maxSize = (appConfig.uploadFileMaxSize || 50) * 1024 * 1024;
     if (file.size > maxSize) {
-      return `文件：${file.name} 超过 ${appConfig.uploadFileMaxSize} MB，已移除`
+      return t('chat.fileExceedRemoved', { name: file.name, size: appConfig.uploadFileMaxSize })
     }
     return ''
   }
@@ -167,6 +170,17 @@ export default function InputFileComponent({
           }
         }
 
+        // Audio/video is transcribed, not text-extracted: every clip holds an ASR
+        // slot for the whole run. Same cap the end-user chat enforces, applied to
+        // the picked batch — a form field replaces its value rather than appending.
+        if (files.filter((file) => isMediaFileName(file.name)).length > MAX_MEDIA_FILES) {
+          toast({
+            variant: 'error',
+            description: t('chat.mediaFileTooMany')
+          })
+          return setLoading(false);
+        }
+
         const fileNames = Array.from(files).map(file => file.name); // Extract file names
 
         // Perform the upload for each file
@@ -208,7 +222,7 @@ export default function InputFileComponent({
       } else {
         toast({
           variant: 'error',
-          description: '没有选择文件'
+          description: t('chat.noFileSelected')
         })
         setLoading(false); // Hide loading state if no files were selected
       }

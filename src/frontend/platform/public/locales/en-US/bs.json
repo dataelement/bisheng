@@ -521,6 +521,8 @@
     "fileUploadFailed": "File upload failed: {{name}}",
     "fileExceedRemoved": "File: {{name}} exceeds {{size}}MB and has been removed",
     "fileTypeNotAllowed": "Unsupported file type: {{type}}",
+    "mediaFileTooMany": "You cannot upload more than 5 audio/video files.",
+    "noFileSelected": "No file selected",
     "uploadFailedCheckFormat": "Upload failed, please check file format",
     "sourceTooltip": "Source Paragraph",
     "filterLabel": "Filter Labels",

@@ -511,6 +511,8 @@
     "fileUploadFailed": "ファイルのアップロードに失敗しました: {{name}}",
     "fileExceedRemoved": "ファイル：{{name}} は {{size}}M を超えているため削除されました",
     "fileTypeNotAllowed": "サポートされていないファイル形式：{{type}}",
+    "mediaFileTooMany": "アップロードファイル数は5個を超えられません。",
+    "noFileSelected": "ファイルが選択されていません",
     "uploadFailedCheckFormat": "アップロードに失敗しました。ファイル形式を確認してください",
     "sourceTooltip": "出典段落",
     "filterLabel": "ラベルでフィルター",
