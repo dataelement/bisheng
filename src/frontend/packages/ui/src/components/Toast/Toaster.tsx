@@ -133,7 +133,11 @@ function ToastRow({ item, closeLabel }: { item: ToastItem; closeLabel: string })
         item.closing ? 'grid-rows-[0fr] pb-0' : 'grid-rows-[1fr] pb-2',
       )}
     >
-      <div className="overflow-hidden">
+      {/* The 0fr collapse only bites when the row clips its content — but a
+          clipping box that fits the toast exactly also cuts off `shadow-popup`,
+          which is drawn entirely OUTSIDE those bounds. So clip only while the
+          row is collapsing; the toast has faded out by then anyway. */}
+      <div className={item.closing ? 'overflow-hidden' : 'overflow-visible'}>
         <div className="flex justify-center">
           <div
             ref={boxRef}
