@@ -15909,7 +15909,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
         await self.update_folder_update_time(file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge_id)
-        # 积分旁路：上传成功记分，失败不影响返回。
+        # 积分旁路：直传人即发布人，上传成功记分，失败不影响返回。
         try:
             from bisheng.points.domain.services.points_award_hooks import notify_space_files_ready
 
@@ -15918,6 +15918,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_id=int(knowledge_id),
                 files=process_files,
                 uploader_id=int(self.login_user.user_id),
+                publisher_id=int(self.login_user.user_id),
                 is_favorite_space=bool(getattr(db_knowledge, "is_favorite", False)),
             )
         except Exception:
