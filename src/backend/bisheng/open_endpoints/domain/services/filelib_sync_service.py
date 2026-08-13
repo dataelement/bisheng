@@ -767,7 +767,9 @@ class FilelibSyncService:
         }
         domain_code = normalize_business_domain_code(domain.code)
         if int(space.id) not in configured_space_ids or domain_code not in allowed_codes:
-            raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台的{space.name}不存在{domain.name}")
+            logger.warning(f"首钢股份知识管理平台的{space.name}不存在{domain.name}")
+            # raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台的{space.name}不存在{domain.name}")
+            return
 
     async def _require_upload_permission(self, target: ResolvedFileSyncTarget) -> None:
         strict_catalog = (
