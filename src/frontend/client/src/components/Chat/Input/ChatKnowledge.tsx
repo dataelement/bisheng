@@ -1,5 +1,4 @@
 import {
-  ChevronLeft,
   Glasses,
   PaperclipIcon,
 } from "lucide-react";
@@ -374,9 +373,10 @@ export const ChatKnowledge = ({
           // skill / org lists) needs the wider width; 160px is fine only for
           // the compact root of the "+" menu (short action items).
           isMobile && mobileTallPanel && 'touch-mobile:w-[min(calc(100vw-24px),320px)]',
-          // Mobile knowledge popup only: replace `p-2` with `pt-2 px-2 pb-0` so
-          // the scroll list's own `pb-2` handles the last-item spacing.
-          isMobile && variant === 'knowledge' && 'touch-mobile:pt-3 touch-mobile:px-3 touch-mobile:pb-0',
+          // Any mobile list panel (knowledge popup, or the "+" menu drilled into
+          // org / skill): replace `p-3` with `pt-3 px-3 pb-0` so the scroll list's
+          // own bottom padding is the only gap under the last row.
+          isMobile && mobileTallPanel && 'touch-mobile:pt-3 touch-mobile:px-3 touch-mobile:pb-0',
           isMobile &&
           mobileTallPanel &&
           'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
@@ -519,10 +519,10 @@ export const ChatKnowledge = ({
         {/* Org knowledge selector (mobile): drill panel. */}
         {variant === 'plus' && isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[#999] hover:bg-[#f2f3f5]"
                 aria-label={localize('com_ui_go_back')}
                 onClick={(e) => {
                   e.preventDefault();
@@ -530,8 +530,9 @@ export const ChatKnowledge = ({
                   setMobilePanel('root');
                 }}
               >
-                <ChevronLeft className="size-5" strokeWidth={2} />
+                <Outlined.ArrowLeft size={18} />
               </button>
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                 {localize('com_tools_org_knowledge')}
               </span>
@@ -625,10 +626,10 @@ export const ChatKnowledge = ({
         {/* 添加 Skill — 移动端下钻面板 */}
         {isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[#999] hover:bg-[#f2f3f5]"
                 aria-label={localize('com_ui_go_back')}
                 onClick={(e) => {
                   e.preventDefault();
@@ -636,8 +637,9 @@ export const ChatKnowledge = ({
                   setMobilePanel('root');
                 }}
               >
-                <ChevronLeft className="size-5" strokeWidth={2} />
+                <Outlined.ArrowLeft size={18} />
               </button>
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                 {localize('com_linsight_add_skill')}
               </span>
