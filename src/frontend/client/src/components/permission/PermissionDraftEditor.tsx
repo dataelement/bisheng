@@ -1,8 +1,5 @@
-import { Button } from "@bisheng/ui";
-import { Outlined } from "bisheng-icons";
 import { useLocalize } from "~/hooks";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { RelationSelect } from "./RelationSelect";
+import { PermissionLevelMenu } from "./PermissionLevelMenu";
 import type { RelationModelOption } from "./RelationSelect";
 import {
   getPermissionDraftRowKey,
@@ -58,6 +55,10 @@ export function PermissionDraftEditor({
           && capabilities.canChangeRelation
           && relationModels.length > 0;
         const canRemove = !row.immutableCreator && capabilities.canRemove;
+        const activeModelId = row.modelId ?? row.relation;
+        const relationLabel =
+          capabilities.relationModels.find((model) => model.id === activeModelId)?.name
+          ?? localize(`com_permission.level_${row.relation}`);
 
         return (
           <div key={rowKey} className="flex min-h-11 items-center gap-3 py-2">
@@ -68,33 +69,18 @@ export function PermissionDraftEditor({
               <span className="min-w-0 truncate text-body text-text-1">{row.subjectName}</span>
             </div>
             {row.immutableCreator ? (
-              <span className="px-2 text-body text-[#999999]">{localize("creator")}</span>
+              <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-[#999999]">
+                {localize("creator")}
+              </span>
             ) : (
-              <RelationSelect
-                value={row.modelId ?? row.relation}
-                onChange={(modelId) => handleRelationChange(row, modelId)}
+              <PermissionLevelMenu
+                label={relationLabel}
                 options={relationModels}
-                disabled={!canChangeRelation}
-                className="w-32"
+                activeId={row.modelId ?? row.relation}
+                canChangeLevel={canChangeRelation}
+                onChange={(modelId) => handleRelationChange(row, modelId)}
+                onRemove={canRemove ? () => handleRemove(row) : undefined}
               />
-            )}
-            {canRemove && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    color="danger"
-                    variant="text"
-                    size="small"
-                    iconOnly
-                    aria-label={localize("com_permission.remove")}
-                    onClick={() => handleRemove(row)}
-                  >
-                    <Outlined.Delete className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{localize("com_permission.remove")}</TooltipContent>
-              </Tooltip>
             )}
           </div>
         );

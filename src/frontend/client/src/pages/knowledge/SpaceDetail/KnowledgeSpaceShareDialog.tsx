@@ -1,4 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+    INCLUDE_CHILDREN_CHECKBOX_CLASS,
+    INCLUDE_CHILDREN_LABEL_CLASS,
+    PERMISSION_DIALOG_CONTENT_CLASS,
+    SUBJECT_TAB_BUTTON_ACTIVE_CLASS,
+    SUBJECT_TAB_BUTTON_CLASS,
+    SUBJECT_TAB_BUTTON_INACTIVE_CLASS,
+    SUBJECT_TAB_LIST_CLASS,
+    SUBJECT_TAB_TRIGGER_CLASS,
+} from "~/components/permission/permissionDialogStyles";
 import { PermissionGrantTab } from "~/components/permission/PermissionGrantTab";
 import { PermissionListTab } from "~/components/permission/PermissionListTab";
 import {
@@ -113,12 +123,12 @@ export function KnowledgeSpaceShareDialog({
             className="flex min-h-0 flex-1 flex-col"
         >
             <div className="flex items-center justify-between gap-3">
-                <TabsList className="w-fit shrink-0 rounded-md border border-[#ECECEC] bg-white p-[3px] shadow-none">
+                <TabsList className={SUBJECT_TAB_LIST_CLASS}>
                     {SUBJECT_TABS.map((tab) => (
                         <TabsTrigger
                             key={tab.value}
                             value={tab.value}
-                            className="min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] font-normal leading-[22px] text-[#818181] shadow-none data-[state=active]:bg-[rgb(var(--brand-500)/0.15)] data-[state=active]:font-medium data-[state=active]:text-blue-500 data-[state=active]:shadow-none"
+                            className={SUBJECT_TAB_TRIGGER_CLASS}
                         >
                             {localize(tab.labelKey)}
                         </TabsTrigger>
@@ -160,7 +170,7 @@ export function KnowledgeSpaceShareDialog({
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(var(--bs-vw,100vw)-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[var(--bs-dvh,100dvh)] max-[768px]:max-h-[var(--bs-dvh,100dvh)] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:p-4">
+                <DialogContent className={PERMISSION_DIALOG_CONTENT_CLASS}>
                     <DialogHeader className="shrink-0 text-left">
                         <DialogTitle className="text-left">{dialogTitle}</DialogTitle>
                     </DialogHeader>
@@ -172,7 +182,7 @@ export function KnowledgeSpaceShareDialog({
             </Dialog>
 
             <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
-                <DialogContent className="!flex h-[80vh] max-h-[800px] w-[calc(var(--bs-vw,100vw)-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5 max-[768px]:fixed max-[768px]:inset-0 max-[768px]:h-[var(--bs-dvh,100dvh)] max-[768px]:max-h-[var(--bs-dvh,100dvh)] max-[768px]:w-full max-[768px]:max-w-none max-[768px]:translate-x-0 max-[768px]:translate-y-0 max-[768px]:rounded-none max-[768px]:p-4">
+                <DialogContent className={PERMISSION_DIALOG_CONTENT_CLASS}>
                     <DialogHeader className="shrink-0 text-left">
                         <DialogTitle className="text-left">
                             {localize("com_permission.tab_grant")} - {resourceName}
@@ -181,16 +191,16 @@ export function KnowledgeSpaceShareDialog({
 
                     <div className="user-manger mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
                         <div className="flex items-center gap-3">
-                            <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-md border border-[#ECECEC] bg-white p-[3px]">
+                            <div className={`inline-flex items-center justify-center ${SUBJECT_TAB_LIST_CLASS}`}>
                                 {SUBJECT_TABS.map((tab) => (
                                     <button
                                         key={tab.value}
                                         type="button"
                                         className={[
-                                            "min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors",
+                                            SUBJECT_TAB_BUTTON_CLASS,
                                             grantSubjectType === tab.value
-                                                ? "bg-[rgb(var(--brand-500)/0.15)] font-medium text-blue-500"
-                                                : "font-normal text-[#818181]",
+                                                ? SUBJECT_TAB_BUTTON_ACTIVE_CLASS
+                                                : SUBJECT_TAB_BUTTON_INACTIVE_CLASS,
                                         ].join(" ")}
                                         onClick={() => setGrantSubjectType(tab.value)}
                                     >
@@ -200,9 +210,9 @@ export function KnowledgeSpaceShareDialog({
                             </div>
 
                             {grantSubjectType === "department" && (
-                                <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-[#212121]">
+                                <label className={INCLUDE_CHILDREN_LABEL_CLASS}>
                                     <Checkbox
-                                        className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
+                                        className={INCLUDE_CHILDREN_CHECKBOX_CLASS}
                                         checked={grantIncludeChildren}
                                         onCheckedChange={(value) => setGrantIncludeChildren(value === true)}
                                     />

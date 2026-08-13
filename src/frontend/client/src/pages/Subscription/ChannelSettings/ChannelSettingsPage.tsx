@@ -348,6 +348,7 @@ export function ChannelSettingsPage() {
         </div>
 
         <SettingsFooter
+          centered
           cancelLabel={settings.localize("com_unified_permission.cancel")}
           submitLabel={settings.localize(
             settings.isEditMode
