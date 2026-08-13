@@ -3377,6 +3377,11 @@ class TestTupleLifecycle:
                 "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_delete_non_creator_members",
                 new_callable=AsyncMock,
             ) as mock_delete_members,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
 
@@ -3461,6 +3466,11 @@ class TestTupleLifecycle:
                 "SpaceChannelMemberDao.async_delete_non_creator_members",
                 new_callable=AsyncMock,
             ) as mock_delete_members,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
             patch.object(service, "_send_space_event_notification", new_callable=AsyncMock),
         ):
             await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
@@ -3515,6 +3525,11 @@ class TestTupleLifecycle:
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_delete_non_creator_members",
                 new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
             patch.object(
                 service,

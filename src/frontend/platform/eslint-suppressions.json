@@ -1618,11 +1618,6 @@
       "count": 3
     }
   },
-  "src/pages/BuildPage/bench/DepartmentKnowledgeSpaceManagerDialog.tsx": {
-    "no-restricted-syntax": {
-      "count": 16
-    }
-  },
   "src/pages/BuildPage/bench/DialogueWork.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -1636,9 +1631,6 @@
   "src/pages/BuildPage/bench/KnowledgeSpace.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 7
     }
   },
   "src/pages/BuildPage/bench/KnowledgeSpaceSensitivePolicy.tsx": {

@@ -17,6 +17,27 @@ class DepartmentKnowledgeSpaceExistsError(BaseErrorCode):
     Msg: str = "Department knowledge space already exists"
 
 
+# F045: single space admin for department knowledge spaces
+class SpaceAdminRequiredError(BaseErrorCode):
+    Code: int = 18003
+    Msg: str = "A space admin must be specified for a department knowledge space"
+
+
+class SpaceAdminInvalidUserError(BaseErrorCode):
+    Code: int = 18004
+    Msg: str = "The space admin must be an active user of the current tenant"
+
+
+class SpacePendingAdminError(BaseErrorCode):
+    Code: int = 18005
+    Msg: str = "The space is pending admin configuration; this operation is locked until an admin is assigned"
+
+
+class SpaceAdminConflictError(BaseErrorCode):
+    Code: int = 18006
+    Msg: str = "The space admin was changed concurrently; please refresh and retry"
+
+
 class SpaceFolderNotFoundError(BaseErrorCode):
     Code: int = 18010
     Msg: str = "Folder does not exist"

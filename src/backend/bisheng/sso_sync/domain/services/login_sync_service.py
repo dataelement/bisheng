@@ -363,6 +363,14 @@ class LoginSyncService:
                 user.delete = want
                 user.disable_source = cls._disable_source_for_row(row_source, want)
                 await UserDao.aupdate_user(user)
+                if want == 1:
+                    # F045: an SSO-disabled account cannot stay the single admin
+                    # of a department knowledge space — flip to pending-admin.
+                    from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                        DepartmentKnowledgeSpaceService,
+                    )
+
+                    await DepartmentKnowledgeSpaceService.handle_admin_invalidated(user.user_id)
 
         if int(getattr(user, "delete", 0) or 0) == 1 and payload.account_disabled is not True:
             raise UserForbiddenError.http_exception()
@@ -690,17 +698,8 @@ class LoginSyncService:
             )
         for did in dict.fromkeys(delete_grant_dept_ids):
             await DepartmentAdminGrantDao.adelete(user_id, did)
-            # Revoking the admin grant must also clear the derived knowledge-space
-            # binding (space_channel_member row + knowledge_space#manager tuple),
-            # else the user keeps manage access after SSO sync (越权 residue).
-            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
-                DepartmentKnowledgeSpaceService,
-            )
-
-            await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
-                department_id=did,
-                user_ids=[user_id],
-            )
+            # F045: department-admin status no longer grants department knowledge
+            # space manage access, so there is no derived binding to clear.
 
     @classmethod
     async def _remove_sso_secondary_membership(
@@ -727,16 +726,8 @@ class LoginSyncService:
         ) + DepartmentChangeHandler.on_admin_removed(department_id, [user_id])
         await DepartmentChangeHandler.execute_async(ops)
         await DepartmentAdminGrantDao.adelete(user_id, department_id)
-        # Clear the derived knowledge-space binding (space_channel_member row +
-        # knowledge_space#manager tuple) so admin access doesn't survive removal.
-        from bisheng.knowledge.domain.services.department_knowledge_space_service import (
-            DepartmentKnowledgeSpaceService,
-        )
-
-        await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
-            department_id=department_id,
-            user_ids=[user_id],
-        )
+        # F045: department-admin status no longer grants department knowledge
+        # space manage access, so there is no derived binding to clear.
 
     @classmethod
     async def _reconcile_remove_sso_secondary_memberships(

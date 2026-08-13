@@ -1153,17 +1153,8 @@ class DepartmentService:
         )
         await DepartmentChangeHandler.execute_async(ops)
         await DepartmentAdminGrantDao.adelete(user_id, int(dept.id))
-        from bisheng.knowledge.domain.services.department_knowledge_space_service import (
-            DepartmentKnowledgeSpaceService,
-        )
-
-        await DepartmentKnowledgeSpaceService.sync_department_admin_memberships(
-            request=None,
-            login_user=login_user,
-            department_id=dept.id,
-            added_user_ids=[],
-            removed_user_ids=[user_id],
-        )
+        # F045: department-admin status no longer syncs into the department
+        # knowledge space — the space is managed by its single explicit admin.
 
     @classmethod
     async def _aget_department_admin_user_ids(cls, dept_internal_id: int) -> set[int]:
@@ -1266,19 +1257,8 @@ class DepartmentService:
                 [int(u) for u in to_remove],
             )
 
-        if to_add or to_remove:
-            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
-                DepartmentKnowledgeSpaceService,
-            )
-
-            await DepartmentKnowledgeSpaceService.sync_department_admin_memberships(
-                request=None,
-                login_user=login_user,
-                department_id=dept.id,
-                added_user_ids=to_add,
-                removed_user_ids=to_remove,
-            )
-
+        # F045: department-admin changes no longer propagate to the department
+        # knowledge space — the space is managed by its single explicit admin.
         return await cls.aget_admins(dept_id, login_user)
 
     @classmethod
@@ -1999,16 +1979,8 @@ class DepartmentService:
             ) + DepartmentChangeHandler.on_admin_removed(old_dept_id_for_fga, [user_id])
             await DepartmentChangeHandler.execute_async(ops_rm)
             await DepartmentAdminGrantDao.adelete(user_id, int(old_dept_id_for_fga))
-            # 撤销部门管理员后，清理其在原部门知识空间的派生绑定
-            # (space_channel_member 行 + knowledge_space#manager 元组)，否则越权残留。
-            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
-                DepartmentKnowledgeSpaceService,
-            )
-
-            await DepartmentKnowledgeSpaceService.cleanup_removed_department_admins(
-                department_id=int(old_dept_id_for_fga),
-                user_ids=[user_id],
-            )
+            # F045: no derived space binding to clean — department-admin status
+            # no longer grants department knowledge space manage access.
         if fga_add_new:
             ops_add = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
             await DepartmentChangeHandler.execute_async(ops_add)

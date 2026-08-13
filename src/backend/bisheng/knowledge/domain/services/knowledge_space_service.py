@@ -313,6 +313,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         binding_map = {binding.space_id: binding for binding in bindings}
         departments = await DepartmentDao.aget_by_ids([binding.department_id for binding in bindings])
         department_name_map = {dept.id: dept.name for dept in departments}
+        admin_user_ids = sorted(
+            {int(binding.admin_user_id) for binding in bindings if getattr(binding, "admin_user_id", None)}
+        )
+        admin_name_map: dict[int, str] = {}
+        if admin_user_ids:
+            admin_users = await UserDao.aget_user_by_ids(admin_user_ids)
+            admin_name_map = {int(user.user_id): user.user_name for user in admin_users or []}
         for space in spaces:
             binding = binding_map.get(int(space.id))
             if binding is None:
@@ -323,6 +330,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.approval_enabled = binding.approval_enabled
             space.sensitive_check_enabled = binding.sensitive_check_enabled
             space.is_hidden = binding.is_hidden
+            # F045: the single space admin; NULL column ⟺ pending-admin state.
+            admin_user_id = getattr(binding, "admin_user_id", None)
+            space.admin_user_id = int(admin_user_id) if admin_user_id else None
+            space.admin_user_name = admin_name_map.get(int(admin_user_id)) if admin_user_id else None
+            space.pending_admin = admin_user_id is None
+            # F045 AC-04/AC-12: the creator (super admin) never surfaces on a
+            # department space. Kill the Knowledge.user_id-derived CREATOR role
+            # the generic formatters synthesize, and show the space admin — not
+            # the creator — as the space's front-facing owner figure.
+            if space.user_role == UserRoleEnum.CREATOR:
+                space.user_role = (
+                    UserRoleEnum.ADMIN if admin_user_id and self.login_user.user_id == int(admin_user_id) else None
+                )
+            space.user_name = space.admin_user_name or ""
+            space.avatar = None
         return spaces
 
     async def _populate_root_file_counts(self, spaces: list[KnowledgeSpaceInfoResp]) -> None:
@@ -1472,8 +1494,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_library_id: int | None = None,
         auto_tag_custom_tags: list[str] | None = None,
         skip_user_limit: bool = False,
+        materialize_creator: bool = True,
     ) -> Knowledge:
-        """Create a new knowledge space (max 30 per user)."""
+        """Create a new knowledge space (max 30 per user).
+
+        ``materialize_creator=False`` (F045, department knowledge spaces) skips
+        the CREATOR member row and the OpenFGA owner tuple: the creating super
+        admin must not surface as a front-facing role — the space is managed by
+        its single explicitly configured space admin. ``Knowledge.user_id``
+        still records the operator for auditing.
+        """
 
         if not skip_user_limit:
             count = await KnowledgeDao.async_count_spaces_by_user(
@@ -1525,28 +1555,29 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
 
-        member = SpaceChannelMember(
-            business_id=str(knowledge_space.id),
-            business_type=BusinessTypeEnum.SPACE,
-            user_id=self.login_user.user_id,
-            user_role=UserRoleEnum.CREATOR,
-            status=MembershipStatusEnum.ACTIVE,
-        )
-        await SpaceChannelMemberDao.async_insert_member(member)
+        if materialize_creator:
+            member = SpaceChannelMember(
+                business_id=str(knowledge_space.id),
+                business_type=BusinessTypeEnum.SPACE,
+                user_id=self.login_user.user_id,
+                user_role=UserRoleEnum.CREATOR,
+                status=MembershipStatusEnum.ACTIVE,
+            )
+            await SpaceChannelMemberDao.async_insert_member(member)
 
-        # F008: Write owner tuple to OpenFGA (INV-2)
-        try:
-            await OwnerService.write_owner_tuple(
-                self.login_user.user_id,
-                "knowledge_space",
-                str(knowledge_space.id),
-            )
-        except Exception as e:
-            _logger.warning(
-                "Failed to write owner tuple for knowledge_space %s: %s",
-                knowledge_space.id,
-                e,
-            )
+            # F008: Write owner tuple to OpenFGA (INV-2)
+            try:
+                await OwnerService.write_owner_tuple(
+                    self.login_user.user_id,
+                    "knowledge_space",
+                    str(knowledge_space.id),
+                )
+            except Exception as e:
+                _logger.warning(
+                    "Failed to write owner tuple for knowledge_space %s: %s",
+                    knowledge_space.id,
+                    e,
+                )
 
         # Audit log for knowledge space creation
         await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
@@ -1803,6 +1834,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 child_resources=child_resources,
             )
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
+            # F045: a department space has no CREATOR row — the wipe above also
+            # removed the single space admin's materialization. Restore it (the
+            # admin_user_id column is the source of truth and must stay served).
+            dept_binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
+            if dept_binding and dept_binding.admin_user_id:
+                from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                    DepartmentKnowledgeSpaceService,
+                )
+
+                await DepartmentKnowledgeSpaceService._materialize_space_admin(
+                    space_id=space_id,
+                    user_id=int(dept_binding.admin_user_id),
+                )
+                removed_user_ids.discard(int(dept_binding.admin_user_id))
 
         space = await KnowledgeDao.async_update_space(space)
         new_auth_type = space.auth_type
@@ -4694,6 +4739,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             # next click and mask the error (first click errors, second click silently
             # "succeeds"). The membership is written only once the gate has decided.
             gate = self.approval_gate or self._build_space_approval_gate()
+            # F045 AC-09: a department space without a space admin has no valid
+            # approver — block the join request instead of stranding it.
+            from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+                DepartmentKnowledgeSpaceService,
+            )
+
+            await DepartmentKnowledgeSpaceService.ensure_space_not_pending_admin(space.id)
             primary_dept = await UserDepartmentDao.aget_user_primary_department(self.login_user.user_id)
             gate_result = await gate.request_or_pass(
                 ApprovalGateRequest(

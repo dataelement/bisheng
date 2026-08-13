@@ -9,6 +9,18 @@ export interface DepartmentKnowledgeSpaceSummary {
   auth_type?: string;
   is_released?: boolean;
   is_hidden?: boolean;
+  // F045: the single space admin; pending_admin=true means the space has no
+  // valid admin and admin-gated operations are locked until one is assigned.
+  admin_user_id?: number | null;
+  admin_user_name?: string | null;
+  pending_admin?: boolean | null;
+}
+
+export interface DepartmentKnowledgeSpaceCreateItem {
+  department_id: number;
+  // F045: required — every department knowledge space is created with exactly
+  // one space admin; the backend rejects items without one (18003).
+  admin_user_id: number;
 }
 
 export async function getDepartmentKnowledgeSpacesApi(params?: {
@@ -19,10 +31,18 @@ export async function getDepartmentKnowledgeSpacesApi(params?: {
 }
 
 export async function batchCreateDepartmentKnowledgeSpacesApi(
-  departmentIds: number[],
+  items: DepartmentKnowledgeSpaceCreateItem[],
 ): Promise<DepartmentKnowledgeSpaceSummary[]> {
-  return await axios.post(`/api/v1/knowledge/space/department/batch-create`, {
-    items: departmentIds.map((department_id) => ({ department_id })),
+  return await axios.post(`/api/v1/knowledge/space/department/batch-create`, { items });
+}
+
+// F045: atomically replace the single space admin (super admin only).
+export async function replaceDepartmentSpaceAdminApi(
+  departmentId: number,
+  adminUserId: number,
+): Promise<DepartmentKnowledgeSpaceSummary> {
+  return await axios.put(`/api/v1/knowledge/space/department/${departmentId}/admin`, {
+    admin_user_id: adminUserId,
   });
 }
 

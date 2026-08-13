@@ -233,6 +233,13 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.knowledge.scheduler.reconcile_file_scheduler_task",
                 "schedule": 300.0,
             }
+        # F045: 6h reconcile of the single-space-admin materialization
+        # (admin_user_id column ↔ ADMIN member row + knowledge_space#manager tuple).
+        if "reconcile_department_space_admins" not in self.beat_schedule:
+            self.beat_schedule["reconcile_department_space_admins"] = {
+                "task": "bisheng.worker.knowledge.space_admin_reconcile.reconcile_department_space_admins",
+                "schedule": crontab.from_string("30 */6 * * *"),  # every 6 hours, offset from F012
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():

@@ -1094,7 +1094,35 @@
     "fetchKbFailed": "获取知识库列表失败",
     "addMoreModels": "添加更多模型",
     "home": "首页",
-    "appCenter": "应用"
+    "appCenter": "应用",
+    "departmentKnowledgeSpace": "部门知识空间",
+    "departmentKnowledgeSpaceDesc": "统一管理部门知识空间创建，并查看已绑定部门的知识空间。",
+    "departmentKnowledgeSpaceManager": "部门知识空间管理",
+    "departmentKnowledgeSpaceManagerDesc2": "勾选部门创建知识空间，取消勾选已配置部门可将其从列表隐藏（不会删除空间与数据）。",
+    "departmentKnowledgeSpaceCreatedList": "已创建知识空间",
+    "departmentKnowledgeSpaceCreatedListDesc": "已绑定部门的知识空间会统一展示在这里。",
+    "departmentKnowledgeSpaceCreatedEmpty": "暂无已创建的部门知识空间",
+    "departmentKnowledgeSpaceDepartmentLabel": "所属部门",
+    "departmentKnowledgeSpaceChangePreview": "变更预览",
+    "departmentKnowledgeSpaceSelectedDesc": "默认生成“XX部门的知识空间”。每个新空间必须选择一名负责人；超级管理员仅执行创建，不进入空间成员和权限关系。",
+    "departmentKnowledgeSpaceNoChanges": "暂无变更",
+    "departmentKnowledgeSpacePendingCreate": "待创建",
+    "departmentKnowledgeSpacePendingRestore": "待恢复显示",
+    "departmentKnowledgeSpacePendingHide": "待隐藏",
+    "departmentKnowledgeSpaceDefaultName": "默认空间名",
+    "departmentKnowledgeSpaceConfigured": "已配置",
+    "departmentKnowledgeSpaceHidden": "已隐藏",
+    "departmentKnowledgeSpaceSelectAll": "全选可创建部门",
+    "departmentKnowledgeSpaceClearAll": "取消全选",
+    "departmentKnowledgeSpaceSave": "保存",
+    "departmentKnowledgeSpaceSaveSuccess": "保存成功",
+    "departmentKnowledgeSpaceAdminLabel": "空间负责人",
+    "departmentKnowledgeSpaceAdminSearchPlaceholder": "搜索企业内部用户",
+    "departmentKnowledgeSpaceAdminRequired": "请为每个新空间选择空间负责人",
+    "departmentKnowledgeSpacePendingAdmin": "待配置负责人",
+    "departmentKnowledgeSpaceReplaceAdmin": "更换负责人",
+    "departmentKnowledgeSpaceReplaceAdminSuccess": "负责人已更新",
+    "departmentKnowledgeSpaceDefaultNameValue": "{{name}}的知识空间"
   },
   "tools": {
     "addTool": "添加工具",
@@ -2010,5 +2038,8 @@
       "githubRateLimit": "GitHub 访问已达速率限制，请稍后再试",
       "unknown": "操作失败，请重试"
     }
-  }
+  },
+  "departmentSpace.adminLabel": "空间负责人",
+  "departmentSpace.adminSearchPlaceholder": "搜索企业内部用户",
+  "departmentSpace.adminRequired": "请为每个新空间选择空间负责人"
 }

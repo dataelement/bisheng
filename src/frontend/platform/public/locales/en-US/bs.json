@@ -1105,7 +1105,35 @@
     "fetchKbFailed": "Failed to fetch knowledge bases",
     "addMoreModels": "Add more models",
     "home": "Home",
-    "appCenter": "Apps"
+    "appCenter": "Apps",
+    "departmentKnowledgeSpace": "Department knowledge spaces",
+    "departmentKnowledgeSpaceDesc": "Create department knowledge spaces in one place and review the ones already bound.",
+    "departmentKnowledgeSpaceManager": "Manage department knowledge spaces",
+    "departmentKnowledgeSpaceManagerDesc2": "Check a department to create its knowledge space; uncheck a configured one to hide it from the list (space and data are kept).",
+    "departmentKnowledgeSpaceCreatedList": "Created knowledge spaces",
+    "departmentKnowledgeSpaceCreatedListDesc": "Knowledge spaces bound to departments are listed here.",
+    "departmentKnowledgeSpaceCreatedEmpty": "No department knowledge spaces yet",
+    "departmentKnowledgeSpaceDepartmentLabel": "Department",
+    "departmentKnowledgeSpaceChangePreview": "Pending changes",
+    "departmentKnowledgeSpaceSelectedDesc": "Spaces are named \"<department>'s knowledge space\" by default. Every new space requires a space admin; the super admin only performs the creation and never enters the space's members or permissions.",
+    "departmentKnowledgeSpaceNoChanges": "No changes",
+    "departmentKnowledgeSpacePendingCreate": "To create",
+    "departmentKnowledgeSpacePendingRestore": "To restore",
+    "departmentKnowledgeSpacePendingHide": "To hide",
+    "departmentKnowledgeSpaceDefaultName": "Default space name",
+    "departmentKnowledgeSpaceConfigured": "Configured",
+    "departmentKnowledgeSpaceHidden": "Hidden",
+    "departmentKnowledgeSpaceSelectAll": "Select all creatable",
+    "departmentKnowledgeSpaceClearAll": "Clear selection",
+    "departmentKnowledgeSpaceSave": "Save",
+    "departmentKnowledgeSpaceSaveSuccess": "Saved",
+    "departmentKnowledgeSpaceAdminLabel": "Space admin",
+    "departmentKnowledgeSpaceAdminSearchPlaceholder": "Search users in your organization",
+    "departmentKnowledgeSpaceAdminRequired": "Select a space admin for every new space",
+    "departmentKnowledgeSpacePendingAdmin": "Admin pending",
+    "departmentKnowledgeSpaceReplaceAdmin": "Change admin",
+    "departmentKnowledgeSpaceReplaceAdminSuccess": "Space admin updated",
+    "departmentKnowledgeSpaceDefaultNameValue": "{{name}}的知识空间"
   },
   "tools": {
     "addTool": "Add Tool",
@@ -2065,5 +2093,8 @@
       "githubRateLimit": "GitHub rate limit exceeded, please retry later",
       "unknown": "Operation failed, please retry"
     }
-  }
+  },
+  "departmentSpace.adminLabel": "Space admin",
+  "departmentSpace.adminSearchPlaceholder": "Search users in your organization",
+  "departmentSpace.adminRequired": "Select a space admin for every new space"
 }

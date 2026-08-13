@@ -78,6 +78,13 @@ class KnowledgeSpaceInfoResp(KnowledgeBase):
         default=None,
         description="Whether the department space is hidden from the management list (data preserved)",
     )
+    # F045: single space admin surface (department spaces only).
+    admin_user_id: int | None = Field(default=None, description="The single space admin user id (department spaces)")
+    admin_user_name: str | None = Field(default=None, description="The single space admin user name")
+    pending_admin: bool | None = Field(
+        default=None,
+        description="True when a department space has no valid space admin (admin-gated operations are locked)",
+    )
     auto_tag_mode: Literal["library", "custom"] = Field(
         default="library",
         description="Discriminator: 'library' for an admin-managed tag library, 'custom' for a private library backed by user-entered tags.",
@@ -110,11 +117,18 @@ class KnowledgeSpaceUpdateReq(BaseModel):
 
 class DepartmentKnowledgeSpaceBatchItem(BaseModel):
     department_id: int = Field(..., description="Department.id")
+    # F045: every department knowledge space must be created with exactly one
+    # space admin; requests without one are rejected (SpaceAdminRequiredError).
+    admin_user_id: int | None = Field(None, description="The single space admin (required, validated in service)")
     name: str | None = Field(None, max_length=200, description="Optional custom space name")
     description: str | None = Field(None, description="Optional custom space description")
     icon: str | None = Field(None, description="Optional icon object name")
     auth_type: AuthTypeEnum | None = Field(None, description="Optional auth type override")
     is_released: bool | None = Field(None, description="Optional release override")
+
+
+class DepartmentKnowledgeSpaceAdminReplaceReq(BaseModel):
+    admin_user_id: int = Field(..., description="New space admin user id")
 
 
 class DepartmentKnowledgeSpaceBatchCreateReq(BaseModel):
