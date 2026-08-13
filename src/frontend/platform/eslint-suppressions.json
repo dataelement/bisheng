@@ -202,9 +202,6 @@
   "src/components/bs-comp/chatComponent/CitationReferencesDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 16
     }
   },
   "src/components/bs-comp/chatComponent/CitationSourceIcon.tsx": {
@@ -2966,7 +2963,7 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 8
+      "count": 2
     }
   },
   "src/pages/KnowledgePage/components/RuleFile.tsx": {

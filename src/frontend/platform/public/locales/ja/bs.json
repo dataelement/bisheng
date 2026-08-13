@@ -2035,6 +2035,23 @@
     "noPreviewUrl": "プレビュー可能なファイルアドレスがありません",
     "documentPreview": "ドキュメントプレビュー",
     "downloadDocument": "ドキュメントをダウンロード",
-    "closeDocumentPreview": "ドキュメントプレビューを閉じる"
+    "closeDocumentPreview": "ドキュメントプレビューを閉じる",
+    "web": "ウェブ",
+    "document": "ドキュメント",
+    "untitled": "タイトルなし",
+    "loadingDetail": "出典の詳細を読み込み中...",
+    "loadDetailFailed": "出典の詳細の読み込みに失敗しました",
+    "policyDocument": "政策文書",
+    "references": "参考資料",
+    "closeReferences": "参考資料を閉じる",
+    "backToReferences": "参考資料一覧に戻る",
+    "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません"
+  },
+  "mediaPreview": {
+    "recognizedText": "認識テキスト",
+    "entryText": "登録テキスト",
+    "webPreview": "ウェブプレビュー",
+    "openSourcePage": "元のページを開く",
+    "noWebSnapshot": "ウェブスナップショットがありません。登録テキストを確認するか、元のページを開いてください。"
   }
 }

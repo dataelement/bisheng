@@ -299,9 +299,19 @@ export function getCitationDocumentUrl(detail?: ChatCitation | null) {
   return getCitationDocumentPreviewUrl(detail);
 }
 
-const inflightFileShareCache: Record<string, Promise<string>> = {};
+/** The two addresses a knowledge file has.
+ *
+ *  `originalUrl` is the file the user uploaded; `previewUrl` is the renderable
+ *  stand-in the backend derived from it — the transcript of a clip, the PDF a
+ *  pptx was converted to, the parsed markdown of a web page. Downloads must use
+ *  the original (otherwise you hand someone a transcript named `.mp4`), while
+ *  most viewers want the stand-in.
+ */
+export type CitationDocumentUrls = { originalUrl: string; previewUrl: string };
 
-export async function resolveCitationDocumentUrl(detail?: ChatCitation | null) {
+const inflightFileShareCache: Record<string, Promise<CitationDocumentUrls>> = {};
+
+export async function resolveCitationDocumentUrls(detail?: ChatCitation | null): Promise<CitationDocumentUrls> {
   const fileId = getCitationKnowledgeFileId(detail);
   if (fileId != null) {
     const cacheKey = String(fileId);
@@ -310,9 +320,12 @@ export async function resolveCitationDocumentUrl(detail?: ChatCitation | null) {
         try {
           const res: any = await getFilePathApi(cacheKey);
           const data = res?.data ?? res;
-          return data?.preview_url || data?.original_url || '';
+          return {
+            originalUrl: data?.original_url || '',
+            previewUrl: data?.preview_url || '',
+          };
         } catch {
-          return '';
+          return { originalUrl: '', previewUrl: '' };
         } finally {
           // Drop after settle so a later open re-fetches a fresh signed URL
           // (signed URLs expire and we don't want to pin a dead one).
@@ -320,11 +333,34 @@ export async function resolveCitationDocumentUrl(detail?: ChatCitation | null) {
         }
       })();
     }
-    const url = await inflightFileShareCache[cacheKey];
-    if (url) return url;
+    const urls = await inflightFileShareCache[cacheKey];
+    if (urls.originalUrl || urls.previewUrl) return urls;
   }
   // Legacy fallback for non-knowledge or older payloads without documentId.
-  return getCitationDocumentPreviewUrl(detail);
+  const legacyUrl = getCitationDocumentPreviewUrl(detail);
+  return { originalUrl: legacyUrl, previewUrl: legacyUrl };
+}
+
+export async function resolveCitationDocumentUrl(detail?: ChatCitation | null) {
+  const { previewUrl, originalUrl } = await resolveCitationDocumentUrls(detail);
+  return previewUrl || originalUrl;
+}
+
+/** Original file, for downloads — never the derived preview. */
+export async function resolveCitationDownloadUrl(detail?: ChatCitation | null) {
+  const { originalUrl, previewUrl } = await resolveCitationDocumentUrls(detail);
+  return originalUrl || previewUrl;
+}
+
+const MEDIA_CITATION_EXTENSIONS = new Set([
+  'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg',
+  'mp4', 'mov', 'avi', 'mkv', 'webm',
+]);
+
+/** Whether the cited file is a clip. Decided from the file name, not the URL:
+ *  a media file's preview URL points at its transcript (`.md`). */
+export function isMediaCitation(detail?: ChatCitation | null) {
+  return MEDIA_CITATION_EXTENSIONS.has(getCitationDocumentFileType(detail));
 }
 
 export function toAbsolutePreviewUrl(url?: string | null) {

@@ -10,6 +10,8 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { getViewerType, supportsPagination, supportsSidebar, supportsZoom } from "./viewers";
 import { MediaPlayer } from "./MediaPlayer";
+import { MediaTranscriptTabs } from "./RichKnowledgePreview";
+import { cn } from "~/utils";
 import { DocxViewer } from "./viewers/DocxViewer";
 import { HtmlViewer } from "./viewers/HtmlViewer";
 import { ImageViewer } from "./viewers/ImageViewer";
@@ -52,6 +54,10 @@ export interface FilePreviewProps {
     hideHeaderDownload?: boolean;
     /** Optional business-level download handler. Defaults to downloading fileUrl. */
     onDownloadFile?: () => void;
+    /** Parsed-transcript URL for an audio/video file. When set, the media viewer
+     *  shows the 识别文本 / 入库文本 pane next to the player, like the knowledge
+     *  space does — the cited text lives in the transcript, not in the clip. */
+    transcriptUrl?: string;
 }
 
 export default function FilePreview({
@@ -68,6 +74,7 @@ export default function FilePreview({
     allowDownload = true,
     hideHeaderDownload = false,
     onDownloadFile,
+    transcriptUrl = "",
 }: FilePreviewProps) {
     const localize = useLocalize();
     const viewerType = getViewerType(fileType);
@@ -250,11 +257,12 @@ export default function FilePreview({
                 return <TextViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
             case "audio":
             case "video":
-                // Same player the knowledge space uses, so a clip opened from a
-                // citation looks like the one opened from the file list.
+                // Same split the knowledge space uses: player on the left, the
+                // transcript the answer actually quoted on the right. Stacked on
+                // narrow screens; player-only when there is no transcript.
                 return (
-                    <div className="flex min-h-0 flex-1 justify-center overflow-y-auto bg-[#fbfbfb] p-4">
-                        <div className="w-full max-w-3xl">
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fbfbfb] md:flex-row">
+                        <div className={cn("shrink-0 p-4", transcriptUrl ? "md:w-1/2 md:overflow-y-auto" : "flex-1")}>
                             <MediaPlayer
                                 kind={viewerType}
                                 src={fileUrl}
@@ -262,6 +270,14 @@ export default function FilePreview({
                                 onDownload={handleDownload}
                             />
                         </div>
+                        {transcriptUrl ? (
+                            <>
+                                <div className="h-px shrink-0 bg-[#e5e6eb] md:h-auto md:w-px" />
+                                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                                    <MediaTranscriptTabs fileUrl={transcriptUrl} />
+                                </div>
+                            </>
+                        ) : null}
                     </div>
                 );
             default:

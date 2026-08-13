@@ -2035,6 +2035,23 @@
     "noPreviewUrl": "暂无可预览文件地址",
     "documentPreview": "文档预览",
     "downloadDocument": "下载文档",
-    "closeDocumentPreview": "关闭文档预览"
+    "closeDocumentPreview": "关闭文档预览",
+    "web": "网页",
+    "document": "文档",
+    "untitled": "暂无标题",
+    "loadingDetail": "加载溯源详情...",
+    "loadDetailFailed": "溯源详情加载失败",
+    "policyDocument": "政策文件",
+    "references": "参考资料",
+    "closeReferences": "关闭参考资料",
+    "backToReferences": "返回参考资料列表",
+    "noDownloadUrl": "暂无可下载文件地址"
+  },
+  "mediaPreview": {
+    "recognizedText": "识别文本",
+    "entryText": "入库文本",
+    "webPreview": "网页预览",
+    "openSourcePage": "打开原网页",
+    "noWebSnapshot": "暂无网页快照，请查看入库文本或打开原网页。"
   }
 }

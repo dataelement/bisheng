@@ -8,6 +8,7 @@ import { FileIcon } from "@/components/bs-icons/file";
 import { ExcelPreview } from "@bisheng/file-viewers";
 import DocxPreview from "@/pages/KnowledgePage/components/DocxFileViewer";
 import TxtFileViewer from "@/pages/KnowledgePage/components/TxtFileViewer";
+import { MediaTranscriptTabs } from "@/pages/KnowledgePage/components/RichPreviewFile";
 import { getCitationDetail, type ChatCitation } from "@/controllers/API";
 import {
   getCitationDocumentDownloadUrl,
@@ -15,6 +16,7 @@ import {
   getCitationDocumentName,
   getCitationDocumentPreviewUrl,
   getCitationItemBBoxes,
+  isMediaCitation,
   isRagCitation,
   isRagCitationMissingPreviewUrl,
   toAbsolutePreviewUrl,
@@ -85,6 +87,33 @@ function resolveFileType(detail: ChatCitation, rawUrl: string) {
   return name.split(".").pop()?.toLowerCase() || "";
 }
 
+/** Audio/video citation: the clip itself plus the transcript the answer quoted,
+ *  the same pairing the knowledge space shows. */
+const VIDEO_CITATION_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
+
+function MediaPreview({ fileUrl, transcriptUrl, isVideo }: { fileUrl: string; transcriptUrl: string; isVideo: boolean }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-gray-50">
+      <div className="shrink-0 overflow-visible p-3 pb-0">
+        <section className="overflow-visible rounded-md border bg-white p-3 shadow-sm">
+          {isVideo ? (
+            <video className="max-h-[280px] w-full rounded bg-black" src={fileUrl} controls />
+          ) : (
+            <div className="flex min-h-[120px] flex-col justify-end overflow-visible py-1">
+              <audio className="w-full" src={fileUrl} controls />
+            </div>
+          )}
+        </section>
+      </div>
+      {transcriptUrl ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 pt-3">
+          <MediaTranscriptTabs fileUrl={transcriptUrl} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function buildPdfLabels(bboxes: CitationPdfBBox[]) {
   const labels: Record<number, { id: string; label: [number, number, number, number]; active: boolean; txt: string }[]> = {};
   bboxes.forEach((item, index) => {
@@ -142,30 +171,6 @@ function renderPreviewContent({
     case "doc":
     case "docx":
       return <DocxPreview filePath={fileUrl} />;
-    // Audio/video citations play in place, the same way the knowledge space
-    // previews them — the cited text came from the transcript, but the file the
-    // user clicked is the clip.
-    case "mp3":
-    case "wav":
-    case "m4a":
-    case "aac":
-    case "flac":
-    case "ogg":
-      return (
-        <div className="flex h-full items-center justify-center overflow-auto bg-[#F5F6F8] p-6">
-          <audio className="w-full max-w-2xl" src={fileUrl} controls />
-        </div>
-      );
-    case "mp4":
-    case "mov":
-    case "avi":
-    case "mkv":
-    case "webm":
-      return (
-        <div className="flex h-full items-center justify-center overflow-auto bg-[#F5F6F8] p-6">
-          <video className="max-h-full w-full max-w-2xl rounded bg-black" src={fileUrl} controls />
-        </div>
-      );
     case "png":
     case "jpg":
     case "jpeg":
@@ -259,9 +264,16 @@ export function CitationDocumentPreviewContent({
 
   const { itemId, locateChunk } = preview;
   const fileName = getCitationDocumentName(effectiveDetail);
-  const rawFileUrl = getCitationDocumentPreviewUrl(effectiveDetail);
+  const isMedia = isMediaCitation(effectiveDetail);
+  // A clip renders from the original file (the player), with its transcript —
+  // which is what the preview URL points at — beside it. Everything else
+  // renders from the preview stand-in.
+  const rawFileUrl = isMedia
+    ? getCitationDocumentDownloadUrl(effectiveDetail)
+    : getCitationDocumentPreviewUrl(effectiveDetail);
   const fileType = resolveFileType(effectiveDetail, rawFileUrl);
   const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
+  const transcriptUrl = isMedia ? toAbsolutePreviewUrl(getCitationDocumentPreviewUrl(effectiveDetail)) : "";
   const shouldLocateChunk = locateChunk && fileType === "pdf";
   const bboxes: CitationPdfBBox[] = shouldLocateChunk ? getCitationItemBBoxes(effectiveDetail, itemId) : [];
   const targetBBox = bboxes[0] ?? null;
@@ -272,6 +284,14 @@ export function CitationDocumentPreviewContent({
         <div className="flex h-full items-center justify-center gap-2 text-[14px] text-[#86909C]">
           <Loader2 className="size-4 animate-spin" />
           {t("citation.loadingPreview")}
+        </div>
+      ) : isMedia && fileUrl ? (
+        <div className="h-full min-h-0 overflow-hidden">
+          <MediaPreview
+            fileUrl={fileUrl}
+            transcriptUrl={transcriptUrl}
+            isVideo={VIDEO_CITATION_EXTENSIONS.has(fileType)}
+          />
         </div>
       ) : fileUrl ? (
         <div className="h-full min-h-0 overflow-hidden">

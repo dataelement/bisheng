@@ -2162,5 +2162,17 @@
     "version": "Version",
     "route": "Page",
     "user": "User"
-  }
+  },
+  "com_citation.no_download_url": "No downloadable file address",
+  "com_citation.web": "Web",
+  "com_citation.document": "Document",
+  "com_citation.untitled": "Untitled",
+  "com_citation.loading_detail": "Loading source details...",
+  "com_citation.load_detail_failed": "Failed to load source details",
+  "com_citation.policy_document": "Policy document",
+  "com_citation.document_preview": "Document preview",
+  "com_citation.no_references": "No references",
+  "com_citation.close_references": "Close references",
+  "com_citation.back_to_references": "Back to reference list",
+  "com_citation.download_document": "Download document"
 }

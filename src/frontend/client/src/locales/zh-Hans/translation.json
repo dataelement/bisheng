@@ -2091,5 +2091,17 @@
     "version": "版本",
     "route": "页面",
     "user": "用户"
-  }
+  },
+  "com_citation.no_download_url": "暂无可下载文件地址",
+  "com_citation.web": "网页",
+  "com_citation.document": "文档",
+  "com_citation.untitled": "暂无标题",
+  "com_citation.loading_detail": "加载溯源详情...",
+  "com_citation.load_detail_failed": "溯源详情加载失败",
+  "com_citation.policy_document": "政策文件",
+  "com_citation.document_preview": "文档预览",
+  "com_citation.no_references": "暂无参考资料",
+  "com_citation.close_references": "关闭参考资料",
+  "com_citation.back_to_references": "返回参考资料列表",
+  "com_citation.download_document": "下载文档"
 }

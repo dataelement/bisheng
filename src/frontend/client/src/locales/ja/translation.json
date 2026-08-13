@@ -2085,5 +2085,17 @@
     "version": "バージョン",
     "route": "ページ",
     "user": "ユーザー"
-  }
+  },
+  "com_citation.no_download_url": "ダウンロード可能なファイルアドレスがありません",
+  "com_citation.web": "ウェブ",
+  "com_citation.document": "ドキュメント",
+  "com_citation.untitled": "タイトルなし",
+  "com_citation.loading_detail": "出典の詳細を読み込み中...",
+  "com_citation.load_detail_failed": "出典の詳細の読み込みに失敗しました",
+  "com_citation.policy_document": "政策文書",
+  "com_citation.document_preview": "ドキュメントプレビュー",
+  "com_citation.no_references": "参考資料はありません",
+  "com_citation.close_references": "参考資料を閉じる",
+  "com_citation.back_to_references": "参考資料一覧に戻る",
+  "com_citation.download_document": "ドキュメントをダウンロード"
 }
