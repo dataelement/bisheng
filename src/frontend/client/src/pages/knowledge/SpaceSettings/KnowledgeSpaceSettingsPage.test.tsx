@@ -371,6 +371,31 @@ describe("KnowledgeSpaceSettingsPage", () => {
     ).toBe("true");
   });
 
+  it("disables private mode for department knowledge spaces", async () => {
+    mockedGetSpaceInfo.mockResolvedValue({
+      ...baseSpace,
+      spaceKind: "department",
+      visibility: VisibilityType.APPROVAL,
+    });
+    mockEditCapabilities(true, true);
+
+    renderPage("/knowledge/space/7/settings");
+    await screen.findByTestId("permission-section");
+
+    const privateMode = screen.getByRole("radio", {
+      name: /com_unified_permission\.private/,
+    }) as HTMLButtonElement;
+    expect(privateMode.disabled).toBe(true);
+
+    fireEvent.click(privateMode);
+    expect(privateMode.getAttribute("data-state")).toBe("unchecked");
+    expect(
+      screen.getByRole("radio", {
+        name: /com_unified_permission\.shared/,
+      }).getAttribute("data-state"),
+    ).toBe("checked");
+  });
+
   it("applies the model selected in the reused authorization dialog", async () => {
     mockedGetCreationModels.mockResolvedValue([
       relationModels[0],

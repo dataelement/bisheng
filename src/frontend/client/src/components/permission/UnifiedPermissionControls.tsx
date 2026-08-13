@@ -42,6 +42,7 @@ interface AccessModeSelectorProps {
   sharedLabel: string;
   sharedDescription: string;
   disabled?: boolean;
+  privateDisabled?: boolean;
 }
 
 export function AccessModeSelector({
@@ -52,17 +53,20 @@ export function AccessModeSelector({
   sharedLabel,
   sharedDescription,
   disabled,
+  privateDisabled = false,
 }: AccessModeSelectorProps) {
   const options = [
     {
       value: "private" as const,
       label: privateLabel,
       description: privateDescription,
+      disabled: privateDisabled,
     },
     {
       value: "shared" as const,
       label: sharedLabel,
       description: sharedDescription,
+      disabled: false,
     },
   ];
 
@@ -76,10 +80,11 @@ export function AccessModeSelector({
       {options.map((option) => (
         <label
           key={option.value}
-          className="flex min-h-12 cursor-pointer items-center gap-2 rounded-xl border border-border-base px-3 text-body text-text-1 transition-colors hover:bg-fill-1 has-[[data-state=checked]]:bg-blue-500/[0.07] has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-60 has-[[data-disabled]]:hover:bg-transparent"
+          className="flex min-h-12 cursor-pointer items-center gap-2 rounded-xl border border-border-base px-3 text-body text-text-1 transition-colors hover:bg-fill-1 has-[[data-state=checked]]:bg-blue-500/[0.07] has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:bg-fill-1 has-[[data-disabled]]:opacity-60 has-[[data-disabled]]:hover:bg-fill-1"
         >
           <RadioGroup.Item
             value={option.value}
+            disabled={option.disabled}
             className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-border-deep data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500"
           >
             <RadioGroup.Indicator className="size-1 rounded-full bg-fill-1" />

@@ -94,6 +94,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [canEdit, setCanEdit] = useState(mode === "create");
   const [canManagePermissions, setCanManagePermissions] = useState(false);
+  const [isDepartmentSpace, setIsDepartmentSpace] = useState(false);
   const [relationModels, setRelationModels] = useState<RelationModel[]>([]);
   const [createdSpace, setCreatedSpace] = useState<KnowledgeSpace | null>(null);
   const [permissionRetryStatus, setPermissionRetryStatus] = useState<
@@ -203,6 +204,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         ]);
         if (cancelled) return;
         setCanEdit(Boolean(editResult.allowed));
+        setIsDepartmentSpace(space.spaceKind === "department");
         setForm({
           name: space.name,
           description: space.description ?? "",
@@ -366,6 +368,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     loadError,
     canEdit,
     canManagePermissions,
+    isDepartmentSpace,
     relationModels,
     canAddNonUserSubjects: relationModels.some(
       (model) => model.relation !== "owner",
