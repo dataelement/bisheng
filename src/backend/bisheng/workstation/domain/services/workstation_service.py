@@ -691,18 +691,36 @@ class WorkStationService(BaseService):
         return await cls.get_daily_chat_config()
 
     @classmethod
-    async def get_daily_chat_config_with_meta(cls) -> tuple[WorkstationConfig | None, bool, int, bool]:
+    async def get_daily_chat_config_with_meta(cls) -> tuple[WorkstationConfig | None, bool, int, bool, bool]:
+        """Resolve the daily config plus its provenance.
+
+        The fifth element is ``is_fallback``: True when nothing was stored for
+        this tenant (or Root) and the returned config is the built-in default
+        rather than anything an admin saved. Callers that write the config back
+        must not treat a fallback as "the admin's current settings" — the admin
+        UI round-trips what it is given, so persisting a fallback silently
+        replaces a real config with defaults.
+        """
         value, inherited, source_tenant_id, has_override = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
         ret = cls.parse_config(config)
+        is_fallback = ret is None
         if ret is None:
+            logger.warning(
+                "daily workstation config falling back to built-in defaults: tenant={} source_tenant={} "
+                "inherited={} has_override={} (no stored value resolved)",
+                cls._current_tenant_id(),
+                source_tenant_id,
+                inherited,
+                has_override,
+            )
             ret = await cls._abuild_default_daily_config()
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, source_tenant_id)
         ret = cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
-        return ret, inherited, source_tenant_id, has_override
+        return ret, inherited, source_tenant_id, has_override, is_fallback
 
     @classmethod
     async def get_linsight_config(cls) -> LinsightConfig | None:

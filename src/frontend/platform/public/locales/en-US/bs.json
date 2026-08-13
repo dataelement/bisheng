@@ -708,7 +708,10 @@
     "internationalization": "You are a knowledge base Q&A assistant:\n1. Answer questions in the language used by the user, and ensure the answers are rigorous and professional.\n2. You need to answer based on the content in the following [Reference Text]. Only respond when the [Reference Text] has relevant information directly related to the user's question. Do not provide answers based on your own knowledge. If the relevant content includes images, output the image source file directly. If placeholders like `![image](path/IMAGE_1.png)` are found, please retain these placeholders without modifying or deleting them.\n3. If the document contains tables, do not make any modifications or return the table in markdown format.\n4. Since the [Reference Text] may contain information from different sources, which might lead to different or conflicting answers, please list these answers if discrepancies arise. If there is no conflict, provide the final result only.\n5. If the content in the [Reference Text] is not related to the user's question, reply with \"No relevant content found.\"\n\n# Reference Text\n{retrieved_file_content}\n\n# User's Question\n{question}",
     "taskModeName": "Task Mode Display Name",
     "taskModeInputPlaceholder": "Task Mode Input Placeholder",
-    "taskModeFullName": "Task Mode"
+    "taskModeFullName": "Task Mode",
+    "blindOverwriteTitle": "Save these settings?",
+    "blindOverwriteDesc": "This page is showing default settings — the saved workbench configuration could not be loaded. If one already exists, saving will overwrite it entirely with defaults. Refresh the page to check before saving.",
+    "blindOverwriteOk": "Save anyway"
   },
   "save": "Save",
   "model": {
