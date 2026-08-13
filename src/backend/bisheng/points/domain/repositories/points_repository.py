@@ -80,19 +80,28 @@ class PointsRepository:
         return (await self.session.exec(select(UserPointLog).where(UserPointLog.id == log_id))).first()
 
     async def sum_earn_today(self, tenant_id: int, user_id: int, rule_code: str, start: datetime) -> int:
-        """汇总上海业务日内同规则已获得分数。"""
-        value = (
+        """汇总上海业务日内同规则已获得分数。
+
+        必须在账户行锁之后调用。``FOR UPDATE`` 走当前读，避免 REPEATABLE READ
+        下 Facade 先读规则定下的快照看不见排队事务刚提交的流水。
+        """
+        rows = (
             await self.session.exec(
-                select(func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                select(UserPointLog.delta)
+                .where(
                     UserPointLog.tenant_id == tenant_id,
                     UserPointLog.user_id == user_id,
                     UserPointLog.rule_code == rule_code,
                     UserPointLog.direction == "earn",
                     UserPointLog.occurred_at >= start,
                 )
+                .with_for_update()
             )
-        ).one()
-        return int(value[0] if isinstance(value, tuple) else value or 0)
+        ).all()
+        total = 0
+        for row in rows:
+            total += int(row[0] if isinstance(row, tuple) else row or 0)
+        return total
 
     async def sum_user_delta(
         self,
@@ -353,16 +362,24 @@ class PointsRepository:
             return None
         return value[0] if isinstance(value, tuple) else value
 
-    async def get_favorite_tier_award(self, tenant_id: int, file_id: int) -> PointFavoriteTierAward | None:
-        """读取文档已发放的 G3 最高档记录。"""
-        return (
-            await self.session.exec(
-                select(PointFavoriteTierAward).where(
-                    PointFavoriteTierAward.tenant_id == tenant_id,
-                    PointFavoriteTierAward.file_id == file_id,
-                )
-            )
-        ).first()
+    async def get_favorite_tier_award(
+        self,
+        tenant_id: int,
+        file_id: int,
+        *,
+        for_update: bool = False,
+    ) -> PointFavoriteTierAward | None:
+        """读取文档已发放的 G3 最高档记录。
+
+        :param for_update: 发分路径在账户行锁之后应加行锁，读取最新已提交进度。
+        """
+        stmt = select(PointFavoriteTierAward).where(
+            PointFavoriteTierAward.tenant_id == tenant_id,
+            PointFavoriteTierAward.file_id == file_id,
+        )
+        if for_update:
+            stmt = stmt.with_for_update()
+        return (await self.session.exec(stmt)).first()
 
     async def upsert_favorite_tier_award(
         self,

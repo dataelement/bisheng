@@ -259,7 +259,9 @@ class PointsAwardFacade:
         if skip:
             return AwardOutcome(skipped=True, reason=skip)
         s_target, highest_tier = _tier_target(rule.score_expr, event.unique_favoriter_count)
-        prior = await self.repository.get_favorite_tier_award(event.tenant_id, event.file_id)
+        # 先锁账户再读档位，避免并发收藏按过期进度各自补差价而超发。
+        await self.repository.lock_or_create_account(event.tenant_id, payee)
+        prior = await self.repository.get_favorite_tier_award(event.tenant_id, event.file_id, for_update=True)
         s_done = int(prior.points_granted_total) if prior else 0
         if s_target <= s_done:
             return AwardOutcome(skipped=True, reason="tier_already_granted")
@@ -346,11 +348,14 @@ class PointsAwardFacade:
         sharer_id: int | None = None,
         answerer_id: int | None = None,
     ) -> tuple[int | None, str | None]:
-        """按规则 beneficiary 解析唯一入账用户。"""
+        """按规则 beneficiary 解析唯一入账用户。
+
+        发布人不得回退成上传人：缺 publisher_id 时由调用方按「直传人=发布人」显式传入。
+        """
         role = (beneficiary or "").strip()
         mapping = {
             "uploader": uploader_id,
-            "publisher": publisher_id if publisher_id is not None else uploader_id,
+            "publisher": publisher_id,
             "sharer": sharer_id,
             "answerer": answerer_id,
         }

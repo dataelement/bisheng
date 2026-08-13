@@ -27,7 +27,7 @@ class FakeAwardRepository:
     async def get_rule(self, _tenant_id, rule_code):
         return self.rules.get(rule_code)
 
-    async def get_favorite_tier_award(self, _tenant_id, file_id):
+    async def get_favorite_tier_award(self, _tenant_id, file_id, *, for_update=False):
         return self.tier_awards.get(file_id)
 
     async def upsert_favorite_tier_award(self, _tenant_id, file_id, *, highest_tier, points_granted_total):
@@ -46,8 +46,14 @@ class FakeAwardRepository:
     async def get_log_by_idempotency(self, _, key):
         return self.logs.get(key)
 
-    async def sum_earn_today(self, *_):
-        return self.today
+    async def sum_earn_today(self, _tenant_id, _user_id, rule_code, _start):
+        if self.today:
+            return self.today
+        return sum(
+            int(log.delta)
+            for log in self.logs.values()
+            if getattr(log, "rule_code", None) == rule_code and getattr(log, "direction", "earn") == "earn"
+        )
 
     async def append_log(self, log):
         log.id = len(self.logs) + 1
@@ -122,9 +128,7 @@ async def test_skips_personal_and_favorite_space():
 async def test_p7b_skips_when_payee_is_space_manager_not_operator():
     """管理员上传、受益人为 uploader → skip；操作人身份不参与判断。"""
     repo = FakeAwardRepository({"G1": _rule(beneficiary="uploader")})
-    outcome = await _facade(repo).on_space_file_ready(
-        _file_event(uploader_id=9, space_manager_ids=frozenset({9}))
-    )
+    outcome = await _facade(repo).on_space_file_ready(_file_event(uploader_id=9, space_manager_ids=frozenset({9})))
     assert outcome.reason == "space_manager_payee"
     assert repo.account.balance == 0
 
@@ -159,14 +163,34 @@ async def test_skips_platform_super_admin_payee():
 @pytest.mark.asyncio
 async def test_beneficiary_publisher_resolves_payee():
     repo = FakeAwardRepository({"G1": _rule(beneficiary="publisher", score=2)})
-    outcome = await _facade(repo).on_space_file_ready(
-        _file_event(uploader_id=4, publisher_id=8)
-    )
+    outcome = await _facade(repo).on_space_file_ready(_file_event(uploader_id=4, publisher_id=8))
     assert not outcome.skipped
     log = next(iter(repo.logs.values()))
     assert log.user_id == 8
     assert log.beneficiary_role == "publisher"
     assert log.delta == 2
+
+
+@pytest.mark.asyncio
+async def test_beneficiary_publisher_skips_when_publisher_id_missing():
+    """规则配发布人但事件未带 publisher_id 时 skip，不得回退成上传人。"""
+    repo = FakeAwardRepository({"G1": _rule(beneficiary="publisher", score=2)})
+    outcome = await _facade(repo).on_space_file_ready(_file_event(uploader_id=4, publisher_id=None))
+    assert outcome.skipped
+    assert outcome.reason == "beneficiary_unresolved"
+    assert repo.account.balance == 0
+    assert not repo.logs
+
+
+@pytest.mark.asyncio
+async def test_beneficiary_publisher_awards_direct_uploader_when_ids_equal():
+    """直传人等于发布人时，配发布人也给当前操作人。"""
+    repo = FakeAwardRepository({"G1": _rule(beneficiary="publisher", score=2)})
+    outcome = await _facade(repo).on_space_file_ready(_file_event(uploader_id=4, publisher_id=4))
+    assert not outcome.skipped
+    log = next(iter(repo.logs.values()))
+    assert log.user_id == 4
+    assert log.beneficiary_role == "publisher"
 
 
 @pytest.mark.asyncio
@@ -186,6 +210,20 @@ async def test_daily_cap_skips_entire_delta():
     assert outcome.result.skipped_cap
     assert repo.account.balance == 0
     assert not repo.logs
+
+
+@pytest.mark.asyncio
+async def test_same_session_serial_awards_respect_daily_cap():
+    """一批文件串行入账时，后一笔能看见本会话已写入流水，不会超过日上限。"""
+    repo = FakeAwardRepository({"G1": _rule(score=30, daily_cap=60)})
+    facade = _facade(repo)
+    first = await facade.on_space_file_ready(_file_event(file_id=1))
+    second = await facade.on_space_file_ready(_file_event(file_id=2))
+    third = await facade.on_space_file_ready(_file_event(file_id=3))
+    assert not first.skipped and not second.skipped
+    assert third.reason == "daily_cap"
+    assert repo.account.balance == 60
+    assert len(repo.logs) == 2
 
 
 @pytest.mark.asyncio
