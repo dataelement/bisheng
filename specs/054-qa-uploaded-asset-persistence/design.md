@@ -63,6 +63,7 @@
 | REQ-005 | AC-REQ-005-01..04 | dual-table repair command | script tests + dry-run evidence |
 | REQ-006 | AC-REQ-006-01..04 | trust boundary、metadata validation、private signing | adversarial/storage/log tests |
 | REQ-007 | AC-REQ-007-01..05 | MIME normalization + inline signing + portal preview modal + existing watermark context | backend contract tests + frontend preview/watermark tests/build |
+| REQ-008 | AC-REQ-008-01..03 | ORM-free field snapshot + clean response reconstruction | committed ORM and long signed URL regression test |
 
 ## 架构设计 Architecture
 - Pattern: `upload to staging -> classify -> validate -> promote -> persist key -> resolve on read`。
@@ -139,6 +140,12 @@ flowchart LR
 - Watermark behavior: 弹窗从现有登录态取得 `PortalUser`，用 `PreviewWatermarkProvider` 向 `DocumentPreview`/`PdfPreview` 已有 overlay 提供同一水印行；不复制布局、透明度或后台文案逻辑。
 - Requirements: `REQ-007`
 
+### ORM Response Snapshot
+- Root cause: `SQLModel.model_copy(deep=True)` 会复制 SQLAlchemy `_sa_instance_state`，复制体的 state 不绑定新实例；clean ORM 实例首次修改资源字段时触发 `ObjectDereferencedError`。
+- Strategy: 通过 `model_dump()` 提取纯字段快照，合并 resolved 字段后使用 SQLModel table constructor 构造拥有独立 state 的响应对象。该快照只包含数据库可信字段和服务端生成的签名 URL，因此响应构造不重复应用只针对持久化 key 的 `max_length` 约束。
+- Alternatives rejected: 浅拷贝仍共享 ORM state；直接修改原 ORM 可能把短期签名标脏并在未来会话边界变化时回写数据库；返回裸字典会扩大现有 Service 类型契约。
+- Requirements: `REQ-008`
+
 ## 数据与一致性 Data / Consistency
 - 不新增 revision；扩展尚未部署的 `f083`，将问题附件、回答附件和回答图片三个多值字段设为 `LargeText`，其他字段保持不变。
 - 正式 key：`qa-expert/{tenant_id}/{question|answer}/{image|attachment}/{owner_stable_id}/{source_uuid}.{ext}`。
@@ -158,6 +165,7 @@ flowchart LR
 | REQ-005 ACs | high/V3 | 双表 dry/apply/missing/idempotent | script contract | EG-005 | dry-run 零写，apply 顺序与重复运行正确 |
 | REQ-006 ACs | high/V2 | trust boundary、size/image、private sign、redaction | adversarial/storage | EG-006 | 非可信输入无外部 I/O，无 policy/log 泄露 |
 | REQ-007 ACs | medium/V2 | wrong MIME、legacy octet-stream、image/file click、unsupported mode、missing watermark context | backend contract + frontend unit/build | EG-008 | 下载回归、支持/不支持预览与现有水印 Provider/overlay 接线均覆盖 |
+| REQ-008 ACs | high/V2 | clean ORM response resolve/state isolation/long signed URL | committed ORM service test | EG-009 | Question/Answer 不报错、超长签名生效且原实例不变 |
 | all | high/V3 | 真实 MinIO + DB 生命周期 | staging smoke | EG-007 | 创建/更新后删除 tmp，重新读取全部资源仍可访问 |
 
 ## 设计决策 Decisions

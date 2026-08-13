@@ -134,3 +134,62 @@ async def test_admin_list_audit_logs_filters_manual_sources():
     repo.list_audit_logs.assert_awaited()
     kwargs = repo.list_audit_logs.await_args.kwargs
     assert kwargs["sources"] == ["manual_adjust", "manual_deduct"]
+
+
+@pytest.mark.asyncio
+async def test_admin_user_detail_returns_summary_and_filtered_logs():
+    """管理端用户详情：概况卡片 + 时间窗全量流水。"""
+    from datetime import datetime
+
+    log_row = SimpleNamespace(
+        id=3,
+        title="发布文档到部门库",
+        delta=2,
+        balance_after=1280,
+        direction="earn",
+        rule_code="E01",
+        source="rule",
+        remark=None,
+        occurred_at=datetime(2024, 1, 15, 10, 30, 1),
+    )
+    repo = SimpleNamespace(
+        find_account=AsyncMock(return_value=SimpleNamespace(balance=1280)),
+        sum_user_delta=AsyncMock(side_effect=[215, -0]),
+        list_logs=AsyncMock(return_value=([log_row], 1)),
+    )
+    service = PointsQueryService(session=None, repository=repo, ledger=None)
+    admin = SimpleNamespace(is_admin=lambda: True, is_global_super=True)
+    with (
+        patch.object(
+            PointsQueryService,
+            "_leaderboard_display_maps",
+            AsyncMock(return_value=({7: "张三"}, {7: "技术研发部"})),
+        ),
+        patch.object(
+            PointsQueryService,
+            "_resolve_user_role_label",
+            AsyncMock(return_value="普通用户"),
+        ),
+    ):
+        out = await service.admin_user_detail(
+            1,
+            admin,
+            7,
+            page=1,
+            page_size=20,
+            from_time=datetime(2024, 1, 1),
+            to_time=datetime(2024, 2, 1),
+        )
+
+    assert out.user_name == "张三"
+    assert out.dept_name == "技术研发部"
+    assert out.role_label == "普通用户"
+    assert out.balance == 1280
+    assert out.month_earned == 215
+    assert out.month_deducted == 0
+    assert out.logs_total == 1
+    assert out.logs[0].title == "发布文档到部门库"
+    assert out.logs[0].delta == 2
+    repo.list_logs.assert_awaited()
+    assert repo.list_logs.await_args.args[1] == 7
+    assert repo.sum_user_delta.await_count == 2

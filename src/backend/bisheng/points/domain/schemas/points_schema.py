@@ -110,6 +110,20 @@ class PointAdminUserFilterOptions(BaseModel):
     user_types: list[str] = Field(default_factory=list)
 
 
+class PointAdminUserDetail(BaseModel):
+    """管理端用户积分详情（弹窗：概况 + 时间范围内流水）。"""
+
+    user_id: int
+    user_name: str = ""
+    dept_name: str = "—"
+    role_label: str = "普通用户"
+    balance: int = 0
+    month_earned: int = 0
+    month_deducted: int = 0
+    logs: list[PointLogResponse] = Field(default_factory=list)
+    logs_total: int = 0
+
+
 class PointAuditLogItem(BaseModel):
     """管理端操作/审计流水行。"""
 

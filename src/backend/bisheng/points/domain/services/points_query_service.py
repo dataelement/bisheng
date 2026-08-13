@@ -14,6 +14,7 @@ from bisheng.points.domain.constants.notify_templates import format_deduct_notif
 from bisheng.points.domain.schemas.points_schema import (
     PointAdjustRequest,
     PointAdminDepartmentOption,
+    PointAdminUserDetail,
     PointAdminUserFilterOptions,
     PointAdminUserItem,
     PointAuditLogItem,
@@ -342,6 +343,73 @@ class PointsQueryService:
             for a in accounts
         ]
         return PageData(data=data, total=total)
+
+    async def admin_user_detail(
+        self,
+        tenant_id: int,
+        user: UserPayload,
+        target_user_id: int,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        from_time: datetime | None = None,
+        to_time: datetime | None = None,
+    ) -> PointAdminUserDetail:
+        """管理端用户积分详情：身份概况 + 本月收支卡片 + 时间范围内全量流水。"""
+        require_platform_admin(user)
+        uid = int(target_user_id)
+        page = max(int(page), 1)
+        page_size = min(max(int(page_size), 1), 100)
+
+        account = await self.repository.find_account(tenant_id, uid)
+        name_by_user, dept_by_user = await self._leaderboard_display_maps([uid])
+        month_start, month_end = self._month_bounds()
+        month_earned = await self.repository.sum_user_delta(
+            tenant_id, uid, direction="earn", start=month_start, end=month_end
+        )
+        month_deducted = abs(
+            await self.repository.sum_user_delta(tenant_id, uid, direction="deduct", start=month_start, end=month_end)
+        )
+        role_label = await self._resolve_user_role_label(uid)
+
+        logs, logs_total = await self.my_logs(
+            tenant_id,
+            uid,
+            page=page,
+            page_size=page_size,
+            from_time=from_time,
+            to_time=to_time,
+        )
+        return PointAdminUserDetail(
+            user_id=uid,
+            user_name=name_by_user.get(uid, str(uid)),
+            dept_name=dept_by_user.get(uid, "—"),
+            role_label=role_label,
+            balance=int(account.balance) if account else 0,
+            month_earned=int(month_earned or 0),
+            month_deducted=int(month_deducted or 0),
+            logs=logs,
+            logs_total=int(logs_total),
+        )
+
+    @staticmethod
+    async def _resolve_user_role_label(user_id: int) -> str:
+        """解析用户角色展示名；无角色时默认「普通用户」。"""
+        try:
+            from bisheng.database.models.role import RoleDao
+            from bisheng.user.domain.models.user_role import UserRoleDao
+
+            links = await UserRoleDao.aget_user_roles(int(user_id))
+            role_ids = [int(r.role_id) for r in (links or []) if getattr(r, "role_id", None) is not None]
+            if not role_ids:
+                return "普通用户"
+            roles = await RoleDao.aget_role_by_ids(role_ids)
+            names = [str(r.role_name).strip() for r in (roles or []) if getattr(r, "role_name", None)]
+            names = [n for n in names if n]
+            return "、".join(names) if names else "普通用户"
+        except Exception:
+            logger.exception("points.admin_user_detail resolve role failed user_id=%s", user_id)
+            return "普通用户"
 
     async def admin_list_audit_logs(
         self,

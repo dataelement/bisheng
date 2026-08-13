@@ -1,11 +1,7 @@
 import MultiSelect from "@/components/bs-ui/select/multi"
-import { readFileLibDatabase } from "@/controllers/API"
+import { listTagConsoleSourceKnowledgesApi } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-
-/** Knowledge *spaces*, which is where tags are proposed from. */
-const KNOWLEDGE_SPACE_TYPE = 3
-const PAGE_SIZE = 60
 
 interface Option {
     label: string
@@ -20,36 +16,32 @@ interface SourceKnowledgeSelectProps {
 /**
  * Picker for 标签来源库.
  *
- * Deliberately not the shared `KnowledgeSelect`: that one only offers the
- * normal/QA knowledge bases (`type` 0 and 1), while every tag in this console
- * comes from a knowledge space (`type` 3). Pointing it at the wrong type made
- * the dropdown show a single entry.
+ * Deliberately not the shared knowledge picker. That one lists knowledge bases
+ * by type, which here meant either a single entry (it defaults to the normal
+ * type, while tags come from knowledge spaces) or, once pointed at spaces,
+ * dozens of useless ones — every user owns a personal space and a 『我的收藏』,
+ * so the dropdown filled with repeated names that could never match a tag.
  *
- * Scope is whatever the caller may use, so an admin sees the whole set.
+ * The console asks instead for the knowledge bases that have actually produced
+ * tags. They come back distinct by id and 『我的收藏』 is excluded server-side,
+ * so what is offered is exactly what can return results.
  */
 export function SourceKnowledgeSelect({ value, onChange }: SourceKnowledgeSelectProps) {
     const { t } = useTranslation()
     const [options, setOptions] = useState<Option[]>([])
-    const cursorRef = useRef<string | null>(null)
-    const keywordRef = useRef("")
+    // Guards against a second load starting before the first returns, which
+    // would otherwise append the same rows again.
+    const loadingRef = useRef(false)
 
-    const load = useCallback(async (cursor: string | null, name: string) => {
-        const res = await readFileLibDatabase({
-            cursor,
-            pageSize: PAGE_SIZE,
-            name,
-            type: KNOWLEDGE_SPACE_TYPE,
-            permissionId: "use_kb",
-        })
-        cursorRef.current = res?.next_cursor ?? null
-        keywordRef.current = name
-        const rows = (res?.data || []).map((item: { id: number; name: string }) => ({
-            label: item.name,
-            value: String(item.id),
-        }))
-        // Appending only when paging keeps a fresh search from being merged
-        // into the previous result set.
-        setOptions((prev) => (cursor ? [...prev, ...rows] : rows))
+    const load = useCallback(async (keyword: string) => {
+        if (loadingRef.current) return
+        loadingRef.current = true
+        try {
+            const res = await listTagConsoleSourceKnowledgesApi(keyword)
+            setOptions((res?.data || []).map((item) => ({ label: item.name, value: String(item.id) })))
+        } finally {
+            loadingRef.current = false
+        }
     }, [])
 
     return (
@@ -59,9 +51,13 @@ export function SourceKnowledgeSelect({ value, onChange }: SourceKnowledgeSelect
                 options={options}
                 value={value}
                 placeholder={t("build.tagConsole.selectKnowledge", "请选择知识库")}
-                onLoad={() => load(null, "")}
-                onSearch={(keyword: string) => load(null, keyword)}
-                onScrollLoad={() => cursorRef.current && load(cursorRef.current, keywordRef.current)}
+                onLoad={() => load("")}
+                onSearch={(keyword: string) => load(keyword)}
+                // Present, but nothing to fetch: the server caps the list and
+                // there is no second page. It also selects the control's
+                // option-shaped value mode, which is what lets the closed box
+                // show the picked name without the option still being loaded.
+                onScrollLoad={() => undefined}
                 onChange={onChange}
             />
         </div>

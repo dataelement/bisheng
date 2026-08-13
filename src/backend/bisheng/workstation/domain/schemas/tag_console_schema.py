@@ -224,5 +224,14 @@ class TagConsoleBatchResult(BaseModel):
     failed: list[TagConsoleBatchFailure] = Field(default_factory=list)
 
 
+class TagConsoleSourceKnowledge(BaseModel):
+    id: int
+    name: str
+
+
+class TagConsoleSourceKnowledgeResp(BaseModel):
+    data: list[TagConsoleSourceKnowledge]
+
+
 class TagConsolePendingCountResp(BaseModel):
     pending_count: int

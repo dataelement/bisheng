@@ -8,7 +8,7 @@ The one exception is the reviewed ("已审核") listing: approving a tag deletes
 history live in different tables and only that listing needs a UNION.
 """
 
-from sqlalchemy import Integer, cast, exists, literal, or_, union_all
+from sqlalchemy import Integer, cast, exists, literal, or_, union, union_all
 from sqlmodel import delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -214,6 +214,50 @@ class TagConsoleRepositoryImpl:
             }
             for file_id, file_name, knowledge_id, file_level_path in rows
         }
+
+    async def list_source_knowledges(
+        self,
+        tenant_id: int,
+        keyword: str | None = None,
+        limit: int = 200,
+    ) -> list[tuple[int, str]]:
+        """Knowledge bases that have actually produced tags.
+
+        The 标签来源库 filter used to be fed the full knowledge-base list, which on
+        a real install is mostly noise: every user owns a personal space and a
+        『我的收藏』, so the dropdown showed dozens of identically named entries
+        that could never match a tag. Offering only genuine sources removes them
+        without having to guess from names, and repeated names collapse because
+        the set is distinct by id.
+
+        『我的收藏』 is excluded outright — it is a per-user pin board, not a
+        source anyone filters by, even on the rare install where a file in it
+        carried a tag.
+        """
+        tagged = (
+            select(KnowledgeFile.knowledge_id)
+            .select_from(TagLink)
+            .join(KnowledgeFile, KnowledgeFile.id == cast(TagLink.resource_id, Integer))
+            .where(TagLink.tenant_id == tenant_id, KnowledgeFile.tenant_id == tenant_id)
+        )
+        reviewed = (
+            select(KnowledgeFile.knowledge_id)
+            .select_from(ReviewTagLink)
+            .join(KnowledgeFile, KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer))
+            .where(ReviewTagLink.tenant_id == tenant_id, KnowledgeFile.tenant_id == tenant_id)
+        )
+        sources = union(tagged, reviewed).subquery()
+
+        clauses = [
+            Knowledge.tenant_id == tenant_id,
+            Knowledge.id.in_(select(sources.c.knowledge_id)),
+            Knowledge.is_favorite == False,  # noqa: E712
+        ]
+        if keyword and keyword.strip():
+            clauses.append(Knowledge.name.like(f"%{keyword.strip()}%"))
+        statement = select(Knowledge.id, Knowledge.name).where(*clauses).order_by(Knowledge.name.asc()).limit(limit)
+        rows = (await self.session.exec(statement)).all()
+        return [(int(knowledge_id), name or "") for knowledge_id, name in rows]
 
     async def list_knowledge_names(self, knowledge_ids: list[int], tenant_id: int) -> dict[int, str]:
         """Names of the knowledge bases a page's source files belong to.
