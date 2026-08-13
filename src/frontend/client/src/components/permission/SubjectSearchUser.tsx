@@ -8,6 +8,7 @@ import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission"
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 
 interface SubjectSearchUserProps {
   value: SelectedSubject[];
@@ -238,9 +239,7 @@ export function SubjectSearchUser({
           </div>
         )}
         {!loading && results.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_search")}
-          </div>
+          <PermissionEmptyState message={localize("com_permission.empty_search")} />
         )}
         {!loading &&
           results.map((user) => {

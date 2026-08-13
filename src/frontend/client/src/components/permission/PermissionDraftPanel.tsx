@@ -1,7 +1,7 @@
 import { Button } from "@bisheng/ui";
 import type { SubjectType } from "~/api/permission";
-import { EmptyStateIllustration } from "~/components/illustrations";
 import { useLocalize } from "~/hooks";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 import { PermissionDraftEditor, type PermissionDraftEditorCapabilities } from "./PermissionDraftEditor";
 import {
   SUBJECT_TAB_BUTTON_ACTIVE_CLASS,
@@ -83,16 +83,9 @@ export function PermissionDraftPanel({
         data-testid="authorization-list-body"
       >
         {visibleRows.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2">
-            <EmptyStateIllustration
-              role="img"
-              aria-label={localize("com_subscription.no_data")}
-              className="size-[120px]"
-            />
-            <p className="text-body text-text-3">
-              {localize("com_unified_permission.authorization_empty")}
-            </p>
-          </div>
+          <PermissionEmptyState
+            message={localize("com_unified_permission.authorization_empty")}
+          />
         ) : (
           <PermissionDraftEditor
             value={visibleRows}
