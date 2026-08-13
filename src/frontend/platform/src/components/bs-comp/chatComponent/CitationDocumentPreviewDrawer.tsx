@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Download, FileText, Loader2, X } from "lucide-react";
 import FileView from "@/components/bs-comp/FileView";
 import { cname } from "@/components/bs-ui/utils";
@@ -107,7 +108,9 @@ function renderPreviewContent({
   fileName,
   bboxes,
   targetBBox,
+  t,
 }: {
+  t: (key: string) => string;
   fileType: string;
   fileUrl: string;
   fileName: string;
@@ -139,6 +142,30 @@ function renderPreviewContent({
     case "doc":
     case "docx":
       return <DocxPreview filePath={fileUrl} />;
+    // Audio/video citations play in place, the same way the knowledge space
+    // previews them — the cited text came from the transcript, but the file the
+    // user clicked is the clip.
+    case "mp3":
+    case "wav":
+    case "m4a":
+    case "aac":
+    case "flac":
+    case "ogg":
+      return (
+        <div className="flex h-full items-center justify-center overflow-auto bg-[#F5F6F8] p-6">
+          <audio className="w-full max-w-2xl" src={fileUrl} controls />
+        </div>
+      );
+    case "mp4":
+    case "mov":
+    case "avi":
+    case "mkv":
+    case "webm":
+      return (
+        <div className="flex h-full items-center justify-center overflow-auto bg-[#F5F6F8] p-6">
+          <video className="max-h-full w-full max-w-2xl rounded bg-black" src={fileUrl} controls />
+        </div>
+      );
     case "png":
     case "jpg":
     case "jpeg":
@@ -156,7 +183,7 @@ function renderPreviewContent({
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 text-[14px] text-[#86909C]">
           <FileIcon type="txt" className="size-16 opacity-60" />
-          <div>该类型文件不支持预览</div>
+          <div>{t("citation.unsupportedPreview")}</div>
         </div>
       );
   }
@@ -223,6 +250,7 @@ export function CitationDocumentPreviewContent({
   compactMode = false,
   className,
 }: CitationDocumentPreviewContentProps) {
+  const { t } = useTranslation();
   const { effectiveDetail, isResolving } = useResolvedCitationDetail(preview);
 
   if (!preview || !isRagCitation(effectiveDetail)) {
@@ -243,15 +271,15 @@ export function CitationDocumentPreviewContent({
       {isResolving ? (
         <div className="flex h-full items-center justify-center gap-2 text-[14px] text-[#86909C]">
           <Loader2 className="size-4 animate-spin" />
-          加载文档预览...
+          {t("citation.loadingPreview")}
         </div>
       ) : fileUrl ? (
         <div className="h-full min-h-0 overflow-hidden">
-          {renderPreviewContent({ fileType, fileUrl, fileName, bboxes, targetBBox })}
+          {renderPreviewContent({ fileType, fileUrl, fileName, bboxes, targetBBox, t })}
         </div>
       ) : (
         <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
-          暂无可预览文件地址
+          {t("citation.noPreviewUrl")}
         </div>
       )}
     </div>
@@ -262,6 +290,7 @@ export default function CitationDocumentPreviewDrawer({
   preview,
   onClose,
 }: CitationDocumentPreviewDrawerProps) {
+  const { t } = useTranslation();
   const { effectiveDetail } = useResolvedCitationDetail(preview);
   const isPhoneViewport = useMediaQuery("(max-width: 576px)");
   const isNarrowLayout = useMediaQuery("(max-width: 768px)");
@@ -327,7 +356,7 @@ export default function CitationDocumentPreviewDrawer({
         isFullBleedMobile && "inset-0 z-[120] overflow-hidden overscroll-contain touch-pan-y",
         !isFullBleedMobile && "inset-y-0 right-0 z-[121] w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]",
       )}
-      aria-label="文档预览"
+      aria-label={t("citation.documentPreview")}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -357,7 +386,7 @@ export default function CitationDocumentPreviewDrawer({
                 "shrink-0 items-center justify-center text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]",
                 isFullBleedMobile ? "inline-flex size-8 rounded-md" : "inline-flex size-6 rounded-[6px]",
               )}
-              aria-label="下载文档"
+              aria-label={t("citation.downloadDocument")}
             >
               <Download className="size-4" />
             </button>
@@ -370,7 +399,7 @@ export default function CitationDocumentPreviewDrawer({
               onClick={handleDownload}
               disabled={!downloadFileUrl}
               className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]"
-              aria-label="下载文档"
+              aria-label={t("citation.downloadDocument")}
             >
               <Download className="size-4" />
             </button>
@@ -382,7 +411,7 @@ export default function CitationDocumentPreviewDrawer({
               "items-center justify-center text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]",
               isFullBleedMobile ? "inline-flex size-8 rounded-md" : "inline-flex size-6 rounded-[6px]",
             )}
-            aria-label="关闭文档预览"
+            aria-label={t("citation.closeDocumentPreview")}
           >
             <X className="size-4" strokeWidth={1.5} />
           </button>

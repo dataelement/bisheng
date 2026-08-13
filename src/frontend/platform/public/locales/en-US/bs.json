@@ -2083,5 +2083,13 @@
       "githubRateLimit": "GitHub rate limit exceeded, please retry later",
       "unknown": "Operation failed, please retry"
     }
+  },
+  "citation": {
+    "unsupportedPreview": "Preview is not supported for this file type",
+    "loadingPreview": "Loading document preview...",
+    "noPreviewUrl": "No previewable file address",
+    "documentPreview": "Document preview",
+    "downloadDocument": "Download document",
+    "closeDocumentPreview": "Close document preview"
   }
 }

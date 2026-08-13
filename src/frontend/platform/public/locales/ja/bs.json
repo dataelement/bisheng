@@ -2028,5 +2028,13 @@
       "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
     }
+  },
+  "citation": {
+    "unsupportedPreview": "この形式のファイルはプレビューできません",
+    "loadingPreview": "ドキュメントプレビューを読み込み中...",
+    "noPreviewUrl": "プレビュー可能なファイルアドレスがありません",
+    "documentPreview": "ドキュメントプレビュー",
+    "downloadDocument": "ドキュメントをダウンロード",
+    "closeDocumentPreview": "ドキュメントプレビューを閉じる"
   }
 }

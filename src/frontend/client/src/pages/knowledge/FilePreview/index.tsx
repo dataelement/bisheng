@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { getViewerType, supportsPagination, supportsSidebar, supportsZoom } from "./viewers";
+import { MediaPlayer } from "./MediaPlayer";
 import { DocxViewer } from "./viewers/DocxViewer";
 import { HtmlViewer } from "./viewers/HtmlViewer";
 import { ImageViewer } from "./viewers/ImageViewer";
@@ -247,6 +248,22 @@ export default function FilePreview({
                 return <ImageViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
             case "text":
                 return <TextViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
+            case "audio":
+            case "video":
+                // Same player the knowledge space uses, so a clip opened from a
+                // citation looks like the one opened from the file list.
+                return (
+                    <div className="flex min-h-0 flex-1 justify-center overflow-y-auto bg-[#fbfbfb] p-4">
+                        <div className="w-full max-w-3xl">
+                            <MediaPlayer
+                                kind={viewerType}
+                                src={fileUrl}
+                                allowDownload={allowDownload}
+                                onDownload={handleDownload}
+                            />
+                        </div>
+                    </div>
+                );
             default:
                 return null;
         }

@@ -2028,5 +2028,13 @@
       "githubRateLimit": "GitHub 访问已达速率限制，请稍后再试",
       "unknown": "操作失败，请重试"
     }
+  },
+  "citation": {
+    "unsupportedPreview": "该类型文件不支持预览",
+    "loadingPreview": "加载文档预览...",
+    "noPreviewUrl": "暂无可预览文件地址",
+    "documentPreview": "文档预览",
+    "downloadDocument": "下载文档",
+    "closeDocumentPreview": "关闭文档预览"
   }
 }
