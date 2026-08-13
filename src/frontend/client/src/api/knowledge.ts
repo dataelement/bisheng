@@ -794,7 +794,10 @@ export async function getDepartmentSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return extractKnowledgeSpaceList(res).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map((raw) => ({
+        ...mapSpace(raw),
+        spaceKind: "department",
+    }));
 }
 
 /**

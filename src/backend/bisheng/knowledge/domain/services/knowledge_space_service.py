@@ -86,6 +86,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
+    KnowledgeSpaceListItemResp,
     SpaceSubscriptionStatusEnum,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
@@ -1435,7 +1436,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # ──────────────────────────── Listings ────────────────────────────────────
 
-    async def _format_member_spaces(self, members: list[SpaceChannelMember], order_by: str) -> list[KnowledgeRead]:
+    async def _format_basic_spaces(self, space_ids: list[int], order_by: str) -> list[KnowledgeRead]:
+        """Format an already-authorized space list with only per-user pin state."""
+        if not space_ids:
+            return []
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
+        pinned_ids = await KnowledgeSpaceUserPinDao.list_pinned_space_ids(self.login_user.user_id)
+        results = [
+            KnowledgeRead(
+                **space.model_dump(),
+                is_pinned=space.id in pinned_ids,
+            )
+            for space in spaces
+        ]
+        return [item for item in results if item.is_pinned] + [item for item in results if not item.is_pinned]
+
+    async def _format_member_spaces(
+        self,
+        members: list[SpaceChannelMember],
+        order_by: str,
+    ) -> list[KnowledgeSpaceListItemResp]:
         if not members:
             return []
 
@@ -1452,7 +1473,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             if one.id in pinned_ids:
                 pinned_spaces.append(
-                    KnowledgeSpaceInfoResp(
+                    KnowledgeSpaceListItemResp(
                         **one.model_dump(),
                         is_pinned=True,
                         user_role=member_conf.user_role,
@@ -1462,7 +1483,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             else:
                 normal_spaces.append(
-                    KnowledgeSpaceInfoResp(
+                    KnowledgeSpaceListItemResp(
                         **one.model_dump(),
                         is_pinned=False,
                         user_role=member_conf.user_role,
@@ -1470,11 +1491,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         is_followed=True,
                     )
                 )
-        ordered = pinned_spaces + normal_spaces
-        await self._populate_root_file_counts(ordered)
-        return await self._decorate_department_metadata(ordered)
+        return pinned_spaces + normal_spaces
 
-    async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
+    async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeSpaceListItemResp]:
         members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)
         if members:
             department_space_ids = set(

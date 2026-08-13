@@ -15,6 +15,19 @@ class SpaceSubscriptionStatusEnum(str, Enum):
     NOT_SUBSCRIBED = "not_subscribed"
 
 
+class KnowledgeSpaceListItemResp(KnowledgeBase):
+    """Lightweight knowledge-space list item without detail-only counters or metadata."""
+
+    id: int = Field(..., description="Knowledge Space ID")
+    is_pinned: bool = Field(default=False, description="Knowledge Space pinned by current user or not")
+    is_followed: bool = Field(default=False, description="Knowledge Space followed by current user or not")
+    subscription_status: SpaceSubscriptionStatusEnum = Field(
+        default=SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED,
+        description="Current user subscription status",
+    )
+    user_role: UserRoleEnum | None = Field(default=None, description="Knowledge Space user role")
+
+
 class KnowledgeSpaceCreateReq(BaseModel):
     name: str = Field(..., max_length=200, description="Knowledge Space Name")
     description: str | None = Field(None, description="Knowledge Space Description")
