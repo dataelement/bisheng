@@ -21,6 +21,57 @@
 
 export type ExecStepType = 'tool' | 'thinking' | 'knowledge' | 'subagent' | 'ui_card' | 'call_user_input';
 
+/**
+ * Attachment ingest moved off the submit request into the worker, so the parse
+ * now happens while the task is already claimed. The worker reports it as an
+ * ordinary tool row carrying only DATA — the wording lives here, because a
+ * backend-formatted label would show Chinese to a Japanese user and would stay
+ * wrong in persisted history after a language switch.
+ *
+ * ⚠️ Contract with the backend: this name is `_INGEST_STEP_NAME` in
+ * bisheng/linsight/domain/task_exec.py. Change one side alone and the row falls
+ * back to rendering the raw token.
+ */
+export const INGEST_STEP_NAME = 'ingest_uploads';
+
+export type IngestPhase = 'running' | 'done' | 'failed' | 'aborted';
+
+export interface IngestProgress {
+    phase: IngestPhase;
+    done: number;
+    total: number;
+    fileName?: string;
+}
+
+/** phase → i18n key, same shape as ACTIVITY_I18N in execTokens. */
+export const INGEST_PHASE_I18N: Record<IngestPhase, string> = {
+    running: 'com_linsight_ingest_running',
+    done: 'com_linsight_ingest_done',
+    failed: 'com_linsight_ingest_failed',
+    aborted: 'com_linsight_ingest_aborted',
+};
+
+const INGEST_PHASES = Object.keys(INGEST_PHASE_I18N) as IngestPhase[];
+
+/** Pull the ingest payload off a step, or null when it is not an ingest row.
+    Defensive about every field: this crosses a process boundary, and an older
+    worker emits nothing here at all. */
+export function readIngestProgress(step: {
+    name?: string;
+    extraInfo?: Record<string, unknown>;
+}): IngestProgress | null {
+    if (step.name !== INGEST_STEP_NAME) return null;
+    const raw = step.extraInfo?.ingest_progress;
+    if (!raw || typeof raw !== 'object') return null;
+    const payload = raw as Record<string, unknown>;
+    return {
+        phase: INGEST_PHASES.find((p) => p === payload.phase) ?? 'running',
+        done: Number(payload.done) || 0,
+        total: Number(payload.total) || 0,
+        fileName: typeof payload.file_name === 'string' ? payload.file_name : undefined,
+    };
+}
+
 /** Raw `task_execute_step.data` frame (contract C1). */
 export interface ExecStepEventData {
     call_id?: string;

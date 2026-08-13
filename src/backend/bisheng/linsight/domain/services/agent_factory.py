@@ -271,7 +271,7 @@ def _build_linsight_system_prompt(
         exec_line = (
             "   - 需要资料时用 search_knowledge_base 检索知识库/知识空间；"
             "读写文件用 write_file / read_file / edit_file / ls。\n"
-            "   - 用户上传的音视频（mp3/mp4 等）已在 submit 阶段 ASR 转写为 uploads/*.md；"
+            "   - 用户上传的音视频（mp3/mp4 等）已由 ASR 转写为 uploads/*.md；"
             "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
             "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
@@ -293,7 +293,7 @@ def _build_linsight_system_prompt(
             "   - 读写文件用 write_file / read_file / edit_file / ls；若用户上传了文件，"
             "用 ls / read_file 在工作区中查阅。本次任务没有可检索的知识库/知识空间，"
             "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。\n"
-            "   - 用户上传的音视频（mp3/mp4 等）已在 submit 阶段 ASR 转写为 uploads/*.md；"
+            "   - 用户上传的音视频（mp3/mp4 等）已由 ASR 转写为 uploads/*.md；"
             "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
             "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )

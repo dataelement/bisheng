@@ -417,7 +417,7 @@ def test_annotate_display_files_stamps_parse_result():
             "cover_filepath": "tmp/cover.jpg",
         },
     ]
-    out = LinsightWorkbenchImpl._annotate_display_files(display, processed)
+    out = LinsightWorkbenchImpl.annotate_display_files(display, processed)
     by_id = {f["file_id"]: f for f in out}
     assert by_id["ok"]["valid"] is True
     assert by_id["ok"]["parsing_status"] == "completed"
@@ -431,8 +431,28 @@ def test_annotate_display_files_stamps_parse_result():
 
 
 def test_annotate_display_files_handles_empty():
-    assert LinsightWorkbenchImpl._annotate_display_files(None, []) is None
-    assert LinsightWorkbenchImpl._annotate_display_files([], None) == []
+    assert LinsightWorkbenchImpl.annotate_display_files(None, []) is None
+    assert LinsightWorkbenchImpl.annotate_display_files([], None) == []
+
+
+def test_annotate_display_files_keeps_an_object_name_that_is_already_set():
+    """With the ingest deferred, submit promotes each attachment out of the temp
+    bucket itself and stamps that key — and THAT is the copy conversation
+    deletion sweeps. The worker's later back-fill must not repoint it at the
+    workspace original, which would orphan the promoted object."""
+    display = [
+        {"file_id": "promoted", "filename": "a.png", "object_name": "chat/7/abc.png"},
+        {"file_id": "fresh", "filename": "b.png"},
+    ]
+    processed = [
+        {"file_id": "promoted", "valid": True, "original_file_path": "linsight/sv1/promoted_original.png"},
+        {"file_id": "fresh", "valid": True, "original_file_path": "linsight/sv1/fresh_original.png"},
+    ]
+
+    by_id = {f["file_id"]: f for f in LinsightWorkbenchImpl.annotate_display_files(display, processed)}
+
+    assert by_id["promoted"]["object_name"] == "chat/7/abc.png"
+    assert by_id["fresh"]["object_name"] == "linsight/sv1/fresh_original.png"
 
 
 async def test_expired_temp_no_formal_marks_invalid():

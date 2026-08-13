@@ -4,6 +4,7 @@ import mimetypes
 import os
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from io import BytesIO
 from typing import Any
@@ -229,6 +230,7 @@ class LinsightWorkbenchImpl:
         submit_obj: LinsightQuestionSubmitSchema,
         login_user: UserPayload,
         display_files: list[dict] | None = None,
+        defer_ingest: bool = True,
     ) -> tuple[MessageSession, LinsightSessionVersion]:
         """
         Submit user issue and create session
@@ -241,6 +243,12 @@ class LinsightWorkbenchImpl:
                 ChatMessage so the uploaded attachments render after a refresh,
                 mirroring the daily-chat question envelope. ``None`` for the
                 legacy /linsight entry (it renders attachments its own way).
+            defer_ingest: Park the raw file refs in ``pending_files`` and let the
+                worker ingest them (``ingest_pending_files``) instead of parsing
+                them here. Ingestion runs the full ETL — 12 PDFs measured at 19
+                minutes — so inline parsing put the whole batch inside one HTTP
+                request, which nginx cut at 300s. Set False only where the caller
+                genuinely needs the files materialized before it returns.
 
         Returns:
             tuple: (Message Session Model, Inspiration Conversation Version Model)
@@ -249,6 +257,10 @@ class LinsightWorkbenchImpl:
             LinsightError: When creating a session fails
         """
         try:
+            # Metadata-only preconditions, always in-request: they carry the typed
+            # codes the frontend branches on, which a deferred ingest could only
+            # report minutes later as a generic task failure.
+            cls.validate_submitted_files(submit_obj.files)
             # Continue an existing session when session_id is supplied, else
             # start a fresh one. Continuing reuses the MessageSession and only
             # appends a new version, so follow-up rounds stay in one 会话 (F035).
@@ -271,7 +283,12 @@ class LinsightWorkbenchImpl:
             # svid up-front and use it both for ingestion and the version row id.
             svid = uuid.uuid4().hex
             # Process files (if present) — after chat_id is finalized
-            processed_files = await cls._process_submitted_files(submit_obj.files, svid, login_user.user_id)
+            if defer_ingest:
+                processed_files = None
+                pending_files = [f.model_dump() for f in (submit_obj.files or [])] or None
+            else:
+                processed_files = await cls._process_submitted_files(submit_obj.files, svid, login_user.user_id)
+                pending_files = None
 
             if not continuing:
                 # F035 Track J (unified conversation model): a task turn is not a
@@ -315,6 +332,7 @@ class LinsightWorkbenchImpl:
                 organization_knowledge_ids=submit_obj.organization_knowledge_ids,
                 knowledge_space_ids=submit_obj.knowledge_space_ids,
                 files=processed_files,
+                pending_files=pending_files,
                 model=submit_obj.model,
                 skills=submit_obj.skills,
             )
@@ -323,18 +341,23 @@ class LinsightWorkbenchImpl:
             # F035 Track J: land the user question in the unified conversation
             # stream so the round reads as one Q→A pair regardless of task mode.
             # (The bot answer turn is written at completion in task_exec.)
-            # Annotate the persisted attachments with each file's parse result so
-            # the attachment chip can show a "parse failed" state after a refresh.
             await linsight_execute_utils.persist_task_user_turn(
                 chat_id=chat_id,
                 user_id=login_user.user_id,
                 question=submit_obj.question,
-                # Attachments that came in through the shared upload endpoint are
-                # still sitting in the temp bucket; the ones ingested by linsight
-                # already have an object_name and are skipped.
+                # Deferring the ingest means EVERY attachment is still sitting in
+                # the temp bucket here, so all of them get promoted — the chat
+                # copy can no longer piggyback on the workspace original the
+                # ingest used to have written by now. That is one extra
+                # server-side copy_object per file, against a message whose
+                # attachments would otherwise vanish with the temp bucket's 3-day
+                # rule if the worker never ran. The parse result (video cover,
+                # failed state) is stamped on later by the worker, via the
+                # session_version_id pointer below.
                 files=await promote_chat_attachments(
-                    cls._annotate_display_files(display_files, processed_files), login_user.user_id
+                    cls.annotate_display_files(display_files, processed_files), login_user.user_id
                 ),
+                session_version_id=svid,
             )
 
             return message_session, linsight_session_version
@@ -349,7 +372,7 @@ class LinsightWorkbenchImpl:
             raise cls.LinsightError(f"Failed to submit user question: {e!s}")
 
     @staticmethod
-    def _annotate_display_files(display_files: list[dict] | None, processed_files: list | None) -> list[dict] | None:
+    def annotate_display_files(display_files: list[dict] | None, processed_files: list | None) -> list[dict] | None:
         """Stamp each persisted attachment with its parse result (by file_id).
 
         ``display_files`` are the daily-shape dicts the frontend renders; the
@@ -357,6 +380,11 @@ class LinsightWorkbenchImpl:
         ``parsing_status`` per file. Merging them lets the attachment chip show a
         "parse failed" state on reload instead of a normal-looking attachment the
         model can't actually use.
+
+        Called twice per deferred turn: once here with ``processed_files=None``
+        (a passthrough — submit no longer knows anything about the files) and
+        again from the worker once the ingest produced them
+        (``linsight_execute_utils.annotate_task_user_turn_files``).
         """
         if not display_files:
             return display_files
@@ -379,7 +407,10 @@ class LinsightWorkbenchImpl:
                 # Ingestion already persisted the original image bytes for the
                 # workspace preview; naming it here lets the conversation resolve
                 # a fresh link for it too, the same way the other chat modes do.
-                if p.get("original_file_path"):
+                # Never overwrite a name that is already set: with the ingest
+                # deferred, submit promotes the attachment out of the temp bucket
+                # itself, and THAT key is the one conversation deletion sweeps.
+                if p.get("original_file_path") and not item.get("object_name"):
                     item["object_name"] = p["original_file_path"]
             annotated.append(item)
         return annotated
@@ -390,8 +421,68 @@ class LinsightWorkbenchImpl:
         return await get_redis_client()
 
     @classmethod
+    def validate_submitted_files(cls, files: list[SubmitFileSchema] | None) -> None:
+        """Cheap, pure-metadata preconditions — must stay in the request.
+
+        These are the only source of the typed codes the frontend branches on
+        (11021/11022/11023) and of the "file still parsing" rejection. They touch
+        no MinIO, no Redis, no bytes; deferring them to the worker would turn a
+        precise, immediate error into a generic task failure minutes later.
+        """
+        if not files:
+            return
+        for file in files:
+            if file.parsing_status != "completed":
+                raise cls.LinsightError(f"file {file.file_name} status is error: {file.parsing_status}")
+        # Folder upload: reject an over-sized batch before any byte is copied.
+        cls._validate_folder_upload(files)
+
+    @classmethod
+    async def ingest_pending_files(
+        cls,
+        session_model: LinsightSessionVersion,
+        *,
+        on_progress: Callable[[int, int, str], Awaitable[None]] | None = None,
+        should_abort: Callable[[], bool] | None = None,
+    ) -> bool:
+        """Materialize the attachments a deferred submit left on the row.
+
+        Returns True when it ingested something. Rebinds ``files`` and clears
+        ``pending_files`` on the passed model — the CALLER persists (the worker
+        has to refresh the Redis snapshot in the same breath, so it owns the
+        write).
+
+        The rebind is deliberate: ``JsonType`` is a plain JSON column with no
+        ``MutableList`` wrapper anywhere in this repo, so mutating the list in
+        place emits no UPDATE at all and the ingest would silently vanish.
+        """
+        pending = session_model.pending_files
+        if not pending:
+            return False
+
+        files = [SubmitFileSchema(**item) for item in pending]
+        processed = await cls._process_submitted_files(
+            files,
+            session_model.id,
+            session_model.user_id,
+            on_progress=on_progress,
+            should_abort=should_abort,
+        )
+
+        existing = session_model.files or []
+        session_model.files = existing + (processed or [])
+        session_model.pending_files = None
+        return True
+
+    @classmethod
     async def _process_submitted_files(
-        cls, files: list[SubmitFileSchema] | None, chat_id: str, user_id: int = 0
+        cls,
+        files: list[SubmitFileSchema] | None,
+        chat_id: str,
+        user_id: int = 0,
+        *,
+        on_progress: Callable[[int, int, str], Awaitable[None]] | None = None,
+        should_abort: Callable[[], bool] | None = None,
     ) -> list | None:
         """Process submitted files (F035: offload-first ingestion).
 
@@ -415,6 +506,14 @@ class LinsightWorkbenchImpl:
         Args:
             files: List of submitted file references.
             chat_id: Session id; scopes the workspace prefix.
+            on_progress: Awaited after each file with ``(done, total, file_name)``.
+                Only the worker passes it, to keep the timeline alive while a
+                deferred ingest runs; ``None`` keeps the original behaviour.
+            should_abort: Polled BETWEEN files; truthy stops the loop and returns
+                what was ingested so far. It bounds a stop to the file currently
+                being parsed, not to the whole batch — an ETL already in flight
+                (600s ceiling) still runs to completion, because nothing here can
+                interrupt it.
 
         Returns:
             List of processed file metadata dicts (one per submitted file).
@@ -422,20 +521,26 @@ class LinsightWorkbenchImpl:
         if not files:
             return None
 
-        for file in files:
-            if file.parsing_status != "completed":
-                raise cls.LinsightError(f"file {file.file_name} status is error: {file.parsing_status}")
-
-        # Folder upload: reject an over-sized batch before any byte is copied.
-        cls._validate_folder_upload(files)
+        cls.validate_submitted_files(files)
 
         # Daily-bucket files (unified-resource) are parsed on-the-fly; only the
         # linsight-pipeline files need a Redis temp_info lookup.
         linsight_files = [f for f in files if not f.file_url]
         redis_keys = [f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{f.file_id}" for f in linsight_files]
         redis_client = await cls._get_redis()
-        temp_list = await redis_client.amget(redis_keys) if redis_keys else []
-        temp_by_id = {f.file_id: t for f, t in zip(linsight_files, temp_list)}
+        temp_values = await redis_client.amget(redis_keys) if redis_keys else []
+        # ``amget`` DROPS misses (``[loads(v) for v in values if v is not None]``),
+        # so a single expired temp key makes the returned list shorter than the
+        # keys — zipping it positionally would then staple B's markdown_file_path
+        # onto A. Only pair by position when the lengths still prove alignment;
+        # otherwise re-read key by key so each file gets its own value (or None).
+        if len(temp_values) == len(linsight_files):
+            temp_by_id = {f.file_id: t for f, t in zip(linsight_files, temp_values)}
+        else:
+            temp_by_id = {
+                f.file_id: await redis_client.aget(f"{cls.FILE_INFO_REDIS_KEY_PREFIX}{f.file_id}")
+                for f in linsight_files
+            }
 
         minio_client = await get_minio_storage()
 
@@ -452,14 +557,37 @@ class LinsightWorkbenchImpl:
                 len(media_files),
                 ",".join(f.file_name for f in media_files),
             )
+        total = len(files)
         for submit_file in files:
-            if submit_file.file_url:
-                entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id, used_names)
-            else:
-                entry = await cls._ingest_one_file(
-                    submit_file, temp_by_id.get(submit_file.file_id), chat_id, minio_client, used_names
-                )
+            if should_abort is not None and should_abort():
+                logger.info(f"ingest aborted after {len(processed_files)}/{total} files chat_id={chat_id}")
+                break
+            try:
+                if submit_file.file_url:
+                    entry = await cls._ingest_daily_file(submit_file, chat_id, minio_client, user_id, used_names)
+                else:
+                    entry = await cls._ingest_one_file(
+                        submit_file, temp_by_id.get(submit_file.file_id), chat_id, minio_client, used_names
+                    )
+            except Exception as e:
+                # Degrade this file, never the batch. The daily branch already
+                # degrades internally, but the linsight branch makes bare
+                # copy_object calls, so one MinIO hiccup abandoned every
+                # remaining attachment. Since the ingest moved into the worker
+                # that loss is also silent — the run would simply proceed with
+                # fewer files than the user attached.
+                logger.exception(f"attachment ingest failed name={submit_file.file_name!r} chat_id={chat_id}: {e}")
+                entry = {
+                    "file_id": submit_file.file_id,
+                    "original_filename": submit_file.file_name,
+                    "relative_path": submit_file.relative_path,
+                    "parsing_status": "failed",
+                    "valid": False,
+                    "error_message": str(e),
+                }
             processed_files.append(entry)
+            if on_progress is not None:
+                await on_progress(len(processed_files), total, submit_file.file_name)
 
         return processed_files
 
