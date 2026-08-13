@@ -13,6 +13,7 @@ import type {
 import { ChevronDown, ChevronRight, Building2, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useLocalize } from "~/hooks";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 import { useGrantDepartmentTree } from "./useGrantDepartmentTree";
 
 /**
@@ -217,9 +218,7 @@ export function SubjectSearchDepartment({
           </div>
         )}
         {!busy && roots.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_departments")}
-          </div>
+          <PermissionEmptyState message={localize("com_permission.empty_departments")} />
         )}
         {!busy &&
           roots.map((node) => (

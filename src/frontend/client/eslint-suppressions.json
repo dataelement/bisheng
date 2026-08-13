@@ -874,11 +874,6 @@
       "count": 1
     }
   },
-  "src/components/FileListRow.tsx": {
-    "no-restricted-syntax": {
-      "count": 11
-    }
-  },
   "src/components/Files/ActionButton.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1

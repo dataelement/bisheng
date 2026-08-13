@@ -280,6 +280,11 @@ describe("ChannelSettingsPage", () => {
     expect(businessColumn.parentElement?.className).toContain(
       "max-[900px]:grid-cols-1",
     );
+    expect(
+      screen
+        .getByText("com_unified_permission.confirm_create")
+        .closest("footer")?.className,
+    ).toContain("h-16");
     expect(screen.getByTestId("authorization-list-body").className).toContain(
       "h-[400px]",
     );

@@ -573,6 +573,112 @@ class FineGrainedPermissionService:
         return effective_permissions
 
     @classmethod
+    async def get_effective_permission_ids_from_verified_bindings_async(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_id: str | int,
+    ) -> set[str]:
+        """Resolve list-management access without scanning every resource tuple.
+
+        Bindings only select current-user candidates. Each candidate must still
+        have its exact OpenFGA tuple before its relation model contributes any
+        permission IDs. This narrow path is for knowledge-space/channel list
+        reads; general permission evaluation keeps using the full evaluator.
+        """
+        if login_user.is_admin():
+            return cls.default_permission_ids_for_relation(object_type, "owner")
+
+        models = await cls.get_relation_models_map()
+        bindings = [
+            binding
+            for binding in await _get_bindings()
+            if binding.get("resource_type") == object_type
+            and str(binding.get("resource_id")) == str(object_id)
+        ]
+        user_subject_strings = await cls.get_current_user_subject_strings(login_user)
+        binding_department_paths = await cls.get_binding_department_paths(bindings)
+        user_department_paths = await cls.get_current_user_department_paths(user_subject_strings)
+        candidates = [
+            binding
+            for binding in bindings
+            if cls._binding_matches_current_user(
+                binding,
+                user_subject_strings,
+                binding_department_paths,
+                user_department_paths,
+            )
+        ]
+
+        verified_bindings: list[dict] = []
+        fga = await PermissionService._aget_fga()
+        if fga is not None and candidates:
+            semaphore = asyncio.Semaphore(20)
+
+            async def exact_tuple_exists(binding: dict) -> bool:
+                subject_type = binding.get("subject_type")
+                try:
+                    subject_id = int(binding.get("subject_id"))
+                except (TypeError, ValueError):
+                    return False
+                if subject_type not in {"user", "department", "user_group"}:
+                    return False
+                member_suffix = "" if subject_type == "user" else "#member"
+                async with semaphore:
+                    try:
+                        tuples = await fga.read_tuples(
+                            user=f"{subject_type}:{subject_id}{member_suffix}",
+                            relation=binding.get("relation"),
+                            object=f"{object_type}:{object_id}",
+                        )
+                    except FGAClientError as exc:
+                        logger.error(
+                            "OpenFGA failed while verifying bound permission for %s:%s: %s",
+                            object_type,
+                            object_id,
+                            exc,
+                        )
+                        return False
+                return bool(tuples)
+
+            verified = await asyncio.gather(*(exact_tuple_exists(binding) for binding in candidates))
+            verified_bindings = [binding for binding, exists in zip(candidates, verified, strict=True) if exists]
+
+        effective_permissions: set[str] = set()
+        verified_relations: set[str] = set()
+        for binding in verified_bindings:
+            relation = binding.get("relation") or ""
+            verified_relations.add(relation)
+            model = models.get(binding.get("model_id")) if binding.get("model_id") else None
+            effective_permissions.update(cls._permission_ids_for_relation(object_type, relation, model))
+
+        implicit_level = await PermissionService.get_implicit_permission_level(
+            user_id=login_user.user_id,
+            object_type=object_type,
+            object_id=str(object_id),
+            login_user=login_user,
+        )
+        implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or "")
+        effective_permissions.update(
+            cls.default_permission_ids_for_relation(object_type, implicit_relation or ""),
+        )
+
+        # Preserve legacy unbound coarse tuples without treating an explicitly
+        # bound custom model as the default model for the same relation.
+        level = await PermissionService.get_permission_level(
+            user_id=login_user.user_id,
+            object_type=object_type,
+            object_id=str(object_id),
+            login_user=login_user,
+        )
+        fallback_relation = _PERMISSION_LEVEL_TO_RELATION.get(level or "")
+        if fallback_relation and fallback_relation not in verified_relations:
+            effective_permissions.update(
+                cls.default_permission_ids_for_relation(object_type, fallback_relation),
+            )
+        return effective_permissions
+
+    @classmethod
     async def has_any_permission_async(
         cls,
         login_user: UserPayload,

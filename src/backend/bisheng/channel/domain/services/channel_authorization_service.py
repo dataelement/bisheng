@@ -149,29 +149,37 @@ class ChannelAuthorizationService:
         )
 
     async def list_permissions(self, channel_id: str, login_user: UserPayload) -> list[ChannelPermissionEntry]:
-        await self._require_manage_access(channel_id, login_user)
+        await self._require_manage_access(channel_id, login_user, use_binding_index=True)
         channel = await self._ensure_channel(channel_id)
         creator_id = int(channel.user_id) if getattr(channel, "user_id", None) is not None else None
-        permissions = await PermissionService.get_resource_permissions("channel", channel_id)
         bindings = [
             b
             for b in await self._get_bindings()
             if b.get("resource_type") == "channel" and str(b.get("resource_id")) == str(channel_id)
         ]
         model_map = {m["id"]: m for m in await self._get_relation_models()}
-        binding_map = {b.get("key"): b for b in bindings if b.get("key")}
+        display_bindings = list(bindings)
+        if creator_id is not None and not any(
+            binding.get("subject_type") == "user"
+            and str(binding.get("subject_id")) == str(creator_id)
+            and binding.get("relation") == ChannelRelationEnum.OWNER.value
+            for binding in display_bindings
+        ):
+            display_bindings.append(
+                {
+                    "subject_type": "user",
+                    "subject_id": creator_id,
+                    "relation": ChannelRelationEnum.OWNER.value,
+                    "include_children": None,
+                    "model_id": ChannelRelationEnum.OWNER.value,
+                }
+            )
+        permissions = await PermissionService.get_resource_permissions_from_bindings(
+            display_bindings,
+            model_map,
+        )
         out: list[ChannelPermissionEntry] = []
         for item in permissions:
-            binding = self._binding_from_map(
-                binding_map,
-                channel_id,
-                item.subject_type,
-                int(item.subject_id),
-                item.relation,
-                getattr(item, "include_children", None),
-            )
-            model_id = binding.get("model_id") if binding else getattr(item, "model_id", None)
-            model = model_map.get(model_id) if model_id else None
             out.append(
                 ChannelPermissionEntry(
                     subject_type=item.subject_type,
@@ -180,11 +188,9 @@ class ChannelAuthorizationService:
                     subject_group_names=getattr(item, "subject_group_names", None),
                     subject_member_names=getattr(item, "subject_member_names", None),
                     relation=ChannelRelationEnum(item.relation),
-                    include_children=binding.get("include_children")
-                    if binding
-                    else getattr(item, "include_children", None),
-                    model_id=model_id,
-                    model_name=model.get("name") if model else getattr(item, "model_name", None),
+                    include_children=getattr(item, "include_children", None),
+                    model_id=getattr(item, "model_id", None),
+                    model_name=getattr(item, "model_name", None),
                     is_creator=(
                         item.subject_type == "user" and creator_id is not None and int(item.subject_id) == creator_id
                     ),
@@ -427,15 +433,26 @@ class ChannelAuthorizationService:
         self,
         channel_id: str,
         login_user: UserPayload,
+        *,
+        use_binding_index: bool = False,
     ) -> ChannelRelationEnum | None:
         if login_user.is_admin():
             return ChannelRelationEnum.OWNER
         try:
-            permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
-                login_user,
-                "channel",
-                channel_id,
-            )
+            if use_binding_index:
+                permission_ids = (
+                    await FineGrainedPermissionService.get_effective_permission_ids_from_verified_bindings_async(
+                        login_user,
+                        "channel",
+                        channel_id,
+                    )
+                )
+            else:
+                permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+                    login_user,
+                    "channel",
+                    channel_id,
+                )
             relation = relation_from_channel_permission_ids(permission_ids)
             if relation:
                 return ChannelRelationEnum(relation)
@@ -446,8 +463,18 @@ class ChannelAuthorizationService:
             login_user.user_id,
         )
 
-    async def _require_manage_access(self, channel_id: str, login_user: UserPayload) -> ChannelRelationEnum:
-        actor_relation = await self._actor_relation(channel_id, login_user)
+    async def _require_manage_access(
+        self,
+        channel_id: str,
+        login_user: UserPayload,
+        *,
+        use_binding_index: bool = False,
+    ) -> ChannelRelationEnum:
+        actor_relation = await self._actor_relation(
+            channel_id,
+            login_user,
+            use_binding_index=use_binding_index,
+        )
         if actor_relation not in {ChannelRelationEnum.OWNER, ChannelRelationEnum.MANAGER}:
             raise ChannelPermissionDeniedError()
         return actor_relation

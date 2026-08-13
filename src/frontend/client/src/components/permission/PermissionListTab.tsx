@@ -12,6 +12,7 @@ import type {
   RevokeItem,
 } from "~/api/permission";
 import { Avatar, AvatarName } from "~/components/ui/Avatar";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 import { Building2, RotateCcw, Search, User, Users } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -492,11 +493,13 @@ export function PermissionListTab({
           data-scrolling={isListScrolling ? "true" : "false"}
         >
           {visibleEntries.length === 0 ? (
-            <div className="py-10 text-center text-sm text-gray-500">
-              {normalizedSearchQuery && listTab === "user"
-                ? localize("com_permission.empty_search")
-                : localize("com_permission.list_empty_for_subject")}
-            </div>
+            <PermissionEmptyState
+              message={
+                normalizedSearchQuery && listTab === "user"
+                  ? localize("com_permission.empty_search")
+                  : localize("com_permission.list_empty_for_subject")
+              }
+            />
           ) : (
             <div className="flex flex-col">
               {visibleEntries.map((entry, index) => {
