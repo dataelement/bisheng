@@ -52,7 +52,11 @@ def patched_endpoint(monkeypatch):
         AsyncMock(return_value=_session()),
     )
     monkeypatch.setattr(endpoint.MessageSessionDao, "touch_session", AsyncMock())
+    # Enqueueing now lives in linsight_execute_utils (shared with the unified
+    # submit path), so the Redis stub belongs on THAT module — patching only the
+    # endpoint's name let the real client through and the call reached the DB.
     monkeypatch.setattr(endpoint, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
+    monkeypatch.setattr(endpoint.linsight_execute_utils, "get_redis_client", AsyncMock(return_value=SimpleNamespace()))
 
     # LinsightQueue and encode_queue_item are imported function-locally from
     # bisheng.linsight.worker; inject a stub module so the heavy worker import
@@ -111,14 +115,23 @@ async def test_start_execute_persist_failure_does_not_break_enqueue(monkeypatch,
     assert resp.data is True
 
 
-async def test_start_execute_rejects_in_progress(monkeypatch, patched_endpoint):
-    """An already-running session is rejected and never re-persisted/enqueued."""
+async def test_start_execute_on_in_progress_is_a_no_op(monkeypatch, patched_endpoint):
+    """An already-running session is left alone — never re-persisted or re-enqueued.
+
+    It now answers 200 rather than an error: submit enqueues server-side, so the
+    client's start-execute routinely arrives after the worker already picked the
+    session up, and reporting that as a failure made the UI mark a healthy task
+    as stopped. Idempotency itself is covered in
+    test_task_submit_server_side_enqueue.py.
+    """
     monkeypatch.setattr(
         endpoint.LinsightSessionVersionDao,
         "get_by_id",
         AsyncMock(return_value=_session(status=SessionVersionStatusEnum.IN_PROGRESS)),
     )
 
-    await endpoint.start_execute(linsight_session_version_id="SV-1", login_user=_login_user())
+    resp = await endpoint.start_execute(linsight_session_version_id="SV-1", login_user=_login_user())
 
+    assert resp.data is True
     assert "session" not in patched_endpoint  # persist never reached
+    patched_endpoint["queue"].put.assert_not_awaited()
