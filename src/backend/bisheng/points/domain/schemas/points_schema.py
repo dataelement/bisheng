@@ -206,3 +206,9 @@ class ClearCompanyRootResponse(BaseModel):
     """取消公司根并清空组织层级标签的结果。"""
 
     cleared_count: int
+
+
+class PointMonthlyRewardJobRequest(BaseModel):
+    """临时 HTTP 触发月奖；缺省 period_key 时与 Beat 一样结算上月。"""
+
+    period_key: str | None = None

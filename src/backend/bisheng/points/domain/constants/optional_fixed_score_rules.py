@@ -1,8 +1,9 @@
-"""G5–G7 / M2/M3/M5/M7/M8：初始禁用且库内可为空；列表展示 —，启用/新增时须填分值与日上限。"""
+"""G5–G7 / M2/M3/M5/M7/M8：初始禁用且库内可为空；G* 启用须填分值与日上限，M* 月奖仅须分值。"""
 
 from __future__ import annotations
 
 DEFERRED_CONFIG_RULE_CODES = frozenset({"G5", "G6", "G7", "M2", "M3", "M5", "M7", "M8"})
+DEFERRED_DAILY_CAP_RULE_CODES = frozenset({"G5", "G6", "G7"})
 
 # 兼容旧名
 OPTIONAL_FIXED_SCORE_RULE_CODES = DEFERRED_CONFIG_RULE_CODES
@@ -25,7 +26,7 @@ def validate_deferred_config_rule_can_enable(
     daily_cap: int | None,
     status: str,
 ) -> str | None:
-    """启用校验：延迟配置规则在 status=enabled 时必须已填写分值与日上限。
+    """启用校验：延迟配置规则在 status=enabled 时必须已填写分值；G5–G7 还须日上限。
 
     Returns:
         错误文案；通过时返回 None。
@@ -35,7 +36,7 @@ def validate_deferred_config_rule_can_enable(
         return None
     if fixed_score_from_expr(score_expr) <= 0:
         return "启用规则须填写积分分值"
-    if daily_cap is None:
+    if code in DEFERRED_DAILY_CAP_RULE_CODES and daily_cap is None:
         return "启用规则须填写每日上限"
     return None
 
