@@ -7,7 +7,7 @@ a ``session_id`` (first turn, no daily session yet), it must create the session
 as flow_type=15 — matching how ``workstation/chat_service`` mints daily chats —
 so the conversation reads as one stream regardless of task mode (C8, design §3.1).
 
-DAO / telemetry / file-processing are patched; the unit under test is the
+DAO / telemetry / attachment-promotion are patched; the unit under test is the
 session-creation branch of submit_user_question, not DB or MinIO access.
 """
 
@@ -45,7 +45,12 @@ def patch_submit_io(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(MessageSessionDao, "async_insert_one", classmethod(_fake_insert_session))
     monkeypatch.setattr(LinsightSessionVersionDao, "insert_one", classmethod(_fake_insert_version))
     monkeypatch.setattr(ChatMessageDao, "ainsert_one", classmethod(_fake_insert_message))
-    monkeypatch.setattr(LinsightWorkbenchImpl, "_process_submitted_files", AsyncMock(return_value=None))
+    # Attachment parsing left this request (submit only parks the refs in
+    # pending_files now), so stubbing ``_process_submitted_files`` isolated
+    # nothing. What still reaches storage is the temp -> permanent promotion of
+    # the display attachments, and that is what has to be stubbed instead — the
+    # display-files test below carries a tmp-bucket link.
+    monkeypatch.setattr(workbench_impl, "promote_chat_attachments", AsyncMock(side_effect=lambda files, _uid: files))
     monkeypatch.setattr(workbench_impl.telemetry_service, "log_event", AsyncMock(return_value=None))
 
     return captured

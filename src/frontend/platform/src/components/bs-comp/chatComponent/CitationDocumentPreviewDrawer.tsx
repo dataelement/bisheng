@@ -1,5 +1,6 @@
 // @ts-strict-ignore
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Download, FileText, Loader2, X } from "lucide-react";
 import FileView from "@/components/bs-comp/FileView";
 import { cname } from "@/components/bs-ui/utils";
@@ -7,6 +8,7 @@ import { FileIcon } from "@/components/bs-icons/file";
 import { ExcelPreview } from "@bisheng/file-viewers";
 import DocxPreview from "@/pages/KnowledgePage/components/DocxFileViewer";
 import TxtFileViewer from "@/pages/KnowledgePage/components/TxtFileViewer";
+import { MediaTranscriptTabs } from "@/pages/KnowledgePage/components/RichPreviewFile";
 import { getCitationDetail, type ChatCitation } from "@/controllers/API";
 import {
   getCitationDocumentDownloadUrl,
@@ -14,6 +16,7 @@ import {
   getCitationDocumentName,
   getCitationDocumentPreviewUrl,
   getCitationItemBBoxes,
+  isMediaCitation,
   isRagCitation,
   isRagCitationMissingPreviewUrl,
   toAbsolutePreviewUrl,
@@ -84,6 +87,33 @@ function resolveFileType(detail: ChatCitation, rawUrl: string) {
   return name.split(".").pop()?.toLowerCase() || "";
 }
 
+/** Audio/video citation: the clip itself plus the transcript the answer quoted,
+ *  the same pairing the knowledge space shows. */
+const VIDEO_CITATION_EXTENSIONS = new Set(["mp4", "mov", "avi", "mkv", "webm"]);
+
+function MediaPreview({ fileUrl, transcriptUrl, isVideo }: { fileUrl: string; transcriptUrl: string; isVideo: boolean }) {
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-gray-50">
+      <div className="shrink-0 overflow-visible p-3 pb-0">
+        <section className="overflow-visible rounded-md border bg-white p-3 shadow-sm">
+          {isVideo ? (
+            <video className="max-h-[280px] w-full rounded bg-black" src={fileUrl} controls />
+          ) : (
+            <div className="flex min-h-[120px] flex-col justify-end overflow-visible py-1">
+              <audio className="w-full" src={fileUrl} controls />
+            </div>
+          )}
+        </section>
+      </div>
+      {transcriptUrl ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-3 pt-3">
+          <MediaTranscriptTabs fileUrl={transcriptUrl} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function buildPdfLabels(bboxes: CitationPdfBBox[]) {
   const labels: Record<number, { id: string; label: [number, number, number, number]; active: boolean; txt: string }[]> = {};
   bboxes.forEach((item, index) => {
@@ -107,7 +137,9 @@ function renderPreviewContent({
   fileName,
   bboxes,
   targetBBox,
+  t,
 }: {
+  t: (key: string) => string;
   fileType: string;
   fileUrl: string;
   fileName: string;
@@ -156,7 +188,7 @@ function renderPreviewContent({
       return (
         <div className="flex h-full flex-col items-center justify-center gap-3 text-[14px] text-[#86909C]">
           <FileIcon type="txt" className="size-16 opacity-60" />
-          <div>该类型文件不支持预览</div>
+          <div>{t("citation.unsupportedPreview")}</div>
         </div>
       );
   }
@@ -223,6 +255,7 @@ export function CitationDocumentPreviewContent({
   compactMode = false,
   className,
 }: CitationDocumentPreviewContentProps) {
+  const { t } = useTranslation();
   const { effectiveDetail, isResolving } = useResolvedCitationDetail(preview);
 
   if (!preview || !isRagCitation(effectiveDetail)) {
@@ -231,9 +264,16 @@ export function CitationDocumentPreviewContent({
 
   const { itemId, locateChunk } = preview;
   const fileName = getCitationDocumentName(effectiveDetail);
-  const rawFileUrl = getCitationDocumentPreviewUrl(effectiveDetail);
+  const isMedia = isMediaCitation(effectiveDetail);
+  // A clip renders from the original file (the player), with its transcript —
+  // which is what the preview URL points at — beside it. Everything else
+  // renders from the preview stand-in.
+  const rawFileUrl = isMedia
+    ? getCitationDocumentDownloadUrl(effectiveDetail)
+    : getCitationDocumentPreviewUrl(effectiveDetail);
   const fileType = resolveFileType(effectiveDetail, rawFileUrl);
   const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
+  const transcriptUrl = isMedia ? toAbsolutePreviewUrl(getCitationDocumentPreviewUrl(effectiveDetail)) : "";
   const shouldLocateChunk = locateChunk && fileType === "pdf";
   const bboxes: CitationPdfBBox[] = shouldLocateChunk ? getCitationItemBBoxes(effectiveDetail, itemId) : [];
   const targetBBox = bboxes[0] ?? null;
@@ -243,15 +283,23 @@ export function CitationDocumentPreviewContent({
       {isResolving ? (
         <div className="flex h-full items-center justify-center gap-2 text-[14px] text-[#86909C]">
           <Loader2 className="size-4 animate-spin" />
-          加载文档预览...
+          {t("citation.loadingPreview")}
+        </div>
+      ) : isMedia && fileUrl ? (
+        <div className="h-full min-h-0 overflow-hidden">
+          <MediaPreview
+            fileUrl={fileUrl}
+            transcriptUrl={transcriptUrl}
+            isVideo={VIDEO_CITATION_EXTENSIONS.has(fileType)}
+          />
         </div>
       ) : fileUrl ? (
         <div className="h-full min-h-0 overflow-hidden">
-          {renderPreviewContent({ fileType, fileUrl, fileName, bboxes, targetBBox })}
+          {renderPreviewContent({ fileType, fileUrl, fileName, bboxes, targetBBox, t })}
         </div>
       ) : (
         <div className="flex h-full items-center justify-center text-[14px] text-[#86909C]">
-          暂无可预览文件地址
+          {t("citation.noPreviewUrl")}
         </div>
       )}
     </div>
@@ -262,6 +310,7 @@ export default function CitationDocumentPreviewDrawer({
   preview,
   onClose,
 }: CitationDocumentPreviewDrawerProps) {
+  const { t } = useTranslation();
   const { effectiveDetail } = useResolvedCitationDetail(preview);
   const isPhoneViewport = useMediaQuery("(max-width: 576px)");
   const isNarrowLayout = useMediaQuery("(max-width: 768px)");
@@ -327,7 +376,7 @@ export default function CitationDocumentPreviewDrawer({
         isFullBleedMobile && "inset-0 z-[120] overflow-hidden overscroll-contain touch-pan-y",
         !isFullBleedMobile && "inset-y-0 right-0 z-[121] w-[min(520px,calc(100vw-24px))] border-l border-[#E5E6EB] shadow-[0_8px_28px_rgba(0,0,0,0.16)]",
       )}
-      aria-label="文档预览"
+      aria-label={t("citation.documentPreview")}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -357,7 +406,7 @@ export default function CitationDocumentPreviewDrawer({
                 "shrink-0 items-center justify-center text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]",
                 isFullBleedMobile ? "inline-flex size-8 rounded-md" : "inline-flex size-6 rounded-[6px]",
               )}
-              aria-label="下载文档"
+              aria-label={t("citation.downloadDocument")}
             >
               <Download className="size-4" />
             </button>
@@ -370,7 +419,7 @@ export default function CitationDocumentPreviewDrawer({
               onClick={handleDownload}
               disabled={!downloadFileUrl}
               className="inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] text-[#86909C] hover:bg-[#F2F3F5] hover:text-[#335CFF] disabled:cursor-not-allowed disabled:text-[#C9CDD4]"
-              aria-label="下载文档"
+              aria-label={t("citation.downloadDocument")}
             >
               <Download className="size-4" />
             </button>
@@ -382,7 +431,7 @@ export default function CitationDocumentPreviewDrawer({
               "items-center justify-center text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]",
               isFullBleedMobile ? "inline-flex size-8 rounded-md" : "inline-flex size-6 rounded-[6px]",
             )}
-            aria-label="关闭文档预览"
+            aria-label={t("citation.closeDocumentPreview")}
           >
             <X className="size-4" strokeWidth={1.5} />
           </button>

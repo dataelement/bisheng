@@ -9,6 +9,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { getViewerType, supportsPagination, supportsSidebar, supportsZoom } from "./viewers";
+import { MediaPlayer } from "./MediaPlayer";
+import { MediaTranscriptTabs } from "./RichKnowledgePreview";
+import { cn } from "~/utils";
 import { DocxViewer } from "./viewers/DocxViewer";
 import { HtmlViewer } from "./viewers/HtmlViewer";
 import { ImageViewer } from "./viewers/ImageViewer";
@@ -51,6 +54,10 @@ export interface FilePreviewProps {
     hideHeaderDownload?: boolean;
     /** Optional business-level download handler. Defaults to downloading fileUrl. */
     onDownloadFile?: () => void;
+    /** Parsed-transcript URL for an audio/video file. When set, the media viewer
+     *  shows the 识别文本 / 入库文本 pane next to the player, like the knowledge
+     *  space does — the cited text lives in the transcript, not in the clip. */
+    transcriptUrl?: string;
 }
 
 export default function FilePreview({
@@ -67,6 +74,7 @@ export default function FilePreview({
     allowDownload = true,
     hideHeaderDownload = false,
     onDownloadFile,
+    transcriptUrl = "",
 }: FilePreviewProps) {
     const localize = useLocalize();
     const viewerType = getViewerType(fileType);
@@ -247,6 +255,31 @@ export default function FilePreview({
                 return <ImageViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
             case "text":
                 return <TextViewer fileUrl={fileUrl} zoomLevel={zoomLevel} />;
+            case "audio":
+            case "video":
+                // Player on top, the transcript the answer actually quoted below
+                // it. Stacked rather than split: this preview lives in a narrow
+                // citation panel, where two columns leave both halves cramped.
+                return (
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#fbfbfb]">
+                        <div className={cn("shrink-0 p-4", transcriptUrl ? "" : "flex-1")}>
+                            <MediaPlayer
+                                kind={viewerType}
+                                src={fileUrl}
+                                allowDownload={allowDownload}
+                                onDownload={handleDownload}
+                            />
+                        </div>
+                        {transcriptUrl ? (
+                            <>
+                                <div className="h-px shrink-0 bg-[#e5e6eb]" />
+                                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                                    <MediaTranscriptTabs fileUrl={transcriptUrl} />
+                                </div>
+                            </>
+                        ) : null}
+                    </div>
+                );
             default:
                 return null;
         }

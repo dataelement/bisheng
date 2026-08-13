@@ -197,17 +197,11 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 7
     }
   },
   "src/components/bs-comp/chatComponent/CitationReferencesDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 16
     }
   },
   "src/components/bs-comp/chatComponent/CitationSourceIcon.tsx": {
@@ -925,9 +919,6 @@
     "no-console": {
       "count": 2
     },
-    "no-restricted-syntax": {
-      "count": 4
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -1581,7 +1572,7 @@
   },
   "src/pages/BuildPage/bench/ConfigInheritanceBanner.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 3
@@ -2972,7 +2963,7 @@
       "count": 2
     },
     "no-restricted-syntax": {
-      "count": 8
+      "count": 2
     }
   },
   "src/pages/KnowledgePage/components/RuleFile.tsx": {

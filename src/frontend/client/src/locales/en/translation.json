@@ -387,6 +387,11 @@
   "com_linsight_task_mode": "Task mode",
   "com_linsight_voice_coming_soon": "Voice input is not available yet",
   "com_linsight_intent_confirmed": "User intent confirmed",
+  "com_linsight_preparing": "Preparing the task",
+  "com_linsight_ingest_running": "Parsing uploaded files {{0}}/{{1}}",
+  "com_linsight_ingest_done": "Uploaded files parsed {{0}}/{{1}}",
+  "com_linsight_ingest_failed": "Failed to parse uploaded files",
+  "com_linsight_ingest_aborted": "Parsing stopped {{0}}/{{1}}",
   "com_linsight_planning": "Planning tasks",
   "com_linsight_executing": "Working",
   "com_linsight_thinking": "Thinking",
@@ -2162,5 +2167,17 @@
     "version": "Version",
     "route": "Page",
     "user": "User"
-  }
+  },
+  "com_citation.no_download_url": "No downloadable file address",
+  "com_citation.web": "Web",
+  "com_citation.document": "Document",
+  "com_citation.untitled": "Untitled",
+  "com_citation.loading_detail": "Loading source details...",
+  "com_citation.load_detail_failed": "Failed to load source details",
+  "com_citation.policy_document": "Policy document",
+  "com_citation.document_preview": "Document preview",
+  "com_citation.no_references": "No references",
+  "com_citation.close_references": "Close references",
+  "com_citation.back_to_references": "Back to reference list",
+  "com_citation.download_document": "Download document"
 }

@@ -4,11 +4,14 @@ Enqueueing used to be the client's job: submit created the session and streamed
 a ``linsight_task_handoff`` event, and only then did the browser POST
 ``/workbench/start-execute``. Everything between those two steps was a window in
 which the task could be lost — and it was not a narrow one, because
-``submit_user_question`` parses every attachment inline. A production task with
-12 attachments spent minutes in that call; the user stopped waiting, so the
-second request never came and the session sat at NOT_STARTED forever. The
+``submit_user_question`` used to parse every attachment inline. A production task
+with 12 attachments spent 19 minutes in that call; the user stopped waiting, so
+the second request never came and the session sat at NOT_STARTED forever. The
 conversation lost its task row too, which is why even the task-mode badge
-vanished on reload.
+vanished on reload. Ingestion now runs in the worker, so the window is short —
+but a short window is still a window, and the browser is still optional. (Where
+the parsing went, and what deliberately stayed behind in the request, is pinned
+in ``test_deferred_ingest.py``.)
 
 So: submit enqueues server-side, and start-execute degrades to a late retry.
 That makes double-enqueue the normal case (server + client), which is safe

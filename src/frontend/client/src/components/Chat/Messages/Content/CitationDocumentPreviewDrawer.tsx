@@ -10,10 +10,11 @@ import { cn } from '~/utils';
 import {
   getCitationDocumentFileType,
   getCitationDocumentName,
-  getCitationDocumentUrl,
   getCitationItemBBoxes,
+  isMediaCitation,
   isRagCitation,
-  resolveCitationDocumentUrl,
+  resolveCitationDocumentUrls,
+  resolveCitationDownloadUrl,
   toAbsolutePreviewUrl,
   type CitationPdfBBox,
 } from './citationUtils';
@@ -66,13 +67,20 @@ export function CitationDocumentPreviewContent({
   const itemId = preview?.itemId;
   const locateChunk = preview?.locateChunk;
   const fileName = detail ? getCitationDocumentName(detail) : '';
-  const rawFileUrl = detail ? getCitationDocumentUrl(detail) : '';
-  const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(rawFileUrl);
+  const isMedia = isMediaCitation(detail);
+  const [resolvedUrls, setResolvedUrls] = useState<{ originalUrl: string; previewUrl: string }>({
+    originalUrl: '',
+    previewUrl: '',
+  });
   const [isResolvingFileUrl, setIsResolvingFileUrl] = useState(false);
-  const fileType = canRenderPreview
-    ? resolveFileType(detail as ChatCitation, resolvedRawFileUrl || rawFileUrl)
-    : '';
-  const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || rawFileUrl);
+  // A clip renders from the original file (the player) with its transcript
+  // alongside; everything else renders from the derived preview.
+  const rawViewerUrl = isMedia
+    ? resolvedUrls.originalUrl || resolvedUrls.previewUrl
+    : resolvedUrls.previewUrl || resolvedUrls.originalUrl;
+  const fileType = canRenderPreview ? resolveFileType(detail as ChatCitation, rawViewerUrl) : '';
+  const fileUrl = toAbsolutePreviewUrl(rawViewerUrl);
+  const transcriptUrl = isMedia ? toAbsolutePreviewUrl(resolvedUrls.previewUrl) : '';
   const shouldLocateChunk = !!locateChunk && fileType === 'pdf';
   const bboxes: CitationPdfBBox[] = shouldLocateChunk
     ? getCitationItemBBoxes(detail as ChatCitation, itemId)
@@ -81,7 +89,7 @@ export function CitationDocumentPreviewContent({
 
   useEffect(() => {
     let active = true;
-    setResolvedRawFileUrl(rawFileUrl);
+    setResolvedUrls({ originalUrl: '', previewUrl: '' });
 
     if (!canRenderPreview || !detail) {
       setIsResolvingFileUrl(false);
@@ -90,24 +98,17 @@ export function CitationDocumentPreviewContent({
       };
     }
 
-    if (rawFileUrl) {
-      setIsResolvingFileUrl(false);
-      return () => {
-        active = false;
-      };
-    }
-
     setIsResolvingFileUrl(true);
-    void resolveCitationDocumentUrl(detail as ChatCitation).then((nextUrl) => {
+    void resolveCitationDocumentUrls(detail as ChatCitation).then((nextUrls) => {
       if (!active) return;
-      setResolvedRawFileUrl(nextUrl || '');
+      setResolvedUrls(nextUrls);
       setIsResolvingFileUrl(false);
     });
 
     return () => {
       active = false;
     };
-  }, [canRenderPreview, detail, rawFileUrl]);
+  }, [canRenderPreview, detail]);
 
   if (!canRenderPreview) {
     return null;
@@ -120,6 +121,7 @@ export function CitationDocumentPreviewContent({
           fileName={fileName}
           fileType={fileType}
           fileUrl={fileUrl}
+          transcriptUrl={transcriptUrl}
           highlightBboxes={bboxes}
           targetBBox={targetBBox}
           compactMode={compactMode}
@@ -149,7 +151,9 @@ export default function CitationDocumentPreviewDrawer({
   const setChatMobileNavHidden = useSetRecoilState(store.chatMobileNavHiddenState);
   const detail = preview?.detail ?? null;
   const fileName = getCitationDocumentName(detail);
-  const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState(() => getCitationDocumentUrl(detail));
+  // Download always hands back the file the user uploaded, never the derived
+  // preview — otherwise a clip downloads as its transcript under an .mp4 name.
+  const [resolvedRawFileUrl, setResolvedRawFileUrl] = useState('');
   const fileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl);
   const canRenderPreview = !!preview && isRagCitation(preview.detail);
 
@@ -197,14 +201,7 @@ export default function CitationDocumentPreviewDrawer({
 
   useEffect(() => {
     let active = true;
-    const nextRawFileUrl = getCitationDocumentUrl(detail);
-    setResolvedRawFileUrl(nextRawFileUrl);
-
-    if (nextRawFileUrl) {
-      return () => {
-        active = false;
-      };
-    }
+    setResolvedRawFileUrl('');
 
     if (!detail || !isRagCitation(detail)) {
       return () => {
@@ -212,7 +209,7 @@ export default function CitationDocumentPreviewDrawer({
       };
     }
 
-    void resolveCitationDocumentUrl(detail).then((nextUrl) => {
+    void resolveCitationDownloadUrl(detail).then((nextUrl) => {
       if (!active) return;
       setResolvedRawFileUrl(nextUrl || '');
     });
@@ -227,7 +224,7 @@ export default function CitationDocumentPreviewDrawer({
   }
 
   const handleDownload = async () => {
-    const nextFileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || await resolveCitationDocumentUrl(detail));
+    const nextFileUrl = toAbsolutePreviewUrl(resolvedRawFileUrl || await resolveCitationDownloadUrl(detail));
     setResolvedRawFileUrl((current) => current || nextFileUrl);
     if (!nextFileUrl) return;
     const link = document.createElement('a');

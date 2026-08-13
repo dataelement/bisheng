@@ -205,7 +205,9 @@ function MarkdownFromUrl({ fileUrl }: { fileUrl: string }) {
     return <MarkdownBlock content={content} />;
 }
 
-function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
+/** Transcript pane of a media preview: 识别文本 / 入库文本 tabs over the parsed
+ *  markdown. Exported so citation previews render the same pane. */
+export function MediaTranscriptTabs({ fileUrl }: { fileUrl: string }) {
     const localize = useLocalize();
     const [activeTab, setActiveTab] = useState<MediaTab>("recognized");
     const [content, setContent] = useState("");

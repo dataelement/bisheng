@@ -372,6 +372,11 @@
   "com_linsight_task_mode": "タスクモード",
   "com_linsight_voice_coming_soon": "音声入力はまだ利用できません",
   "com_linsight_intent_confirmed": "ユーザーの意図を確認しました",
+  "com_linsight_preparing": "タスクを準備中",
+  "com_linsight_ingest_running": "アップロードファイルを解析中 {{0}}/{{1}}",
+  "com_linsight_ingest_done": "アップロードファイルの解析が完了 {{0}}/{{1}}",
+  "com_linsight_ingest_failed": "アップロードファイルの解析に失敗しました",
+  "com_linsight_ingest_aborted": "解析を中断しました {{0}}/{{1}}",
   "com_linsight_planning": "タスクを計画中",
   "com_linsight_executing": "タスクを実行中",
   "com_linsight_thinking": "思考中",
@@ -2085,5 +2090,17 @@
     "version": "バージョン",
     "route": "ページ",
     "user": "ユーザー"
-  }
+  },
+  "com_citation.no_download_url": "ダウンロード可能なファイルアドレスがありません",
+  "com_citation.web": "ウェブ",
+  "com_citation.document": "ドキュメント",
+  "com_citation.untitled": "タイトルなし",
+  "com_citation.loading_detail": "出典の詳細を読み込み中...",
+  "com_citation.load_detail_failed": "出典の詳細の読み込みに失敗しました",
+  "com_citation.policy_document": "政策文書",
+  "com_citation.document_preview": "ドキュメントプレビュー",
+  "com_citation.no_references": "参考資料はありません",
+  "com_citation.close_references": "参考資料を閉じる",
+  "com_citation.back_to_references": "参考資料一覧に戻る",
+  "com_citation.download_document": "ドキュメントをダウンロード"
 }

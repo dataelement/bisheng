@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Download, Loader2, X } from "lucide-react";
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from "@/controllers/API";
 import { cname } from "@/components/bs-ui/utils";
+import { toast } from "@/components/bs-ui/toast/use-toast";
 import {
   buildCitationDocumentPreview,
   buildCitationReferenceItems,
@@ -62,6 +64,7 @@ function useMediaQuery(query: string) {
 }
 
 function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; type?: string }) {
+  const { t } = useTranslation();
   const isWeb = normalizeCitationType(preview?.type || type) === "web";
   return (
     <div
@@ -70,7 +73,7 @@ function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; t
         isWeb ? "bg-[#F7F3FF] text-[#7224D9]" : "bg-[#F5F8FF] text-[#024DE3]",
       )}
     >
-      {isWeb ? "网页" : "文档"}
+      {isWeb ? t("citation.web") : t("citation.document")}
     </div>
   );
 }
@@ -108,10 +111,11 @@ function CitationReferenceCard({
   hasError: boolean;
   onOpenDocumentPreview: (item: CitationReferenceItem, detail: ChatCitation) => void;
 }) {
+  const { t } = useTranslation();
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
   const isWeb = normalizeCitationType(type) === "web";
-  const title = preview?.title || "暂无标题";
+  const title = preview?.title || t("citation.untitled");
   const canOpenDocument = !!detail && isRagCitation(detail, type);
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
@@ -169,10 +173,10 @@ function CitationReferenceCard({
         {isLoading ? (
           <span className="inline-flex items-center gap-2 text-[#86909C]">
             <Loader2 className="size-3.5 animate-spin" />
-            加载溯源详情...
+            {t("citation.loadingDetail")}
           </span>
         ) : hasError ? (
-          <span className="text-[#86909C]">溯源详情加载失败</span>
+          <span className="text-[#86909C]">{t("citation.loadDetailFailed")}</span>
         ) : (
           null
         )}
@@ -184,13 +188,13 @@ function CitationReferenceCard({
             <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#ECECEC] bg-white">
               <CitationSourceIcon detail={detail} preview={preview} type={type} />
             </div>
-            <span className="truncate">{preview?.sourceName || "网页"}</span>
+            <span className="truncate">{preview?.sourceName || t("citation.web")}</span>
             {preview?.sourceMeta ? <span className="shrink-0">{preview.sourceMeta}</span> : null}
           </>
         ) : (
           <>
             <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" />
-            <span className="truncate">{preview?.sourceName || "政策文件"}</span>
+            <span className="truncate">{preview?.sourceName || t("citation.policyDocument")}</span>
           </>
         )}
       </div>
@@ -205,6 +209,7 @@ export default function CitationReferencesDrawer({
   buttonClassName,
   allowRemoteCitationResolve = true,
 }: CitationReferencesDrawerProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [detailMap, setDetailMap] = useState<Record<string, ChatCitation>>(() => createCitationDetailMap(citations));
   const [loadingMap, setLoadingMap] = useState<Record<string, boolean>>({});
@@ -428,14 +433,24 @@ export default function CitationReferencesDrawer({
     setPanelView("document-preview");
   };
 
-  const handleDownloadDocument = () => {
+  const handleDownloadDocument = async () => {
     if (!documentPreview) {
       return;
     }
 
-    const fileName = getCitationDocumentName(documentPreview.detail);
-    const fileUrl = toAbsolutePreviewUrl(getCitationDocumentDownloadUrl(documentPreview.detail));
+    const detail = documentPreview.detail;
+    const fileName = getCitationDocumentName(detail);
+    // The panel holds the citation as it arrived with the message, and that
+    // payload carries no file URL until it is resolved. The preview body
+    // resolves on its own, so the file showed up while this button silently
+    // did nothing — resolve here too before giving up.
+    let rawFileUrl = getCitationDocumentDownloadUrl(detail);
+    if (!rawFileUrl && detail?.citationId) {
+      rawFileUrl = getCitationDocumentDownloadUrl(await loadCitationDetail(detail.citationId));
+    }
+    const fileUrl = toAbsolutePreviewUrl(rawFileUrl);
     if (!fileUrl) {
+      toast({ variant: "error", description: t("citation.noDownloadUrl") });
       return;
     }
 
@@ -450,7 +465,7 @@ export default function CitationReferencesDrawer({
 
   const documentHeaderTitle = documentPreview
     ? splitDocumentTitle(getCitationDocumentName(documentPreview.detail), documentPreview.detail, null)
-    : { name: "文档预览", extension: "" };
+    : { name: t("citation.documentPreview"), extension: "" };
 
   const referenceListContent = (
     <>
@@ -459,7 +474,7 @@ export default function CitationReferencesDrawer({
         isNarrowLayout ? "h-11 px-2" : "h-14 px-3",
       )}>
         <div className="flex items-center gap-2">
-          <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">参考资料</h2>
+          <h2 className="text-[14px] font-medium leading-[22px] text-[#1D2129]">{t("citation.references")}</h2>
           <span className="inline-flex h-4 w-4 items-center justify-center gap-2 rounded-[6px] bg-[#F5F8FF] px-1 text-[12px] font-medium leading-4 text-[#165DFF]">
             {references.length}
           </span>
@@ -471,7 +486,7 @@ export default function CitationReferencesDrawer({
             "inline-flex items-center justify-center text-[#A9AEB8] hover:bg-[#F2F3F5] hover:text-[#4E5969]",
             isNarrowLayout ? "size-8 rounded-md" : "size-6 rounded-[6px]",
           )}
-          aria-label="关闭参考资料"
+          aria-label={t("citation.closeReferences")}
         >
           <X className="size-4" strokeWidth={1.5} />
         </button>
@@ -506,7 +521,7 @@ export default function CitationReferencesDrawer({
               setDocumentPreview(null);
             }}
             className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#4E5969] hover:bg-[#F2F3F5]"
-            aria-label="返回参考资料列表"
+            aria-label={t("citation.backToReferences")}
           >
             <ChevronLeft className="size-4" strokeWidth={1.75} />
           </button>
@@ -528,7 +543,7 @@ export default function CitationReferencesDrawer({
           type="button"
           onClick={handleDownloadDocument}
           className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#024DE3] transition-colors hover:bg-[#F2F7FF]"
-          aria-label="下载文档"
+          aria-label={t("citation.downloadDocument")}
         >
           <Download className="size-4" strokeWidth={1.75} />
         </button>
@@ -536,7 +551,7 @@ export default function CitationReferencesDrawer({
           type="button"
           onClick={handleClosePanel}
           className="inline-flex size-6 shrink-0 items-center justify-center rounded-[6px] text-[#A9AEB8] transition-colors hover:bg-[#F7F8FA]"
-          aria-label="关闭参考资料"
+          aria-label={t("citation.closeReferences")}
         >
           <X className="size-4" strokeWidth={1.5} />
         </button>
@@ -569,7 +584,7 @@ export default function CitationReferencesDrawer({
           <CitationSourceIconStack icons={referenceEntryIcons} />
         </div>
         <div className="flex h-5 w-16 shrink-0 items-center whitespace-nowrap">
-          <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
+          <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">{t("citation.references")}</span>
           <ChevronRight className="size-4 text-[#818181]" strokeWidth={1.5} />
         </div>
       </button>
@@ -578,7 +593,7 @@ export default function CitationReferencesDrawer({
         isFullBleedMobile ? (
           <aside
             className="fixed inset-0 z-[120] flex h-[100dvh] min-h-0 flex-col overflow-hidden overscroll-contain bg-white"
-            aria-label="参考资料"
+            aria-label={t("citation.references")}
           >
             {panelContent}
           </aside>
@@ -586,7 +601,7 @@ export default function CitationReferencesDrawer({
           <aside
             ref={drawerRef}
             className="fixed inset-y-0 right-0 z-[120] flex h-full min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]"
-            aria-label="参考资料"
+            aria-label={t("citation.references")}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
           >
