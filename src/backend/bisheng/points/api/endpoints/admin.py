@@ -14,8 +14,10 @@ from bisheng.points.domain.schemas.points_schema import (
     PointAdjustRequest,
     PointCopiesUpdateRequest,
     PointDeductRequest,
+    PointMonthlyRewardJobRequest,
     PointRuleRequest,
 )
+from bisheng.points.domain.services.points_admin_jobs_service import PointsAdminJobsService
 from bisheng.points.domain.services.points_query_service import PointsQueryService
 from bisheng.points.domain.services.points_rule_service import PointsRuleService
 
@@ -212,6 +214,35 @@ async def get_user_detail(
         from bisheng.common.errcode.points import PointsInvalidAdjustError
 
         return PointsInvalidAdjustError.return_resp(msg="日期格式须为 YYYY-MM-DD")
+
+
+@router.post("/admin/jobs/refresh-rank-snapshots")
+async def trigger_refresh_rank_snapshots(
+    tenant_id: int = Query(1, ge=1, description="目标租户 ID，默认 1"),
+):
+    """【临时·无鉴权】手动刷新积分榜快照（月/年/总）；Beat 任务逻辑不变，用完即删。"""
+    try:
+        data = await PointsAdminJobsService().refresh_rank_snapshots_for_tenant(tenant_id)
+        return resp_200(data)
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+
+
+@router.post("/admin/jobs/run-monthly-rewards")
+async def trigger_run_monthly_rewards(
+    body: PointMonthlyRewardJobRequest | None = None,
+    tenant_id: int = Query(1, ge=1, description="目标租户 ID，默认 1"),
+):
+    """【临时·无鉴权】手动结算管理员月奖；Beat 任务逻辑不变，用完即删。"""
+    try:
+        period_key = body.period_key if body else None
+        data = await PointsAdminJobsService().run_monthly_rewards_for_tenant(
+            tenant_id,
+            period_key=period_key,
+        )
+        return resp_200(data)
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
 
 
 @router.get("/admin/audit-logs")

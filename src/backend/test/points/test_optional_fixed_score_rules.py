@@ -42,7 +42,7 @@ def test_g5_requires_score_and_daily_cap_to_enable():
     )
 
 
-def test_m2_requires_score_and_daily_cap_to_enable():
+def test_m2_requires_score_only_to_enable():
     assert (
         validate_deferred_config_rule_can_enable(
             "M2",
@@ -50,14 +50,14 @@ def test_m2_requires_score_and_daily_cap_to_enable():
             daily_cap=None,
             status="enabled",
         )
-        == "启用规则须填写每日上限"
+        is None
     )
     assert (
         validate_deferred_config_rule_can_enable(
             "M2",
-            score_expr={"mode": "fixed", "score": 150},
-            daily_cap=20,
+            score_expr={"mode": "fixed", "score": 0},
+            daily_cap=None,
             status="enabled",
         )
-        is None
+        == "启用规则须填写积分分值"
     )
