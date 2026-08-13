@@ -153,7 +153,7 @@ async def track_a() -> None:
     backend = WorkspaceBackend(svid=svid, minio=get_minio_storage_sync(), file_dir=tmp)
     with patch(
         "bisheng.linsight.domain.services.agent_factory._resolve_model",
-        return_value=GenericFakeChatModel(messages=iter([])),
+        return_value=(GenericFakeChatModel(messages=iter([])), True),
     ):
         agent = await create_linsight_agent(
             session_model=session_model,

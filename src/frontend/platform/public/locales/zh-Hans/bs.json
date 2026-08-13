@@ -1089,7 +1089,7 @@
     "modelDescription": "描述信息",
     "modelDescriptionPlaceholder": "将展示在模型选择器中",
     "vision": "视觉",
-    "visionText": "开启后，模型将结合图像内容（支持PNG、JPEG、WEBP、非动画GIF格式）进行回答，注意仅多模态模型支持此能力。",
+    "visionText": "开启后，模型将结合图像内容（支持PNG、JPEG、WEBP、非动画GIF格式）进行回答，注意仅多模态模型支持此能力。未开启时，灵思任务模式也不会把图片交给该模型阅读。",
     "webSearchPrompt": "联网搜索提示词",
     "confirmDelete": "确定要删除吗?",
     "deleteFailed": "删除失败",

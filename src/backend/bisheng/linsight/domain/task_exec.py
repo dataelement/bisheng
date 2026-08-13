@@ -724,7 +724,11 @@ class LinsightWorkflowTask:
         Worker subprocess).
         """
         try:
-            return await _resolve_model(session_model, getattr(session_model, "model", None))
+            # ``_resolve_model`` also reports the model's declared vision capability,
+            # which only the agent's guards consume — this helper LLM never carries
+            # attachments, so the flag is dropped here.
+            model, _supports_vision = await _resolve_model(session_model, getattr(session_model, "model", None))
+            return model
         except Exception as e:
             # Keep the generic user-facing message, but chain + log the real
             # cause so the original stack trace surfaces (project error-handling

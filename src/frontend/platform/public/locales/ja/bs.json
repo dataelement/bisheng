@@ -1083,7 +1083,7 @@
     "modelDescription": "説明",
     "modelDescriptionPlaceholder": "モデル選択に表示されます",
     "vision": "画像",
-    "visionText": "有効にすると、モデルは画像コンテンツ（PNG、JPEG、WEBP、非アニメーションGIF形式をサポート）を組み合わせて回答します。この機能はマルチモーダルモデルのみでサポートされています。",
+    "visionText": "有効にすると、モデルは画像コンテンツ（PNG、JPEG、WEBP、非アニメーションGIF形式をサポート）を組み合わせて回答します。この機能はマルチモーダルモデルのみでサポートされています。無効の間は、Linsightタスクモードでもこのモデルに画像を渡しません。",
     "webSearchPrompt": "Web 検索プロンプト",
     "confirmDelete": "削除してよろしいですか？",
     "deleteFailed": "削除に失敗しました",
