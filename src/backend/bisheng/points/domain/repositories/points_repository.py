@@ -325,7 +325,11 @@ class PointsRepository:
         *,
         limit: int = 10,
     ) -> list[PointRankSnapshot]:
-        """读取 TOP N 排名快照。"""
+        """读取公司/部门桶快照，按首页榜排序键返回。
+
+        排序：分降序 → 最近获得时间升序（空在后）→ user_id。
+        ``limit`` 保留兼容；截断（算法甲）由查询服务按名次深度处理。
+        """
         stmt = select(PointRankSnapshot).where(
             PointRankSnapshot.tenant_id == tenant_id,
             PointRankSnapshot.period == period,
@@ -336,15 +340,18 @@ class PointsRepository:
             stmt = stmt.where(PointRankSnapshot.scope_id.is_(None))
         else:
             stmt = stmt.where(PointRankSnapshot.scope_id == scope_id)
-        # TOP N 按人数截断：同分同名次时仍按分值降序、user_id 升序取前 N 人。
+        # MySQL/DM8：用 IS NULL 分组把空获得时间排到同分末尾，避免 nulls_last 方言差异。
         rows = (
             await self.session.exec(
                 stmt.order_by(
                     PointRankSnapshot.period_score.desc(),
+                    PointRankSnapshot.last_earned_at.is_(None),
+                    PointRankSnapshot.last_earned_at.asc(),
                     PointRankSnapshot.user_id.asc(),
-                ).limit(limit)
+                )
             )
         ).all()
+        _ = limit
         return list(rows)
 
     async def latest_rank_refreshed_at(self, tenant_id: int, period: str, period_key: str) -> datetime | None:
@@ -615,6 +622,7 @@ class PointsRepository:
                 "period_score": row.period_score,
                 "balance": row.balance,
                 "dept_id": row.dept_id,
+                "last_earned_at": row.last_earned_at,
                 "refreshed_at": row.refreshed_at,
             }
             for row in rows

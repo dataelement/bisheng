@@ -146,12 +146,14 @@ class PointsLedgerService:
         balance = account.balance + delta
         account.balance = balance
         account.version += 1
-        if delta > 0:
-            account.lifetime_earned += delta
-        else:
-            account.lifetime_deducted += -delta
         # MySQL 严格模式下 ORM 传 None 不会回落到 server_default，需显式写入业务时间。
         occurred_at = datetime.now(SHANGHAI).replace(tzinfo=None)
+        if delta > 0:
+            account.lifetime_earned += delta
+            # 仅获得刷新；扣分不改，供首页榜同分「最后一次获得更早优先」。
+            account.last_earned_at = occurred_at
+        else:
+            account.lifetime_deducted += -delta
         log = await self.repository.append_log(
             UserPointLog(
                 tenant_id=tenant_id,

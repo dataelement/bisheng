@@ -73,3 +73,18 @@ async def test_deduct_allows_negative_balance():
         tenant_id=1, user_id=1, delta=-100, title="违规", rule_code="R1", idempotency_key="d", operator_id=2
     )
     assert result.balance == -100
+
+
+async def test_award_sets_last_earned_at_deduct_does_not():
+    """获得刷新 last_earned_at；扣分保持原值。"""
+    repo = FakeRepository()
+    service = PointsLedgerService(repo)
+    await service.award(tenant_id=1, user_id=1, delta=10, title="赚", rule_code="G1", idempotency_key="e1")
+    earned_at = repo.account.last_earned_at
+    assert earned_at is not None
+    await service.deduct(
+        tenant_id=1, user_id=1, delta=-3, title="扣", rule_code="R1", idempotency_key="d1", operator_id=2
+    )
+    assert repo.account.last_earned_at == earned_at
+    await service.award(tenant_id=1, user_id=1, delta=5, title="再赚", rule_code="G1", idempotency_key="e2")
+    assert repo.account.last_earned_at >= earned_at
