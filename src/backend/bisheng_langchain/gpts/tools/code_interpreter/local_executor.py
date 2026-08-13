@@ -159,6 +159,29 @@ class LocalExecutor(BaseExecutor):
             return "powershell"
         raise NotImplementedError(f"{lang} not recognized in code execution")
 
+    @staticmethod
+    def _child_env(work_dir: str | None) -> dict[str, str]:
+        """Environment for the executed script.
+
+        ``HOME`` is pointed at the working directory. Otherwise ``expanduser('~')``
+        resolves to the SERVICE account's home (``/root`` in the shipped image),
+        which is shared by every user's runs and holds the download cache of their
+        uploads — and reaching for ``~`` is exactly what a model does when it goes
+        looking for "the file I was given". Paired with
+        ``workspace_escape_guard``: the guard rejects the obvious spellings, this
+        makes the ones it cannot see (``os.environ['HOME']``, a library resolving
+        ``~`` internally) land inside the workspace instead of on the host.
+
+        ``MPLCONFIGDIR`` is pinned to matplotlib's current cache dir FIRST, because
+        moving ``HOME`` would otherwise send matplotlib to a fresh, empty config
+        dir and make it rebuild the font cache on every single run.
+        """
+        env = os.environ.copy()
+        if work_dir:
+            env.setdefault("MPLCONFIGDIR", matplotlib.get_cachedir())
+            env["HOME"] = work_dir
+        return env
+
     @classmethod
     def _execute_code(
         cls,
@@ -178,6 +201,7 @@ class LocalExecutor(BaseExecutor):
         proc = subprocess.Popen(
             cmd,
             cwd=work_dir,
+            env=cls._child_env(work_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -381,6 +405,13 @@ class LocalExecutor(BaseExecutor):
 
     def run(self, code: str) -> Any:
         original_code = code
+        # Checked BEFORE anything executes: this executor is a subprocess on the
+        # shared backend host, so by the time an escaping read has run, another
+        # user's document is already in the model's context.
+        escape_notice = self.workspace_escape_guard(original_code)
+        if escape_notice:
+            logger.warning("code interpreter: rejected a run that reaches outside the working directory")
+            return {"exitcode": 1, "log": escape_notice, "file_list": []}
         code_blocks = self.extract_code(code)
         logs_all = ""
         all_file_list = []

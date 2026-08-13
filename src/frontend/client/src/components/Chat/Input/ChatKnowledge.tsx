@@ -157,6 +157,7 @@ export const ChatKnowledge = ({
   showFileUpload = false,
   fileUploadDisabled = false,
   onFileUploadClick,
+  onFolderUploadClick,
   showTaskModeEntry = false,
   onEnterTaskMode,
   renderSkillSubmenu,
@@ -176,6 +177,8 @@ export const ChatKnowledge = ({
   showFileUpload?: boolean;
   fileUploadDisabled?: boolean;
   onFileUploadClick?: () => void;
+  /** Render an "上传文件夹" entry below it. Task mode only — omit to hide it. */
+  onFolderUploadClick?: () => void;
   /** F035 (PRD §4.1.3): render the "任务模式" entry as a separate group at the
    *  bottom of the "+" menu. Daily chat → navigates to /linsight; routing is
    *  delegated to the caller so this component stays route-free. */
@@ -492,6 +495,24 @@ export const ChatKnowledge = ({
           >
             <Outlined.Attachment size={16} className="text-[#999]" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
+          </DropdownMenuItem>
+        )}
+
+        {/* Upload folder — only rendered when the caller supplies a handler, i.e.
+            task mode. Daily chat has no agent workspace to rebuild a tree in. */}
+        {variant === 'plus' && showFileUpload && onFolderUploadClick
+          && ((!isMobile) || (isMobile && mobilePanel === 'root')) && (
+          <DropdownMenuItem
+            disabled={fileUploadDisabled}
+            onSelect={(e) => {
+              e.preventDefault();
+              if (fileUploadDisabled) return;
+              onFolderUploadClick();
+            }}
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
+          >
+            <Outlined.FolderClose size={16} className="text-[#999]" />
+            <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_folder')}</span>
           </DropdownMenuItem>
         )}
 

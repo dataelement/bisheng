@@ -255,8 +255,15 @@ export async function getPermissionCatalogApi(): Promise<PermissionCatalogReleas
 
 export async function createPermissionCatalogDraftApi(
   payload: CreatePermissionCatalogDraftRequest,
+  config: { silent?: boolean } = {},
 ): Promise<PermissionCatalogDraft> {
-  return await axios.post(`/api/v1/permissions/catalog/drafts`, payload)
+  // The batch is validated here, not only at publish: a change the release
+  // cannot accept is refused while drafting. `silent` yields the response
+  // envelope instead of a bare message string, so a caller can read the
+  // business error's `data` and explain what went wrong.
+  return await axios.post(`/api/v1/permissions/catalog/drafts`, payload, {
+    silent: config.silent,
+  })
 }
 
 export async function getPermissionCatalogDraftApi(
@@ -268,10 +275,16 @@ export async function getPermissionCatalogDraftApi(
 export async function publishPermissionCatalogDraftApi(
   draftId: number,
   payload: PublishPermissionCatalogDraftRequest,
+  config: { silent?: boolean } = {},
 ): Promise<PermissionCatalogPublishResult> {
+  // `silent` makes the interceptor reject with the response envelope instead of
+  // a bare message string, which is the only way to read the `data` a business
+  // error carries — a caller that wants to explain *why* the publish failed
+  // needs it.
   return await axios.post(
     `/api/v1/permissions/catalog/drafts/${draftId}/publish`,
     payload,
+    { silent: config.silent },
   )
 }
 

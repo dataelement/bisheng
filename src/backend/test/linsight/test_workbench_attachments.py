@@ -179,7 +179,9 @@ async def test_prepare_file_list_media_and_docx_headers_both_present():
     )
     block = "\n".join(await LinsightWorkbenchImpl.prepare_file_list(sv, has_code_interpreter=False))
     assert "说明（音视频）" in block
-    assert "raw 是原始二进制文件" in block
+    # The dual-track clause plus its no-code-interpreter degradation.
+    assert "raw 指向同名原件" in block
+    assert "无法读取二进制原件" in block
 
 
 async def test_prepare_file_list_empty():
@@ -453,3 +455,182 @@ async def test_expired_temp_no_formal_marks_invalid():
     assert entry["file_id"] == "f1"
     # not silently dropped: carries a status the frontend can branch on
     assert entry.get("parsing_status") in ("expired", "invalid")
+
+
+async def test_daily_passthrough_file_never_touches_the_parser(tmp_path):
+    """A .py has no loader, so the old path called the ETL purely to catch its
+    exception — one wasted round-trip plus a logger.exception that reads like a
+    real failure. The parser must not be constructed at all."""
+    constructed = []
+
+    class _ExplodingPipeline:
+        def __init__(self, *args, **kwargs):
+            constructed.append(kwargs.get("file_name"))
+            raise AssertionError("passthrough types must not reach the parser")
+
+    local = tmp_path / "analyze.py"
+    local.write_text("import os\nprint(os.getcwd())\n", encoding="utf-8")
+    fake_minio = FakeMinio()
+    submit = SubmitFileSchema(
+        file_id="p1",
+        file_name="analyze.py",
+        parsing_status="completed",
+        file_url="/tmp-dir/analyze.py?X-Amz-Algorithm=AWS4",
+    )
+
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(return_value=(str(local), "analyze.py")),
+        ),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _ExplodingPipeline),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files([submit], "svid9", user_id=7)
+
+    assert constructed == []
+    entry = result[0]
+    assert entry["parsing_status"] == "completed"
+    assert entry["valid"] is True
+    assert entry["ingest_mode"] == "passthrough"
+    assert entry["workspace_path"] == "/uploads/analyze.py"
+    ws_keys = [k for (_b, k) in fake_minio.store if k.startswith("workspace/svid9/uploads/")]
+    assert ws_keys == ["workspace/svid9/uploads/analyze.py"]
+
+
+async def test_daily_unsupported_type_short_circuits_the_parser(tmp_path):
+    """An .exe would be rejected by the pipeline on the same extension check, so
+    calling it buys nothing but latency and a misleading traceback."""
+    constructed = []
+
+    class _ExplodingPipeline:
+        def __init__(self, *args, **kwargs):
+            constructed.append(kwargs.get("file_name"))
+            raise AssertionError("unsupported types must not reach the parser")
+
+    local = tmp_path / "setup.exe"
+    local.write_bytes(b"MZ\x90\x00")
+    fake_minio = FakeMinio()
+    submit = SubmitFileSchema(
+        file_id="p2",
+        file_name="setup.exe",
+        parsing_status="completed",
+        file_url="/tmp-dir/setup.exe?X-Amz-Algorithm=AWS4",
+    )
+
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(return_value=(str(local), "setup.exe")),
+        ),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _ExplodingPipeline),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files([submit], "svid10", user_id=7)
+
+    assert constructed == []
+    entry = result[0]
+    assert entry["parsing_status"] == "unsupported"
+    assert entry["valid"] is False
+    assert not [k for (_b, k) in fake_minio.store if k.startswith("workspace/")]
+
+
+async def test_daily_csv_passes_through_as_one_file(tmp_path):
+    """csv has a loader, but that loader is a RAG chunker: it slices every N rows
+    and repeats the header per chunk. The csv is already plain text the model can
+    read_file directly, so the "reading view" would be a reshuffle of something
+    already readable, stored twice."""
+
+    class _ExplodingPipeline:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("csv must not be chunked by the RAG loader")
+
+    local = tmp_path / "data.csv"
+    local.write_text("a,b\n1,2\n", encoding="utf-8")
+    fake_minio = FakeMinio()
+    submit = SubmitFileSchema(
+        file_id="p3",
+        file_name="data.csv",
+        parsing_status="completed",
+        file_url="/tmp-dir/data.csv?X-Amz-Algorithm=AWS4",
+    )
+
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(return_value=(str(local), "data.csv")),
+        ),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _ExplodingPipeline),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files([submit], "svid11", user_id=7)
+
+    entry = result[0]
+    assert entry["ingest_mode"] == "passthrough"
+    assert entry["valid"] is True
+    assert entry["workspace_path"] == "/uploads/data.csv"
+    # One file, not a .md view plus a copy of the original.
+    ws_keys = sorted(k for (_b, k) in fake_minio.store if k.startswith("workspace/svid11/uploads/"))
+    assert ws_keys == ["workspace/svid11/uploads/data.csv"]
+
+
+async def test_daily_html_still_parses(tmp_path):
+    """REGRESSION: markup is the one carve-out — stripping tags is a real
+    conversion, and raw HTML is genuinely worse to read than the text inside."""
+
+    class _Doc:
+        def __init__(self, content):
+            self.page_content = content
+
+    class _Result:
+        documents = [_Doc("# Title\nbody\n")]
+
+    calls = []
+
+    class _FakePipeline:
+        def __init__(self, *args, **kwargs):
+            calls.append(kwargs.get("file_name"))
+
+        async def arun(self):
+            return _Result()
+
+    local = tmp_path / "page.html"
+    local.write_text("<html><body>body</body></html>", encoding="utf-8")
+    fake_minio = FakeMinio()
+    submit = SubmitFileSchema(
+        file_id="p4",
+        file_name="page.html",
+        parsing_status="completed",
+        file_url="/tmp-dir/page.html?X-Amz-Algorithm=AWS4",
+    )
+
+    with (
+        patch(
+            "bisheng.linsight.domain.services.workbench_impl.get_minio_storage",
+            new=AsyncMock(return_value=fake_minio),
+        ),
+        patch.object(LinsightWorkbenchImpl, "_get_redis", return_value=AsyncMock()),
+        patch(
+            "bisheng.core.cache.utils.async_file_download",
+            new=AsyncMock(return_value=(str(local), "page.html")),
+        ),
+        patch("bisheng.knowledge.rag.temp_file_pipeline.TempFilePipeline", _FakePipeline),
+    ):
+        result = await LinsightWorkbenchImpl._process_submitted_files([submit], "svid12", user_id=7)
+
+    assert calls == ["page.html"]
+    entry = result[0]
+    assert entry.get("ingest_mode") is None
+    assert entry["workspace_path"] == "/uploads/page.md"

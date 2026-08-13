@@ -534,7 +534,11 @@ class WorkspaceBackend(FilesystemBackend):
         rel_prefix = self._ws_rel(path) if path else ""
         object_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
         if rel_prefix:
-            object_prefix += rel_prefix
+            # Terminate the prefix at a directory boundary. Without the slash,
+            # ``ls("/uploads/年报")`` also matches a sibling ``年报备份/`` — harmless
+            # when uploads were flat, wrong as soon as a folder upload puts real
+            # sibling directories in there.
+            object_prefix += rel_prefix.rstrip("/") + "/"
         entries: list[FileInfo] = []
         key_prefix = f"{WORKSPACE_PREFIX}/{self.svid}/"
         try:
@@ -600,9 +604,41 @@ class WorkspaceBackend(FilesystemBackend):
         return EditResult(path="/" + rel, occurrences=occurrences)
 
     # -- glob ---------------------------------------------------------------
-    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
+    @staticmethod
+    def _glob_patterns(pattern: str) -> tuple[str, ...]:
+        """The spellings of ``pattern`` that should all mean the same thing.
+
+        Two mismatches to absorb, both of which used to silently return zero
+        matches for patterns we ourselves tell the model to write:
+
+        - **Leading slash.** ``ls`` reports ``/uploads/a/b.csv`` and every tool
+          argument in the prompt is written absolute, but matching happens against
+          the workspace-RELATIVE key (``uploads/a/b.csv``). ``fnmatch`` is literal
+          about that first character, so ``/uploads/**/*.xlsx`` — the exact
+          spelling in the folder-upload guidance — matched nothing.
+        - **``**`` spanning zero directories.** ``fnmatch`` has no ``**``; it
+          treats it as a plain ``*`` that happens to cross ``/``. So
+          ``uploads/**/*.csv`` demands at least one intermediate directory and
+          skips ``uploads/top.csv`` — surprising for a pattern whose whole point
+          is "anywhere under uploads". Collapsing ``**/`` gives that case its
+          own candidate.
+        """
+        pat = (pattern or "").strip().lstrip("/")
+        candidates = [pat]
+        if "**/" in pat:
+            candidates.append(pat.replace("**/", ""))
+        return tuple(dict.fromkeys(c for c in candidates if c))
+
+    @classmethod
+    def _glob_matches(cls, rel_in_ws: str, pattern: str) -> bool:
         import fnmatch
 
+        return any(
+            fnmatch.fnmatch(rel_in_ws, pat) or fnmatch.fnmatch(os.path.basename(rel_in_ws), pat)
+            for pat in cls._glob_patterns(pattern)
+        )
+
+    def glob(self, pattern: str, path: str | None = None) -> GlobResult:
         base = self._ws_rel(path) if path else ""
         ls_res = self.ls(base)
         if ls_res.error is not None:
@@ -612,7 +648,7 @@ class WorkspaceBackend(FilesystemBackend):
         for entry in ls_res.entries or []:
             rel = entry["path"]
             rel_in_ws = rel[len(prefix) :] if rel.startswith(prefix) else rel.lstrip("/")
-            if fnmatch.fnmatch(rel_in_ws, pattern) or fnmatch.fnmatch(os.path.basename(rel_in_ws), pattern):
+            if self._glob_matches(rel_in_ws, pattern):
                 matches.append(entry)
         return GlobResult(matches=matches)
 
@@ -626,14 +662,15 @@ class WorkspaceBackend(FilesystemBackend):
             return GrepResult(error=ls_res.error)
         prefix = f"/{WORKSPACE_PREFIX}/{self.svid}/"
         matches: list = []
-        import fnmatch
 
         skipped_large = 0
         skipped_binary = 0
         for entry in ls_res.entries or []:
             full = entry["path"]
             rel_in_ws = full[len(prefix) :] if full.startswith(prefix) else full.lstrip("/")
-            if glob and not (fnmatch.fnmatch(rel_in_ws, glob) or fnmatch.fnmatch(os.path.basename(rel_in_ws), glob)):
+            # Same spelling tolerance as ``glob`` — an absolute filter must not
+            # silently narrow the scan to nothing.
+            if glob and not self._glob_matches(rel_in_ws, glob):
                 continue
             # ``ls`` already reports the object size; use it to avoid downloading a
             # multi-MB original (uploads/ carries them since the dual-track write)

@@ -4,6 +4,7 @@ import { Outlined } from 'bisheng-icons';
 import { useSetRecoilState } from 'recoil';
 import { getCitationDetail, resolveCitationDetails, type ChatCitation } from '~/api/chatApi';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
+import { useToastContext } from '~/Providers';
 import store from '~/store';
 import { cn } from '~/utils';
 import {
@@ -15,7 +16,7 @@ import {
   getCitationDocumentUrl,
   isRagCitation,
   normalizeCitationType,
-  resolveCitationDocumentUrl,
+  resolveCitationDownloadUrl,
   toAbsolutePreviewUrl,
   type CitationPreview,
   type CitationReferenceItem,
@@ -63,6 +64,7 @@ type CitationDesktopView = 'list' | 'document-preview';
 const CITATION_PANEL_EXPANDED_BREAKPOINT = 768;
 
 function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; type?: string }) {
+  const localize = useLocalize();
   const isWeb = normalizeCitationType(preview?.type || type) === 'web';
   return (
     <div
@@ -71,7 +73,7 @@ function SourceTypeBadge({ preview, type }: { preview: CitationPreview | null; t
         isWeb ? 'bg-[#F7F3FF] text-[#7224D9]' : 'bg-blue-50 text-blue-600',
       )}
     >
-      {isWeb ? '网页' : '文档'}
+      {isWeb ? localize('com_citation.web') : localize('com_citation.document')}
     </div>
   );
 }
@@ -109,10 +111,11 @@ function CitationReferenceCard({
   hasError: boolean;
   onOpenDocumentPreview: (item: CitationReferenceItem, detail: ChatCitation) => void;
 }) {
+  const localize = useLocalize();
   const preview = item.legacyPreview ?? buildCitationDocumentPreview(detail, item.data);
   const type = preview?.type || item.data.type;
   const isWeb = normalizeCitationType(type) === 'web';
-  const title = preview?.title || '暂无标题';
+  const title = preview?.title || localize('com_citation.untitled');
   const canOpenDocument = !!detail && isRagCitation(detail, type);
   const { name: documentName, extension: documentExtension } = splitDocumentTitle(title, detail, preview);
 
@@ -174,10 +177,10 @@ function CitationReferenceCard({
         {isLoading ? (
           <span className="inline-flex items-center gap-2 text-[#86909C]">
             <Outlined.Loading className="size-3.5 animate-spin" />
-            加载溯源详情...
+            {localize('com_citation.loading_detail')}
           </span>
         ) : hasError ? (
-          <span className="text-[#86909C]">溯源详情加载失败</span>
+          <span className="text-[#86909C]">{localize('com_citation.load_detail_failed')}</span>
         ) : (
           null
         )}
@@ -189,13 +192,13 @@ function CitationReferenceCard({
             <div className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#ECECEC] bg-white">
               <CitationSourceIcon detail={detail} preview={preview} type={type} />
             </div>
-            <span className="truncate">{preview?.sourceName || '网页'}</span>
+            <span className="truncate">{preview?.sourceName || localize('com_citation.web')}</span>
             {preview?.sourceMeta ? <span className="shrink-0">{preview.sourceMeta}</span> : null}
           </>
         ) : (
           <>
             <CitationSourceIcon detail={detail} preview={preview} type={type} ragIconVariant="knowledge" clipAsCircle={false} />
-            <span className="truncate">{preview?.sourceName || '政策文件'}</span>
+            <span className="truncate">{preview?.sourceName || localize('com_citation.policy_document')}</span>
           </>
         )}
       </div>
@@ -222,7 +225,8 @@ export default function CitationReferencesDrawer({
   onDesktopViewChange,
 }: CitationReferencesDrawerProps) {
   const localize = useLocalize();
-  // <=768: 走抽屉（不内联分栏）；<=576: 抽屉全屏覆盖
+  const { showToast } = useToastContext();
+  // <=768: use the drawer (no inline split); <=576: drawer covers full screen
   const isNarrowLayout = usePrefersMobileLayout();
   const isPhoneViewport = useMediaQuery('(max-width: 576px)');
   const isFullBleedMobile = isPhoneViewport;
@@ -403,7 +407,8 @@ export default function CitationReferencesDrawer({
   const isOpen = panelOnly ? true : isDesktopInlinePanel ? !!open : internalOpen;
   const isDesktopPreviewInline = isDesktopInlinePanel && desktopView === 'document-preview' && !!documentPreview;
 
-  // 仅全屏参考资料（≤576）隐藏 MobileNav；平板窄屏保留顶栏标题，抽屉 z-[120] 已高于 MobileNav z-[60]
+  // Only the full-screen references view (<=576) hides MobileNav; the tablet-width
+  // drawer keeps the top bar title, and its z-[120] already sits above MobileNav z-[60].
   useEffect(() => {
     if (!isNarrowLayout || !isOpen || !isFullBleedMobile) {
       return;
@@ -497,10 +502,13 @@ export default function CitationReferencesDrawer({
     }
 
     const fileName = getCitationDocumentName(documentPreview.detail);
-    const fileUrl = toAbsolutePreviewUrl(
-      getCitationDocumentUrl(documentPreview.detail) || await resolveCitationDocumentUrl(documentPreview.detail),
-    );
+    // The original upload, not the derived preview — a clip must download as the
+    // clip, not as the transcript that happens to render in the panel.
+    const fileUrl = toAbsolutePreviewUrl(await resolveCitationDownloadUrl(documentPreview.detail));
     if (!fileUrl) {
+      // Nothing to download (the backend withholds file URLs from viewers who
+      // lack view_file) — say so rather than letting the click do nothing.
+      showToast({ message: localize('com_citation.no_download_url'), status: 'error' });
       return;
     }
 
@@ -518,7 +526,7 @@ export default function CitationReferencesDrawer({
       documentPreview.detail,
       null,
     )
-    : { name: '文档预览', extension: '' };
+    : { name: localize('com_citation.document_preview'), extension: '' };
   // The "centered reading card" layout (max-w-[464/480]) only makes sense for the
   // citation list. When previewing a document, both header and body fill the
   // panel so they line up flush — capping the header alone leaves the body
@@ -542,7 +550,8 @@ export default function CitationReferencesDrawer({
             ? cn(
               // Mobile keeps the divider; desktop drops it to match the workspace panel.
               'border-b border-[#ECECEC] px-4',
-              // 竖直：侧栏/全屏均在顶栏内垂直居中；全屏保留安全区 + 顶 16px，并加底内边距平衡
+              // Vertical: centered in the top bar for both side panel and full screen;
+              // full screen keeps the safe area + 16px top, balanced by bottom padding.
               isFullBleedMobile
                 ? 'pb-3 pt-[calc(env(safe-area-inset-top,0px)+1rem)]'
                 : 'py-3',
@@ -567,7 +576,7 @@ export default function CitationReferencesDrawer({
               ? 'size-8 rounded-md hover:bg-[#F2F3F5] hover:text-[#4E5969]'
               : 'h-7 w-7 rounded-lg text-[#8C8C8C] hover:bg-gray-100',
           )}
-          aria-label="关闭参考资料"
+          aria-label={localize('com_citation.close_references')}
         >
           <Outlined.Close className="size-4" />
         </button>
@@ -576,7 +585,7 @@ export default function CitationReferencesDrawer({
       <div
         className={cn(
           'scrollbar-os min-h-0 flex-1 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] space-y-3',
-          // 设计：标题栏与列表区间距 24px；左右与标题区对齐 16px
+          // Design: 24px between title bar and list; 16px sides, aligned with the title.
           // Desktop matches the workspace list body padding (px-3 pt-1 pb-4).
           isMobileLikeViewport ? 'px-4 pt-6 pb-4' : 'px-3 pt-1 pb-4',
         )}
@@ -597,7 +606,7 @@ export default function CitationReferencesDrawer({
           })
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-[#86909C]">
-            暂无参考资料
+            {localize('com_citation.no_references')}
           </div>
         )}
       </div>
@@ -617,7 +626,7 @@ export default function CitationReferencesDrawer({
             setDocumentPreview(null);
           }}
           className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#8C8C8C] transition-colors hover:bg-gray-100"
-          aria-label="返回参考资料列表"
+          aria-label={localize('com_citation.back_to_references')}
         >
           <Outlined.ArrowLeft className="size-4" />
         </button>
@@ -642,7 +651,7 @@ export default function CitationReferencesDrawer({
             desktopButtonSize,
             desktopDownloadButtonClass,
           )}
-          aria-label="下载文档"
+          aria-label={localize('com_citation.download_document')}
         >
           <Outlined.Download className="size-4" strokeWidth={1.75} />
         </button>
@@ -654,7 +663,7 @@ export default function CitationReferencesDrawer({
             desktopButtonSize,
             desktopCloseButtonClass,
           )}
-          aria-label="关闭参考资料"
+          aria-label={localize('com_citation.close_references')}
         >
           <Outlined.Close className={desktopButtonIconSize} />
         </button>
@@ -673,7 +682,7 @@ export default function CitationReferencesDrawer({
       <>
         <section
           className={cn('flex h-full min-h-0 flex-col bg-[#FBFBFB]', !isNarrowLayout && `w-full ${desktopPanelMaxWidth}`, panelClassName)}
-          aria-label="参考资料"
+          aria-label={localize('com_msg_source_reference')}
         >
           {panelContent}
         </section>
@@ -717,7 +726,7 @@ export default function CitationReferencesDrawer({
             <CitationSourceIconStack icons={referenceEntryIcons} />
           </div>
           <div className="flex h-5 w-16 shrink-0 items-center whitespace-nowrap">
-            <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">参考资料</span>
+            <span className="w-12 whitespace-nowrap text-[12px] font-normal leading-5 text-[#818181]">{localize('com_msg_source_reference')}</span>
             <Outlined.Right className="size-4 text-[#818181]" strokeWidth={1.5} />
           </div>
         </button>
@@ -730,7 +739,7 @@ export default function CitationReferencesDrawer({
           isFullBleedMobile ? (
             <aside
               className="fixed inset-0 z-[130] flex min-h-0 flex-col overflow-hidden overscroll-contain bg-white [height:100dvh]"
-              aria-label="参考资料"
+              aria-label={localize('com_msg_source_reference')}
             >
               {panelContent}
             </aside>
@@ -740,7 +749,7 @@ export default function CitationReferencesDrawer({
                 'fixed inset-y-0 right-0 z-[130] flex min-h-0 w-[min(520px,calc(100vw-24px))] min-w-0 flex-col overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)] animate-in slide-in-from-right duration-300',
                 'rounded-tl-lg',
               )}
-              aria-label="参考资料"
+              aria-label={localize('com_msg_source_reference')}
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
             >

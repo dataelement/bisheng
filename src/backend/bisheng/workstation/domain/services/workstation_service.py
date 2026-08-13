@@ -1287,6 +1287,19 @@ class WorkStationService(BaseService):
             logger.exception(f"queryChunksFromDB error: {exc}")
             return [], None, failures
 
+    @staticmethod
+    def _attachment_display_name(file_item: dict) -> str:
+        """Best-effort display name for one attachment row.
+
+        Daily uploads and task-mode ingests disagree on the key, so try each in
+        turn rather than assuming one shape.
+        """
+        for key in ("file_name", "filename", "name", "original_filename"):
+            value = file_item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
     @classmethod
     async def get_chat_history(cls, chat_id: str, size: int = 4, max_tokens: int | None = None):
         """Build LLM-consumable chat history, backward compatible with both
@@ -1322,10 +1335,16 @@ class WorkStationService(BaseService):
         for one in messages:
             raw = one.message or ""
             if one.category == MessageCategory.QUESTION.value:
-                # Try new JSON format: {"query": "..."}
+                # Try new JSON format: {"query": "...", "files": [...]}
+                attachments: list[dict] = []
                 try:
                     parsed = json.loads(raw)
-                    content = parsed.get("query", raw) if isinstance(parsed, dict) else raw
+                    if isinstance(parsed, dict):
+                        content = parsed.get("query", raw)
+                        files = parsed.get("files")
+                        attachments = [f for f in files if isinstance(f, dict)] if isinstance(files, list) else []
+                    else:
+                        content = raw
                 except (json.JSONDecodeError, TypeError):
                     content = raw
                 # Legacy rows may carry a rewritten prompt in `extra.prompt`.
@@ -1335,6 +1354,15 @@ class WorkStationService(BaseService):
                         content = extra["prompt"]
                 except (json.JSONDecodeError, TypeError):
                     pass
+                # Name the attachments of past turns. Their extracted text is NOT
+                # replayed (it was already truncated into that turn's prompt, and
+                # replaying it would blow the history budget), but a model that
+                # cannot see the file at all tends to answer from its own summary
+                # of an earlier turn — inventing page citations it never read.
+                # Knowing a file was attached is what lets it say so instead.
+                names = [n for n in (cls._attachment_display_name(f) for f in attachments) if n]
+                if names:
+                    content = f"{content}\n[attachments] {', '.join(names)}"
                 chat_history.append(HumanMessage(content=content))
 
             elif one.category == MessageCategory.AGENT_ANSWER.value:

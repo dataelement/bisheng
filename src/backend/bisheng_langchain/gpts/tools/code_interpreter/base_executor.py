@@ -45,6 +45,49 @@ ABSOLUTE_PROVISIONED_PATH_NOTICE = (
     "`skills/<name>/SKILL.md` or `uploads/<file>`."
 )
 
+# --- Workspace escape ------------------------------------------------------
+# The local executor is a subprocess on the SHARED backend host, not a sandbox:
+# a script can read anything the service account can. That is how a daily-chat
+# turn once answered from `/root/.cache/bisheng/bisheng/` — the global download
+# cache, where EVERY user's uploads pile up under a flat sha256 name. Reading
+# another tenant's document is not a feature we want to keep, so these patterns
+# reject the run outright (unlike the advisories above, which only annotate).
+#
+# Matching an ACCESS VERB rather than a bare string literal is deliberate: code
+# may legitimately mention such a path in prose it prints back to the user.
+_FS_ACCESS_VERBS = (
+    "open|walk|scandir|listdir|glob|iglob|rglob|Path|PosixPath|copy|copy2|copyfile|copytree|"
+    "move|rename|remove|unlink|rmtree|stat|lstat|getsize|exists|isfile|isdir|read_text|read_bytes"
+)
+# Host directories that are never part of a workspace. The workspace's own
+# absolute-looking zones (/output /scratch /skills /uploads) are handled by
+# ``absolute_path_advisory`` and are deliberately absent here.
+_HOST_ROOTS = "root|home|etc|proc|sys|boot|opt|srv|usr|var|app|data|mnt|media"
+# Group 2 captures the whole literal so the caller can tell "somewhere on the
+# host" from "my own working dir, spelled absolutely" — linsight hands the model
+# host paths of its own workspace, so those must stay legal.
+_HOST_PATH_ACCESS_RE = re.compile(
+    rf"""\b(?:{_FS_ACCESS_VERBS})\s*\([^)\n]{{0,120}}?(['"])(/(?:{_HOST_ROOTS})[^'"\n]*)\1"""
+)
+# ``expanduser("~")`` / ``Path.home()`` resolve to the SERVICE account's home.
+# A model hunting for "the file I was given" reaches for ``~`` early.
+_HOME_EXPANSION_RE = re.compile(r"""expanduser\s*\(\s*['"]~|Path\s*\.\s*home\s*\(""")
+# A scan rooted at ``/`` walks the entire container.
+_ROOT_SCAN_RE = re.compile(r"""\b(?:walk|glob|iglob|scandir|listdir)\s*\(\s*['"]/['"]""")
+
+WORKSPACE_ESCAPE_NOTICE = (
+    "[SYSTEM NOTICE] This run was REJECTED and nothing was executed: the code reaches OUTSIDE "
+    "the working directory — a host path (/root, /etc, /app, /home, ...), the expanded home "
+    "directory (`~`), or a scan rooted at `/`. Those locations are shared infrastructure that "
+    "may hold other users' data; they are not yours to read.\n"
+    "Your current working directory IS your workspace. Use RELATIVE paths only: "
+    "`uploads/<file>` for provided sources, `output/<file>` for deliverables, `scratch/<file>` "
+    "for intermediates.\n"
+    "If what you are looking for is not under the working directory, it was NOT provided to you "
+    "on this turn. Say so plainly and ask for it — do not search the filesystem for it, and do "
+    "not answer from memory of an earlier turn as if you had re-read the file."
+)
+
 # Delivery zones of the executor working dir. ``output/`` is the ONLY zone the
 # linsight harvester (``get_final_result_file``) treats as deliverables;
 # ``scratch/`` is explicitly intermediate.
@@ -138,6 +181,37 @@ class BaseExecutor(ABC):
         if _ABSOLUTE_PROVISIONED_RE.search(code):
             notices += ABSOLUTE_PROVISIONED_PATH_NOTICE
         return notices
+
+    def workspace_escape_guard(self, code: str) -> str:
+        """Rejection notice when ``code`` reaches outside the working dir; "" if clean.
+
+        Unlike ``absolute_path_advisory`` (annotates a completed run), a hit here
+        means the run must NOT happen: the local executor shares a filesystem with
+        the backend service, so a read of ``/root/.cache/...`` returns other users'
+        uploaded documents. Blocking after the fact would be pointless — the data
+        would already be in the model's context.
+
+        Two deliberate exemptions keep legitimate code running:
+
+        - Matching is VERB-anchored, so prose stays legal: a script may print
+          "nothing under /root/.cache" without being rejected; only an actual
+          ``open`` / ``os.walk`` / ``glob`` against a host root trips it.
+        - A literal under ``local_sync_path`` is this run's OWN workspace written
+          absolutely. ``path_namespace_rules`` shows the model exactly such host
+          paths, so rejecting them would break the thing we told it to expect.
+        """
+        if not code:
+            return ""
+        work_dir = (self.local_sync_path or "").rstrip("/")
+        for match in _HOST_PATH_ACCESS_RE.finditer(code):
+            path = match.group(2)
+            if work_dir and (path == work_dir or path.startswith(f"{work_dir}/")):
+                continue
+            return WORKSPACE_ESCAPE_NOTICE
+        # `~` and `/` are never the workspace, so no exemption applies.
+        if _HOME_EXPANSION_RE.search(code) or _ROOT_SCAN_RE.search(code):
+            return WORKSPACE_ESCAPE_NOTICE
+        return ""
 
     @staticmethod
     def relocation_advisory(moved: list[tuple[str, str]]) -> str:

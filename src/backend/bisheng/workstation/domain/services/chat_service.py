@@ -1274,6 +1274,18 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
 # parse failure. Mirrors the task-mode failure card's transient/terminal split.
 _TRANSIENT_PARSE_ERRORS = frozenset({ErrorType.RATE_LIMIT, ErrorType.NETWORK_TIMEOUT, ErrorType.SERVICE_UNAVAILABLE})
 
+# Extracted document text is hard-cut at ``maxTokens`` CHARACTERS. Silently
+# handing the model a prefix makes it read the fragment as the whole document:
+# a 1072-page tender truncated to 15k chars still "answers" questions about
+# tables that live on page 400, complete with fabricated page citations. Naming
+# the cut is what lets the model say "I only have the first N characters".
+_TRUNCATION_NOTICE = (
+    "\n\n[TRUNCATED] Only the first {shown} of {total} characters of the uploaded file(s) appear above; "
+    "the remainder was NOT provided to you. Do not state or infer anything about the omitted part, and do "
+    "not cite page, section or table numbers that are not visible in the text above. If answering needs "
+    "the full document, say so plainly instead of guessing."
+)
+
 
 async def _extract_doc_text(filepath: str, filename: str, invoke_user_id: int) -> str:
     """Extract one attachment's text, turning a parser failure into a domain error.
@@ -1331,7 +1343,10 @@ async def _process_agent_files(data: APIChatCompletion, model_info, login_user, 
     annotated_valid = await _annotate_agent_files_with_video_covers(valid_files, downloaded_files)
     merged_files = _merge_agent_file_covers(data.files, valid_files, annotated_valid)
     max_token = getattr(ws_config, "maxTokens", 15000) or 15000
-    file_context = "\n".join(doc_results)[:max_token]
+    joined_docs = "\n".join(doc_results)
+    file_context = joined_docs[:max_token]
+    if len(joined_docs) > max_token:
+        file_context += _TRUNCATION_NOTICE.format(shown=len(file_context), total=len(joined_docs))
     logger.info(
         f"[process_agent_files] docs={len(doc_results)} visuals={len(visual_results)}"
         f" file_context_len={len(file_context)} max_token={max_token}"
@@ -1680,12 +1695,13 @@ async def _agent_stream_chat_completion(
                     "{cur_date}",
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 )
-            # Citation-rule backstop: inject only when knowledge/citation tools are in play
-            # and the admin prompt doesn't already carry the rules (the default does), so
-            # existing configs keep citations and updated prompts aren't duplicated.
-            has_citation_tool = knowledge_bases_info or any(
-                isinstance(tool, DailyChatCitationToolWrapper) for tool in langchain_tools
-            )
+            # No citation-rule backstop here on purpose: the default daily-chat
+            # system prompt (platform locales, `chatConfig.systemPrompt2`) already
+            # carries the full marker spec — source-id format, the private-use
+            # delimiters and the "never invent an id" rule — making it a superset
+            # of CITATION_PROMPT_RULES. A backstop was declared here once but the
+            # flag was never read, so it never ran; injecting it now would only
+            # duplicate rules the prompt already states.
             llm_messages = list(history) + [HumanMessage(content=content_payload)]
 
             logger.info(
@@ -2160,6 +2176,27 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
         submit_obj, login_user, display_files=data.files
     )
 
+    # Enqueue HERE, not from the browser after it receives the handoff below.
+    # submit_user_question parses every attachment inline, so this request can run
+    # for minutes on a multi-file task; a user who stops waiting (refresh, closed
+    # tab, proxy timeout) never sends the follow-up start-execute, and the session
+    # is stranded at NOT_STARTED with no one to pick it up. Enqueueing server-side
+    # decouples "the task runs" from "the client is still listening". The client's
+    # start-execute remains as a late retry and is safe to arrive after this: the
+    # executor rejects re-entry on an already-running session.
+    from bisheng.linsight.domain import utils as linsight_execute_utils
+
+    try:
+        await linsight_execute_utils.enqueue_session_for_execution(session_version)
+        await linsight_execute_utils.persist_task_turn_message(session_version)
+    except Exception:
+        # Keep streaming the handoff: the client's start-execute is the fallback
+        # path, and failing the whole submit here would lose the question too.
+        logger.exception(
+            f"[TASK_SUBMIT] server-side enqueue failed chat_id={session_version.session_id} "
+            f"svid={session_version.id}; relying on client start-execute"
+        )
+
     # Generate the conversation title straight from the user's question (task
     # mode has no "round complete" moment to hang it on). Reuse the daily-mode
     # title helper with the daily chat model (data.model) rather than the
@@ -2288,6 +2325,10 @@ def _to_linsight_submit(data: APIChatCompletion):
                     file_name=item.get("file_name") or item.get("filename") or item.get("name") or "",
                     parsing_status=item.get("parsing_status") or "completed",
                     file_url=item.get("filepath") or item.get("file_url"),
+                    # Folder upload: the tree the user dropped is rebuilt inside the
+                    # task workspace from this. Absent on a plain single-file pick.
+                    relative_path=item.get("relative_path") or None,
+                    size=int(item.get("size") or 0),
                 )
             )
         submit_files = submit_files or None

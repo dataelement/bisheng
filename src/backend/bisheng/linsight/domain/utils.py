@@ -596,6 +596,33 @@ async def check_and_terminate_incomplete_tasks(node_id: str) -> None:
             return
 
 
+async def enqueue_session_for_execution(session_model: LinsightSessionVersion) -> None:
+    """Hand a task-mode session to the Linsight worker queue.
+
+    Single entry point for enqueueing, shared by the unified submit path and the
+    ``/workbench/start-execute`` endpoint.
+
+    Enqueueing used to be the CLIENT's job: submit created the session, streamed a
+    handoff event, and the browser then called start-execute. Anything that cut
+    the stream before that second call — a refresh, a closed tab, a proxy timeout
+    — left the session parked at NOT_STARTED with nothing to pick it up. That is
+    not hypothetical: a task with 12 attachments spent minutes parsing them
+    INSIDE the submit request, the user gave up waiting, and the session sat in
+    the table untouched (the conversation lost its task row too, so even the
+    task-mode badge disappeared). Submitting now enqueues server-side, so the
+    task runs whether or not the client is still listening.
+
+    Enqueueing twice is harmless: the executor re-reads the session and bails via
+    ``_is_session_in_progress`` when it is already running, so the client's
+    start-execute stays a safe no-op / late retry.
+    """
+    from bisheng.linsight.worker import LinsightQueue, encode_queue_item
+
+    redis_client = await get_redis_client()
+    queue = LinsightQueue("queue", namespace="linsight", redis=redis_client)
+    await queue.put(data=encode_queue_item(session_model.id, tenant_id=session_model.tenant_id))
+
+
 async def persist_task_turn_message(session_model: LinsightSessionVersion) -> ChatMessage:
     """F035 Track J (TJ-3): upsert the task turn into the unified conversation.
 

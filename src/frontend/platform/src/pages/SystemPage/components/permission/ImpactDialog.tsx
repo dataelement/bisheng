@@ -172,7 +172,7 @@ export function ImpactDialog({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11"
+            
             disabled={publishing}
             onClick={() => onOpenChange(false)}
           >
@@ -180,7 +180,7 @@ export function ImpactDialog({
           </Button>
           <Button
             type="button"
-            className="min-h-11"
+            
             disabled={publishing || expired || blocked}
             onClick={() => void handlePublish()}
           >

@@ -73,7 +73,15 @@
     "pendingChanges_other": "{{count}} changes are not published yet",
     "publishChanges": "Publish changes",
     "discardChanges": "Discard changes",
-    "draftFailed": "Could not prepare the change draft. Try again."
+    "draftFailed": "Could not prepare the change draft. Try again.",
+    "appliesTo": "Applies to",
+    "showChangeList": "Show details",
+    "hideChangeList": "Hide details",
+    "changeSummary": {
+      "level": "{{name}}: {{from}} → {{to}}",
+      "enabled": "{{name}}: enabled",
+      "disabled": "{{name}}: disabled"
+    }
   },
   "model": {
     "title": "Permission Model",
@@ -83,7 +91,7 @@
     "actions": "Included Actions",
     "action": "Model action",
     "active": "Enable Model",
-    "inactive": "Model inactive",
+    "inactive": "Off",
     "level": "Derived Level",
     "allowSameLevel": "Allow Same-level Grants",
     "create": "New Model",
@@ -103,7 +111,12 @@
     "confirmDelete": "Delete the model \"{{name}}\"? This takes effect immediately and cannot be undone.",
     "deleteFailed": "Delete failed. Refresh and try again",
     "deleteBlockedByGrants": "{{count}} grant(s) still use this permission model. Move them to another model before deleting it.",
-    "disableBeforeDelete": "Turn the model off before deleting it"
+    "disableBeforeDelete": "Turn the model off before deleting it",
+    "description": "Tick the actions this model covers. Its level is the highest action in the selection.",
+    "derivedLevel": "Model level",
+    "activeHint": "Switched off, it can no longer be granted; existing grants are unaffected.",
+    "allowSameLevelHint": "Holders may grant this same tier to others.",
+    "allowSameLevelUnavailable": "Select the manage-permission action first."
   },
   "impact": {
     "title": "Confirm Publish Impact",

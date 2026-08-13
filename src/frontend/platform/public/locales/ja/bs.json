@@ -511,6 +511,8 @@
     "fileUploadFailed": "ファイルのアップロードに失敗しました: {{name}}",
     "fileExceedRemoved": "ファイル：{{name}} は {{size}}M を超えているため削除されました",
     "fileTypeNotAllowed": "サポートされていないファイル形式：{{type}}",
+    "mediaFileTooMany": "アップロードファイル数は5個を超えられません。",
+    "noFileSelected": "ファイルが選択されていません",
     "uploadFailedCheckFormat": "アップロードに失敗しました。ファイル形式を確認してください",
     "sourceTooltip": "出典段落",
     "filterLabel": "ラベルでフィルター",
@@ -2026,5 +2028,30 @@
       "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
     }
+  },
+  "citation": {
+    "unsupportedPreview": "この形式のファイルはプレビューできません",
+    "loadingPreview": "ドキュメントプレビューを読み込み中...",
+    "noPreviewUrl": "プレビュー可能なファイルアドレスがありません",
+    "documentPreview": "ドキュメントプレビュー",
+    "downloadDocument": "ドキュメントをダウンロード",
+    "closeDocumentPreview": "ドキュメントプレビューを閉じる",
+    "web": "ウェブ",
+    "document": "ドキュメント",
+    "untitled": "タイトルなし",
+    "loadingDetail": "出典の詳細を読み込み中...",
+    "loadDetailFailed": "出典の詳細の読み込みに失敗しました",
+    "policyDocument": "政策文書",
+    "references": "参考資料",
+    "closeReferences": "参考資料を閉じる",
+    "backToReferences": "参考資料一覧に戻る",
+    "noDownloadUrl": "ダウンロード可能なファイルアドレスがありません"
+  },
+  "mediaPreview": {
+    "recognizedText": "認識テキスト",
+    "entryText": "登録テキスト",
+    "webPreview": "ウェブプレビュー",
+    "openSourcePage": "元のページを開く",
+    "noWebSnapshot": "ウェブスナップショットがありません。登録テキストを確認するか、元のページを開いてください。"
   }
 }

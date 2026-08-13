@@ -73,7 +73,15 @@
     "pendingChanges_other": "有 {{count}} 项改动尚未发布",
     "publishChanges": "发布更改",
     "discardChanges": "放弃更改",
-    "draftFailed": "生成变更草案失败，请重试"
+    "draftFailed": "生成变更草案失败，请重试",
+    "appliesTo": "适用资源",
+    "showChangeList": "查看明细",
+    "hideChangeList": "收起明细",
+    "changeSummary": {
+      "level": "{{name}}：{{from}} → {{to}}",
+      "enabled": "{{name}}：启用",
+      "disabled": "{{name}}：停用"
+    }
   },
   "model": {
     "title": "权限模型",
@@ -83,7 +91,7 @@
     "actions": "包含的动作",
     "action": "模型动作",
     "active": "启用模型",
-    "inactive": "模型已停用",
+    "inactive": "已停用",
     "level": "派生等级",
     "allowSameLevel": "允许同级授权",
     "create": "新建模型",
@@ -103,7 +111,12 @@
     "confirmDelete": "确认删除模型「{{name}}」？删除后立即生效，不可恢复。",
     "deleteFailed": "删除失败，请刷新后重试",
     "deleteBlockedByGrants": "该权限模型还有 {{count}} 处授权在使用，先把这些授权改到其他模型再删除",
-    "disableBeforeDelete": "先关闭「启用」才能删除"
+    "disableBeforeDelete": "先关闭「启用」才能删除",
+    "description": "勾选这个模型包含哪些动作，等级由其中最高的动作决定。",
+    "derivedLevel": "模型等级",
+    "activeHint": "关闭后不能再用它授权，已有授权不受影响。",
+    "allowSameLevelHint": "开启后，持有此模型的人可以把同等级权限授予别人。",
+    "allowSameLevelUnavailable": "需要先勾选「管理权限」动作。"
   },
   "impact": {
     "title": "发布影响确认",

@@ -109,6 +109,35 @@ export function ModelEditor({
             : Math.max(highest, action.level ?? highest),
         null,
       )
+  // One group per level, in level order, with anything unusable (an action that
+  // lost its level or was switched off while this model still selects it) last.
+  const actionGroups = useMemo(() => {
+    const groups = new Map<string, PermissionCatalogAction[]>()
+    for (const action of eligibleActions) {
+      const key = action.level === null ? "unassigned" : String(action.level)
+      const bucket = groups.get(key)
+      if (bucket) bucket.push(action)
+      else groups.set(key, [action])
+    }
+    return [...groups.entries()]
+      .sort(([left], [right]) => {
+        if (left === "unassigned") return 1
+        if (right === "unassigned") return -1
+        return Number(left) - Number(right)
+      })
+      .map(([key, groupActions]) => ({
+        key,
+        title:
+          key === "unassigned"
+            ? t("actionLevel.unassigned")
+            : t("actionLevel.level", { level: Number(key) }),
+        actions: groupActions,
+        selectedCount: groupActions.filter((action) =>
+          selected.has(action.code),
+        ).length,
+      }))
+  }, [eligibleActions, selected, t])
+
   const hasInvalidSelection = [...selected].some((actionCode) => {
     const action = actions.find((item) => item.code === actionCode)
     return !action || !action.active || action.level === null
@@ -229,20 +258,42 @@ export function ModelEditor({
       className="flex h-full min-h-0 flex-col rounded-xl border bg-background"
     >
       <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b p-5">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">
-            {t("model.title")}
-          </h2>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-base font-semibold text-foreground">
+              {createMode ? t("model.create") : name || model.name}
+            </h2>
+            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+              {t(`model.kind.${model.kind.toLowerCase()}`)}
+            </span>
+            {!createMode && !active && (
+              <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                {t("model.inactive")}
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
-            {t(`model.kind.${model.kind.toLowerCase()}`)}
+            {t("model.description")}
           </p>
         </div>
-        <span
-          data-testid="model-derived-level"
-          className="rounded-full bg-muted px-3 py-1 text-sm font-medium text-foreground"
-        >
-          {derivedLevel ?? t("actionLevel.unassigned")}
-        </span>
+        {/* A bare "3" said nothing. The level is derived from the highest action
+            in the selection, so name it and say where it came from. */}
+        <div className="shrink-0 text-right">
+          <p className="text-xs text-muted-foreground">
+            {t("model.derivedLevel")}
+          </p>
+          <p
+            data-testid="model-derived-level"
+            // The visible text is localized ("Level 3"); the raw tier stays
+            // readable here for anything asserting on the value itself.
+            data-level={derivedLevel ?? "unassigned"}
+            className="text-lg font-semibold tabular-nums text-foreground"
+          >
+            {derivedLevel === null || derivedLevel === undefined
+              ? t("actionLevel.unassigned")
+              : t("actionLevel.level", { level: derivedLevel })}
+          </p>
+        </div>
       </div>
 
       {/* Only the form scrolls, so the title and the save bar stay in place while
@@ -259,7 +310,7 @@ export function ModelEditor({
               >
                 <SelectTrigger
                   aria-label={t("model.preset.label")}
-                  className="min-h-11 w-full bg-background"
+                  className="w-full bg-background"
                 >
                   <SelectValue placeholder={t("model.preset.select")} />
                 </SelectTrigger>
@@ -278,7 +329,7 @@ export function ModelEditor({
             <Button
               type="button"
               variant="outline"
-              className="min-h-11 self-end"
+              className="self-end"
               disabled={disabled || !selectedPreset}
               onClick={handleApplyPreset}
             >
@@ -293,57 +344,84 @@ export function ModelEditor({
             aria-label={t("model.name")}
             value={name}
             disabled={disabled || isStandard}
-            className="min-h-11"
+            
             onChange={(event) => setName(event.target.value)}
           />
         </label>
 
-        <fieldset className="grid gap-2">
+        {/* Grouped by level, because the level is what the selection produces:
+            ticking anything in the "level 3" group makes this a level-3 model.
+            A flat list made the derived level in the header look arbitrary. */}
+        <fieldset className="grid gap-3">
           <legend className="mb-1 text-sm font-medium text-foreground">
             {t("model.actions")}
           </legend>
-          {eligibleActions.map((action) => {
-            const isChecked = selected.has(action.code)
-            const actionDisabled =
-              disabled || isStandard || (!action.active && !isChecked)
-            return (
-              <label
-                key={action.code}
-                className="flex min-h-11 items-center gap-3 rounded-lg border px-3 py-2 text-sm"
-              >
-                <Checkbox
-                  aria-label={`${t("model.action")}.${action.code}`}
-                  checked={isChecked}
-                  disabled={actionDisabled}
-                  onCheckedChange={(checked) =>
-                    handleActionChange(action.code, checked === true)
-                  }
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block font-medium text-foreground">
-                    {actionLabel(t, action.code, action.name)}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {action.code}
-                  </span>
+          {actionGroups.map((group) => (
+            <div key={group.key} className="rounded-lg border">
+              <div className="flex items-center justify-between gap-2 border-b bg-muted/30 px-3 py-1.5">
+                <span className="text-xs font-medium text-foreground">
+                  {group.title}
                 </span>
-                {action.level === null ? (
-                  <span className="text-xs font-medium text-amber-700">
-                    {t("actionLevel.unassigned")}
-                  </span>
-                ) : !action.active && (
-                  <span className="text-xs font-medium text-red-700">
-                    {t("actionLevel.inactive")}
-                  </span>
-                )}
-              </label>
-            )
-          })}
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {group.selectedCount}/{group.actions.length}
+                </span>
+              </div>
+              <div className="divide-y">
+                {group.actions.map((action) => {
+                  const isChecked = selected.has(action.code)
+                  const actionDisabled =
+                    disabled || isStandard || (!action.active && !isChecked)
+                  return (
+                    <label
+                      key={action.code}
+                      className="flex items-center gap-3 px-3 py-2 text-sm has-[:disabled]:opacity-60"
+                    >
+                      <Checkbox
+                        aria-label={`${t("model.action")}.${action.code}`}
+                        checked={isChecked}
+                        disabled={actionDisabled}
+                        onCheckedChange={(checked) =>
+                          handleActionChange(action.code, checked === true)
+                        }
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-medium text-foreground">
+                          {actionLabel(t, action.code, action.name)}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {action.code}
+                        </span>
+                      </span>
+                      {action.level === null ? (
+                        <span className="text-xs text-destructive">
+                          {t("actionLevel.unassigned")}
+                        </span>
+                      ) : !action.active && (
+                        <span className="text-xs text-destructive">
+                          {t("actionLevel.inactive")}
+                        </span>
+                      )}
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </fieldset>
 
+        {/* Both switches carry a consequence the label alone never conveyed —
+            "allow same level" in particular decides whether a holder can hand
+            out their own tier. */}
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-sm font-medium">
-            <span>{t("model.active")}</span>
+          <label className="flex items-start justify-between gap-3 rounded-lg border p-3 text-sm">
+            <span className="min-w-0">
+              <span className="block font-medium text-foreground">
+                {t("model.active")}
+              </span>
+              <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                {t("model.activeHint")}
+              </span>
+            </span>
             <Switch
               aria-label={t("model.active")}
               checked={active}
@@ -351,8 +429,17 @@ export function ModelEditor({
               onCheckedChange={setActive}
             />
           </label>
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 text-sm font-medium">
-            <span>{t("model.allowSameLevel")}</span>
+          <label className="flex items-start justify-between gap-3 rounded-lg border p-3 text-sm">
+            <span className="min-w-0">
+              <span className="block font-medium text-foreground">
+                {t("model.allowSameLevel")}
+              </span>
+              <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                {canAllowSameLevel
+                  ? t("model.allowSameLevelHint")
+                  : t("model.allowSameLevelUnavailable")}
+              </span>
+            </span>
             <Switch
               aria-label={t("model.allowSameLevel")}
               checked={allowSameLevel}
@@ -361,14 +448,22 @@ export function ModelEditor({
             />
           </label>
         </div>
+      </div>
 
+      {/* The draft notice used to sit at the end of the scrolling form, so the
+          button that publishes it was below the fold — the author saved and saw
+          nothing happen. It belongs beside the button that produced it. */}
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t p-4">
         {draft && (
           <div
-            className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900"
+            className="mr-auto flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-sm text-foreground"
             role="status"
           >
-            <ShieldAlert aria-hidden="true" className="size-4 shrink-0" />
-            <span className="flex-1">
+            <ShieldAlert
+              aria-hidden="true"
+              className="size-4 shrink-0 text-primary"
+            />
+            <span className="min-w-0">
               {t("impact.unpublished")}
               {" · "}
               {t("impact.pending", {
@@ -378,16 +473,14 @@ export function ModelEditor({
             </span>
             <Button
               type="button"
-              className="min-h-11"
+              size="sm"
+              className="ml-auto shrink-0"
               onClick={() => onReviewImpact(draft)}
             >
               {t("impact.publishChanges")}
             </Button>
           </div>
         )}
-      </div>
-
-      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t p-4">
         {!isStandard && !createMode && (
           <TooltipProvider>
             <Tooltip>
@@ -398,7 +491,7 @@ export function ModelEditor({
                   <Button
                     type="button"
                     variant="outline"
-                    className="min-h-11 text-red-700"
+                    className="text-destructive"
                     disabled={disabled || saving || active}
                     onClick={handleDelete}
                   >
@@ -414,7 +507,7 @@ export function ModelEditor({
         )}
         <Button
           type="button"
-          className="min-h-11"
+          
           disabled={
             disabled ||
             saving ||

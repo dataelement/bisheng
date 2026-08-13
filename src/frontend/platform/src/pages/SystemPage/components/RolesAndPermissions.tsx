@@ -52,7 +52,7 @@ function CatalogState({ loading, error, onRetry }: CatalogStateProps) {
         <Button
           type="button"
           variant="outline"
-          className="min-h-11 bg-background"
+          className="bg-background"
           onClick={onRetry}
         >
           {t("catalog.retry")}
@@ -119,7 +119,7 @@ function ModelCatalogPanel({
           <Button
             type="button"
             variant="outline"
-            className="min-h-10 px-2"
+            className="px-2"
             aria-pressed={creating}
             onClick={() => setCreating(true)}
           >
@@ -138,11 +138,20 @@ function ModelCatalogPanel({
                 setCreating(false)
                 onSelectModel(model.key)
               }}
-              className="min-h-11 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+              // Two lines of text in a fixed-height row sat against the top edge;
+              // centre them so the selected block reads as one item.
+              className="flex min-h-[52px] flex-col justify-center rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted aria-pressed:bg-primary aria-pressed:text-primary-foreground"
             >
               <span className="block truncate font-medium">{model.name}</span>
+              {/* The row used to repeat only "standard / custom". What the author
+                  actually looks for is the tier and whether it is switched on. */}
               <span className="block truncate text-xs opacity-70">
                 {t(`model.kind.${model.kind.toLowerCase()}`)}
+                {" · "}
+                {model.derived_level === null
+                  ? t("actionLevel.unassigned")
+                  : t("actionLevel.level", { level: model.derived_level })}
+                {!model.active && ` · ${t("model.inactive")}`}
               </span>
             </button>
           ))}
@@ -210,13 +219,17 @@ export function RolesAndPermissions() {
 
   const handleCreateDraft = async (
     changes: PermissionCatalogChange[],
+    config: { silent?: boolean } = {},
   ): Promise<PermissionCatalogDraft> => {
     if (!catalog) throw new Error("permission Catalog is not loaded")
-    return await createPermissionCatalogDraftApi({
-      idempotency_key: createIdempotencyKey("catalog-draft"),
-      base_release_id: catalog.id,
-      changes,
-    })
+    return await createPermissionCatalogDraftApi(
+      {
+        idempotency_key: createIdempotencyKey("catalog-draft"),
+        base_release_id: catalog.id,
+        changes,
+      },
+      config,
+    )
   }
 
   const handleReviewImpact = (draft: PermissionCatalogDraft) => {
@@ -244,12 +257,20 @@ export function RolesAndPermissions() {
         ]
       : [{ type: "DELETE_MODEL", model_key: modelKey }]
     try {
-      const draft = await handleCreateDraft(changes)
-      await handlePublish(draft.draft_id, {
-        expected_current_release_id: catalog.id,
-        idempotency_key: createIdempotencyKey("catalog-publish"),
-        confirmed: true,
-      })
+      // Deletion is refused while drafting, not at publish — ask for the
+      // envelope on both legs or the reason is lost on the first one.
+      const draft = await handleCreateDraft(changes, { silent: true })
+      await handlePublish(
+        draft.draft_id,
+        {
+          expected_current_release_id: catalog.id,
+          idempotency_key: createIdempotencyKey("catalog-publish"),
+          confirmed: true,
+        },
+        // Ask for the envelope: the failure below needs the reason the server
+        // sent, and the default rejection is a bare message string.
+        { silent: true },
+      )
       setSelectedModelKey(null)
     } catch (error) {
       // Nothing else reports this: the request layer only auto-toasts a couple of
@@ -257,7 +278,9 @@ export function RolesAndPermissions() {
       // leave the model in place with no explanation. 25004 covers several model
       // -state conflicts, so name the one in the way — "state does not allow
       // this" leaves the author with nothing to act on.
-      const detail = (error as { data?: { reason?: string; reference_count?: number } })?.data
+      const detail = (
+        error as { data?: { reason?: string; reference_count?: number } } | null
+      )?.data
       message({
         variant: "error",
         description:
@@ -271,8 +294,9 @@ export function RolesAndPermissions() {
   const handlePublish = async (
     draftId: number,
     payload: PublishPermissionCatalogDraftRequest,
+    config: { silent?: boolean } = {},
   ) => {
-    await publishPermissionCatalogDraftApi(draftId, payload)
+    await publishPermissionCatalogDraftApi(draftId, payload, config)
     setImpactDraft(null)
     await loadCatalog()
     message({

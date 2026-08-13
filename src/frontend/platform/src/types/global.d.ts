@@ -58,3 +58,13 @@ declare module "*.svg" {
     const content: any;
     export default content;
 }
+
+// `silent` is read by the response interceptor in `@/controllers/request.ts`:
+// it skips the global error handling and rejects with the response envelope
+// instead of a bare message string, so a caller can read the business error's
+// `data`. Declared here so passing it no longer needs an `as any` cast.
+declare module "axios" {
+  export interface AxiosRequestConfig {
+    silent?: boolean
+  }
+}

@@ -377,7 +377,7 @@ class LinsightConf(BaseModel):
         default=100000, description="Maximum Tool Execution Historytoken, you need to summarize your history after"
     )
     max_steps: int = Field(
-        default=500,
+        default=2500,
         description="LangGraph ``recursion_limit`` for a task graph — a runaway FUSE, not the business "
         "budget. It counts SUPER-STEPS, not model turns: one model turn costs ~4 super-steps "
         "(model -> tool-loop-breaker.after_model -> TodoList.after_model -> tools), so 500 ~= 115 turns. "
@@ -385,13 +385,13 @@ class LinsightConf(BaseModel):
         "value automatically if it would trip before the turn budget.",
     )
     max_model_turns: int = Field(
-        default=115,
+        default=600,
         description="Turn budget for the MAIN graph: how many model calls one task run may make before "
         "the soft-landing ladder forces it to wrap up. This is the real business gate (see max_steps). "
         "Reset on every ask_user resume, since the middleware instance is rebuilt with the agent.",
     )
     max_model_turns_subagent: int = Field(
-        default=30,
+        default=120,
         description="Turn budget for the researcher subagent's own graph (counted separately — a subgraph "
         "runs its own Pregel loop with its own step counter).",
     )

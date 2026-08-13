@@ -521,6 +521,8 @@
     "fileUploadFailed": "File upload failed: {{name}}",
     "fileExceedRemoved": "File: {{name}} exceeds {{size}}MB and has been removed",
     "fileTypeNotAllowed": "Unsupported file type: {{type}}",
+    "mediaFileTooMany": "You cannot upload more than 5 audio/video files.",
+    "noFileSelected": "No file selected",
     "uploadFailedCheckFormat": "Upload failed, please check file format",
     "sourceTooltip": "Source Paragraph",
     "filterLabel": "Filter Labels",
@@ -2081,5 +2083,30 @@
       "githubRateLimit": "GitHub rate limit exceeded, please retry later",
       "unknown": "Operation failed, please retry"
     }
+  },
+  "citation": {
+    "unsupportedPreview": "Preview is not supported for this file type",
+    "loadingPreview": "Loading document preview...",
+    "noPreviewUrl": "No previewable file address",
+    "documentPreview": "Document preview",
+    "downloadDocument": "Download document",
+    "closeDocumentPreview": "Close document preview",
+    "web": "Web",
+    "document": "Document",
+    "untitled": "Untitled",
+    "loadingDetail": "Loading source details...",
+    "loadDetailFailed": "Failed to load source details",
+    "policyDocument": "Policy document",
+    "references": "References",
+    "closeReferences": "Close references",
+    "backToReferences": "Back to reference list",
+    "noDownloadUrl": "No downloadable file address"
+  },
+  "mediaPreview": {
+    "recognizedText": "Recognized text",
+    "entryText": "Stored text",
+    "webPreview": "Web preview",
+    "openSourcePage": "Open source page",
+    "noWebSnapshot": "No web snapshot yet — check the stored text or open the source page."
   }
 }
