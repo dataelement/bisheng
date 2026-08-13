@@ -1,14 +1,33 @@
 // @ts-strict-ignore
 import {
     type CreateManagerChannelPayload,
+    type InformationSource,
     type ManagerChannelFilterRule,
     type ManagerChannelRuleNode,
     type ManagerChannelSingleRule
 } from "~/api/channels";
 import { type KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
-import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
 import type { Channel } from "~/api/channels";
-import { validateFilterGroups } from "./CreateChannel/FilterConditionEditor";
+import {
+    validateFilterGroups,
+    type FilterGroup,
+} from "./CreateChannel/FilterConditionEditor";
+import type { KnowledgeSyncDraft } from "./CreateChannel/KnowledgeSyncSection";
+import type { SubChannelData } from "./CreateChannel/SubChannelBlock";
+
+export interface CreateChannelFormData {
+    sources: InformationSource[];
+    channelName: string;
+    channelDesc: string;
+    visibility: "private" | "review" | "public";
+    publishToSquare: "yes" | "no";
+    contentFilter: boolean;
+    filterGroups: FilterGroup[];
+    topFilterRelation: "and" | "or";
+    createSubChannel: boolean;
+    subChannels: SubChannelData[];
+    knowledgeSync: KnowledgeSyncDraft;
+}
 
 /**
  * Validate the entire form data before submission.
@@ -141,6 +160,15 @@ export function buildCreateChannelPayload(data: CreateChannelFormData): CreateMa
     };
 }
 
+export function buildChannelSettingsUpdatePayload(
+    data: CreateChannelFormData,
+    isChannelCreator: boolean,
+): CreateManagerChannelPayload {
+    const payload = buildCreateChannelPayload(data);
+    if (!isChannelCreator) delete payload.knowledge_sync;
+    return payload;
+}
+
 /**
  * Convert a Channel to a KnowledgeSpace for the member dialog.
  */
@@ -160,7 +188,8 @@ export function toMemberDialogSpace(channel?: Channel | null): KnowledgeSpace {
             isPinned: channel.isPinned,
             createdAt: channel.createdAt,
             updatedAt: channel.updatedAt,
-            tags: []
+            tags: [],
+            isReleased: false,
         };
     }
     return {
@@ -177,6 +206,7 @@ export function toMemberDialogSpace(channel?: Channel | null): KnowledgeSpace {
         isPinned: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        tags: []
+        tags: [],
+        isReleased: false,
     };
 }

@@ -149,6 +149,7 @@ export async function getChatHistoryApi({ flowId, chatId, flowType, id, shareTok
             const _category = _isSend ? 'question' : category
             const _files = (files ? JSON.parse(files) : []).map(file => {
                 return {
+                    ...file,
                     file_name: file.file_name || file.name,
                     file_url: file.file_url || file.path,
                 }
@@ -243,7 +244,10 @@ export async function uploadChatFile(v, file: File, onProgress, uploadMode?: 'li
     }
     const urlMap = {
         linsight: '/api/v1/linsight/workbench/upload-file',
-        workstation: '/api/v1/workstation/files',
+        // Daily chat used to have its own endpoint, which stored files under
+        // their raw filename — two users uploading "1.png" overwrote each other.
+        // The shared endpoint already names objects by uuid.
+        workstation: '/api/v1/knowledge/upload',
     };
     const url = uploadMode ? urlMap[uploadMode] : '/api/v1/knowledge/upload';
     return await request.post(url, formData, {

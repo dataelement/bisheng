@@ -11,8 +11,9 @@ import { QueryKeys, dataService } from "~/types/chat";
 import { addConversation, updateConvoFields } from "~/utils";
 import store from "~/store";
 import { useLocalize } from "~/hooks";
+import { useToastContext } from "~/Providers";
 import type { ChatMessage } from "~/api/chatApi";
-import { getAgentMessages } from "~/api/chatApi";
+import { getAgentMessages, getSessionName } from "~/api/chatApi";
 import useAiChatSSE, { type SSESubmission } from "~/hooks/useAiChatSSE";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
 import { useLinsightManager } from "~/hooks/useLinsightManager";
@@ -21,8 +22,22 @@ import { SopStatus, taskModeSkillsState } from "~/store/linsight";
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
+/** The fields of an input-box attachment that decide whether it can be sent.
+    Backends disagree on the path key (filepath / file_path / file_url), so all
+    three count as "the upload landed somewhere we can point at". */
+interface OutgoingAttachment {
+    filepath?: string;
+    file_path?: string;
+    file_url?: string;
+    valid?: boolean;
+    name?: string;
+    filename?: string;
+    file_name?: string;
+}
+
 export default function useAiChat(initialConversationId: string = "new", isLingsi: boolean = false, shareToken: string = "") {
     const localize = useLocalize();
+    const { showToast } = useToastContext();
     // --- Local state ---
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [conversationId, setConversationId] = useState(initialConversationId);
@@ -152,6 +167,32 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
     }, [conversationId, shareToken]);
 
+    // Load the conversation's stored name. The history endpoints return messages
+    // only, so opening an existing conversation by URL (deep link or share link)
+    // left `title` empty and HeaderTitle fell back to "New Chat" — even though
+    // the sidebar list showed the real name.
+    //
+    // Guarded against clobbering a freshly generated title: skip while streaming
+    // (a brand-new conversation's row still says "New Chat" until gen_title
+    // lands) and never overwrite a title we already hold.
+    useEffect(() => {
+        if (isStreaming) return;
+        if (!conversationId || conversationId === "new") return;
+        let cancelled = false;
+        getSessionName(conversationId, shareToken || undefined)
+            .then((name) => {
+                if (cancelled || !name) return;
+                setTitle((prev) => (prev ? prev : name));
+            })
+            .catch(() => {
+                // Non-critical: the header keeps the "New Chat" fallback.
+            });
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally exclude isStreaming
+    }, [conversationId, shareToken]);
+
     // v2.5 Module B: agent flow renders a flat list keyed by category;
     // messagesTree + buildMessageTree were only needed by the legacy
     // SiblingSwitch UI which is no longer shown (ChatView passes flatMode).
@@ -164,6 +205,24 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         (text: string, files?: any[] | null, opts?: { taskMode?: boolean }) => {
             if (!text.trim() || isStreaming) return;
             const taskMode = !!opts?.taskMode;
+
+            // An attachment whose upload never landed carries no storage path. It
+            // used to be sent anyway: the backend stored it as an attachment with
+            // no object name, the model never saw it, and on render the bubble
+            // showed "图片已失效" — so the user got an answer that quietly ignored
+            // one of their files. Block the send and name the offender instead.
+            const stranded = ((files ?? []) as OutgoingAttachment[]).filter(
+                (f) => f && (f.valid === false || !(f.filepath || f.file_path || f.file_url)),
+            );
+            if (stranded.length) {
+                showToast({
+                    message: localize("com_error_file_upload_incomplete", {
+                        0: stranded.map((f) => f.name || f.filename || f.file_name || "").join("、"),
+                    }),
+                    status: "error",
+                });
+                return;
+            }
 
             // Drop client-only fields (e.g. the local `previewUrl` blob string used
             // for input-box image previews) before they reach the message state or
@@ -593,7 +652,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         }
                     }
                 },
-                onError: (error, errorCode) => {
+                onError: (error, errorCode, meta) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const lastMsg = msgs[msgs.length - 1];
@@ -603,6 +662,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 text: error || "发生错误，请重试",
                                 error: true,
                                 errorCode,
+                                errorType: meta?.errorType,
+                                errorDetail: meta?.errorDetail,
                             };
                         }
                         return msgs;
@@ -618,7 +679,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, queryClient]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, dailyTaskSkills, isLingsi, createLinsight, updateLinsight, localize, showToast, queryClient]
     );
 
     // --- Stop generating ---
@@ -761,7 +822,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         setConversationId(data.conversation.conversationId);
                     }
                 },
-                onError: (error, errorCode) => {
+                onError: (error, errorCode, meta) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
                         const idx = msgs.findIndex(
@@ -773,6 +834,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                                 text: error || "发生错误，请重试",
                                 error: true,
                                 errorCode,
+                                errorType: meta?.errorType,
+                                errorDetail: meta?.errorDetail,
                             };
                         }
                         return msgs;

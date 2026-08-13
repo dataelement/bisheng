@@ -12,6 +12,18 @@ import { SkillMethod } from "./appUtils/skillMethod"
 import { bishengConfState, chatApiVersionState, chatIdState, chatsState, currentChatState, currentRunningState, runningState } from "./store/atoms"
 import { emitAreaTextEvent, EVENT_TYPE } from "./useAreaText"
 
+// Attachments hung on a sent message. Producers disagree on the field names
+// (the uploader says `name`/`filepath`, the websocket payload says
+// `file_name`/`file_url`), so every alias stays optional and readers fall back.
+type SentMessageFile = {
+    file_id?: string
+    file_name?: string
+    file_url?: string
+    name?: string
+    filepath?: string
+    file_path?: string
+}
+
 export default function useChatHelpers() {
     const chatState = useRecoilValue(currentChatState)
     const runState = useRecoilValue(currentRunningState)
@@ -206,7 +218,10 @@ export default function useChatHelpers() {
                             files: _files.map(el => ({
                                 // 兼容
                                 file_name: el.file_name || el.name,
-                                file_url: el.file_url || el.url || el.path
+                                file_url: el.file_url || el.url || el.path,
+                                // Keep the id: it's what an image attachment is
+                                // looked up by when its link is re-issued.
+                                file_id: el.file_id
                             })),
                             is_bot,
                             message: msg,
@@ -384,7 +399,9 @@ export default function useChatHelpers() {
                 }),
             )
         },
-        createSendMsg: (msg: string) => {
+        // `files` keeps the attachments as data rather than only as filenames
+        // glued onto the text, so an image can render as an image.
+        createSendMsg: (msg: string, files: SentMessageFile[] = []) => {
             setChats((prev) =>
                 updateChatMessages(prev, chatId, (messages) => [
                     ...messages,
@@ -393,6 +410,7 @@ export default function useChatHelpers() {
                         category: "question",
                         id: 'u-' + generateUUID(8),
                         message: msg,
+                        files,
                         create_time: formatDate(new Date(), "yyyy-MM-ddTHH:mm:ss"),
                     },
                 ]),

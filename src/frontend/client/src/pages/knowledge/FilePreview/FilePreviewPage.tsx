@@ -315,7 +315,7 @@ export default function FilePreviewPage() {
                         type="button"
                         onClick={handleDownloadFile}
                         aria-label={localize("com_knowledge.download_file")}
-                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-text-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] backdrop-blur-md transition-colors hover:bg-white/85"
+                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-text-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
                     >
                         <Outlined.Download className="size-5" />
                     </button>

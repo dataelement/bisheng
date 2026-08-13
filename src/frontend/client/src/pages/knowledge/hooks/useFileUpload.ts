@@ -549,7 +549,7 @@ export function useFileUpload({
     // ─── Folder creation ─────────────────────────────────────────────────
     const handleCreateFolder = useCallback(() => {
         if (currentPath.length >= MAX_FOLDER_DEPTH) {
-            showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING } as any);
+            showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING });
             return;
         }
 
@@ -597,8 +597,16 @@ export function useFileUpload({
                     setCreatingFolder(null);
                     // Keep the left-side folder tree in sync.
                     dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-                } catch {
-                    showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                } catch (e) {
+                    // Server-authoritative depth check: the breadcrumb-based
+                    // pre-check in handleCreateFolder can race a navigation
+                    // (async currentPath), so 18011 can still come back here.
+                    if ((e as { status_code?: number })?.status_code === 18011) {
+                        showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING });
+                        setCreatingFolder(null);
+                    } else {
+                        showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                    }
                 }
                 return;
             }

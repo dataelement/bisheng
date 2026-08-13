@@ -154,7 +154,7 @@ export const ComponentWrapper = memo(({
                             <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 bg-background/80 backdrop-blur-sm border border-border shadow-sm hover:bg-accent dark:border-gray-500 dark:text-gray-500"
+                                className="h-6 w-6 bg-background/80 border border-border shadow-sm hover:bg-accent dark:border-gray-500 dark:text-gray-500"
                             >
                                 <MoreVerticalIcon className="h-4 w-4" />
                             </Button>

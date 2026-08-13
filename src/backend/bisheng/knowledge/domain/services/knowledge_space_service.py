@@ -132,6 +132,11 @@ if TYPE_CHECKING:
 
 # Maximum number of Knowledge Spaces a user can create
 _MAX_SPACE_PER_USER = 30
+# Folder depth cap: product rule is "10 层". UI 第1层 = level 0, so the deepest
+# allowed FOLDER level is 9. Files inside a deepest-level folder don't count as
+# a layer. Existing level-10 folders (legacy over-deep data) stay accessible and
+# movable; they just can't gain children.
+MAX_FOLDER_LEVEL = 9
 SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
 SPACE_MEMBER_REMOVED_MESSAGE = "removed_knowledge_space_member"
 SPACE_MADE_PRIVATE_MESSAGE = "knowledge_space_made_private"
@@ -711,9 +716,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _get_relation_models_map(self) -> dict[str, dict]:
         if hasattr(self, "_relation_models_map_cache"):
             return self._relation_models_map_cache
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _get_relation_models,
-            _normalize_model_dict,
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_relation_models as _get_relation_models,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            normalize_model_dict as _normalize_model_dict,
         )
 
         raw_models = await _get_relation_models()
@@ -723,7 +730,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _get_relation_bindings(self) -> list[dict]:
         if hasattr(self, "_relation_bindings_cache"):
             return self._relation_bindings_cache
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
 
         self._relation_bindings_cache = await _get_bindings()
         return self._relation_bindings_cache
@@ -744,7 +753,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         since ``list_accessible_ids`` returns None (can-read-all) for admins and would
         otherwise hide spaces the admin was granted but is not a member of.
         """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
 
         bindings = await _get_bindings()
         return [
@@ -765,10 +776,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         is_active: bool,
     ) -> None:
         """Keep direct space memberships and ReBAC grants in sync."""
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _binding_key_with_scope,
-            _get_bindings,
-            _save_bindings,
+        from bisheng.permission.domain.services.relation_model_store import (
+            binding_key_with_scope as _binding_key_with_scope,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            save_bindings as _save_bindings,
         )
 
         desired_relation = None
@@ -859,12 +874,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         child_resources: list[tuple[str, int]],
     ) -> None:
         """Remove non-owner space permissions when a space becomes private."""
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _get_bindings,
-            _save_bindings,
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            save_bindings as _save_bindings,
         )
 
-        resources = [("knowledge_space", int(space.id))] + list(child_resources)
+        resources = [("knowledge_space", int(space.id)), *child_resources]
         resource_keys = {(resource_type, str(resource_id)) for resource_type, resource_id in resources}
 
         bindings = await _get_bindings()
@@ -1740,11 +1757,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space.auto_tag_enabled = resolved_enabled
             space.auto_tag_library_id = resolved_library_id
 
-        space = await KnowledgeDao.async_update_space(space)
-        new_auth_type = space.auth_type
-
-        # When switching to PRIVATE, remove all non-creator members
-        if old_auth_type != AuthTypeEnum.PRIVATE and new_auth_type == AuthTypeEnum.PRIVATE:
+        private_cleanup_requested = auth_type == AuthTypeEnum.PRIVATE
+        removed_user_ids: set[int] = set()
+        if private_cleanup_requested:
             removed_members = await SpaceChannelMemberDao.async_get_members_by_space(space_id)
             removed_user_ids = {
                 member.user_id for member in removed_members if member.user_role != UserRoleEnum.CREATOR
@@ -1756,6 +1771,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 child_resources=child_resources,
             )
             await SpaceChannelMemberDao.async_delete_non_creator_members(space_id)
+
+        space = await KnowledgeDao.async_update_space(space)
+        new_auth_type = space.auth_type
+
+        if private_cleanup_requested:
             final_removed_user_ids = []
             for user_id in removed_user_ids:
                 if not await self._user_can_read_space(user_id, space_id):
@@ -2899,7 +2919,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if parent_id:
             parent_folder = await self._get_folder_for_action(knowledge_id, parent_id)
             level = parent_folder.level + 1
-            if level > 10:
+            if level > MAX_FOLDER_LEVEL:
                 raise SpaceFolderDepthError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_id}"
             parent_type = "folder"
@@ -3583,11 +3603,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for depth in range(1, len(dir_parts) + 1):
                 dir_set.add(dir_parts[:depth])
 
-        # Depth: deepest created FOLDER must stay within the 10-layer limit
-        # (UI 第1层 = level 0 ⇒ deepest folder level 9). Files inside the
-        # deepest folder don't count as a layer.
+        # Depth: deepest created FOLDER must stay within MAX_FOLDER_LEVEL.
         max_chain = max((len(d) for d in dir_set), default=0)
-        if max_chain and base_child_level + max_chain - 1 > 9:
+        if max_chain and base_child_level + max_chain - 1 > MAX_FOLDER_LEVEL:
             raise SpaceFolderDepthError()
 
         # Duplicate check only for the top-level folder names (design 坑 U3):
@@ -3833,10 +3851,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         await self._require_read_permission(space_id)
         cross_space = target_space_id != space_id
-        # Depth limit counts FOLDER layers only (UI 第1层 = level 0, "10 层" ⇒
-        # deepest folder level 9). Files may sit inside a deepest-level folder,
-        # so file moves carry no depth check at all.
-        max_folder_level = 9
+        # Depth limit counts FOLDER layers only (see MAX_FOLDER_LEVEL). Files may
+        # sit inside a deepest-level folder, so file moves carry no depth check.
+        max_folder_level = MAX_FOLDER_LEVEL
 
         async with get_async_db_session() as session:
             source_space = await session.get(Knowledge, space_id)

@@ -33,8 +33,6 @@ interface ArticleListProps {
     selectedArticleId?: string;
     /** PC：顶部标题下拉切换频道（替代左侧 ChannelSidebar） */
     onChannelSelect?: (channel: Channel | null) => void;
-    /** PC：下拉内频道项管理操作 */
-    onManageMembers?: (channel: Channel) => void;
     onChannelSettings?: (channel: Channel) => void;
     /** H5：打开「我的频道」侧栏（订阅页抽屉） */
     onOpenChannelNav?: () => void;
@@ -161,7 +159,6 @@ export function ArticleList({
     selectedArticleId,
     onArticleSelect,
     onChannelSelect,
-    onManageMembers,
     onChannelSettings,
     onOpenChannelNav,
     onGoChannelSquare,
@@ -492,7 +489,6 @@ export function ArticleList({
                                         variant="mobile"
                                         channel={channel}
                                         onChannelSelect={onChannelSelect}
-                                        onManageMembers={onManageMembers}
                                         onChannelSettings={onChannelSettings}
                                         onShare={canOpenChannelShare ? handleMobileShare : undefined}
                                         onOpenSourceFilter={
@@ -778,7 +774,6 @@ export function ArticleList({
                                 <ChannelActionsMenu
                                     channel={channel}
                                     onChannelSelect={onChannelSelect}
-                                    onManageMembers={onManageMembers}
                                     onChannelSettings={onChannelSettings}
                                     triggerClassName="border-border-base"
                                 />

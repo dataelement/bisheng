@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { TransitionEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Outlined } from "bisheng-icons";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import { getRecommendedChannelsApi, subscribeManagerChannelApi } from "~/api/channels";
@@ -84,6 +84,8 @@ export function ChannelDiscoveryHome({
     onCreateChannel,
 }: ChannelDiscoveryHomeProps) {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const [paused, setPaused] = useState(false);
@@ -248,7 +250,7 @@ export function ChannelDiscoveryHome({
                 className="shrink-0 px-10 pt-5 pb-4 text-[32px] font-bold leading-[40px] text-text-1"
                 style={{ fontFamily: SERIF_FONT_STACK }}
             >
-                {localize("com_subscription.subscribe")}
+                {menuNames.channel}
             </h1>
         );
     };

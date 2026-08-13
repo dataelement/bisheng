@@ -157,6 +157,70 @@ def test_resolve_asr_model_requires_knowledge_config() -> None:
             KnowledgeMediaTranscriptionService._resolve_asr_model(tenant_id=1)
 
 
+class _FakeRecognition:
+    """Stand-in for dashscope Recognition returning a canned result."""
+
+    result = None
+
+    def __init__(self, **kwargs) -> None:
+        pass
+
+    def call(self, wav_path, api_key=None):
+        return type(self).result
+
+
+def _call_asr_with_result(monkeypatch, result) -> list[TranscriptSegment]:
+    _FakeRecognition.result = result
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.media_transcription_service.Recognition",
+        _FakeRecognition,
+    )
+    return KnowledgeMediaTranscriptionService._call_aliyun_asr(
+        "/tmp/fake.wav", api_key="sk-test", model_name="paraformer-realtime-v2"
+    )
+
+
+def test_call_aliyun_asr_null_output_returns_no_segments(monkeypatch) -> None:
+    """A 200 response with no sentences and output=null must NOT surface the
+    raw JSON envelope as recognized text — it should yield zero segments so the
+    caller raises KnowledgeMediaNoRecognizableAudioError."""
+    result = SimpleNamespace(
+        status_code=200,
+        code="",
+        message="",
+        output=None,
+        get_sentence=lambda: None,
+    )
+
+    assert _call_asr_with_result(monkeypatch, result) == []
+
+
+def test_call_aliyun_asr_empty_output_dict_returns_no_segments(monkeypatch) -> None:
+    result = SimpleNamespace(
+        status_code=200,
+        code="",
+        message="",
+        output={"sentence": []},
+        get_sentence=lambda: [],
+    )
+
+    assert _call_asr_with_result(monkeypatch, result) == []
+
+
+def test_call_aliyun_asr_plain_text_output_fallback(monkeypatch) -> None:
+    result = SimpleNamespace(
+        status_code=200,
+        code="",
+        message="",
+        output={"text": "hello world"},
+        get_sentence=lambda: [],
+    )
+
+    segments = _call_asr_with_result(monkeypatch, result)
+
+    assert [segment.text for segment in segments] == ["hello world"]
+
+
 def test_empty_asr_text_reports_missing_recognizable_audio(monkeypatch, tmp_path) -> None:
     media_path = tmp_path / "silent.mp4"
     wav_path = tmp_path / "silent.wav"

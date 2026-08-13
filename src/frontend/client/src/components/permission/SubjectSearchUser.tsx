@@ -1,17 +1,24 @@
 import { Checkbox } from "~/components/ui/Checkbox";
-import { getResourceGrantUsers, searchUsers } from "~/api/permission";
+import {
+  getCreationGrantSubjects,
+  getResourceGrantUsers,
+  searchUsers,
+} from "~/api/permission";
 import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 
 interface SubjectSearchUserProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
   resourceType?: ResourceType;
   resourceId?: string;
+  mode?: "create" | "resource";
   disabledIds?: number[];
   grantUsersApi?: typeof getResourceGrantUsers;
+  creationGrantSubjectsApi?: typeof getCreationGrantSubjects;
 }
 
 type UserRow = GrantUser;
@@ -23,8 +30,10 @@ export function SubjectSearchUser({
   onChange,
   resourceType,
   resourceId,
+  mode = "resource",
   disabledIds = [],
   grantUsersApi,
+  creationGrantSubjectsApi,
 }: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
@@ -53,6 +62,20 @@ export function SubjectSearchUser({
       pageNum: number,
       signal: AbortSignal,
     ): Promise<UserRow[]> => {
+      if (mode === "create") {
+        if (resourceType !== "knowledge_space" && resourceType !== "channel") return [];
+        const getCreationSubjects = creationGrantSubjectsApi ?? getCreationGrantSubjects;
+        const rows = await getCreationSubjects({
+          resourceType,
+          subjectType: "user",
+          operation: "list",
+          keyword: name,
+          page: pageNum,
+          pageSize: PAGE_SIZE,
+        }, { signal });
+        if (signal.aborted) return [];
+        return Array.isArray(rows) ? rows : [];
+      }
       if (resourceType && resourceId) {
         const getGrantUsers = grantUsersApi ?? getResourceGrantUsers;
         const rows = await getGrantUsers(
@@ -72,7 +95,7 @@ export function SubjectSearchUser({
       if (signal.aborted) return [];
       return res.data || [];
     },
-    [grantUsersApi, resourceId, resourceType],
+    [creationGrantSubjectsApi, grantUsersApi, mode, resourceId, resourceType],
   );
 
   const resetAndLoad = useCallback(
@@ -179,13 +202,13 @@ export function SubjectSearchUser({
     timerRef.current = setTimeout(() => resetAndLoad(val), 300);
   };
 
-  const selectedIds = new Set(value.map((s) => s.id));
+  const selectedIds = new Set(value.filter((s) => s.type === "user").map((s) => s.id));
   const disabledIdSet = new Set(disabledIds);
 
   const toggle = (user: UserRow) => {
     if (disabledIdSet.has(user.user_id)) return;
     if (selectedIds.has(user.user_id)) {
-      onChange(value.filter((s) => s.id !== user.user_id));
+      onChange(value.filter((s) => s.type !== "user" || s.id !== user.user_id));
     } else {
       onChange([
         ...value,
@@ -216,9 +239,7 @@ export function SubjectSearchUser({
           </div>
         )}
         {!loading && results.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_search")}
-          </div>
+          <PermissionEmptyState message={localize("com_permission.empty_search")} />
         )}
         {!loading &&
           results.map((user) => {

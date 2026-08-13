@@ -1,28 +1,33 @@
 /**
- * Friendly, classified task-failure card (灵思LLM容错与失败态友好交互).
+ * Friendly, classified failure card for a chat turn (灵思LLM容错与失败态友好交互).
  *
  * Replaces the old red box that dumped the raw provider error (e.g. an English
  * aliyun "inappropriate content" message + a doc URL) on end users. The backend
  * ships a stable `error_type` (content_filter / quota_exhausted / network_timeout
- * …) on the error_message event; this card renders a localized title +
- * explanation + actionable hint per type, and keeps the raw provider text behind
- * a "view details" disclosure. Display-only — no retry action (the user re-runs
- * by asking again in the input).
+ * …) on the failure event; this card renders a localized title + explanation +
+ * actionable hint per type, and keeps the raw provider text behind a "view
+ * details" disclosure.
+ *
+ * Shared by task mode (Linsight execution flow) and daily-mode chat, so both
+ * surfaces read identically. The `com_linsight_error_*` key prefix predates the
+ * move and is kept — renaming ~20 keys across three locales would change nothing
+ * a user sees.
  */
 import { ChevronDown, ChevronRight, CircleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useLocalize } from '~/hooks';
 import { ServiceBusyNotice } from '~/components/ServiceBusyNotice';
 
-interface TaskErrorCardProps {
-    /** stable classification from the backend (error_message event) */
+interface ChatErrorCardProps {
+    /** stable classification from the backend (error_message event / SSE error `data.error_type`) */
     errorType?: string;
     /** raw provider text for the "view details" disclosure */
     detail?: string;
-    /** legacy/raw taskError string — fallback when `detail` is absent */
+    /** legacy/raw error string — fallback when `detail` is absent */
     fallbackMessage?: string;
-    /** transient (retryable) errors only: re-run the task. Wired on the /linsight
-        ExecutionFlow via continueConversation; omitted on /c and history views. */
+    /** transient (retryable) errors only: re-run the turn. Wired on the /linsight
+        ExecutionFlow via continueConversation and on daily chat via regenerate;
+        omitted on /c and history views. */
     onRetry?: () => void;
 }
 
@@ -35,15 +40,37 @@ const KNOWN_TYPES = new Set([
     'service_unavailable',
     'network_timeout',
     'auth_error',
+    // Attachment parsing (OCR / ETL) — daily-mode chat only.
+    'file_parse_busy',
+    'file_parse_failed',
+    // Daily-mode counterpart of `unknown`: same card, wording that says "reply"
+    // rather than "task" so a chat turn doesn't get task-mode phrasing.
+    'chat_unknown',
 ]);
 
 // Transient upstream hiccups (throttling / timeout / 5xx) recover on their own, so
 // they get the calm neutral ServiceBusyNotice (+ optional retry) rather than the red
 // failure card — a rate limit is the model vendor's availability blip, not a fault.
 // Mirrors the classifier's RETRYABLE bucket.
-const TRANSIENT_TYPES = new Set(['rate_limit', 'network_timeout', 'service_unavailable']);
+//
+// `file_parse_busy` is deliberately NOT here despite being recoverable: the turn is
+// already lost (the attachment never made it into the prompt), so a Retry button
+// would re-run against the same throttled service. It keeps its own "busy" wording
+// but renders as the red card, and the user re-sends from the input box.
+const TRANSIENT_TYPES = new Set([
+    'rate_limit',
+    'network_timeout',
+    'service_unavailable',
+]);
 
-export function TaskErrorCard({ errorType, detail, fallbackMessage, onRetry }: TaskErrorCardProps) {
+/** Would this failure render as the calm busy notice rather than the red card?
+    Callers use it to decide whether to offer Retry and to suppress copy/feedback
+    actions on a "try again" status. */
+export function isTransientErrorType(errorType?: string): boolean {
+    return !!errorType && TRANSIENT_TYPES.has(errorType);
+}
+
+export function ChatErrorCard({ errorType, detail, fallbackMessage, onRetry }: ChatErrorCardProps) {
     const localize = useLocalize();
     const [showDetail, setShowDetail] = useState(false);
 

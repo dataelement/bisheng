@@ -39,10 +39,20 @@ DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayNam
 
 const DropdownMenuSubContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
->(({ className = '', ...props }, ref) => (
+  Omit<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>, 'align'> & {
+    /**
+     * Cross-axis alignment against the sub-trigger: 'start' (default) lines up
+     * their top edges, 'center' centers the panel vertically on the trigger row.
+     * Radix types SubContent's align as 'start' | 'end' only, but the runtime
+     * hands the value straight to Popper — which does support 'center' — so we
+     * widen it here rather than hand-computing an alignOffset from panel height.
+     */
+    align?: 'start' | 'center' | 'end';
+  }
+>(({ className = '', align = 'start', ...props }, ref) => (
   <DropdownMenuPrimitive.SubContent
     ref={ref}
+    align={align as 'start' | 'end'}
     className={cn(
       'z-50 min-w-[8rem] overflow-hidden rounded-lg border-0 bg-white p-2 text-gray-700 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)] animate-in slide-in-from-left-1 dark:bg-gray-800 dark:text-gray-400',
       className,

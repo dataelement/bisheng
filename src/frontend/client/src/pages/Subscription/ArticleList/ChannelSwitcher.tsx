@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Channel, SortType, getChannelsApi } from "~/api/channels";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/Popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { useLocalize } from "~/hooks";
+import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { cn } from "~/utils";
 import { useChannelActions } from "../hooks/useChannelActions";
 
@@ -57,6 +57,8 @@ export function ChannelSwitcher({
     onOpenChange,
 }: ChannelSwitcherProps) {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const queryClient = useQueryClient();
     const isMobile = variant === "mobile";
     const [internalOpen, setInternalOpen] = useState(false);
@@ -290,7 +292,7 @@ export function ChannelSwitcher({
             className="flex min-w-0 items-center gap-2 text-[32px] leading-[40px] text-text-1 font-bold"
             style={{ fontFamily: SERIF_FONT_STACK }}
         >
-            <span className="shrink-0">{localize("com_subscription.subscribe")}</span>
+            <span className="shrink-0">{menuNames.channel}</span>
             <span className="shrink-0 text-text-4">·</span>
             {/* Info popover is scoped to the channel name. The name is not clickable — only the
                 arrow opens the switcher menu. */}

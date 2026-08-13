@@ -1,223 +1,74 @@
+import { ErrorPage, collectDiagnostics } from '@bisheng/ui';
+import { useContext, useMemo } from 'react';
 import { useRouteError } from 'react-router-dom';
-import { Button } from '~/components/ui';
-import logger from '~/utils/logger';
+import { SystemErrorIllustration } from '~/components/illustrations';
+import { AuthContext } from '~/hooks/AuthContext';
+import { useToastContext } from '~/Providers';
+import { useLocalize } from '~/hooks';
 
-interface UserAgentData {
-  getHighEntropyValues(hints: string[]): Promise<{ platform: string; platformVersion: string }>;
-}
-
-type PlatformInfo = {
-  os: string;
-  version?: string;
-};
-
-const formatStackTrace = (stack: string) => {
-  return stack
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, i) => ({
-      number: i + 1,
-      content: line,
-    }));
-};
-
-const getPlatformInfo = async (): Promise<PlatformInfo> => {
-  if ('userAgentData' in navigator) {
-    try {
-      const ua = navigator.userAgentData as UserAgentData;
-      const highEntropyValues = await ua.getHighEntropyValues(['platform', 'platformVersion']);
-      return {
-        os: highEntropyValues.platform,
-        version: highEntropyValues.platformVersion,
-      };
-    } catch (e) {
-      logger.warn('Failed to get high entropy values');
-      logger.error(e);
-    }
-  }
-
-  const userAgent = navigator.userAgent.toLowerCase();
-
-  if (userAgent.includes('mac')) {
-    return { os: 'macOS' };
-  }
-  if (userAgent.includes('win')) {
-    return { os: 'Windows' };
-  }
-  if (userAgent.includes('linux')) {
-    return { os: 'Linux' };
-  }
-  if (userAgent.includes('android')) {
-    return { os: 'Android' };
-  }
-  if (userAgent.includes('ios') || userAgent.includes('iphone') || userAgent.includes('ipad')) {
-    return { os: 'iOS' };
-  }
-
-  return { os: 'Unknown' };
-};
-
-const getBrowserInfo = async () => {
-  const platformInfo = await getPlatformInfo();
-  return {
-    userAgent: navigator.userAgent,
-    platform: platformInfo.os,
-    platformVersion: platformInfo.version,
-    language: navigator.language,
-    windowSize: `${window.innerWidth}x${window.innerHeight}`,
-  };
-};
-
+/**
+ * Crash screen for anything the router throws.
+ *
+ * The screen itself lives in @bisheng/ui so this app and the admin app hand a
+ * support engineer the same identifiers, the same QR payload and the same log
+ * file — an engineer reading a user's screenshot should not have to know which
+ * app it came from. Everything app-shaped stays here: where the error comes
+ * from, who was signed in, and the translations.
+ */
 export default function RouteErrorBoundary() {
-  const typedError = useRouteError() as {
+  const error = useRouteError() as {
     message?: string;
     stack?: string;
     status?: number;
     statusText?: string;
-    data?: unknown;
   };
+  const localize = useLocalize();
+  // Read straight off the context rather than through useAuthContext, which
+  // throws when the provider is missing — and it is missing here: an
+  // errorElement renders *in place of* its route's element, so this screen
+  // lives outside the layout that provides it. A crash screen that can itself
+  // crash leaves the user with a white page and nothing to report.
+  const auth = useContext(AuthContext);
+  // The toast provider and its viewport both sit outside the router, so they
+  // survive the crash that put this screen on screen.
+  const { showToast } = useToastContext();
 
-  const errorDetails = {
-    message: typedError.message ?? 'An unexpected error occurred',
-    stack: typedError.stack,
-    status: typedError.status,
-    statusText: typedError.statusText,
-    data: typedError.data,
-  };
-
-  const handleDownloadLogs = async () => {
-    try {
-      const browser = await getBrowserInfo();
-      const errorLog = {
-        timestamp: new Date().toISOString(),
-        browser,
-        error: {
-          ...errorDetails,
-          stack:
-            errorDetails.stack != null && errorDetails.stack.trim() !== ''
-              ? formatStackTrace(errorDetails.stack)
-              : undefined,
-        },
-      };
-
-      const blob = new Blob([JSON.stringify(errorLog, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `error-log-${new Date().toISOString()}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      logger.warn('Failed to download error logs:');
-      logger.error(e);
-    }
-  };
-
-  const handleCopyStack = async () => {
-    if (errorDetails.stack != null && errorDetails.stack !== '') {
-      await navigator.clipboard.writeText(errorDetails.stack);
-    }
-  };
+  // Collected once: the trace id names this occurrence, and a re-render must not
+  // rename it after the user has already screenshotted it.
+  const diagnostics = useMemo(
+    () =>
+      collectDiagnostics({
+        error: error ?? {},
+        // Guarded for the same reason: the define is absent if the page is
+        // opened from a bundle built before it existed.
+        version: typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'unknown',
+        user: auth?.user?.username,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately once per mount
+    [],
+  );
 
   return (
-    <div
-      role="alert"
-      className="flex min-h-screen flex-col items-center justify-center bg-surface-primary bg-gradient-to-br"
-    >
-      <div className="bg-surface-primary/60 mx-4 w-11/12 max-w-4xl rounded-2xl border border-border-light p-8 shadow-2xl backdrop-blur-xl">
-        <h2 className="mb-6 text-center text-3xl font-medium tracking-tight text-text-primary">
-          Oops! Something Unexpected Occurred
-        </h2>
-
-        {/* Error Message */}
-        <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-gray-600 dark:text-gray-200">
-          <h3 className="mb-2 font-medium">Error Message:</h3>
-          <pre className="whitespace-pre-wrap text-sm font-light leading-relaxed text-text-primary">
-            {errorDetails.message}
-          </pre>
-        </div>
-
-        {/* Status Information */}
-        {(typeof errorDetails.status === 'number' ||
-          typeof errorDetails.statusText === 'string') && (
-          <div className="mb-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4 text-sm text-text-primary">
-            <h3 className="mb-2 font-medium">Status:</h3>
-            <p className="text-text-primary">
-              {typeof errorDetails.status === 'number' && `${errorDetails.status} `}
-              {typeof errorDetails.statusText === 'string' && errorDetails.statusText}
-            </p>
-          </div>
-        )}
-
-        {/* Stack Trace - Collapsible */}
-        {errorDetails.stack != null && errorDetails.stack.trim() !== '' && (
-          <details className="group mb-4 rounded-xl border border-border-light p-4">
-            <summary className="mb-2 flex cursor-pointer items-center justify-between text-sm font-medium text-text-primary">
-              <span>Stack Trace</span>
-              <div className="flex items-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyStack}
-                  className="ml-2 px-2 py-1 text-xs"
-                >
-                  Copy
-                </Button>
-              </div>
-            </summary>
-            <div className="overflow-x-auto rounded-lg bg-black/5 p-4 dark:bg-white/5">
-              {formatStackTrace(errorDetails.stack).map(({ number, content }) => (
-                <div key={number} className="flex">
-                  <span className="select-none pr-4 font-mono text-xs text-text-secondary">
-                    {String(number).padStart(3, '0')}
-                  </span>
-                  <pre className="flex-1 font-mono text-xs leading-relaxed text-text-primary">
-                    {content}
-                  </pre>
-                </div>
-              ))}
-            </div>
-          </details>
-        )}
-
-        {/* Additional Error Data */}
-        {errorDetails.data != null && (
-          <details className="group mb-4 rounded-xl border border-border-light p-4">
-            <summary className="mb-2 flex cursor-pointer items-center justify-between text-sm font-medium text-text-primary">
-              <span>Additional Details</span>
-              <span className="transition-transform group-open:rotate-90">{'>'}</span>
-            </summary>
-            <pre className="whitespace-pre-wrap text-xs font-light leading-relaxed text-text-primary">
-              {JSON.stringify(errorDetails.data, null, 2)}
-            </pre>
-          </details>
-        )}
-
-        <div className="mt-6 flex flex-col gap-4">
-          <p className="text-sm font-light text-text-secondary">Please try one of the following:</p>
-          <ul className="list-inside list-disc text-sm text-text-secondary">
-            <li>Refresh the page</li>
-            <li>Clear your browser cache</li>
-            <li>Check your internet connection</li>
-            <li>Contact the Admin if the issue persists</li>
-          </ul>
-          <div className="mt-4 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-            <Button
-              variant="submit"
-              onClick={() => window.location.reload()}
-              className="w-full sm:w-auto"
-            >
-              Refresh Page
-            </Button>
-            <Button variant="outline" onClick={handleDownloadLogs} className="w-full sm:w-auto">
-              Download Error Logs
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ErrorPage
+      diagnostics={diagnostics}
+      illustration={<SystemErrorIllustration className="size-[120px]" />}
+      onCopied={() => showToast({ message: localize('com_ui_copied_to_clipboard'), status: 'success' })}
+      labels={{
+        title: localize('com_error_page.title'),
+        description: localize('com_error_page.description'),
+        copyBefore: localize('com_error_page.copy_before'),
+        copyLink: localize('com_error_page.copy_link'),
+        copyAfter: localize('com_error_page.copy_after'),
+        refresh: localize('com_error_page.refresh'),
+        download: localize('com_error_page.download'),
+        screenshotHint: localize('com_error_page.screenshot_hint'),
+        traceId: localize('com_error_page.trace_id'),
+        errorCode: localize('com_error_page.error_code'),
+        time: localize('com_error_page.time'),
+        version: localize('com_error_page.version'),
+        route: localize('com_error_page.route'),
+        user: localize('com_error_page.user'),
+      }}
+    />
   );
 }

@@ -1,5 +1,5 @@
 import { useLocalize } from "~/hooks";
-import { LogOut, MoreHorizontal, Pin, PinOff, Settings, UsersRound } from "lucide-react";
+import { LogOut, MoreHorizontal, Pin, PinOff, Settings } from "lucide-react";
 import { useState } from "react";
 import { canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, type Channel } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
@@ -33,7 +33,6 @@ interface ChannelItemProps {
     onDelete: (id: string) => void;
     onUnsubscribe: (id: string) => void;
     onPin: (id: string, pinned: boolean, type: "created" | "subscribed") => void;
-    onManageMembers: (channel: Channel) => void;
     onChannelSettings: (channel: Channel) => void;
 }
 
@@ -46,7 +45,6 @@ export default function ChannelItem({
     onDelete,
     onUnsubscribe,
     onPin,
-    onManageMembers,
     onChannelSettings
 }: ChannelItemProps) {
     const localize = useLocalize();
@@ -61,6 +59,9 @@ export default function ChannelItem({
     // independent: any subscriber can leave, including one who can also dissolve.
     const canDissolve = canDeleteChannel(channel.role, channel.permissionIds);
     const canUnsubscribe = type === "subscribed";
+    const effectivePermissionIds = channel.permissionIds ?? [];
+    const canOpenSettings = canEditChannelSettings(undefined, effectivePermissionIds)
+        || canManageChannelPermissions(undefined, effectivePermissionIds);
 
     const rename = (e) => {
         const newName = e.target.value.trim();
@@ -166,7 +167,7 @@ export default function ChannelItem({
                     </DropdownMenuTrigger>
 
                     <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {canEditChannelSettings(channel.role, channel.permissionIds) && (
+                        {canOpenSettings && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onChannelSettings(channel)}
@@ -174,17 +175,6 @@ export default function ChannelItem({
                                 <Settings className={sidebarListMoreMenuIconClassName} />
                                 <span className={sidebarListMoreMenuLabelClassName}>
                                     {localize("com_subscription.channel_settings")}
-                                </span>
-                            </DropdownMenuItem>
-                        )}
-                        {canManageChannelPermissions(channel.role, channel.permissionIds) && (
-                            <DropdownMenuItem
-                                className={sidebarListMoreMenuItemClassName}
-                                onClick={() => onManageMembers(channel)}
-                            >
-                                <UsersRound className={sidebarListMoreMenuIconClassName} />
-                                <span className={sidebarListMoreMenuLabelClassName}>
-                                    {localize("com_subscription.member_management")}
                                 </span>
                             </DropdownMenuItem>
                         )}

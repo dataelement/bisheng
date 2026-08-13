@@ -1,6 +1,8 @@
 import { Checkbox } from "~/components/ui/Checkbox";
 import {
+  getCreationGrantSubjects,
   getResourceGrantDepartmentChildren,
+  getResourceGrantDepartmentPathTree,
   searchResourceGrantDepartments,
 } from "~/api/permission";
 import type {
@@ -11,6 +13,7 @@ import type {
 import { ChevronDown, ChevronRight, Building2, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 import { useLocalize } from "~/hooks";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 import { useGrantDepartmentTree } from "./useGrantDepartmentTree";
 
 /**
@@ -25,12 +28,15 @@ interface SubjectSearchDepartmentProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
   resourceType: ResourceType;
-  resourceId: string;
+  resourceId?: string;
+  mode?: "create" | "resource";
   includeChildren: boolean;
   onSelectionSummaryChange?: (v: SelectedSubject[]) => void;
   disabledIds?: number[];
   grantDepartmentChildrenApi?: typeof getResourceGrantDepartmentChildren;
   grantDepartmentSearchApi?: typeof searchResourceGrantDepartments;
+  grantDepartmentPathTreeApi?: typeof getResourceGrantDepartmentPathTree;
+  creationGrantSubjectsApi?: typeof getCreationGrantSubjects;
 }
 
 export function SubjectSearchDepartment({
@@ -38,27 +44,95 @@ export function SubjectSearchDepartment({
   onChange,
   resourceType,
   resourceId,
+  mode = "resource",
   includeChildren,
   onSelectionSummaryChange,
   disabledIds = [],
   grantDepartmentChildrenApi,
   grantDepartmentSearchApi,
+  grantDepartmentPathTreeApi,
+  creationGrantSubjectsApi,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const disabledIdSet = useMemo(() => new Set(disabledIds), [disabledIds]);
 
   const fetchChildren = grantDepartmentChildrenApi ?? getResourceGrantDepartmentChildren;
   const fetchSearch = grantDepartmentSearchApi ?? searchResourceGrantDepartments;
+  const fetchPathTree = grantDepartmentPathTreeApi ?? getResourceGrantDepartmentPathTree;
+  const getCreationSubjects = creationGrantSubjectsApi ?? getCreationGrantSubjects;
   const tree = useGrantDepartmentTree({
-    fetchChildren: (parentId, signal) =>
-      fetchChildren(resourceType, resourceId, parentId, signal ? { signal } : undefined),
-    fetchSearch: (keyword, signal) =>
-      fetchSearch(resourceType, resourceId, keyword, 50, signal ? { signal } : undefined),
+    fetchChildren: (parentId, signal) => {
+      if (mode === "create") {
+        if (resourceType !== "knowledge_space" && resourceType !== "channel") {
+          return Promise.resolve([]);
+        }
+        return getCreationSubjects({
+          resourceType,
+          subjectType: "department",
+          operation: "children",
+          parentId,
+        }, signal ? { signal } : undefined);
+      }
+      if (!resourceId) return Promise.resolve([]);
+      return fetchChildren(
+        resourceType,
+        resourceId,
+        parentId,
+        signal ? { signal } : undefined,
+      );
+    },
+    fetchSearch: (keyword, signal) => {
+      if (mode === "create") {
+        if (resourceType !== "knowledge_space" && resourceType !== "channel") {
+          return Promise.resolve({ roots: [], total_matches: 0, truncated: false });
+        }
+        return getCreationSubjects({
+          resourceType,
+          subjectType: "department",
+          operation: "search",
+          keyword,
+          limit: 50,
+        }, signal ? { signal } : undefined);
+      }
+      if (!resourceId) {
+        return Promise.resolve({ roots: [], total_matches: 0, truncated: false });
+      }
+      return fetchSearch(
+        resourceType,
+        resourceId,
+        keyword,
+        50,
+        signal ? { signal } : undefined,
+      );
+    },
+    fetchPathTree: (departmentId, signal) => {
+      if (mode === "create") {
+        if (resourceType !== "knowledge_space" && resourceType !== "channel") {
+          return Promise.resolve({ roots: [], total_matches: 0, truncated: false });
+        }
+        return getCreationSubjects({
+          resourceType,
+          subjectType: "department",
+          operation: "path_tree",
+          departmentId,
+        }, signal ? { signal } : undefined);
+      }
+      if (!resourceId) {
+        return Promise.resolve({ roots: [], total_matches: 0, truncated: false });
+      }
+      return fetchPathTree(
+        resourceType,
+        resourceId,
+        departmentId,
+        signal ? { signal } : undefined,
+      );
+    },
   });
 
   // Remember each selected dept's path at pick time so implicit selection can be
   // computed by path even after a search swaps the rendered nodes.
   const selectedPathRef = useRef<Map<number, string>>(new Map());
+  const revealingIdsRef = useRef<Set<number>>(new Set());
 
   const departmentSubjects = useMemo(
     () => value.filter((s) => s.type === "department"),
@@ -68,6 +142,20 @@ export function SubjectSearchDepartment({
     () => new Set(departmentSubjects.map((s) => s.id)),
     [departmentSubjects]
   );
+  const getTreeNode = tree.getNode;
+  const revealTreeNode = tree.reveal;
+
+  useEffect(() => {
+    for (const subject of departmentSubjects) {
+      if (getTreeNode(subject.id) || revealingIdsRef.current.has(subject.id)) continue;
+      revealingIdsRef.current.add(subject.id);
+      void revealTreeNode(subject.id)
+        .catch(() => undefined)
+        .finally(() => {
+          revealingIdsRef.current.delete(subject.id);
+        });
+    }
+  }, [departmentSubjects, getTreeNode, revealTreeNode]);
   const selectedPaths = departmentSubjects
     .map((s) => tree.getNode(s.id)?.path ?? selectedPathRef.current.get(s.id))
     .filter((p): p is string => !!p);
@@ -90,7 +178,7 @@ export function SubjectSearchDepartment({
   const toggle = (node: GrantDepartmentNode) => {
     if (disabledIdSet.has(node.id)) return;
     if (selectedIdSet.has(node.id)) {
-      onChange(value.filter((s) => s.id !== node.id));
+      onChange(value.filter((s) => s.type !== "department" || s.id !== node.id));
       return;
     }
     // Implicitly-selected children can't be picked/unpicked individually; the
@@ -130,9 +218,7 @@ export function SubjectSearchDepartment({
           </div>
         )}
         {!busy && roots.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_departments")}
-          </div>
+          <PermissionEmptyState message={localize("com_permission.empty_departments")} />
         )}
         {!busy &&
           roots.map((node) => (

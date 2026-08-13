@@ -43,44 +43,15 @@ import { DepartmentTreeNode } from "@/types/api/department"
 import { ROLE } from "@/types/api/user"
 import { useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-
-const WORKBENCH_PARENT_ID = "workstation"
-const ADMIN_PARENT_ID = "admin"
-const WORKBENCH_CHILD_MENUS = ["home", "apps", "subscription", "knowledge_space"] as const
-const ADMIN_CHILD_MENUS = [
-  "board",
-  "model",
-  "log",
-  "knowledge",
-  "create_knowledge",
-  "build",
-  "create_app",
-  "evaluation",
-  "dataset",
-  "mark_task",
-] as const
-/**
- * 工作台「首页」下挂的子能力：任务模式。它本身就是客户端早已消费的菜单键
- * `linsight_task_mode`（user.plugins）——开启后工作台首页展示技能与任务模式
- * 选择、左上角「新建任务」入口；关闭则全部隐藏。归属首页，作为其依赖项。
- */
-const TASK_MODE_MENU_ID = "linsight_task_mode"
-const WORKBENCH_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
-  home: [TASK_MODE_MENU_ID],
-}
-/**
- * 某些子菜单依赖另一个子菜单（父项关闭则隐藏、且会级联移除）。
- * `create_app` 依赖 `build`；"新建知识库"依赖 `knowledge`（PRD 3.3.3）。
- */
-const ADMIN_CHILD_DEPENDENTS: Record<string, readonly string[]> = {
-  build: ["create_app"],
-  knowledge: ["create_knowledge"],
-}
-/** 工作台 + 管理后台父子依赖合并表，供加载 / 保存 / 级联删除统一引用。 */
-const CHILD_DEPENDENTS: Record<string, readonly string[]> = {
-  ...WORKBENCH_CHILD_DEPENDENTS,
-  ...ADMIN_CHILD_DEPENDENTS,
-}
+import {
+  ADMIN_CHILD_MENUS,
+  ADMIN_PARENT_ID,
+  CHILD_DEPENDENTS,
+  normalizeRoleMenuSelection,
+  TASK_MODE_MENU_ID,
+  WORKBENCH_CHILD_MENUS,
+  WORKBENCH_PARENT_ID,
+} from "./roleMenuSelection"
 
 /** Knowledge-space total upload quota (GB); one decimal, inclusive bounds. */
 const KB_SPACE_FILE_GB_MIN = 0.1
@@ -294,11 +265,7 @@ export default function Roles() {
       setIsMenuLoading(false)
       return
     }
-    let ids = [...menuRes].filter((id) => id !== "system_config")
-    // 依赖约束：若父项未启用则剔除依赖项（例如 create_app 依赖 build、任务模式依赖首页）。
-    Object.entries(CHILD_DEPENDENTS).forEach(([parent, deps]) => {
-      if (!ids.includes(parent)) ids = ids.filter((id) => !deps.includes(id))
-    })
+    const ids = normalizeRoleMenuSelection(menuRes)
     setMenuIds(ids)
     const qc = (role.quota_config || {}) as Record<string, unknown>
     // Scoped keys supersede the legacy global flag; fall back to it for roles
@@ -374,19 +341,15 @@ export default function Roles() {
     }
     setIsSaving(true)
     const quota_config = buildQuotaConfig()
-    // 保存前清理依赖：父项未开则不应持久化依赖项（例如 build 关闭时移除 create_app）。
-    const sanitizedMenuIds = menuIds.filter((id) => {
-      const parent = Object.entries(CHILD_DEPENDENTS).find(([, deps]) =>
-        (deps as readonly string[]).includes(id),
-      )?.[0]
-      return !parent || menuIds.includes(parent)
-    })
+    // Build the payload only from the current UI selection. API-only legacy or
+    // unknown values must not survive an edit just because they were loaded.
+    const selectedMenuIds = normalizeRoleMenuSelection(menuIds)
     const payload = {
       role_name: roleName.trim(),
       department_id: departmentId === "none" ? null : Number(departmentId),
       quota_config,
       remark: "PRD 2.5 role",
-      menu_ids: sanitizedMenuIds,
+      menu_ids: selectedMenuIds,
     }
     try {
       if (!activeRole) {

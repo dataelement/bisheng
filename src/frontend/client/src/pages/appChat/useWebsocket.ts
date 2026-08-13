@@ -322,7 +322,7 @@ export const useWebSocket = (helpers) => {
                         })
                     }
                     break
-                case ActionType.INPUT:
+                case ActionType.INPUT: {
                     const sessionInfo = sessionInfoMap.get(helpers.chatId)
                     const node = submitData.flow.data.nodes.find(node => node.id === sessionInfo?.node_id)
                     const tab = node.data.tab.value
@@ -352,6 +352,17 @@ export const useWebSocket = (helpers) => {
                         message = fileNames.length > 0 ? fileNames.join('\n') + '\n' + _value : _value;
                     }
 
+                    // Attachments travel twice on purpose: `dialog_files_content`
+                    // is what the workflow node reads, while `files` keeps them
+                    // as structured data so the message can render them (and the
+                    // backend can make them permanent) instead of relying on the
+                    // filenames glued onto the text.
+                    const messageFiles = (submitData.files || []).map((f) => ({
+                        file_id: f.file_id ?? f.id,
+                        file_name: f.name ?? f.file_name,
+                        file_url: f.filepath ?? f.file_path ?? f.path,
+                    }))
+
                     sendWsMsg({
                         action: 'input',
                         chat_id: submitData.chatId,
@@ -363,6 +374,7 @@ export const useWebSocket = (helpers) => {
                                     dialog_files_content: filePath
                                 },
                                 message,
+                                files: messageFiles,
                                 message_id: sessionInfo.message_id,
                                 category: 'question',
                                 extra: '',
@@ -371,8 +383,9 @@ export const useWebSocket = (helpers) => {
                         },
                     })
 
-                    helpers.message.createSendMsg(message)
+                    helpers.message.createSendMsg(message, messageFiles)
                     break
+                }
                 case ActionType.SKILL_INPUT:
                     sendWsMsg(submitData.data)
                     helpers.message.createSendMsg(submitData.input)

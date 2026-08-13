@@ -8,6 +8,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate, Outlet, useParams } from 'react-router-dom';
 import ChatRoute from './ChatRoute';
 import LoginLayout from './Layouts/Login';
+import { RequireLogin } from './RequireLogin';
 import RouteErrorBoundary from './RouteErrorBoundary';
 // import ShareRoute from './ShareRoute';
 import MainLayout from '@/layouts/MainLayout';
@@ -35,6 +36,16 @@ const Share = lazy(() => import('@/pages/share'));
 const Sop = lazy(() => import('@/components/Sop'));
 const Subscription = lazy(() => import('~/pages/Subscription'));
 const Knowledge = lazy(() => import('~/pages/knowledge'));
+const ChannelSettingsPage = lazy(() =>
+  import('~/pages/Subscription/ChannelSettings/ChannelSettingsPage').then((module) => ({
+    default: module.ChannelSettingsPage,
+  })),
+);
+const KnowledgeSpaceSettingsPage = lazy(() =>
+  import('~/pages/knowledge/SpaceSettings/KnowledgeSpaceSettingsPage').then((module) => ({
+    default: module.KnowledgeSpaceSettingsPage,
+  })),
+);
 const FilePreviewPage = lazy(() => import('~/pages/knowledge/FilePreview/FilePreviewPage'));
 const ArticlePage = lazy(() => import('~/pages/Subscription/Article/ArticlePage'));
 const DevLogin = lazy(() => import('~/pages/DevLogin'));
@@ -213,6 +224,16 @@ export const router = createBrowserRouter([
               <Subscription />
             </MenuApprovalPluginGate>
           )},
+          { path: 'channel/create', element: suspended(
+            <MenuApprovalPluginGate pluginId="subscription">
+              <ChannelSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'channel/:channelId/settings', element: suspended(
+            <MenuApprovalPluginGate pluginId="subscription">
+              <ChannelSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
           { path: 'channel/share/:channelId', element: suspended(<Subscription />) },
           { path: 'channel/:channelId', element: suspended(
             <MenuApprovalPluginGate pluginId="subscription">
@@ -222,6 +243,16 @@ export const router = createBrowserRouter([
           { path: 'knowledge', element: suspended(
             <MenuApprovalPluginGate pluginId="knowledge_space">
               <Knowledge />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/create', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <KnowledgeSpaceSettingsPage />
+            </MenuApprovalPluginGate>
+          )},
+          { path: 'knowledge/space/:spaceId/settings', element: suspended(
+            <MenuApprovalPluginGate pluginId="knowledge_space">
+              <KnowledgeSpaceSettingsPage />
             </MenuApprovalPluginGate>
           )},
           { path: 'knowledge/space/:spaceId', element: suspended(
@@ -242,7 +273,10 @@ export const router = createBrowserRouter([
       { path: 'chat/flow/auth/:flowId', element: suspended(<StandaloneChatPage mode="auth" flowType="workflow" />) },
       { path: 'chat/assistant/auth/:flowId', element: suspended(<StandaloneChatPage mode="auth" flowType="assistant" />) },
 
-      { path: 'share/:token/:vid?', element: suspended(<Share />) },
+      // Share links are viewable by any LOGGED-IN user (owner or not) — every
+      // endpoint behind them is login-gated, so an anonymous visitor must go
+      // through login first and is returned here afterwards.
+      { path: 'share/:token/:vid?', element: suspended(<RequireLogin><Share /></RequireLogin>) },
       { path: 'knowledge/file/:fileId', element: suspended(<FilePreviewPage />) },
       { path: 'channel/:channelId/article/:articleId', element: suspended(<ArticlePage />) },
     ],

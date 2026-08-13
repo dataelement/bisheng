@@ -24,9 +24,11 @@ import { ToggleSection } from "./ToggleSection";
 import ToolsConfig, { ToolConfig as ToolConfigType } from "./ToolsConfig";
 import RecommendedAppsConfig from "./RecommendedAppsConfig";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
+import { clampMenuName } from "./menuDisplayName";
 import { canManageWorkbenchConfig } from "@/pages/ModelPage/manage/permissions";
 
 export interface FormErrors {
+    homeMenuDisplayName: string;
     welcomeMessage: string;
     functionDescription: string;
     tabDisplayName: string;
@@ -42,6 +44,10 @@ export interface FormErrors {
 
 export interface ChatConfigForm {
     menuShow: boolean;
+    /** 首页在 client 侧边栏的菜单显示名称，为空时客户端回退到本地化默认文案 */
+    homeMenuDisplayName: string;
+    /** 应用菜单显示名称：在「应用」tab 编辑，这里只做原样回传，避免保存首页时被清空 */
+    appCenterMenuDisplayName: string;
     systemPrompt: string;
     sidebarIcon: {
         enabled: boolean;
@@ -93,7 +99,8 @@ export interface ChatConfigForm {
         tab_display_name: string;
     };
 }
-export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
+export default function DailyChatConfig({ scopeVersion = 0 }: { scopeVersion?: number }) {
+    const homeMenuDisplayNameRef = useRef<HTMLDivElement>(null);
     const welcomeMessageRef = useRef<HTMLDivElement>(null);
     const functionDescriptionRef = useRef<HTMLDivElement>(null);
     const inputPlaceholderRef = useRef<HTMLDivElement>(null);
@@ -111,10 +118,12 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
         configMeta,
         setFormData,
         handleInputChange,
+        handleMenuNameChange,
         handleLinsightChange,
         toggleFeature,
         handleSave
     } = useChatConfig({
+        homeMenuDisplayNameRef,
         welcomeMessageRef,
         functionDescriptionRef,
         inputPlaceholderRef,
@@ -180,6 +189,16 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
                             enabled={formData.menuShow}
                             onToggle={(enabled) => setFormData(prev => ({ ...prev, menuShow: enabled }))}
                         >{null}</ToggleSection> */}
+                        {/* Sidebar entry name — required, capped at MENU_NAME_MAX_WIDTH */}
+                        <div ref={homeMenuDisplayNameRef}>
+                            <FormInput
+                                label={t('chatConfig.menuDisplayName')}
+                                value={formData.homeMenuDisplayName}
+                                error={errors.homeMenuDisplayName}
+                                placeholder={t('bench.home')}
+                                onChange={(v) => handleMenuNameChange('homeMenuDisplayName', v)}
+                            />
+                        </div>
                         {/* Icon Uploads */}
                         <p className="text-lg font-bold mb-2">{t('chatConfig.iconUpload')}</p>
                         <div className="flex gap-8 mb-6">
@@ -347,6 +366,7 @@ export default function index({ scopeVersion = 0 }: { scopeVersion?: number }) {
 
 
 interface UseChatConfigProps {
+    homeMenuDisplayNameRef: React.RefObject<HTMLDivElement>;
     welcomeMessageRef: React.RefObject<HTMLDivElement>;
     functionDescriptionRef: React.RefObject<HTMLDivElement>;
     inputPlaceholderRef: React.RefObject<HTMLDivElement>;
@@ -364,6 +384,9 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         // menuShow: true,
         // Fresh-deployment default — overwritten by API value when present.
         systemPrompt: t('chatConfig.systemPrompt2'),
+        // 接口为空时展示默认菜单名，用户可直接改
+        homeMenuDisplayName: t('bench.home'),
+        appCenterMenuDisplayName: '',
         sidebarIcon: { enabled: true, image: '', relative_path: '' },
         assistantIcon: { enabled: true, image: '', relative_path: '' },
         welcomeMessage: '',
@@ -495,6 +518,11 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
 
                 return {
                     ...prev,
+                    // 空字符串同样视为「未配置」，回落到默认菜单名
+                    homeMenuDisplayName: typeof cfg.homeMenuDisplayName === 'string' && cfg.homeMenuDisplayName.trim()
+                        ? cfg.homeMenuDisplayName.trim()
+                        : prev.homeMenuDisplayName,
+                    appCenterMenuDisplayName: cfg.appCenterMenuDisplayName ?? prev.appCenterMenuDisplayName,
                     welcomeMessage: cfg.welcomeMessage ?? prev.welcomeMessage,
                     functionDescription: cfg.functionDescription ?? prev.functionDescription,
                     inputPlaceholder: cfg.inputPlaceholder ?? prev.inputPlaceholder,
@@ -527,6 +555,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
     }, [scopeVersion, t]);
 
     const [errors, setErrors] = useState<FormErrors>({
+        homeMenuDisplayName: '',
         welcomeMessage: '',
         functionDescription: '',
         tabDisplayName: '',
@@ -549,6 +578,12 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         } else {
             setErrors(prev => ({ ...prev, [field]: '' }));
         }
+    };
+
+    // 菜单显示名称：超出显示宽度的部分直接截掉，非空校验留到保存时做
+    const handleMenuNameChange = (field: 'homeMenuDisplayName', value: string) => {
+        setFormData(prev => ({ ...prev, [field]: clampMenuName(value) }));
+        setErrors(prev => ({ ...prev, [field]: '' }));
     };
 
     // F035: edits to the merged task-mode fields (legacy linsight config).
@@ -578,6 +613,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         let firstErrorRef: React.RefObject<HTMLDivElement> | null = null;
         const modelErrorMessages: string[] = [];
         const newErrors: FormErrors = {
+            homeMenuDisplayName: '',
             welcomeMessage: '',
             functionDescription: '',
             tabDisplayName: '',
@@ -590,6 +626,13 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
             applicationCenterDescription: '',
             systemPrompt: '',
         };
+
+        // 菜单显示名称必填（长度已在输入时截断，这里只查空）
+        if (!formData.homeMenuDisplayName.trim()) {
+            newErrors.homeMenuDisplayName = t('chatConfig.errors.required');
+            if (!firstErrorRef) firstErrorRef = refs.homeMenuDisplayNameRef;
+            isValid = false;
+        }
 
         // F035: 日常模式展示名称 was removed from the UI (the value still
         // round-trips through dataToSave) — no validation for it anymore.
@@ -676,6 +719,9 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         }
 
         const dataToSave = {
+            // Blank stays blank: the client falls back to its localized menu name.
+            homeMenuDisplayName: formData.homeMenuDisplayName.trim(),
+            appCenterMenuDisplayName: formData.appCenterMenuDisplayName.trim(),
             sidebarIcon: formData.sidebarIcon,
             assistantIcon: formData.assistantIcon,
             welcomeMessage: formData.welcomeMessage.trim(),
@@ -731,6 +777,7 @@ const useChatConfig = (refs: UseChatConfigProps, scopeVersion: number) => {
         setErrors,
         configMeta,
         handleInputChange,
+        handleMenuNameChange,
         handleLinsightChange,
         toggleFeature,
         handleSave

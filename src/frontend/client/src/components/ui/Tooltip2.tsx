@@ -38,8 +38,13 @@ function TooltipContent({
     sideOffset = 0,
     children,
     noArrow = false,
+    arrowClassName,
     ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content> & { noArrow?: boolean }) {
+}: React.ComponentProps<typeof TooltipPrimitive.Content> & {
+    noArrow?: boolean
+    /** Recolor the arrow alongside a `className` that changes the panel background. */
+    arrowClassName?: string
+}) {
     return (
         <TooltipPrimitive.Portal>
             <TooltipPrimitive.Content
@@ -52,7 +57,7 @@ function TooltipContent({
                 {...props}
             >
                 {children}
-                {!noArrow && <TooltipPrimitive.Arrow className="bg-black fill-black z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]" />}
+                {!noArrow && <TooltipPrimitive.Arrow className={cn("bg-black fill-black z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px]", arrowClassName)} />}
             </TooltipPrimitive.Content>
         </TooltipPrimitive.Portal>
     )

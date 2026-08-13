@@ -34,7 +34,6 @@ interface KnowledgeSpaceItemProps {
     onLeave: (id: string) => void;
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
-    onManageMembers?: (space: KnowledgeSpace) => void;
     /** F040: lazily resolve this space's action permissions when its menu opens. */
     onMenuOpen?: () => void;
     canEditSpace?: boolean;
@@ -57,7 +56,6 @@ export default function KnowledgeSpaceItem({
     onLeave,
     onPin,
     onSettings,
-    onManageMembers,
     onMenuOpen,
     canEditSpace = false,
     canDeleteSpace = false,
@@ -100,25 +98,10 @@ export default function KnowledgeSpaceItem({
         onAfterNavigate?.();
     };
 
-    const rename = (e: React.FocusEvent<HTMLInputElement>) => {
-        const newName = e.target.value.trim();
-        setIsEditing(false);
-        if (!newName) return;
-        if (getFullWidthLength(newName) > 50) {
-            return showToast({
-                message: localize("com_knowledge.max_20_chars_spaced"),
-                severity: NotificationSeverity.ERROR
-            });
-        }
-        if (newName && newName !== space.name) {
-            onUpdate({ ...space, name: newName });
-        }
-    };
-
     // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
     const moreMenuItems = (
         <>
-            {canEditSpace && (
+            {(canEditSpace || canManageMembers) && (
                 <DropdownMenuItem
                     className={sidebarListMoreMenuItemClassName}
                     onClick={() => onSettings?.(space)}
@@ -126,17 +109,6 @@ export default function KnowledgeSpaceItem({
                     <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                     <span className={sidebarListMoreMenuLabelClassName}>
                         {localize("com_knowledge.space_settings")}
-                    </span>
-                </DropdownMenuItem>
-            )}
-            {canManageMembers && (
-                <DropdownMenuItem
-                    className={sidebarListMoreMenuItemClassName}
-                    onClick={() => onManageMembers?.(space)}
-                >
-                    <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
-                    <span className={sidebarListMoreMenuLabelClassName}>
-                        {localize("com_knowledge.member_management")}
                     </span>
                 </DropdownMenuItem>
             )}

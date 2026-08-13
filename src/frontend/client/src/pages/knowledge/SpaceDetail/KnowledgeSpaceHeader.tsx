@@ -403,7 +403,7 @@ export function KnowledgeSpaceHeader({
                                 </button>
                                 <div className="mx-1 h-4 w-px shrink-0 bg-fill-3" aria-hidden />
                                 */}
-                                <h1 className="min-w-0 truncate text-base font-medium text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
+                                <h1 className="min-w-0 truncate text-base font-normal text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {currentPath[currentPath.length - 1]?.name || space.name}
                                 </h1>
                             </>

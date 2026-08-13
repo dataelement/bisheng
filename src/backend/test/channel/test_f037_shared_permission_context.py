@@ -31,7 +31,7 @@ from bisheng.channel.domain.services import channel_service as channel_service_m
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.models.space_channel_member import MembershipStatusEnum, UserRoleEnum
 
-_RP = "bisheng.permission.api.endpoints.resource_permission._get_bindings"
+_RP = "bisheng.permission.domain.services.relation_model_store.get_bindings"
 _FGPS = "bisheng.channel.domain.services.channel_service.FineGrainedPermissionService"
 
 
