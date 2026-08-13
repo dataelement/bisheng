@@ -113,6 +113,7 @@ async def _flush_award_notifies(outcomes: list[AwardOutcome]) -> None:
                     item.rule_code or "",
                     rule_name=item.rule_name or item.rule_code or "",
                     delta=int(item.result.applied_delta) if item.result else 0,
+                    **(item.notify_extra or {}),
                 )
                 await notify.notify(
                     user_id=int(item.notify_user_id),

@@ -91,8 +91,23 @@ class PointAdminUserItem(BaseModel):
     user_id: int
     user_name: str = ""
     dept_name: str = "—"
+    user_type: str = "普通用户"
     balance: int
     month_score: int = 0
+
+
+class PointAdminDepartmentOption(BaseModel):
+    """用户积分列表部门筛选项。"""
+
+    id: int
+    name: str
+
+
+class PointAdminUserFilterOptions(BaseModel):
+    """用户积分列表筛选下拉数据。"""
+
+    departments: list[PointAdminDepartmentOption] = Field(default_factory=list)
+    user_types: list[str] = Field(default_factory=list)
 
 
 class PointAuditLogItem(BaseModel):
@@ -108,6 +123,7 @@ class PointAuditLogItem(BaseModel):
     rule_code: str | None = None
     source: str
     operator_id: int | None = None
+    operator_name: str = ""
     remark: str | None = None
     occurred_at: datetime | None = None
 
