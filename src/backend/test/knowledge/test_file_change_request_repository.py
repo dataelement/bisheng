@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -16,6 +18,10 @@ from bisheng.knowledge.domain.models.knowledge_space_file_change_request import 
     KnowledgeSpaceFileChangeLockScope,
     KnowledgeSpaceFileChangeRequest,
     KnowledgeSpaceFileChangeResourceType,
+)
+from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
+    KnowledgeSpaceUploadStage,
+    KnowledgeSpaceUploadStageState,
 )
 from bisheng.knowledge.domain.repositories.knowledge_space_file_change_footprint_repository import (
     FootprintEntry,
@@ -39,6 +45,7 @@ async def repository_engine():
         Knowledge.__table__,
         KnowledgeSpaceFileChangeRequest.__table__,
         KnowledgeSpaceFileChangeFootprint.__table__,
+        KnowledgeSpaceUploadStage.__table__,
     ]
     async with engine.begin() as connection:
         await connection.run_sync(lambda conn: SQLModel.metadata.create_all(conn, tables=tables))
@@ -153,6 +160,75 @@ async def test_request_repository_always_scopes_reads_and_updates_by_tenant(repo
             )
         ).one()
         assert foreign.approval_instance_id == 1002
+
+
+async def test_request_view_keeps_non_upload_request_without_optional_stage(repository_engine):
+    set_current_tenant_id(17)
+    async with AsyncSession(bind=repository_engine, expire_on_commit=False) as session:
+        async with session.begin():
+            stage = KnowledgeSpaceUploadStage(
+                tenant_id=17,
+                space_id=101,
+                uploader_user_id=9,
+                upload_id="upload-101",
+                object_name="staged/upload-101",
+                file_name="upload.pdf",
+                file_size=128,
+                content_hash="upload-hash",
+                state=KnowledgeSpaceUploadStageState.ATTACHED,
+                expire_at=datetime(2030, 1, 1),
+            )
+            session.add(stage)
+            await session.flush()
+            assert stage.id is not None
+
+            upload = KnowledgeSpaceFileChangeRequest(
+                tenant_id=17,
+                space_id=101,
+                action=KnowledgeSpaceFileChangeAction.UPLOAD,
+                resource_type=KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD,
+                applicant_user_id=9,
+                business_key="upload-request",
+                request_fingerprint="upload-fingerprint",
+                upload_stage_id=stage.id,
+                file_name="upload.pdf",
+            )
+            rename = KnowledgeSpaceFileChangeRequest(
+                tenant_id=17,
+                space_id=101,
+                action=KnowledgeSpaceFileChangeAction.RENAME,
+                resource_type=KnowledgeSpaceFileChangeResourceType.KNOWLEDGE_FILE,
+                resource_id=501,
+                applicant_user_id=9,
+                business_key="rename-request",
+                request_fingerprint="rename-fingerprint",
+                action_snapshot={"resource_name": "before.pdf"},
+            )
+            session.add(upload)
+            session.add(rename)
+            await session.flush()
+            assert upload.id is not None
+            assert rename.id is not None
+
+        repository = KnowledgeSpaceFileChangeRequestRepository(session)
+        upload_view = await repository.get_request_view(
+            tenant_id=17,
+            space_id=101,
+            request_id=upload.id,
+        )
+        rename_view = await repository.get_request_view(
+            tenant_id=17,
+            space_id=101,
+            request_id=rename.id,
+        )
+
+    assert upload_view is not None
+    assert upload_view.upload_id == "upload-101"
+    assert upload_view.stage_state == KnowledgeSpaceUploadStageState.ATTACHED
+    assert rename_view is not None
+    assert rename_view.upload_id is None
+    assert rename_view.stage_state is None
+    assert rename_view.resource_name == "before.pdf"
 
 
 async def test_active_resource_matches_use_only_authoritative_root_footprint(repository_engine):
@@ -650,9 +726,7 @@ async def test_resource_lock_and_approver_reconciliation_status_sets_are_separat
             KnowledgeSpaceFileChangeExecutionState.COMPENSATING,
         }
     )
-    assert APPROVER_RECONCILABLE_STATUSES == frozenset(
-        {KnowledgeSpaceFileChangeExecutionState.NOT_STARTED}
-    )
+    assert APPROVER_RECONCILABLE_STATUSES == frozenset({KnowledgeSpaceFileChangeExecutionState.NOT_STARTED})
     assert KnowledgeSpaceFileChangeExecutionState.APPLIED not in APPROVER_RECONCILABLE_STATUSES
 
     set_current_tenant_id(17)

@@ -17,6 +17,17 @@ interface ApiResponse<T> {
     data: T;
 }
 
+function unwrapFileChangeResponse<T>(response: ApiResponse<T>): T {
+    if (response.status_code !== 200) {
+        const error = new Error(
+            response.status_message || `file change request failed (${response.status_code})`,
+        ) as Error & { status_code: number };
+        error.status_code = response.status_code;
+        throw error;
+    }
+    return response.data;
+}
+
 // ─────────────────────────────────────────────
 // Enums (kept aligned with backend value strings)
 // ─────────────────────────────────────────────
@@ -1883,8 +1894,9 @@ export async function listPendingUploadFileChangesApi(
             page_size: params.pageSize,
         },
         paramsSerializer: request.paramsSerializer,
+        skip403Redirect: true,
     });
-    const payload = res.data;
+    const payload = unwrapFileChangeResponse(res);
     return {
         data: extractList<RawPendingUploadFileChange>(payload?.data).map(mapPendingUploadFileChange),
         pageSize: Number(payload?.page_size ?? params.pageSize ?? 20),
@@ -1902,8 +1914,9 @@ export async function decidePendingUploadFileChangeApi(
     const res = await request.post<ApiResponse<RawFileChangeDetail>>(
         `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}/decision`,
         { action, comment },
+        { skip403Redirect: true },
     );
-    return mapFileChangeDetail(res.data);
+    return mapFileChangeDetail(unwrapFileChangeResponse(res));
 }
 
 export async function getFileChangeDetailApi(
@@ -1912,8 +1925,9 @@ export async function getFileChangeDetailApi(
 ): Promise<FileChangeDetail> {
     const res = await request.get<ApiResponse<RawFileChangeDetail>>(
         `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}`,
+        { skip403Redirect: true },
     );
-    return mapFileChangeDetail(res.data);
+    return mapFileChangeDetail(unwrapFileChangeResponse(res));
 }
 
 export interface FileChangePreview {
@@ -1927,10 +1941,12 @@ export async function getFileChangePreviewApi(
 ): Promise<FileChangePreview> {
     const res = await request.get<ApiResponse<{ preview_url: string; original_url?: string }>>(
         `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}/preview`,
+        { skip403Redirect: true },
     );
+    const payload = unwrapFileChangeResponse(res);
     return {
-        previewUrl: res.data.preview_url,
-        originalUrl: res.data.original_url,
+        previewUrl: payload.preview_url,
+        originalUrl: payload.original_url,
     };
 }
 
@@ -1938,10 +1954,12 @@ export async function retryFileChangeIngestApi(
     spaceId: string,
     requestId: number,
 ): Promise<FileChangeDetail> {
-    const res = await request.post(
+    const res = await request.post<ApiResponse<RawFileChangeDetail>>(
         `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}/retry-ingest`,
-    ) as ApiResponse<RawFileChangeDetail>;
-    return mapFileChangeDetail(res.data);
+        undefined,
+        { skip403Redirect: true },
+    );
+    return mapFileChangeDetail(unwrapFileChangeResponse(res));
 }
 
 export async function cleanupUploadFileChangeApi(
@@ -1950,8 +1968,9 @@ export async function cleanupUploadFileChangeApi(
 ): Promise<FileChangeDetail> {
     const res = await request.delete<ApiResponse<RawFileChangeDetail>>(
         `/api/v1/knowledge/space/${spaceId}/file-changes/${requestId}`,
+        { skip403Redirect: true },
     );
-    return mapFileChangeDetail(res.data);
+    return mapFileChangeDetail(unwrapFileChangeResponse(res));
 }
 
 /**

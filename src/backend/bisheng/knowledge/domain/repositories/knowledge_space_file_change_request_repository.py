@@ -118,35 +118,43 @@ class KnowledgeSpaceFileChangeRequestRepository:
     def _read_base_statement(*, tenant_id: int, space_id: int):
         tenant_id = int(tenant_id)
         space_id = int(space_id)
-        return (
-            select(
-                KnowledgeSpaceFileChangeRequest,
-                KnowledgeSpaceUploadStage.upload_id,
-                KnowledgeSpaceUploadStage.state,
-            )
-            .outerjoin(
-                KnowledgeSpaceUploadStage,
-                and_(
-                    KnowledgeSpaceUploadStage.tenant_id == tenant_id,
-                    KnowledgeSpaceUploadStage.id == KnowledgeSpaceFileChangeRequest.upload_stage_id,
-                ),
-            )
-            .where(
-                KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
-                KnowledgeSpaceFileChangeRequest.space_id == space_id,
-            )
+        return select(KnowledgeSpaceFileChangeRequest).where(
+            KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
+            KnowledgeSpaceFileChangeRequest.space_id == space_id,
         )
 
-    @staticmethod
-    def _to_read_rows(rows) -> list[FileChangeRequestReadRow]:
+    async def _to_read_rows(
+        self,
+        *,
+        tenant_id: int,
+        requests: Sequence[KnowledgeSpaceFileChangeRequest],
+    ) -> list[FileChangeRequestReadRow]:
+        stage_ids = sorted(
+            {int(request.upload_stage_id) for request in requests if request.upload_stage_id is not None}
+        )
+        stage_by_id: dict[int, KnowledgeSpaceUploadStage] = {}
+        if stage_ids:
+            stages = list(
+                (
+                    await self.session.exec(
+                        select(KnowledgeSpaceUploadStage).where(
+                            KnowledgeSpaceUploadStage.tenant_id == int(tenant_id),
+                            KnowledgeSpaceUploadStage.id.in_(stage_ids),
+                        )
+                    )
+                ).all()
+            )
+            stage_by_id = {int(stage.id): stage for stage in stages if stage.id is not None}
+
         result: list[FileChangeRequestReadRow] = []
-        for request, upload_id, stage_state in rows:
+        for request in requests:
             snapshot = dict(request.action_snapshot or {})
+            stage = stage_by_id.get(int(request.upload_stage_id)) if request.upload_stage_id is not None else None
             result.append(
                 FileChangeRequestReadRow(
                     request=request,
-                    upload_id=upload_id,
-                    stage_state=stage_state,
+                    upload_id=stage.upload_id if stage is not None else None,
+                    stage_state=stage.state if stage is not None else None,
                     applicant_user_name=snapshot.get("applicant_user_name"),
                     resource_name=str(snapshot.get("resource_name") or request.file_name or ""),
                 )
@@ -163,8 +171,8 @@ class KnowledgeSpaceFileChangeRequestRepository:
         statement = self._read_base_statement(tenant_id=tenant_id, space_id=space_id).where(
             KnowledgeSpaceFileChangeRequest.id == int(request_id)
         )
-        rows = list((await self.session.exec(statement)).all())
-        result = self._to_read_rows(rows)
+        requests = list((await self.session.exec(statement)).all())
+        result = await self._to_read_rows(tenant_id=tenant_id, requests=requests)
         return result[0] if result else None
 
     async def list_upload_request_views(
@@ -207,10 +215,10 @@ class KnowledgeSpaceFileChangeRequestRepository:
             KnowledgeSpaceFileChangeRequest.create_time.desc(),
             KnowledgeSpaceFileChangeRequest.id.desc(),
         ).limit(bounded_limit + 1)
-        rows = list((await self.session.exec(statement)).all())
-        has_more = len(rows) > bounded_limit
+        requests = list((await self.session.exec(statement)).all())
+        has_more = len(requests) > bounded_limit
         return (
-            self._to_read_rows(rows[:bounded_limit]),
+            await self._to_read_rows(tenant_id=tenant_id, requests=requests[:bounded_limit]),
             has_more,
         )
 
@@ -229,8 +237,8 @@ class KnowledgeSpaceFileChangeRequestRepository:
             statement = statement.where(
                 KnowledgeSpaceFileChangeRequest.approval_instance_id.in_([int(row) for row in instance_ids])
             )
-        rows = list((await self.session.exec(statement)).all())
-        return self._to_read_rows(rows)
+        requests = list((await self.session.exec(statement)).all())
+        return await self._to_read_rows(tenant_id=tenant_id, requests=requests)
 
     async def get_request_views_by_request_ids(
         self,
@@ -550,19 +558,16 @@ class KnowledgeSpaceFileChangeRequestRepository:
         """Build a tenant-explicit keyset page of reconcilable F046 requests."""
 
         tenant_id = int(tenant_id)
-        statement = (
-            select(
-                KnowledgeSpaceFileChangeRequest.tenant_id,
-                KnowledgeSpaceFileChangeRequest.id,
-                KnowledgeSpaceFileChangeRequest.approval_instance_id,
-                KnowledgeSpaceFileChangeRequest.space_id,
-                KnowledgeSpaceFileChangeRequest.update_time,
-            )
-            .where(
-                KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
-                KnowledgeSpaceFileChangeRequest.approval_instance_id.is_not(None),
-                KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
-            )
+        statement = select(
+            KnowledgeSpaceFileChangeRequest.tenant_id,
+            KnowledgeSpaceFileChangeRequest.id,
+            KnowledgeSpaceFileChangeRequest.approval_instance_id,
+            KnowledgeSpaceFileChangeRequest.space_id,
+            KnowledgeSpaceFileChangeRequest.update_time,
+        ).where(
+            KnowledgeSpaceFileChangeRequest.tenant_id == tenant_id,
+            KnowledgeSpaceFileChangeRequest.approval_instance_id.is_not(None),
+            KnowledgeSpaceFileChangeRequest.execution_state == KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
         )
         if after_update_time is not None:
             statement = statement.where(
