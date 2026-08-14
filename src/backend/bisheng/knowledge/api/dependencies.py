@@ -5,6 +5,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.search.elasticsearch.manager import get_es_connection
 from bisheng.knowledge.domain.repositories.implementations.department_file_view_grant_repository_impl import (
     DepartmentFileViewGrantRepositoryImpl,
 )
@@ -22,6 +23,12 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_similarity_candidate_repository_impl import (
     KnowledgeFileSimilarityCandidateRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_index_repository_impl import (
+    KnowledgeFulltextIndexRepositoryImpl,
+)
+from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_search_repository_impl import (
+    KnowledgeFulltextSearchRepositoryImpl,
 )
 from bisheng.knowledge.domain.repositories.implementations.knowledge_migration_repository_impl import (
     KnowledgeMigrationRepositoryImpl,
@@ -72,6 +79,11 @@ from bisheng.knowledge.domain.services.knowledge_parse_queue_service import (
     KnowledgeParseQueueService,
 )
 from bisheng.knowledge.domain.services.knowledge_permission_service import KnowledgePermissionService
+from bisheng.knowledge.domain.services.knowledge_fulltext_search_service import (
+    KnowledgeFulltextReadinessGuard,
+    KnowledgeFulltextSearchService,
+)
+from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
 from bisheng.message.api.dependencies import get_message_service as _get_message_service
 
 # Service imports are deferred to avoid circular imports
@@ -82,6 +94,31 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
     from bisheng.knowledge.domain.services.portal_pdf_download_service import PortalPdfDownloadService
+
+
+_knowledge_fulltext_readiness_guard: KnowledgeFulltextReadinessGuard | None = None
+_knowledge_fulltext_readiness_client_id: int | None = None
+
+
+async def get_knowledge_fulltext_search_service() -> KnowledgeFulltextSearchService:
+    """构建请求级搜索服务，并复用进程级只读索引就绪缓存。"""
+    global _knowledge_fulltext_readiness_client_id
+    global _knowledge_fulltext_readiness_guard
+
+    client = await get_es_connection()
+    client_id = id(client)
+    if (
+        _knowledge_fulltext_readiness_guard is None
+        or _knowledge_fulltext_readiness_client_id != client_id
+    ):
+        _knowledge_fulltext_readiness_guard = KnowledgeFulltextReadinessGuard(
+            KnowledgeFulltextIndexRepositoryImpl(client)
+        )
+        _knowledge_fulltext_readiness_client_id = client_id
+    return KnowledgeFulltextSearchService(
+        repository=KnowledgeFulltextSearchRepositoryImpl(client),
+        readiness_guard=_knowledge_fulltext_readiness_guard,
+    )
 
 
 async def get_knowledge_repository(
@@ -229,6 +266,9 @@ async def get_knowledge_space_service(
     department_file_view_access_service: DepartmentFileViewAccessService = Depends(
         get_department_file_view_access_service
     ),
+    knowledge_fulltext_search_service: KnowledgeFulltextSearchService = Depends(
+        get_knowledge_fulltext_search_service
+    ),
 ) -> "KnowledgeSpaceService":
     """Get KnowledgeSpaceService instance, bound to the current request and login user"""
     from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
@@ -254,6 +294,9 @@ async def get_knowledge_space_service(
     service.version_repo = version_repo
     service.doc_repo = doc_repo
     service.similar_candidate_repo = similar_candidate_repo
+    service.knowledge_file_repo = knowledge_file_repo
+    service.user_repository = UserRepositoryImpl(session)
+    service.knowledge_fulltext_search_service = knowledge_fulltext_search_service
     service.document_distribution_service = (
         KnowledgeDocumentDistributionService(
             session=session,
@@ -436,6 +479,12 @@ async def get_knowledge_version_service(
     )
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
+    # 该依赖也会在部分内部调用和单元测试中被直接调用，此时 FastAPI 的
+    # ``Depends`` 默认值不会被解析；复用仓储已绑定的真实会话。
+    resolved_session = session
+    if not isinstance(resolved_session, AsyncSession):
+        resolved_session = getattr(knowledge_file_repo, "session", resolved_session)
+
     service = KnowledgeVersionService(
         request=request,
         login_user=login_user,
@@ -445,7 +494,7 @@ async def get_knowledge_version_service(
         similar_candidate_repo=similar_candidate_repo,
     )
     # 版本关联变更时给收藏了受影响文件的用户发站内信，需要 message_service。
-    service.message_service = await _get_message_service(session)
+    service.message_service = await _get_message_service(resolved_session)
     service.department_file_view_access_service = department_file_view_access_service
     authorization_service = KnowledgeSpaceService(
         request=request,
@@ -470,7 +519,7 @@ async def get_knowledge_version_service(
     )
     service.document_distribution_service = (
         KnowledgeDocumentDistributionService(
-            session=session,
+            session=resolved_session,
             document_repository=doc_repo,
             version_repository=version_repo,
             file_repository=knowledge_file_repo,

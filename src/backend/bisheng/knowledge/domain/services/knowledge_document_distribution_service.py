@@ -39,6 +39,10 @@ from bisheng.knowledge.domain.services.knowledge_document_permission_activation_
     KnowledgeDocumentPermissionActivationError,
     KnowledgeDocumentPermissionActivationService,
 )
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    commit_tracked_fulltext_changes,
+    track_fulltext_file_changes,
+)
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 
 logger = logging.getLogger(__name__)
@@ -172,6 +176,13 @@ class KnowledgeDocumentDistributionService:
         self.file_repository = file_repository
         self.permission_activation_service = permission_activation_service
         self.permission_snapshot_loader = permission_snapshot_loader
+        track_fulltext_file_changes(self.session)
+
+    async def _commit(self) -> None:
+        await commit_tracked_fulltext_changes(
+            self.session,
+            trigger_type="document_distribution_updated",
+        )
 
     async def _lock_published_spaces(self, space_ids: set[int]) -> None:
         normalized = sorted({int(item) for item in space_ids})
@@ -250,7 +261,7 @@ class KnowledgeDocumentDistributionService:
         ):
             await self.session.delete(publish)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
 
     async def _load_or_create_primary_document(
         self,
@@ -321,7 +332,7 @@ class KnowledgeDocumentDistributionService:
         )
         self.session.add(document)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
         return CanonicalManagerSnapshot(
             document_id=int(document.id),
             manager_file_id=int(source_file.id),
@@ -356,7 +367,7 @@ class KnowledgeDocumentDistributionService:
         self.session.add(source_file)
         self.session.add(document)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
         return CanonicalManagerSnapshot(
             document_id=int(document.id),
             manager_file_id=int(source_file.id),
@@ -421,7 +432,7 @@ class KnowledgeDocumentDistributionService:
         source_file.applied_entry_generation = 0
         self.session.add(source_file)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
         return True
 
     async def _ensure_canonical_name_available(
@@ -640,7 +651,7 @@ class KnowledgeDocumentDistributionService:
         except Exception as exc:
             raise KnowledgeDocumentDistributionError("primary switch permission prewrite failed") from exc
 
-        await self.session.commit()
+        await self._commit()
         document = await self.document_repository.find_by_id_for_update(document_id)
         locked_files = await self.file_repository.find_by_ids_for_update(sorted(excluded_file_ids))
         file_map = {int(item.id): item for item in locked_files}
@@ -735,7 +746,7 @@ class KnowledgeDocumentDistributionService:
             document_id,
             int(document.content_generation),
         )
-        await self.session.commit()
+        await self._commit()
 
         try:
             await self.permission_activation_service.tuple_writer(
@@ -823,7 +834,7 @@ class KnowledgeDocumentDistributionService:
             document_id,
             int(document.content_generation),
         )
-        await self.session.commit()
+        await self._commit()
         return manager
 
     async def touch_manager_content(
@@ -855,7 +866,7 @@ class KnowledgeDocumentDistributionService:
             document_id,
             int(document.content_generation),
         )
-        await self.session.commit()
+        await self._commit()
         return int(document.content_generation)
 
     @staticmethod
@@ -959,7 +970,7 @@ class KnowledgeDocumentDistributionService:
             manager.entry_status == KnowledgeFileEntryStatus.PREPARING.value
             and int(manager.approval_instance_id or 0) == command.approval_instance_id
         ):
-            await self.session.commit()
+            await self._commit()
             return manager
         if manager.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
             raise KnowledgeDocumentDistributionError("publish manager permission transition is not retryable")
@@ -967,7 +978,7 @@ class KnowledgeDocumentDistributionService:
         manager.approval_instance_id = command.approval_instance_id
         self.session.add(manager)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
         return manager
 
     async def _prepare_publish_entry(
@@ -1012,7 +1023,7 @@ class KnowledgeDocumentDistributionService:
         )
         self.session.add(publish)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
         return publish
 
     async def _validate_merge_target(
@@ -1176,7 +1187,7 @@ class KnowledgeDocumentDistributionService:
             command.document_id,
             document.content_generation,
         )
-        await self.session.commit()
+        await self._commit()
 
     async def _activate_publish_merge(
         self,
@@ -1306,7 +1317,7 @@ class KnowledgeDocumentDistributionService:
         )
         await self.session.delete(source_document)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
 
     async def publish_approved(
         self,
@@ -1454,10 +1465,11 @@ class KnowledgeDocumentDistributionService:
         except Exception as exc:
             raise KnowledgeDocumentDistributionError("publish permission snapshot or prewrite failed") from exc
 
+        publish_entry_id = int(publish.id)
         try:
             await self._activate_publish_transfer(
                 command=command,
-                publish_entry_id=int(publish.id),
+                publish_entry_id=publish_entry_id,
                 source_md5=source_md5,
             )
         except Exception as exc:
@@ -1465,7 +1477,7 @@ class KnowledgeDocumentDistributionService:
             if isinstance(exc, KnowledgeDocumentDistributionError) and str(exc) == PUBLISH_DUPLICATE_CONTENT_MESSAGE:
                 await self._discard_duplicate_publish_preparation(
                     command=command,
-                    publish_entry_id=int(publish.id),
+                    publish_entry_id=publish_entry_id,
                 )
                 try:
                     await self.permission_activation_service.tuple_writer(prewrite_cleanup_operations)
@@ -1648,7 +1660,7 @@ class KnowledgeDocumentDistributionService:
             )
             self.session.add(share)
             await self.session.flush()
-            await self.session.commit()
+            await self._commit()
 
         try:
             source_entry = await self.file_repository.find_by_id(
@@ -1664,7 +1676,7 @@ class KnowledgeDocumentDistributionService:
             await self.permission_activation_service.prewrite_and_activate(
                 entry_id=int(share.id),
             )
-            await self.session.commit()
+            await self._commit()
         except Exception as exc:
             await self.session.rollback()
             raise KnowledgeDocumentDistributionError("share permission prewrite or activation failed") from exc
@@ -1721,7 +1733,7 @@ class KnowledgeDocumentDistributionService:
             raise KnowledgeDocumentDistributionError("share entry is not active")
         if not await self.file_repository.mark_entry_deleting(share_entry_id):
             raise KnowledgeDocumentDistributionError("share entry state changed concurrently")
-        await self.session.commit()
+        await self._commit()
 
         try:
             explicit_snapshot = list(await self.permission_snapshot_loader(share_entry_id))
@@ -1776,7 +1788,7 @@ class KnowledgeDocumentDistributionService:
         entry.projection_lease_owner = None
         entry.projection_lease_until = None
         self.session.add(entry)
-        await self.session.commit()
+        await self._commit()
         return RemoveShareEntryResult(
             document_id=document_id,
             share_entry_id=entry_id,
@@ -1934,7 +1946,7 @@ class KnowledgeDocumentDistributionService:
         self.session.add(document)
         self.session.add(manager)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
         return DeleteManagerResult(
             document_id=document_id,
             manager_file_id=manager_file_id,
@@ -1988,7 +2000,7 @@ class KnowledgeDocumentDistributionService:
             await self.session.flush()
         manager.entry_status = KnowledgeFileEntryStatus.PREPARING.value
         self.session.add(manager)
-        await self.session.commit()
+        await self._commit()
 
         try:
             predecessor_permissions = list(await self.permission_snapshot_loader(int(predecessor.id)))
@@ -2073,7 +2085,7 @@ class KnowledgeDocumentDistributionService:
         self.session.add(predecessor)
         self.session.add(tombstone)
         await self.session.flush()
-        await self.session.commit()
+        await self._commit()
 
         try:
             await self.permission_activation_service.tuple_writer([old_parent_delete])

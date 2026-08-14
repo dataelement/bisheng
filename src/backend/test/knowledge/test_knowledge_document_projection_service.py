@@ -133,6 +133,41 @@ async def test_projection_claims_short_lease_and_applies_both_generations(
 
 
 @pytest.mark.asyncio
+async def test_projection_rebuild_reopens_ready_share_without_changing_file_state(
+    async_db_session: AsyncSession,
+):
+    await _seed_entries(async_db_session)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    entry = await repository.find_by_id(102)
+    entry.applied_content_generation = entry.desired_content_generation
+    entry.applied_entry_generation = entry.desired_entry_generation
+    entry.projection_status = KnowledgeFileProjectionStatus.READY.value
+    async_db_session.add(entry)
+    await async_db_session.commit()
+
+    assert await repository.request_projection_rebuild(102)
+    assert not await repository.request_projection_rebuild(100)
+
+    pending = await repository.find_by_id(102)
+    assert pending.projection_status == KnowledgeFileProjectionStatus.PENDING.value
+
+    writer = AsyncMock()
+    result = await _service(async_db_session, writer=writer).process_entry(
+        tenant_id=7,
+        entry_id=102,
+        lease_owner="fulltext-repair",
+    )
+
+    refreshed = await repository.find_by_id(102)
+    source = writer.await_args.args[0]
+    assert result.status == "ready"
+    assert source.file_id == 100
+    assert refreshed.status == KnowledgeFileStatus.SUCCESS.value
+    assert refreshed.object_name is None
+    assert refreshed.projection_status == KnowledgeFileProjectionStatus.READY.value
+
+
+@pytest.mark.asyncio
 async def test_cross_space_manager_uses_publish_source_anchor(
     async_db_session: AsyncSession,
 ):

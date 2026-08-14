@@ -47,6 +47,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAStatus,
 )
 from bisheng.knowledge.domain.schemas.knowledge_rag_schema import QAKnowledgeMetadata
+from bisheng.knowledge.domain.services.knowledge_fulltext_parse_hook import (
+    persist_parse_result_with_fulltext_intent,
+)
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import KnowledgeSpaceAutoTagService
 from bisheng.knowledge.domain.services.knowledge_space_review_tag_service import KnowledgeSpaceReviewTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
@@ -369,7 +372,7 @@ def addEmbedding(
             status = "failed"
         finally:
             logger.info(f"process_file_end file_id={db_file.id} file_name={db_file.file_name}")
-            KnowledgeFileDao.update(db_file)
+            persist_parse_result_with_fulltext_intent(db_file)
             if db_file.status == KnowledgeFileStatus.SUCCESS.value:
                 KnowledgeSpaceContentStat.enqueue_file_stat_sync([db_file.id])
                 try:
@@ -529,16 +532,12 @@ def text_knowledge(db_knowledge: Knowledge, db_file: KnowledgeFile, documents: l
             es_client.add_texts(texts=[t.page_content for t in texts], metadatas=metadata)
         db_file.status = 2
         result["status"] = 2
-        with get_sync_db_session() as session:
-            session.add(db_file)
-            session.commit()
+        persist_parse_result_with_fulltext_intent(db_file, trigger_type="text_parse_success")
     except Exception as e:
         logger.error(e)
         db_file.status = 3
         db_file.remark = str(e)[:500]
-        with get_sync_db_session() as session:
-            session.add(db_file)
-            session.commit()
+        persist_parse_result_with_fulltext_intent(db_file, trigger_type="text_parse_failed")
         result["status"] = 3
         result["remark"] = str(e)[:500]
     return result

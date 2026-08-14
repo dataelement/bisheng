@@ -24,6 +24,16 @@ from bisheng.worker.knowledge.file_migration import (
     preflight_knowledge_migration,
     reconcile_knowledge_migrations,
 )
+from bisheng.worker.knowledge.fulltext_index import (
+    consume_knowledge_fulltext_outbox,
+    dispatch_knowledge_fulltext_outbox,
+    repair_knowledge_fulltext_source,
+)
+from bisheng.worker.knowledge.fulltext_engagement import (
+    rebuild_knowledge_fulltext_engagement,
+    reconcile_knowledge_fulltext_engagement,
+    sync_knowledge_fulltext_engagement,
+)
 from bisheng.worker.knowledge.file_title_worker import (
     extract_knowledge_file_title_celery,
 )

@@ -11,7 +11,7 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibrary
 def _make_session(*, existing_tag=None):
     session = MagicMock()
     find_result = MagicMock()
-    find_result.first.return_value = existing_tag
+    find_result.all.return_value = [existing_tag] if existing_tag is not None else []
     link_result = MagicMock()
     link_result.all.return_value = []
     session.exec.side_effect = [find_result, link_result]
@@ -38,14 +38,17 @@ def test_append_file_library_tags_creates_tag_in_first_library(mock_list_libs, m
 
     session.add.side_effect = fake_add
 
-    TagLibraryTagService.append_file_library_tags_sync(
-        space_id=137,
-        file_id=42,
-        tag_names=["新标签"],
-        user_id=1,
-        tenant_id=1,
-        resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
-    )
+    with patch(
+        "bisheng.knowledge.domain.services.tag_library_tag_service.request_file_sync_intents_sync",
+    ) as request_fulltext_sync:
+        TagLibraryTagService.append_file_library_tags_sync(
+            space_id=137,
+            file_id=42,
+            tag_names=["新标签"],
+            user_id=1,
+            tenant_id=1,
+            resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+        )
 
     assert len(created_objects) == 2
     tag_row = created_objects[0]
@@ -58,6 +61,7 @@ def test_append_file_library_tags_creates_tag_in_first_library(mock_list_libs, m
     assert link_row.resource_id == "42"
     assert link_row.resource_type == ResourceTypeEnum.SPACE_FILE.value
     mock_list_libs.assert_called_once_with(137)
+    request_fulltext_sync.assert_called_once()
     session.commit.assert_called_once()
 
 
@@ -79,18 +83,22 @@ def test_append_file_library_tags_reuses_existing_tag_without_insert(mock_list_l
     session = _make_session(existing_tag=existing)
     mock_session_ctx.return_value.__enter__.return_value = session
 
-    TagLibraryTagService.append_file_library_tags_sync(
-        space_id=137,
-        file_id=42,
-        tag_names=["已有标签"],
-        user_id=1,
-        tenant_id=1,
-        resource_type=TagResourceTypeEnum.SYSTEM_TAG,
-    )
+    with patch(
+        "bisheng.knowledge.domain.services.tag_library_tag_service.request_file_sync_intents_sync",
+    ) as request_fulltext_sync:
+        TagLibraryTagService.append_file_library_tags_sync(
+            space_id=137,
+            file_id=42,
+            tag_names=["已有标签"],
+            user_id=1,
+            tenant_id=1,
+            resource_type=TagResourceTypeEnum.SYSTEM_TAG,
+        )
 
     session.add.assert_called_once()
     link_row = session.add.call_args.args[0]
     assert link_row.tag_id == 55
+    request_fulltext_sync.assert_called_once()
     session.flush.assert_not_called()
 
 
@@ -105,14 +113,21 @@ def test_append_file_library_tags_skips_unknown_when_space_has_no_library(mock_l
     session = _make_session()
     mock_session_ctx.return_value.__enter__.return_value = session
 
-    TagLibraryTagService.append_file_library_tags_sync(
-        space_id=137,
-        file_id=42,
-        tag_names=["孤立标签"],
-        user_id=1,
-        tenant_id=1,
-        resource_type=TagResourceTypeEnum.SYSTEM_TAG,
-    )
+    with (
+        patch.object(TagLibraryTagService, "_first_library_id_for_space", return_value=None),
+        patch(
+            "bisheng.knowledge.domain.services.tag_library_tag_service.request_file_sync_intents_sync",
+        ) as request_fulltext_sync,
+    ):
+        TagLibraryTagService.append_file_library_tags_sync(
+            space_id=137,
+            file_id=42,
+            tag_names=["孤立标签"],
+            user_id=1,
+            tenant_id=1,
+            resource_type=TagResourceTypeEnum.SYSTEM_TAG,
+        )
 
     session.add.assert_not_called()
+    request_fulltext_sync.assert_not_called()
     session.commit.assert_not_called()

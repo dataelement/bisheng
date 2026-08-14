@@ -80,6 +80,8 @@ celery_task:
       queue: knowledge_celery
     bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery:
       queue: knowledge_celery
+    bisheng.worker.knowledge.fulltext_index.repair_source:
+      queue: knowledge_celery
     bisheng.worker.knowledge.pdf_artifact_worker.generate_knowledge_file_pdf_celery:
       queue: knowledge_pdf_celery
     bisheng.worker.points.tasks.process_points_award_event:

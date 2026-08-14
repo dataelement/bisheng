@@ -490,7 +490,7 @@ class ShougangPortalFileBrowseReq(BaseModel):
         description="Server-derived portal discovery scope",
     )
     tag: str | None = Field(default=None, description="Space tag name")
-    space_ids: list[int] = Field(default_factory=list, max_length=1000, description="Candidate knowledge space IDs")
+    space_ids: list[int] = Field(default_factory=list, description="Candidate knowledge space IDs")
     space_level: KnowledgeSpaceLevelEnum | None = Field(default=None, description="Knowledge space level filter")
     file_ext: str | None = Field(default=None, description="File extension filter")
     document_type: str | None = Field(default=None, description="Document type code from file_encoding segment 2")
@@ -543,19 +543,81 @@ class ShougangPortalAdvancedFileSearchReq(ShougangPortalFileBrowseReq):
     exact_phrase: str | None = Field(default=None, max_length=200)
     any_keywords: str | None = Field(default=None, max_length=200)
     exclude_keywords: str | None = Field(default=None, max_length=200)
-    search_field: Literal["file_name", "summary", "tags"] = "file_name"
+    search_field: Literal["all", "file_name", "summary", "tags", "content"] = "all"
+    original_uploader_id: int | None = Field(default=None, gt=0)
+    original_knowledge_id: int | None = Field(default=None, gt=0)
+    preview_count_min: int | None = Field(default=None, ge=0)
+    preview_count_max: int | None = Field(default=None, ge=0)
+    download_count_min: int | None = Field(default=None, ge=0)
+    download_count_max: int | None = Field(default=None, ge=0)
     updated_from: date | None = None
     updated_to: date | None = None
-    sort: Literal["updated_at", "updated_at_desc", "updated_at_asc"] = Field(
-        default="updated_at_desc",
-        description="Sort mode: updated_at / updated_at_desc / updated_at_asc",
+    sort: Literal[
+        "relevance",
+        "updated_at",
+        "updated_at_desc",
+        "updated_at_asc",
+        "preview_count_desc",
+        "preview_count_asc",
+        "download_count_desc",
+        "download_count_asc",
+    ] = Field(
+        default="relevance",
+        description="Advanced fulltext sort mode",
     )
 
     @model_validator(mode="after")
-    def validate_updated_range(self):
+    def validate_advanced_ranges(self):
+        if any(space_id <= 0 for space_id in self.space_ids):
+            raise ValueError("space_ids must contain positive integers")
         if self.updated_from is not None and self.updated_to is not None and self.updated_from > self.updated_to:
             raise ValueError("updated_from must not be later than updated_to")
+        for name, lower, upper in (
+            ("preview_count", self.preview_count_min, self.preview_count_max),
+            ("download_count", self.download_count_min, self.download_count_max),
+        ):
+            if lower is not None and upper is not None and lower > upper:
+                raise ValueError(f"{name}_min must not be greater than {name}_max")
         return self
+
+
+class ShougangPortalAdvancedUploaderSearchReq(BaseModel):
+    discovery_scope: Literal[
+        "legacy",
+        "public",
+        "public_and_department",
+        "portal_public",
+        "portal_configured",
+    ] = "legacy"
+    space_ids: list[int] = Field(default_factory=list)
+    space_level: KnowledgeSpaceLevelEnum | None = None
+    public_only: bool = False
+    q: str = Field(min_length=1, max_length=64)
+    limit: int = Field(default=20, ge=1, le=20)
+
+    @field_validator("q")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("q must not be empty")
+        return normalized
+
+    @field_validator("space_ids")
+    @classmethod
+    def validate_space_ids(cls, values: list[int]) -> list[int]:
+        if any(value <= 0 for value in values):
+            raise ValueError("space_ids must contain positive integers")
+        return list(dict.fromkeys(values))
+
+
+class ShougangPortalAdvancedUploaderItemResp(BaseModel):
+    user_id: int
+    user_name: str
+
+
+class ShougangPortalAdvancedUploaderSearchResp(BaseModel):
+    data: list[ShougangPortalAdvancedUploaderItemResp] = Field(default_factory=list)
 
 
 class ShougangPortalFileTagResp(BaseModel):

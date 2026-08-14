@@ -26,6 +26,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ChatReq,
     KnowledgeSpaceFolderStatsReq,
     ShougangPortalAdvancedFileSearchReq,
+    ShougangPortalAdvancedUploaderSearchReq,
+    ShougangPortalAdvancedUploaderSearchResp,
     ShougangPortalDomainBindableSpacesResp,
     ShougangPortalDomainFileCountReq,
     ShougangPortalDomainFileCountResp,
@@ -76,6 +78,9 @@ from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
 )
 from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
     RealtimeQaQuestionFact,
+)
+from bisheng.knowledge.domain.services.knowledge_fulltext_engagement_service import (
+    project_knowledge_fulltext_engagement_best_effort,
 )
 from bisheng.utils import generate_uuid
 
@@ -360,6 +365,16 @@ async def record_shougang_portal_telemetry_event(
         event_type=event_type,
         event_data=event_data,
     )
+    if event_type in {
+        BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ,
+        BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD,
+    }:
+        await project_knowledge_fulltext_engagement_best_effort(
+            event_type=event_type.value,
+            source_app=req.source_app,
+            status=req.status,
+            file_id=req.file_id,
+        )
     if event_type == BaseTelemetryTypeEnum.PORTAL_QA:
         try:
             await RealtimeQaQuestionFact.record_success(
@@ -496,6 +511,17 @@ async def advanced_search_shougang_portal_files(
 ) -> Any:
     result = await svc.advanced_search_shougang_portal_files(req)
     return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode="json"))
+
+
+@router.post("/files/advanced-search/uploaders")
+async def search_shougang_portal_advanced_uploaders(
+    req: ShougangPortalAdvancedUploaderSearchReq,
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.search_shougang_portal_advanced_uploaders(req)
+    return resp_200(
+        ShougangPortalAdvancedUploaderSearchResp(**result).model_dump(mode="json")
+    )
 
 
 @router.post("/files/browse")

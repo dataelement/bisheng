@@ -582,9 +582,37 @@ class SpaceFileDao(KnowledgeFileDao):
             )
         )
         async with get_async_db_session() as session:
+            affected_result = await session.execute(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.knowledge_id == space_id,
+                    or_(
+                        col(KnowledgeFile.file_level_path) == old_prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{old_prefix}/%"),
+                    ),
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                )
+            )
+            affected_files = list(affected_result.scalars().all())
             await session.execute(statement)
             if folder is not None:
                 session.add(folder)
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                KnowledgeFulltextFileRef,
+                request_file_sync_intents,
+            )
+
+            await request_file_sync_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(item.id),
+                        knowledge_id=int(item.knowledge_id),
+                        tenant_id=int(item.tenant_id or 1),
+                    )
+                    for item in affected_files
+                ],
+                trigger_type="folder_moved",
+            )
             await session.commit()
             if folder is not None:
                 await session.refresh(folder)
