@@ -634,6 +634,18 @@ class StreamEventMapper:
                 namespace=ns,
                 delegate_goal=delegate_goal,
             )
+            # An earlier call with the SAME provider id is still open — it never got
+            # an end frame (HITL park, recursion cut, budget refusal) and is now
+            # being displaced. Its half-written arg buffer would otherwise keep
+            # accumulating under this call's deltas: usually that just fails
+            # json.loads and the delegation goal degrades to empty, but a leftover
+            # that happens to CLOSE against this call's first fragment parses fine
+            # and hands us the previous call's goal. Drop it here — this is the one
+            # moment we can tell "stale" from "mid-stream", because a normally
+            # finished call was popped by its end frame. Deltas that follow refill
+            # the buffer from scratch.
+            if raw_call_id in self.ctx.open_calls:
+                self.ctx.tool_arg_buffers.pop(raw_call_id, None)
             # Keyed by the RAW id: the end frame arrives as ToolMessage.tool_call_id,
             # which carries the provider's value, not ours.
             self.ctx.open_calls[raw_call_id] = open_call

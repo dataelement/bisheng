@@ -657,6 +657,10 @@ class TestStreamedDelegationArgs:
             tool_call_chunks=[{"name": name, "args": args, "id": cid, "index": index, "type": "tool_call_chunk"}],
         )
 
+    @staticmethod
+    def _steps(mapper: StreamEventMapper, chunk: AIMessageChunk) -> list[ExecStep]:
+        return [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)]
+
     def test_streamed_task_args_recover_goal(self, mapper: StreamEventMapper):
         # chunk 1: name+id, args still empty -> argless start frame (goal '')
         c1 = self._arg_delta("task", "", "call_s1")
@@ -708,6 +712,29 @@ class TestStreamedDelegationArgs:
         assert len(ev_b) == 1
         assert ev_b[0].call_id.startswith("call_b#")
         assert ev_b[0].extra_info.get("delegate_goal") == "任务B"
+
+    def test_abandoned_call_does_not_leak_its_goal_into_an_id_reuse(self, mapper: StreamEventMapper):
+        """A call that never gets an end frame must not poison the next call that
+        reuses its provider id.
+
+        ``tool_arg_buffers`` is keyed by the provider's id and is normally cleared
+        by the end frame. When a call is abandoned (HITL park / recursion cut /
+        budget refusal) its partial JSON stays behind, and a provider that recycles
+        ids — ``<tool_name>:<index>``, restarting at 0 every response — hands that
+        id straight to the next call. Here the leftover is one character short of
+        closing, so the newcomer's first fragment completes it and the delegation
+        would report the ABANDONED call's goal as its own.
+        """
+        # Call 1: args start streaming, then the call is abandoned (no end frame).
+        self._steps(mapper, self._arg_delta("task", '{"description": "stal', "task:0"))
+
+        # Call 2 reuses the id; its own args stream in from scratch.
+        self._steps(mapper, self._arg_delta("task", "", "task:0"))
+        events = self._steps(mapper, self._arg_delta("", 'e"}', ""))
+
+        assert not any(e.extra_info.get("delegate_goal") == "stale" for e in events), (
+            "the abandoned call's args must not close against the new call's fragment"
+        )
 
     def test_complete_args_in_one_chunk_still_works(self, mapper: StreamEventMapper):
         # Backward-compat: a provider that ships full args in one AIMessage (no
