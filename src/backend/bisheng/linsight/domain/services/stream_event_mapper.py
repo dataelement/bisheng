@@ -111,7 +111,12 @@ class _TodoProjection:
 class _OpenCall:
     """Buffered tool-call *start* frame, keyed by call_id (design §3.4)."""
 
+    # Emitted/persisted id — globally unique for this svid, see ``StreamContext.tool_seq``.
     call_id: str
+    # The provider's own tool_call id. Every in-memory bookkeeping dict
+    # (``open_calls`` / ``orphan_ends`` / ``tool_arg_buffers``) stays keyed by THIS,
+    # because that is what comes back on ``ToolMessage.tool_call_id``.
+    raw_call_id: str
     task_id: str
     name: str
     params: Any
@@ -169,6 +174,18 @@ class StreamContext:
     # welded reasoning from different runs into one block, spliced new text into
     # the middle of old text, and left history ordered against its own timestamps.
     run_token: str = field(default_factory=lambda: uuid4().hex[:8])
+    # monotonic counter giving each TOOL call a distinct, stable call_id.
+    #
+    # A provider only has to make ``tool_calls[].id`` unique WITHIN one response —
+    # the OpenAI contract is just "the id a ToolMessage refers back to", never a
+    # cross-request guarantee. tokenrouter/kimi-k3 mints ``<tool_name>:<index>``
+    # and restarts the index at 0 every turn, so ``bisheng_code_interpreter:0``
+    # came back 156 times in one run. ``add_execution_task_step`` upserts by
+    # call_id across the WHOLE history, so all 156 collapsed onto one row and the
+    # step flow showed "运行代码 1 次". Mixed with ``run_token`` for the same reason
+    # thinking ids are (see above): a mapper is per-RUN, so the counter alone would
+    # collide again after an ask_user resume.
+    tool_seq: int = 0
     # terminal收口 dedup: first terminal wins, later ones dropped (§3.7)
     terminated: bool = False
 
@@ -496,14 +513,14 @@ class StreamEventMapper:
                 continue
             self.ctx.tool_arg_buffers[cid] = self.ctx.tool_arg_buffers.get(cid, "") + (tcc.get("args") or "")
 
-    def _parse_arg_buffer(self, call_id: str) -> dict[str, Any] | None:
+    def _parse_arg_buffer(self, raw_call_id: str) -> dict[str, Any] | None:
         """Parse a call's reassembled arg buffer once it is a complete JSON object.
 
         Returns ``None`` while the buffer is still partial (mid-stream JSON does
         not parse) — strict ``json.loads`` succeeds only when the object closes,
         so this fires exactly once per call, when its args finish streaming.
         """
-        raw = self.ctx.tool_arg_buffers.get(call_id)
+        raw = self.ctx.tool_arg_buffers.get(raw_call_id)
         if not raw:
             return None
         try:
@@ -522,7 +539,9 @@ class StreamEventMapper:
         """
         if open_call.step_type != "subagent" or open_call.delegate_goal:
             return False
-        args = self._parse_arg_buffer(open_call.call_id)
+        # RAW id: ``tool_arg_buffers`` is filled by _accumulate_tool_args from the
+        # provider's own chunk ids, so the minted call_id would never hit.
+        args = self._parse_arg_buffer(open_call.raw_call_id)
         if not args:
             return False
         goal = args.get("description") or args.get("instruction") or ""
@@ -565,9 +584,16 @@ class StreamEventMapper:
         # segment boundary (段流重构 2026-06).
         task_id = self.ctx.svid
         for tc in tool_calls:
-            call_id = tc.get("id") or tc.get("call_id")
-            if not call_id:
+            raw_call_id = tc.get("id") or tc.get("call_id")
+            if not raw_call_id:
                 continue
+            # Mint the id we emit and persist. The provider's id is only unique
+            # within one response (see StreamContext.tool_seq), and the persistence
+            # layer upserts by call_id across the whole history — so a colliding id
+            # silently overwrites an earlier, unrelated call. Keeping the raw id as
+            # the prefix leaves the row greppable ("which tool, which turn").
+            self.ctx.tool_seq += 1
+            call_id = f"{raw_call_id}#{self.ctx.run_token}:{self.ctx.tool_seq}"
             name = tc.get("name", "")
             args = tc.get("args")
             step_type = self._infer_step_type(name, ns)
@@ -599,6 +625,7 @@ class StreamEventMapper:
 
             open_call = _OpenCall(
                 call_id=call_id,
+                raw_call_id=raw_call_id,
                 task_id=task_id,
                 name=name,
                 params=args,
@@ -607,7 +634,9 @@ class StreamEventMapper:
                 namespace=ns,
                 delegate_goal=delegate_goal,
             )
-            self.ctx.open_calls[call_id] = open_call
+            # Keyed by the RAW id: the end frame arrives as ToolMessage.tool_call_id,
+            # which carries the provider's value, not ours.
+            self.ctx.open_calls[raw_call_id] = open_call
 
             if ns:
                 extra_info["namespace"] = ns
@@ -627,26 +656,32 @@ class StreamEventMapper:
             )
 
             # An orphan end may already be buffered for this call_id (§3.7).
-            buffered = self.ctx.orphan_ends.pop(call_id, None)
+            buffered = self.ctx.orphan_ends.pop(raw_call_id, None)
             if buffered is not None:
                 events.append(self._build_end_step(open_call, buffered))
         return events
 
-    def _handle_tool_end(self, message: Any, call_id: str, ns: str | None) -> list[BaseEvent]:
+    def _handle_tool_end(self, message: Any, raw_call_id: str, ns: str | None) -> list[BaseEvent]:
+        """Close the open call ``ToolMessage.tool_call_id`` points at.
+
+        ``raw_call_id`` is the PROVIDER's id — every dict touched here is keyed by
+        it. The emitted frame's id comes from ``open_call.call_id`` (the minted,
+        globally-unique one), so start and end still merge into a single history row.
+        """
         output = self._message_text(message)
         payload = {"output": output}
 
-        open_call = self.ctx.open_calls.pop(call_id, None)
+        open_call = self.ctx.open_calls.pop(raw_call_id, None)
         if open_call is None:
             # End arrived before start — buffer it (§3.7 reordering).
-            self.ctx.orphan_ends[call_id] = payload
+            self.ctx.orphan_ends[raw_call_id] = payload
             return []
         # Last-chance goal/params fill: if _reconcile_open_delegations never ran
         # for this call (e.g. the args finished streaming in the same chunk that
         # also carried the tool result), recover them from the buffer so the end
         # frame still carries the delegation goal. The buffer is then disposable.
         self._enrich_delegation_from_buffer(open_call)
-        self.ctx.tool_arg_buffers.pop(call_id, None)
+        self.ctx.tool_arg_buffers.pop(raw_call_id, None)
         return [self._build_end_step(open_call, payload)]
 
     def _build_end_step(self, open_call: _OpenCall, payload: dict[str, Any]) -> ExecStep:
