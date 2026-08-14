@@ -411,6 +411,19 @@ class LinsightConf(BaseModel):
         description="L3 tool-loop breaker: after this many consecutive same-tool failures, abort the task "
         "gracefully and salvage the intermediate result (instead of spinning to recursion_limit).",
     )
+    tool_repeat_soft_limit: int = Field(
+        default=3,
+        description="L3 tool-loop breaker: after this many consecutive BYTE-IDENTICAL tool calls (same tool, "
+        "same arguments) that keep SUCCEEDING, append a counted corrective instruction to the next model "
+        "request. Distinct from tool_failure_soft_limit, which only counts errors. 0 disables the tier.",
+    )
+    tool_repeat_hard_limit: int = Field(
+        default=8,
+        description="L3 tool-loop breaker: after this many consecutive byte-identical tool calls, abort the "
+        "task gracefully and salvage the intermediate result. Measured baseline: healthy runs that COMPLETED "
+        "reached at most 10 consecutive identical tool OUTPUTS (an upper bound on identical arguments), while "
+        "the 2026-08-14 incident hit 48. 0 disables the abort and leaves only the soft nudge.",
+    )
     truncation_retry_limit: int = Field(
         default=2,
         description="L2 truncation guard: max times to retry a model call whose tool-call arguments were "

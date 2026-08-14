@@ -139,6 +139,18 @@ _ENCODING_MIN_CONFIDENCE = 0.5
 # aware hint; on its own the message still reads correctly to the model.
 BINARY_READ_ERROR_PREFIX = "[binary-file]"
 
+# Character-page fallback for files with (almost) no line breaks — see
+# ``_slice_workspace_text``. The size is a compromise: small enough that a default
+# ``limit=100`` read stays a sane chunk, large enough that paging a 100KB file does
+# not take dozens of calls.
+_CHAR_PAGE_SIZE = 2000
+_CHAR_PAGE_MIN_CHARS = 8000
+_CHAR_PAGE_NOTICE = (
+    "[This file has no line breaks, so it was paginated by CHARACTER: "
+    "{total} pages of {size} characters each. Use offset/limit to page through it — "
+    "offset counts pages, not source lines.]\n"
+)
+
 
 @dataclass
 class FileEntry:
@@ -274,6 +286,45 @@ def _decode_workspace_text(data: bytes, rel_path: str = "") -> str | None:
         return None
     logger.info("workspace read: {} decoded as {} (confidence {})", rel_path, encoding, confidence)
     return text
+
+
+def _slice_workspace_text(text: str, offset: int, limit: int | None) -> str:
+    """Apply ``offset``/``limit`` to text, falling back to CHARACTER pages when the
+    file has (almost) no line breaks.
+
+    Line slicing silently breaks down on a file that is one enormous line, and the
+    single most likely such file is one deepagents itself produced: an offloaded
+    tool result. ToolNode serializes a dict result with ``json.dumps``, so every
+    newline becomes a literal ``\\n`` and the whole payload is one line. Reading it
+    back then had exactly two outcomes, both wrong:
+
+    - ``offset=0`` returned the entire file (deepagents then clipped it to its own
+      80000-char ceiling), and
+    - ``offset>=1`` returned ``""``, which upstream reports to the model as
+      *"File exists but has empty contents"* — worse than an error, because it
+      states as fact that there is nothing there.
+
+    So the tail of such a file was unreachable by ANY call, while the offload notice
+    was busy telling the model to page through it with offset/limit. Paginating by
+    character makes that advice true. Only files that are both nearly line-free and
+    genuinely large are affected; ordinary text keeps byte-identical behaviour.
+    """
+    lines = text.splitlines()
+    end = offset + limit if limit is not None else None
+    if not (len(lines) <= 2 and len(text) > _CHAR_PAGE_MIN_CHARS):
+        return "\n".join(lines[offset:end])
+
+    pages = [text[i : i + _CHAR_PAGE_SIZE] for i in range(0, len(text), _CHAR_PAGE_SIZE)]
+    selected = pages[offset:end]
+    if not selected:
+        return ""  # past the end reads empty, exactly as line slicing would
+    if offset == 0 and len(selected) == len(pages):
+        # The whole file fits in this one read: hand back the ORIGINAL text. Joining
+        # the pages would splice in newlines that are not in the file, and a caller
+        # parsing the result (json.loads on a one-line payload) would get corrupt
+        # input — while the header would be noise it never asked for.
+        return text
+    return _CHAR_PAGE_NOTICE.format(total=len(pages), size=_CHAR_PAGE_SIZE) + "\n".join(selected)
 
 
 def _binary_read_result(rel_path: str, data: bytes) -> ReadResult:
@@ -523,10 +574,7 @@ class WorkspaceBackend(FilesystemBackend):
             # Binary: offset/limit are meaningless here (slicing bytes by "lines"
             # would corrupt the payload), so the whole object is decided on at once.
             return _binary_read_result(rel, data)
-        lines = text.splitlines()
-        start = offset
-        end = offset + limit if limit is not None else None
-        sliced = "\n".join(lines[start:end])
+        sliced = _slice_workspace_text(text, offset, limit)
         return ReadResult(file_data=FileData(content=sliced, encoding="utf-8"))
 
     # -- ls (authoritative from MinIO) --------------------------------------
@@ -768,9 +816,8 @@ class WorkspaceBackend(FilesystemBackend):
         if text is None:
             # Same contract as the sync path: binary is decided whole, never sliced.
             return _binary_read_result(rel, data)
-        lines = text.splitlines()
-        end = offset + limit if limit is not None else None
-        return ReadResult(file_data=FileData(content="\n".join(lines[offset:end]), encoding="utf-8"))
+        # Same slicing contract as the sync path — they must not diverge.
+        return ReadResult(file_data=FileData(content=_slice_workspace_text(text, offset, limit), encoding="utf-8"))
 
     async def als(self, path: str = "") -> LsResult:
         return await asyncio.to_thread(self.ls, path)

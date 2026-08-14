@@ -99,11 +99,25 @@ async def get_all_files_from_session(
 #   uploads/ — the user's own source files
 #   skills/  — skill bundles the platform copies in at task start
 #              (skill_provisioning.WORKSPACE_SKILLS_DIR)
+#
+# The last two are written by deepagents itself, through the same WorkspaceBackend:
+#   large_tool_results/   — a tool result too big to inline (FilesystemMiddleware)
+#   conversation_history/ — history evicted by the summarization middleware
+# They are context-overflow spill, not something the agent authored. Without them
+# here, a run that ends with an empty output/ falls through to the baseline-diff
+# branch of ``select_deliverables`` and hands the user a raw tool dump as its
+# "deliverable" — and because an offloaded file is named after a tool_call_id it
+# usually has NO extension, which sorts it AHEAD of any real .png chart. bisheng
+# cannot stop deepagents writing these, so they are excluded here instead.
 OUTPUT_ZONE = "output"
 SCRATCH_ZONE = "scratch"
 UPLOADS_ZONE = "uploads"
 SKILLS_ZONE = "skills"
-NON_DELIVERABLE_ZONES = frozenset({SCRATCH_ZONE, UPLOADS_ZONE, SKILLS_ZONE})
+LARGE_TOOL_RESULTS_ZONE = "large_tool_results"
+CONVERSATION_HISTORY_ZONE = "conversation_history"
+NON_DELIVERABLE_ZONES = frozenset(
+    {SCRATCH_ZONE, UPLOADS_ZONE, SKILLS_ZONE, LARGE_TOOL_RESULTS_ZONE, CONVERSATION_HISTORY_ZONE}
+)
 
 
 def snapshot_file_paths(file_dir: str) -> set[str]:
