@@ -17,7 +17,7 @@
 | [Feedback 点赞点踩](/components/feedback) | ✅ 已收敛 | MessageFeedbackButtons 三种初始状态（回调可视化）/ 延迟点踩规则 |
 | [Icon 图标](/components/icon) | ✅ 规范 v1 | bisheng-icons 全量清单（遍历库导出，升版自动同步）/ 尺寸六档 + strokeWidth 补偿 / 着色 / 使用规则 |
 | [Illustration 插画](/components/illustration) | ✅ 已迁库 | 8 个主题化插画 × 蓝 / 绿 / 灰稿三态切换 / 调色板 |
-| [State 状态页](/components/state) | ✅ 已落地 | 没有内容四类 / 有结果要报三类 / 尺寸三档 page·panel·inline / 高容器顶距封顶 / 使用规则 + API（导出名 `StateView`，只有 `size` 一根轴） |
+| [State 状态页](/components/state) | ✅ 已落地 | 没有内容四类 / 有结果要报三类 / 尺寸三档 page·panel·inline / 区域内定位与手动上移 / 使用规则 + API（导出名 `StateView`，只有 `size` 一根轴） |
 | Tooltip 文字提示 / Popover 气泡卡片 | ⬜ demo 待补 | 规范 v1 已建（见顶部导航「文档」两篇组件规范）；demo 页待基准组件实现后补 |
 | Select / Dropdown / Input / Tabs | ⬜ 待补 | 规范待建 |
 

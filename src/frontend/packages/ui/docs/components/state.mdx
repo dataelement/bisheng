@@ -135,25 +135,32 @@ export default () => (
 
 `inline` 档只服务「没有内容」这一组：表格行里不报「创建成功」，结果反馈至少要有一张图才立得住。`size="inline"` 时 `image` / `action` 在类型上就传不进来，写了直接是编译错误。
 
-## 高容器里的位置
+## 在区域内的位置
 
-**顶部距容器顶部 = min（（容器高 − 内容高）÷ 2，200px）。** 矮容器里就是正正的垂直居中；容器越高，纯居中会把插画推到屏幕下方甚至推出首屏，所以顶距封顶在 200px（移动端 120px），超过就固定不再往下走。
+**就一种机制：flex 居中**，横竖都居中，占满它所替代的那块区域（最小高 320 / 200）。不做顶距封顶、也不按百分比定位——多一套算法就多一处会跑偏的地方。
+
+少数容器需要把内容往上挪：容器比内容高出太多，或者底部压着悬浮元素（AI dock、批量操作条）。**这时业务侧自己加一个不对称的下内边距**，居中在剩下的框里重新解算，内容上移一半的量。
 
 ```tsx
 import { EmptyStateIllustration, StateView } from '@bisheng/ui';
 
+const Frame = ({ label, children }) => (
+  <div style={{ flex: '1 1 280px', minWidth: 260 }}>
+    <div style={{ marginBottom: 8, fontSize: 12, color: 'rgb(var(--text-3))' }}>{label}</div>
+    <div style={{ height: 420, overflow: 'hidden', border: '1px dashed rgb(var(--border-base))', borderRadius: 8 }}>
+      {children}
+    </div>
+  </div>
+);
+
 export default () => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
-    {[360, 900].map((h) => (
-      <div key={h} style={{ flex: '1 1 280px', minWidth: 260 }}>
-        <div style={{ marginBottom: 8, fontSize: 12, color: 'rgb(var(--text-3))' }}>
-          容器高 {h}px — {h === 360 ? '居中' : '顶距封顶 200px，下方留白更多'}
-        </div>
-        <div style={{ height: h, overflow: 'hidden', border: '1px dashed rgb(var(--border-base))', borderRadius: 8 }}>
-          <StateView image={<EmptyStateIllustration />} title="还没有知识库" />
-        </div>
-      </div>
-    ))}
+    <Frame label="默认 — 居中">
+      <StateView image={<EmptyStateIllustration />} title="还没有知识库" />
+    </Frame>
+    <Frame label='上移 — className="pb-16"（内容上移 32px）'>
+      <StateView className="pb-16" image={<EmptyStateIllustration />} title="还没有知识库" />
+    </Frame>
   </div>
 );
 ```
@@ -176,4 +183,4 @@ export default () => (
 | `description` | `ReactNode` | — | 辅助说明，最多两行；文字链接放这里 |
 | `image` | `ReactNode` | — | 插画元素，如 `<EmptyStateIllustration />`；**尺寸由组件控制，调用侧不要传 className** |
 | `action` | `ReactNode` | — | 至多一主一次两个 `<Button>` |
-| `className` | `string` | — | 透传到最外层容器 |
+| `className` | `string` | — | 透传到最外层容器；**特殊容器的上移就靠它**（`pb-16`、`pb-[112px]`），组件的定位类可被 twMerge 覆盖 |

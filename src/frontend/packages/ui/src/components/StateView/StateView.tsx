@@ -95,16 +95,18 @@ export function StateView(props: StateViewProps) {
   const titleClass = description ? 'text-h4 text-text-1' : 'text-body text-text-3';
 
   return (
-    <div className={cn('flex h-full w-full flex-col items-center px-4', MIN_HEIGHT[size], className)}>
-      {/*
-       * §6 vertical rule: top offset = min((container − content) ÷ 2, 200px).
-       * Two flexible spacers split the free space evenly — plain centering —
-       * until the top one freezes at its max-height and flexbox hands the rest
-       * to the bottom one. Tall containers therefore stop pushing the art down
-       * and off the first screen. The cap tightens to 120px on phones (§7).
-       */}
-      <div aria-hidden className="w-full max-h-[200px] flex-1 max-md:max-h-[120px]" />
-
+    // §6: plain flex centering, both axes — one mechanism, no offset math. In
+    // the few containers that are far taller than their content (or that have a
+    // floating dock over the bottom edge), the caller nudges the block up with
+    // an asymmetric padding through `className` (`pb-16`, `pb-[112px]` …);
+    // twMerge keeps it, and centering resolves inside the remaining box.
+    <div
+      className={cn(
+        'flex h-full w-full flex-col items-center justify-center px-4',
+        MIN_HEIGHT[size],
+        className,
+      )}
+    >
       {/* §4: content block centered, capped at 400px — a wider line of text
           makes the eye sweep back and forth and stops reading as one unit. */}
       <div className="flex w-full max-w-[400px] flex-col items-center text-center">
@@ -135,8 +137,6 @@ export function StateView(props: StateViewProps) {
           </div>
         ) : null}
       </div>
-
-      <div aria-hidden className="w-full flex-1" />
     </div>
   );
 }
