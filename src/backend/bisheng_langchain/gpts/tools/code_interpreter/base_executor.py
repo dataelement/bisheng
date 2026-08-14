@@ -142,6 +142,46 @@ RELOCATED_PATH_NOTICE_HEADER = (
     "files to `scratch/` directly.\n"
 )
 
+# A SUCCESSFUL run's log is unbounded today, and nothing downstream bounds it either.
+# Once the serialized result crosses ~80000 chars, the deepagents FilesystemMiddleware
+# offloads it to /large_tool_results/<tool_call_id> and replaces the content with a
+# preview. That preview is computed PER LINE — but ToolNode serializes the dict result
+# with json.dumps, which turns every newline into a literal \n, so the whole result is
+# ONE line and the preview degrades to line[:1000] with no truncation marker at all.
+# The model then sees `{"exitcode": 0, "log": "…` and nothing else: no file_list, no
+# ending, and no sign that the rest exists elsewhere. Measured on 114, 2026-08-14: a
+# 112744-byte result put a kimi-k3 run into a 79-turn / 78-minute / 13.8M-token loop
+# re-sending the exact same script, because re-running was the only way it could think
+# of to get the data back.
+#
+# Capping here keeps the output INSIDE the context (head + tail, ~30x more than the
+# 1000 chars the offload path actually delivers) instead of behind a pointer the model
+# does not follow. 30000 sits far above the measured p90 (~8000; only 11.7% of calls
+# exceed 8000) so ordinary runs are untouched, and far below the eviction line even
+# after file_list URLs are added.
+MAX_SUCCESS_LOG_CHARS = 30000
+LOG_MIDDLE_TRUNCATED_NOTICE = (
+    "\n[... {omitted} characters of output omitted from the middle. Re-running this "
+    "code will NOT return more — the output itself is too long. Print less (summarize, "
+    "or print only what you need), or write the bulk to a file under `scratch/` and read "
+    "it back in chunks with read_file ...]\n"
+)
+
+
+def clip_middle(logs: str, limit: int = MAX_SUCCESS_LOG_CHARS) -> str:
+    """Cap ``logs`` keeping BOTH ends, dropping the middle.
+
+    Deliberately not ``LocalExecutor._tail``: that one keeps only the tail, which is
+    right for a FAILING run (a traceback states its cause on the last lines) and wrong
+    for a succeeding one — the head holds what the script actually printed (its
+    conclusions), and the tail holds the advisories the model must act on next turn.
+    """
+    if len(logs) <= limit:
+        return logs
+    notice = LOG_MIDDLE_TRUNCATED_NOTICE.format(omitted=len(logs) - limit)
+    head_len = limit // 2
+    return logs[:head_len] + notice + logs[-(limit - head_len) :]
+
 
 class BaseExecutor(ABC):
     def __init__(self, minio: dict, **kwargs):

@@ -157,10 +157,19 @@ __SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md�
 
 - ask_user(reason, questions)：第 0 步澄清；整个会话最多调用一次。
 - write_todos(todos)：维护有编号的待办清单；只翻转 status，不改写已有文案。
-__KB_TOOL_LINE__- write_file / read_file / edit_file / ls：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。
+__KB_TOOL_LINE__- write_file / read_file / edit_file / ls / glob / grep：工作区文件工具；交付物写 output/，中间产物写 scratch/（工具回显的 /output/x 与 output/x 是同一个文件）。read_file 支持 offset/limit 分块读取大文件；grep 可在整个工作区按关键字定位内容。
 - export_docx(source_path, dest_path)：把 output/ 下的 markdown 转 Word(.docx)，必须在对应 .md 写好之后。
 - export_pdf(source_path, dest_path)：把 output/ 下的 markdown 转 PDF，必须在对应 .md 写好之后。
 - task(description, subagent_type="general-purpose")：把独立、可隔离、较重的调研子任务委派给子代理。description 必须自包含——子代理看不到你的对话历史与上下文，只能读到 description，因此完成该子任务所需的全部背景、目标、约束与必要标识都要写进去；不得委派最终交付物撰写，也不得委派“问用户/澄清”。
+
+# 超大工具结果
+
+某次工具结果过大时，系统会把它存入 /large_tool_results/<tool_call_id>，只在回复里保留开头片段。
+这表示**结果已经产生并保存好了**，不是执行失败、也不是输出被弄丢了。此时：
+
+- 用 read_file 读那个路径把内容取回来；文件很大就配合 offset/limit 分页读（该文件常常没有换行，会按字符分页，offset 数的是页不是行）。
+- 不知道确切路径时，用 grep 在 /large_tool_results/ 下按关键字定位。
+- **绝对不要重跑产生它的那次调用**：参数没变，结果一定一样，重跑只会再产生一份同样的大结果。
 
 __PATH_NAMESPACE_LINE__# 风格
 
@@ -355,8 +364,14 @@ def _build_linsight_system_prompt(
             "- 反向同理：**不要**把代码里看到的宿主机绝对路径（形如 /root/.cache/…/<8位任务号>/output/a.png）"
             "传给 read_file / edit_file，去掉前缀只传 output/a.png。\n"
             "- 执行器写完会把本轮产出同步到工作区，随后 ls / glob 一般就能看到它们。"
-            "但**判定成功的依据是执行结果本身**：只要 exitcode 0 且日志显示写成功，就视为交付物已产出，"
-            "继续下一步；不要反复 ls / glob 找它，更不要因为一时“找不到”而重新生成一遍。\n\n"
+            "但**判定成功的依据是执行结果本身**：只要 exitcode 0 且 file_list 里出现了目标文件，"
+            "就视为交付物已产出，继续下一步，不要反复 ls / glob 找它。\n"
+            "- 若日志被截断、你看不到 file_list：可以 ls output/ **核实一次**；"
+            "若结果提示「Tool result too large … /large_tool_results/…」，用 read_file 读那个路径取回内容"
+            "（必要时配合 offset/limit 分页，或用 grep 在 /large_tool_results/ 下定位关键字）。"
+            "**任何情况下都不要把同一段代码原样再跑一遍**——相同的输入只会得到相同的结果。\n"
+            "- 不要一次 print 巨量内容：超长日志会被截断（中间省略），需要完整数据时把它写进 "
+            "scratch/ 下的文件，再用 read_file 分块读取。\n\n"
         )
 
     return (

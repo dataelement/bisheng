@@ -98,12 +98,22 @@ _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP = (
     "抱歉，在生成报告文件时遇到问题，模型未能正确调用写入工具。以下是已完成的分析内容："
 )
 _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT = "抱歉，任务执行步骤数已达上限，未能完全收尾。以下是已完成的内容："
+# Third cause, same lesson as above: a repeat loop is NOT a failed tool call. The
+# tool succeeded every time — the model kept re-sending identical arguments and
+# ignoring the result. Saying "未能正确调用工具" here would be plainly false.
+_PARTIAL_RESULT_PREAMBLE_REPEAT_LOOP = (
+    "抱歉，模型在同一个步骤上重复提交了完全相同的调用且没有推进，任务已提前收尾。以下是已完成的分析内容："
+)
 
 # Friendly failure copy when the abort left nothing salvageable (no analysis text
 # and no captured answer) — still a classified friendly card, never a raw dump.
 # Same two-cause split as the preambles above.
 _PARTIAL_NO_SALVAGE_TOOL_LOOP = (
     "任务未能完成：模型多次未能正确调用工具，且没有可供返回的中间结果。建议简化任务范围，或更换能力更强的模型后重试。"
+)
+_PARTIAL_NO_SALVAGE_REPEAT_LOOP = (
+    "任务未能完成：模型在同一个步骤上反复提交完全相同的调用，没有取得进展，且没有可供返回的中间结果。"
+    "建议简化任务范围，或更换能力更强的模型后重试。"
 )
 # Appended to a NORMAL (successful) result when the turn budget made the agent
 # wrap up ahead of schedule. Not an apology — the deliverables are real; the user
@@ -2010,17 +2020,30 @@ class LinsightWorkflowTask:
         ``_handle_direct_answer_completion``. If nothing is salvageable, degrade to
         a friendly classified failure (never a raw dump).
         """
-        # Copy follows the REAL cause: only the tool-loop breaker means "the model
-        # kept calling a tool wrong"; a recursion ceiling means the step budget ran
-        # out, which has nothing to do with the write tools.
+        # Copy follows the REAL cause, three ways: a failure loop means "the model
+        # kept calling a tool wrong"; a REPEAT loop means the tool kept succeeding
+        # and the model kept ignoring the result (blaming the tool there is simply
+        # false); a recursion ceiling means the step budget ran out, which has
+        # nothing to do with the write tools.
         is_tool_loop = isinstance(self._partial_error, LinsightToolLoopError)
+        is_repeat_loop = is_tool_loop and getattr(self._partial_error, "reason", "failure") == "repeat"
         body = (self._partial_salvage or "").strip() or (self._last_assistant_text or "").strip()
         if not body:
-            no_salvage = _PARTIAL_NO_SALVAGE_TOOL_LOOP if is_tool_loop else _PARTIAL_NO_SALVAGE_STEP_LIMIT
+            if is_repeat_loop:
+                no_salvage = _PARTIAL_NO_SALVAGE_REPEAT_LOOP
+            elif is_tool_loop:
+                no_salvage = _PARTIAL_NO_SALVAGE_TOOL_LOOP
+            else:
+                no_salvage = _PARTIAL_NO_SALVAGE_STEP_LIMIT
             await self._handle_task_failure(session_model, no_salvage, exc=self._partial_error)
             return
 
-        preamble = _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP if is_tool_loop else _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT
+        if is_repeat_loop:
+            preamble = _PARTIAL_RESULT_PREAMBLE_REPEAT_LOOP
+        elif is_tool_loop:
+            preamble = _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP
+        else:
+            preamble = _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT
         answer = f"{preamble}\n\n{body}"
         session_model.status = SessionVersionStatusEnum.COMPLETED
         # Collect any output/ deliverable the model managed to write before looping;
