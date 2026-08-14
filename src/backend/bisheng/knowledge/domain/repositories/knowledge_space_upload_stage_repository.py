@@ -79,6 +79,10 @@ class KnowledgeSpaceUploadStageRepository:
     async def add(self, stage: KnowledgeSpaceUploadStage) -> KnowledgeSpaceUploadStage:
         self.session.add(stage)
         await self.session.flush()
+        # `create_time` is filled by the column's server default, so the INSERT leaves it
+        # unloaded on the instance. Callers read the stage after the session closed, where
+        # a lazy load raises DetachedInstanceError — load it while the session is still open.
+        await self.session.refresh(stage)
         return stage
 
     async def save(self, stage: KnowledgeSpaceUploadStage) -> KnowledgeSpaceUploadStage:

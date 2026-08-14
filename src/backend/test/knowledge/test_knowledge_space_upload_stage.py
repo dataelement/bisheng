@@ -189,6 +189,32 @@ async def test_create_stage_generates_opaque_uuid_and_persists_server_metadata_w
     assert "object_name" not in public
 
 
+async def test_create_stage_returns_server_generated_create_time_after_the_session_closed(stage_engine):
+    """The upload endpoint reads `create_time` off the returned stage.
+
+    It is filled by the column's server default, so an unrefreshed instance raises
+    DetachedInstanceError once the service's session is gone — every space upload 500s.
+
+    SQLite would hide this: it fetches server defaults through INSERT ... RETURNING, which
+    MySQL (the deployment target) cannot do. Turn that off so the test sees what production
+    sees; otherwise the assertion passes with or without the fix.
+    """
+
+    stage_engine.dialect.insert_returning = False
+    set_current_tenant_id(17)
+    service = _service(stage_engine, _Storage())
+
+    stage = await service.create_stage(
+        space_id=101,
+        uploader_user_id=7,
+        file_name="quarterly.pdf",
+        content=b"authoritative-content",
+    )
+
+    assert stage.create_time is not None
+    assert stage.expire_at is not None
+
+
 async def test_same_upload_id_and_hash_is_idempotent_but_changed_content_creates_a_new_stage(stage_engine):
     set_current_tenant_id(17)
     storage = _Storage()
