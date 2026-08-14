@@ -6,7 +6,8 @@
 >
 > F043～F046 来自 PRD《3.0.0-beta1 需求文档》§四 功能体验优化；
 > F047 为灵思任务模式引用溯源；F048 来自 PRD《3.0-beta1 ReBAC 逻辑优化》，
-> 是本版本的 P0 权限架构升级 Feature。
+> 是本版本的 P0 权限架构升级 Feature；F049 在遵守 C4 系统身份策略与 OpenFGA 最终可见性语义的前提下，
+> 优化知识空间目录与搜索读取的候选批次、冗余查询和可观测性。
 
 ---
 
@@ -35,6 +36,7 @@
 | PermissionProjectionOperation / PermissionProjectionTuple | F048-rebac-permission-model-grants | tenant 级 Grant/mode/resource 到 OpenFGA 的幂等发布意图、分阶段 tuple、commit、补偿和失败关闭状态 |
 | AuthorizationModelRelease / PermissionMigrationRun / PermissionMigrationItem | F048-rebac-permission-model-grants | 现有 OpenFGA Store 中的新 Authorization Model 版本、唯一生产固定版本，以及由 `src/backend/scripts/` 专用数据迁移脚本写入的逐项映射、checkpoint、旧 tuple 退役、校验、启服和人工处置结果；不是 Alembic revision 状态 |
 | PermissionVisibleSourceProjection | F048-rebac-permission-model-grants | 原 F048 正式迁移和后续运行时从 canonical Grant assignee 生成的展平可见派生索引；随同一 PermissionMigrationRun/Item 追溯；system/public/shared 继续由各 Owner 事实与 system tuple 追溯；均不可独立编辑或参与数据库 ALLOW |
+| —（无新增） | F049-knowledge-space-children-read-optimization | 只调整既有目录与搜索列表的读取、最终可见性批量判断、文件夹统计响应和性能观测；不新增领域对象、表、错误码、Grant、权限模式或 OpenFGA relation |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -90,6 +92,7 @@
 | F047-linsight-citation-traceability | F035, F029（均为 v2.6.0 存量，已上线） | 接线型；把灵思任务模式产物接入既有 citation 溯源子系统（Phase 1 应用内预览行内角标，覆盖 KB 文档 + Web 网页；Phase 2 下载 Word/PDF 烘焙可见 `[1]` 编号 + 参考资料，延后）；不新增领域对象/表/对外 API/错误码/不变量/`MessageEventType` 枚举；无 alembic 迁移（复用 `message_citation`）；不写 `LinsightExecuteTask.history`（避 DM8 写放大）；角标解析复用 F029 `view_file` 过滤守 **INV-7**（见 v2.6.0 契约） |
 | F048-rebac-permission-model-grants | F004, F006, F007, F008 | 依赖既有 OpenFGA 核心、历史 ReBAC 迁移、资源权限界面和资源接入基线，并替换其中的四档静态关系与 Config 细粒度执行语义 |
 | F048-rebac-permission-model-grants | F027, F036, F040 | 依赖既有候选枚举、继承评估和列表性能基线；实现时必须保证分页与性能契约不倒退，并移除对旧 binding 第二次求值的依赖 |
+| F049-knowledge-space-children-read-optimization | F027, F040, F048 | 沿用目录 cursor、搜索页码候选扫描与 F048 OpenFGA 唯一执行面；不得用 `INHERIT` 数据库模式绕过最终候选可见性判断 |
 
 ---
 
@@ -103,6 +106,7 @@
 | F008-resource-rebac-adaptation | 资源生命周期继续统一接入权限服务，但资源存在性/租户/状态/父级等业务校验留在各业务 Service；权限领域只接收已验证上下文并执行 F048 授权 |
 | F027/F036/F040 | cursor、批量候选和请求内性能约束继续有效；旧 Config binding / 第二 PDP 的优化路径在切换后退役 |
 | F013/F017 | `system`、`tenant`、`department`、`user_group`、`shared_with` 等系统关系继续保留；不得被误转为普通资源 Grant |
+| F027/F040/F048 | F049 优化知识空间 `children` / `search` 的候选批次、重复门禁、文件夹统计和耗时观测；平台超级管理员遵守 C4 系统身份策略，普通用户继续执行有界 OpenFGA BatchCheck、稳定目录游标、既有搜索页码契约和 fail-closed，不改变个人可见空间枚举语义 |
 | F018-resource-owner-transfer | 当前实现先提交资源 `user_id`、再删除旧/写入新 owner tuple，失败依赖 `failed_tuple` 补写；同时不更新 knowledge_space/channel CREATOR membership，且无已接入前端。OQ-07 已选择 A：F048 启服时退役其 API/Service 调用路径，本期不重构 owner transfer；历史差异按 preservation-first 迁移 |
 
 ---
@@ -135,3 +139,4 @@
 | 2026-08-13 | 为 StreamedListObjects 未完整终止或超过业务容量上限分配 25014，禁止把枚举前缀作为成功全集返回 | F048 |
 | 2026-08-13 | 纠正 F048 可见投影迁移拓扑：F048 尚未上线，不新增旧 F048 到新 F048 model 的二次迁移；原 PermissionMigrationRun/Item 从旧 Config/四档关系和 Owner 事实直接生成最终单槽浅层 visible model、Grant/Assignee、PermissionVisibleSourceProjection 与 tuple | F048 |
 | 2026-08-13 | 明确模型停用/删除语义：停用只禁止新增或变更授权，已有 Grant 保持有效；删除必须先清零或替换全部绑定并完成残留投影对账。因停用不再触发批量撤权，F048 可见执行投影采用单槽浅层 `visible`，不引入 A/B 槽与运行时 switch | F048 |
+| 2026-08-14 | 登记 F049 知识空间目录与搜索读取优化：指定资源的超级管理员按 C4 系统身份策略放行、去重空间鉴权、页大小驱动的有界候选扫描、移除未展示的文件夹数量统计并保留失败存在性、增加分段性能观测；普通用户候选最终可见性继续统一使用 OpenFGA BatchCheck，不新增继承捷径 | F049、F027、F040、F048 |
