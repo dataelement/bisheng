@@ -54,8 +54,20 @@ const TARGET_LEVEL_LABELS: Record<PublishTargetLevel, string> = {
 
 const TARGET_LEVEL_ORDER: PublishTargetLevel[] = ["public", "department", "team", "personal"];
 
+export function normalizePublishTargetLevel(rawLevel: string | null | undefined): PublishTargetLevel {
+    const level = String(rawLevel ?? "personal");
+    // Clinic spaces use team_ks in API responses but share the team/clinic UI group.
+    if (level === "team_ks") return "team";
+    if (level === "public" || level === "department" || level === "team" || level === "personal") {
+        return level;
+    }
+    return "personal";
+}
+
 function getTargetSpaceLevel(space: ShougangFilePublishTargetSpace): PublishTargetLevel {
-    return String((space as any).space_level ?? (space as any).spaceLevel ?? "personal") as PublishTargetLevel;
+    return normalizePublishTargetLevel(
+        (space as any).space_level ?? (space as any).spaceLevel,
+    );
 }
 
 function mapFolderNode(item: any): TargetFolderNode {
