@@ -10,6 +10,7 @@ class GrantSubjectDepartment:
     name: str
     parent_id: int | None
     path: str
+    short_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -33,13 +34,19 @@ class GrantSubjectDepartmentMembership:
     name: str
     path: str
     is_primary: bool
+    short_name: str | None = None
+    display_name: str | None = None
+    display_path: str | None = None
 
     def to_dict(self) -> dict:
         return {
             "department_id": self.department_id,
             "dept_id": self.dept_id,
             "name": self.name,
+            "short_name": self.short_name,
+            "display_name": self.display_name or self.name,
             "path": self.path,
+            "display_path": self.display_path or self.path,
             "is_primary": self.is_primary,
         }
 
@@ -53,6 +60,10 @@ class GrantSubjectUser:
 
     def to_dict(self) -> dict:
         department_paths = [membership.path for membership in self.department_memberships]
+        department_display_paths = [
+            membership.display_path or membership.path
+            for membership in self.department_memberships
+        ]
         primary_path = next(
             (membership.path for membership in self.department_memberships if membership.is_primary),
             None,
@@ -63,6 +74,7 @@ class GrantSubjectUser:
             "external_id": self.external_id,
             "primary_department_path": primary_path,
             "department_paths": department_paths,
+            "department_display_paths": department_display_paths,
             "department_memberships": [
                 membership.to_dict() for membership in self.department_memberships
             ],

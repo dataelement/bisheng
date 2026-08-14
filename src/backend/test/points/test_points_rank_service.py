@@ -13,6 +13,7 @@ from bisheng.points.domain.services.points_rank_service import (
     period_keys,
     resolve_company_id,
     resolve_dept_bucket_id,
+    select_top_n_with_score_ties,
 )
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
@@ -60,8 +61,10 @@ def test_resolve_dept_bucket_none_when_unlabeled():
 
 
 def test_build_ranked_rows_dense_ties_and_excludes_admins():
-    """同分稠密同名次：100,100,50 → rank 1,1,2；列表序按 user_id。"""
+    """同分稠密同名次：100,100,50 → rank 1,1,2；同分按 last_earned_at 再 user_id。"""
     refreshed = datetime(2026, 8, 7, 5, 0)
+    earlier = datetime(2026, 8, 1, 10, 0)
+    later = datetime(2026, 8, 2, 10, 0)
     rows = build_ranked_rows(
         tenant_id=1,
         period="month",
@@ -73,12 +76,29 @@ def test_build_ranked_rows_dense_ties_and_excludes_admins():
         dept_ids={10: 2, 11: 2, 12: None, 99: 2},
         exclude_user_ids={99},
         refreshed_at=refreshed,
+        last_earned_at={10: later, 11: earlier, 12: earlier},
     )
-    assert [r.user_id for r in rows] == [10, 11, 12]
+    # 同分 100：先获得的 user 11 排在 user 10 前。
+    assert [r.user_id for r in rows] == [11, 10, 12]
     assert [r.rank_no for r in rows] == [1, 1, 2]
     assert rows[0].period_score == 100
     assert rows[0].scope_id == 100
+    assert rows[0].last_earned_at == earlier
     assert rows[2].dept_id is None
+
+
+def test_select_top_n_with_score_ties_includes_boundary_ties():
+    """算法甲：第 10 名分值并列者全部纳入，人数可超过 10。"""
+    rows = [
+        SimpleNamespace(user_id=i, period_score=score)
+        for i, score in enumerate(
+            [100, 90, 80, 70, 60, 50, 40, 30, 20, 10, 10, 10, 5],
+            start=1,
+        )
+    ]
+    selected = select_top_n_with_score_ties(rows, top_n=10)
+    assert [r.user_id for r in selected] == list(range(1, 13))
+    assert all(int(r.period_score) >= 10 for r in selected)
 
 
 @pytest.mark.asyncio
@@ -100,12 +120,8 @@ async def test_refresh_scopes_by_company_and_trims_inactive():
     repo = SimpleNamespace(
         list_accounts=AsyncMock(return_value=accounts),
         sum_deltas_by_user=AsyncMock(side_effect=[month_scores, year_scores]),
-        clear_period_rank_snapshots=AsyncMock(
-            side_effect=lambda *a, **_k: cleared.append(a) or None
-        ),
-        bulk_insert_rank_snapshots=AsyncMock(
-            side_effect=lambda rows: inserted.append(list(rows)) or len(rows)
-        ),
+        clear_period_rank_snapshots=AsyncMock(side_effect=lambda *a, **_k: cleared.append(a) or None),
+        bulk_insert_rank_snapshots=AsyncMock(side_effect=lambda rows: inserted.append(list(rows)) or len(rows)),
     )
 
     with (
@@ -151,9 +167,7 @@ async def test_refresh_no_company_writes_empty_period_batches():
         list_accounts=AsyncMock(return_value=accounts),
         sum_deltas_by_user=AsyncMock(side_effect=[{1: 10}, {1: 20}]),
         clear_period_rank_snapshots=AsyncMock(),
-        bulk_insert_rank_snapshots=AsyncMock(
-            side_effect=lambda rows: inserted.append(list(rows)) or len(rows)
-        ),
+        bulk_insert_rank_snapshots=AsyncMock(side_effect=lambda rows: inserted.append(list(rows)) or len(rows)),
     )
     with (
         patch.object(PointsRankService, "_load_super_admin_ids", AsyncMock(return_value=set())),

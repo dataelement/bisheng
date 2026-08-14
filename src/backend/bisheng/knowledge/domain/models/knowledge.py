@@ -184,6 +184,18 @@ class KnowledgeDao(KnowledgeBase):
     async def aupdate_one(cls, data: Knowledge) -> Knowledge:
         async with get_async_db_session() as session:
             session.add(data)
+            await session.flush()
+            if data.type == KnowledgeTypeEnum.SPACE.value:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    request_knowledge_intent,
+                )
+
+                await request_knowledge_intent(
+                    session,
+                    knowledge_id=int(data.id),
+                    tenant_id=int(data.tenant_id or 1),
+                    trigger_type="knowledge_updated",
+                )
             await session.commit()
             await session.refresh(data)
             return data
@@ -902,12 +914,16 @@ class KnowledgeDao(KnowledgeBase):
     async def async_get_space_source_metadata_by_ids(
         cls,
         space_ids: List[int],
-    ) -> Dict[int, Tuple[str, str]]:
-        """批量读取来源知识库名称及其绑定部门名称。"""
+    ) -> Dict[int, Tuple[str, str, str | None, str]]:
+        """批量读取来源知识库名称及其绑定部门名称投影。"""
         if not space_ids:
             return {}
 
         from bisheng.database.models.department import Department
+        from bisheng.department.domain.services.department_display_service import (
+            get_department_display_name,
+            normalize_department_short_name,
+        )
         from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
 
         statement = (
@@ -915,6 +931,7 @@ class KnowledgeDao(KnowledgeBase):
                 Knowledge.id,
                 Knowledge.name,
                 Department.name,
+                Department.short_name,
             )
             .outerjoin(
                 DepartmentKnowledgeSpace,
@@ -935,8 +952,13 @@ class KnowledgeDao(KnowledgeBase):
                 int(space_id): (
                     str(space_name or space_id),
                     str(department_name or ''),
+                    normalize_department_short_name(department_short_name),
+                    get_department_display_name(
+                        str(department_name or ''),
+                        department_short_name,
+                    ),
                 )
-                for space_id, space_name, department_name in result.all()
+                for space_id, space_name, department_name, department_short_name in result.all()
             }
 
     @classmethod
@@ -999,6 +1021,17 @@ class KnowledgeDao(KnowledgeBase):
         """ Async: Persist an updated Knowledge Space record """
         async with get_async_db_session() as session:
             session.add(space)
+            await session.flush()
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                request_knowledge_intent,
+            )
+
+            await request_knowledge_intent(
+                session,
+                knowledge_id=int(space.id),
+                tenant_id=int(space.tenant_id or 1),
+                trigger_type="knowledge_space_updated",
+            )
             await session.commit()
             await session.refresh(space)
             return space
@@ -1024,6 +1057,18 @@ class KnowledgeDao(KnowledgeBase):
             for space in spaces:
                 space.business_domain_codes = list(bindings.get(int(space.id), []))
                 session.add(space)
+            await session.flush()
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                request_knowledge_intent,
+            )
+
+            for space in spaces:
+                await request_knowledge_intent(
+                    session,
+                    knowledge_id=int(space.id),
+                    tenant_id=int(space.tenant_id or 1),
+                    trigger_type="knowledge_business_domains_updated",
+                )
             await session.commit()
             return len(spaces)
 

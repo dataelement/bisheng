@@ -632,13 +632,7 @@ class KnowledgeFileDao(KnowledgeFileBase):
         category_space_ids: dict[str, set[int]],
         category_file_ids: dict[str, set[int]] | None = None,
     ) -> dict[str, int]:
-        """Count SUCCESS files per document-type category within each card's bound spaces.
-
-        Aligns with portal category landing list (``aget_file_by_space_filters*`` +
-        ``_filter_shougang_portal_files_by_document_type``): ``file_type=FILE``,
-        ``status=SUCCESS``, ``deleted_at IS NULL``, filtered by document-type code parsed
-        from ``file_encoding``. Does **not** apply ``active_inventory_predicate``.
-        """
+        """Count active canonical documents per category within each card scope."""
         normalized_scopes = {
             code.strip().upper(): {int(space_id) for space_id in space_ids if int(space_id) > 0}
             for code, space_ids in category_space_ids.items()
@@ -669,18 +663,20 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return counts
         statement = select(
             KnowledgeFile.id,
+            KnowledgeFile.reference_document_id,
             KnowledgeFile.knowledge_id,
             KnowledgeFile.file_encoding,
         ).where(
             KnowledgeFile.file_type == FileType.FILE.value,
             KnowledgeFile.status == KnowledgeFileStatus.SUCCESS.value,
-            col(KnowledgeFile.deleted_at).is_(None),
             col(KnowledgeFile.file_encoding).is_not(None),
             or_(*conditions),
+            cls.active_inventory_predicate(),
         )
         async with get_async_db_session() as session:
             rows = (await session.exec(statement)).all()
-        for file_id, knowledge_id, encoding in rows:
+        canonical_ids_by_code = {code: set() for code in codes}
+        for file_id, document_id, knowledge_id, encoding in rows:
             document_code, _ = parse_shougang_file_encoding_codes({"file_encoding": encoding})
             document_code = (document_code or "").strip().upper()
             if not document_code:
@@ -689,8 +685,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
                 int(knowledge_id) in normalized_scopes.get(document_code, set())
                 or int(file_id) in normalized_file_scopes.get(document_code, set())
             ):
-                counts[document_code] += 1
-        return counts
+                canonical_ids_by_code[document_code].add(int(document_id or file_id))
+        return {code: len(canonical_ids_by_code[code]) for code in counts}
 
     @classmethod
     def delete_batch(cls, file_ids: list[int]) -> bool:
@@ -710,6 +706,24 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def add_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
         with get_sync_db_session() as session:
             session.add(knowledge_file)
+            session.flush()
+            if knowledge_file.file_type == FileType.FILE.value:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    KnowledgeFulltextFileRef,
+                    request_file_sync_intents_sync,
+                )
+
+                request_file_sync_intents_sync(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(knowledge_file.id),
+                            knowledge_id=int(knowledge_file.knowledge_id),
+                            tenant_id=int(knowledge_file.tenant_id or 1),
+                        )
+                    ],
+                    trigger_type="knowledge_file_created",
+                )
             session.commit()
             session.refresh(knowledge_file)
         return knowledge_file
@@ -764,6 +778,24 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def update(cls, knowledge_file):
         with get_sync_db_session() as session:
             session.add(knowledge_file)
+            session.flush()
+            if knowledge_file.file_type == FileType.FILE.value:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    KnowledgeFulltextFileRef,
+                    request_file_sync_intents_sync,
+                )
+
+                request_file_sync_intents_sync(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(knowledge_file.id),
+                            knowledge_id=int(knowledge_file.knowledge_id),
+                            tenant_id=int(knowledge_file.tenant_id or 1),
+                        )
+                    ],
+                    trigger_type="knowledge_file_updated",
+                )
             session.commit()
             session.refresh(knowledge_file)
         return knowledge_file
@@ -772,6 +804,44 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def async_update(cls, knowledge_file):
         async with get_async_db_session() as session:
             session.add(knowledge_file)
+            await session.flush()
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                KnowledgeFulltextFileRef,
+                request_file_sync_intents,
+            )
+
+            if knowledge_file.file_type == FileType.FILE.value:
+                affected_files = [knowledge_file]
+                trigger_type = "knowledge_file_updated"
+            else:
+                prefix = f"{knowledge_file.file_level_path or ''}/{int(knowledge_file.id)}"
+                affected_files = list(
+                    (
+                        await session.exec(
+                            select(KnowledgeFile).where(
+                                KnowledgeFile.knowledge_id == knowledge_file.knowledge_id,
+                                KnowledgeFile.file_type == FileType.FILE.value,
+                                or_(
+                                    col(KnowledgeFile.file_level_path) == prefix,
+                                    col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                                ),
+                            )
+                        )
+                    ).all()
+                )
+                trigger_type = "knowledge_folder_updated"
+            await request_file_sync_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(item.id),
+                        knowledge_id=int(item.knowledge_id),
+                        tenant_id=int(item.tenant_id or 1),
+                    )
+                    for item in affected_files
+                ],
+                trigger_type=trigger_type,
+            )
             await session.commit()
             await session.refresh(knowledge_file)
         return knowledge_file
@@ -799,6 +869,25 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return False
         async with get_async_db_session() as session:
             session.add_all(knowledge_files)
+            await session.flush()
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                KnowledgeFulltextFileRef,
+                request_file_sync_intents,
+            )
+
+            await request_file_sync_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(item.id),
+                        knowledge_id=int(item.knowledge_id),
+                        tenant_id=int(item.tenant_id or 1),
+                    )
+                    for item in knowledge_files
+                    if item.file_type == FileType.FILE.value
+                ],
+                trigger_type="knowledge_files_updated",
+            )
             await session.commit()
             return True
 
@@ -809,7 +898,36 @@ class KnowledgeFileDao(KnowledgeFileBase):
             update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value, remark=reason)
         )
         with get_sync_db_session() as session:
+            files = session.exec(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.id.in_(file_ids),
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                )
+            ).all()
             session.exec(statement)
+            if status.value in {
+                KnowledgeFileStatus.SUCCESS.value,
+                KnowledgeFileStatus.FAILED.value,
+                KnowledgeFileStatus.TIMEOUT.value,
+                KnowledgeFileStatus.VIOLATION.value,
+            }:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    KnowledgeFulltextFileRef,
+                    request_file_sync_intents_sync,
+                )
+
+                request_file_sync_intents_sync(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(item.id),
+                            knowledge_id=int(item.knowledge_id),
+                            tenant_id=int(item.tenant_id or 1),
+                        )
+                        for item in files
+                    ],
+                    trigger_type="knowledge_file_status_finalized",
+                )
             session.commit()
 
     @classmethod
@@ -819,7 +937,38 @@ class KnowledgeFileDao(KnowledgeFileBase):
             update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value, remark=reason)
         )
         async with get_async_db_session() as session:
+            files = (
+                await session.exec(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.id.in_(file_ids),
+                        KnowledgeFile.file_type == FileType.FILE.value,
+                    )
+                )
+            ).all()
             await session.exec(statement)
+            if status.value in {
+                KnowledgeFileStatus.SUCCESS.value,
+                KnowledgeFileStatus.FAILED.value,
+                KnowledgeFileStatus.TIMEOUT.value,
+                KnowledgeFileStatus.VIOLATION.value,
+            }:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    KnowledgeFulltextFileRef,
+                    request_file_sync_intents,
+                )
+
+                await request_file_sync_intents(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(item.id),
+                            knowledge_id=int(item.knowledge_id),
+                            tenant_id=int(item.tenant_id or 1),
+                        )
+                        for item in files
+                    ],
+                    trigger_type="knowledge_file_status_finalized",
+                )
             await session.commit()
 
     @classmethod
@@ -1089,6 +1238,8 @@ class KnowledgeFileDao(KnowledgeFileBase):
         document_type: str = None,
         file_subcategory_code: str = None,
         business_domain_code: str = None,
+        full_space_ids: list[int] | None = None,
+        explicit_file_ids: list[int] | None = None,
         order_sort: str = "desc",
         cursor: list[Any] | None = None,
         limit: int = 20,
@@ -1098,13 +1249,53 @@ class KnowledgeFileDao(KnowledgeFileBase):
         if not unique_knowledge_ids:
             return []
 
-        statement = select(KnowledgeFile).where(
+        canonical_document_id = func.coalesce(
+            KnowledgeFile.reference_document_id,
+            KnowledgeFile.id,
+        )
+        space_priority = case(
+            *(
+                (KnowledgeFile.knowledge_id == knowledge_id, index)
+                for index, knowledge_id in enumerate(unique_knowledge_ids)
+            ),
+            else_=len(unique_knowledge_ids),
+        )
+        entry_priority = case(
+            (KnowledgeFile.entry_type.is_(None), 0),
+            (KnowledgeFile.entry_type == KnowledgeFileEntryType.MANAGER.value, 0),
+            (KnowledgeFile.entry_type == KnowledgeFileEntryType.PUBLISH.value, 1),
+            (KnowledgeFile.entry_type == KnowledgeFileEntryType.SHARE.value, 2),
+            else_=9,
+        )
+        canonical_rank = func.row_number().over(
+            partition_by=canonical_document_id,
+            order_by=(space_priority.asc(), entry_priority.asc(), KnowledgeFile.id.asc()),
+        ).label("canonical_rank")
+        ranked_statement = select(
+            KnowledgeFile.id.label("file_id"),
+            canonical_rank,
+        ).where(
             KnowledgeFile.knowledge_id.in_(unique_knowledge_ids),
             KnowledgeFile.file_type == FileType.FILE.value,
-            col(KnowledgeFile.deleted_at).is_(None),
+            cls.active_inventory_predicate(),
         )
-        statement = cls._build_file_filters_statement(
-            statement,
+        if full_space_ids is not None or explicit_file_ids is not None:
+            normalized_full_space_ids = {
+                int(space_id) for space_id in (full_space_ids or []) if int(space_id) > 0
+            }
+            normalized_explicit_file_ids = {
+                int(file_id) for file_id in (explicit_file_ids or []) if int(file_id) > 0
+            }
+            visibility_conditions = []
+            if normalized_full_space_ids:
+                visibility_conditions.append(KnowledgeFile.knowledge_id.in_(normalized_full_space_ids))
+            if normalized_explicit_file_ids:
+                visibility_conditions.append(KnowledgeFile.id.in_(normalized_explicit_file_ids))
+            if not visibility_conditions:
+                return []
+            ranked_statement = ranked_statement.where(or_(*visibility_conditions))
+        ranked_statement = cls._build_file_filters_statement(
+            ranked_statement,
             file_name,
             status,
             file_ids,
@@ -1114,19 +1305,33 @@ class KnowledgeFileDao(KnowledgeFileBase):
 
         normalized_ext = (file_ext or "").strip().lower().lstrip(".")
         if normalized_ext:
-            statement = statement.where(func.lower(KnowledgeFile.file_name).like(f"%.{normalized_ext}"))
+            ranked_statement = ranked_statement.where(
+                func.lower(KnowledgeFile.file_name).like(f"%.{normalized_ext}")
+            )
 
         normalized_file_subcategory_code = (file_subcategory_code or "").strip().upper()
         if normalized_file_subcategory_code:
-            statement = statement.where(KnowledgeFile.file_subcategory_code == normalized_file_subcategory_code)
+            ranked_statement = ranked_statement.where(
+                KnowledgeFile.file_subcategory_code == normalized_file_subcategory_code
+            )
 
         normalized_document_type = (document_type or "").strip().upper()
         if normalized_document_type:
-            statement = statement.where(KnowledgeFile.file_encoding.like(f"%-{normalized_document_type}-%"))
+            ranked_statement = ranked_statement.where(
+                KnowledgeFile.file_encoding.like(f"%-{normalized_document_type}-%")
+            )
 
         normalized_business_domain_code = (business_domain_code or "").strip().upper()
         if normalized_business_domain_code:
-            statement = statement.where(KnowledgeFile.file_encoding.like(f"%-{normalized_business_domain_code}-%"))
+            ranked_statement = ranked_statement.where(
+                KnowledgeFile.file_encoding.like(f"%-{normalized_business_domain_code}-%")
+            )
+
+        ranked_files = ranked_statement.subquery()
+        statement = select(KnowledgeFile).join(
+            ranked_files,
+            KnowledgeFile.id == ranked_files.c.file_id,
+        ).where(ranked_files.c.canonical_rank == 1)
 
         normalized_order_sort = "asc" if str(order_sort or "").lower() == "asc" else "desc"
         if cursor and len(cursor) >= 2:

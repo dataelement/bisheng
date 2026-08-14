@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from sqlalchemy.orm.attributes import flag_modified
+
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.points import PointsRuleConflictError, PointsRuleNotFoundError
 from bisheng.points.domain.constants.beneficiary import allowed_beneficiaries
+from bisheng.points.domain.constants.optional_fixed_score_rules import validate_deferred_config_rule_can_enable
 from bisheng.points.domain.models import PointRule
 from bisheng.points.domain.schemas.points_schema import (
     PointCopiesUpdateRequest,
@@ -64,9 +67,7 @@ class PointsRuleService:
         rows = await self.repository.list_rules(tenant_id, rule_type=rule_type, status=status)
         return [self._to_dto(r) for r in rows]
 
-    async def create_rule(
-        self, tenant_id: int, user: UserPayload, body: PointRuleRequest
-    ) -> PointRuleResponse:
+    async def create_rule(self, tenant_id: int, user: UserPayload, body: PointRuleRequest) -> PointRuleResponse:
         """创建规则；rule_code 租户内唯一。"""
         require_platform_admin(user)
         if not body.rule_code or not body.rule_type or not body.name:
@@ -108,6 +109,7 @@ class PointsRuleService:
             rule.name = body.name
         if "score_expr" in fields and body.score_expr is not None:
             rule.score_expr = body.score_expr
+            flag_modified(rule, "score_expr")
         if "daily_cap" in fields:
             rule.daily_cap = body.daily_cap
         if "status" in fields and body.status is not None:
@@ -121,6 +123,17 @@ class PointsRuleService:
         if "beneficiary" in fields:
             self.validate_beneficiary(rule.rule_code, rule.rule_type, body.beneficiary)
             rule.beneficiary = body.beneficiary
+        target_status = rule.status
+        effective_expr = rule.score_expr or {}
+        effective_cap = rule.daily_cap
+        enable_err = validate_deferred_config_rule_can_enable(
+            rule.rule_code,
+            score_expr=effective_expr,
+            daily_cap=effective_cap,
+            status=target_status,
+        )
+        if enable_err:
+            raise PointsRuleConflictError(msg=enable_err)
         saved = await self.repository.save_rule(rule)
         await self.session.commit()
         return self._to_dto(saved)
@@ -129,10 +142,7 @@ class PointsRuleService:
         """管理端说明文案列表。"""
         require_platform_admin(user)
         rows = await self.repository.list_copies(tenant_id)
-        return [
-            PointCopyItem(copy_key=r.copy_key, content=r.content, sort_order=int(r.sort_order or 0))
-            for r in rows
-        ]
+        return [PointCopyItem(copy_key=r.copy_key, content=r.content, sort_order=int(r.sort_order or 0)) for r in rows]
 
     async def update_copies(
         self, tenant_id: int, user: UserPayload, body: PointCopiesUpdateRequest
@@ -144,10 +154,7 @@ class PointsRuleService:
             [item.model_dump() for item in body.items],
         )
         await self.session.commit()
-        return [
-            PointCopyItem(copy_key=r.copy_key, content=r.content, sort_order=int(r.sort_order or 0))
-            for r in rows
-        ]
+        return [PointCopyItem(copy_key=r.copy_key, content=r.content, sort_order=int(r.sort_order or 0)) for r in rows]
 
     async def public_rules(self, tenant_id: int) -> dict:
         """前台规则弹窗：启用的 earn/deduct + 文案；不暴露月奖 M*。"""

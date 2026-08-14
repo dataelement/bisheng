@@ -11,14 +11,16 @@ import {
     type TagConsoleReviewRef,
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SourceFileLinks } from "./SourceFileLinks"
 import { tagSourceLabel } from "./TagSourceIcon"
+import { distinctSourceSpaceIds, useApprovableLibraries } from "./useApprovableLibraries"
 
 interface TagReviewDialogProps {
     /** Null closes the dialog. */
     target: TagConsoleReviewRef | null
+    /** Fallback list, used only while the tag's own source is still unknown. */
     libraries: KnowledgeSpaceTagLibraryListItem[]
     saving: boolean
     onClose: () => void
@@ -41,6 +43,12 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
     const [loading, setLoading] = useState(false)
     const [libraryId, setLibraryId] = useState("")
     const [rejectReason, setRejectReason] = useState("")
+
+    // Only libraries bound to this tag's own knowledge base can take it; the
+    // rest are refused server-side with "该标签库未关联此知识空间".
+    const spaceIds = useMemo(() => (detail ? distinctSourceSpaceIds([detail]) : []), [detail])
+    const { libraries: approvable, loading: loadingLibraries } = useApprovableLibraries(spaceIds)
+    const selectable = spaceIds.length ? approvable : libraries
 
     useEffect(() => {
         if (!target) {
@@ -97,7 +105,7 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
                             <div className="rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                                 {field(t("build.tagName", "标签名称"), detail?.name || "-")}
                                 {field(
-                                    t("build.tagSource", "标签来源"),
+                                    t("build.tagConsole.tagType", "标签类型"),
                                     detail ? tagSourceLabel(detail.resource_type, t) : "-",
                                 )}
                                 {field(t("build.creator", "创建者"), detail?.submitter_name || "-")}
@@ -113,14 +121,14 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
                                     {t("build.reviewTagSelectLibrary", "选择标签库")}
                                     <span className="bisheng-tip">*</span>
                                 </Label>
-                                <Select value={libraryId} onValueChange={setLibraryId}>
+                                <Select value={libraryId} onValueChange={setLibraryId} disabled={loadingLibraries}>
                                     <SelectTrigger className="mt-2">
                                         <SelectValue
                                             placeholder={t("build.reviewTagSelectLibraryPlaceholder", "请选择标签库")}
                                         />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {libraries.map((library) => (
+                                        {selectable.map((library) => (
                                             <SelectItem key={library.id} value={String(library.id)}>
                                                 {library.name}
                                             </SelectItem>

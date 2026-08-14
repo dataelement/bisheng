@@ -36,9 +36,7 @@ def year_bounds(now: datetime | None = None) -> tuple[datetime, datetime]:
     if current.tzinfo is not None:
         current = current.astimezone(SHANGHAI)
     start = current.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-    end = current.replace(
-        year=current.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None
-    )
+    end = current.replace(year=current.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     return start, end
 
 
@@ -90,18 +88,28 @@ def build_ranked_rows(
     dept_ids: dict[int, int | None],
     exclude_user_ids: set[int],
     refreshed_at: datetime,
+    last_earned_at: dict[int, datetime | None] | None = None,
 ) -> list[PointRankSnapshot]:
-    """按 period_score 降序生成快照行；同分稠密同名次，列表序按 user_id 稳定。"""
+    """按分降序生成快照；同分看 last_earned_at 升序再 user_id；名次仍按分稠密并列。"""
+    earned_map = last_earned_at or {}
     candidates = [
-        (user_id, score)
+        (user_id, score, earned_map.get(user_id))
         for user_id, score in scores.items()
         if user_id not in exclude_user_ids
     ]
-    candidates.sort(key=lambda item: (-item[1], item[0]))
+    # 无获得时间的排在同分末尾，再比 user_id。
+    candidates.sort(
+        key=lambda item: (
+            -int(item[1]),
+            item[2] is None,
+            item[2] or datetime.min,
+            int(item[0]),
+        )
+    )
     rows: list[PointRankSnapshot] = []
     prev_score: int | None = None
     rank_no = 0
-    for user_id, score in candidates:
+    for user_id, score, earned_at in candidates:
         score_i = int(score)
         # 稠密名次：分不同才 +1；同分共用上一名次（100,100,90 → 1,1,2）。
         if prev_score is None or score_i != prev_score:
@@ -119,10 +127,24 @@ def build_ranked_rows(
                 period_score=score_i,
                 balance=int(balances.get(user_id, 0)),
                 dept_id=dept_ids.get(user_id),
+                last_earned_at=earned_at,
                 refreshed_at=refreshed_at,
             )
         )
     return rows
+
+
+def select_top_n_with_score_ties(rows: list, *, top_n: int = 10) -> list:
+    """算法甲：按已排序列表取第 N 人的分作阈值，纳入所有 ≥ 该分的行。
+
+    ``rows`` 须已按 period_score 降序（同分 last_earned_at / user_id 已排好）。
+    """
+    if top_n <= 0 or not rows:
+        return []
+    if len(rows) <= top_n:
+        return list(rows)
+    threshold = int(rows[top_n - 1].period_score)
+    return [row for row in rows if int(row.period_score) >= threshold]
 
 
 class PointsRankService:
@@ -165,6 +187,7 @@ class PointsRankService:
         accounts = await repo.list_accounts(tenant_id)
         balances = {int(a.user_id): int(a.balance) for a in accounts}
         lifetime_earned = {int(a.user_id): int(a.lifetime_earned) for a in accounts}
+        last_earned_at = {int(a.user_id): getattr(a, "last_earned_at", None) for a in accounts}
         if not balances:
             return {"tenant_id": tenant_id, "rows": 0}
 
@@ -174,14 +197,10 @@ class PointsRankService:
         year_start, year_end = year_bounds(now)
         month_scores = await repo.sum_deltas_by_user(tenant_id, start=month_start, end=month_end)
         year_scores = await repo.sum_deltas_by_user(tenant_id, start=year_start, end=year_end)
-        all_scores = {
-            user_id: earned for user_id, earned in lifetime_earned.items() if earned > 0
-        }
+        all_scores = {user_id: earned for user_id, earned in lifetime_earned.items() if earned > 0}
 
         exclude = await self._load_super_admin_ids()
-        company_by_user, bucket_by_user = await self._load_company_and_dept_buckets(
-            list(balances.keys())
-        )
+        company_by_user, bucket_by_user = await self._load_company_and_dept_buckets(list(balances.keys()))
         company_ids = sorted({cid for cid in company_by_user.values() if cid is not None})
 
         written = 0
@@ -214,6 +233,7 @@ class PointsRankService:
                         dept_ids=bucket_by_user,
                         exclude_user_ids=set(),
                         refreshed_at=refreshed_at,
+                        last_earned_at=last_earned_at,
                     )
                 )
 
@@ -236,6 +256,7 @@ class PointsRankService:
                             dept_ids=bucket_by_user,
                             exclude_user_ids=set(),
                             refreshed_at=refreshed_at,
+                            last_earned_at=last_earned_at,
                         )
                     )
 
@@ -261,9 +282,7 @@ class PointsRankService:
         from sqlmodel import select
 
         async with get_async_db_session() as session:
-            rows = (
-                await session.exec(select(UserRole.user_id).where(UserRole.role_id == AdminRole))
-            ).all()
+            rows = (await session.exec(select(UserRole.user_id).where(UserRole.role_id == AdminRole))).all()
         return {int(r[0] if isinstance(r, tuple) else r) for r in rows}
 
     @staticmethod

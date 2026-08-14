@@ -20,6 +20,7 @@ from bisheng.knowledge.domain.services.department_knowledge_space_service import
     DepartmentKnowledgeSpaceService,
 )
 from bisheng.knowledge.domain.services.department_space_target_resolver import (
+    DepartmentSpaceTargetKind,
     DepartmentSpaceTargetResolver,
 )
 
@@ -185,6 +186,147 @@ async def test_resolver_accepts_one_legacy_candidate_and_rejects_multiple() -> N
     ):
         with pytest.raises(DepartmentKnowledgeSpaceAmbiguousError):
             await DepartmentSpaceTargetResolver.resolve([3])
+
+
+@pytest.mark.asyncio
+async def test_resolver_selects_clinic_space_for_clinic_kind() -> None:
+    bindings = [_binding(3, 100), _binding(3, 101)]
+    scopes = [
+        _scope(
+            100,
+            level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+            owner_id=3,
+        ),
+        _scope(
+            101,
+            level=KnowledgeSpaceLevelEnum.TEAM_KS,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+            owner_id=9,
+        ),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.department_space_target_resolver."
+            "DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new=AsyncMock(return_value=bindings),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.department_space_target_resolver."
+            "KnowledgeSpaceScopeDao.aget_by_space_ids",
+            new=AsyncMock(return_value=scopes),
+        ),
+    ):
+        assert await DepartmentSpaceTargetResolver.resolve(
+            [3],
+            kind=DepartmentSpaceTargetKind.CLINIC,
+            allow_legacy=False,
+        ) == 101
+        assert await DepartmentSpaceTargetResolver.resolve(
+            [3],
+            kind=DepartmentSpaceTargetKind.DEPARTMENT,
+            allow_legacy=False,
+        ) == 100
+
+
+@pytest.mark.asyncio
+async def test_resolver_clinic_kind_does_not_fall_back_to_department_space() -> None:
+    bindings = [_binding(3, 100)]
+    scopes = [
+        _scope(
+            100,
+            level=KnowledgeSpaceLevelEnum.DEPARTMENT,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.DEPARTMENT,
+            owner_id=3,
+        ),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.department_space_target_resolver."
+            "DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new=AsyncMock(return_value=bindings),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.department_space_target_resolver."
+            "KnowledgeSpaceScopeDao.aget_by_space_ids",
+            new=AsyncMock(return_value=scopes),
+        ),
+    ):
+        assert await DepartmentSpaceTargetResolver.resolve(
+            [3],
+            kind=DepartmentSpaceTargetKind.CLINIC,
+            allow_legacy=False,
+        ) is None
+
+
+@pytest.mark.asyncio
+async def test_resolver_department_kind_does_not_fall_back_to_clinic_space() -> None:
+    bindings = [_binding(3, 100)]
+    scopes = [
+        _scope(
+            100,
+            level=KnowledgeSpaceLevelEnum.TEAM_KS,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+            owner_id=9,
+        ),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.department_space_target_resolver."
+            "DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new=AsyncMock(return_value=bindings),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.department_space_target_resolver."
+            "KnowledgeSpaceScopeDao.aget_by_space_ids",
+            new=AsyncMock(return_value=scopes),
+        ),
+    ):
+        assert await DepartmentSpaceTargetResolver.resolve(
+            [3],
+            kind=DepartmentSpaceTargetKind.DEPARTMENT,
+            allow_legacy=False,
+        ) is None
+
+
+@pytest.mark.asyncio
+async def test_resolver_clinic_kind_walks_to_nearest_ancestor() -> None:
+    bindings = [_binding(2, 200), _binding(1, 100)]
+    scopes = [
+        _scope(
+            200,
+            level=KnowledgeSpaceLevelEnum.TEAM_KS,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+            owner_id=9,
+        ),
+        _scope(
+            100,
+            level=KnowledgeSpaceLevelEnum.TEAM_KS,
+            owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
+            owner_id=8,
+        ),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.department_space_target_resolver."
+            "DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new=AsyncMock(return_value=bindings),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.department_space_target_resolver."
+            "KnowledgeSpaceScopeDao.aget_by_space_ids",
+            new=AsyncMock(return_value=scopes),
+        ),
+    ):
+        assert await DepartmentSpaceTargetResolver.resolve(
+            [3, 2, 1],
+            kind=DepartmentSpaceTargetKind.CLINIC,
+            allow_legacy=False,
+        ) == 200
 
 
 @pytest.mark.asyncio

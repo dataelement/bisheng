@@ -138,6 +138,7 @@ class AutomotiveSheetIntroSyncService:
                 api_url=str(config.api_url),
                 method=config.api_method,
                 timeout_seconds=config.api_timeout_seconds,
+                api_ssl_verify=bool(config.api_ssl_verify),
             )
             temp_file_path = await self._write_temp_pdf(config.file_name, pdf_bytes)
 

@@ -288,7 +288,7 @@ async def test_share_source_metadata_resolves_share_source_entry_instead_of_rece
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_get_space_source_metadata_by_ids",
             new_callable=AsyncMock,
-            return_value={10: ("来源知识库", "来源部门")},
+            return_value={10: ("来源知识库", "来源部门", "来源", "来源")},
         ),
     ):
         result = await svc._resolve_shougang_portal_source_metadata(
@@ -309,6 +309,8 @@ async def test_share_source_metadata_resolves_share_source_entry_instead_of_rece
             "source_space_id": 10,
             "source_space_name": "来源知识库",
             "source_department_name": "来源部门",
+            "source_department_short_name": "来源",
+            "source_department_display_name": "来源",
             "source_folder_path": "来源知识库/源目录",
             "source_path": "来源知识库>源目录/制度.pdf",
         }
@@ -321,8 +323,8 @@ async def test_source_space_metadata_query_returns_department_name_without_extra
         exec=AsyncMock(
             return_value=SimpleNamespace(
                 all=lambda: [
-                    (10, "来源知识库", "来源部门"),
-                    (11, "无绑定知识库", None),
+                    (10, "来源知识库", "来源部门", "来源"),
+                    (11, "无绑定知识库", None, None),
                 ]
             )
         )
@@ -339,7 +341,7 @@ async def test_source_space_metadata_query_returns_department_name_without_extra
         result = await KnowledgeDao.async_get_space_source_metadata_by_ids([10, 11])
 
     assert result == {
-        10: ("来源知识库", "来源部门"),
-        11: ("无绑定知识库", ""),
+        10: ("来源知识库", "来源部门", "来源", "来源"),
+        11: ("无绑定知识库", "", None, ""),
     }
     session.exec.assert_awaited_once()

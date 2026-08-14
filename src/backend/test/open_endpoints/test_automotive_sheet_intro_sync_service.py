@@ -143,6 +143,12 @@ async def test_run_success_writes_run_log_and_syncs(async_db_session):
 
     assert result.status == "success"
     assert result.file_id == 900
+    service.pdf_client.fetch_pdf.assert_awaited_once_with(
+        api_url="https://example.com/automotive.pdf",
+        method="GET",
+        timeout_seconds=120,
+        api_ssl_verify=True,
+    )
     filelib_service.sync_from_staged_file.assert_awaited_once_with(
         params=service._build_filelib_sync_params.return_value,
         local_file_path="/tmp/test.pdf",
@@ -172,6 +178,59 @@ async def test_run_upstream_failure_marks_run_log_failed_without_sync(async_db_s
     service.run_log_repository.update.assert_awaited()
     update_payload = service.run_log_repository.update.await_args.args[1]
     assert update_payload.status == "failed"
+
+
+@pytest.mark.asyncio
+async def test_run_passes_disabled_api_ssl_verify_to_pdf_client(async_db_session):
+    service = _service(async_db_session)
+    config = AutomotiveSheetIntroSyncConfig.model_validate(
+        {
+            "enabled": True,
+            "api_url": "https://192.168.147.131/automotive.pdf",
+            "developer_token_id": 10,
+            "api_ssl_verify": False,
+        }
+    )
+    service.config_service.get_config = AsyncMock(return_value=config)
+    service.run_log_repository.insert = AsyncMock(return_value=13)
+    service.run_log_repository.update = AsyncMock()
+    service.pdf_client.fetch_pdf = AsyncMock(return_value=b"%PDF-1.4 test")
+    service._build_filelib_sync_params = AsyncMock(
+        return_value=FilelibSyncParams(external_file_id="automotive_sheet_intro", file_name="汽车板介绍.pdf")
+    )
+    filelib_service = MagicMock()
+    filelib_service.sync_from_staged_file = AsyncMock(
+        return_value=FilelibSyncResponseData(
+            external_file_id="automotive_sheet_intro",
+            file_id=901,
+            file_encoding="ENC",
+            knowledge_id=100,
+            knowledge_name="space",
+            status=5,
+        )
+    )
+
+    with patch.object(service, "_acquire_lock", AsyncMock(return_value="lock-token")):
+        with patch.object(service, "_release_lock", AsyncMock()):
+            with patch.object(service, "_load_enabled_token", AsyncMock(return_value=_token())):
+                with patch.object(service, "_write_temp_pdf", AsyncMock(return_value="/tmp/test.pdf")):
+                    with patch.object(service, "_cleanup_temp_file", AsyncMock()):
+                        with patch(
+                            "bisheng.open_endpoints.domain.services.automotive_sheet_intro_sync_service.build_filelib_sync_service_for_scheduled_sync",
+                            return_value=filelib_service,
+                        ):
+                            with patch(
+                                "bisheng.open_endpoints.domain.services.automotive_sheet_intro_sync_service.DeveloperTokenService._get_bound_user_payload",
+                                AsyncMock(return_value=UserPayload(user_id=100, user_name="u", tenant_id=5)),
+                            ):
+                                await service.run(tenant_id=5, trigger_type="manual")
+
+    service.pdf_client.fetch_pdf.assert_awaited_once_with(
+        api_url="https://192.168.147.131/automotive.pdf",
+        method="GET",
+        timeout_seconds=120,
+        api_ssl_verify=False,
+    )
 
 
 @pytest.mark.asyncio

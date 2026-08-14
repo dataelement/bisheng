@@ -306,6 +306,7 @@ async def test_approve_passes_scope_to_repository():
         1,
         skip_library_add=True,
         scope=scope,
+        target_library_id=10,
     )
 
 

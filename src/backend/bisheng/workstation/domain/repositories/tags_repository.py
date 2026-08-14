@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlmodel import delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink, TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
@@ -21,6 +22,7 @@ class TagRepositoryImpl:
         *,
         reviewer_id: int | None = None,
         review_time: datetime | None = None,
+        target_library_id: int | None = None,
     ):
         """Move an approved tag from ``review_tag`` into ``tag``.
 
@@ -29,24 +31,62 @@ class TagRepositoryImpl:
         it back from. ``review_time`` is likewise passed in rather than copied:
         the source row is still unreviewed at this point, the service marks it
         only after the move.
+
+        ``target_library_id`` is the library the **reviewer chose**, and it wins
+        over the id recorded on the review row. That recorded id says where the
+        tag was *proposed*, not where the reviewer decided it belongs; trusting
+        it filed every approval into the proposing library instead.
+
+        The approval flow registers the name into the chosen library first, which
+        already leaves a row there. This updates that row rather than inserting a
+        second one — two rows per approval, one holding the audit trail in the
+        wrong library and one holding nothing in the right one, was the bug.
         """
-        tag = Tag()
-        tag.name = review_tag.name
-        tag.business_id = self._resolve_approved_tag_business_id(review_tag)
-        tag.business_type = TagBusinessTypeEnum.TAG_LIBRARY.value
-        # Stays the original proposer; the reviewer is a separate column.
-        tag.user_id = review_tag.user_id
-        tag.tenant_id = review_tag.tenant_id
-        tag.resource_type = review_tag.resource_type
-        tag.create_time = review_tag.create_time
-        tag.update_time = review_tag.update_time
-        tag.reviewer_id = reviewer_id
-        tag.review_time = review_time
-        self.session.add(tag)
-        await self.session.flush()
+        business_id = (
+            TagLibraryTagService._business_id(target_library_id)
+            if target_library_id is not None
+            else self._resolve_approved_tag_business_id(review_tag)
+        )
+        tag_id, existing_links = await self.find_committed_library_tag(
+            review_tag.name, business_id, review_tag.tenant_id
+        )
+        values = {
+            # The row left by the library registration carries the reviewer as
+            # its creator and "now" as its creation time; both are wrong for the
+            # tag itself, so they are overwritten either way.
+            "user_id": review_tag.user_id,  # the original proposer, not the reviewer
+            "create_time": review_tag.create_time,
+            "update_time": review_tag.update_time,
+            "reviewer_id": reviewer_id,
+            "review_time": review_time,
+        }
+        if tag_id is None:
+            tag = Tag(
+                name=review_tag.name,
+                business_id=business_id,
+                business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
+                tenant_id=review_tag.tenant_id,
+                # Only set on insert: an existing row's classification belongs to
+                # the library, which may have filed the name differently.
+                resource_type=review_tag.resource_type,
+                **values,
+            )
+            self.session.add(tag)
+            await self.session.flush()
+            tag_id = tag.id
+        else:
+            # Updated by id rather than through a loaded object: the row was
+            # committed by another connection and this transaction's snapshot
+            # cannot see it, but a write always applies to the current version.
+            await self.session.exec(update(Tag).where(Tag.id == tag_id).values(**values))
+
         for link in review_tag_link:
+            # Re-approving the same file must not stack duplicate links, which
+            # would inflate 已标识知识数.
+            if (link.resource_id, link.resource_type) in existing_links:
+                continue
             taglink = TagLink()
-            taglink.tag_id = tag.id
+            taglink.tag_id = tag_id
             taglink.resource_id = link.resource_id
             taglink.resource_type = link.resource_type
             taglink.tenant_id = link.tenant_id
@@ -54,7 +94,58 @@ class TagRepositoryImpl:
             taglink.create_time = link.create_time
             taglink.update_time = link.update_time
             self.session.add(taglink)
+            existing_links.add((link.resource_id, link.resource_type))
             await self.session.flush()
+
+    @staticmethod
+    async def find_committed_library_tag(
+        name: str,
+        business_id: str | None,
+        tenant_id: int | None,
+    ) -> tuple[int | None, set]:
+        """The library's row for this name, read on a **fresh** connection.
+
+        Registering the tag name into the library happens on its own session and
+        commits there. Under MySQL's REPEATABLE READ the approving request cannot
+        see that row — its snapshot was taken earlier in the request — so looking
+        for it on the request's own session always came back empty and the move
+        inserted a second row beside it. Reading on a new connection gets a
+        snapshot that postdates the commit.
+
+        Its existing file links come back too, and for the same reason: rebuilding
+        a library remaps links onto the new row ids from that other session.
+        """
+        async with get_async_db_session() as session:
+            row = (
+                await session.exec(
+                    select(Tag.id).where(
+                        Tag.name == name,
+                        Tag.tenant_id == tenant_id,
+                        Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+                        Tag.business_id == business_id,
+                    )
+                )
+            ).first()
+            if row is None:
+                return None, set()
+            tag_id = int(row)
+            links = (
+                await session.exec(select(TagLink.resource_id, TagLink.resource_type).where(TagLink.tag_id == tag_id))
+            ).all()
+            return tag_id, set(links)
+
+    async def find_library_tag_in(self, name: str, library_id: int, tenant_id: int | None) -> Tag | None:
+        """By library id, for callers that do not know the encoded business_id."""
+        return await self.find_library_tag(name, TagLibraryTagService._business_id(library_id), tenant_id)
+
+    async def find_library_tag(self, name: str, business_id: str | None, tenant_id: int | None) -> Tag | None:
+        statement = select(Tag).where(
+            Tag.name == name,
+            Tag.tenant_id == tenant_id,
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+            Tag.business_id == business_id,
+        )
+        return (await self.session.exec(statement)).first()
 
     @staticmethod
     def _resolve_approved_tag_business_id(review_tag: ReviewTag) -> str | None:

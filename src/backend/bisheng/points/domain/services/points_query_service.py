@@ -10,8 +10,12 @@ from zoneinfo import ZoneInfo
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.points import PointsInvalidAdjustError, PointsRuleNotFoundError
 from bisheng.common.schemas.api import PageData
+from bisheng.points.domain.constants.notify_templates import format_deduct_notify_reason
 from bisheng.points.domain.schemas.points_schema import (
     PointAdjustRequest,
+    PointAdminDepartmentOption,
+    PointAdminUserDetail,
+    PointAdminUserFilterOptions,
     PointAdminUserItem,
     PointAuditLogItem,
     PointDeductRequest,
@@ -30,6 +34,16 @@ SHANGHAI = ZoneInfo("Asia/Shanghai")
 # 运营概览缓存：三个指标均为全历史聚合，AC-19 允许 5min 陈旧。
 OVERVIEW_CACHE_PREFIX = "points:overview:"
 OVERVIEW_CACHE_TTL = 300
+
+
+def _intersect_user_ids(current: list[int] | None, new_ids: list[int]) -> list[int]:
+    """合并多路 user_id 过滤条件（交集）；new_ids 为空则整表无命中。"""
+    if not new_ids:
+        return []
+    normalized = sorted({int(uid) for uid in new_ids})
+    if current is None:
+        return normalized
+    return sorted(set(current) & set(normalized))
 
 
 class PointsQueryService:
@@ -155,10 +169,8 @@ class PointsQueryService:
         )
         return [self._log_response(r) for r in rows], total
 
-    async def leaderboard(
-        self, tenant_id: int, period: str, user_id: int
-    ) -> PointLeaderboardResponse:
-        """读取当前用户所属公司的小时快照 TOP10；无公司则空榜（AC-15）。"""
+    async def leaderboard(self, tenant_id: int, period: str, user_id: int) -> PointLeaderboardResponse:
+        """读取当前用户所属公司的小时快照前十（算法甲含并列）；无公司则空榜（AC-15）。"""
         now = datetime.now(SHANGHAI)
         if period == "year":
             period_key = now.strftime("%Y")
@@ -171,9 +183,13 @@ class PointsQueryService:
         refreshed = await self.repository.latest_rank_refreshed_at(tenant_id, period, period_key)
         if company_id is None:
             return PointLeaderboardResponse(period=period, refreshed_at=refreshed, items=[])
-        rows = await self.repository.list_top_ranks(
+        from bisheng.points.domain.services.points_rank_service import select_top_n_with_score_ties
+
+        # 先取整桶排序结果，再按第 10 名分值阈值纳入全部并列（人数可 >10）。
+        bucket_rows = await self.repository.list_top_ranks(
             tenant_id, period, "global", company_id, period_key, limit=10
         )
+        rows = select_top_n_with_score_ties(bucket_rows, top_n=10)
         user_ids = [int(r.user_id) for r in rows]
         name_by_user, dept_by_user = await self._leaderboard_display_maps(user_ids)
         items = [
@@ -190,23 +206,51 @@ class PointsQueryService:
         return PointLeaderboardResponse(period=period, refreshed_at=refreshed, items=items)
 
     @staticmethod
+    def _department_path_ids(path: str | None) -> list[int]:
+        """从 materialized path 抽出部门 id，例如 ``/1/54/55/94/`` → ``[1, 54, 55, 94]``。"""
+        ids: list[int] = []
+        for part in str(path or "").strip("/").split("/"):
+            if part.isdigit():
+                ids.append(int(part))
+        return ids
+
+    @staticmethod
     async def _leaderboard_display_maps(
         user_ids: list[int],
     ) -> tuple[dict[int, str], dict[int, str]]:
-        """批量解析榜单用户名与主部门名称。"""
+        """批量解析用户名与积分部门名称。
+
+        部门名取主部门沿 path 向上最近的 ``org_level=dept`` 节点，与部门榜桶一致；
+        找不到该标签时不回退叶子部门，调用方按 ``—`` 展示。
+        """
         if not user_ids:
             return {}, {}
-        from bisheng.database.models.department import UserDepartmentDao
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+        from bisheng.points.domain.services.points_rank_service import resolve_dept_bucket_id
         from bisheng.user.domain.models.user import UserDao
 
         users = await UserDao.aget_user_by_ids(user_ids) or []
-        name_by_user = {
-            int(u.user_id): str(getattr(u, "user_name", None) or u.user_id) for u in users
-        }
+        name_by_user = {int(u.user_id): str(getattr(u, "user_name", None) or u.user_id) for u in users}
         primary_map = UserDepartmentDao.get_primary_department_map_by_user_ids(user_ids)
-        dept_by_user = {
-            uid: str(dept.name) for uid, dept in primary_map.items() if getattr(dept, "name", None)
-        }
+        dept_by_id: dict[int, object] = {}
+        ancestor_ids: set[int] = set()
+        for dept in primary_map.values():
+            dept_id = getattr(dept, "id", None)
+            if dept_id is not None:
+                dept_by_id[int(dept_id)] = dept
+            ancestor_ids.update(PointsQueryService._department_path_ids(getattr(dept, "path", None)))
+        missing_ids = [dept_id for dept_id in ancestor_ids if dept_id not in dept_by_id]
+        if missing_ids:
+            for row in await DepartmentDao.aget_by_ids(missing_ids):
+                if getattr(row, "id", None) is not None:
+                    dept_by_id[int(row.id)] = row
+        dept_by_user: dict[int, str] = {}
+        for uid, primary in primary_map.items():
+            bucket_id = resolve_dept_bucket_id(primary, dept_by_id)
+            node = dept_by_id.get(bucket_id) if bucket_id is not None else None
+            name = getattr(node, "name", None) if node is not None else None
+            if name:
+                dept_by_user[int(uid)] = str(name)
         return name_by_user, dept_by_user
 
     async def overview(self, tenant_id: int, user: UserPayload) -> PointOverviewResponse:
@@ -251,16 +295,35 @@ class PointsQueryService:
         except Exception:
             logger.warning("points.overview cache write failed key=%s", key, exc_info=True)
 
+    async def admin_user_filter_options(self, user: UserPayload) -> PointAdminUserFilterOptions:
+        """用户积分列表筛选项：部门树扁平列表 + PRD 四类角色。"""
+        require_platform_admin(user)
+        from bisheng.database.models.department import DepartmentDao
+        from bisheng.department.domain.services.department_display_service import get_department_display_name
+        from bisheng.points.domain.constants.admin_user_type import USER_TYPE_FILTER_OPTIONS
+
+        departments: list[PointAdminDepartmentOption] = []
+        for row in await DepartmentDao.aget_all_active():
+            name = get_department_display_name(row.name, getattr(row, "short_name", None))
+            departments.append(PointAdminDepartmentOption(id=int(row.id), name=name))
+        departments.sort(key=lambda item: item.name)
+        return PointAdminUserFilterOptions(
+            departments=departments,
+            user_types=list(USER_TYPE_FILTER_OPTIONS),
+        )
+
     async def admin_list_users(
         self,
         tenant_id: int,
         user: UserPayload,
         *,
         keyword: str | None = None,
+        dept_id: int | None = None,
+        user_type: str | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> PageData[PointAdminUserItem]:
-        """管理端用户积分列表（账户 + 姓名/主部门 + 本月净变动）。"""
+        """管理端用户积分列表（账户 + 姓名/积分部门桶 + 本月净变动）。"""
         require_platform_admin(user)
         page = max(int(page), 1)
         page_size = min(max(int(page_size), 1), 100)
@@ -276,7 +339,23 @@ class PointsQueryService:
             # 纯数字关键词按 user_id 命中
             if kw.isdigit():
                 ids.add(int(kw))
-            user_ids_filter = sorted(ids)
+            user_ids_filter = _intersect_user_ids(user_ids_filter, sorted(ids))
+        if dept_id is not None:
+            from bisheng.database.models.department import UserDepartmentDao
+
+            dept_user_ids = await UserDepartmentDao.aget_user_ids_by_department(int(dept_id), is_primary=True)
+            user_ids_filter = _intersect_user_ids(user_ids_filter, dept_user_ids)
+        role_label = (user_type or "").strip()
+        if role_label:
+            from bisheng.points.domain.constants.admin_user_type import resolve_user_ids_for_user_type_filter
+
+            account_user_ids = await self.repository.list_account_user_ids(tenant_id)
+            role_user_ids = await resolve_user_ids_for_user_type_filter(
+                role_label,
+                account_user_ids=account_user_ids,
+            )
+            if role_user_ids is not None:
+                user_ids_filter = _intersect_user_ids(user_ids_filter, role_user_ids)
         accounts, total = await self.repository.list_accounts_page(
             tenant_id, page=page, page_size=page_size, user_ids=user_ids_filter
         )
@@ -284,20 +363,91 @@ class PointsQueryService:
         name_by_user, dept_by_user = await self._leaderboard_display_maps(ids)
         start, end = self._month_bounds()
         # 只聚合当页用户；此前是对全租户整月流水做 GROUP BY 后再取子集。
-        month_scores = await self.repository.sum_deltas_by_users(
-            tenant_id, ids, start=start, end=end
+        month_scores = await self.repository.sum_deltas_by_users(tenant_id, ids, start=start, end=end)
+        from bisheng.points.domain.constants.admin_user_type import (
+            resolve_user_types_for_admin_list,
         )
+
+        user_type_by_user = await resolve_user_types_for_admin_list(ids)
         data = [
             PointAdminUserItem(
                 user_id=int(a.user_id),
                 user_name=name_by_user.get(int(a.user_id), str(a.user_id)),
                 dept_name=dept_by_user.get(int(a.user_id), "—"),
+                user_type=user_type_by_user.get(int(a.user_id), "普通用户"),
                 balance=int(a.balance),
                 month_score=int(month_scores.get(int(a.user_id), 0)),
             )
             for a in accounts
         ]
         return PageData(data=data, total=total)
+
+    async def admin_user_detail(
+        self,
+        tenant_id: int,
+        user: UserPayload,
+        target_user_id: int,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        from_time: datetime | None = None,
+        to_time: datetime | None = None,
+    ) -> PointAdminUserDetail:
+        """管理端用户积分详情：身份概况 + 本月收支卡片 + 时间范围内全量流水。"""
+        require_platform_admin(user)
+        uid = int(target_user_id)
+        page = max(int(page), 1)
+        page_size = min(max(int(page_size), 1), 100)
+
+        account = await self.repository.find_account(tenant_id, uid)
+        name_by_user, dept_by_user = await self._leaderboard_display_maps([uid])
+        month_start, month_end = self._month_bounds()
+        month_earned = await self.repository.sum_user_delta(
+            tenant_id, uid, direction="earn", start=month_start, end=month_end
+        )
+        month_deducted = abs(
+            await self.repository.sum_user_delta(tenant_id, uid, direction="deduct", start=month_start, end=month_end)
+        )
+        role_label = await self._resolve_user_role_label(uid)
+
+        logs, logs_total = await self.my_logs(
+            tenant_id,
+            uid,
+            page=page,
+            page_size=page_size,
+            from_time=from_time,
+            to_time=to_time,
+        )
+        return PointAdminUserDetail(
+            user_id=uid,
+            user_name=name_by_user.get(uid, str(uid)),
+            dept_name=dept_by_user.get(uid, "—"),
+            role_label=role_label,
+            balance=int(account.balance) if account else 0,
+            month_earned=int(month_earned or 0),
+            month_deducted=int(month_deducted or 0),
+            logs=logs,
+            logs_total=int(logs_total),
+        )
+
+    @staticmethod
+    async def _resolve_user_role_label(user_id: int) -> str:
+        """解析用户角色展示名；无角色时默认「普通用户」。"""
+        try:
+            from bisheng.database.models.role import RoleDao
+            from bisheng.user.domain.models.user_role import UserRoleDao
+
+            links = await UserRoleDao.aget_user_roles(int(user_id))
+            role_ids = [int(r.role_id) for r in (links or []) if getattr(r, "role_id", None) is not None]
+            if not role_ids:
+                return "普通用户"
+            roles = await RoleDao.aget_role_by_ids(role_ids)
+            names = [str(r.role_name).strip() for r in (roles or []) if getattr(r, "role_name", None)]
+            names = [n for n in names if n]
+            return "、".join(names) if names else "普通用户"
+        except Exception:
+            logger.exception("points.admin_user_detail resolve role failed user_id=%s", user_id)
+            return "普通用户"
 
     async def admin_list_audit_logs(
         self,
@@ -319,8 +469,9 @@ class PointsQueryService:
             sources=["manual_adjust", "manual_deduct"],
             user_id=user_id,
         )
-        ids = sorted({int(r.user_id) for r in rows})
-        name_by_user, _ = await self._leaderboard_display_maps(ids)
+        subject_ids = sorted({int(r.user_id) for r in rows})
+        operator_ids = sorted({int(r.operator_id) for r in rows if r.operator_id is not None})
+        name_by_user, _ = await self._leaderboard_display_maps(sorted(set(subject_ids) | set(operator_ids)))
         data = [
             PointAuditLogItem(
                 id=int(r.id),
@@ -333,6 +484,9 @@ class PointsQueryService:
                 rule_code=r.rule_code,
                 source=r.source,
                 operator_id=r.operator_id,
+                operator_name=(
+                    name_by_user.get(int(r.operator_id), str(r.operator_id)) if r.operator_id is not None else "—"
+                ),
                 remark=r.remark,
                 occurred_at=r.occurred_at,
             )
@@ -340,9 +494,7 @@ class PointsQueryService:
         ]
         return PageData(data=data, total=total)
 
-    async def admin_adjust(
-        self, tenant_id: int, user: UserPayload, body: PointAdjustRequest
-    ) -> PointLogResponse:
+    async def admin_adjust(self, tenant_id: int, user: UserPayload, body: PointAdjustRequest) -> PointLogResponse:
         """平台超管手动调分；提交后再发站内信。"""
         require_platform_admin(user)
         result = await self.ledger.adjust(
@@ -359,17 +511,24 @@ class PointsQueryService:
             raise PointsInvalidAdjustError()
         log = await self.repository.get_log_by_id(int(result.log_id))
         assert log is not None
-        await self.notify.notify(
-            user_id=body.user_id,
-            template_code="adjust_admin",
-            delta=int(log.delta),
-            reason=body.remark or "",
-        )
+        delta = int(log.delta)
+        if delta >= 0:
+            await self.notify.notify(
+                user_id=body.user_id,
+                template_code="adjust_admin_add",
+                delta=delta,
+                reason=(body.remark or "").strip() or "—",
+            )
+        else:
+            await self.notify.notify(
+                user_id=body.user_id,
+                template_code="adjust_admin_deduct",
+                delta=abs(delta),
+                reason=(body.remark or "").strip() or "—",
+            )
         return self._log_response(log)
 
-    async def admin_deduct(
-        self, tenant_id: int, user: UserPayload, body: PointDeductRequest
-    ) -> PointLogResponse:
+    async def admin_deduct(self, tenant_id: int, user: UserPayload, body: PointDeductRequest) -> PointLogResponse:
         """平台超管按 R* 规则扣减。"""
         require_platform_admin(user)
         rule = await self.repository.get_rule(tenant_id, body.rule_code.strip().upper())
@@ -384,9 +543,7 @@ class PointsQueryService:
             delta=-score,
             rule_code=rule.rule_code,
             title=rule.name,
-            idempotency_key=(
-                f"deduct:{rule.rule_code}:{user.user_id}:{body.user_id}:{uuid.uuid4().hex}"
-            ),
+            idempotency_key=(f"deduct:{rule.rule_code}:{user.user_id}:{body.user_id}:{uuid.uuid4().hex}"),
             operator_id=int(user.user_id),
             remark=body.remark,
             biz_type=body.biz_type,
@@ -401,7 +558,6 @@ class PointsQueryService:
             user_id=body.user_id,
             template_code="deduct_admin",
             delta=abs(int(log.delta)),
-            rule_name=rule.name,
-            reason=body.remark or "",
+            reason=format_deduct_notify_reason(rule_name=rule.name, remark=body.remark),
         )
         return self._log_response(log)

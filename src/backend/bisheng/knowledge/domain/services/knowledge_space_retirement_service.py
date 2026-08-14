@@ -18,6 +18,11 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileEntryType,
     KnowledgeFileProjectionStatus,
 )
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    KnowledgeFulltextFileRef,
+    request_file_delete_intents,
+    request_knowledge_intent,
+)
 
 
 class KnowledgeSpaceRetirementError(RuntimeError):
@@ -103,6 +108,7 @@ class KnowledgeSpaceRetirementService:
         )
         documents = {int(item.id): item for item in document_result.scalars().all()}
         entry_ids: set[int] = set()
+        entry_knowledge_ids: dict[int, int] = {}
 
         for document_id in document_ids:
             document = documents.get(document_id)
@@ -140,8 +146,28 @@ class KnowledgeSpaceRetirementService:
                 else:
                     continue
                 entry_ids.add(int(entry.id))
+                entry_knowledge_ids[int(entry.id)] = int(entry.knowledge_id)
 
         space.state = KnowledgeState.DELETING.value
+        await request_file_delete_intents(
+            self.session,
+            [
+                KnowledgeFulltextFileRef(
+                    file_id=entry_id,
+                    knowledge_id=entry_knowledge_ids.get(entry_id),
+                    tenant_id=tenant_id,
+                )
+                for entry_id in sorted(entry_ids)
+            ],
+            trigger_type="knowledge_space_retired",
+        )
+        await request_knowledge_intent(
+            self.session,
+            knowledge_id=space_id,
+            tenant_id=tenant_id,
+            trigger_type="knowledge_space_retired",
+            delete_scope=True,
+        )
         await self.session.commit()
         return KnowledgeSpaceRetirementResult(
             space_id=space_id,

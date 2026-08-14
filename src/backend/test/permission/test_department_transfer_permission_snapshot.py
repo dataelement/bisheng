@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
 
 import pytest
 
@@ -35,20 +35,22 @@ async def test_snapshot_unions_sources_and_hard_excludes_protected_identities():
             "model_id": "manager",
         },
     ]
+    fga_tuples = [
+        {"user": "user:7", "relation": "viewer", "object": "knowledge_space:100"},
+        {"user": "user:7", "relation": "owner", "object": "knowledge_space:100"},
+        {"user": "user:7", "relation": "editor", "object": "knowledge_file:301"},
+        {"user": "user:7", "relation": "viewer", "object": "folder:999"},
+        {"user": "department:8#member", "relation": "viewer", "object": "folder:302"},
+    ]
+
+    async def read_tuples(*, user=None, relation=None, object=None):
+        assert object in {"folder:", "knowledge_file:", "knowledge_space:"}
+        return [item for item in fga_tuples if item["object"].startswith(object)]
+
     fga = type(
         "FGA",
         (),
-        {
-            "read_tuples": AsyncMock(
-                return_value=[
-                    {"user": "user:7", "relation": "viewer", "object": "knowledge_space:100"},
-                    {"user": "user:7", "relation": "owner", "object": "knowledge_space:100"},
-                    {"user": "user:7", "relation": "editor", "object": "knowledge_file:301"},
-                    {"user": "user:7", "relation": "viewer", "object": "folder:999"},
-                    {"user": "department:8#member", "relation": "viewer", "object": "folder:302"},
-                ]
-            )
-        },
+        {"read_tuples": AsyncMock(side_effect=read_tuples)},
     )()
     source_repository = type(
         "Sources",
@@ -161,4 +163,9 @@ async def test_snapshot_unions_sources_and_hard_excludes_protected_identities():
     )
     assert "space_membership:100" in captured
     assert "department_file_grant:100:301" in captured
+    assert fga.read_tuples.await_args_list == [
+        call(user="user:7", object="folder:"),
+        call(user="user:7", object="knowledge_file:"),
+        call(user="user:7", object="knowledge_space:"),
+    ]
     repository.set_snapshot_complete.assert_awaited_once_with(51, complete=True, error=None)

@@ -383,10 +383,10 @@ export function CreateKnowledgeSpaceDrawer({
     const levelOwnerName = mode === "create"
         ? undefined
         : isEditingClinic
-            ? selectedDepartmentName || editingSpace?.departmentName
+            ? selectedDepartmentName || editingSpace?.departmentDisplayName || editingSpace?.departmentName
             : spaceLevel === SpaceLevel.DEPARTMENT
-                ? selectedDepartmentName || editingSpace?.ownerName || editingSpace?.departmentName
-                : editingSpace?.ownerName || editingSpace?.departmentName;
+                ? selectedDepartmentName || editingSpace?.ownerDisplayName || editingSpace?.departmentDisplayName || editingSpace?.ownerName || editingSpace?.departmentName
+                : editingSpace?.ownerDisplayName || editingSpace?.departmentDisplayName || editingSpace?.ownerName || editingSpace?.departmentName;
     const levelDisplayLabel = levelOwnerName
         ? `${currentLevelLabel} - ${levelOwnerName}`
         : currentLevelLabel;
@@ -491,7 +491,7 @@ export function CreateKnowledgeSpaceDrawer({
                 setDepartmentSelection([{
                     type: "department",
                     id: Number(departmentId),
-                    name: editingSpace.departmentName || editingSpace.ownerName || `#${departmentId}`,
+                    name: editingSpace.departmentDisplayName || editingSpace.ownerDisplayName || editingSpace.departmentName || editingSpace.ownerName || `#${departmentId}`,
                 }]);
             } else {
                 setDepartmentSelection([]);

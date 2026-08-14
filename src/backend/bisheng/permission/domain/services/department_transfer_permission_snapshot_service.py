@@ -54,21 +54,25 @@ class DepartmentTransferPermissionSnapshotService:
         fga = self.fga_client or await PermissionService._aget_fga()
         if fga is None:
             raise RuntimeError("openfga client unavailable during department transfer snapshot")
-        for raw_tuple in await fga.read_tuples(user=f"user:{user_id}"):
-            tuple_key = raw_tuple.get("key", raw_tuple)
-            if tuple_key.get("user") != f"user:{user_id}":
-                continue
-            relation = str(tuple_key.get("relation") or "")
-            if relation not in _DIRECT_RELATIONS:
-                continue
-            object_value = str(tuple_key.get("object") or "")
-            if ":" not in object_value:
-                continue
-            resource_type, resource_id = object_value.split(":", 1)
-            if resource_type not in _KNOWLEDGE_RESOURCE_TYPES:
-                continue
-            signature = (resource_type, resource_id, relation)
-            candidates.setdefault(signature, {"sources": set()})["sources"].add("openfga")
+        for object_type in sorted(_KNOWLEDGE_RESOURCE_TYPES):
+            for raw_tuple in await fga.read_tuples(
+                user=f"user:{user_id}",
+                object=f"{object_type}:",
+            ):
+                tuple_key = raw_tuple.get("key", raw_tuple)
+                if tuple_key.get("user") != f"user:{user_id}":
+                    continue
+                relation = str(tuple_key.get("relation") or "")
+                if relation not in _DIRECT_RELATIONS:
+                    continue
+                object_value = str(tuple_key.get("object") or "")
+                if ":" not in object_value:
+                    continue
+                resource_type, resource_id = object_value.split(":", 1)
+                if resource_type not in _KNOWLEDGE_RESOURCE_TYPES:
+                    continue
+                signature = (resource_type, resource_id, relation)
+                candidates.setdefault(signature, {"sources": set()})["sources"].add("openfga")
 
         resources = {(kind, resource_id) for kind, resource_id, _ in candidates}
         contexts = await self.source_repository.resolve_resource_contexts(resources=resources)

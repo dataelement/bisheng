@@ -350,6 +350,7 @@ class ReviewTagsRepositoryImpl:
         skip_library_add: bool = False,
         reviewer_id: int | None = None,
         review_time: datetime | None = None,
+        target_library_id: int | None = None,
     ):
         if not skip_library_add:
             if (
@@ -362,6 +363,7 @@ class ReviewTagsRepositoryImpl:
             review_tag_link,
             reviewer_id=reviewer_id,
             review_time=review_time,
+            target_library_id=target_library_id,
         )
 
     async def create_tag_library_by_tag(self, tag_name: str, tenant_id: int, resource_type: TagResourceTypeEnum):
@@ -925,7 +927,14 @@ class ReviewTagsRepositoryImpl:
             else:
                 await self.tags_repository.delete_tag_library_by_name(tag_name, resource_type, tenant_id)
 
-    async def query_existed_tag_by_review_tag(self, review_tag: ReviewTag):
+    async def query_existed_tag_by_review_tag(self, review_tag: ReviewTag, *, target_library_id: int | None = None):
+        """Look in the library the approval targets, not the proposing one."""
+        if target_library_id is not None:
+            return await self.tags_repository.find_library_tag_in(
+                review_tag.name,
+                target_library_id,
+                review_tag.tenant_id,
+            )
         return await self.tags_repository.query_existed_tag_by_review_tag(review_tag)
 
     async def get_not_exist_system_tag_by_name(self, keyword: str, tenant_id: int):

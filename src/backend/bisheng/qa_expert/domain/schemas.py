@@ -278,9 +278,9 @@ class QuestionDetailResponse(BaseModel):
     status: str
     user_id: int
     anonymous: bool
-    attachments: list[str]
-    related_docs: list[int]
-    invited_experts: list[int]
+    attachments: str | None = Field(default=None, description="分号分隔的附件URL或业务ID")
+    related_docs: str | None = None
+    invited_experts: str | None = None
     experts_names: str | None = Field(default=None, description="邀请专家名称，多个用分号;分割")
     adopted_answer_id: int | None
     image_url: str | None = Field(default=None, description="图片URL")
@@ -317,8 +317,9 @@ class AnswerUpdateRequest(BaseModel):
     """更新回答 - 请求"""
 
     content: str | None = None
-    attachments: list[str] | None = None
-    related_docs: list[int] | None = None
+    attachments: str | None = Field(default=None, description="分号分隔的附件URL或业务ID")
+    related_docs: str | None = None
+    images_url: str | None = Field(default=None, description="分号分隔的图片URL")
 
 
 class AnswerDetailResponse(BaseModel):
@@ -330,8 +331,9 @@ class AnswerDetailResponse(BaseModel):
     expert_id: int | None
     content: str
     status: str
-    attachments: list[str]
-    related_docs: list[int]
+    attachments: str | None = Field(default=None, description="分号分隔的附件URL或业务ID")
+    related_docs: str | None = None
+    images_url: str | None = Field(default=None, description="分号分隔的图片URL")
     vote_count: int
     comment_count: int
     created_at: datetime

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     name="bisheng.worker.points.tasks.process_points_award_event",
 )
 def process_points_award_event(payload: dict[str, Any]):
-    """消费自动发分事件；由 hooks 投递，幂等键防双发。"""
+    """消费自动发分事件；一次上传的多个文件在同一任务内串行入账，幂等键防双发。"""
     return run_async_task(lambda: _process_award_async(payload))
 
 

@@ -19,7 +19,7 @@ from urllib3 import BaseHTTPResponse
 from bisheng.common.services.config_service import settings as _bisheng_settings
 from bisheng.core.config.settings import MinioConf
 from bisheng.core.context.tenant import get_current_tenant_id
-from bisheng.core.storage.base import BaseStorage
+from bisheng.core.storage.base import BaseStorage, ObjectMetadata
 
 # F017 AC-06: prefix pattern installed by multi_tenant layout —
 #   Root       → no prefix (e.g. ``knowledge/<file>``)
@@ -449,14 +449,32 @@ class MinioStorage(BaseStorage, ABC):
                 return False
             raise e
 
+    async def stat_object(self, bucket_name: str, object_name: str) -> ObjectMetadata:
+        return await asyncio.to_thread(
+            self.stat_object_sync,
+            bucket_name=bucket_name,
+            object_name=object_name,
+        )
+
+    def stat_object_sync(self, bucket_name: str, object_name: str) -> ObjectMetadata:
+        if not bucket_name or not object_name:
+            raise ValueError("stat_object_sync: bucket_name and object_name must be provided")
+        result = self.minio_client_sync.stat_object(bucket_name, object_name)
+        return ObjectMetadata(
+            size=int(result.size),
+            content_type=getattr(result, "content_type", None),
+        )
+
     async def copy_object(self, source_bucket: str = None, source_object: str = None,
-                          dest_bucket: str = None, dest_object: str = None) -> None:
+                          dest_bucket: str = None, dest_object: str = None,
+                          content_type: str | None = None) -> None:
 
         return await asyncio.to_thread(self.copy_object_sync, source_bucket=source_bucket, source_object=source_object,
-                                       dest_bucket=dest_bucket, dest_object=dest_object)
+                                       dest_bucket=dest_bucket, dest_object=dest_object, content_type=content_type)
 
     def copy_object_sync(self, source_bucket: str = None, source_object: str = None,
-                         dest_bucket: str = None, dest_object: str = None) -> None:
+                         dest_bucket: str = None, dest_object: str = None,
+                         content_type: str | None = None) -> None:
 
         if source_bucket is None:
             source_bucket = self.tmp_bucket
@@ -468,10 +486,17 @@ class MinioStorage(BaseStorage, ABC):
             object_name=source_object
         )
 
+        copy_kwargs = {}
+        if content_type:
+            copy_kwargs = {
+                "metadata": {"Content-Type": content_type},
+                "metadata_directive": "REPLACE",
+            }
         self.minio_client_sync.copy_object(
             bucket_name=dest_bucket,
             object_name=dest_object,
-            source=source
+            source=source,
+            **copy_kwargs,
         )
 
     async def remove_object(self, bucket_name: Optional[str] = None, object_name: str = None) -> None:
@@ -486,7 +511,8 @@ class MinioStorage(BaseStorage, ABC):
 
         self.minio_client_sync.remove_object(bucket_name, object_name)
 
-    async def get_share_link(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
+    async def get_share_link(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7,
+                             response_headers: dict[str, str] | None = None) -> str:
         """
         DapatkanminioFile sharing link
         :param object_name:
@@ -497,9 +523,10 @@ class MinioStorage(BaseStorage, ABC):
         """
 
         return await asyncio.to_thread(self.get_share_link_sync, object_name, bucket=bucket, clear_host=clear_host,
-                                       expire_days=expire_days)
+                                       expire_days=expire_days, response_headers=response_headers)
 
-    def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
+    def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7,
+                            response_headers: dict[str, str] | None = None) -> str:
         """
         Synchronous fetchminioFile sharing link, Default Removalhost<g id="Bold">Address:</g> urlwill go through the front endnginxProxy Access
         :param object_name:
@@ -516,7 +543,8 @@ class MinioStorage(BaseStorage, ABC):
             object_name = object_name[1:]
 
         share_link = self.share_minio_client.presigned_get_object(bucket, object_name,
-                                                                  expires=timedelta(days=expire_days))
+                                                                  expires=timedelta(days=expire_days),
+                                                                  response_headers=response_headers)
         if clear_host:
             share_link = self.clear_minio_share_host(share_link)
         return share_link

@@ -29,6 +29,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceUpdateReq,
     ShougangPortalCategoryFileCountItem,
     ShougangPortalDomainFileCountItem,
+    ShougangPortalFileSearchResp,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
@@ -495,6 +496,7 @@ def _discovery_scope(
     owner_type: KnowledgeSpaceOwnerTypeEnum,
     owner_id: int,
     enabled: bool,
+    created_by: int = 0,
 ) -> KnowledgeSpaceScope:
     return KnowledgeSpaceScope(
         id=space_id,
@@ -503,6 +505,7 @@ def _discovery_scope(
         level=level,
         owner_type=owner_type,
         owner_id=owner_id,
+        created_by=created_by,
         portal_discovery_enabled=enabled,
     )
 
@@ -683,6 +686,112 @@ async def test_portal_discovery_resolver_separates_configured_spaces_and_single_
 
 
 @pytest.mark.asyncio
+async def test_portal_configured_admin_only_keeps_owned_joined_or_explicit_private_spaces(
+) -> None:
+    login_user = Mock(user_id=7, user_name="管理员", tenant_id=1)
+    login_user.is_admin.return_value = True
+    service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
+    scopes = [
+        _discovery_scope(
+            10,
+            KnowledgeSpaceLevelEnum.PUBLIC,
+            KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT,
+            1,
+            True,
+        ),
+        _discovery_scope(
+            40,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            41,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            7,
+            False,
+            7,
+        ),
+        _discovery_scope(
+            42,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            43,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            50,
+            KnowledgeSpaceLevelEnum.PERSONAL,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+            8,
+        ),
+        _discovery_scope(
+            51,
+            KnowledgeSpaceLevelEnum.PERSONAL,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            7,
+            False,
+            7,
+        ),
+    ]
+    service.knowledge_space_scope_repo = Mock(
+        list_portal_candidates=AsyncMock(return_value=scopes)
+    )
+    service.department_space_binding_repo = Mock(
+        find_by_space_ids=AsyncMock(return_value=[])
+    )
+    service.department_file_view_access_service = Mock(grant_repository=None)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "SpaceChannelMemberDao.async_get_user_space_members",
+            new_callable=AsyncMock,
+            return_value=[Mock(business_id="42"), Mock(business_id="50")],
+        ) as get_memberships,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "PermissionService.list_accessible_ids",
+            new_callable=AsyncMock,
+        ) as list_accessible_ids,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "FineGrainedPermissionService.filter_object_ids_by_explicit_binding_async",
+            new_callable=AsyncMock,
+            return_value=["43"],
+        ) as filter_explicit_bindings,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+    ):
+        result = await service.resolve_portal_discovery(scope="portal_configured")
+
+    assert result.discoverable_space_ids == [10]
+    assert result.explicitly_visible_space_ids == [41, 42, 43, 51]
+    assert result.query_space_ids == [10, 41, 42, 43, 51]
+    get_memberships.assert_awaited_once_with(7)
+    list_accessible_ids.assert_not_awaited()
+    filter_explicit_bindings.assert_awaited_once_with(
+        login_user,
+        "knowledge_space",
+        [40, 43],
+    )
+
+
+@pytest.mark.asyncio
 async def test_portal_public_resolver_only_returns_enabled_public_spaces() -> None:
     login_user = Mock(user_id=0, user_name="", tenant_id=1)
     login_user.is_admin.return_value = False
@@ -811,6 +920,63 @@ async def test_portal_counts_keep_grant_only_parent_at_exact_file_scope() -> Non
         {"STD": {10, 20}},
         {"STD": {3101}},
     )
+
+
+@pytest.mark.asyncio
+async def test_portal_counts_keep_explicit_empty_card_scope_empty() -> None:
+    login_user = Mock(user_id=7, user_name="访问者", tenant_id=1)
+    service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
+    discovery = PortalDiscoveryResult(
+        discoverable_space_ids=[10, 20],
+        explicitly_visible_space_ids=[],
+        explicitly_visible_file_ids=[],
+        explicit_file_space_by_id={},
+        grant_parent_space_ids=[],
+        query_space_ids=[10, 20],
+        space_kind_by_id={10: "public", 20: "department"},
+        snapshot="snapshot-1",
+    )
+
+    with (
+        patch.object(
+            service,
+            "resolve_portal_discovery",
+            new_callable=AsyncMock,
+            return_value=discovery,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_files_by_domain_scopes",
+            new_callable=AsyncMock,
+            return_value={"PM": 0},
+        ) as count_domains,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_files_by_category_scopes",
+            new_callable=AsyncMock,
+            return_value={"STD": 0},
+        ) as count_categories,
+    ):
+        await service.count_shougang_portal_domain_files(
+            [ShougangPortalDomainFileCountItem(code="PM", space_ids=[])],
+            discovery_scope="portal_configured",
+        )
+        await service.count_shougang_portal_category_files(
+            [ShougangPortalCategoryFileCountItem(code="STD", space_ids=[])],
+            discovery_scope="portal_configured",
+        )
+
+    count_domains.assert_awaited_once_with({"PM": set()}, {"PM": set()})
+    count_categories.assert_awaited_once_with({"STD": set()}, {"STD": set()})
+
+
+def test_portal_file_response_preserves_discovery_snapshot() -> None:
+    response = ShougangPortalFileSearchResp(
+        data=[],
+        has_more=False,
+        next_cursor=None,
+        discovery_snapshot="snapshot-1",
+    )
+
+    assert response.model_dump(mode="json")["discovery_snapshot"] == "snapshot-1"
 
 
 def test_safe_projection_only_redacts_discoverable_space_without_explicit_permission() -> None:

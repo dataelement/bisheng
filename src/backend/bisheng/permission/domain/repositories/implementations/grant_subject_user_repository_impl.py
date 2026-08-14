@@ -87,6 +87,7 @@ class GrantSubjectUserRepositoryImpl(
                 name=department.name,
                 parent_id=int(department.parent_id) if department.parent_id is not None else None,
                 path=department.path,
+                short_name=department.short_name,
             )
             for department in departments
             if department.id is not None

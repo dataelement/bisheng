@@ -71,6 +71,14 @@ class UserPointAccount(SQLModelSerializable, table=True):
             comment="更新时间",
         ),
     )
+    last_earned_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime,
+            nullable=True,
+            comment="最近一次获得积分时间（仅 earn 更新；榜单同分排序用）",
+        ),
+    )
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uk_upa_tenant_user"),
         Index("ix_upa_tenant_balance", "tenant_id", "balance"),
@@ -350,6 +358,14 @@ class PointRankSnapshot(SQLModelSerializable, table=True):
     dept_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, comment="用户所属部门桶ID（展示用）"),
+    )
+    last_earned_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime,
+            nullable=True,
+            comment="刷榜时账户最近一次获得积分时间（同分排序；空则排后）",
+        ),
     )
     refreshed_at: datetime | None = Field(
         default=None,

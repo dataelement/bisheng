@@ -1,10 +1,11 @@
 """Expert QA Repositories - 数据访问层"""
 
 
-from sqlalchemy import desc, func, update
+from sqlalchemy import Integer, cast, desc, func, update
 from sqlmodel import and_, or_, select
 
 from bisheng.core.database import get_async_db_session  # 确保导入了异步方法
+from bisheng.database.models.department import Department
 from bisheng.database.models.qa_expert import (
     Answer,
     AnswerVote,
@@ -74,10 +75,16 @@ class ExpertRepository:
 
             if keyword:
                 normalized_keyword = keyword.strip()
+                base_stmt = base_stmt.outerjoin(
+                    Department,
+                    cast(Expert.depart_ment, Integer) == Department.id,
+                )
                 base_stmt = base_stmt.where(
                     or_(
                         Expert.expert_name.ilike(f"%{normalized_keyword}%"),
                         Expert.introduction.ilike(f"%{normalized_keyword}%"),
+                        Department.name.ilike(f"%{normalized_keyword}%"),
+                        Department.short_name.ilike(f"%{normalized_keyword}%"),
                     )
                 )
 

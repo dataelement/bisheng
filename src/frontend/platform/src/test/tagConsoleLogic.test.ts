@@ -16,10 +16,20 @@ import {
     EMPTY_FILTERS,
     INITIAL_SELECTION,
     reviewRequestStatus,
+    sourceLibraryNames,
     selectLibrary,
     selectReviewEntry,
     type TagConsoleFilterState,
 } from "@/pages/BuildPage/bench/standalone/tagConsole/tagConsoleTypes"
+import {
+    distinctSourceSpaceIds,
+    intersectLibraries,
+} from "@/pages/BuildPage/bench/standalone/tagConsole/useApprovableLibraries"
+import {
+    isViolationFile,
+    sensitiveViolationMessage,
+    sensitiveViolationWords,
+} from "@/util/sensitiveViolation"
 
 describe("left panel selection", () => {
     it("selecting a library toggles it and stays in library mode", () => {
@@ -80,6 +90,19 @@ describe("buildSearchParams", () => {
         expect(params.tag_name).toBe("结垢")
         expect(params.submitter_id).toBe(101)
         expect(params.reviewer_id).toBe(103)
+    })
+
+    it("sends the source knowledge base as an id", () => {
+        const filters: TagConsoleFilterState = {
+            ...EMPTY_FILTERS,
+            sourceKnowledge: { id: "109", name: "gzx0187的知识库" },
+        }
+
+        expect(buildSearchParams(filters, 1, 20).source_knowledge_id).toBe(109)
+    })
+
+    it("omits the source knowledge base when nothing is picked", () => {
+        expect(buildSearchParams(EMPTY_FILTERS, 1, 20).source_knowledge_id).toBeUndefined()
     })
 })
 
@@ -150,5 +173,101 @@ describe("reviewRequestStatus", () => {
     it("narrows the reviewed tab to one outcome", () => {
         expect(reviewRequestStatus("reviewed", "approved")).toBe("approved")
         expect(reviewRequestStatus("reviewed", "rejected")).toBe("rejected")
+    })
+})
+
+describe("sourceLibraryNames", () => {
+    const file = (knowledge_name: string | null, file_id = 1) =>
+        ({ file_id, file_name: "a.docx", knowledge_id: 9, knowledge_name }) as any
+
+    it("lists each knowledge base once, in order", () => {
+        expect(sourceLibraryNames([file("热轧库"), file("冷轧库", 2), file("热轧库", 3)])).toEqual([
+            "热轧库",
+            "冷轧库",
+        ])
+    })
+
+    it("drops files whose knowledge base is missing or blank", () => {
+        expect(sourceLibraryNames([file(null), file("   ", 2), file("热轧库", 3)])).toEqual(["热轧库"])
+    })
+
+    it("survives a row with no source files", () => {
+        expect(sourceLibraryNames([])).toEqual([])
+        expect(sourceLibraryNames(undefined as any)).toEqual([])
+    })
+})
+
+describe("approvable libraries", () => {
+    const lib = (id: number, name = `lib${id}`) => ({ id, name }) as any
+
+    it("keeps only libraries every source knowledge base is bound to", () => {
+        const shared = intersectLibraries([
+            [lib(1), lib(2), lib(3)],
+            [lib(2), lib(3)],
+            [lib(3), lib(9)],
+        ])
+
+        expect(shared.map((l) => l.id)).toEqual([3])
+    })
+
+    it("a single source keeps its whole list, in order", () => {
+        expect(intersectLibraries([[lib(5), lib(1)]]).map((l) => l.id)).toEqual([5, 1])
+    })
+
+    it("no overlap means the batch has to be split, not an error", () => {
+        expect(intersectLibraries([[lib(1)], [lib(2)]])).toEqual([])
+        expect(intersectLibraries([])).toEqual([])
+    })
+
+    it("collects the distinct source knowledge bases of a selection", () => {
+        const row = (...ids: number[]) => ({ source_files: ids.map((knowledge_id) => ({ knowledge_id })) })
+
+        expect(distinctSourceSpaceIds([row(9, 3), row(3), row(1)])).toEqual([1, 3, 9])
+        expect(distinctSourceSpaceIds([{ source_files: [] }, {}])).toEqual([])
+    })
+})
+
+describe("sensitive violation", () => {
+    // The real strings come from the knowledge namespace; a stub keeps this test
+    // about the logic rather than about translation wiring.
+    const t = (key: string) =>
+        ({
+            sensitiveViolationMessage: "GENERIC",
+            sensitiveViolationMessagePrefix: "PREFIX",
+            sensitiveViolationMessageSuffix: "SUFFIX",
+        })[key] ?? key
+
+    it("recognises only the content-safety status", () => {
+        expect(isViolationFile({ status: 7 })).toBe(true)
+        expect(isViolationFile({ status: 2 })).toBe(false)
+        expect(isViolationFile({})).toBe(false)
+    })
+
+    it("pulls the hit words out, deduplicated", () => {
+        const remark = JSON.stringify({ reason: "sensitive_check", hits: [{ word: "赌博" }, { word: "赌博" }, { word: "毒品" }] })
+        expect(sensitiveViolationWords(remark)).toEqual(["赌博", "毒品"])
+        expect(sensitiveViolationMessage(remark, t)).toBe("PREFIX{赌博,毒品}SUFFIX")
+    })
+
+    it("never renders a key when the knowledge namespace is missing", () => {
+        // How i18next behaves for a namespace the page never loaded: no
+        // translation, so it returns defaultValue if given and the key if not.
+        // Without a default this rendered "sensitiveViolationMessagePrefix{21}
+        // sensitiveViolationMessageSuffix" at the user.
+        const missingNs = (key: string, options?: Record<string, any>) => options?.defaultValue ?? key
+        const remark = JSON.stringify({ reason: "sensitive_check", hits: [{ word: "21" }] })
+
+        const message = sensitiveViolationMessage(remark, missingNs)
+
+        expect(message).not.toContain("sensitiveViolationMessage")
+        expect(message).toContain("21")
+        expect(sensitiveViolationMessage(null, missingNs)).not.toContain("sensitiveViolationMessage")
+    })
+
+    it("falls back to the generic sentence when there are no words to show", () => {
+        expect(sensitiveViolationMessage(null, t)).toBe("GENERIC")
+        expect(sensitiveViolationMessage("解析超时", t)).toBe("GENERIC")
+        expect(sensitiveViolationMessage("{not json", t)).toBe("GENERIC")
+        expect(sensitiveViolationMessage(JSON.stringify({ reason: "other" }), t)).toBe("GENERIC")
     })
 })

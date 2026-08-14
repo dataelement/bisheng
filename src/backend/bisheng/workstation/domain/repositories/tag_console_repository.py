@@ -8,12 +8,13 @@ The one exception is the reviewed ("已审核") listing: approving a tag deletes
 history live in different tables and only that listing needs a UNION.
 """
 
-from sqlalchemy import Integer, cast, exists, literal, or_, union_all
+from sqlalchemy import Integer, cast, exists, literal, or_, union, union_all
 from sqlmodel import delete, func, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
+from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibrary
 from bisheng.workstation.domain.schemas.tag_console_schema import (
@@ -42,7 +43,35 @@ class TagConsoleRepositoryImpl:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _tag_field_filters(req: TagConsoleFilter, tenant_id: int) -> list:
+    def _source_space_clause(link_model, tag_id_column, tenant_id: int, knowledge_id: int):
+        """Rows whose source files live in the given knowledge space.
+
+        Neither ``tag`` nor ``review_tag`` records the space a tag came from, so
+        provenance is matched through the file link. Deleted links are not
+        excluded: rejecting soft-deletes them and those rows must still be
+        findable by their source.
+
+        Same shape for both tables, hence the passed-in link model.
+        """
+        return exists(
+            select(1)
+            .select_from(link_model)
+            .join(
+                KnowledgeFile,
+                # Compare as integers: resource_id is varchar, and CAST(id AS CHAR)
+                # hits collation mismatches on MySQL.
+                KnowledgeFile.id == cast(link_model.resource_id, Integer),
+            )
+            .where(
+                link_model.tag_id == tag_id_column,
+                link_model.tenant_id == tenant_id,
+                KnowledgeFile.tenant_id == tenant_id,
+                KnowledgeFile.knowledge_id == knowledge_id,
+            )
+        )
+
+    @classmethod
+    def _tag_field_filters(cls, req: TagConsoleFilter, tenant_id: int) -> list:
         """Where-clauses over ``tag`` shared by library mode and the approved half
         of the reviewed listing.
 
@@ -73,6 +102,8 @@ class TagConsoleRepositoryImpl:
             clauses.append(Tag.review_time >= req.review_time_start)
         if req.review_time_end is not None:
             clauses.append(Tag.review_time <= req.review_time_end)
+        if req.source_knowledge_id is not None:
+            clauses.append(cls._source_space_clause(TagLink, Tag.id, tenant_id, req.source_knowledge_id))
         return clauses
 
     @classmethod
@@ -164,20 +195,89 @@ class TagConsoleRepositoryImpl:
             KnowledgeFile.file_name,
             KnowledgeFile.knowledge_id,
             KnowledgeFile.file_level_path,
+            KnowledgeFile.status,
+            KnowledgeFile.remark,
         ).where(
             KnowledgeFile.id.in_(normalized),
             KnowledgeFile.tenant_id == tenant_id,
         )
         rows = (await self.session.exec(statement)).all()
+        space_names = await self.list_knowledge_names(
+            [row[2] for row in rows],
+            tenant_id=tenant_id,
+        )
         return {
             int(file_id): {
                 "file_id": int(file_id),
                 "file_name": file_name or "",
                 "knowledge_id": int(knowledge_id) if knowledge_id is not None else 0,
+                "knowledge_name": space_names.get(int(knowledge_id)) if knowledge_id is not None else None,
                 "parent_id": self.parent_folder_id_from_level_path(file_level_path),
+                "status": status,
+                "remark": remark,
             }
-            for file_id, file_name, knowledge_id, file_level_path in rows
+            for file_id, file_name, knowledge_id, file_level_path, status, remark in rows
         }
+
+    async def list_source_knowledges(
+        self,
+        tenant_id: int,
+        keyword: str | None = None,
+        limit: int = 200,
+    ) -> list[tuple[int, str]]:
+        """Knowledge bases that have actually produced tags.
+
+        The 标签来源库 filter used to be fed the full knowledge-base list, which on
+        a real install is mostly noise: every user owns a personal space and a
+        『我的收藏』, so the dropdown showed dozens of identically named entries
+        that could never match a tag. Offering only genuine sources removes them
+        without having to guess from names, and repeated names collapse because
+        the set is distinct by id.
+
+        『我的收藏』 is excluded outright — it is a per-user pin board, not a
+        source anyone filters by, even on the rare install where a file in it
+        carried a tag.
+        """
+        tagged = (
+            select(KnowledgeFile.knowledge_id)
+            .select_from(TagLink)
+            .join(KnowledgeFile, KnowledgeFile.id == cast(TagLink.resource_id, Integer))
+            .where(TagLink.tenant_id == tenant_id, KnowledgeFile.tenant_id == tenant_id)
+        )
+        reviewed = (
+            select(KnowledgeFile.knowledge_id)
+            .select_from(ReviewTagLink)
+            .join(KnowledgeFile, KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer))
+            .where(ReviewTagLink.tenant_id == tenant_id, KnowledgeFile.tenant_id == tenant_id)
+        )
+        sources = union(tagged, reviewed).subquery()
+
+        clauses = [
+            Knowledge.tenant_id == tenant_id,
+            Knowledge.id.in_(select(sources.c.knowledge_id)),
+            Knowledge.is_favorite == False,  # noqa: E712
+        ]
+        if keyword and keyword.strip():
+            clauses.append(Knowledge.name.like(f"%{keyword.strip()}%"))
+        statement = select(Knowledge.id, Knowledge.name).where(*clauses).order_by(Knowledge.name.asc()).limit(limit)
+        rows = (await self.session.exec(statement)).all()
+        return [(int(knowledge_id), name or "") for knowledge_id, name in rows]
+
+    async def list_knowledge_names(self, knowledge_ids: list[int], tenant_id: int) -> dict[int, str]:
+        """Names of the knowledge bases a page's source files belong to.
+
+        One query for the whole page — the 标签来源库 column would otherwise be a
+        lookup per file.
+        """
+        normalized = {int(knowledge_id) for knowledge_id in knowledge_ids if knowledge_id}
+        if not normalized:
+            return {}
+        statement = select(Knowledge.id, Knowledge.name).where(
+            Knowledge.id.in_(sorted(normalized)),
+            Knowledge.tenant_id == tenant_id,
+        )
+        rows = (await self.session.exec(statement)).all()
+        return {int(knowledge_id): name for knowledge_id, name in rows}
 
     # ------------------------------------------------------------------
     # Library mode — writes
@@ -368,6 +468,8 @@ class TagConsoleRepositoryImpl:
             clauses.append(ReviewTag.review_time >= req.review_time_start)
         if req.review_time_end is not None:
             clauses.append(ReviewTag.review_time <= req.review_time_end)
+        if req.source_knowledge_id is not None:
+            clauses.append(cls._source_space_clause(ReviewTagLink, ReviewTag.id, tenant_id, req.source_knowledge_id))
         return clauses
 
     async def search_review_tags(

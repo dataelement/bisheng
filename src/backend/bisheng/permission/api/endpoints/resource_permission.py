@@ -1011,11 +1011,21 @@ async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dic
             )
             count_map = {int(dept_id): int(count) for dept_id, count in count_result.all()}
 
-    nodes = {
-        int(dept.id): {
+    from bisheng.department.domain.services.department_display_service import (
+        build_department_name_projection,
+    )
+
+    nodes = {}
+    for dept in departments:
+        if getattr(dept, "id", None) is None:
+            continue
+        projection = build_department_name_projection(dept)
+        nodes[int(dept.id)] = {
             "id": int(dept.id),
             "dept_id": dept.dept_id,
             "name": dept.name,
+            "short_name": projection.short_name,
+            "display_name": projection.display_name,
             "parent_id": int(dept.parent_id) if getattr(dept, "parent_id", None) is not None else None,
             "path": dept.path,
             "sort_order": int(getattr(dept, "sort_order", 0) or 0),
@@ -1024,9 +1034,6 @@ async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dic
             "member_count": count_map.get(int(dept.id), 0),
             "children": [],
         }
-        for dept in departments
-        if getattr(dept, "id", None) is not None
-    }
 
     roots: list[dict] = []
     for node in nodes.values():
@@ -1037,7 +1044,13 @@ async def _list_knowledge_space_grant_departments(*, tenant_id: int) -> list[dic
             roots.append(node)
 
     def _sort_tree(items: list[dict]) -> list[dict]:
-        items.sort(key=lambda item: (item["sort_order"], item["name"]))
+        items.sort(
+            key=lambda item: (
+                item["display_name"],
+                item["name"],
+                item["id"],
+            )
+        )
         for item in items:
             item["children"] = _sort_tree(item["children"])
         return items

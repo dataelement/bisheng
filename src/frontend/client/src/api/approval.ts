@@ -33,6 +33,8 @@ export interface ApprovalTaskItem {
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;
+  applicant_department_short_name?: string | null;
+  applicant_department_display_name?: string | null;
   // task-level fields (when inside ApprovalInstanceDetail.tasks)
   approver_user_id?: number;
   approver_user_name?: string | null;
@@ -55,6 +57,8 @@ export interface ApprovalInstanceItem {
   applicant_user_name?: string;
   applicant_department_id?: number | null;
   applicant_department_name?: string | null;
+  applicant_department_short_name?: string | null;
+  applicant_department_display_name?: string | null;
   current_node_name?: string | null;
   current_approver_names?: string | null;
   create_time?: string;

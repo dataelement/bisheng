@@ -159,6 +159,7 @@ class PortalPdfDownloadService:
         capacity_limiter: PortalPdfDownloadProcessCapacity | None = None,
         watermark_runner: Callable[..., Any] = run_watermark_worker,
         telemetry_recorder: Callable[[dict[str, Any]], Any] | None = None,
+        engagement_recorder: Callable[..., Any] | None = None,
         temp_root: str | Path | None = None,
         now_provider: Callable[[], datetime] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
@@ -181,6 +182,7 @@ class PortalPdfDownloadService:
         self.capacity_limiter = capacity_limiter or get_portal_pdf_download_capacity(config.max_concurrency)
         self.watermark_runner = watermark_runner
         self.telemetry_recorder = telemetry_recorder or self._record_download_telemetry
+        self.engagement_recorder = engagement_recorder or self._record_fulltext_engagement
         self.temp_root = Path(temp_root).resolve() if temp_root is not None else None
         self.now_provider = now_provider or (lambda: datetime.now(ZoneInfo("Asia/Shanghai")))
         self.monotonic = monotonic
@@ -285,7 +287,14 @@ class PortalPdfDownloadService:
         display_name = str(getattr(user_record, "user_name", "") or "").strip()
         if not display_name:
             display_name = str(getattr(login_user, "user_name", "") or user_id).strip()
-        department_name = str(await self.user_repository.get_primary_department_name(user_id) or "").strip()
+        department_projection = await self.user_repository.get_primary_department_name_projection(
+            user_id
+        )
+        department_name = (
+            str(department_projection.display_name or "").strip()
+            if department_projection is not None
+            else ""
+        )
         account = str(getattr(user_record, "external_id", "") or "").strip()
         if not account:
             account = str(getattr(login_user, "user_name", "") or user_id).strip()
@@ -425,6 +434,20 @@ class PortalPdfDownloadService:
             result = self.telemetry_recorder(payload)
             if inspect.isawaitable(result):
                 await result
+            try:
+                engagement_result = self.engagement_recorder(
+                    event_type=BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD.value,
+                    source_app="shougang_portal",
+                    status="success",
+                    file_id=request.file_id,
+                )
+                if inspect.isawaitable(engagement_result):
+                    await engagement_result
+            except Exception:
+                logger.exception(
+                    "portal_pdf_download_engagement_projection_failed file_id={}",
+                    request.file_id,
+                )
 
         await self._record_daily_download(request, login_user)
 
@@ -542,3 +565,11 @@ class PortalPdfDownloadService:
                 status="success",
             ),
         )
+
+    @staticmethod
+    async def _record_fulltext_engagement(**kwargs: Any) -> bool:
+        from bisheng.knowledge.domain.services.knowledge_fulltext_engagement_service import (
+            project_knowledge_fulltext_engagement_best_effort,
+        )
+
+        return await project_knowledge_fulltext_engagement_best_effort(**kwargs)

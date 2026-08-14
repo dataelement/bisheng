@@ -260,6 +260,7 @@ export interface AutomotiveSheetIntroSyncConfig {
   api_url: string | null
   api_method: AutomotiveSheetIntroSyncApiMethod
   api_timeout_seconds: number
+  api_ssl_verify: boolean
   developer_token_id: number | null
   file_name: string
   external_file_id: string

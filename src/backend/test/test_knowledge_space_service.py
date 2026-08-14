@@ -10306,7 +10306,7 @@ class TestTupleLifecycle:
         mock_require_permission_id.assert_awaited_once_with("knowledge_space", 1, "edit_space")
 
     @pytest.mark.asyncio
-    async def test_update_file_tags_uses_edit_permission(self, service):
+    async def test_update_file_tags_uses_metadata_edit_permission(self, service):
         file_record = _make_file(file_id=123, knowledge_id=1)
 
         with (
@@ -10318,21 +10318,53 @@ class TestTupleLifecycle:
             ),
             patch.object(
                 service,
-                "_require_permission_id",
+                "_require_file_metadata_edit_permission",
                 new_callable=AsyncMock,
-            ) as mock_require_permission_id,
+                return_value=None,
+            ) as mock_require_metadata_edit_permission,
+            patch.object(
+                service,
+                "_load_file_tags_batch",
+                new_callable=AsyncMock,
+                return_value={123: []},
+            ),
+            patch.object(
+                service,
+                "_notify_favorite_source_changed",
+                new_callable=AsyncMock,
+            ),
+            patch.object(
+                service,
+                "_partition_file_tag_ids_for_update",
+                new_callable=AsyncMock,
+                return_value=([1, 2], []),
+            ),
+            patch.object(
+                service,
+                "_promote_review_tags_existing_in_libraries",
+                new_callable=AsyncMock,
+                return_value=([1, 2], []),
+            ),
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aupdate_resource_tags",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.aupdate_resource_tags",
                 new_callable=AsyncMock,
             ),
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
+                new_callable=AsyncMock,
+            ),
         ):
-            await service.update_file_tags(1, 123, [1, 2])
+            await service.update_file_tags(1, 123, [1, 2], [])
 
-        mock_require_permission_id.assert_awaited_once_with("knowledge_file", 123, "rename_file", space_id=1)
+        mock_require_metadata_edit_permission.assert_awaited_once_with(file_record)
 
     @pytest.mark.asyncio
     async def test_retry_space_files_relies_on_edit_permission_only(self, service):

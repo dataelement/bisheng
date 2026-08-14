@@ -15,6 +15,7 @@ KNOWLEDGE_PARSE_TASKS = frozenset(
     {
         "bisheng.worker.knowledge.file_worker.parse_knowledge_file_celery",
         "bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery",
+        "bisheng.worker.knowledge.fulltext_index.repair_source",
     }
 )
 KNOWLEDGE_PARSE_COMPAT_TASKS = frozenset(

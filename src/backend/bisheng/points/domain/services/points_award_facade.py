@@ -26,7 +26,7 @@ class SpaceFileReadyEvent:
     uploader_id: int
     publisher_id: int | None = None
     is_favorite_space: bool = False
-    # 目标库 creator + admin 用户 ID；P7=B 只看受益人是否在此集合。
+    # 目标库 OpenFGA owner∪manager（含创建人兜底）；P7=B 只看受益人是否在此集合。
     space_manager_ids: frozenset[int] = field(default_factory=frozenset)
 
 
@@ -38,7 +38,7 @@ class DocumentSharedEvent:
     share_entry_id: int
     uploader_id: int
     sharer_id: int
-    # 源库与目标库的 creator/admin 并集。
+    # 源库与目标库的 OpenFGA owner∪manager 并集（含创建人兜底）。
     related_manager_ids: frozenset[int] = field(default_factory=frozenset)
 
 
@@ -77,6 +77,7 @@ class AwardOutcome:
     notify_user_id: int | None = None
     rule_code: str | None = None
     rule_name: str | None = None
+    notify_extra: dict | None = None
 
     @property
     def should_notify(self) -> bool:
@@ -94,6 +95,7 @@ class AwardOutcome:
         user_id: int,
         rule_code: str,
         rule_name: str | None,
+        notify_extra: dict | None = None,
     ) -> AwardOutcome:
         """构造可通知的成功入账结果。"""
         return AwardOutcome(
@@ -102,6 +104,7 @@ class AwardOutcome:
             notify_user_id=int(user_id),
             rule_code=rule_code,
             rule_name=rule_name or rule_code,
+            notify_extra=notify_extra,
         )
 
 
@@ -256,7 +259,9 @@ class PointsAwardFacade:
         if skip:
             return AwardOutcome(skipped=True, reason=skip)
         s_target, highest_tier = _tier_target(rule.score_expr, event.unique_favoriter_count)
-        prior = await self.repository.get_favorite_tier_award(event.tenant_id, event.file_id)
+        # 先锁账户再读档位，避免并发收藏按过期进度各自补差价而超发。
+        await self.repository.lock_or_create_account(event.tenant_id, payee)
+        prior = await self.repository.get_favorite_tier_award(event.tenant_id, event.file_id, for_update=True)
         s_done = int(prior.points_granted_total) if prior else 0
         if s_target <= s_done:
             return AwardOutcome(skipped=True, reason="tier_already_granted")
@@ -288,6 +293,7 @@ class PointsAwardFacade:
             user_id=payee,
             rule_code="G3",
             rule_name=rule.name or "G3",
+            notify_extra={"favorite_count": int(event.unique_favoriter_count)},
         )
 
     async def _award_answer_adopted(self, event: AnswerAdoptedEvent) -> AwardOutcome:
@@ -326,7 +332,7 @@ class PointsAwardFacade:
         )
 
     async def _should_skip_payee(self, payee: int, manager_ids: frozenset[int]) -> str | None:
-        """P7=B：受益人是相关库 creator/admin，或平台超管 → skip。"""
+        """P7=B：受益人是相关库 OpenFGA owner/manager（或创建人兜底），或平台超管 → skip。"""
         if payee in manager_ids:
             return "space_manager_payee"
         if await self._is_platform_super_admin(payee):
@@ -342,11 +348,14 @@ class PointsAwardFacade:
         sharer_id: int | None = None,
         answerer_id: int | None = None,
     ) -> tuple[int | None, str | None]:
-        """按规则 beneficiary 解析唯一入账用户。"""
+        """按规则 beneficiary 解析唯一入账用户。
+
+        发布人不得回退成上传人：缺 publisher_id 时由调用方按「直传人=发布人」显式传入。
+        """
         role = (beneficiary or "").strip()
         mapping = {
             "uploader": uploader_id,
-            "publisher": publisher_id if publisher_id is not None else uploader_id,
+            "publisher": publisher_id,
             "sharer": sharer_id,
             "answerer": answerer_id,
         }

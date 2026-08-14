@@ -80,19 +80,28 @@ class PointsRepository:
         return (await self.session.exec(select(UserPointLog).where(UserPointLog.id == log_id))).first()
 
     async def sum_earn_today(self, tenant_id: int, user_id: int, rule_code: str, start: datetime) -> int:
-        """汇总上海业务日内同规则已获得分数。"""
-        value = (
+        """汇总上海业务日内同规则已获得分数。
+
+        必须在账户行锁之后调用。``FOR UPDATE`` 走当前读，避免 REPEATABLE READ
+        下 Facade 先读规则定下的快照看不见排队事务刚提交的流水。
+        """
+        rows = (
             await self.session.exec(
-                select(func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                select(UserPointLog.delta)
+                .where(
                     UserPointLog.tenant_id == tenant_id,
                     UserPointLog.user_id == user_id,
                     UserPointLog.rule_code == rule_code,
                     UserPointLog.direction == "earn",
                     UserPointLog.occurred_at >= start,
                 )
+                .with_for_update()
             )
-        ).one()
-        return int(value[0] if isinstance(value, tuple) else value or 0)
+        ).all()
+        total = 0
+        for row in rows:
+            total += int(row[0] if isinstance(row, tuple) else row or 0)
+        return total
 
     async def sum_user_delta(
         self,
@@ -149,9 +158,7 @@ class PointsRepository:
             filters.append(UserPointLog.occurred_at >= from_time)
         if to_time is not None:
             filters.append(UserPointLog.occurred_at < to_time)
-        total = (
-            await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))
-        ).one()
+        total = (await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))).one()
         rows = (
             await self.session.exec(
                 select(UserPointLog)
@@ -202,9 +209,7 @@ class PointsRepository:
         """列出租户说明文案。"""
         rows = (
             await self.session.exec(
-                select(PointCopy)
-                .where(PointCopy.tenant_id == tenant_id)
-                .order_by(PointCopy.sort_order, PointCopy.id)
+                select(PointCopy).where(PointCopy.tenant_id == tenant_id).order_by(PointCopy.sort_order, PointCopy.id)
             )
         ).all()
         return list(rows)
@@ -239,9 +244,7 @@ class PointsRepository:
             self.session.add(row)
             result.append(row)
 
-        existing = (
-            await self.session.exec(select(PointCopy).where(PointCopy.tenant_id == tenant_id))
-        ).all()
+        existing = (await self.session.exec(select(PointCopy).where(PointCopy.tenant_id == tenant_id))).all()
         for row in existing:
             if row.copy_key not in keep_keys:
                 await self.session.delete(row)
@@ -322,7 +325,11 @@ class PointsRepository:
         *,
         limit: int = 10,
     ) -> list[PointRankSnapshot]:
-        """读取 TOP N 排名快照。"""
+        """读取公司/部门桶快照，按首页榜排序键返回。
+
+        排序：分降序 → 最近获得时间升序（空在后）→ user_id。
+        ``limit`` 保留兼容；截断（算法甲）由查询服务按名次深度处理。
+        """
         stmt = select(PointRankSnapshot).where(
             PointRankSnapshot.tenant_id == tenant_id,
             PointRankSnapshot.period == period,
@@ -333,20 +340,21 @@ class PointsRepository:
             stmt = stmt.where(PointRankSnapshot.scope_id.is_(None))
         else:
             stmt = stmt.where(PointRankSnapshot.scope_id == scope_id)
-        # TOP N 按人数截断：同分同名次时仍按分值降序、user_id 升序取前 N 人。
+        # MySQL/DM8：用 IS NULL 分组把空获得时间排到同分末尾，避免 nulls_last 方言差异。
         rows = (
             await self.session.exec(
                 stmt.order_by(
                     PointRankSnapshot.period_score.desc(),
+                    PointRankSnapshot.last_earned_at.is_(None),
+                    PointRankSnapshot.last_earned_at.asc(),
                     PointRankSnapshot.user_id.asc(),
-                ).limit(limit)
+                )
             )
         ).all()
+        _ = limit
         return list(rows)
 
-    async def latest_rank_refreshed_at(
-        self, tenant_id: int, period: str, period_key: str
-    ) -> datetime | None:
+    async def latest_rank_refreshed_at(self, tenant_id: int, period: str, period_key: str) -> datetime | None:
         """返回指定榜单最近刷新时间。"""
         value = (
             await self.session.exec(
@@ -362,17 +370,23 @@ class PointsRepository:
         return value[0] if isinstance(value, tuple) else value
 
     async def get_favorite_tier_award(
-        self, tenant_id: int, file_id: int
+        self,
+        tenant_id: int,
+        file_id: int,
+        *,
+        for_update: bool = False,
     ) -> PointFavoriteTierAward | None:
-        """读取文档已发放的 G3 最高档记录。"""
-        return (
-            await self.session.exec(
-                select(PointFavoriteTierAward).where(
-                    PointFavoriteTierAward.tenant_id == tenant_id,
-                    PointFavoriteTierAward.file_id == file_id,
-                )
-            )
-        ).first()
+        """读取文档已发放的 G3 最高档记录。
+
+        :param for_update: 发分路径在账户行锁之后应加行锁，读取最新已提交进度。
+        """
+        stmt = select(PointFavoriteTierAward).where(
+            PointFavoriteTierAward.tenant_id == tenant_id,
+            PointFavoriteTierAward.file_id == file_id,
+        )
+        if for_update:
+            stmt = stmt.with_for_update()
+        return (await self.session.exec(stmt)).first()
 
     async def upsert_favorite_tier_award(
         self,
@@ -401,11 +415,7 @@ class PointsRepository:
 
     async def list_accounts(self, tenant_id: int) -> list[UserPointAccount]:
         """列出租户全部积分账户。"""
-        rows = (
-            await self.session.exec(
-                select(UserPointAccount).where(UserPointAccount.tenant_id == tenant_id)
-            )
-        ).all()
+        rows = (await self.session.exec(select(UserPointAccount).where(UserPointAccount.tenant_id == tenant_id))).all()
         return list(rows)
 
     async def list_accounts_page(
@@ -422,9 +432,7 @@ class PointsRepository:
             if not user_ids:
                 return [], 0
             filters.append(UserPointAccount.user_id.in_(user_ids))
-        total = (
-            await self.session.exec(select(func.count()).select_from(UserPointAccount).where(*filters))
-        ).one()
+        total = (await self.session.exec(select(func.count()).select_from(UserPointAccount).where(*filters))).one()
         rows = (
             await self.session.exec(
                 select(UserPointAccount)
@@ -435,6 +443,13 @@ class PointsRepository:
             )
         ).all()
         return list(rows), int(total[0] if isinstance(total, tuple) else total)
+
+    async def list_account_user_ids(self, tenant_id: int) -> list[int]:
+        """租户下全部积分账户 user_id（角色筛「普通用户」用）。"""
+        rows = (
+            await self.session.exec(select(UserPointAccount.user_id).where(UserPointAccount.tenant_id == tenant_id))
+        ).all()
+        return sorted({int(r[0] if isinstance(r, tuple) else r) for r in rows})
 
     async def list_audit_logs(
         self,
@@ -451,9 +466,7 @@ class PointsRepository:
             filters.append(UserPointLog.source.in_(sources))
         if user_id is not None:
             filters.append(UserPointLog.user_id == int(user_id))
-        total = (
-            await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))
-        ).one()
+        total = (await self.session.exec(select(func.count()).select_from(UserPointLog).where(*filters))).one()
         rows = (
             await self.session.exec(
                 select(UserPointLog)
@@ -480,11 +493,13 @@ class PointsRepository:
         """按用户汇总时间窗内全部 delta（月/年净变动）。"""
         rows = (
             await self.session.exec(
-                select(UserPointLog.user_id, func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                select(UserPointLog.user_id, func.coalesce(func.sum(UserPointLog.delta), 0))
+                .where(
                     UserPointLog.tenant_id == tenant_id,
                     UserPointLog.occurred_at >= start,
                     UserPointLog.occurred_at < end,
-                ).group_by(UserPointLog.user_id)
+                )
+                .group_by(UserPointLog.user_id)
             )
         ).all()
         result: dict[int, int] = {}
@@ -607,6 +622,7 @@ class PointsRepository:
                 "period_score": row.period_score,
                 "balance": row.balance,
                 "dept_id": row.dept_id,
+                "last_earned_at": row.last_earned_at,
                 "refreshed_at": row.refreshed_at,
             }
             for row in rows
@@ -624,9 +640,7 @@ class PointsRepository:
             return 0
         values = self._snapshot_values(rows)
         for start in range(0, len(values), RANK_SNAPSHOT_INSERT_CHUNK):
-            await self.session.execute(
-                insert(PointRankSnapshot), values[start : start + RANK_SNAPSHOT_INSERT_CHUNK]
-            )
+            await self.session.execute(insert(PointRankSnapshot), values[start : start + RANK_SNAPSHOT_INSERT_CHUNK])
         return len(rows)
 
     async def replace_rank_snapshots(
@@ -652,9 +666,7 @@ class PointsRepository:
         await self.session.exec(stmt)
         return await self.bulk_insert_rank_snapshots(rows)
 
-    async def get_pending_deduct_by_key(
-        self, tenant_id: int, idempotency_key: str
-    ) -> PointPendingDeduct | None:
+    async def get_pending_deduct_by_key(self, tenant_id: int, idempotency_key: str) -> PointPendingDeduct | None:
         """按幂等键读取补扣行。"""
         return (
             await self.session.exec(

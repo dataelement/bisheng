@@ -32,11 +32,13 @@ async def test_notify_space_files_ready_sync_when_async_disabled():
             is_favorite_space=False,
         )
     award.assert_awaited_once()
+    assert award.await_args.args[0].publisher_id == 4
+    assert award.await_args.args[0].uploader_id == 4
 
 
 @pytest.mark.asyncio
-async def test_notify_space_files_ready_enqueues_one_task_per_file():
-    """异步开启时一文件一 Celery 任务。"""
+async def test_notify_space_files_ready_enqueues_one_task_per_upload():
+    """异步开启时一次上传只投一个 Celery 任务，携带全部 file_ids。"""
     enqueue = MagicMock()
     with (
         patch.object(hooks, "_award_async_enabled", return_value=True),
@@ -52,11 +54,54 @@ async def test_notify_space_files_ready_enqueues_one_task_per_file():
             is_favorite_space=False,
             space_level="public",
         )
-    assert enqueue.call_count == 2
-    first = enqueue.call_args_list[0].args[0]
-    assert first["event_type"] == "space_file_ready"
-    assert first["file_id"] == 100
-    assert first["space_manager_ids"] == [9]
+    enqueue.assert_called_once()
+    body = enqueue.call_args.args[0]
+    assert body["event_type"] == "space_file_ready"
+    assert body["file_ids"] == [100, 101]
+    assert body["space_manager_ids"] == [9]
+    assert body["publisher_id"] == 4
+
+
+@pytest.mark.asyncio
+async def test_notify_space_files_ready_keeps_explicit_publisher_id():
+    """审批发布显式传入的 publisher_id 不得被上传人覆盖。"""
+    enqueue = MagicMock()
+    with (
+        patch.object(hooks, "_award_async_enabled", return_value=True),
+        patch.object(hooks, "resolve_space_level", AsyncMock(return_value="public")),
+        patch.object(hooks, "resolve_space_manager_ids", AsyncMock(return_value=frozenset())),
+        patch.object(hooks, "_enqueue_award_event", enqueue),
+    ):
+        await hooks.notify_space_files_ready(
+            tenant_id=1,
+            space_id=10,
+            files=[SimpleNamespace(id=100)],
+            uploader_id=4,
+            publisher_id=8,
+            is_favorite_space=False,
+            space_level="public",
+        )
+    assert enqueue.call_args.args[0]["publisher_id"] == 8
+    assert enqueue.call_args.args[0]["uploader_id"] == 4
+
+
+@pytest.mark.asyncio
+async def test_notify_space_files_ready_skips_enqueue_for_personal_space():
+    """个人库整批不入队。"""
+    enqueue = MagicMock()
+    with (
+        patch.object(hooks, "_award_async_enabled", return_value=True),
+        patch.object(hooks, "_enqueue_award_event", enqueue),
+    ):
+        await hooks.notify_space_files_ready(
+            tenant_id=1,
+            space_id=10,
+            files=[SimpleNamespace(id=100), SimpleNamespace(id=101)],
+            uploader_id=4,
+            is_favorite_space=False,
+            space_level="personal",
+        )
+    enqueue.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -158,3 +203,35 @@ async def test_run_payload_sync_space_file_ready_maps_event():
     event = award.await_args.args[0]
     assert event.file_id == 100
     assert event.space_manager_ids == frozenset({9})
+    assert event.publisher_id == 4
+
+
+@pytest.mark.asyncio
+async def test_run_payload_sync_space_file_ready_processes_file_ids_in_order():
+    """新 payload 的 file_ids 在同一会话按顺序逐个入账。"""
+    award = AsyncMock()
+    facade = SimpleNamespace(on_space_file_ready=award)
+
+    async def fake_run(action):
+        await action(facade)
+
+    with patch.object(hooks, "_run_with_facade", side_effect=fake_run):
+        await hooks._run_payload_sync(
+            {
+                "event_type": "space_file_ready",
+                "tenant_id": 1,
+                "space_id": 10,
+                "space_level": "public",
+                "file_ids": [100, 101, 100],
+                "uploader_id": 4,
+                "is_favorite_space": False,
+                "space_manager_ids": [],
+            }
+        )
+    assert [call.args[0].file_id for call in award.await_args_list] == [100, 101]
+    assert all(call.args[0].publisher_id == 4 for call in award.await_args_list)
+
+
+def test_space_file_ids_from_payload_prefers_file_ids():
+    assert hooks._space_file_ids_from_payload({"file_ids": [2, 3], "file_id": 1}) == [2, 3]
+    assert hooks._space_file_ids_from_payload({"file_id": 9}) == [9]

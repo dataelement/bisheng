@@ -257,6 +257,62 @@ Scope:
 - 仅处理真实文件、解析成功、未处理完成的文件：`file_type = FILE`、`status = SUCCESS`、`similar_status != 2`
 - 跳过没有有效 `simhash` 或没有有效前三段 `file_encoding` 的文件
 
+### `backfill_knowledge_fulltext.py`
+
+将当前存量可索引文件提交给既有全文索引 Outbox/Worker 链路。脚本只扫描 MySQL 当前事实并创建
+`file + sync_current` 请求；不读取 RAG Chunk、不拼接正文、不直接写全文 Elasticsearch，也不会
+删除、重建或切换索引。默认是 dry-run，只有显式传入 `--apply` 才写 Outbox。
+
+建议按以下顺序执行：
+
+```bash
+# 1. 全量只读预检并保存自动生成的 JSON 报告
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_fulltext.py
+
+# 2. 单文件灰度；等待的成功条件为 applied_revision >= 本批 target_revision
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_fulltext.py \
+  --file-id 1829 --apply --wait --verify-es
+
+# 3. 单知识库灰度，并在每个已提交批次后限速
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_fulltext.py \
+  --knowledge-id 198 --batch-size 50 --sleep-ms 500 --apply --wait --verify-es
+
+# 4. 全量 apply 仅在另行取得生产运维确认后执行；默认提交完 Outbox 即退出
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_fulltext.py \
+  --batch-size 200 --sleep-ms 500 --apply
+
+# 5. 等待阶段中断后，从原 apply 报告恢复；不会生成新 revision
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_fulltext.py \
+  --resume-report migration_reports/knowledge_fulltext_backfill/backfill-RUN_ID.json \
+  --wait --verify-es
+
+# 6. 扫描阶段中断后，使用报告中的排他游标继续，必要时限制总扫描量
+PYTHONPATH=./ .venv/bin/python scripts/backfill_knowledge_fulltext.py \
+  --start-after-id 5000 --limit 10000 --batch-size 200 --apply
+```
+
+报告位于 `migration_reports/knowledge_fulltext_backfill/`：JSON 摘要记录参数、候选/排除统计、
+下一游标、有限脱敏失败样例和等待/校准结果；同名 `.targets.jsonl` 只记录已提交的
+`file_id/outbox_id/target_revision`。报告采用原子摘要替换和已提交行计数，进程在数据库提交与报告
+落盘之间退出时，可以从未推进的游标安全重跑；重复范围只会产生更高 revision，不会产生重复 ES `_id`。
+
+运行约束与风险：
+
+- 启动时只读校验单租户模式、Outbox 表、全文活动别名、Mapping 和 Analyzer；预检不会调用
+  `ensure_index()`，因此不会创建或升级索引。
+- `--limit` 限制扫描的文件 ID 数，`--batch-size` 范围为 1～1000，`--start-after-id` 为排他游标；
+  已存在于全文 ES 的文档仍会重新同步。
+- 不带 `--wait` 的 apply 只保证 Outbox 已提交，正文由默认 Celery Worker 异步构建；Beat 仅作为
+  低频漏投补偿。`--wait` 超时不会取消 Outbox。
+- `--verify-es` 是观察时点的只读 ID 对账；业务并发变化可能造成候选数与 ES 命中数短暂漂移，
+  应结合 target revision 状态判断，不能直接视为数据丢失。
+- 全量回写会让 Worker 读取每个候选文件的全部 RAG Chunk，并重建 1～20 字符 ngram。必须先保存
+  全量 dry-run 报告，再做单文件和单知识库灰度，观察默认 Celery 队列、RAG ES、目标 ES CPU、磁盘、
+  Segment Merge 和写入耗时；正式全量 `--apply` 需要独立运维确认。
+
+退出码：`0` 成功；`2` 参数/单租户/数据库/索引预检失败；`3` 扫描、Outbox 或执行失败；
+`4` target revision 失败或等待超时；`5` 报告初始化或持久化失败。
+
 ### `backfill_file_subcategories.py`
 
 补全历史空间知识库文件的二级分类。默认 dry-run 只扫描全部租户中
@@ -321,6 +377,52 @@ bash scripts/backfill_knowledge_space_auto_tags.sh --apply --min-tags 3 --max-ta
 - 默认沿用线上 Link A/B 的 `_should_run` 门禁，可用 `--force` 绕过。
 - `--scan-batch-size` 控制标签统计分批大小；`--batch-size` 控制实际打标签分批大小。
 - Link B 是否执行仍受 `review_tag_visible`、空间 `auto_tag_enabled`、Link A 应用标签数上限，以及 `--max-tags` 剩余额度约束。
+
+### `resync_tag_library_name_lists.py`
+
+把标签库自己那份**名字清单**（`tags` / `ai_tags` / `tag_count`）对齐到 `tag` 表。标签管理页面早期版本的删除/添加/移动只改了 `tag` 表没同步清单，导致左侧标签库计数不准；更严重的是某个库被**删空**后清单还在，会被"自愈"逻辑误判成"迁移漏了这个库"，在有人打开该库详情时照着清单把标签重建出来 —— 表现为"删掉的标签又回来了"。
+
+用法：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/resync_tag_library_name_lists.py
+PYTHONPATH=./ .venv/bin/python scripts/resync_tag_library_name_lists.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/resync_tag_library_name_lists.py --apply --library 2 --library 7
+
+# Docker 容器内（WORKDIR /app）：
+python scripts/resync_tag_library_name_lists.py
+```
+
+说明：
+
+- **有标签行、但清单对不上** → 自动对齐（标签行是权威数据）。
+- **0 行标签、但清单非空** → **默认跳过**，必须 `--library <id>` 显式点名。这种状态有两种完全相反的来源，数据上无法区分：库被人为删空（清单该清），或该库当年没迁移过、标签只活在清单里（清空等于删光该库标签）。
+- 只改标签库那三个字段，不新增或删除任何 `tag` 行。
+- 需要带 `TagLibraryTagService.sync_library_name_lists` 的版本才能 `--apply`。
+
+### `merge_duplicate_approved_tags.py`
+
+合并**审核通过时产生的重复标签行**。修复前，通过一个标签会写两次：一次把标签名注册进审核人选的标签库（提报者记成审核人、无审核留痕、无文件关联），一次把审核记录搬进 `tag` 但标签库取的是提出该标签的库。结果一次通过留下两行，落在两个不同的标签库里。
+
+按 `(tenant_id, name)` 分组，组内**没有文件关联且创建时间更晚**的那行是审核人选的库（保留），**有文件关联且更早**的那行是数据来源（合入后删除）。默认 dry-run。
+
+用法：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/merge_duplicate_approved_tags.py
+PYTHONPATH=./ .venv/bin/python scripts/merge_duplicate_approved_tags.py --tenant 1
+PYTHONPATH=./ .venv/bin/python scripts/merge_duplicate_approved_tags.py --apply
+
+# Docker 容器内（WORKDIR /app）：
+python scripts/merge_duplicate_approved_tags.py
+```
+
+说明：
+
+- 只处理**刚好两行、且能明确区分保留行/数据行**的组。三行以上、两行文件关联情况相同、创建时间无法区分先后的，一律跳过并打印原因，交人工判断。
+- 只碰 `business_type='tag_library'` 的行，应用标签 / 知识标签不受影响。
+- 单次事务，失败整体回滚；`--apply` 才会写库。
+- 仅适用于已经升级到带 `tag.reviewer_id` / `tag.review_time` 的环境；老版本库结构不会产生这种重复。
 
 ### `backfill_word_pdf_preview.py`
 

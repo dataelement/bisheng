@@ -4,7 +4,7 @@ Two modes, two independent listings: ``/search`` reads approved tags, and
 ``/review/*`` reads and acts on pending / rejected ones.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from bisheng.api.v1.schemas import UnifiedResponseModel, resp_200
 from bisheng.workstation.api.dependencies import get_tag_console_service
@@ -103,3 +103,14 @@ async def pending_count(
     login_user=LoginUserDep,
 ):
     return resp_200({"pending_count": await service.pending_count(login_user.tenant_id)})
+
+
+@router.get(
+    "/source-knowledges", summary="Options for the source-knowledge filter", response_model=UnifiedResponseModel
+)
+async def list_source_knowledges(
+    keyword: str | None = Query(default=None),
+    service: TagConsoleService = Depends(get_tag_console_service),
+    login_user=LoginUserDep,
+):
+    return resp_200(await service.list_source_knowledges(login_user.tenant_id, keyword))

@@ -235,12 +235,20 @@ export interface TagConsoleSourceFile {
   file_id: number
   file_name: string
   knowledge_id: number
+  /** 标签来源库 — the knowledge base this file lives in. */
+  knowledge_name?: string | null
   parent_id?: number | null
+  /** knowledge_file.status; 7 means it failed the content-safety check. */
+  status?: number | null
+  /** JSON for a content-safety rejection, carrying the words that were hit. */
+  remark?: string | null
 }
 
 export interface TagConsoleFilterParams {
   tag_name?: string
   resource_type?: string
+  /** 标签来源库 — matched through the tag's file links, not stored on the tag. */
+  source_knowledge_id?: number
   submitter_id?: number
   reviewer_id?: number
   create_time_start?: string
@@ -360,4 +368,21 @@ export async function batchRejectTagConsoleApi(
 
 export async function getTagConsolePendingCountApi(): Promise<{ pending_count: number }> {
   return await axios.get("/api/v1/workstation/tags/console/review/pending-count")
+}
+
+export interface TagConsoleSourceKnowledge {
+  id: number
+  name: string
+}
+
+/**
+ * Options for the 标签来源库 filter: only knowledge bases that actually produced
+ * a tag, distinct by id and without 『我的收藏』.
+ */
+export async function listTagConsoleSourceKnowledgesApi(
+  keyword?: string,
+): Promise<{ data: TagConsoleSourceKnowledge[] }> {
+  return await axios.get("/api/v1/workstation/tags/console/source-knowledges", {
+    params: keyword ? { keyword } : {},
+  })
 }

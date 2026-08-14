@@ -238,6 +238,7 @@ class WorkStationTagsService(BaseService):
                 tenant_id,
                 skip_library_add=True,
                 scope=scope,
+                target_library_id=int(data.tag_library_id),
             )
             await self.review_tags_repository.approve_review_tag(
                 data.tag_name, data.resource_type, tenant_id, scope=scope
@@ -300,6 +301,7 @@ class WorkStationTagsService(BaseService):
         skip_library_add: bool = False,
         scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
+        target_library_id: int | None = None,
     ):
         if scope is None:
             # 兼容旧测试：未传 scope 时，space_ids=None 全量；set 视为仅 role 空间。
@@ -317,12 +319,23 @@ class WorkStationTagsService(BaseService):
         # stamped onto the tag row during the move (F079).
         reviewer_id = getattr(self.login_user, "user_id", None)
         reviewed_at = datetime.now()
+
+        # Checked once, before the loop, and against the *chosen* library.
+        #
+        # Registering the name into that library already left a row there, so a
+        # per-row "does it exist" check would now match on the first iteration
+        # and skip every remaining row — dropping the file links of every space
+        # after the first. A row that already carries a reviewer is the only
+        # real "approved earlier" case.
+        already_approved = await self.review_tags_repository.query_existed_tag_by_review_tag(
+            review_tag_list[0],
+            target_library_id=target_library_id,
+        )
+        if already_approved is not None and already_approved.reviewer_id is not None:
+            logger.error(f"tag {tag_name} already existed")
+            return list(review_tag_list)
+
         for review_tag in review_tag_list:
-            existed_tag = await self.review_tags_repository.query_existed_tag_by_review_tag(review_tag)
-            if existed_tag:
-                logger.error(f"tag {review_tag.name} already existed")
-                existed_tag_list.append(review_tag)
-                continue
             review_tag_link = await self.review_tags_repository.query_review_tag_link_list_by_tag_id(
                 review_tag.id, tenant_id
             )
@@ -340,6 +353,7 @@ class WorkStationTagsService(BaseService):
                 skip_library_add=skip_library_add,
                 reviewer_id=reviewer_id,
                 review_time=reviewed_at,
+                target_library_id=target_library_id,
             )
         return existed_tag_list
 

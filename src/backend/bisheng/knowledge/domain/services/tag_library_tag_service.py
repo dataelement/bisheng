@@ -28,6 +28,12 @@ from bisheng.database.models.tag import (
 from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
     KnowledgeTagLibraryLinkDao,
 )
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    KnowledgeFulltextFileRef,
+    request_file_sync_intents,
+    request_file_sync_intents_sync,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_tag_library_schema import KnowledgeSpaceTagLibraryTreeItem
 from bisheng.knowledge.domain.schemas.link_b_tag_resolver_schema import (
     PendingReviewTagMatch,
@@ -565,12 +571,19 @@ class TagLibraryTagService:
         name: str,
         resource_type: str,
     ) -> tuple:
+        """Fields carried across a library rebuild.
+
+        ``(create_time, user_id, reviewer_id, review_time)`` — the last two were
+        added with the review audit trail (F079). Rebuilding drops whatever is
+        not listed here, so a new column on ``tag`` that must survive an edit to
+        the library has to be added in this tuple too.
+        """
         if (name, resource_type) in existing_meta:
             return existing_meta[(name, resource_type)]
         for alt_type in (TagResourceTypeEnum.SYSTEM_TAG.value, TagResourceTypeEnum.MANUAL_TAG.value):
             if alt_type != resource_type and (name, alt_type) in existing_meta:
                 return existing_meta[(name, alt_type)]
-        return None, None
+        return None, None, None, None
 
     @classmethod
     async def _resolve_file_tag_ids(
@@ -789,6 +802,30 @@ class TagLibraryTagService:
         return list(dict.fromkeys([*(system_tags or []), *(manual_tags or [])]))
 
     @classmethod
+    async def sync_library_name_lists(cls, library_id: int) -> None:
+        """Rewrite a library's own name list from its ``tag`` rows.
+
+        A library keeps a second copy of its tag names in its ``tags`` /
+        ``ai_tags`` columns, left over from before the names lived in ``tag``.
+        Anything that writes tag rows directly has to call this, or the two
+        copies drift — and drift is not harmless: a library with no tag rows but
+        a non-empty name list looks to ``_ensure_tags_materialized`` like one the
+        migration missed, so it rebuilds every name and deleted tags come back.
+        """
+        from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
+            KnowledgeSpaceTagLibraryDao,
+        )
+
+        system, manual, ai = await cls.list_tag_names(library_id)
+        non_ai = cls.non_ai_tag_names(system, manual)
+        await KnowledgeSpaceTagLibraryDao.aupdate(
+            library_id,
+            tags=non_ai,
+            ai_tags=ai,
+            tag_count=len(non_ai) + len(ai),
+        )
+
+    @classmethod
     async def count_tags(cls, library_id: int) -> int:
         system, manual, ai = await cls.list_tag_names(library_id)
         return len(system) + len(manual) + len(ai)
@@ -937,6 +974,17 @@ class TagLibraryTagService:
                     )
                 )
             try:
+                request_file_sync_intents_sync(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(file_id),
+                            knowledge_id=int(space_id),
+                            tenant_id=int(tenant_id or 1),
+                        )
+                    ],
+                    trigger_type="approved_file_tags_updated",
+                )
                 session.commit()
             except IntegrityError:
                 session.rollback()
@@ -1214,11 +1262,18 @@ class TagLibraryTagService:
                     )
                 )
             ).all()
-            existing_meta = {(tag.name, tag.resource_type): (tag.create_time, tag.user_id) for tag in existing}
+            existing_meta = {
+                (tag.name, tag.resource_type): (tag.create_time, tag.user_id, tag.reviewer_id, tag.review_time)
+                for tag in existing
+            }
             old_id_by_key: dict[tuple[str, str], int] = {}
             for tag in existing:
                 if tag.id is not None and tag.name:
                     old_id_by_key[(tag.name, tag.resource_type)] = int(tag.id)
+            affected_files = await cls._load_files_for_tag_ids(
+                session,
+                list(old_id_by_key.values()),
+            )
             await session.exec(
                 delete(Tag).where(
                     Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
@@ -1228,7 +1283,9 @@ class TagLibraryTagService:
             now = datetime.now()
             for name in system:
                 resource_type = TagResourceTypeEnum.SYSTEM_TAG.value
-                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
+                prev_create_time, prev_user_id, prev_reviewer_id, prev_review_time = cls._existing_tag_meta(
+                    existing_meta, name, resource_type
+                )
                 session.add(
                     Tag(
                         name=name,
@@ -1239,11 +1296,17 @@ class TagLibraryTagService:
                         resource_type=resource_type,
                         create_time=prev_create_time or now,
                         update_time=now,
+                        # Rebuilding a library must not erase who approved the
+                        # tag and when — that trail has no other home.
+                        reviewer_id=prev_reviewer_id,
+                        review_time=prev_review_time,
                     )
                 )
             for name in manual:
                 resource_type = TagResourceTypeEnum.MANUAL_TAG.value
-                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
+                prev_create_time, prev_user_id, prev_reviewer_id, prev_review_time = cls._existing_tag_meta(
+                    existing_meta, name, resource_type
+                )
                 session.add(
                     Tag(
                         name=name,
@@ -1254,11 +1317,17 @@ class TagLibraryTagService:
                         resource_type=resource_type,
                         create_time=prev_create_time or now,
                         update_time=now,
+                        # Rebuilding a library must not erase who approved the
+                        # tag and when — that trail has no other home.
+                        reviewer_id=prev_reviewer_id,
+                        review_time=prev_review_time,
                     )
                 )
             for name in ai:
                 resource_type = TagResourceTypeEnum.AI_AUTO_TAG.value
-                prev_create_time, prev_user_id = cls._existing_tag_meta(existing_meta, name, resource_type)
+                prev_create_time, prev_user_id, prev_reviewer_id, prev_review_time = cls._existing_tag_meta(
+                    existing_meta, name, resource_type
+                )
                 session.add(
                     Tag(
                         name=name,
@@ -1269,6 +1338,10 @@ class TagLibraryTagService:
                         resource_type=resource_type,
                         create_time=prev_create_time or now,
                         update_time=now,
+                        # Rebuilding a library must not erase who approved the
+                        # tag and when — that trail has no other home.
+                        reviewer_id=prev_reviewer_id,
+                        review_time=prev_review_time,
                     )
                 )
             await session.flush()
@@ -1286,6 +1359,11 @@ class TagLibraryTagService:
                 new_tags=new_tags,
                 now=now,
             )
+            await request_file_sync_intents(
+                session,
+                affected_files,
+                trigger_type="tag_library_replaced",
+            )
             await session.commit()
         await cls.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
         return system, manual, ai
@@ -1294,26 +1372,61 @@ class TagLibraryTagService:
     async def delete_for_library(cls, library_id: int) -> None:
         tenant_id: int | None = None
         async with get_async_db_session() as session:
-            tenant_row = (
+            tag_rows = (
                 await session.exec(
-                    select(Tag.tenant_id)
-                    .where(
+                    select(Tag.id, Tag.tenant_id).where(
                         Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
                         Tag.business_id == cls._business_id(library_id),
                     )
-                    .limit(1)
                 )
-            ).first()
-            if tenant_row is not None:
-                tenant_id = int(tenant_row)
+            ).all()
+            if tag_rows:
+                tenant_id = int(tag_rows[0][1])
+            affected_files = await cls._load_files_for_tag_ids(
+                session,
+                [int(row[0]) for row in tag_rows],
+            )
             await session.exec(
                 delete(Tag).where(
                     Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
                     Tag.business_id == cls._business_id(library_id),
                 )
             )
+            await request_file_sync_intents(
+                session,
+                affected_files,
+                trigger_type="tag_library_deleted",
+            )
             await session.commit()
         await cls.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
+
+    @staticmethod
+    async def _load_files_for_tag_ids(
+        session,
+        tag_ids: list[int],
+    ) -> list[KnowledgeFulltextFileRef]:
+        if not tag_ids:
+            return []
+        resource_ids = (
+            await session.exec(
+                select(TagLink.resource_id).where(
+                    TagLink.tag_id.in_(tag_ids),
+                    TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                )
+            )
+        ).all()
+        file_ids = sorted({int(resource_id) for resource_id in resource_ids if str(resource_id).isdigit()})
+        if not file_ids:
+            return []
+        files = (await session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))).all()
+        return [
+            KnowledgeFulltextFileRef(
+                file_id=int(item.id),
+                knowledge_id=int(item.knowledge_id),
+                tenant_id=int(item.tenant_id or 1),
+            )
+            for item in files
+        ]
 
     @classmethod
     async def collect_space_portal_tag_map(cls, space_ids: list[int]) -> dict[str, list[Tag]]:

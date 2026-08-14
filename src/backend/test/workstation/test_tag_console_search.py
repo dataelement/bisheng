@@ -16,10 +16,12 @@ import pytest
 from sqlmodel import select
 
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink, TagResourceTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.workstation.domain.repositories.tag_console_repository import TagConsoleRepositoryImpl
 from bisheng.workstation.domain.schemas.tag_console_schema import TagConsoleSearchReq
 
 TENANT_ID = 1
+SPACE_PUMP, SPACE_ROLL = 900, 901
 LIB_PROCESS = 10
 LIB_DEFECT = 20
 ALICE, BOB, CAROL = 101, 102, 103
@@ -69,6 +71,20 @@ async def _seed(session):
     tags = (await session.exec(select(Tag).where(Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value))).all()
     by_name = {tag.name: tag for tag in tags}
     # "漏水" is applied to two files, "结垢" to one, the rest to none.
+    # The files give the tags their source knowledge base — nothing on `tag`
+    # records it, so 标签来源库 has to be matched through this chain.
+    for file_id, space_id in ((501, SPACE_PUMP), (502, SPACE_PUMP), (503, SPACE_ROLL)):
+        session.add(
+            KnowledgeFile(
+                id=file_id,
+                knowledge_id=space_id,
+                file_name=f"{file_id}.docx",
+                tenant_id=TENANT_ID,
+                user_id=ALICE,
+                create_time=datetime(2026, 8, 8),
+                update_time=datetime(2026, 8, 8),
+            )
+        )
     for tag_name, file_ids in (("漏水", [501, 502]), ("结垢", [503])):
         for file_id in file_ids:
             session.add(
@@ -244,3 +260,45 @@ async def test_marked_knowledge_counts_are_batched(async_db_session):
     assert counts[by_name["漏水"].id] == 2
     assert counts[by_name["结垢"].id] == 1
     assert counts.get(by_name["边裂"].id, 0) == 0
+
+
+@pytest.mark.asyncio
+async def test_filters_by_source_knowledge_base(async_db_session):
+    """标签来源库: reached through the tag's files, since `tag` never stores it."""
+    await _seed(async_db_session)
+
+    rows, total = await _search(async_db_session, source_knowledge_id=SPACE_PUMP)
+    assert total == 1
+    assert [row.name for row in rows] == ["漏水"]
+
+    rows, total = await _search(async_db_session, source_knowledge_id=SPACE_ROLL)
+    assert total == 1
+    assert [row.name for row in rows] == ["结垢"]
+
+
+@pytest.mark.asyncio
+async def test_source_knowledge_filter_hides_tags_with_no_files(async_db_session):
+    """Known consequence: a tag typed straight into a library has no source.
+
+    It is not a defect — such a tag genuinely came from no knowledge base — but
+    it does mean this filter narrows further than the other ones do.
+    """
+    await _seed(async_db_session)
+
+    _, total = await _search(async_db_session, source_knowledge_id=SPACE_PUMP)
+    rows, _ = await _search(async_db_session)
+
+    assert total < len(rows), "tags without file links must drop out"
+    _, unknown_space = await _search(async_db_session, source_knowledge_id=999)
+    assert unknown_space == 0
+
+
+@pytest.mark.asyncio
+async def test_source_knowledge_filter_combines_with_the_others(async_db_session):
+    await _seed(async_db_session)
+
+    _, both = await _search(async_db_session, source_knowledge_id=SPACE_PUMP, library_ids=[LIB_PROCESS])
+    assert both == 1  # 漏水 lives in LIB_PROCESS
+
+    _, mismatched = await _search(async_db_session, source_knowledge_id=SPACE_PUMP, library_ids=[LIB_DEFECT])
+    assert mismatched == 0

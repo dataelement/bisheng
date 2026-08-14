@@ -48,6 +48,10 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_file_reposi
 from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
     KnowledgeDocumentProjectionService,
 )
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    KnowledgeFulltextFileRef,
+    request_file_delete_intents,
+)
 from bisheng.worker._asyncio_utils import run_async_task
 from bisheng.worker.approval.tasks import (
     execute_approval_outbox,
@@ -270,7 +274,23 @@ async def _finalize_document_delete(entry: KnowledgeFile) -> None:
                 ),
             }
         )
+        knowledge_by_file_id = {
+            int(item.id): int(item.knowledge_id)
+            for item in [*physical_files, *current_entries]
+        }
         await file_repository.prepare_delete_by_ids(delete_file_ids)
+        await request_file_delete_intents(
+            session,
+            [
+                KnowledgeFulltextFileRef(
+                    file_id=file_id,
+                    knowledge_id=knowledge_by_file_id.get(file_id),
+                    tenant_id=tenant_id,
+                )
+                for file_id in delete_file_ids
+            ],
+            trigger_type="document_entry_finalized",
+        )
         if invalid_entries:
             document.primary_version_id = None
             document.predecessor_logic_file_id = None
@@ -308,6 +328,17 @@ async def _finalize_deleting_entry(entry: KnowledgeFile) -> None:
                 "F059 logical entry cleanup state changed"
             )
         await repository.prepare_delete_by_ids([int(entry.id)])
+        await request_file_delete_intents(
+            session,
+            [
+                KnowledgeFulltextFileRef(
+                    file_id=int(current.id),
+                    knowledge_id=int(current.knowledge_id),
+                    tenant_id=int(current.tenant_id or 1),
+                )
+            ],
+            trigger_type="document_entry_finalized",
+        )
         document_id = int(current.reference_document_id or 0)
         remaining = await repository.find_distribution_entries_by_document_id(
             document_id,

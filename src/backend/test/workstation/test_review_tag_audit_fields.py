@@ -17,9 +17,10 @@ Two things drove the design here and are asserted below:
 import importlib
 import sys
 import types
+from contextlib import contextmanager
 from datetime import datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -85,19 +86,41 @@ def _build_tag_repository() -> tuple[TagRepositoryImpl, MagicMock]:
     session = MagicMock()
     session.add = MagicMock()
     session.flush = AsyncMock()
+    result = MagicMock()
+    result.first = MagicMock(return_value=None)
+    result.all = MagicMock(return_value=[])
+    session.exec = AsyncMock(return_value=result)
     return TagRepositoryImpl(session=session), session
+
+
+@contextmanager
+def _no_existing_row():
+    """No row waiting in the target library, so the move inserts one.
+
+    Production looks for that row on a fresh connection — the registration step
+    commits it from another session and MySQL's REPEATABLE READ hides it from the
+    request. These tests hand the repository a mocked session and never reach a
+    database, so the lookup is stubbed rather than left to open a real one.
+    """
+    with patch.object(
+        TagRepositoryImpl,
+        "find_committed_library_tag",
+        staticmethod(AsyncMock(return_value=(None, set()))),
+    ):
+        yield
 
 
 @pytest.mark.asyncio
 async def test_approve_stamps_reviewer_on_moved_tag():
     repository, session = _build_tag_repository()
 
-    await repository.approve_tag_to_move(
-        _pending_review_tag(),
-        [_review_tag_link()],
-        reviewer_id=REVIEWER_ID,
-        review_time=REVIEWED_AT,
-    )
+    with _no_existing_row():
+        await repository.approve_tag_to_move(
+            _pending_review_tag(),
+            [_review_tag_link()],
+            reviewer_id=REVIEWER_ID,
+            review_time=REVIEWED_AT,
+        )
 
     tag = _added_tag(session)
     assert tag.reviewer_id == REVIEWER_ID
@@ -109,12 +132,13 @@ async def test_approve_preserves_submitter():
     """The reviewer must not overwrite who originally proposed the tag."""
     repository, session = _build_tag_repository()
 
-    await repository.approve_tag_to_move(
-        _pending_review_tag(),
-        [_review_tag_link()],
-        reviewer_id=REVIEWER_ID,
-        review_time=REVIEWED_AT,
-    )
+    with _no_existing_row():
+        await repository.approve_tag_to_move(
+            _pending_review_tag(),
+            [_review_tag_link()],
+            reviewer_id=REVIEWER_ID,
+            review_time=REVIEWED_AT,
+        )
 
     tag = _added_tag(session)
     assert tag.user_id == SUBMITTER_ID
@@ -128,7 +152,8 @@ async def test_approve_without_reviewer_leaves_audit_fields_empty():
     """Callers that predate F079 keep working; the columns just stay null."""
     repository, session = _build_tag_repository()
 
-    await repository.approve_tag_to_move(_pending_review_tag(), [_review_tag_link()])
+    with _no_existing_row():
+        await repository.approve_tag_to_move(_pending_review_tag(), [_review_tag_link()])
 
     tag = _added_tag(session)
     assert tag.reviewer_id is None

@@ -1,0 +1,151 @@
+"""门户全文高级检索的严格查询与游标契约。"""
+
+from __future__ import annotations
+
+from datetime import date
+from enum import Enum
+from typing import Any
+
+from pydantic import Field, field_validator, model_validator
+
+from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import StrictSchema
+
+
+class KnowledgeFulltextSearchField(str, Enum):
+    ALL = "all"
+    FILE_NAME = "file_name"
+    SUMMARY = "summary"
+    TAGS = "tags"
+    CONTENT = "content"
+
+
+class KnowledgeFulltextSearchSort(str, Enum):
+    RELEVANCE = "relevance"
+    UPDATED_AT_DESC = "updated_at_desc"
+    UPDATED_AT_ASC = "updated_at_asc"
+    PREVIEW_COUNT_DESC = "preview_count_desc"
+    PREVIEW_COUNT_ASC = "preview_count_asc"
+    DOWNLOAD_COUNT_DESC = "download_count_desc"
+    DOWNLOAD_COUNT_ASC = "download_count_asc"
+
+
+class KnowledgeFulltextAdvancedSearchQuery(StrictSchema):
+    space_ids: list[int] = Field(min_length=1)
+    space_level: str | None = None
+    business_domain_code: str | None = None
+    document_type: str | None = None
+    file_subcategory_code: str | None = None
+    file_ext: str | None = None
+    tag: str | None = None
+    all_keywords: str | None = Field(default=None, max_length=200)
+    exact_phrase: str | None = Field(default=None, max_length=200)
+    any_keywords: str | None = Field(default=None, max_length=200)
+    exclude_keywords: str | None = Field(default=None, max_length=200)
+    search_field: KnowledgeFulltextSearchField = KnowledgeFulltextSearchField.ALL
+    original_uploader_id: int | None = Field(default=None, gt=0)
+    original_knowledge_id: int | None = Field(default=None, gt=0)
+    preview_count_min: int | None = Field(default=None, ge=0)
+    preview_count_max: int | None = Field(default=None, ge=0)
+    download_count_min: int | None = Field(default=None, ge=0)
+    download_count_max: int | None = Field(default=None, ge=0)
+    updated_from: date | None = None
+    updated_to: date | None = None
+    sort: KnowledgeFulltextSearchSort = KnowledgeFulltextSearchSort.RELEVANCE
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_sort(cls, values: Any) -> Any:
+        if isinstance(values, dict) and values.get("sort") == "updated_at":
+            return {**values, "sort": KnowledgeFulltextSearchSort.UPDATED_AT_DESC.value}
+        return values
+
+    @field_validator(
+        "space_level",
+        "business_domain_code",
+        "document_type",
+        "file_subcategory_code",
+        "file_ext",
+        "tag",
+        "all_keywords",
+        "exact_phrase",
+        "any_keywords",
+        "exclude_keywords",
+        mode="before",
+    )
+    @classmethod
+    def normalize_optional_text(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(str(value).split())
+        return normalized or None
+
+    @field_validator("space_ids")
+    @classmethod
+    def normalize_space_ids(cls, values: list[int]) -> list[int]:
+        if any(value <= 0 for value in values):
+            raise ValueError("space_ids must contain positive integers")
+        return sorted(set(values))
+
+    @field_validator("file_ext")
+    @classmethod
+    def normalize_file_ext(cls, value: str | None) -> str | None:
+        return value.lower().lstrip(".") if value else None
+
+    @field_validator("business_domain_code", "document_type", "file_subcategory_code")
+    @classmethod
+    def normalize_codes(cls, value: str | None) -> str | None:
+        return value.upper() if value else None
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        ranges = (
+            ("preview_count", self.preview_count_min, self.preview_count_max),
+            ("download_count", self.download_count_min, self.download_count_max),
+        )
+        for name, lower, upper in ranges:
+            if lower is not None and upper is not None and lower > upper:
+                raise ValueError(f"{name}_min must not be greater than {name}_max")
+        if self.updated_from is not None and self.updated_to is not None:
+            if self.updated_from > self.updated_to:
+                raise ValueError("updated_from must not be later than updated_to")
+        return self
+
+    @property
+    def has_keywords(self) -> bool:
+        return any(
+            (
+                self.all_keywords,
+                self.exact_phrase,
+                self.any_keywords,
+                self.exclude_keywords,
+            )
+        )
+
+
+class KnowledgeFulltextSearchHit(StrictSchema):
+    file_id: int = Field(gt=0)
+    score: float | None = None
+    sort_values: list[Any] = Field(min_length=2)
+
+
+class KnowledgeFulltextSearchBatch(StrictSchema):
+    pit_id: str = Field(min_length=1)
+    hits: list[KnowledgeFulltextSearchHit] = Field(default_factory=list)
+    exhausted: bool = False
+
+
+class KnowledgeFulltextSearchSession(StrictSchema):
+    pit_id: str = Field(min_length=1)
+    search_after: list[Any] | None = None
+    context_signature: str = Field(min_length=64, max_length=64)
+    expected_sort_values: int = Field(ge=2)
+
+
+class KnowledgeFulltextUploaderCandidate(StrictSchema):
+    user_id: int = Field(gt=0)
+    user_name: str = Field(min_length=1, max_length=255)
+
+
+class KnowledgeFulltextUploaderSupport(StrictSchema):
+    user_id: int = Field(gt=0)
+    file_ids: list[int] = Field(default_factory=list)

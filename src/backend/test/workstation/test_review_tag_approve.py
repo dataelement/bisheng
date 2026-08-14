@@ -117,6 +117,7 @@ async def test_approve_review_tag_imports_to_selected_library():
         1,
         skip_library_add=True,
         scope=ReviewTagScope(full_tenant=True),
+        target_library_id=10,
     )
     service.review_tags_repository.approve_review_tag.assert_awaited_once()
     service.session.commit.assert_awaited_once()

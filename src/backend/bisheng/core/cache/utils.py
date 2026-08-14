@@ -235,7 +235,13 @@ async def save_file_to_folder(file: UploadFile, folder_name: str, file_name: str
 
 
 @create_cache_folder
-async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_name: str = None):
+async def save_uploaded_file(
+    file: UploadFile,
+    folder_name,
+    file_name,
+    bucket_name: str = None,
+    content_type: str | None = None,
+):
     """
     Save an uploaded file to the specified folder with a hash of its content as the file name.
 
@@ -281,7 +287,11 @@ async def save_uploaded_file(file: UploadFile, folder_name, file_name, bucket_na
             file_data_to_upload.seek(0)
             is_converted_text = False
 
-        await minio_client.put_object_tmp(object_name=file_name, file=file_data_to_upload)
+        await minio_client.put_object_tmp(
+            object_name=file_name,
+            file=file_data_to_upload,
+            content_type=content_type or "application/octet-stream",
+        )
 
     finally:
         if is_converted_text and file_data_to_upload:

@@ -114,6 +114,8 @@ export type TUser = {
   avatar: string;
   role: string;
   departmentName?: string;
+  departmentShortName?: string;
+  departmentDisplayName?: string;
   externalId?: string;
   provider: string;
   plugins?: string[];

@@ -18,7 +18,8 @@ from datetime import datetime
 import pytest
 
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
-from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagResourceTypeEnum
+from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink, TagResourceTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.workstation.domain.repositories.tag_console_repository import (
     SOURCE_REVIEW,
     SOURCE_TAG,
@@ -30,6 +31,7 @@ from bisheng.workstation.domain.schemas.tag_console_schema import (
 )
 
 TENANT_ID = 1
+SPACE_PUMP, SPACE_ROLL = 900, 901
 ALICE, BOB, CAROL = 101, 102, 103
 AI = TagResourceTypeEnum.AI_AUTO_TAG.value
 MANUAL = TagResourceTypeEnum.MANUAL_TAG.value
@@ -127,6 +129,31 @@ async def _seed(session):
     )
     await session.commit()
 
+    # Files carry the source knowledge base — neither table records it, so
+    # 标签来源库 has to be matched through this chain.
+    for file_id, space_id in (
+        (500, SPACE_PUMP),
+        (501, SPACE_PUMP),
+        (502, SPACE_ROLL),
+        (510, SPACE_ROLL),
+        (511, SPACE_PUMP),
+        (512, SPACE_PUMP),
+        (513, SPACE_ROLL),
+        (514, SPACE_ROLL),
+    ):
+        session.add(
+            KnowledgeFile(
+                id=file_id,
+                knowledge_id=space_id,
+                file_name=f"{file_id}.docx",
+                tenant_id=TENANT_ID,
+                user_id=ALICE,
+                create_time=datetime(2026, 8, 5),
+                update_time=datetime(2026, 8, 5),
+            )
+        )
+    await session.commit()
+
     for index, row in enumerate(scale):
         await _link(session, row.id, 500 + index)
     await _link(session, pending_others[0].id, 510)
@@ -136,6 +163,24 @@ async def _seed(session):
     await _link(session, already_in_library.id, 513)
     # orphan: intentionally no active link
     await _link(session, orphan.id, 514, is_deleted=True)
+    # Approving copies the file links onto the real tag, which is what gives an
+    # approved row its source knowledge base in the reviewed listing.
+    approved = (
+        await session.exec(
+            __import__("sqlmodel").select(Tag).where(Tag.name == "漏水"),
+        )
+    ).first()
+    session.add(
+        TagLink(
+            tag_id=approved.id,
+            resource_id="513",
+            resource_type=1,
+            user_id=ALICE,
+            tenant_id=TENANT_ID,
+            create_time=datetime(2026, 8, 9),
+            update_time=datetime(2026, 8, 9),
+        )
+    )
     await session.commit()
     return {"scale": scale, "rejected": rejected, "orphan": orphan}
 
@@ -356,3 +401,55 @@ async def test_load_group_and_source_files(async_db_session):
     # Rejected links are soft-deleted but must still be listed.
     rejected_files = await repository.list_review_source_files([seeded["rejected"].id], tenant_id=TENANT_ID)
     assert rejected_files[seeded["rejected"].id] == [512]
+
+
+@pytest.mark.asyncio
+async def test_filters_pending_by_source_knowledge_base(async_db_session):
+    """标签来源库 over review rows, matched through their file links."""
+    await _seed(async_db_session)
+
+    pairs, total = await _search(
+        async_db_session,
+        status=TagConsoleReviewStatus.PENDING,
+        source_knowledge_id=SPACE_PUMP,
+    )
+    # 结垢 has files in both spaces (500/501 pump, 502 roll); 边裂 sits on 511.
+    assert {name for name, _ in pairs} == {"结垢", "边裂"}
+    assert total == 2
+
+    pairs, _ = await _search(
+        async_db_session,
+        status=TagConsoleReviewStatus.PENDING,
+        source_knowledge_id=SPACE_ROLL,
+    )
+    assert {name for name, _ in pairs} == {"结垢", "表面裂纹"}
+
+
+@pytest.mark.asyncio
+async def test_source_knowledge_filter_still_finds_rejected_rows(async_db_session):
+    """Rejecting soft-deletes the links, so the filter must not skip them."""
+    await _seed(async_db_session)
+
+    pairs, total = await _search(
+        async_db_session,
+        status=TagConsoleReviewStatus.REJECTED,
+        source_knowledge_id=SPACE_PUMP,
+    )
+
+    assert total == 1
+    assert pairs == [("翘曲", AI)]
+
+
+@pytest.mark.asyncio
+async def test_reviewed_listing_honours_the_source_filter(async_db_session):
+    await _seed(async_db_session)
+
+    _, from_pump = await _search_reviewed(
+        async_db_session, status=TagConsoleReviewStatus.REVIEWED, source_knowledge_id=SPACE_PUMP
+    )
+    _, from_roll = await _search_reviewed(
+        async_db_session, status=TagConsoleReviewStatus.REVIEWED, source_knowledge_id=SPACE_ROLL
+    )
+
+    assert from_pump == 1, "只有已驳回的 翘曲 来自 pump"
+    assert from_roll == 1, "已通过的 漏水 来自 roll (file 513)"

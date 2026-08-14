@@ -13,11 +13,16 @@ from loguru import logger
 
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.core.database import get_async_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.qa_expert import Answer, Comment, Expert, QANotification, Question
+from bisheng.department.domain.services.department_display_service import (
+    build_department_name_projection,
+)
 from bisheng.dictionary.domain.repositories.implementations.system_dictionary_repository_impl import (
     SystemDictionaryRepositoryImpl,
 )
+from bisheng.qa_expert.domain.asset_service import QaAssetService, new_owner_stable_id
 from bisheng.qa_expert.domain.repositories import (
     AnswerRepository,
     CommentRepository,
@@ -108,6 +113,21 @@ class ExpertService:
         self.repository = ExpertRepository()
 
     @staticmethod
+    def _with_department_projection(expert: Expert, department) -> dict:
+        expert_dict = expert.model_dump()
+        expert_dict["department_id"] = expert.depart_ment
+        if department is None:
+            expert_dict["depart_ment"] = None
+            expert_dict["department_short_name"] = None
+            expert_dict["department_display_name"] = None
+            return expert_dict
+        projection = build_department_name_projection(department)
+        expert_dict["depart_ment"] = projection.name
+        expert_dict["department_short_name"] = projection.short_name
+        expert_dict["department_display_name"] = projection.display_name
+        return expert_dict
+
+    @staticmethod
     async def _sync_wechat_user_id(user_id: int | None, wechat_user_id: str | None) -> None:
         """将企业微信用户ID同步到关联的user表。"""
         if user_id is None:
@@ -123,7 +143,7 @@ class ExpertService:
         user.update_time = datetime.now()
         await UserDao.aupdate_user(user)
 
-    async def create_expert(self, request: ExpertCreateRequest) -> Expert:
+    async def create_expert(self, request: ExpertCreateRequest) -> dict:
         """创建专家（后台管理员操作）"""
         # 检查是否已是专家
         existing = await self.repository.get_by_user_name(request.expert_name, request.user_id)
@@ -143,11 +163,7 @@ class ExpertService:
         temp_expert = await self.repository.create(expert)
         await self._sync_wechat_user_id(temp_expert.user_id, request.wechat_user_id)
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
-        if depart:
-            temp_expert.depart_ment = depart.name
-        else:
-            temp_expert.depart_ment = None
-        return temp_expert
+        return self._with_department_projection(temp_expert, depart)
 
     async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> dict:
         """更新专家信息"""
@@ -159,14 +175,8 @@ class ExpertService:
         wechat_user_id = update_data.pop("wechat_user_id", None)
         temp_expert = await self.repository.update(expert_id, **update_data)
         await self._sync_wechat_user_id(temp_expert.user_id, wechat_user_id)
-        expert_dict = temp_expert.model_dump()
-        expert_dict["department_id"] = temp_expert.depart_ment
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
-        if depart:
-            expert_dict["depart_ment"] = depart.name
-        else:
-            expert_dict["depart_ment"] = None
-        return expert_dict
+        return self._with_department_projection(temp_expert, depart)
 
     async def list_experts(
         self,
@@ -203,10 +213,19 @@ class ExpertService:
         )
         experts_all = await self._build_expert_rows(experts)
         if sort_by_department:
-            populated = [item for item in experts_all if str(item.get("depart_ment") or "").strip()]
-            empty = [item for item in experts_all if not str(item.get("depart_ment") or "").strip()]
+            populated = [
+                item
+                for item in experts_all
+                if str(item.get("department_display_name") or "").strip()
+            ]
+            empty = [
+                item
+                for item in experts_all
+                if not str(item.get("department_display_name") or "").strip()
+            ]
             populated.sort(
                 key=lambda item: (
+                    str(item.get("department_display_name") or "").casefold(),
                     str(item.get("depart_ment") or "").casefold(),
                     str(item.get("expert_name") or "").casefold(),
                     int(item.get("id") or 0),
@@ -227,13 +246,26 @@ class ExpertService:
                 continue
 
         departments = await DepartmentDao.aget_by_ids(department_ids)
+        department_options = []
+        for department in departments:
+            if department.id is None or not str(department.name or "").strip():
+                continue
+            projection = build_department_name_projection(department)
+            department_options.append(
+                {
+                    "id": str(department.id),
+                    "name": projection.name,
+                    "short_name": projection.short_name,
+                    "display_name": projection.display_name,
+                }
+            )
         department_options = sorted(
-            (
-                {"id": str(department.id), "name": department.name}
-                for department in departments
-                if department.id is not None and str(department.name or "").strip()
+            department_options,
+            key=lambda item: (
+                str(item["display_name"]).casefold(),
+                str(item["name"]).casefold(),
+                str(item["id"]),
             ),
-            key=lambda item: (str(item["name"]).casefold(), str(item["id"])),
         )
         # 职业维度字段对应系统字典表中的 type code
         field_to_type = {
@@ -308,8 +340,8 @@ class ExpertService:
                 major_keys.add(expert.major)
 
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
-        department_names = {
-            int(department.id): department.name for department in departments if department.id is not None
+        department_map = {
+            int(department.id): department for department in departments if department.id is not None
         }
 
         users = await UserDao.aget_user_by_ids(list(set(user_ids))) or []
@@ -326,13 +358,14 @@ class ExpertService:
 
         experts_all = []
         for expert in experts:
-            expert_dict = expert.model_dump()
-            expert_dict["department_id"] = expert.depart_ment
             try:
                 department_id = int(expert.depart_ment) if expert.depart_ment else None
             except (TypeError, ValueError):
                 department_id = None
-            expert_dict["depart_ment"] = department_names.get(department_id)
+            expert_dict = self._with_department_projection(
+                expert,
+                department_map.get(department_id),
+            )
             expert_dict["job_family"] = dict_key_maps["job_family"].get(expert.job_family, expert.job_family)
             expert_dict["job_category"] = dict_key_maps["job_category"].get(expert.job_category, expert.job_category)
             expert_dict["position"] = dict_key_maps["position"].get(expert.position, expert.position)
@@ -348,16 +381,13 @@ class ExpertService:
         """删除专家"""
         return await self.repository.delete(expert_id)
 
-    async def get_expertinfo(self, expert_name: str) -> Expert | None:
+    async def get_expertinfo(self, expert_name: str) -> dict | None:
         """获取专家信息"""
         expert = await self.repository.get_expertinfo(expert_name)
         if expert:
             department = DepartmentDao.get_by_id(expert.depart_ment)
-            if department:
-                expert.depart_ment = department.name
-            else:
-                expert.depart_ment = None
-        return expert
+            return self._with_department_projection(expert, department)
+        return None
 
     async def get_expertinfobyid(self, user_id: int) -> bool:
         """获取专家信息"""
@@ -368,11 +398,30 @@ class ExpertService:
 class QuestionService:
     """问题业务逻辑"""
 
-    def __init__(self):
+    def __init__(self, asset_service: QaAssetService | None = None):
         self.repository = QuestionRepository()
         self.expert_repo = ExpertRepository()
         self.answer_repo = AnswerRepository()
         self.notification_repo = NotificationRepository()
+        self.asset_service = asset_service
+
+    async def _assets(self) -> QaAssetService:
+        if self.asset_service is None:
+            self.asset_service = QaAssetService(await get_minio_storage())
+        return self.asset_service
+
+    async def _resolve_question(self, question: Question) -> Question:
+        values = {
+            "image_url": question.image_url,
+            "file_url": question.file_url,
+            "attachments": question.attachments,
+        }
+        if not any(values.values()):
+            return question
+        resolved = await (await self._assets()).resolve_fields(entity_type="question", values=values)
+        response_data = question.model_dump()
+        response_data.update(resolved)
+        return Question(**response_data)
 
     async def create_question(
         self,
@@ -382,22 +431,43 @@ class QuestionService:
         tenant_id: int | None = None,
     ) -> Question:
         """创建问题"""
+        asset_values = {
+            "image_url": request.image_url,
+            "file_url": request.file_url,
+            "attachments": request.attachments,
+        }
+        promotion = None
+        if any(asset_values.values()):
+            promotion = await (await self._assets()).promote_fields(
+                tenant_id=tenant_id,
+                entity_type="question",
+                owner_stable_id=new_owner_stable_id(),
+                values=asset_values,
+            )
+            asset_values.update(promotion.values)
         question = Question(
             user_id=user_id,
             title=request.title,
             description=request.description,
             business_domain=request.business_domain,
-            attachments=request.attachments,
+            attachments=asset_values["attachments"],
             related_docs=request.related_docs,
             invited_experts=request.invited_experts,
             experts_names=request.experts_names,
-            image_url=request.image_url,
-            file_url=request.file_url,
+            image_url=asset_values["image_url"],
+            file_url=asset_values["file_url"],
             file_name=request.file_name,
             created_by=user_name,
         )
 
-        question = await self.repository.create(question)
+        try:
+            question = await self.repository.create(question)
+        except Exception:
+            if promotion is not None:
+                await (await self._assets()).compensate(promotion)
+            raise
+        if promotion is not None:
+            await (await self._assets()).cleanup_sources(promotion)
         # 发送邀请通知
         await self._send_expert_invitation_inbox_notice(question, user_id, user_name)
 
@@ -420,7 +490,7 @@ class QuestionService:
             )
 
         logger.info(f"Question created: {question.id} by user {user_id}")
-        return question
+        return await self._resolve_question(question)
 
     async def list_questions(
         self,
@@ -453,7 +523,7 @@ class QuestionService:
             for question in questions:
                 vote_count = await self.answer_repo.get_answer_vote_count(question.id)
                 question.vote_count = vote_count
-        return questions, total
+        return [await self._resolve_question(question) for question in questions], total
 
     async def get_question_detail(self, question_id: int, user_id: int | None = None) -> Question:
         """获取问题详情"""
@@ -464,7 +534,7 @@ class QuestionService:
         # 增加浏览数
         question.view_count += 1
         await self.repository.update(question_id, view_count=question.view_count)
-        return question
+        return await self._resolve_question(question)
 
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
         """采纳最佳回答：同题最多 3 条；已采纳幂等；G4 按同题同回答者只发一次。"""
@@ -644,19 +714,42 @@ class QuestionService:
                 )
         return deleted
 
-    async def update_question(self, question_id: int, request: QuestionUpdateRequest) -> Question:
+    async def update_question(
+        self,
+        question_id: int,
+        request: QuestionUpdateRequest,
+        tenant_id: int | None = None,
+    ) -> Question:
         """更新问题信息"""
         question = await self.repository.get_by_id(question_id)
         if not question:
             raise QuestionNotFoundError()
 
         update_data = request.model_dump(exclude_unset=True)
-        new_question = await self.repository.update(question_id, **update_data)
+        asset_fields = {"image_url", "file_url", "attachments"}
+        requested_assets = {name: update_data[name] for name in asset_fields if name in update_data}
+        promotion = None
+        if any(value for value in requested_assets.values()):
+            promotion = await (await self._assets()).promote_fields(
+                tenant_id=tenant_id,
+                entity_type="question",
+                owner_stable_id=str(question_id),
+                values=requested_assets,
+            )
+            update_data.update(promotion.values)
+        try:
+            new_question = await self.repository.update(question_id, **update_data)
+        except Exception:
+            if promotion is not None:
+                await (await self._assets()).compensate(promotion)
+            raise
+        if promotion is not None:
+            await (await self._assets()).cleanup_sources(promotion)
         # 发送邀请通知
         # await self._send_expert_invitation_inbox_notice(new_question, user_id,user_name)
 
         # logger.info(f"Question updated: {new_question.id} by user {user_id}")
-        return new_question
+        return await self._resolve_question(new_question)
 
     async def _send_expert_invitation_inbox_notice(
         self,
@@ -731,16 +824,32 @@ class QuestionService:
 class AnswerService:
     """回答业务逻辑"""
 
-    def __init__(self):
+    def __init__(self, asset_service: QaAssetService | None = None):
         self.repository = AnswerRepository()
         self.question_repo = QuestionRepository()
         self.expert_repo = ExpertRepository()
         self.notification_repo = NotificationRepository()
+        self.asset_service = asset_service
+
+    async def _assets(self) -> QaAssetService:
+        if self.asset_service is None:
+            self.asset_service = QaAssetService(await get_minio_storage())
+        return self.asset_service
+
+    async def _resolve_answer(self, answer: Answer) -> Answer:
+        values = {"images_url": answer.images_url, "attachments": answer.attachments}
+        if not any(values.values()):
+            return answer
+        resolved = await (await self._assets()).resolve_fields(entity_type="answer", values=values)
+        response_data = answer.model_dump()
+        response_data.update(resolved)
+        return Answer(**response_data)
 
     async def create_answer(
         self,
         user_id: int,
         request: AnswerCreateRequest,
+        tenant_id: int | None = None,
     ) -> Answer:
         """发布回答"""
         question = await self.question_repo.get_by_id(request.question_id)
@@ -752,17 +861,35 @@ class AnswerService:
         if not expert:
             raise ExpertNotFoundError(message="Only verified experts can answer questions")
 
+        asset_values = {"attachments": request.attachments, "images_url": request.images_url}
+        promotion = None
+        if any(asset_values.values()):
+            promotion = await (await self._assets()).promote_fields(
+                tenant_id=tenant_id,
+                entity_type="answer",
+                owner_stable_id=new_owner_stable_id(),
+                values=asset_values,
+            )
+            asset_values.update(promotion.values)
+
         answer = Answer(
             question_id=request.question_id,
             expert_id=expert.id,
             content=request.content,
-            attachments=request.attachments,
+            attachments=asset_values["attachments"],
             related_docs=request.related_docs,
-            images_url=request.images_url,
+            images_url=asset_values["images_url"],
             expert_name=expert.expert_name,
         )
 
-        answer = await self.repository.create(answer)
+        try:
+            answer = await self.repository.create(answer)
+        except Exception:
+            if promotion is not None:
+                await (await self._assets()).compensate(promotion)
+            raise
+        if promotion is not None:
+            await (await self._assets()).cleanup_sources(promotion)
 
         # 更新问题的回答计数
         question.answer_count += 1
@@ -774,13 +901,16 @@ class AnswerService:
         await self._send_answer_notification(question, answer)
 
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
-        return answer
+        return await self._resolve_answer(answer)
 
     async def get_answers(
         self, question_id: int, skip: int = 0, limit: int = 100, sort_by: str | None = None
     ) -> tuple[list[Answer], int]:
         """获取问题的回答列表"""
-        return await self.repository.get_by_question_id(question_id, skip=skip, limit=limit, sort_by=sort_by)
+        answers, total = await self.repository.get_by_question_id(
+            question_id, skip=skip, limit=limit, sort_by=sort_by
+        )
+        return [await self._resolve_answer(answer) for answer in answers], total
 
     async def get_by_expertname(
         self,
@@ -788,23 +918,27 @@ class AnswerService:
         question_id: int,
     ) -> Answer | None:
         """获取问题的回答列表"""
-        return await self.repository.get_by_expertname(expert_name, question_id)
+        answer = await self.repository.get_by_expertname(expert_name, question_id)
+        return await self._resolve_answer(answer) if answer else None
 
     async def update_answer(
         self,
         answer_id: int,
         operator_id: int,
         content: str | None = None,
-        attachments: list[str] | None = None,
-        related_docs: list[int] | None = None,
+        attachments: str | list[str] | None = None,
+        related_docs: str | list[int] | None = None,
+        images_url: str | None = None,
+        tenant_id: int | None = None,
     ) -> Answer:
         """更新回答"""
         answer = await self.repository.get_by_id(answer_id)
         if not answer:
             raise AnswerNotFoundError()
 
-        # 只有回答者可以编辑
-        if answer.user_id != operator_id:
+        # 只有回答对应的专家用户可以编辑
+        expert = await self.expert_repo.get_by_id(answer.expert_id) if answer.expert_id is not None else None
+        if not expert or expert.user_id != operator_id:
             raise PermissionDeniedError(message="Only answer author can edit")
 
         update_data = {}
@@ -814,8 +948,33 @@ class AnswerService:
             update_data["attachments"] = attachments
         if related_docs is not None:
             update_data["related_docs"] = related_docs
-
-        return await self.repository.update(answer_id, **update_data)
+        if images_url is not None:
+            update_data["images_url"] = images_url
+        requested_assets = {}
+        if attachments is not None:
+            requested_assets["attachments"] = attachments
+        if images_url is not None:
+            requested_assets["images_url"] = images_url
+        promotion = None
+        if any(value for value in requested_assets.values()):
+            promotion = await (await self._assets()).promote_fields(
+                tenant_id=tenant_id,
+                entity_type="answer",
+                owner_stable_id=str(answer_id),
+                values=requested_assets,
+            )
+            update_data.update(promotion.values)
+        try:
+            updated = await self.repository.update(answer_id, **update_data)
+        except Exception:
+            if promotion is not None:
+                await (await self._assets()).compensate(promotion)
+            raise
+        if promotion is not None:
+            await (await self._assets()).cleanup_sources(promotion)
+        if updated is None:
+            raise AnswerNotFoundError()
+        return await self._resolve_answer(updated)
 
     async def delete_answer(self, answer_id: int, operator_id: int) -> bool:
         """删除回答"""

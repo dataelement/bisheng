@@ -6,7 +6,6 @@ import logging
 from collections.abc import Iterable
 from typing import Any
 
-from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
@@ -15,6 +14,7 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceScopeDao,
 )
 from bisheng.points.domain.constants.notify_templates import resolve_earn_notify
+from bisheng.points.domain.constants.space_level_rules import earn_rule_for_space_level
 from bisheng.points.domain.repositories.points_repository import PointsRepository
 from bisheng.points.domain.services.points_award_facade import (
     AnswerAdoptedEvent,
@@ -26,6 +26,7 @@ from bisheng.points.domain.services.points_award_facade import (
 )
 from bisheng.points.domain.services.points_ledger_service import PointsLedgerService
 from bisheng.points.domain.services.points_notify_service import build_points_notify_service
+from bisheng.points.domain.services.space_fga_roles import resolve_space_owner_manager_ids
 
 logger = logging.getLogger(__name__)
 
@@ -42,29 +43,8 @@ async def is_platform_super_admin_user(user_id: int) -> bool:
 
 
 async def resolve_space_manager_ids(*space_ids: int) -> frozenset[int]:
-    """汇总空间 creator/admin，并兜底纳入知识库 owner。"""
-    managers: set[int] = set()
-    for raw in space_ids:
-        try:
-            space_id = int(raw)
-        except (TypeError, ValueError):
-            continue
-        if space_id <= 0:
-            continue
-        try:
-            members = await SpaceChannelMemberDao.async_get_members_by_space(
-                space_id,
-                user_roles=[UserRoleEnum.CREATOR, UserRoleEnum.ADMIN],
-            )
-            for member in members or []:
-                if getattr(member, "user_id", None) is not None:
-                    managers.add(int(member.user_id))
-            space = await KnowledgeDao.aquery_by_id(space_id)
-            if space is not None and getattr(space, "user_id", None) is not None:
-                managers.add(int(space.user_id))
-        except Exception:
-            logger.exception("points.award.hooks resolve_managers_failed space_id=%s", space_id)
-    return frozenset(managers)
+    """汇总空间 OpenFGA owner∪manager（缺 owner 时含 DB 创建人），供 P7 跳过库管发分。"""
+    return await resolve_space_owner_manager_ids(*space_ids)
 
 
 async def resolve_space_level(space_id: int) -> str:
@@ -77,6 +57,44 @@ async def resolve_space_level(space_id: int) -> str:
     except Exception:
         logger.exception("points.award.hooks resolve_level_failed space_id=%s", space_id)
         return KnowledgeSpaceLevelEnum.PERSONAL.value
+
+
+def _space_file_ids_from_payload(payload: dict[str, Any]) -> list[int]:
+    """解析入库发分 payload 中的文件 ID。
+
+    新消息用 ``file_ids``；旧 Worker 升级窗口仍可能只有 ``file_id``。
+    去重且保持原顺序，避免同一文件在一批里入账两次。
+    """
+    raw = payload.get("file_ids")
+    ids: list[int] = []
+    if isinstance(raw, list) and raw:
+        ids = [int(item) for item in raw if item is not None]
+    elif payload.get("file_id") is not None:
+        ids = [int(payload["file_id"])]
+    seen: set[int] = set()
+    unique: list[int] = []
+    for file_id in ids:
+        if file_id <= 0 or file_id in seen:
+            continue
+        seen.add(file_id)
+        unique.append(file_id)
+    return unique
+
+
+def _resolve_space_file_publisher_id(publisher_id: int | None, uploader_id: int) -> int:
+    """直传没有单独发布人时，发布人等于本次上传操作人。审批发布应显式传入申请人。"""
+    if publisher_id is not None:
+        return int(publisher_id)
+    return int(uploader_id)
+
+
+def _should_skip_space_file_batch(*, is_favorite_space: bool, space_level: str) -> str | None:
+    """整批入库在入队前即可判定的免计分原因；个人库/收藏库整批不进 Worker。"""
+    if is_favorite_space:
+        return "favorite_space"
+    if earn_rule_for_space_level(space_level) is None:
+        return "personal_or_unmapped_level"
+    return None
 
 
 def _award_async_enabled() -> bool:
@@ -113,6 +131,7 @@ async def _flush_award_notifies(outcomes: list[AwardOutcome]) -> None:
                     item.rule_code or "",
                     rule_name=item.rule_name or item.rule_code or "",
                     delta=int(item.result.applied_delta) if item.result else 0,
+                    **(item.notify_extra or {}),
                 )
                 await notify.notify(
                     user_id=int(item.notify_user_id),
@@ -193,21 +212,35 @@ async def _dispatch(event_type: str, payload: dict[str, Any]) -> None:
 async def _run_payload_sync(payload: dict[str, Any]) -> None:
     """与 Celery worker 相同的事件分发，供同步路径与 enqueue fallback 复用。"""
 
-    async def _award(facade: PointsAwardFacade) -> AwardOutcome:
+    async def _award(facade: PointsAwardFacade) -> AwardOutcome | list[AwardOutcome]:
         event_type = str(payload.get("event_type") or "")
         if event_type == "space_file_ready":
-            return await facade.on_space_file_ready(
-                SpaceFileReadyEvent(
-                    tenant_id=int(payload["tenant_id"]),
-                    space_id=int(payload["space_id"]),
-                    space_level=str(payload["space_level"]),
-                    file_id=int(payload["file_id"]),
-                    uploader_id=int(payload["uploader_id"]),
-                    publisher_id=(int(payload["publisher_id"]) if payload.get("publisher_id") is not None else None),
-                    is_favorite_space=bool(payload.get("is_favorite_space")),
-                    space_manager_ids=frozenset(int(x) for x in (payload.get("space_manager_ids") or [])),
-                )
+            file_ids = _space_file_ids_from_payload(payload)
+            if not file_ids:
+                raise ValueError("space_file_ready payload missing file_ids")
+            managers = frozenset(int(x) for x in (payload.get("space_manager_ids") or []))
+            uploader_id = int(payload["uploader_id"])
+            publisher_id = _resolve_space_file_publisher_id(
+                int(payload["publisher_id"]) if payload.get("publisher_id") is not None else None,
+                uploader_id,
             )
+            outcomes: list[AwardOutcome] = []
+            for file_id in file_ids:
+                outcomes.append(
+                    await facade.on_space_file_ready(
+                        SpaceFileReadyEvent(
+                            tenant_id=int(payload["tenant_id"]),
+                            space_id=int(payload["space_id"]),
+                            space_level=str(payload["space_level"]),
+                            file_id=file_id,
+                            uploader_id=uploader_id,
+                            publisher_id=publisher_id,
+                            is_favorite_space=bool(payload.get("is_favorite_space")),
+                            space_manager_ids=managers,
+                        )
+                    )
+                )
+            return outcomes
         if event_type == "document_shared":
             return await facade.on_document_shared(
                 DocumentSharedEvent(
@@ -252,9 +285,19 @@ async def notify_space_files_ready(
     is_favorite_space: bool | None = None,
     space_level: str | None = None,
 ) -> None:
-    """上传/发布入库成功后发分；一文件一任务（或同步路径一批处理）。"""
+    """上传/发布入库成功后发分；一次动作一个任务，任务内按文件串行入账。"""
     try:
-        file_ids = [int(f.id) for f in files if getattr(f, "id", None)]
+        seen: set[int] = set()
+        file_ids: list[int] = []
+        for item in files:
+            file_id = getattr(item, "id", None)
+            if file_id is None:
+                continue
+            file_id = int(file_id)
+            if file_id <= 0 or file_id in seen:
+                continue
+            seen.add(file_id)
+            file_ids.append(file_id)
         if not file_ids:
             return
         favorite = is_favorite_space
@@ -262,47 +305,34 @@ async def notify_space_files_ready(
             space = await KnowledgeDao.aquery_by_id(int(space_id))
             favorite = bool(space and getattr(space, "is_favorite", False))
         level = space_level or await resolve_space_level(space_id)
+        skip_reason = _should_skip_space_file_batch(is_favorite_space=bool(favorite), space_level=str(level))
+        if skip_reason:
+            logger.info(
+                "points.award.skip_enqueue reason=%s space_id=%s files=%s",
+                skip_reason,
+                space_id,
+                len(file_ids),
+            )
+            return
         managers = await resolve_space_manager_ids(space_id)
         manager_list = sorted(int(x) for x in managers)
+        body = {
+            "tenant_id": int(tenant_id),
+            "space_id": int(space_id),
+            "space_level": level,
+            "file_ids": file_ids,
+            "uploader_id": int(uploader_id),
+            # 直传未传发布人时按「直传人=发布人」写入 payload，避免 Worker 侧规则配发布人却 skip。
+            "publisher_id": _resolve_space_file_publisher_id(publisher_id, int(uploader_id)),
+            "is_favorite_space": bool(favorite),
+            "space_manager_ids": manager_list,
+        }
 
         if not _award_async_enabled():
-            # 同步：同一会话批量处理，减少连接开销；仍按文件各发一条站内信。
-            async def _award(facade: PointsAwardFacade) -> list[AwardOutcome]:
-                outs: list[AwardOutcome] = []
-                for file_id in file_ids:
-                    outs.append(
-                        await facade.on_space_file_ready(
-                            SpaceFileReadyEvent(
-                                tenant_id=int(tenant_id),
-                                space_id=int(space_id),
-                                space_level=level,
-                                file_id=file_id,
-                                uploader_id=int(uploader_id),
-                                publisher_id=int(publisher_id) if publisher_id is not None else None,
-                                is_favorite_space=bool(favorite),
-                                space_manager_ids=managers,
-                            )
-                        )
-                    )
-                return outs
-
-            await _run_with_facade(_award)
+            await _run_payload_sync({"event_type": "space_file_ready", **body})
             return
 
-        for file_id in file_ids:
-            await _dispatch(
-                "space_file_ready",
-                {
-                    "tenant_id": int(tenant_id),
-                    "space_id": int(space_id),
-                    "space_level": level,
-                    "file_id": int(file_id),
-                    "uploader_id": int(uploader_id),
-                    "publisher_id": int(publisher_id) if publisher_id is not None else None,
-                    "is_favorite_space": bool(favorite),
-                    "space_manager_ids": manager_list,
-                },
-            )
+        await _dispatch("space_file_ready", body)
     except Exception:
         logger.exception(
             "points.award.hooks space_file_ready_failed space_id=%s uploader_id=%s",
