@@ -530,8 +530,26 @@ export function mapSessionVersionStatus(status: string, executeFeedback?: string
     }
 }
 
+/**
+ * Project the server's task rows onto the shape the panels render.
+ *
+ * Status is passed through as-is. There used to be a sticky `hasTerminated` flag
+ * here that rewrote EVERY row after the first `terminated`/`failed` one to
+ * `not_started` (to hide them), back when `terminated` could only mean "the user
+ * hit stop". It no longer can: `_diff_todos` now also marks a todo `terminated` when
+ * the MODEL prunes it from its own plan, so one pruned todo silently buried every
+ * task after it — a session with 8 successful tasks rendered "3/18" with grey
+ * rings, and since `isTaskStarted('not_started')` is false, those tasks' steps
+ * vanished from the timeline too.
+ *
+ * Nothing is lost by passing status through: a manually stopped run has its
+ * unfinished rows swept to TERMINATED by the backend (`_terminate_unfinished_tasks`)
+ * and its in-flight row rewritten by `getLinsightTaskList`, `TaskPanel` keys the
+ * stopped-run rendering off its own `terminated` prop, and a pruned row with no
+ * history is dropped by TaskStepRow's empty guard. The live WS path never called
+ * this function at all — so this is the reload view converging on the live one.
+ */
 function buildTaskTree(tasks) {
-    let hasTerminated = false
     const newTasks = tasks.map(task => {
         const taskTree = {
             id: task.id,
@@ -540,7 +558,7 @@ function buildTaskTree(tasks) {
             // task_generate mapping (Websocket/index.tsx) or history-loaded turns
             // render blank task rows (structure present, names empty).
             name: task.name || task.task_data?.name || task.task_data?.display_target || '',
-            status: hasTerminated ? 'not_started' : task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
+            status: task.status === 'waiting_for_user_input' ? 'user_input' : task.status,
             history: task.history || [],
             event_type: task.status === 'waiting_for_user_input' ? 'user_input' : '',
             call_reason: task.input_prompt || '',
@@ -560,11 +578,6 @@ function buildTaskTree(tasks) {
                     task_data: child.task_data
                 }
             }) || []
-        }
-
-        // 处理终止后的任务全部为not_started（隐藏）
-        if (['terminated', 'failed'].includes(task.status)) {
-            hasTerminated = true
         }
 
         return taskTree

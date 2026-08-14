@@ -117,6 +117,38 @@ describe('reconcileLinsightFromServer', () => {
         expect(info.liked).toBe(1);
     });
 
+    it('keeps tasks that follow a model-pruned todo intact', async () => {
+        // `terminated` no longer means only "the user hit stop": _diff_todos marks a
+        // todo terminated when the MODEL drops it from its own plan. buildTaskTree
+        // used to treat the first terminated row as a cutoff and rewrite everything
+        // after it to `not_started`, so session 8a570723 on 114 — 8 successful tasks
+        // in the DB, one pruned todo sitting fourth — rendered "任务已完成 3/18" with
+        // unfilled rings, and those tasks' steps dropped out of the timeline as well
+        // (isTaskStarted('not_started') is false).
+        mockVersionList.mockResolvedValue([
+            {
+                id: VERSION_ID,
+                status: 'completed',
+                execute_feedback: null,
+                output_result: { answer: '', final_files: [] },
+            },
+        ]);
+        mockTaskList.mockResolvedValue([
+            { id: 'p1', task_data: { name: 'Build parameter table' }, status: 'success', history: [] },
+            { id: 'p2', task_data: { name: 'Pruned extraction todo' }, status: 'terminated', history: [] },
+            { id: 'p3', task_data: { name: 'D3' }, status: 'success', history: [] },
+            { id: 'p4', task_data: { name: 'D5' }, status: 'success', history: [] },
+        ]);
+
+        const result = renderManager();
+        await act(async () => {
+            await result.current.reconcileLinsightFromServer(VERSION_ID);
+        });
+
+        const info = result.current.getLinsight(VERSION_ID)!;
+        expect(info.tasks.map((t) => t.status)).toEqual(['success', 'terminated', 'success', 'success']);
+    });
+
     it('leaves a still-running session untouched and skips the task fetch', async () => {
         mockVersionList.mockResolvedValue([
             { id: VERSION_ID, status: 'in_progress', output_result: null },
