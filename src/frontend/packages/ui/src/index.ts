@@ -13,3 +13,6 @@ export * from './components/ErrorPage';
 // Empty-state / status illustrations. Inline SVG driven by the --illus-* palette
 // (blue ⇄ green + grey draft) — artwork only, so the contract above holds.
 export * from './components/Illustration';
+// State page shell — illustration + copy + buttons for an area with no normal
+// content (组件-State状态页.md). Every string comes from the caller.
+export * from './components/StateView';

@@ -92,6 +92,7 @@ export default defineConfig({
             { text: '弹窗 Modal', link: '/components/modal' },
             { text: '二次确认 Confirm', link: '/components/confirm' },
             { text: '轻提示 Toast', link: '/components/toast' },
+            { text: '状态页 State', link: '/components/state' },
             { text: '点赞点踩 Feedback', link: '/components/feedback' },
           ],
         },

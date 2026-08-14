@@ -11,7 +11,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
 import { DropdownMenuItem, Input } from '~/components/ui';
-import { EmptyStateIllustration } from '~/components/illustrations';
+import { StateView } from '@bisheng/ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
@@ -209,14 +209,13 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                     <Loader2 size={16} className="animate-spin text-slate-300" />
                 </div>
             ) : filtered.length === 0 ? (
-                // Centred in whatever height the list area is holding (see
+                // Inline tier (组件-State状态页.md §3): a selector with no
+                // options gets one centered line and no artwork. Centred in
+                // whatever height the list area is holding (see
                 // unfilteredHeight), so searching to zero results doesn't leave
                 // the copy stranded at the top of an otherwise empty panel.
-                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-4">
-                    <EmptyStateIllustration grey className="size-[100px] shrink-0" />
-                    <p className="text-center text-xs text-slate-400">
-                        {localize('com_linsight_skill_empty')}
-                    </p>
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                    <StateView size="inline" title={localize('com_linsight_skill_empty')} />
                 </div>
             ) : (
                 <div className="relative flex min-h-0 flex-1 flex-col">

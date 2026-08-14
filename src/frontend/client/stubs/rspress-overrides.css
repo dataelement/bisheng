@@ -62,10 +62,16 @@ body {
   line-height: var(--leading-body) !important;
 }
 
-.rspress-doc p,
-.rspress-doc li,
-.rspress-doc td,
-.rspress-doc th {
+/* Live demos are exempt (`:not(.rspress-preview *)`): inside a preview card the
+   COMPONENT's own classes must win. Otherwise every <p> a real component renders
+   is flattened to 14/22/400/--text-1 and the demo shows something the app would
+   never show — caught on the 状态页 State page, whose result 标题 (16/24, 500)
+   rendered identical to the compact 主提示, i.e. exactly the hierarchy the
+   designer comes here to 目检. Prose keeps the doc body rules. */
+.rspress-doc p:not(.rspress-preview *),
+.rspress-doc li:not(.rspress-preview *),
+.rspress-doc td:not(.rspress-preview *),
+.rspress-doc th:not(.rspress-preview *) {
   font-size: var(--text-body) !important;
   line-height: var(--leading-body) !important;
   /* Base text color only (NOT !important): tables set per-cell muted colors

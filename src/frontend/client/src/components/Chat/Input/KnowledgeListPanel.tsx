@@ -13,7 +13,7 @@ import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenuItem, Input } from "~/components/ui";
 import { Checkbox } from "~/components/ui/Checkbox";
-import { EmptyStateIllustration } from "~/components/illustrations";
+import { StateView } from "@bisheng/ui";
 import { useScrollRevealRef } from "~/hooks";
 import { cn } from "~/utils";
 import type { KnowledgeItem } from "./knowledgeTypes";
@@ -211,11 +211,12 @@ export const KnowledgeListPanel = ({
             </div>
           )}
           {!isFetching && totalCount === 0 && (
-            // Fills the scroll viewport so the copy sits in the panel's middle
-            // rather than stranded under the search box.
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-4">
-              <EmptyStateIllustration grey className="size-[100px] shrink-0" />
-              <p className="text-center text-[12px] text-slate-400">{emptyText}</p>
+            // Inline tier (组件-State状态页.md §3): a selector with no options
+            // gets one centered line and no artwork. Fills the scroll viewport
+            // so the copy sits in the panel's middle rather than stranded under
+            // the search box.
+            <div className="flex min-h-0 flex-1 items-center justify-center">
+              <StateView size="inline" title={emptyText} />
             </div>
           )}
         </div>
