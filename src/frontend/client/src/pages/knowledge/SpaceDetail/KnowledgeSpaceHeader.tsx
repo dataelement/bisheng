@@ -1,17 +1,11 @@
 import { CircleHelp, FolderPlus, FolderUp, Link2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
+import { KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
-import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import {
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger,
-    DropdownMenuSeparator,
-    DropdownMenuCheckboxItem
 } from "~/components/ui/DropdownMenu";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import {
     ActionMenuContent,
     ActionMenuItem,
@@ -21,23 +15,20 @@ import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { KnowledgeBreadcrumb } from "./KnowledgeBreadcrumb";
-import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
+/**
+ * Space header: identity (name / info / share) on the left, batch + add actions
+ * on the right. Search, filter, sort and the view toggle used to live here too;
+ * they moved into FileListToolbar so list and card views share one bar
+ * (Figma 13198:75829).
+ */
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
     currentPath: Array<{ id?: string; name: string }>;
     onNavigateFolder: (folderId?: string) => void;
-    searchQuery: string;
     isSearching: boolean;
-    onSearch: (params: SearchParams) => void;
-    viewMode: "card" | "list";
-    setViewMode: (mode: "card" | "list") => void;
-    statusFilter: FileStatus[];
-    onFilterStatus: (status: FileStatus, checked: boolean) => void;
-    sortBy: SortType | undefined;
-    sortDirection: SortDirection | undefined;
-    onSort: (sortBy: SortType) => void;
     onCreateFolder: () => void;
     onTriggerUpload: () => void;
     onTriggerUploadFolder: () => void;
@@ -64,8 +55,12 @@ interface KnowledgeSpaceHeaderProps {
     /** F034: whether the current selection can be moved (no uploading placeholders + move permission). */
     canBatchMove?: boolean;
     onGoKnowledgeSquare?: () => void;
-    enableCardMode?: boolean;
     canShareSpace?: boolean;
+    /** Batch approve/reject entries for the selected pending-upload files. */
+    pendingSelectedCount?: number;
+    onBatchApprovePending?: () => void;
+    onBatchRejectPending?: () => void;
+    pendingBatchDeciding?: boolean;
     /** Version management: gates the "process similar documents" entry + per-row version actions. */
     versionManagementEnabled?: boolean;
     /** True when the current selection contains at least one pending similar document. */
@@ -80,16 +75,7 @@ export function KnowledgeSpaceHeader({
     space,
     currentPath,
     onNavigateFolder,
-    searchQuery,
     isSearching,
-    onSearch,
-    viewMode,
-    setViewMode,
-    statusFilter,
-    onFilterStatus,
-    sortBy,
-    sortDirection,
-    onSort,
     onCreateFolder,
     onTriggerUpload,
     onTriggerUploadFolder,
@@ -102,7 +88,6 @@ export function KnowledgeSpaceHeader({
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
-    onClearSelection,
     onBatchDownload,
     canBatchDownload = false,
     onBatchTag,
@@ -111,155 +96,38 @@ export function KnowledgeSpaceHeader({
     canBatchDelete = false,
     onBatchMove,
     canBatchMove = false,
-    onGoKnowledgeSquare,
-    enableCardMode = true,
     canShareSpace = false,
     versionManagementEnabled = false,
     hasSimilarSelected = false,
     onProcessSimilar,
     canManageMembers = false,
+    pendingSelectedCount = 0,
+    onBatchApprovePending,
+    onBatchRejectPending,
+    pendingBatchDeciding = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
-    const isNarrow576 = useMediaQuery("(max-width: 576px)");
 
     const isAdmin = space.role === SpaceRole.CREATOR || space.role === SpaceRole.ADMIN;
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
     const showAddMenu = canCreateFolder || canUploadFile;
-    const showViewModeTabs = enableCardMode && !isNarrow576;
-    const showFilterButton = space.role !== SpaceRole.MEMBER;
-    const showSortButton = showViewModeTabs && viewMode === "card";
-    const showFilterSortCluster = showFilterButton || showSortButton;
-    // Include the view-mode toggle here so the trailing button group still renders for
-    // viewers (no add menu, not admin, no selection) who only have the toggle to show.
+    // Filter / sort / search / view-toggle all moved into FileListToolbar; the
+    // approve-all button is the only thing left that can carry this row on its own.
     const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold
-        || approvablePendingUploadCount > 0 || showViewModeTabs;
-
-    const viewModeToggleButton = showViewModeTabs ? (
-        <Button
-            variant="outline"
-            onClick={() => setViewMode(viewMode === "list" ? "card" : "list")}
-            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-[#818181] hover:bg-[#f7f8fa]"
-        >
-            {viewMode === "list"
-                ? <Outlined.ViewGridCard className="size-4 shrink-0" />
-                : <Outlined.List className="size-4 shrink-0" />}
-        </Button>
-    ) : null;
-
-    const viewFilterSortCluster = showFilterSortCluster && (
-        <div className="flex min-w-0 shrink-0 items-center gap-3">
-            {showFilterButton && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className={cn(
-                                "inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md p-0 font-normal border-[#e5e6eb]",
-                                statusFilter.length > 0
-                                    ? "border-blue-600 bg-blue-500/[0.07] text-blue-600 hover:bg-blue-500/[0.07]"
-                                    : "bg-white text-[#818181] hover:bg-[#f7f8fa]"
-                            )}
-                        >
-                            <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-blue-600" : "text-[#818181]")} />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.status")}</div>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.UPLOADING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.UPLOADING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.uploading_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.WAITING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.WAITING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.queueing_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.PROCESSING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.PROCESSING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.parsing_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.REBUILDING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.rebuilding_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.SUCCESS)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.SUCCESS, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.success")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.FAILED)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.FAILED, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.fail")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.VIOLATION)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.VIOLATION, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.violation")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.TIMEOUT)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.TIMEOUT, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.timeout")}
-                        </DropdownMenuCheckboxItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            )}
-
-            {showSortButton && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="inline-flex h-8 w-8 min-h-8 min-w-8 shrink-0 items-center justify-center gap-0 rounded-md border border-[#e5e6eb] bg-white p-0 font-normal text-[#818181] hover:bg-[#f7f8fa]"
-                        >
-                            <Outlined.Sort className="size-4 shrink-0" aria-hidden />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
-                        <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
-                            {localize("com_knowledge.sort_by_name_label")}
-                            {sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
-                            {localize("com_knowledge.sort_by_type_label")}
-                            {sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
-                            {localize("com_knowledge.sort_by_update_time_label")}
-                            {sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            )}
-        </div>
-    );
+        || approvablePendingUploadCount > 0;
+    // Pending-upload rows can only be approved or rejected — the reviewed-file
+    // actions below never apply to them (Figma 13198:78120).
+    const showPendingBatchGroup = pendingSelectedCount > 0
+        && Boolean(onBatchApprovePending || onBatchRejectPending);
+    const reviewedSelectedCount = selectedCount - pendingSelectedCount;
+    const showReviewedBatchGroup = reviewedSelectedCount > 0;
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
-            {viewModeToggleButton}
+            {/* Approve every approvable pending upload in this folder — unlike the
+                menu groups below, it does not depend on the row selection. */}
             {approvablePendingUploadCount > 0 && onBatchApprovePendingUploads && (
                 <Button
                     size="sm"
@@ -271,58 +139,97 @@ export function KnowledgeSpaceHeader({
                     {` (${approvablePendingUploadCount})`}
                 </Button>
             )}
+
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button size="sm" variant="outline" className="h-8 gap-0.5 rounded-md border-[#e5e6eb] font-normal text-[#4e5969]">
+                        <button
+                            type="button"
+                            className="inline-flex h-8 shrink-0 items-center justify-center gap-0.5 rounded-md border border-[#e5e6eb] bg-white px-3 text-sm font-normal text-text-2 transition-colors hover:bg-fill-1"
+                        >
                             {localize("com_knowledge.batch_operation")}
                             <Outlined.Down className="size-4" />
-                        </Button>
+                        </button>
                     </DropdownMenuTrigger>
                     <ActionMenuContent align="end">
-                        {versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar && (
-                            <ActionMenuItem
-                                onClick={onProcessSimilar}
-                                icon={<Outlined.FileSearch />}
-                                label={localize("com_knowledge.version.header_process_similar_label")}
-                            />
+                        {showPendingBatchGroup && (
+                            <>
+                                <div className="px-2 py-1.5 text-xs font-medium text-text-3">
+                                    {localize("com_knowledge.batch_group_pending")}
+                                </div>
+                                {onBatchApprovePending && (
+                                    <ActionMenuItem
+                                        // Approve reads green, mirroring the row-level ✓ (Figma 13198:78122).
+                                        className="text-success data-[highlighted]:text-success focus:text-success"
+                                        disabled={pendingBatchDeciding}
+                                        onClick={onBatchApprovePending}
+                                        icon={<Outlined.Check className="text-success" />}
+                                        label={localize("com_approval_action_approve")}
+                                    />
+                                )}
+                                {onBatchRejectPending && (
+                                    <ActionMenuItem
+                                        danger
+                                        disabled={pendingBatchDeciding}
+                                        onClick={onBatchRejectPending}
+                                        icon={<Outlined.Close />}
+                                        label={localize("com_approval_action_reject")}
+                                    />
+                                )}
+                            </>
                         )}
-                        {canBatchDownload && (
-                            <ActionMenuItem
-                                onClick={onBatchDownload}
-                                icon={<Outlined.Download />}
-                                label={localize("com_knowledge.batch_download")}
-                            />
+                        {showPendingBatchGroup && showReviewedBatchGroup && (
+                            <div className="px-2 py-1.5 text-xs font-medium text-text-3">
+                                {localize("com_knowledge.batch_group_reviewed")}
+                            </div>
                         )}
-                        {isAdmin && !hasFoldersSelected && (
-                            <ActionMenuItem
-                                onClick={onBatchTag}
-                                icon={<Outlined.Tag />}
-                                label={localize("com_knowledge.batch_add_tags")}
-                            />
-                        )}
-                        {isAdmin && hasFailedFiles && (
-                            <ActionMenuItem
-                                onClick={onBatchRetry}
-                                icon={<Outlined.Refresh />}
-                                label={localize("com_knowledge.batch_retry")}
-                            />
-                        )}
-                        {onBatchMove && (
-                            <ActionMenuItem
-                                disabled={!canBatchMove}
-                                onClick={onBatchMove}
-                                icon={<Outlined.MoveToFolder />}
-                                label={localize("com_knowledge.move")}
-                            />
-                        )}
-                        {canBatchDelete && (
-                            <ActionMenuItem
-                                danger
-                                onClick={onBatchDelete}
-                                icon={<Outlined.Delete />}
-                                label={localize("com_knowledge.batch_delete")}
-                            />
+                        {showReviewedBatchGroup && (
+                            <>
+                                {versionManagementEnabled && canManageMembers && hasSimilarSelected && onProcessSimilar && (
+                                    <ActionMenuItem
+                                        onClick={onProcessSimilar}
+                                        icon={<Outlined.FileSearch />}
+                                        label={localize("com_knowledge.version.header_process_similar_label")}
+                                    />
+                                )}
+                                {canBatchDownload && (
+                                    <ActionMenuItem
+                                        onClick={onBatchDownload}
+                                        icon={<Outlined.Download />}
+                                        label={localize("com_knowledge.batch_download")}
+                                    />
+                                )}
+                                {isAdmin && !hasFoldersSelected && (
+                                    <ActionMenuItem
+                                        onClick={onBatchTag}
+                                        icon={<Outlined.Tag />}
+                                        label={localize("com_knowledge.batch_add_tags")}
+                                    />
+                                )}
+                                {isAdmin && hasFailedFiles && (
+                                    <ActionMenuItem
+                                        onClick={onBatchRetry}
+                                        icon={<Outlined.Refresh />}
+                                        label={localize("com_knowledge.batch_retry")}
+                                    />
+                                )}
+                                {onBatchMove && (
+                                    <ActionMenuItem
+                                        disabled={!canBatchMove}
+                                        onClick={onBatchMove}
+                                        icon={<Outlined.MoveToFolder />}
+                                        label={localize("com_knowledge.move")}
+                                    />
+                                )}
+                                {canBatchDelete && (
+                                    <ActionMenuItem
+                                        danger
+                                        onClick={onBatchDelete}
+                                        icon={<Outlined.Delete />}
+                                        label={localize("com_knowledge.batch_delete")}
+                                    />
+                                )}
+                            </>
                         )}
                     </ActionMenuContent>
                 </DropdownMenu>
@@ -481,15 +388,8 @@ export function KnowledgeSpaceHeader({
                         )}
                     </div>
 
-                    {/* 右侧：搜索（收起为图标，点击展开）+ 视图/筛选/排序 + 批量/新增，单行排列 */}
+                    {/* 右侧：批量操作 + 新增。搜索/筛选/排序/视图切换已移入 FileListToolbar */}
                     <div className="flex shrink-0 items-center gap-3">
-                        <CompoundSearchInput
-                            collapsible
-                            spaceId={space.id}
-                            isRoot={currentPath.length === 0}
-                            onSearch={onSearch}
-                        />
-                        {viewFilterSortCluster}
                         {batchAndAddActions}
                     </div>
         </div>

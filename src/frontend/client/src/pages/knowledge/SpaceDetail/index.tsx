@@ -36,8 +36,11 @@ import {
     getMaxFileSizeBytesForFile,
     getMaxFileSizeMBForFile,
     isKnowledgeItemUploading,
+    PENDING_REVIEW_FILTER,
     resolveUploadSizeLimits,
+    toBackendStatusFilter,
     triggerUrlDownload,
+    type FileStatusFilter,
     type UploadSizeLimits,
 } from "../knowledgeUtils";
 import { resolveLocalizedKnowledgeImportError } from "../webLinkI18n";
@@ -45,7 +48,8 @@ import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
-import { FileTable } from "./FileTable";
+import { FileListToolbar } from "./FileListToolbar";
+import { FileListView } from "./FileListView";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { MoveToDialog } from "./MoveToDialog";
@@ -190,9 +194,9 @@ export function KnowledgeSpaceContent({
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
+    const [statusFilter, setStatusFilter] = useState<FileStatusFilter[]>([]);
     const fileChangeApproval = useFileChangeApproval({
         spaceId: space.id,
         parentId: currentFolderId,
@@ -201,6 +205,13 @@ export function KnowledgeSpaceContent({
     const pendingUploadFiles = fileChangeApproval.pendingItems.map((item) =>
         projectPendingUploadAsKnowledgeFile(item, space.id),
     );
+    // Pending uploads are merged client-side, so the status filter has to gate
+    // them here: an active filter shows them only when 待审核 is one of the
+    // checked options. Search results never include them.
+    const showPendingUploads =
+        searchQuery.trim().length === 0
+        && searchTagIds.length === 0
+        && (statusFilter.length === 0 || statusFilter.includes(PENDING_REVIEW_FILTER));
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         // In-progress folder upload: show its placeholder card (keyed to the space +
@@ -221,9 +232,17 @@ export function KnowledgeSpaceContent({
                 String(f.spaceId) === String(space.id) &&
                 String(f.parentId ?? "") === String(currentFolderId ?? ""),
         ),
-        ...(searchQuery.trim().length === 0 && searchTagIds.length === 0 ? pendingUploadFiles : []),
+        ...(showPendingUploads ? pendingUploadFiles : []),
         ...files
     ];
+
+    /**
+     * The selected rows a reviewed-file batch action applies to. Pending uploads
+     * can be selected (for 同意 / 拒绝) but must never reach download / delete /
+     * move / tag / retry, which all address formal file ids.
+     */
+    const getReviewedSelection = () =>
+        displayFiles.filter((f) => selectedFiles.has(f.id) && !f.pendingUploadApproval);
 
     // Infinite scroll: trigger the next page when the scroll container nears its bottom.
     const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -249,11 +268,12 @@ export function KnowledgeSpaceContent({
     // Shared atom (not local state) so the bottom AI dock can clear the selection
     // on focus/send without prop drilling. See selectionStore.ts.
     const [selectedFiles, setSelectedFiles] = useRecoilState(knowledgeSelectedFilesState);
-    const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
+    // Sequential batch reject has no dedicated mutation flag — track it here.
+    const [pendingBatchDeciding, setPendingBatchDeciding] = useState(false);
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
@@ -372,7 +392,7 @@ export function KnowledgeSpaceContent({
 
     // Open the similar-document dialog scoped to the currently selected files.
     const handleProcessSimilar = () => {
-        setSimilarRestrictIds(Array.from(selectedFiles));
+        setSimilarRestrictIds(getReviewedSelection().map((f) => f.id));
         setSimilarDialogOpen(true);
     };
 
@@ -734,13 +754,14 @@ export function KnowledgeSpaceContent({
         onSearch(params);
     };
 
-    const handleStatusFilter = (status: FileStatus, checked: boolean) => {
-        const coupled = [status];
+    const handleStatusFilter = (status: FileStatusFilter, checked: boolean) => {
         const newFilter = checked
-            ? [...statusFilter, ...coupled.filter(s => !statusFilter.includes(s))]
-            : statusFilter.filter(s => !coupled.includes(s));
+            ? (statusFilter.includes(status) ? statusFilter : [...statusFilter, status])
+            : statusFilter.filter((s) => s !== status);
         setStatusFilter(newFilter);
-        onFilterStatus(newFilter);
+        // Pending uploads come from a separate endpoint and are filtered
+        // client-side (see showPendingUploads) — the query only takes real statuses.
+        onFilterStatus(toBackendStatusFilter(newFilter));
     };
 
     const handleSort = (newSortBy: SortType) => {
@@ -757,9 +778,16 @@ export function KnowledgeSpaceContent({
     const isFolderUploadPlaceholder = (f: KnowledgeFile) =>
         f.type === FileType.FOLDER && isKnowledgeItemUploading(f);
 
+    // A pending-upload row is selectable only when this user may decide it —
+    // batch 同意/拒绝 is the only action that applies to it.
+    const isSelectableFile = (f: KnowledgeFile) =>
+        f.pendingUploadApproval
+            ? Boolean(f.pendingUploadApproval.canApprove)
+            : !isFolderUploadPlaceholder(f);
+
     const handleSelectFile = (fileId: string, selected: boolean) => {
         const target = displayFiles.find((f) => f.id === fileId);
-        if (target && (target.pendingUploadApproval || isFolderUploadPlaceholder(target))) return;
+        if (target && !isSelectableFile(target)) return;
         const newSelected = new Set(selectedFiles);
         if (selected) {
             newSelected.add(fileId);
@@ -785,7 +813,7 @@ export function KnowledgeSpaceContent({
     const handleSelectAll = (isAllSelectedOnPage: boolean) => {
         const newSelected = new Set(selectedFiles);
         // Skip uploading folder placeholders so select-all never picks them up.
-        const selectable = displayFiles.filter((f) => !f.pendingUploadApproval && !isFolderUploadPlaceholder(f));
+        const selectable = displayFiles.filter(isSelectableFile);
         if (isAllSelectedOnPage) {
             selectable.forEach(f => newSelected.delete(f.id));
         } else {
@@ -795,7 +823,7 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchDownload = async () => {
-        const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        const selectedList = getReviewedSelection();
         const canDownloadSelected = selectedList.length > 0 && selectedList.every((file) =>
             downloadEntryIds.has(file.id)
         );
@@ -885,8 +913,53 @@ export function KnowledgeSpaceContent({
             showToast({ message: localize("com_approval_toast_failed"), status: "error" });
         }
     };
+    /** Request ids of the selected pending uploads this user may decide. */
+    const getPendingSelectionRequestIds = () =>
+        displayFiles
+            .filter((f) => selectedFiles.has(f.id) && f.pendingUploadApproval?.canApprove)
+            .map((f) => f.pendingUploadApproval!.requestId);
+
+    const handleBatchApprovePending = async () => {
+        const requestIds = getPendingSelectionRequestIds();
+        if (requestIds.length === 0) return;
+        try {
+            const result = await fileChangeApproval.batchApprove(requestIds);
+            setSelectedFiles(new Set());
+            showToast({
+                message: localize("com_knowledge.batch_approve_success", { 0: result.successCount }),
+                status: result.failureCount > 0 ? "warning" : "success",
+            });
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
+
+    // There is no batch-reject endpoint — reject each request in turn and report
+    // how many went through (mirrors the batch-approve summary).
+    const handleBatchRejectPending = async () => {
+        const requestIds = getPendingSelectionRequestIds();
+        if (requestIds.length === 0) return;
+        setPendingBatchDeciding(true);
+        let rejected = 0;
+        try {
+            for (const requestId of requestIds) {
+                await fileChangeApproval.decide({ requestId, action: "reject" });
+                rejected += 1;
+            }
+            setSelectedFiles(new Set());
+            showToast({
+                message: localize("com_knowledge.batch_reject_success", { 0: rejected }),
+                status: "success",
+            });
+        } catch {
+            showToast({ message: localize("com_knowledge.batch_reject_failed"), status: "error" });
+        } finally {
+            setPendingBatchDeciding(false);
+        }
+    };
+
     const handleBatchMove = () => {
-        const selected = displayFiles.filter((f) => selectedFiles.has(f.id));
+        const selected = getReviewedSelection();
         // Uploading placeholders have no backend id yet → can't be moved. Surface
         // them in the partial-move dialog so the user can still move the rest.
         const uploading = selected.filter((f) => isKnowledgeItemUploading(f));
@@ -986,7 +1059,7 @@ export function KnowledgeSpaceContent({
         // Optimistic batch delete (handled by the parent): rows are dropped from
         // the list in place — keeps the scroll position and works regardless of
         // which page they were loaded from. The parent rolls back on API failure.
-        const ids = selectedList.map(f => f.id);
+        const ids = getReviewedSelection().map(f => f.id);
         setSelectedFiles(new Set());
         const ok = await onBatchDeleteFiles(ids);
         if (ok) {
@@ -1020,8 +1093,8 @@ export function KnowledgeSpaceContent({
 
     const handleBatchRetry = async () => {
         // Find selected files/folders that have FAILED status or partial failures
-        const retryIds = displayFiles
-            .filter(f => selectedFiles.has(f.id) && (
+        const retryIds = getReviewedSelection()
+            .filter(f => (
                 f.status === FileStatus.FAILED ||
                 f.status === FileStatus.VIOLATION ||
                 (f.type === FileType.FOLDER && f.hasFailedFiles === true)
@@ -1068,35 +1141,42 @@ export function KnowledgeSpaceContent({
         return null;
     };
 
-    const hasFailedFiles = displayFiles.some(f =>
-        selectedFiles.has(f.id) && (
-            f.status === FileStatus.FAILED ||
-            f.status === FileStatus.VIOLATION ||
-            (f.type === FileType.FOLDER && f.hasFailedFiles === true)
-        )
-    );
-    const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
+    const selectableFiles = displayFiles.filter(isSelectableFile);
+    const isAllSelectedOnPage =
+        selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
+    const isSelectionIndeterminate =
+        !isAllSelectedOnPage && selectableFiles.some((f) => selectedFiles.has(f.id));
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
-    const selectionHasFile = selectedList.some((f) => f.type !== FileType.FOLDER);
+    // Pending uploads only support 同意 / 拒绝; every other batch action applies to
+    // the reviewed (formal) files in the selection (Figma 13198:78120).
+    const pendingSelectedList = selectedList.filter((f) => f.pendingUploadApproval);
+    const reviewedSelectedList = selectedList.filter((f) => !f.pendingUploadApproval);
+    const hasFailedFiles = reviewedSelectedList.some(f =>
+        f.status === FileStatus.FAILED ||
+        f.status === FileStatus.VIOLATION ||
+        (f.type === FileType.FOLDER && f.hasFailedFiles === true)
+    );
+    const hasFoldersSelected = reviewedSelectedList.some(f => f.type === FileType.FOLDER);
+    const selectionHasFile = reviewedSelectedList.some((f) => f.type !== FileType.FOLDER);
     // Batch move requires the matching move permission for every kind in the
     // selection: folders need move_folder, files need move_file (a role may
     // grant only one). Uploading placeholders no longer block the entry — the
     // move flow warns about them and lets the user move the rest (handleBatchMove).
     const canBatchMove =
-        selectedList.length > 0 &&
-        selectedList.every((file) => !getFileChangeLockState(file).locked) &&
+        reviewedSelectedList.length > 0 &&
+        reviewedSelectedList.every((file) => !getFileChangeLockState(file).locked) &&
         (!hasFoldersSelected || canMoveFolder) &&
         (!selectionHasFile || canMoveFile);
-    const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
+    const canBatchDelete = reviewedSelectedList.length > 0 && reviewedSelectedList.every((file) =>
         deleteEntryIds.has(file.id) && !getFileChangeLockState(file).locked
     );
-    const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
+    const canBatchDownload = reviewedSelectedList.length > 0 && reviewedSelectedList.every((file) =>
         downloadEntryIds.has(file.id)
     );
     // "处理相似文档" uses union semantics (like batch retry's hasFailedFiles): the entry
     // appears whenever ANY selected file is a pending similar document. The dialog is then
     // scoped to exactly the selected files (see handleProcessSimilar).
-    const hasSimilarSelected = selectedList.some((f) => f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS);
+    const hasSimilarSelected = reviewedSelectedList.some((f) => f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS);
 
     // Mobile only ever shows the list form — never the multi-column card grid.
     const effectiveViewMode: "card" | "list" = isH5 ? "list" : viewMode;
@@ -1371,17 +1451,7 @@ export function KnowledgeSpaceContent({
                 space={space}
                 currentPath={currentPath}
                 onNavigateFolder={onNavigateFolder}
-                searchQuery={searchQuery}
                 isSearching={isSearching}
-                onSearch={handleSearch}
-                viewMode={viewMode}
-                setViewMode={setViewMode}
-                enableCardMode={!isH5}
-                statusFilter={statusFilter}
-                onFilterStatus={handleStatusFilter}
-                sortBy={sortBy}
-                sortDirection={sortDirection}
-                onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 onTriggerUploadFolder={triggerUploadFolder}
@@ -1413,8 +1483,35 @@ export function KnowledgeSpaceContent({
                 hasSimilarSelected={hasSimilarSelected}
                 onProcessSimilar={handleProcessSimilar}
                 canManageMembers={canManageMembers}
+                pendingSelectedCount={pendingSelectedList.length}
+                onBatchApprovePending={handleBatchApprovePending}
+                onBatchRejectPending={handleBatchRejectPending}
+                pendingBatchDeciding={pendingBatchDeciding || fileChangeApproval.batchApproving}
             />
             </div>
+            )}
+
+            {/* Unified toolbar — shared by the list and card views (Figma 13198:75844).
+                Hidden in the full-page search view, which carries its own search box. */}
+            {!isH5 && !searchMode && (
+                <FileListToolbar
+                    spaceId={space.id}
+                    isRoot={currentPath.length === 0}
+                    onSearch={handleSearch}
+                    statusFilter={statusFilter}
+                    onFilterStatus={handleStatusFilter}
+                    showFilter={space.role !== SpaceRole.MEMBER}
+                    showPendingReviewFilter={pendingUploadFiles.length > 0 || statusFilter.includes(PENDING_REVIEW_FILTER)}
+                    sortBy={sortBy}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                    isAllSelected={isAllSelectedOnPage}
+                    isIndeterminate={isSelectionIndeterminate}
+                    hasSelectableFiles={selectableFiles.length > 0}
+                    onSelectAll={() => handleSelectAll(isAllSelectedOnPage)}
+                />
             )}
 
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
@@ -1549,16 +1646,14 @@ export function KnowledgeSpaceContent({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#e5e6eb]">
-                                <FileTable files={displayFiles}
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                            <FileListView files={displayFiles}
                                     onEnsureFilePermissions={ensureFilePermissions}
                                     onScroll={handleListScroll}
                                     /* Reserve 112px under the last row so the bottom AI dock leaves
                                        a 40px visual gap above the input. */
                                     bottomSpacing={112}
                                     selectedFiles={selectedFiles}
-                                    handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
                                     isAdmin={isAdmin}
                                     currentUserRole={space.role}
@@ -1584,17 +1679,13 @@ export function KnowledgeSpaceContent({
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                     canManageMembers={canManageMembers}
-                                    sortBy={sortBy}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
                                     highlightedTagIds={searchTagIds}
                                     highlightKeyword={searchQuery}
                                     onOpenApprovalDetail={fileChangeApproval.openDetail}
                                     onPreviewPendingUpload={handleFileChangePreview}
                                     onDecidePendingUpload={handlePendingUploadDecision}
                                     pendingUploadDeciding={fileChangeApproval.deciding}
-                                />
-                            </div>
+                            />
                         </div>
                     )}
                 </div>
@@ -1676,7 +1767,7 @@ export function KnowledgeSpaceContent({
                 onSaved={handleTagsSaved}
                 spaceId={space.id}
                 fileId={isBatchTagging ? null : editingTagsFileId}
-                fileIds={isBatchTagging ? Array.from(selectedFiles) : undefined}
+                fileIds={isBatchTagging ? getReviewedSelection().map((f) => f.id) : undefined}
                 initialTagIds={
                     editingTagsFileId && !isBatchTagging
                         ? (displayFiles.find(f => f.id === editingTagsFileId)?.tags?.map(t => t.id) || [])
