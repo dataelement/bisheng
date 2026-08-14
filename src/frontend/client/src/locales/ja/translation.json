@@ -376,6 +376,7 @@
   "com_linsight_ingest_running": "アップロードファイルを解析中 {{0}}/{{1}}",
   "com_linsight_ingest_done": "アップロードファイルの解析が完了 {{0}}/{{1}}",
   "com_linsight_ingest_failed": "アップロードファイルの解析に失敗しました",
+  "com_linsight_skill_load_failed": "次のスキルを読み込めなかったため、今回の実行では使用されません：{{0}}",
   "com_linsight_ingest_aborted": "解析を中断しました {{0}}/{{1}}",
   "com_linsight_planning": "タスクを計画中",
   "com_linsight_executing": "タスクを実行中",

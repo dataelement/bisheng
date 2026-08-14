@@ -13,6 +13,8 @@ non-obvious contracts:
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 from bisheng.linsight.domain.models.linsight_skill import (
@@ -22,6 +24,7 @@ from bisheng.linsight.domain.models.linsight_skill import (
 )
 from bisheng.linsight.domain.services import builtin_skill_seeder as seeder
 from bisheng.linsight.domain.services.skill_store import SkillStore
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
 
 SKILL_MD_TEMPLATE = """---
 name: {name}
@@ -72,8 +75,18 @@ def env(tmp_path, monkeypatch):
     dao = _FakeDao()
     monkeypatch.setattr(seeder, "LinsightSkillDao", dao)
 
-    store = SkillStore(root=tmp_path / "skills_root")
+    store = SkillStore(root=tmp_path / "skills_root", minio=FakeMinioStorage())
     return builtin, store, dao
+
+
+def _is_stored(store, dao, tenant_id, name) -> bool:
+    """Bundle resolvable through the row's pointer — the way production reads it."""
+    row = dao.rows.get((tenant_id, name))
+    return bool(row) and store.exists(tenant_id, name, row.content_hash)
+
+
+def _stored_bytes(store, dao, tenant_id, name, rel) -> bytes:
+    return store.read_bytes(tenant_id, name, dao.rows[(tenant_id, name)].content_hash, rel)
 
 
 def _write_bundle(builtin, name="demo-skill", description="演示技能描述", display="演示技能", extra=None):
@@ -146,7 +159,7 @@ async def test_first_seed_creates_the_row_and_writes_the_bundle(env):
     assert row.source == SKILL_SOURCE_BUILTIN
     assert row.display_name == "演示技能"
     assert row.enabled is True
-    assert store.exists(7, "demo-skill")
+    assert _is_stored(store, dao, 7, "demo-skill")
 
 
 async def test_second_run_is_a_noop_when_content_is_unchanged(env):
@@ -160,6 +173,43 @@ async def test_second_run_is_a_noop_when_content_is_unchanged(env):
     assert dao.updates == 0  # nothing rewritten
 
 
+async def test_missing_object_is_republished_even_when_the_hash_matches(env):
+    """Self-healing: comparing hashes alone would leave a deleted bundle broken forever.
+
+    The byte-for-byte check this replaced repaired such a bundle on the next boot
+    as a side effect; confirming the object still exists keeps that property
+    without re-reading every file.
+    """
+    builtin, store, dao = env
+    _write_bundle(builtin)
+    await seeder.seed_builtin_skills([7], store=store)
+
+    # The object disappears (bucket lifecycle, operator error) while the row keeps
+    # advertising it, and no node has it cached.
+    store.minio.store.clear()
+    shutil.rmtree(store.root)
+
+    stats = await seeder.seed_builtin_skills([7], store=store)
+
+    assert stats == {"updated": 1}
+    assert _is_stored(store, dao, 7, "demo-skill")
+
+
+async def test_a_non_uniqueness_db_error_is_not_swallowed_as_a_race(env, monkeypatch):
+    """Only the unique-key collision means "another replica won"."""
+    builtin, store, dao = env
+    _write_bundle(builtin)
+
+    async def _boom(_skill):
+        raise RuntimeError("connection reset")
+
+    monkeypatch.setattr(dao, "create", _boom)
+
+    stats = await seeder.seed_builtin_skills([7], store=store)
+
+    assert stats == {"failed": 1}  # not "raced"
+
+
 async def test_changed_content_refreshes_the_bundle(env):
     """An upgraded image must update the installed skill on the next restart."""
     builtin, store, dao = env
@@ -171,7 +221,7 @@ async def test_changed_content_refreshes_the_bundle(env):
 
     assert stats == {"updated": 1}
     assert dao.rows[(7, "demo-skill")].description == "改过的描述"
-    assert store.read_bytes(7, "demo-skill", "scripts/helper.py") == b"print('v2')\n"
+    assert _stored_bytes(store, dao, 7, "demo-skill", "scripts/helper.py") == b"print('v2')\n"
 
 
 async def test_a_tenant_edit_opts_out_of_reseeding_forever(env):
@@ -179,30 +229,33 @@ async def test_a_tenant_edit_opts_out_of_reseeding_forever(env):
     _write_bundle(builtin)
     await seeder.seed_builtin_skills([7], store=store)
 
-    # The tenant edits it through the API -> SkillService._mark_forked
-    dao.rows[(7, "demo-skill")].source = SKILL_SOURCE_MANUAL
-    store.write_bundle(7, "demo-skill", {"SKILL.md": b"---\nname: demo-skill\ndescription: mine\n---\n\nmine"})
+    # The tenant edits it through the API -> SkillService._mark_forked, which also
+    # repoints the row at the new version.
+    edited = store.write_bundle(7, "demo-skill", {"SKILL.md": b"---\nname: demo-skill\ndescription: mine\n---\n\nmine"})
+    row = dao.rows[(7, "demo-skill")]
+    row.source = SKILL_SOURCE_MANUAL
+    row.content_hash, row.object_path = edited.content_hash, edited.object_key
 
     _write_bundle(builtin, description="上游又改了", extra="print('v3')\n")
     stats = await seeder.seed_builtin_skills([7], store=store)
 
     assert stats == {"forked": 1}
-    assert b"mine" in store.read_bytes(7, "demo-skill", "SKILL.md")
+    assert b"mine" in _stored_bytes(store, dao, 7, "demo-skill", "SKILL.md")
 
 
 async def test_every_tenant_gets_its_own_copy(env):
-    builtin, store, _dao = env
+    builtin, store, dao = env
     _write_bundle(builtin)
 
     stats = await seeder.seed_builtin_skills([1, 2, 3], store=store)
 
     assert stats == {"created": 3}
-    assert store.exists(1, "demo-skill") and store.exists(2, "demo-skill") and store.exists(3, "demo-skill")
+    assert all(_is_stored(store, dao, t, "demo-skill") for t in (1, 2, 3))
 
 
 async def test_falls_back_to_the_default_tenant_when_none_are_active(env, monkeypatch):
     """Single-tenant deployments have no rows in the tenant table."""
-    builtin, store, _dao = env
+    builtin, store, dao = env
     _write_bundle(builtin)
 
     class _NoTenants:
@@ -215,11 +268,11 @@ async def test_falls_back_to_the_default_tenant_when_none_are_active(env, monkey
     stats = await seeder.seed_builtin_skills(store=store)
 
     assert stats == {"created": 1}
-    assert store.exists(1, "demo-skill")
+    assert _is_stored(store, dao, 1, "demo-skill")
 
 
 async def test_one_broken_bundle_does_not_stop_the_others(env, monkeypatch):
-    builtin, store, _dao = env
+    builtin, store, dao = env
     _write_bundle(builtin, name="good-skill", display="好技能")
     _write_bundle(builtin, name="bad-skill", display="坏技能")
 
@@ -235,14 +288,14 @@ async def test_one_broken_bundle_does_not_stop_the_others(env, monkeypatch):
     stats = await seeder.seed_builtin_skills([7], store=store)
 
     assert stats == {"created": 1, "failed": 1}
-    assert store.exists(7, "good-skill")
+    assert _is_stored(store, dao, 7, "good-skill")
 
 
 async def test_tenant_context_is_restored_after_seeding(env):
     """Seeding runs inside per-tenant context; it must not leak into the caller's."""
     from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 
-    builtin, store, _dao = env
+    builtin, store, dao = env
     _write_bundle(builtin)
 
     token = set_current_tenant_id(99)

@@ -391,6 +391,7 @@
   "com_linsight_ingest_running": "Parsing uploaded files {{0}}/{{1}}",
   "com_linsight_ingest_done": "Uploaded files parsed {{0}}/{{1}}",
   "com_linsight_ingest_failed": "Failed to parse uploaded files",
+  "com_linsight_skill_load_failed": "These skills could not be loaded and are not in use for this run: {{0}}",
   "com_linsight_ingest_aborted": "Parsing stopped {{0}}/{{1}}",
   "com_linsight_planning": "Planning tasks",
   "com_linsight_executing": "Working",

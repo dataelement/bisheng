@@ -447,9 +447,15 @@ class LinsightConf(BaseModel):
     )
     skills_root: str = Field(
         default="data/linsight_skills",
-        description="Root directory of Linsight skills on disk (F035). Layout: built-in/<name>/SKILL.md for "
-        "kernel built-in skills; data/skills/{tenant_id}/<name>/ for tenant custom skill bundles. "
-        "Multi-node deployments must mount this path on a shared volume (design §7.1).",
+        description="LEGACY: the pre-object-storage on-disk skill root. Skill bundles now live in object "
+        "storage; this path is only read by the one-off migration/restore scripts to find bundles left "
+        "on a node's local disk by an older release. Not used at runtime.",
+    )
+    skills_cache_dir: str = Field(
+        default="",
+        description="Local cache root for materialized skill bundles. Empty = a 'linsight_skills' folder "
+        "under the process cache dir. Purely a cache: object storage is authoritative, entries are keyed "
+        "by content hash and are safe to delete at any time. Do NOT point this at a shared volume.",
     )
 
 
