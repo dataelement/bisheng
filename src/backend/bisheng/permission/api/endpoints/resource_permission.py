@@ -582,6 +582,7 @@ async def _has_resource_permission_management_access(
     resource_type: str,
     resource_id: str,
     login_user: UserPayload,
+    use_binding_index: bool = False,
 ) -> bool:
     from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -589,12 +590,21 @@ async def _has_resource_permission_management_access(
     if management_permission_ids:
         from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
-        effective_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
-            login_user,
-            resource_type,
-            resource_id,
-            nearest_binding_wins=_lineage_binding_can_override(resource_type),
-        )
+        if use_binding_index and resource_type in {"knowledge_space", "channel"}:
+            effective_permission_ids = (
+                await FineGrainedPermissionService.get_effective_permission_ids_from_verified_bindings_async(
+                    login_user,
+                    resource_type,
+                    resource_id,
+                )
+            )
+        else:
+            effective_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+                login_user,
+                resource_type,
+                resource_id,
+                nearest_binding_wins=_lineage_binding_can_override(resource_type),
+            )
         return bool(management_permission_ids & effective_permission_ids)
 
     return await PermissionService.check(
@@ -1091,41 +1101,48 @@ async def get_resource_permissions(
         resource_type=resource_type,
         resource_id=resource_id,
         login_user=login_user,
+        use_binding_index=resource_type == "knowledge_space",
     )
     if not allowed:
         return PermissionDeniedError.return_resp()
 
-    permissions = await PermissionService.get_resource_permissions(
-        object_type=resource_type,
-        object_id=resource_id,
-    )
     models = await _get_relation_models()
     model_map = {m["id"]: _normalize_model_dict(m) for m in models}
-    binding_map = {
-        b.get("key"): b
+    bindings = [
+        b
         for b in await _get_bindings()
         if b.get("resource_type") == resource_type and str(b.get("resource_id")) == str(resource_id)
-    }
-    bindings = list(binding_map.values())
-    visible_permissions = []
-    for p in permissions:
-        matched = _binding_from_map(
-            binding_map,
-            resource_type,
-            str(resource_id),
-            p.subject_type,
-            p.subject_id,
-            p.relation,
-            getattr(p, "include_children", None),
+    ]
+    binding_map = {b.get("key"): b for b in bindings if b.get("key")}
+    if resource_type == "knowledge_space":
+        permissions = await PermissionService.get_resource_permissions_from_bindings(
+            bindings,
+            model_map,
         )
-        if matched:
-            p.model_id = matched.get("model_id")
-            p.model_name = model_map.get(p.model_id, {}).get("name")
-            p.include_children = matched.get("include_children")
+    else:
+        permissions = await PermissionService.get_resource_permissions(
+            object_type=resource_type,
+            object_id=resource_id,
+        )
+        visible_permissions = []
+        for p in permissions:
+            matched = _binding_from_map(
+                binding_map,
+                resource_type,
+                str(resource_id),
+                p.subject_type,
+                p.subject_id,
+                p.relation,
+                getattr(p, "include_children", None),
+            )
+            if matched:
+                p.model_id = matched.get("model_id")
+                p.model_name = model_map.get(p.model_id, {}).get("name")
+                p.include_children = matched.get("include_children")
 
-        visible_permissions.append(p)
-    permissions = visible_permissions
-    permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
+            visible_permissions.append(p)
+        permissions = visible_permissions
+        permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
     permissions = await _add_creator_owner_entry(
         resource_type=resource_type,
         resource_id=resource_id,

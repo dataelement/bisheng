@@ -319,7 +319,7 @@ export function ChannelSettingsPage() {
   return (
     <div
       ref={knowledgePickerHostRef}
-      className="flex h-full min-h-0 bg-fill-1"
+      className="flex h-full min-h-0 bg-white"
     >
       <main className="flex min-h-0 w-full flex-1 flex-col px-4 pt-4">
         <header className="flex h-8 shrink-0 items-center gap-3">
@@ -376,6 +376,7 @@ export function ChannelSettingsPage() {
         </div>
 
         <SettingsFooter
+          centered
           cancelLabel={settings.localize("com_unified_permission.cancel")}
           submitLabel={settings.localize(
             settings.isEditMode

@@ -22,6 +22,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMember,
     UserRoleEnum,
 )
+from bisheng.core.config.settings import KnowledgeSpaceReadBypassConf
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     Knowledge,
@@ -335,6 +336,249 @@ def service():
     visibility.filter_file_change_visible_ids = AsyncMock(side_effect=keep_all_file_change_visible)
     instance._knowledge_file_visibility_service = visibility
     return instance
+
+
+class TestReadPermissionBypass:
+    def test_config_is_disabled_by_default(self):
+        config = KnowledgeSpaceReadBypassConf()
+
+        assert config.enabled is False
+        assert config.space_ids == set()
+
+    def test_configured_space_is_bypassed(self, service):
+        from bisheng.common.services.config_service import settings
+
+        config = KnowledgeSpaceReadBypassConf(enabled=True, space_ids={311})
+        with patch.object(settings, "knowledge_space_read_bypass", config):
+            assert service._is_read_permission_bypassed(311) is True
+            assert service._is_read_permission_bypassed(312) is False
+
+    @pytest.mark.asyncio
+    async def test_generic_space_read_gate_is_not_bypassed(self, service):
+        space = _make_space(auth_type=AuthTypeEnum.PRIVATE)
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=space,
+            ),
+            patch.object(service, "_is_read_permission_bypassed", return_value=True),
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ) as mock_effective,
+        ):
+            with pytest.raises(SpacePermissionDeniedError):
+                await service._require_read_permission(1)
+
+        mock_effective.assert_awaited_once_with("knowledge_space", 1)
+
+    @pytest.mark.asyncio
+    async def test_bypass_does_not_skip_write_permission(self, service):
+        with (
+            patch.object(service, "_is_read_permission_bypassed", return_value=True),
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ) as mock_effective,
+        ):
+            with pytest.raises(SpacePermissionDeniedError):
+                await service._require_permission_id("knowledge_space", 1, "edit_space")
+
+        mock_effective.assert_awaited_once_with("knowledge_space", 1, space_id=None)
+
+    @pytest.mark.asyncio
+    async def test_child_filter_returns_database_rows_without_permission_calls(self, service):
+        items = [
+            _make_file(file_id=11, knowledge_id=1),
+            _make_file(file_id=12, knowledge_id=1, file_type=FileType.DIR.value),
+        ]
+
+        with (
+            patch.object(
+                service,
+                "_get_child_item_effective_permission_ids",
+                new_callable=AsyncMock,
+            ) as mock_item_permissions,
+            patch.object(
+                service,
+                "_chain_effective_permission_ids",
+                new_callable=AsyncMock,
+            ) as mock_chain_permissions,
+        ):
+            result = await service._filter_visible_child_items(
+                items,
+                space_id=1,
+                context={"read_permission_bypassed": True},
+            )
+
+        assert result == items
+        mock_item_permissions.assert_not_awaited()
+        mock_chain_permissions.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_shared_child_permission_context_remains_complete(self, service):
+        with (
+            patch.object(service, "_is_read_permission_bypassed", return_value=True),
+            patch.object(
+                service,
+                "_get_current_user_subject_strings",
+                new_callable=AsyncMock,
+                return_value={"user:7"},
+            ),
+            patch.object(service, "_get_relation_bindings", new_callable=AsyncMock, return_value=[]),
+            patch.object(service, "_get_binding_department_paths", new_callable=AsyncMock, return_value={}),
+            patch.object(service, "_get_relation_models_map", new_callable=AsyncMock, return_value={}),
+            patch.object(service, "_membership_permission_ids", new_callable=AsyncMock, return_value=set()),
+            patch.object(
+                service,
+                "_public_space_viewer_permission_ids",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ),
+        ):
+            context = await service._build_child_permission_context(1)
+
+        assert context["models"] == {}
+        assert context["bindings"] == []
+        assert context["user_subject_strings"] == {"user:7"}
+        assert context["tuple_cache"] == {}
+
+    @pytest.mark.asyncio
+    async def test_child_scan_bypass_does_not_build_permission_context(self, service):
+        with (
+            patch.object(service, "_is_read_permission_bypassed", return_value=True),
+            patch.object(
+                service,
+                "_build_child_permission_context",
+                new_callable=AsyncMock,
+            ) as mock_build_context,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.async_list_children",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+        ):
+            result = await service._scan_visible_child_items(
+                space_id=1,
+                parent_id=None,
+                file_ids=None,
+                order_field="file_type",
+                order_sort="asc",
+                file_status=None,
+                file_type=None,
+                page_size=20,
+            )
+
+        assert result == ([], False)
+        mock_build_context.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_breadcrumb_bypass_still_rejects_cross_space_resource(self, service):
+        folder = _make_file(
+            file_id=22,
+            knowledge_id=2,
+            file_type=FileType.DIR.value,
+        )
+
+        with (
+            patch.object(service, "_is_read_permission_bypassed", return_value=True),
+            patch.object(service, "_get_space_or_raise", new_callable=AsyncMock),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=folder,
+            ),
+        ):
+            with pytest.raises(SpaceFileNotFoundError):
+                await service.get_folder_file_parent(1, 22)
+
+    @pytest.mark.asyncio
+    async def test_space_info_bypass_skips_role_permission_resolution(self, service):
+        space = _make_space(
+            space_id=1,
+            user_id=99,
+            auth_type=AuthTypeEnum.PRIVATE,
+            state=KnowledgeState.UNPUBLISHED.value,
+        )
+
+        with (
+            patch.object(
+                service,
+                "_require_space_info_permission",
+                new_callable=AsyncMock,
+                return_value=(space, True),
+            ),
+            patch.object(service, "_is_read_permission_bypassed", return_value=True),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_count_space_members",
+                new_callable=AsyncMock,
+                return_value=0,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_count_success_files_batch",
+                new_callable=AsyncMock,
+                return_value={1: 0},
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(user_name="owner"),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_find_member",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.get_permission_level",
+                new_callable=AsyncMock,
+            ) as mock_permission_level,
+            patch.object(service, "_get_effective_permission_ids", new_callable=AsyncMock) as mock_effective,
+            patch.object(service, "_decorate_department_metadata", new_callable=AsyncMock),
+            patch.object(service, "_decorate_auto_tag_for_info", new_callable=AsyncMock),
+            patch("bisheng.worker.rebuild_knowledge_celery.delay") as mock_rebuild,
+        ):
+            result = await service.get_space_info(1)
+
+        assert result.user_role == UserRoleEnum.MEMBER
+        assert result.subscription_status == SpaceSubscriptionStatusEnum.NOT_SUBSCRIBED
+        mock_permission_level.assert_not_awaited()
+        mock_effective.assert_not_awaited()
+        mock_rebuild.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_file_preview_still_requires_permission(self, service):
+        file_record = _make_file(file_id=31, knowledge_id=1)
+
+        with (
+            patch.object(service, "_is_read_permission_bypassed", return_value=True),
+            patch.object(service, "_require_read_permission", new_callable=AsyncMock),
+            patch.object(service, "_require_resource_permission", new_callable=AsyncMock),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=file_record,
+            ),
+            patch.object(
+                service,
+                "_get_effective_permission_ids",
+                new_callable=AsyncMock,
+                return_value=set(),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.get_file_share_url"
+            ) as mock_share_url,
+        ):
+            with pytest.raises(SpacePermissionDeniedError):
+                await service.get_file_preview(31)
+
+        mock_share_url.assert_not_called()
 
 
 class TestGetSpaceInfo:

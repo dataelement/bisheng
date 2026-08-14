@@ -266,6 +266,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # ──────────────────────────── Permission helpers ───────────────────────────
 
+    def _is_read_permission_bypassed(self, space_id: int) -> bool:
+        """Return whether read authorization is bypassed for this space."""
+        from bisheng.common.services.config_service import settings
+
+        config = settings.knowledge_space_read_bypass
+        normalized_space_id = int(space_id)
+        bypassed = config.enabled and normalized_space_id in config.space_ids
+        if not bypassed:
+            return False
+
+        logged_space_ids = self.__dict__.setdefault("_read_bypass_logged_space_ids", set())
+        if normalized_space_id not in logged_space_ids:
+            logger.info(
+                "KNOWLEDGE_SPACE_READ_PERMISSION_BYPASS space_id={} user_id={} tenant_id={}",
+                normalized_space_id,
+                self.login_user.user_id,
+                getattr(self.login_user, "tenant_id", None),
+            )
+            logged_space_ids.add(normalized_space_id)
+        return True
+
     # Roles with write access to a space
     _WRITE_ROLES = {UserRoleEnum.CREATOR, UserRoleEnum.ADMIN}
 
@@ -1456,10 +1477,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for resource_id, file_type in rows
         ]
 
-    async def _require_read_permission(self, space_id: int) -> Knowledge:
+    async def _get_space_or_raise(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
+        return space
+
+    async def _require_read_permission(self, space_id: int) -> Knowledge:
+        space = await self._get_space_or_raise(space_id)
         effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
         if "view_space" not in effective_permissions:
             raise SpacePermissionDeniedError()
@@ -1473,9 +1498,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
 
     async def _require_space_info_permission(self, space_id: int) -> tuple[Knowledge, bool]:
-        space = await KnowledgeDao.aquery_by_id(space_id)
-        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
-            raise SpaceNotFoundError()
+        space = await self._get_space_or_raise(space_id)
+        if self._is_read_permission_bypassed(space_id):
+            return space, True
         effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
         if "view_space" in effective_permissions:
             return space, True
@@ -1668,6 +1693,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.worker import rebuild_knowledge_celery
 
         space, has_content_permission = await self._require_space_info_permission(space_id)
+        read_permission_bypassed = self._is_read_permission_bypassed(space_id)
 
         follower_num = await SpaceChannelMemberDao.async_count_space_members(space_id)
         total_file_num = (await KnowledgeFileDao.async_count_success_files_batch([space_id])).get(space_id, 0)
@@ -1677,6 +1703,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             result.user_name = create_user.user_name if create_user else str(space.user_id)
         else:
             result.user_name = self.login_user.user_name
+        member_info = None
         if space.user_id == self.login_user.user_id:
             result.user_role = UserRoleEnum.CREATOR
             self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
@@ -1689,7 +1716,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 self._apply_subscription_flags(result, self._resolve_subscription_status(member_info))
                 if member_info.is_active:
                     result.user_role = member_info.user_role
-            elif has_content_permission and not self.login_user.is_admin():
+            elif has_content_permission and not self.login_user.is_admin() and not read_permission_bypassed:
                 # On a released PUBLIC space every user is synthetically granted view_space
                 # by _public_space_viewer_permission_ids, so has_content_permission alone
                 # cannot distinguish "subscribed" from "merely able to preview from the
@@ -1701,7 +1728,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 if "view_space" in real_permissions:
                     self._apply_subscription_flags(result, SpaceSubscriptionStatusEnum.SUBSCRIBED)
-            if result.user_role is None and has_content_permission:
+            if result.user_role is None and has_content_permission and not read_permission_bypassed:
                 level = await PermissionService.get_permission_level(
                     user_id=self.login_user.user_id,
                     object_type="knowledge_space",
@@ -1716,7 +1743,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._decorate_department_metadata([result])
         await self._decorate_auto_tag_for_info(result)
 
-        if space.state != KnowledgeState.PUBLISHED.value:
+        can_trigger_rebuild = (
+            not read_permission_bypassed
+            or space.user_id == self.login_user.user_id
+            or bool(member_info and member_info.is_active)
+        )
+        if space.state != KnowledgeState.PUBLISHED.value and can_trigger_rebuild:
             current_tid = get_current_tenant_id()
             if space.tenant_id is None or current_tid in (None, space.tenant_id):
                 rebuild_knowledge_celery.delay(
@@ -2845,6 +2877,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
           chain eval via nearest-binding-wins).
         """
         permission_context = context or await self._build_child_permission_context(space_id)
+        if permission_context.get("read_permission_bypassed"):
+            return items
+
         binding_index = permission_context["binding_index"]
         bound_ff = {key for key in binding_index if key[0] in ("knowledge_file", "folder")}
         user_id = self.login_user.user_id
@@ -2903,7 +2938,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         visible_page_items: list[KnowledgeFile] = []
-        permission_context = await self._build_child_permission_context(space_id)
+        permission_context = (
+            {"read_permission_bypassed": True}
+            if self._is_read_permission_bypassed(space_id)
+            else await self._build_child_permission_context(space_id)
+        )
         file_change_excluded_ids = await self._get_file_change_excluded_ids(space_id=space_id)
         batch_cursor: list | None = list(cursor) if cursor else None
 
@@ -2982,7 +3021,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         batch (same idea as ``_scan_visible_child_items``).
         """
         needed = page * page_size + 1
-        permission_context = await self._build_child_permission_context(space_id)
+        permission_context = (
+            {"read_permission_bypassed": True}
+            if self._is_read_permission_bypassed(space_id)
+            else await self._build_child_permission_context(space_id)
+        )
         file_change_excluded_ids = await self._get_file_change_excluded_ids(space_id=space_id)
         visible: list[KnowledgeFile] = []
         batch_num = 0
@@ -3042,12 +3085,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.schemas.api import PageInfiniteCursorData
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
-        await self._require_read_permission(space_id)
-        if parent_id:
-            await self._require_folder_relation(space_id, parent_id, "can_read")
-            await self._require_permission_id("folder", parent_id, "view_folder", space_id=space_id)
+        read_permission_bypassed = self._is_read_permission_bypassed(space_id)
+        if read_permission_bypassed:
+            await self._get_space_or_raise(space_id)
+            if parent_id:
+                await self._get_folder_for_action(space_id, parent_id)
         else:
-            await self._require_permission_id("knowledge_space", space_id, "view_space")
+            await self._require_read_permission(space_id)
+            if parent_id:
+                await self._require_folder_relation(space_id, parent_id, "can_read")
+                await self._require_permission_id("folder", parent_id, "view_folder", space_id=space_id)
+            else:
+                await self._require_permission_id("knowledge_space", space_id, "view_space")
 
         context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
         try:
@@ -3118,9 +3167,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_sort: str = "asc",
         file_ids: list[int] | None = None,
     ) -> dict:
-        space = await self._require_read_permission(space_id)
-        if not parent_id:
-            await self._require_permission_id("knowledge_space", space_id, "view_space")
+        read_permission_bypassed = self._is_read_permission_bypassed(space_id)
+        if read_permission_bypassed:
+            space = await self._get_space_or_raise(space_id)
+        else:
+            space = await self._require_read_permission(space_id)
+            if not parent_id:
+                await self._require_permission_id("knowledge_space", space_id, "view_space")
 
         file_level_path = None
         if file_ids is not None and not file_ids:
@@ -3128,8 +3181,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         filter_files = list(dict.fromkeys(int(file_id) for file_id in (file_ids or [])))
 
         if parent_id:
-            parent_folder = await self._require_folder_relation(space_id, parent_id, "can_read")
-            await self._require_permission_id("folder", parent_id, "view_folder", space_id=space_id)
+            if read_permission_bypassed:
+                parent_folder = await self._get_folder_for_action(space_id, parent_id)
+            else:
+                parent_folder = await self._require_folder_relation(space_id, parent_id, "can_read")
+                await self._require_permission_id("folder", parent_id, "view_folder", space_id=space_id)
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
             children_ids = await SpaceFileDao.get_children_by_prefix(space_id, file_level_path)
             if not children_ids:
@@ -3377,13 +3433,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
 
     async def get_folder_file_parent(self, space_id: int, file_id: int) -> list[dict]:
-        file_record = await self._require_file_or_folder_relation(space_id, file_id, "can_read")
-        await self._require_permission_id(
-            "folder" if file_record.file_type == FileType.DIR.value else "knowledge_file",
-            file_record.id,
-            "view_folder" if file_record.file_type == FileType.DIR.value else "view_file",
-            space_id=space_id,
-        )
+        if self._is_read_permission_bypassed(space_id):
+            await self._get_space_or_raise(space_id)
+            file_record = await KnowledgeFileDao.query_by_id(file_id)
+            if not file_record or file_record.knowledge_id != space_id:
+                raise SpaceFileNotFoundError()
+        else:
+            file_record = await self._require_file_or_folder_relation(space_id, file_id, "can_read")
+            await self._require_permission_id(
+                "folder" if file_record.file_type == FileType.DIR.value else "knowledge_file",
+                file_record.id,
+                "view_folder" if file_record.file_type == FileType.DIR.value else "view_file",
+                space_id=space_id,
+            )
         # Build the breadcrumb path: ancestors (from file_level_path) followed by
         # the target folder/file itself as the leaf. The leaf is included so the
         # frontend has an authoritative name for it and does not have to guess
@@ -4715,8 +4777,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # ──────────────────────────── Tags ───────────────────────────────────
     async def get_space_tags(self, space_id: int) -> list[Tag]:
-        await self._require_read_permission(space_id)
-        await self._require_permission_id("knowledge_space", space_id, "view_space")
+        if self._is_read_permission_bypassed(space_id):
+            await self._get_space_or_raise(space_id)
+        else:
+            await self._require_read_permission(space_id)
+            await self._require_permission_id("knowledge_space", space_id, "view_space")
         tags = await TagDao.get_tags_by_business(
             business_type=TagBusinessTypeEnum.KNOWLEDGE_SPACE, business_id=str(space_id)
         )

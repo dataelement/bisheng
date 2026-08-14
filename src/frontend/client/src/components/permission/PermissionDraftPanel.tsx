@@ -1,8 +1,14 @@
 import { Button } from "@bisheng/ui";
 import type { SubjectType } from "~/api/permission";
-import { EmptyStateIllustration } from "~/components/illustrations";
 import { useLocalize } from "~/hooks";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 import { PermissionDraftEditor, type PermissionDraftEditorCapabilities } from "./PermissionDraftEditor";
+import {
+  SUBJECT_TAB_BUTTON_ACTIVE_CLASS,
+  SUBJECT_TAB_BUTTON_CLASS,
+  SUBJECT_TAB_BUTTON_INACTIVE_CLASS,
+  SUBJECT_TAB_LIST_CLASS,
+} from "./permissionDialogStyles";
 import { getPermissionDraftRowKey, type PermissionDraftRow } from "./usePermissionDraft";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
@@ -43,15 +49,15 @@ export function PermissionDraftPanel({
         {localize("com_unified_permission.authorization")}
       </div>
       <div className="flex items-center justify-between gap-3">
-        <div className="inline-flex rounded-md bg-fill-2 p-[3px]">
+        <div className={`inline-flex items-center justify-center ${SUBJECT_TAB_LIST_CLASS}`}>
           {SUBJECT_TYPES.map((type) => (
             <button
               key={type}
               type="button"
-              className={`rounded px-3 py-0.5 text-body ${
+              className={`${SUBJECT_TAB_BUTTON_CLASS} ${
                 activeSubjectType === type
-                  ? "bg-blue-500/[0.15] font-medium text-blue-500"
-                  : "text-text-3"
+                  ? SUBJECT_TAB_BUTTON_ACTIVE_CLASS
+                  : SUBJECT_TAB_BUTTON_INACTIVE_CLASS
               }`}
               onClick={() => onActiveSubjectTypeChange(type)}
             >
@@ -65,7 +71,7 @@ export function PermissionDraftPanel({
             color="primary"
             variant="filled"
             size="small"
-            className="h-7"
+            className="h-7 px-3"
             onClick={onAddAuthorization}
           >
             {localize("com_unified_permission.add_authorization")}
@@ -73,17 +79,13 @@ export function PermissionDraftPanel({
         )}
       </div>
       <div
-        className="h-[400px] overflow-y-auto rounded-xl border border-border-base bg-white px-3"
+        className="h-[400px] overflow-y-auto rounded-xl bg-white pl-2"
         data-testid="authorization-list-body"
       >
         {visibleRows.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <EmptyStateIllustration
-              role="img"
-              aria-label={localize("com_subscription.no_data")}
-              className="size-[120px]"
-            />
-          </div>
+          <PermissionEmptyState
+            message={localize("com_unified_permission.authorization_empty")}
+          />
         ) : (
           <PermissionDraftEditor
             value={visibleRows}

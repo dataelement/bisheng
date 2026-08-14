@@ -212,6 +212,69 @@ class TestEnrichPermissionTuples:
         assert result[0].subject_name is None
 
 
+class TestGetResourcePermissionsFromBindings:
+    @pytest.mark.asyncio
+    async def test_builds_enriched_rows_without_reading_openfga(self):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        bindings = [
+            {
+                "subject_type": "user",
+                "subject_id": 7,
+                "relation": "manager",
+                "include_children": None,
+                "model_id": "custom_manager",
+            },
+            {
+                "subject_type": "department",
+                "subject_id": 5,
+                "relation": "viewer",
+                "include_children": True,
+                "model_id": "viewer",
+            },
+        ]
+        model_map = {
+            "custom_manager": {"name": "协作者管理员"},
+            "viewer": {"name": "可查看"},
+        }
+
+        with (
+            patch.object(PermissionService, "_aget_fga", new_callable=AsyncMock) as get_fga,
+            patch.object(
+                PermissionService,
+                "_resolve_subject_names",
+                new=AsyncMock(
+                    return_value={
+                        ("user", 7): "Alice",
+                        ("department", 5): "总部/研发部",
+                    }
+                ),
+            ),
+            patch.object(
+                PermissionService,
+                "_resolve_user_group_names",
+                new=AsyncMock(return_value={}),
+            ),
+            patch.object(
+                PermissionService,
+                "_resolve_user_group_member_names",
+                new=AsyncMock(return_value={}),
+            ),
+        ):
+            result = await PermissionService.get_resource_permissions_from_bindings(
+                bindings,
+                model_map,
+            )
+
+        get_fga.assert_not_awaited()
+        rows = {(item.subject_type, item.subject_id): item for item in result}
+        assert rows[("user", 7)].subject_name == "Alice"
+        assert rows[("user", 7)].model_id == "custom_manager"
+        assert rows[("user", 7)].model_name == "协作者管理员"
+        assert rows[("department", 5)].include_children is True
+        assert rows[("department", 5)].model_name == "可查看"
+
+
 class TestResolveSubjectNames:
     """Test _resolve_subject_names with mocked DAOs."""
 

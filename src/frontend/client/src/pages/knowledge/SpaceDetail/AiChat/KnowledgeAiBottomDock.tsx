@@ -454,15 +454,21 @@ export function KnowledgeAiBottomDock({
                     // pt-10 always — the fade backdrop hides on focus but the input
                     // shouldn't jump when the keyboard opens.
                     !open && "pt-10",
-                    // White fade backdrop. On mobile it hides while the input is focused so the
-                    // grey keyboard overlay's gradient can carry through; on desktop there is no
-                    // such overlay, so keep the fade consistent regardless of focus.
-                    !open && (!isH5 || !keyboardVisible) && "bg-gradient-to-b from-white/0 to-white",
-                    // Expanded: same transparent→white fade as the collapsed state, sized to the
-                    // dialog (the container hugs the card when open, no pt-10), masking the list behind.
-                    open && "bg-gradient-to-b from-white/0 to-white",
                 )}
             >
+                {/* White fade backdrop — its own layer instead of the container's background,
+                    at a CONSTANT height in every state: it never grows with the expanded
+                    panel, the direct-history card, the reference strip, or a multi-line
+                    textarea. 120px = default collapsed footprint (pt-10 + box input +
+                    bottom padding), so the default state looks exactly as before. On
+                    mobile it hides while the input is focused so the grey keyboard
+                    overlay's gradient can carry through. */}
+                {(!isH5 || !keyboardVisible) && (
+                    <div
+                        aria-hidden
+                        className="absolute inset-x-0 bottom-0 h-[120px] bg-gradient-to-b from-white/0 to-white"
+                    />
+                )}
                 <div
                     // data-active exposes the default/active (input-focused) state for future
                     // styling hooks and QA, without coupling to the mobile keyboard flag.

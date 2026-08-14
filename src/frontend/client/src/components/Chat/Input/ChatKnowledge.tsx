@@ -1,13 +1,9 @@
 import {
-  ChevronLeft,
   Glasses,
   PaperclipIcon,
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { getDisplayScale, getLogicalViewport } from "~/utils/fontSize";
-import { getSelectableSkills } from "~/api/linsight";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,11 +14,9 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
-import BookOpen from "~/components/ui/icon/BookOpen";
-import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useCategorizedKnowledgeSpaces, useFreezePanelWidth, useLocalize, useMediaQuery } from "~/hooks";
+import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { KnowledgeListPanel } from "./KnowledgeListPanel";
@@ -40,8 +34,16 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
+/** Cap for the mobile popup / drill panels (further clamped to whatever space
+ *  the viewport actually offers — see mobileDrillMaxH). */
 const MAX_SUB_HEIGHT = 256;
+/** Cap for the desktop 知识空间 panel. Its own value: the skill / org panels sit
+ *  at 440, this one stays shorter so it still opens downward more often. */
+const KNOWLEDGE_PANEL_MAX_H = 320;
 const BOTTOM_GAP = 8;
+/** Distance from the chat input box's outer edge to its toolbar: the box's
+ *  `p-3` (12px) plus its 1px border (AiChatInput / TaskModeInput shell). */
+const INPUT_INNER_INSET = 13;
 /** 移动端：碰撞检测余量；底部勿过大，否则 flip/shift 会把整块菜单顶到视口上方导致裁切 */
 const MOBILE_MENU_COLLISION = {
   top: 56,
@@ -49,106 +51,6 @@ const MOBILE_MENU_COLLISION = {
   left: 12,
   right: 12,
 } as const;
-
-/**
- * Compute an alignOffset so the sub-content top aligns with the parent menu top,
- * and clamp maxH so the sub-content never overflows the viewport on either side.
- *
- * After the sub-content is rendered by Radix, we also observe its real position
- * and re-clamp maxH based on the actual top (handles Radix collision shifting).
- */
-function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, triggerKey: string, open: boolean) {
-  const [alignOffset, setAlignOffset] = useState(0);
-  const [maxH, setMaxH] = useState<number>(MAX_SUB_HEIGHT);
-  const subContentRef = useRef<HTMLElement | null>(null);
-
-  // Phase 1 — compute alignOffset & an initial maxH from parent menu rect
-  useLayoutEffect(() => {
-    if (!open) return;
-
-    const update = () => {
-      const menuEl = menuRef.current;
-      if (!menuEl) return;
-
-      const menuRect = menuEl.getBoundingClientRect();
-
-      const trigger = menuEl.querySelector<HTMLElement>(`[data-sub-key="${triggerKey}"]`);
-      if (trigger) {
-        const triggerRect = trigger.getBoundingClientRect();
-        setAlignOffset(Math.round(menuRect.top - triggerRect.top));
-      } else {
-        setAlignOffset(0);
-      }
-
-      // Initial estimate — will be refined in Phase 2
-      const spaceBelow = getLogicalViewport().height - menuRect.top / getDisplayScale() - BOTTOM_GAP;
-      const spaceAbove = menuRect.bottom - BOTTOM_GAP;
-      const available = Math.max(spaceBelow, spaceAbove);
-      setMaxH(Math.min(Math.max(available, 120), MAX_SUB_HEIGHT));
-    };
-
-    requestAnimationFrame(update);
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, [open, menuRef, triggerKey]);
-
-  // Phase 2 — once Radix renders the actual sub-content, observe its real
-  // position and clamp maxH so it stays within the viewport.
-  useEffect(() => {
-    if (!open) {
-      subContentRef.current = null;
-      return;
-    }
-
-    // Radix renders sub-content in a portal; locate it by role + data attribute
-    const findSubContent = (): HTMLElement | null => {
-      // Look for the sub-content element associated with this trigger
-      const menuEl = menuRef.current;
-      if (!menuEl) return null;
-
-      const trigger = menuEl.querySelector<HTMLElement>(`[data-sub-key="${triggerKey}"]`);
-      if (!trigger) return null;
-
-      // The sub-content is rendered in a portal; we find it via the Radix
-      // data-state="open" attribute on [role="menu"] elements in the document
-      const allMenus = document.querySelectorAll<HTMLElement>('[role="menu"][data-state="open"]');
-      // Pick the deepest nested one that is NOT the parent menu
-      for (const m of Array.from(allMenus)) {
-        if (m !== menuEl && !menuEl.contains(m)) {
-          return m;
-        }
-      }
-      return null;
-    };
-
-    const clampToViewport = () => {
-      const el = subContentRef.current || findSubContent();
-      if (!el) return;
-      subContentRef.current = el;
-
-      const rect = el.getBoundingClientRect();
-      const spaceBelow = getLogicalViewport().height - rect.top / getDisplayScale() - BOTTOM_GAP;
-      const finalH = Math.min(Math.max(spaceBelow, 120), MAX_SUB_HEIGHT);
-      setMaxH(finalH);
-    };
-
-    // Wait a tick for Radix portal to mount
-    const rafId = requestAnimationFrame(() => {
-      requestAnimationFrame(clampToViewport);
-    });
-
-    window.addEventListener('resize', clampToViewport);
-    window.addEventListener('scroll', clampToViewport, true);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', clampToViewport);
-      window.removeEventListener('scroll', clampToViewport, true);
-    };
-  }, [open, menuRef, triggerKey]);
-
-  return { alignOffset, maxH };
-}
 
 // --- main ---
 export const ChatKnowledge = ({
@@ -220,38 +122,18 @@ export const ChatKnowledge = ({
   const [spaceKeyword, setSpaceKeyword] = useState("");
   const debouncedSpaceKeyword = useDebounce(spaceKeyword, 300);
 
-  // Spaces are only shown inside the open picker, so fetch lazily on open (or
-  // on trigger hover, as a warm-up) instead of eagerly on mount. The eager
-  // mount-fetch fired knowledge/space/{mine,joined} every time the input box
-  // re-mounted (e.g. the send-triggered welcome→messages layout flip), causing
-  // duplicate requests on send. react-query keeps the result cached
-  // (stale-while-revalidate), so every reopen paints with data on the first
-  // frame — which also keeps the content-fit popup width stable from frame 1.
+  // Spaces are only shown inside the open picker, so load them lazily on first
+  // open instead of eagerly on mount. The eager mount-fetch fired
+  // knowledge/space/{mine,joined} every time the input box re-mounted (e.g. the
+  // send-triggered welcome→messages layout flip), causing duplicate requests on send.
   const [rootOpen, setRootOpen] = useState(false);
-  const [warm, setWarm] = useState(false);
 
   // Grouped as 部门知识空间 / 我创建的 / 我加入的, matching the 知识空间 page.
   // Empty groups (including "no search hit in this group") are dropped by the hook.
-  // Only the 'knowledge' pill renders the spaces list; the '+' variant never
-  // shows it, so don't let opening the '+' menu fire these requests.
-  const {
-    groups: spaceGroups,
-    isFetching: spaceFetching,
-    isFetched: spacesFetched,
-    refetch: refetchSpaces,
-  } = useCategorizedKnowledgeSpaces({
-    enabled: variant === "knowledge" && (rootOpen || warm),
+  const { groups: spaceGroups, isFetching: spaceFetching } = useCategorizedKnowledgeSpaces({
+    enabled: rootOpen,
     keyword: debouncedSpaceKeyword,
   });
-
-  // `warm` keeps the query observers enabled after the first hover, which means
-  // reopening no longer flips enabled off→on (the trigger that used to refresh
-  // the list). Restore the refresh-on-open semantics explicitly — cached data
-  // stays on screen while refetching, and the frozen panel width can't jump.
-  useEffect(() => {
-    if (rootOpen && variant === "knowledge" && spacesFetched) refetchSpaces();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only on open
-  }, [rootOpen]);
   const spaceListGroups = useMemo(
     () => spaceGroups.map((group) => ({ key: group.key, label: group.label, items: group.spaces })),
     [spaceGroups],
@@ -337,37 +219,10 @@ export const ChatKnowledge = ({
   const orgEnabled = !!config?.knowledgeBase?.enabled;
 
   const [openSub, setOpenSub] = useState<'org' | null>(null);
-
-  // Content-fit popup widths: each list panel auto-fits its first data batch
-  // between the min/max clamps, then freezes so pagination / search filtering
-  // can't resize an open popup (see useFreezePanelWidth).
-  const spacesFreeze = useFreezePanelWidth(spacesFetched, rootOpen && variant === 'knowledge');
-  // Org readiness must track the *accumulated* list (allOrgKbs lags orgData by
-  // one effect tick) — freezing on isFetched alone could measure an empty list.
-  const orgReady =
-    allOrgKbs.length > 0 || (!orgFetching && orgData !== undefined && orgData.length === 0);
-  const orgFreeze = useFreezePanelWidth(orgReady, openSub === 'org');
-
-  // Warm the skills list as soon as the "+" root opens so the "添加技能"
-  // submenu paints with data — and its final width — on first hover.
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (rootOpen && renderSkillSubmenu) {
-      queryClient.prefetchQuery({
-        queryKey: ['linsightSelectableSkills'],
-        queryFn: getSelectableSkills,
-      });
-    }
-  }, [rootOpen, renderSkillSubmenu, queryClient]);
-
   // 仅 <=576 走移动端下钻面板；577~768 保持桌面级联交互（右侧展开）
   const isMobile = useMediaQuery('(max-width: 576px)');
   const [mobilePanel, setMobilePanel] = useState<'root' | 'org' | 'skill'>('root');
-  // Mobile renders the org list as a drill panel inside the root popup (no
-  // Radix sub), so it needs its own freeze instance keyed to the drill state.
-  const orgFreezeMobile = useFreezePanelWidth(orgReady, rootOpen && mobilePanel === 'org');
   const menuContentRef = useRef<HTMLDivElement>(null);
-  const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
 
   const handleRootOpenChange = useCallback((open: boolean) => {
     setRootOpen(open);
@@ -398,13 +253,13 @@ export const ChatKnowledge = ({
       const padT = MOBILE_MENU_COLLISION.top;
       const padB = MOBILE_MENU_COLLISION.bottom;
       const above = r.top - padT;
-      const below = getLogicalViewport().height - r.bottom / getDisplayScale() - padB;
+      const below = window.innerHeight - r.bottom - padB;
       // Mobile adaptive strategy:
       // prefer opening downward when there is enough space;
       // otherwise open upward to avoid being clipped by the chat input area.
       const preferBottom = below >= 240 || below >= above;
       setMobileMenuSide(preferBottom ? 'bottom' : 'top');
-      // Fixed cap aligned with the desktop popup (MAX_SUB_HEIGHT = 256), but
+      // Fixed cap, but
       // fall back to whatever space is actually available on the chosen side if
       // 256 wouldn't fit — keeps the popup from being clipped against the
       // viewport edge on smaller phones.
@@ -437,14 +292,10 @@ export const ChatKnowledge = ({
                   className={cn(
                     // `group` lets the chevron pick up the Radix-emitted
                     // `data-state` to mirror the Tools-select rotation.
-                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-[#334155] outline-none transition-colors hover:bg-[#f8f8f8]",
+                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
-                  // Warm up the spaces fetch on hover/focus so the popup opens
-                  // with data (and its frozen content-fit width) on frame 1.
-                  onMouseEnter={() => setWarm(true)}
-                  onFocus={() => setWarm(true)}
                 >
                   <div className="relative shrink-0">
                     {/* Icon is neutral by default (matches the + button) and
@@ -453,7 +304,7 @@ export const ChatKnowledge = ({
                       aria-hidden
                       className={cn(
                         "block size-4",
-                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-500" : "bg-[#999999]"
+                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-500" : "bg-[#4E5969]"
                       )}
                       style={{
                         WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
@@ -497,31 +348,35 @@ export const ChatKnowledge = ({
       <DropdownMenuContent
         ref={menuContentRef}
         align="start"
+        // The "+" panel lines up with the INPUT BOX's left edge, not its own
+        // trigger: the trigger sits INPUT_INNER_INSET in from that edge, so pull
+        // the panel back by the same amount. The knowledge pill keeps trigger
+        // alignment — it sits mid-toolbar, where the input edge means nothing.
+        alignOffset={variant === 'plus' ? -INPUT_INNER_INSET : undefined}
         side={isMobile ? mobileMenuSide : 'bottom'}
         collisionPadding={isMobile ? MOBILE_MENU_COLLISION : BOTTOM_GAP}
         sticky={isMobile ? 'partial' : undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
         className={cn(
-          'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
+          'flex flex-col gap-1 rounded-2xl border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list
           // directly, so it needs the wider list layout; the "+" menu stays
-          // compact for its short action items.
-          // Width fits content between the min/max clamps (the Radix popper
-          // wrapper is shrink-to-fit); the knowledge list additionally freezes
-          // on first data (spacesFreeze).
+          // compact for its short action items. Bottom padding is 0 on the list
+          // variant — the scroll list carries its own so rows can reach the edge.
           variant === 'knowledge'
-            ? 'min-w-[180px] max-w-[240px] overflow-hidden pt-2 px-2 pb-0'
-            : 'min-w-[140px] max-w-[280px] p-2',
+            ? 'w-[240px] overflow-hidden pt-3 px-3 pb-0'
+            : 'w-[160px] p-3',
           // Mobile width override only applies to the knowledge variant — the
           // "+" menu shows short action items and matches the desktop 160px
           // width on phones too. (knowledge needs more room for search + list)
           // Mobile: any "tall" panel (knowledge, or the "+" menu drilled into
           // skill / org lists) needs the wider width; 160px is fine only for
           // the compact root of the "+" menu (short action items).
-          isMobile && mobileTallPanel && 'touch-mobile:min-w-[180px] touch-mobile:max-w-[min(calc(var(--bs-vw,100vw)-24px),240px)]',
-          // Mobile knowledge popup only: replace `p-2` with `pt-2 px-2 pb-0` so
-          // the scroll list's own `pb-2` handles the last-item spacing.
-          isMobile && variant === 'knowledge' && 'touch-mobile:pt-2 touch-mobile:px-2 touch-mobile:pb-0',
+          isMobile && mobileTallPanel && 'touch-mobile:w-[min(calc(100vw-24px),320px)]',
+          // Any mobile list panel (knowledge popup, or the "+" menu drilled into
+          // org / skill): replace `p-3` with `pt-3 px-3 pb-0` so the scroll list's
+          // own bottom padding is the only gap under the last row.
+          isMobile && mobileTallPanel && 'touch-mobile:pt-3 touch-mobile:px-3 touch-mobile:pb-0',
           isMobile &&
           mobileTallPanel &&
           'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
@@ -532,7 +387,7 @@ export const ChatKnowledge = ({
             : // Desktop knowledge pill: cap height so the space list scrolls
               // internally instead of growing past the viewport.
               !isMobile && variant === 'knowledge'
-              ? { maxHeight: MAX_SUB_HEIGHT }
+              ? { maxHeight: KNOWLEDGE_PANEL_MAX_H }
               : undefined
         }
       >
@@ -544,42 +399,26 @@ export const ChatKnowledge = ({
               if (fileUploadDisabled) return;
               onFileUploadClick?.();
             }}
-            className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
+            className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <Outlined.Attachment size={16} className="text-[#999]" />
+            <Outlined.Attachment size={16} className="text-[#4E5969]" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
 
-        {/* Knowledge pill (mobile): show the SPACES list directly — no drill.
-            Matches the desktop layout (title + list) so both surfaces feel the
-            same; only the outer width / position adapt to the smaller screen. */}
-        {variant === 'knowledge' && isMobile && (
-          <div ref={spacesFreeze.ref} style={spacesFreeze.style} className="flex min-h-0 w-full flex-1 flex-col">
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-              {localize('com_ui_knowledge_space')}
-            </p>
-            <KnowledgeListPanel
-              placeholder={localize('com_chat_knowledge_placeholder_search_space')}
-              keyword={spaceKeyword}
-              setKeyword={setSpaceKeyword}
-              groups={spaceListGroups}
-              selectedItems={selectedKnowledgeSpaces}
-              onToggle={(item) => handleToggle(item, 'space')}
-              isFetching={spaceFetching}
-              hasMore={false}
-              onLoadMore={() => { }}
-              emptyText={localize('com_chat_knowledge_empty_no_spaces')}
-            />
-          </div>
-        )}
-
-        {/* Knowledge pill (desktop): show the SPACES list directly — no sub. */}
-        {variant === 'knowledge' && !isMobile && (
-          <div ref={spacesFreeze.ref} style={spacesFreeze.style} className="flex min-h-0 w-full flex-1 flex-col">
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-              {localize('com_ui_knowledge_space')}
-            </p>
+        {/* Knowledge pill: show the SPACES list directly — no drill, no sub.
+            Same layout on both surfaces; only the outer width / position adapt
+            to the smaller screen, plus the mobile-only heading below. */}
+        {variant === 'knowledge' && (
+          <div className="flex min-h-0 w-full flex-1 flex-col">
+            {/* Mobile keeps the heading: the narrow toolbar can collapse the pill
+                trigger to icon-only (`compact`), leaving this as the only place
+                the name shows. On desktop the trigger reads "知识空间" beside it. */}
+            {isMobile && (
+              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
+                {localize('com_ui_knowledge_space')}
+              </p>
+            )}
             <KnowledgeListPanel
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
@@ -608,15 +447,13 @@ export const ChatKnowledge = ({
             <DropdownMenuSubTrigger
               data-sub-key="org"
               className={cn(
-                // Explicit gap: at content-fit (max-content) width,
-                // justify-between alone lets the label butt against the chevron.
-                'mt-0.5 flex cursor-pointer items-center justify-between gap-3 rounded-[6px] px-2 py-[5px] outline-none',
+                'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
               )}
             >
               <div className="flex items-center gap-2">
                 <div className="relative">
                   {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-[#999]"} />
+                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-[#4E5969]"} />
                 </div>
                 <span className="text-[14px] font-normal text-slate-700">
                   {localize('com_tools_org_knowledge')}
@@ -624,24 +461,24 @@ export const ChatKnowledge = ({
               </div>
             </DropdownMenuSubTrigger>
 
+            {/* `align="center"` centers the panel vertically on the trigger row
+                (same placement rule as the skill panel below). */}
             <DropdownMenuSubContent
-              ref={orgFreeze.ref}
-              alignOffset={orgLayout.alignOffset}
+              align="center"
               collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex min-w-[180px] max-w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+              className="ml-2 flex max-h-[440px] w-[240px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white pt-3 px-3 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
                   '--tw-enter-duration': '0.35s',
                   '--tw-enter-easing': 'ease-in-out',
-                  maxHeight: orgLayout.maxH,
-                  ...orgFreeze.style,
                 } as React.CSSProperties
               }
             >
-              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-                {localize('com_tools_org_knowledge')}
-              </p>
+              {/* No heading here: this panel hangs off the "组织知识库" row, which
+                  stays visible next to it. The mobile drill panel keeps its own
+                  heading — there it is the back row's label. */}
               <KnowledgeListPanel
+                freezeHeightOnFilter
                 placeholder={localize('com_tools_knowledge_base_search')}
                 keyword={orgKeyword}
                 setKeyword={setOrgKeyword}
@@ -664,12 +501,12 @@ export const ChatKnowledge = ({
               e.preventDefault();
               setMobilePanel('org');
             }}
-            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+            className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none"
           >
             <div className="flex min-w-0 items-center gap-2">
               <div className="relative shrink-0">
                 {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-[#999]"} />
+                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-[#4E5969]"} />
               </div>
               <span className="truncate text-[14px] font-normal text-slate-700">
                 {localize('com_tools_org_knowledge')}
@@ -681,11 +518,11 @@ export const ChatKnowledge = ({
 
         {/* Org knowledge selector (mobile): drill panel. */}
         {variant === 'plus' && isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
-          <div ref={orgFreezeMobile.ref} style={orgFreezeMobile.style} className="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+          <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[#999] hover:bg-[#f2f3f5]"
                 aria-label={localize('com_ui_go_back')}
                 onClick={(e) => {
                   e.preventDefault();
@@ -693,8 +530,9 @@ export const ChatKnowledge = ({
                   setMobilePanel('root');
                 }}
               >
-                <ChevronLeft className="size-5" strokeWidth={2} />
+                <Outlined.ArrowLeft size={18} />
               </button>
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                 {localize('com_tools_org_knowledge')}
               </span>
@@ -727,9 +565,9 @@ export const ChatKnowledge = ({
                 setRootOpen(false);
                 onEnterTaskMode?.();
               }}
-              className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+              className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none"
             >
-              <Outlined.ListSuccess size={16} className={taskModeActive ? 'text-blue-500' : 'text-[#999]'} />
+              <Outlined.ListSuccess size={16} className={taskModeActive ? 'text-blue-500' : 'text-[#4E5969]'} />
               <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-500' : 'text-slate-700')}>
                 {localize('com_linsight_task_mode')}
               </span>
@@ -743,19 +581,24 @@ export const ChatKnowledge = ({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
                     className={cn(
-                      'flex cursor-pointer items-center justify-between gap-3 rounded-[6px] px-2 py-[5px] outline-none',
+                      'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-[#999]'} />
+                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-[#4E5969]'} />
                       <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_linsight_add_skill')}
                       </span>
                     </div>
                   </DropdownMenuSubTrigger>
                   {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above).
-                      Width fits content between the clamps; SkillSelector freezes it internally. */}
-                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] min-w-[180px] max-w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                      `align="center"` centers the panel vertically on the trigger row
+                      instead of aligning their top edges. */}
+                  <DropdownMenuSubContent
+                    align="center"
+                    collisionPadding={BOTTOM_GAP}
+                    className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                  >
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -765,10 +608,10 @@ export const ChatKnowledge = ({
                     e.preventDefault();
                     setMobilePanel('skill');
                   }}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+                  className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none"
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-[#999]'} />
+                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-[#4E5969]'} />
                     <span className="truncate text-[14px] font-normal text-slate-700">
                       {localize('com_linsight_add_skill')}
                     </span>
@@ -783,10 +626,10 @@ export const ChatKnowledge = ({
         {/* 添加 Skill — 移动端下钻面板 */}
         {isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-[#999] hover:bg-[#f2f3f5]"
                 aria-label={localize('com_ui_go_back')}
                 onClick={(e) => {
                   e.preventDefault();
@@ -794,8 +637,9 @@ export const ChatKnowledge = ({
                   setMobilePanel('root');
                 }}
               >
-                <ChevronLeft className="size-5" strokeWidth={2} />
+                <Outlined.ArrowLeft size={18} />
               </button>
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                 {localize('com_linsight_add_skill')}
               </span>

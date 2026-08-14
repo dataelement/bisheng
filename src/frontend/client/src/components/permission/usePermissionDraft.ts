@@ -70,9 +70,9 @@ function rowToGrant(row: PermissionDraftRow): GrantItem {
     subject_id: row.subjectId,
     relation: row.relation,
     ...(row.modelId ? { model_id: row.modelId } : {}),
-    ...(row.includeChildren === undefined
-      ? {}
-      : { include_children: row.includeChildren }),
+    ...(row.subjectType === "department"
+      ? { include_children: Boolean(row.includeChildren) }
+      : {}),
   };
 }
 
@@ -81,9 +81,9 @@ function rowToRevoke(row: PermissionDraftRow): RevokeItem {
     subject_type: row.subjectType,
     subject_id: row.subjectId,
     relation: row.relation,
-    ...(row.includeChildren === undefined
-      ? {}
-      : { include_children: row.includeChildren }),
+    ...(row.subjectType === "department"
+      ? { include_children: Boolean(row.includeChildren) }
+      : {}),
   };
 }
 

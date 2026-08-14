@@ -373,7 +373,7 @@
       "count": 11
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 6
+      "count": 4
     }
   },
   "src/components/Chat/Input/Files/FileFormWrapper.tsx": {
@@ -872,11 +872,6 @@
   "src/components/Endpoints/Settings/Plugins.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/FileListRow.tsx": {
-    "no-restricted-syntax": {
-      "count": 11
     }
   },
   "src/components/Files/ActionButton.tsx": {
@@ -1718,9 +1713,6 @@
     }
   },
   "src/components/permission/PermissionListTab.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
     "no-restricted-syntax": {
       "count": 4
     }

@@ -5,12 +5,15 @@
  * textarea; only checked skills are sent with the submission. Supports keyword
  * search over display name + description.
  */
-import { Check, Loader2, SearchIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Outlined } from 'bisheng-icons';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
 import { DropdownMenuItem, Input } from '~/components/ui';
-import { useFreezePanelWidth, useLocalize } from '~/hooks';
+import { EmptyStateIllustration } from '~/components/illustrations';
+import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
+import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
 import { cn } from '~/utils';
 
@@ -19,21 +22,113 @@ interface SkillSelectorProps {
     onChange: (skills: TaskModeSkill[]) => void;
 }
 
+interface SkillRowProps {
+    skill: TaskModeSkill;
+    isChecked: boolean;
+    onToggle: (skill: TaskModeSkill) => void;
+}
+
+/**
+ * Whether a single-line element is actually cut off. Re-measures on resize, so
+ * it keeps up with panel-width changes.
+ */
+function useIsClipped<T extends HTMLElement>(text?: string) {
+    const ref = useRef<T | null>(null);
+    const [clipped, setClipped] = useState(false);
+
+    useLayoutEffect(() => {
+        const el = ref.current;
+        if (!el) {
+            setClipped(false);
+            return;
+        }
+        // +1 absorbs sub-pixel rounding, which otherwise reports a clip on text
+        // that fits exactly.
+        const measure = () => setClipped(el.scrollWidth > el.clientWidth + 1);
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [text]);
+
+    return [ref, clipped] as const;
+}
+
+/**
+ * One selectable row. Name and description are each clamped to a single line;
+ * the full text moves into a tooltip — but only when something actually
+ * overflows, which we can only know by measuring, hence the per-row component.
+ */
+function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
+    const [nameRef, nameClipped] = useIsClipped<HTMLParagraphElement>(skill.display_name);
+    const [descRef, descClipped] = useIsClipped<HTMLParagraphElement>(skill.description);
+    const showTooltip = nameClipped || descClipped;
+
+    return (
+        // Always wrapped: rendering the tooltip conditionally would instead swap
+        // the row's element type and remount it on every measure.
+        <Tooltip delayDuration={300}>
+            <TooltipTrigger asChild>
+                <DropdownMenuItem
+                    onSelect={(e) => {
+                        e.preventDefault();
+                        onToggle(skill);
+                    }}
+                    className={cn(
+                        'flex cursor-pointer items-start gap-2 rounded-lg px-2 py-[5px] outline-none transition-colors',
+                        'data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]',
+                        // Selected rows carry the state themselves (brand tint + a
+                        // trailing check) now that the leading checkbox is gone.
+                        isChecked && 'bg-blue-500/[0.07] data-[highlighted]:bg-blue-500/[0.07] focus:bg-blue-500/[0.07]',
+                    )}
+                >
+                    {/* Both lines are single-line; the full text lives in the tooltip. */}
+                    <div className="min-w-0 flex-1">
+                        <p
+                            ref={nameRef}
+                            className={cn('truncate text-[14px] leading-5', isChecked ? 'text-blue-500' : 'text-slate-700')}
+                        >
+                            {skill.display_name}
+                        </p>
+                        {skill.description && (
+                            <p ref={descRef} className="truncate text-[12px] leading-4 text-[#999]">
+                                {skill.description}
+                            </p>
+                        )}
+                    </div>
+                    {isChecked && <Outlined.Check size={14} className="mt-1 shrink-0 text-blue-500" />}
+                </DropdownMenuItem>
+            </TooltipTrigger>
+            {/* No content unless something is actually cut off — a tooltip that just
+                repeats what is already fully visible is noise. Once it does show, it
+                carries the whole row: a name-only tooltip next to a visible
+                description reads as if the description were missing. */}
+            {showTooltip && (
+                <TooltipContent
+                    side="right"
+                    align="start"
+                    sideOffset={8}
+                    className="max-w-[260px] whitespace-normal break-words leading-[18px]"
+                >
+                    <p className="font-medium">{skill.display_name}</p>
+                    {skill.description && (
+                        <p className="mt-0.5 text-[10px] leading-[15px] text-white/70">{skill.description}</p>
+                    )}
+                </TooltipContent>
+            )}
+        </Tooltip>
+    );
+}
+
 export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
     const localize = useLocalize();
     const [keyword, setKeyword] = useState('');
-    const { data: skills = [], isFetching, isFetched } = useQuery({
+    const { data: skills = [], isFetching } = useQuery({
         queryKey: ['linsightSelectableSkills'],
         queryFn: getSelectableSkills,
         refetchOnWindowFocus: false,
         refetchOnReconnect: false,
     });
-
-    // The hosting submenu popup auto-fits its content between min/max clamps;
-    // freeze that width once the first skill batch renders so search filtering
-    // can't resize the open panel. This component mounts fresh per open (Radix
-    // unmounts sub-content on close), so no `open` reset is needed.
-    const freeze = useFreezePanelWidth(isFetched);
 
     const filtered = useMemo(() => {
         const kw = keyword.trim().toLowerCase();
@@ -61,6 +156,17 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
         updateScrollIndicators();
     }, [filtered, updateScrollIndicators]);
 
+    // Filtering shrinks the list, and the panel is centred on its trigger, so a
+    // shrinking panel visibly jumps. Sample the unfiltered height and hold it as
+    // a floor while a keyword is active.
+    const listAreaRef = useRef<HTMLDivElement | null>(null);
+    const [unfilteredHeight, setUnfilteredHeight] = useState<number>();
+    useLayoutEffect(() => {
+        if (keyword) return; // only the unfiltered list is a valid sample
+        const el = listAreaRef.current;
+        if (el) setUnfilteredHeight(el.getBoundingClientRect().height);
+    }, [keyword, filtered.length]);
+
     const handleToggle = (skill: TaskModeSkill) => {
         const exists = selected.some((s) => s.name === skill.name);
         onChange(
@@ -71,20 +177,19 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
     };
 
     return (
-        <div ref={freeze.ref} style={freeze.style} className="flex min-h-0 w-full flex-1 flex-col gap-1">
-            {/* Panel title — mirrors the knowledge panel header for visual consistency */}
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-                {localize('com_linsight_skill_title')}
-            </p>
-
+        // gap-2: 8px between the search box and the list below it, so the first
+        // row doesn't crowd the input's bottom border.
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+            {/* No panel heading: every surface that opens this list already
+                labels it — the desktop submenu hangs off the "添加技能" row, the
+                mobile drill panel has it in the back-navigation row. */}
             {/* Search — stopPropagation so typing isn't hijacked by the Radix menu's type-ahead */}
             <div className="relative shrink-0">
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                {/* top nudged 1px past centre: the magnifier's ring sits above the glyph's
+                    own box, so a mathematically centred icon reads high next to the text. */}
+                <Outlined.Search size={14} className="absolute left-3 top-[calc(50%+1px)] -translate-y-1/2 text-slate-400" />
                 <Input
-                    className="h-[28px] rounded-[6px] border border-[#ECECEC] bg-white pl-8 text-sm focus-visible:ring-1 focus-visible:ring-blue-500/20"
-                    // size=1 kills the input's ~180px intrinsic width so it can't
-                    // floor the content-fit popup above its min-w; still renders 100%.
-                    size={1}
+                    className="h-[28px] rounded-lg border border-[#ECECEC] bg-white py-0 pl-8 text-[12px] placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
                     placeholder={localize('com_linsight_skill_search')}
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
@@ -94,13 +199,24 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
             </div>
 
             {/* List */}
+            <div
+                ref={listAreaRef}
+                className="flex min-h-0 flex-1 flex-col"
+                style={keyword ? { minHeight: unfilteredHeight } : undefined}
+            >
             {isFetching && skills.length === 0 ? (
                 <div className="flex justify-center py-4">
                     <Loader2 size={16} className="animate-spin text-slate-300" />
                 </div>
             ) : filtered.length === 0 ? (
-                <div className="px-2 py-4 text-center text-xs text-slate-400">
-                    {localize('com_linsight_skill_empty')}
+                // Centred in whatever height the list area is holding (see
+                // unfilteredHeight), so searching to zero results doesn't leave
+                // the copy stranded at the top of an otherwise empty panel.
+                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-4">
+                    <EmptyStateIllustration grey className="size-[100px] shrink-0" />
+                    <p className="text-center text-xs text-slate-400">
+                        {localize('com_linsight_skill_empty')}
+                    </p>
                 </div>
             ) : (
                 <div className="relative flex min-h-0 flex-1 flex-col">
@@ -124,40 +240,26 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                     />
                     <div
                         ref={scrollNodeRef}
-                        className="scrollbar-os flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto pb-2"
+                        className="scrollbar-os flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pb-3"
                         onScroll={updateScrollIndicators}
                     >
-                    {filtered.map((skill) => {
-                        const isChecked = selected.some((s) => s.name === skill.name);
-                        return (
-                            <DropdownMenuItem
-                                key={skill.name}
-                                onSelect={(e) => {
-                                    e.preventDefault();
-                                    handleToggle(skill);
-                                }}
-                                className="flex cursor-pointer items-start gap-2 rounded-[6px] px-2 py-[5px] outline-none transition-colors data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]"
-                            >
-                                <div
-                                    className={cn(
-                                        'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border transition-colors',
-                                        isChecked ? 'border-blue-600 bg-blue-600' : 'border-slate-300 bg-white',
-                                    )}
-                                >
-                                    {isChecked && <Check size={12} className="stroke-[3] text-white" />}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="truncate text-[14px] leading-5 text-slate-700">{skill.display_name}</p>
-                                    {skill.description && (
-                                        <p className="line-clamp-2 text-[12px] leading-4 text-[#999]">{skill.description}</p>
-                                    )}
-                                </div>
-                            </DropdownMenuItem>
-                        );
-                    })}
+                    {filtered.map((skill, i) => (
+                        <Fragment key={skill.name}>
+                            {/* Hairline between rows — a standalone element rather than a
+                                border on the row, so it sits centred in the 4px gutter and
+                                never cuts across a selected row's tinted background. */}
+                            {i > 0 && <div aria-hidden className="mx-2 h-px shrink-0 bg-slate-100" />}
+                            <SkillRow
+                                skill={skill}
+                                isChecked={selected.some((s) => s.name === skill.name)}
+                                onToggle={handleToggle}
+                            />
+                        </Fragment>
+                    ))}
                     </div>
                 </div>
             )}
+            </div>
         </div>
     );
 }

@@ -105,7 +105,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
-  const [submitError, setSubmitError] = useState<Error | null>(null);
   const [canEdit, setCanEdit] = useState(mode === "create");
   const [canManagePermissions, setCanManagePermissions] = useState(false);
   const [relationModels, setRelationModels] = useState<RelationModel[]>([]);
@@ -302,7 +301,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     if (!form.name.trim() || submitting || (!canEdit && !canManagePermissions))
       return null;
     setSubmitting(true);
-    setSubmitError(null);
     setAuthorizationFeedback(null);
     try {
       const payload = buildResourcePayload();
@@ -372,13 +370,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         space: result,
         authorizationFeedback: submitAuthorizationFeedback,
       } satisfies KnowledgeSpaceSettingsSubmitOutcome;
-    } catch (error) {
-      const normalized =
-        error instanceof Error
-          ? error
-          : new Error("Failed to save knowledge space settings");
-      setSubmitError(normalized);
-      throw normalized;
     } finally {
       setSubmitting(false);
     }
@@ -432,7 +423,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     loading,
     submitting,
     loadError,
-    submitError,
     canEdit,
     canManagePermissions,
     isDepartmentSpace,

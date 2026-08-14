@@ -12,6 +12,7 @@ import type {
 import { Users, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 
 interface SubjectSearchUserGroupProps {
   value: SelectedSubject[];
@@ -124,9 +125,7 @@ export function SubjectSearchUserGroup({
           </div>
         )}
         {!loading && filtered.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_user_groups")}
-          </div>
+          <PermissionEmptyState message={localize("com_permission.empty_user_groups")} />
         )}
         {!loading &&
           filtered.map((group) => {

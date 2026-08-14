@@ -1,5 +1,5 @@
 import { Outlined } from "bisheng-icons";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { VisibilityType } from "~/api/knowledge";
 import type { SubjectType } from "~/api/permission";
@@ -27,6 +27,7 @@ import { Textarea } from "~/components/ui/Textarea";
 import { useAuthContext, useLocalize } from "~/hooks";
 import { useConfirm, useToastContext } from "~/Providers";
 import { getFullWidthLength, truncateByFullWidth } from "~/utils";
+import { extractApiStatusCode } from "~/pages/Subscription/errorUtils";
 import { CreatedPermissionFailureState } from "./CreatedPermissionFailureState";
 import {
   parseKnowledgeSpaceCustomTags,
@@ -50,43 +51,6 @@ export function KnowledgeSpaceSettingsPage() {
   const customTagsInputRef = useRef<HTMLInputElement | null>(null);
   const nameComposingRef = useRef(false);
   const descriptionComposingRef = useRef(false);
-
-  useEffect(() => {
-    if (!settings.submitError) return;
-    showToast({
-      message: settings.submitError.message,
-      severity: NotificationSeverity.ERROR,
-    });
-  }, [settings.submitError, showToast]);
-
-  useEffect(() => {
-    const feedback = settings.authorizationFeedback;
-    if (!feedback) return;
-    if (feedback.inviteCreatedCount > 0) {
-      showToast({
-        message: localize("com_invite.invite_sent", {
-          count: feedback.inviteCreatedCount,
-        }),
-        severity: NotificationSeverity.SUCCESS,
-      });
-    }
-    if (feedback.inviteExistingCount > 0) {
-      showToast({
-        message: localize("com_invite.invite_existing", {
-          count: feedback.inviteExistingCount,
-        }),
-        severity: NotificationSeverity.INFO,
-      });
-    }
-    if (feedback.failedCount > 0) {
-      showToast({
-        message: localize("com_invite.partial_failed", {
-          count: feedback.failedCount,
-        }),
-        severity: NotificationSeverity.WARNING,
-      });
-    }
-  }, [localize, settings.authorizationFeedback, showToast]);
 
   const isPrivate = settings.form.visibility === VisibilityType.PRIVATE;
 
@@ -238,15 +202,28 @@ export function KnowledgeSpaceSettingsPage() {
         navigate(`/knowledge/space/${result.id}`);
         return;
       }
-      if (feedback?.failedCount) return;
+      if (feedback?.failedCount) {
+        showToast({
+          message: localize("com_invite.partial_failed", {
+            count: feedback.failedCount,
+          }),
+          severity: NotificationSeverity.WARNING,
+        });
+        return;
+      }
       showSuccessfulAuthorizationFeedback(feedback);
       showToast({
         message: localize("com_knowledge.space_updated"),
         severity: NotificationSeverity.SUCCESS,
       });
       navigate(spaceId ? `/knowledge/space/${spaceId}` : "/knowledge");
-    } catch {
-      // The form hook normalizes and exposes submit errors for the toast effect.
+    } catch (error) {
+      if (!extractApiStatusCode(error)) {
+        showToast({
+          message: localize("com_knowledge.operation_failed_retry"),
+          severity: NotificationSeverity.ERROR,
+        });
+      }
     }
   };
 
@@ -290,10 +267,10 @@ export function KnowledgeSpaceSettingsPage() {
 
   return (
     <main
-      className="flex h-full min-h-0 bg-fill-2 p-2"
+      className="flex h-full min-h-0 bg-white"
       data-testid="knowledge-space-settings-page"
     >
-      <div className="flex min-h-0 w-full flex-1 flex-col rounded-xl bg-fill-1 px-4 pt-4">
+      <div className="flex min-h-0 w-full flex-1 flex-col rounded-xl bg-white px-4 pt-4">
         <header className="flex h-8 shrink-0 items-center gap-3">
           <button
             type="button"
@@ -614,7 +591,7 @@ export function KnowledgeSpaceSettingsPage() {
         </div>
 
         <SettingsFooter
-          centered={settings.mode === "create"}
+          centered
           cancelLabel={localize("com_unified_permission.cancel")}
           submitLabel={localize(
             settings.mode === "create"

@@ -30,6 +30,12 @@ openfga:
   enabled: true
   api_url: "http://openfga:8080"
 
+# Permission bypass for space info, children/search, tags, folder-session lookup,
+# and breadcrumb lookup only. File preview/download, writes and RAG checks remain.
+knowledge_space_read_bypass:
+  enabled: true
+  space_ids: [311]
+
 # 网关 HMAC 推送验签（与 bisheng-gateway 的 bisheng.gateway-hmac-secret 一致）
 sso_sync:
   gateway_hmac_secret: "bisheng-local-hmac-20260422"
