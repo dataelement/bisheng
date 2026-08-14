@@ -334,6 +334,16 @@ async def test_real_check_batch_list_and_higher_consistency_semantics(
         )
     )
     await client.write_tuples(writes=tuples)
+    await client.write_tuples(
+        writes=[
+            {
+                "user": "department:visible-engineering#member",
+                "relation": "visible",
+                "object": "workflow:department",
+            }
+        ],
+        ignore_duplicate_writes=True,
+    )
 
     assert await client.check(
         "user:1",
@@ -392,6 +402,21 @@ async def test_real_check_batch_list_and_higher_consistency_semantics(
         "workflow:direct",
         consistency="HIGHER_CONSISTENCY",
     )
+    assert await client.batch_check(
+        [
+            {
+                "user": "department:visible-engineering#member",
+                "relation": "visible",
+                "object": "workflow:department",
+            },
+            {
+                "user": "user_group:reviewers#member",
+                "relation": "visible",
+                "object": "workflow:group",
+            },
+        ],
+        consistency="HIGHER_CONSISTENCY",
+    ) == [True, True]
     assert await client.batch_check(
         [
             {

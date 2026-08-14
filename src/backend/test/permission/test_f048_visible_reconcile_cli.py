@@ -54,10 +54,17 @@ def test_parse_defaults_to_dry_run_and_apply_requires_store_confirmation() -> No
     assert args.batch_size == 90
 
 
-def test_report_deduplicates_aggregate_tuple_and_never_schedules_unowned_delete() -> None:
+def test_report_deduplicates_only_the_same_projected_subject_tuple() -> None:
     first = _source(fingerprint="a" * 64)
     second = _source(fingerprint="b" * 64)
-    orphan = ("user:99", "visible", "knowledge_space:99")
+    department = _source(
+        fingerprint="c" * 64,
+        subject="department:7#member",
+    )
+    user_group = _source(
+        fingerprint="d" * 64,
+        subject="user_group:9#member",
+    )
     current = cli.CurrentRelease(
         catalog_id=1,
         catalog_key="catalog-v1",
@@ -68,22 +75,73 @@ def test_report_deduplicates_aggregate_tuple_and_never_schedules_unowned_delete(
         write_fenced=False,
     )
 
-    report, upserts, retires, missing = cli._build_report(
+    report, upserts, retires, expected = cli._build_report(
         mode="dry-run",
         current=current,
         target_model_id=None,
         target_checksum="d" * 64,
         grants=(SimpleNamespace(),),
-        assignee_count=2,
-        canonical_sources=(first, second),
+        assignee_count=4,
+        canonical_sources=(first, second, department, user_group),
         persisted=(),
-        live=frozenset({orphan}),
     )
 
-    assert report.canonical_source_count == 2
-    assert report.expected_tuple_count == 1
-    assert report.missing_tuple_count == 1
-    assert report.unowned_tuple_count == 1
-    assert upserts == (first, second)
+    assert report.canonical_source_count == 4
+    assert report.expected_tuple_count == 3
+    assert upserts == (first, second, department, user_group)
     assert retires == ()
-    assert missing == {("user:7", "visible", "knowledge_space:42")}
+    assert expected == {
+        ("user:7", "visible", "knowledge_space:42"),
+        ("department:7#member", "visible", "knowledge_space:42"),
+        ("user_group:9#member", "visible", "knowledge_space:42"),
+    }
+
+
+class _FGAClient:
+    def __init__(self) -> None:
+        self.writes = []
+        self.checks = []
+
+    @staticmethod
+    def validate_business_mutation_size(operation_count: int) -> None:
+        assert operation_count <= 90
+
+    async def write_tuples(self, *, writes, ignore_duplicate_writes=False):
+        self.writes.append((writes, ignore_duplicate_writes))
+
+    async def batch_check(self, checks, consistency=None):
+        self.checks.append((checks, consistency))
+        return [True] * len(checks)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_ensures_without_live_scan_and_verifies_usersets() -> None:
+    client = _FGAClient()
+    expected = frozenset(
+        {
+            ("department:7#member", "visible", "knowledge_space:42"),
+            ("user_group:9#member", "visible", "knowledge_space:42"),
+        }
+    )
+
+    await cli._ensure_expected_tuples(client, expected, batch_size=80)
+    await cli._verify_expected_tuples(client, expected)
+
+    assert client.writes == [
+        (
+            [
+                {
+                    "user": "department:7#member",
+                    "relation": "visible",
+                    "object": "knowledge_space:42",
+                },
+                {
+                    "user": "user_group:9#member",
+                    "relation": "visible",
+                    "object": "knowledge_space:42",
+                },
+            ],
+            True,
+        )
+    ]
+    assert client.checks[0][1] == cli.HIGHER_CONSISTENCY

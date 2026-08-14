@@ -3,9 +3,9 @@
 
 The command is safe for production use when run in a maintenance window.  It
 uses PermissionGrant/PermissionGrantAssignee as the canonical authorization
-source, rebuilds permission_visible_source_projection, writes only missing
-direct ``visible`` tuples, verifies them at higher consistency, and can perform
-the immutable Authorization Model + Catalog forward cutover required after an
+source, rebuilds permission_visible_source_projection, idempotently ensures
+all expected direct ``visible`` tuples, verifies them at higher consistency,
+and can perform the immutable Authorization Model + Catalog forward cutover required after an
 older F048 migration.
 
 Run from ``src/backend`` with the live ``config`` value::
@@ -14,9 +14,9 @@ Run from ``src/backend`` with the live ``config`` value::
     PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py --apply --confirm-store-id <store-id> --operator-id <user-id> --allow-model-upgrade
 
 Dry-run is the default.  Apply refuses active runtime heartbeats or in-flight
-permission projection operations.  Existing unowned visible tuples are
-reported but never deleted automatically because system/public/shared sources
-are owned outside the Grant source projection.
+permission projection operations. It never scans or deletes existing
+``visible`` tuples: system/public/shared sources are owned outside the Grant
+source projection.
 """
 
 from __future__ import annotations
@@ -48,13 +48,14 @@ from bisheng.core.context.manager import (  # noqa: E402
 from bisheng.core.context.tenant import bypass_tenant_filter  # noqa: E402
 from bisheng.core.database import get_async_db_session  # noqa: E402
 from bisheng.core.openfga.authorization_model_f048 import (  # noqa: E402
-    MIGRATED_RESOURCE_TYPES,
     MODEL_VERSION,
-    OWNER_PROJECTION_RESOURCE_TYPES,
     authorization_model_checksum,
     get_authorization_model_f048,
 )
-from bisheng.core.openfga.client import FGAClient  # noqa: E402
+from bisheng.core.openfga.client import (  # noqa: E402
+    BUSINESS_BATCH_CHECK_LIMIT,
+    FGAClient,
+)
 from bisheng.core.openfga.discovery import discover_openfga_runtime  # noqa: E402
 from bisheng.core.openfga.runtime_heartbeat import (  # noqa: E402
     list_runtime_heartbeats,
@@ -98,7 +99,6 @@ EXIT_BLOCKED = 3
 EXIT_RUNTIME_ERROR = 4
 HIGHER_CONSISTENCY = "HIGHER_CONSISTENCY"
 ACTIVE_OPERATION_STATUSES = ("PREPARED", "STAGING", "COMMIT_UNKNOWN", "COMMITTED")
-VISIBLE_RESOURCE_TYPES = tuple(dict.fromkeys((*MIGRATED_RESOURCE_TYPES, *OWNER_PROJECTION_RESOURCE_TYPES)))
 
 
 class VisibleReconcileBlockedError(RuntimeError):
@@ -131,12 +131,8 @@ class ReconcileReport:
     source_upsert_count: int
     source_retire_count: int
     expected_tuple_count: int
-    live_visible_tuple_count: int
-    missing_tuple_count: int
-    unowned_tuple_count: int
     source_checksum: str
     expected_tuple_checksum: str
-    live_tuple_checksum: str
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -147,7 +143,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Repair SQL source projections, missing tuples, and model/Catalog pin",
+        help="Repair SQL source projections, ensure expected tuples, and update the model/Catalog pin",
     )
     parser.add_argument(
         "--confirm-store-id",
@@ -385,22 +381,6 @@ def _compile_sources(grants: tuple[GrantSnapshot, ...]):
     )
 
 
-async def _read_visible_tuples(client: FGAClient) -> frozenset[tuple[str, str, str]]:
-    rows: set[tuple[str, str, str]] = set()
-    for resource_type in VISIBLE_RESOURCE_TYPES:
-        page = await client.read_tuples(
-            relation="visible",
-            object=f"{resource_type}:",
-            consistency=HIGHER_CONSISTENCY,
-        )
-        rows.update(
-            (str(row["user"]), str(row["relation"]), str(row["object"]))
-            for row in page
-            if row.get("relation") == "visible"
-        )
-    return frozenset(rows)
-
-
 def _source_key(source: Any) -> str:
     return str(source.contribution_fingerprint)
 
@@ -423,7 +403,6 @@ def _build_report(
     assignee_count: int,
     canonical_sources: tuple[Any, ...],
     persisted: tuple[PermissionVisibleSourceProjection, ...],
-    live: frozenset[tuple[str, str, str]],
 ) -> tuple[ReconcileReport, tuple[Any, ...], tuple[PermissionVisibleSourceProjection, ...], frozenset]:
     desired = {_source_key(row): row for row in canonical_sources}
     persisted_active = {_source_key(row): row for row in persisted if row.state == "ACTIVE"}
@@ -436,8 +415,6 @@ def _build_report(
     )
     retires = tuple(row for key, row in sorted(persisted_active.items()) if key not in desired)
     expected = frozenset(_tuple_key(row) for row in canonical_sources)
-    missing = expected - live
-    unowned = live - expected
     report = ReconcileReport(
         mode=mode,
         store_id=current.store_id,
@@ -452,14 +429,10 @@ def _build_report(
         source_upsert_count=len(upserts),
         source_retire_count=len(retires),
         expected_tuple_count=len(expected),
-        live_visible_tuple_count=len(live),
-        missing_tuple_count=len(missing),
-        unowned_tuple_count=len(unowned),
         source_checksum=_checksum([row.model_dump(mode="json") for row in sorted(canonical_sources, key=_source_key)]),
         expected_tuple_checksum=_checksum(sorted(expected)),
-        live_tuple_checksum=_checksum(sorted(live)),
     )
-    return report, upserts, retires, missing
+    return report, upserts, retires, expected
 
 
 async def _apply_source_rows(upserts: tuple[Any, ...]) -> None:
@@ -509,18 +482,36 @@ async def _apply_source_rows(upserts: tuple[Any, ...]) -> None:
                     existing.state = "ACTIVE"
 
 
-async def _write_missing(
+async def _ensure_expected_tuples(
     client: FGAClient,
-    missing: frozenset[tuple[str, str, str]],
+    expected: frozenset[tuple[str, str, str]],
     *,
     batch_size: int,
 ) -> None:
-    rows = sorted(missing)
+    rows = sorted(expected)
     for offset in range(0, len(rows), batch_size):
         batch = rows[offset : offset + batch_size]
         client.validate_business_mutation_size(len(batch))
         await client.write_tuples(
-            writes=[{"user": user, "relation": relation, "object": object_key} for user, relation, object_key in batch]
+            writes=[{"user": user, "relation": relation, "object": object_key} for user, relation, object_key in batch],
+            ignore_duplicate_writes=True,
+        )
+
+
+async def _verify_expected_tuples(
+    client: FGAClient,
+    expected: frozenset[tuple[str, str, str]],
+) -> None:
+    rows = sorted(expected)
+    for offset in range(0, len(rows), BUSINESS_BATCH_CHECK_LIMIT):
+        batch = rows[offset : offset + BUSINESS_BATCH_CHECK_LIMIT]
+        allowed = await client.batch_check(
+            [{"user": user, "relation": relation, "object": object_key} for user, relation, object_key in batch],
+            consistency=HIGHER_CONSISTENCY,
+        )
+        _require(
+            len(allowed) == len(batch) and all(allowed),
+            "higher-consistency visible tuple verification failed",
         )
 
 
@@ -705,8 +696,7 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
         grants, assignee_count = await _load_canonical_grants()
         canonical_sources = _compile_sources(grants)
         persisted = await _load_persisted_sources()
-        live = await _read_visible_tuples(target_client)
-        report, upserts, retires, missing = _build_report(
+        report, upserts, retires, expected = _build_report(
             mode="apply" if args.apply else "dry-run",
             current=current,
             target_model_id=target_model_id,
@@ -715,7 +705,6 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
             assignee_count=assignee_count,
             canonical_sources=canonical_sources,
             persisted=persisted,
-            live=live,
         )
         print(json.dumps(asdict(report), ensure_ascii=False, sort_keys=True))
         if not args.apply:
@@ -751,11 +740,9 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
             )
             target_client = source_client.for_model(target_model_id)
         _require(target_model_id is not None, "target Authorization Model was not published")
+        await _ensure_expected_tuples(target_client, expected, batch_size=args.batch_size)
+        await _verify_expected_tuples(target_client, expected)
         await _apply_source_rows(upserts)
-        await _write_missing(target_client, missing, batch_size=args.batch_size)
-        verified_live = await _read_visible_tuples(target_client)
-        expected = frozenset(_tuple_key(row) for row in canonical_sources)
-        _require(not (expected - verified_live), "higher-consistency visible tuple verification failed")
 
         new_catalog_id = current.catalog_id
         if current.model_id != target_model_id:
@@ -791,8 +778,8 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
                     "model_version": MODEL_VERSION,
                     "source_upserts": len(upserts),
                     "source_retires": len(retires),
-                    "visible_writes": len(missing),
-                    "unowned_visible_tuples_reported": len(verified_live - expected),
+                    "visible_tuples_ensured": len(expected),
+                    "visible_tuples_verified": len(expected),
                 },
                 ensure_ascii=False,
                 sort_keys=True,

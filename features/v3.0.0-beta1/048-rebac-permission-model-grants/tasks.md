@@ -1614,8 +1614,8 @@
 
 - [x] **T193：生产级 visible 对账命令测试**
   - **文件**：`src/backend/test/permission/test_f048_visible_reconcile_cli.py`
-  - **测试**：覆盖默认 dry-run、apply Store 二次确认、多来源聚合去重、缺失 tuple 补写计划，
-    并证明无 Grant source 的 visible 只报告不自动删除。
+  - **测试**：覆盖默认 dry-run、apply Store 二次确认、仅相同 projected subject 的聚合去重、部门/
+    用户组 userset 不展开，以及 duplicate-ignore 幂等补写与 higher-consistency 批量验证。
   - **依赖**：T159, T192
 
 - [x] **T194：实现旧迁移环境前向对账与 immutable model/Catalog 切换**
@@ -1623,8 +1623,9 @@
     `src/backend/bisheng/permission/application/catalog_api.py`, `src/backend/scripts/README.md`
   - **逻辑**：以 SQL Grant/assignee 重建 source projection；默认 dry-run，apply 要求停流、Store
     /operator 确认、无在途 operation，旧 model 切换需显式确认；同 Store 发布/复用最终 model，
-    先补写并 higher-consistency 验证，再用 no-op Catalog release 前向切换且不修改历史
-    migration run；多余 tuple 只报告，stale source 阻断自动写入。
+    以 duplicate-ignore 确保全部 Grant visible tuple 并 higher-consistency 验证，成功后再激活来源表，
+    最后用 no-op Catalog release 前向切换且不修改历史 migration run；不扫描/删除既有 tuple，
+    stale source 阻断自动写入。
   - **验收**：T193、Catalog runtime 回归、ruff、diff-check 通过
   - **依赖**：T192, T193
 

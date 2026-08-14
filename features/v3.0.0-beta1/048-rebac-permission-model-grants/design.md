@@ -1764,16 +1764,18 @@ CREATED
 migration run。使用 `scripts/reconcile_f048_visible_projection.py` 执行独立的前向对账：
 
 1. 默认 dry-run，以 SQL `PermissionGrant/PermissionGrantAssignee` 为 Grant 可见来源真相，重算
-   source projection 与聚合直接 tuple；system/public/shared 只报告，不从 OpenFGA 反推授权。
+   source projection 与聚合直接 tuple；不扫描 OpenFGA tuple，也不从 system/public/shared
+   关系反推授权。
 2. `--apply` 必须确认 Store ID 和操作人，并要求 runtime heartbeat 和在途 projection operation
    均为零；旧 model 切换还必须显式指定 `--allow-model-upgrade`。生产、开发、测试使用同一逻辑，
    不按环境名放宽门禁。
-3. 若 CURRENT Catalog 仍引用旧 F048 model，在同一 Store 发布最终 immutable model，先补 SQL
-   source projection 和缺失 visible tuple并 higher-consistency 验证，再发布一个无业务动作/
-   模型变化的新 Catalog release 绑定新 Authorization Model release，最后退休旧 release。
-4. 多余 direct visible tuple 首版只报告不删除，因为它可能由 system owner 等非 Grant canonical
-   来源贡献；存在 stale Grant source projection 时 apply 整体阻断，来源分类完成前不得把
-   “无 Grant source”直接解释为应撤销或形成 SQL/tuple 不一致。
+3. 若 CURRENT Catalog 仍引用旧 F048 model，在同一 Store 发布最终 immutable model；按
+   `projected_subject + visible + resource` 去重后，用 `on_duplicate=ignore` 幂等确保所有 Grant
+   直接 tuple，higher-consistency BatchCheck 全部通过后才激活 SQL source projection，再发布一个
+   无业务动作/模型变化的新 Catalog release 绑定新 Authorization Model release，最后退休旧 release。
+4. 部门和用户组保持 userset subject，不展开成员用户；脚本不扫描或删除多余 direct visible tuple，
+   因为它可能由 system owner 等非 Grant canonical 来源贡献。存在 stale Grant source projection 时
+   apply 整体阻断，来源分类完成前不得把“无 Grant source”直接解释为应撤销。
 5. 任一步失败保持停流，重复执行同一命令按 model checksum、Catalog idempotency key、source
    fingerprint 和 tuple key 前向续跑；成功后重启服务，由稳定 Store name 自动发现新 model。
 

@@ -46,9 +46,9 @@ PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
 ```
 
 The JSON report includes canonical Grant/assignee source counts, persisted
-source differences, expected/live checksums, missing tuples, and unowned
-visible tuples. Unowned tuples are never deleted automatically because
-system/public/shared visibility is not owned by the Grant source projection.
+source differences, and the deduplicated expected tuple count/checksum. The
+script never scans or deletes existing visible tuples because system/public/
+shared visibility is not owned by the Grant source projection.
 
 For apply, stop ingress traffic and all API/Worker/Linsight processes, wait for
 their F048 heartbeat TTL to expire, and copy the dry-run `store_id` into the
@@ -68,10 +68,10 @@ when Store confirmation differs, a runtime heartbeat or projection operation
 is active, the CURRENT Catalog has an unrelated/non-resumable fence, canonical
 SQL data is incomplete, or stale source projections would require a classified
 revocation. It publishes/reuses the final immutable model in the same Store,
-rebuilds Grant-derived source rows, writes
-only missing direct `visible` tuples in batches of at most 90, verifies them
-with higher consistency, then publishes a no-op Catalog release bound to the
-new Authorization Model release. It does not create or modify a formal
+ensures every Grant-derived direct `visible` tuple in batches of at most 90
+with OpenFGA duplicate-ignore semantics, verifies them with higher consistency,
+then activates the rebuilt Grant source rows and publishes a no-op Catalog
+release bound to the new Authorization Model release. It does not create or modify a formal
 `permission_migration_run`. Re-running after an interruption is forward-only
 and idempotent. Restart all permission-using processes after success; they
 discover the latest model through the stable Store name and validate the new

@@ -204,13 +204,19 @@ class FGAClient:
         self,
         writes: list[dict] | None = None,
         deletes: list[dict] | None = None,
+        *,
+        ignore_duplicate_writes: bool = False,
     ) -> None:
         """Batch write and/or delete tuples.
 
         Each tuple: {"user": "user:7", "relation": "owner", "object": "workflow:abc"}
         Raises FGAWriteError when the atomic request is invalid or fails.
         """
-        body = self._build_write_body(writes, deletes)
+        body = self._build_write_body(
+            writes,
+            deletes,
+            ignore_duplicate_writes=ignore_duplicate_writes,
+        )
         if body is None:
             return
 
@@ -226,9 +232,15 @@ class FGAClient:
         self,
         writes: list[dict] | None = None,
         deletes: list[dict] | None = None,
+        *,
+        ignore_duplicate_writes: bool = False,
     ) -> None:
         """Synchronous tuple write for Celery tasks without an asyncio loop."""
-        body = self._build_write_body(writes, deletes)
+        body = self._build_write_body(
+            writes,
+            deletes,
+            ignore_duplicate_writes=ignore_duplicate_writes,
+        )
         if body is None:
             return
 
@@ -244,6 +256,8 @@ class FGAClient:
         self,
         writes: list[dict] | None = None,
         deletes: list[dict] | None = None,
+        *,
+        ignore_duplicate_writes: bool = False,
     ) -> dict | None:
         """Assemble the OpenFGA write request body, or None when nothing to do."""
         operation_count = len(writes or ()) + len(deletes or ())
@@ -251,7 +265,12 @@ class FGAClient:
             raise FGAWriteError(f"OpenFGA Write exceeds {OPENFGA_WRITE_TUPLE_LIMIT} tuple operations")
         body: dict[str, Any] = {}
         if writes:
-            body["writes"] = {"tuple_keys": [self._tuple_key(t) for t in writes]}
+            write_payload: dict[str, Any] = {
+                "tuple_keys": [self._tuple_key(t) for t in writes],
+            }
+            if ignore_duplicate_writes:
+                write_payload["on_duplicate"] = "ignore"
+            body["writes"] = write_payload
         if deletes:
             body["deletes"] = {"tuple_keys": [self._tuple_key(t) for t in deletes]}
         return body if body else None

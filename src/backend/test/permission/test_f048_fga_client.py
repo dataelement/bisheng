@@ -311,10 +311,34 @@ async def test_write_is_single_model_and_enforces_openfga_limit(
     client._post.assert_called_once()
     body = client._post.call_args.args[1]
     assert body["authorization_model_id"] == "model-f048"
+    assert "on_duplicate" not in body["writes"]
 
     with pytest.raises(FGAWriteError):
         await client.write_tuples(writes=tuples, deletes=[tuples[0]])
     assert client._post.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_write_can_ignore_duplicate_tuples_for_reconciliation(
+    client: FGAClient,
+) -> None:
+    client._post = AsyncMock(return_value={})
+    relationship = {
+        "user": "department:7#member",
+        "relation": "visible",
+        "object": "knowledge_space:42",
+    }
+
+    await client.write_tuples(
+        writes=[relationship],
+        ignore_duplicate_writes=True,
+    )
+
+    body = client._post.call_args.args[1]
+    assert body["writes"] == {
+        "tuple_keys": [relationship],
+        "on_duplicate": "ignore",
+    }
 
 
 def test_business_atomic_limit_is_stricter_than_service_limit() -> None:
