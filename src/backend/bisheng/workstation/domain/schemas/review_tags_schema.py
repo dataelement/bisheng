@@ -25,7 +25,7 @@ class ReviewTagScope:
     Attributes:
         full_tenant: 超管/租户管理员，不过滤。
         role_managed_space_ids: 当前用户对 public/department/team_ks 具备 can_manage 的空间。
-        org_uploader_ids: 部门管理员所管组织内的用户；None 表示非部门管理员路径。
+        org_uploader_ids: 部门管理员所管组织内的用户（按文件上传人匹配）；None 表示非部门管理员路径。
     """
 
     full_tenant: bool = False
