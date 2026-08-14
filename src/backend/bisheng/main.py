@@ -101,9 +101,22 @@ async def lifespan(app: FastAPI):
             await backfill_linsight_default_model()
         except Exception:
             logger.exception("linsight default-model backfill failed; continuing startup")
+        # Skill bundles moved from node-local disk to object storage. Publish what
+        # this host still holds so an upgraded deployment heals itself; anything it
+        # cannot resolve is logged by name for the operator to run the migration
+        # script on the host that has it. Runs before seeding: built-in rows are
+        # left to the seeder, which republishes them from the image.
+        try:
+            from bisheng.linsight.domain.services.skill_bundle_backfill import (
+                backfill_skill_bundles_from_local_disk,
+            )
+
+            await backfill_skill_bundles_from_local_disk()
+        except Exception:
+            logger.exception("linsight skill bundle backfill failed; continuing startup")
         # Ships the kernel's built-in skills into every tenant so a fresh deploy
         # has them without any operator step. Content-addressed and idempotent:
-        # an unchanged image costs a few file reads.
+        # an unchanged image costs one existence probe per skill.
         try:
             from bisheng.linsight.domain.services.builtin_skill_seeder import seed_builtin_skills
 

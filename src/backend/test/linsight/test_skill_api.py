@@ -21,6 +21,8 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.linsight.api.endpoints import skill as skill_endpoints
 from bisheng.linsight.domain.services import skill_service as service_module
 from bisheng.linsight.domain.services.skill_service import SkillService
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
+
 from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, SkillStore
 from test.linsight.test_skill_service import FakeSkillDao
 
@@ -47,7 +49,7 @@ def client(tmp_path, monkeypatch):
         skill_endpoints,
         "SkillService",
         lambda: SkillService(
-            store=SkillStore(root=tmp_path),
+            store=SkillStore(root=tmp_path, minio=FakeMinioStorage()),
             owner_projection=owner_projection,
         ),
     )

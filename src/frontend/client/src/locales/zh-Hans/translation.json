@@ -379,6 +379,7 @@
   "com_linsight_ingest_running": "正在解析上传文件 {{0}}/{{1}}",
   "com_linsight_ingest_done": "上传文件解析完成 {{0}}/{{1}}",
   "com_linsight_ingest_failed": "上传文件解析失败",
+  "com_linsight_skill_load_failed": "以下技能本次未能加载，运行将不使用它们：{{0}}",
   "com_linsight_ingest_aborted": "上传文件解析已中断 {{0}}/{{1}}",
   "com_linsight_planning": "正在规划任务",
   "com_linsight_executing": "正在执行任务",

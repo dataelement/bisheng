@@ -72,6 +72,33 @@ export function readIngestProgress(step: {
     };
 }
 
+/**
+ * A skill the user picked could not be loaded for this run.
+ *
+ * Skill bundles live in object storage and are materialized per run; when that
+ * fails the task still runs, just without the skill. Left unreported this is
+ * indistinguishable from never having selected it — which is exactly how the old
+ * local-disk storage hid a multi-node inconsistency for months.
+ *
+ * ⚠️ Contract with the backend: `_SKILL_LOAD_FAILED_STEP_NAME` in
+ * bisheng/linsight/domain/task_exec.py.
+ */
+export const SKILL_LOAD_FAILED_STEP_NAME = 'skill_load_failed';
+
+/** Pull the failed skill names off a step, or null when it is not that row. */
+export function readSkillLoadFailure(step: {
+    name?: string;
+    extraInfo?: Record<string, unknown>;
+}): string[] | null {
+    if (step.name !== SKILL_LOAD_FAILED_STEP_NAME) return null;
+    const raw = step.extraInfo?.skill_load_failed;
+    if (!raw || typeof raw !== 'object') return null;
+    const names = (raw as Record<string, unknown>).names;
+    if (!Array.isArray(names)) return null;
+    const cleaned = names.filter((n): n is string => typeof n === 'string' && n.length > 0);
+    return cleaned.length ? cleaned : null;
+}
+
 /** Raw `task_execute_step.data` frame (contract C1). */
 export interface ExecStepEventData {
     call_id?: string;

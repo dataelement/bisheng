@@ -121,7 +121,7 @@ async def _load_tenant_state(store: SkillStore, tenant_id: int) -> tuple[dict[st
         if row.source != SKILL_SOURCE_SOP_MIGRATED:
             continue
         try:
-            meta, _body = parse_skill_md(store.read_text(tenant_id, row.name))
+            meta, _body = parse_skill_md(store.read_text(tenant_id, row.name, row.content_hash))
             sop_id = str((meta.get("metadata") or {}).get(SOP_ID_META_KEY) or "")
             if sop_id:
                 sop_map[sop_id] = row
@@ -195,10 +195,10 @@ async def _migrate_tenant(
             )
 
             if apply:
-                size = store.write_bundle(tenant_id, name, {SKILL_MD: skill_md.encode("utf-8")})
+                ref = store.write_bundle(tenant_id, name, {SKILL_MD: skill_md.encode("utf-8")})
                 if existing:
-                    existing.description, existing.size = description, size
-                    existing.object_path = store.object_path(tenant_id, name)
+                    existing.description, existing.size = description, ref.size
+                    existing.object_path, existing.content_hash = ref.object_key, ref.content_hash
                     await LinsightSkillDao.update(existing)
                 else:
                     await LinsightSkillDao.create(
@@ -209,8 +209,9 @@ async def _migrate_tenant(
                             description=description,
                             enabled=True,
                             source=SKILL_SOURCE_SOP_MIGRATED,
-                            object_path=store.object_path(tenant_id, name),
-                            size=size,
+                            object_path=ref.object_key,
+                            content_hash=ref.content_hash,
+                            size=ref.size,
                             created_by=sop.user_id,
                         )
                     )

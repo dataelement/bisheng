@@ -577,7 +577,9 @@ SKILLS_ROOT/                          # 配置项 linsight_conf.skills_root（v2
 
 `FilesystemBackend(root_dir=SKILLS_ROOT, virtual_mode=True)`：`virtual_mode=True` 把所有路径约束在 `root_dir` 内，**防路径穿越**（`../` 逃逸被拦截）。租户自定义目录按 `tenant_id` 分片，配合 §6 自动注入实现隔离。
 
-> ⚠️ **多节点部署约束**：`worker.py` 的 `NodeManager` 为多节点设计（hostname 级 node_id + 心跳 + ownership），磁盘 Skill 要求 `SKILLS_ROOT` 为**所有 Worker 节点可见的同一卷** —— 须满足「灵思 Worker 单机部署」或「多机挂共享存储（NFS 等）」之一，否则 A 机新建/编辑的 Skill 在 B 机 worker 上读不到、CRUD 与执行不一致。元数据若入 DB 则跨节点一致；**正文一致性依赖共享卷**。运维须将此约束写入部署文档；启动期可加 `SKILLS_ROOT` 可写 + 共享性自检告警。若未来多机且不便共享盘，演进为 MinIO 正文 + 本地物化（`FilesystemBackend` 退化为物化后的本地只读层）。
+> ~~⚠️ **多节点部署约束**：`worker.py` 的 `NodeManager` 为多节点设计（hostname 级 node_id + 心跳 + ownership），磁盘 Skill 要求 `SKILLS_ROOT` 为**所有 Worker 节点可见的同一卷** —— 须满足「灵思 Worker 单机部署」或「多机挂共享存储（NFS 等）」之一，否则 A 机新建/编辑的 Skill 在 B 机 worker 上读不到、CRUD 与执行不一致。元数据若入 DB 则跨节点一致；**正文一致性依赖共享卷**。运维须将此约束写入部署文档；启动期可加 `SKILLS_ROOT` 可写 + 共享性自检告警。若未来多机且不便共享盘，演进为 MinIO 正文 + 本地物化（`FilesystemBackend` 退化为物化后的本地只读层）。~~
+>
+> **已解决（v3.0，2026-08-14）**：本段末尾预留的演进路径已实施 —— Skill bundle 改为**对象存储内容寻址**（`linsight/skills/{tenant_id}/{name}/{content_hash}.zip`）为唯一权威，节点按内容哈希本地物化；共享卷不再是正确性前提。`SKILLS_ROOT` 降级为迁移脚本读取遗留 bundle 的来源。约束本身也已上升为架构宪法 C8（禁止用本地文件系统承载跨进程共享状态），并写入 `docs/architecture/08-deployment.md`「多节点部署」。**当时把它降级成一条"运维须知"而没有落地，是这次返工的根因**：契约写在设计文档里、部署文档零覆盖、启动自检也没做，等于没有约束。
 
 > **两类技能的本质区别（对齐 PRD §4.5/§4.7）**：`built-in/` 是任务模式**内核能力**，所有租户共用同一份磁盘文件、随内核常驻加载，**不出现在技能选择器与管理页，也不经 `/skill` API**；`data/skills/{tenant_id}/` 才是前端可见、可管理的**租户自定义技能**（租户管理员从 0 新建 / 导入）。系统管理员不直接管 built-in，如需维护某租户的自定义技能须经 admin-scope 切入该租户。
 

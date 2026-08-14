@@ -40,9 +40,10 @@ import { ACCENT, ACTIVITY_I18N, BODY, INK } from './execTokens';
 // the single Accent (blue) highlight; the chevron is muted and darkens on hover;
 // the title + narration sit lighter as quiet meta.
 const NODE_TEXT = '#999999';
-import { readIngestProgress } from './execTypes';
+import { readIngestProgress, readSkillLoadFailure } from './execTypes';
 import { GroupHeaderLabel } from './GroupHeaderLabel';
 import { IngestPhaseRow } from './IngestPhaseRow';
+import { SkillLoadFailureRow } from './SkillLoadFailureRow';
 import { KnowledgeRow } from './KnowledgeRow';
 import { NarrationTicker } from './NarrationTicker';
 import ToolRowLite from './ToolRowLite';
@@ -216,6 +217,9 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
         }
         if (readIngestProgress(seg.step)) {
             return <IngestPhaseRow key={seg.key} step={seg.step} />;
+        }
+        if (readSkillLoadFailure(seg.step)) {
+            return <SkillLoadFailureRow key={seg.key} step={seg.step} />;
         }
         return <ToolRowLite key={seg.key} step={seg.step} />;
     });

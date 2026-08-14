@@ -1,20 +1,24 @@
 """Install the kernel's built-in skill bundles into every tenant at startup.
 
-A shipped skill has to reach the same place a user-uploaded one does — disk under
-``SKILLS_ROOT/data/skills/{tenant_id}/<name>/`` plus a ``linsight_skill`` row —
-because that is the only path the picker, the governance toggle and
-``materialize_session_skills`` know about. Seeding there means an out-of-the-box
-deployment shows the official skills with zero operator action, and every existing
-capability (enable/disable, detail view, per-tenant isolation) works unchanged.
+A shipped skill has to reach the same place a user-uploaded one does — a bundle
+object in storage plus a ``linsight_skill`` row — because that is the only path
+the picker, the governance toggle and ``materialize_session_skills`` know about.
+Seeding there means an out-of-the-box deployment shows the official skills with
+zero operator action, and every existing capability (enable/disable, detail view,
+per-tenant isolation) works unchanged.
+
+Only the API process seeds. That is sufficient now that bundles live in object
+storage: a Linsight worker on any host resolves the same objects. Under the old
+local-disk layout it was a bug — the worker's filesystem was simply empty.
 
 Why here and not in a migration: project law says an Alembic revision does DDL
 only — any data seeding/backfill is a separate operational step. Doing it in the
 API lifespan keeps `docker compose up` a single command while staying out of the
 migration chain.
 
-Idempotency is content-based: the bundle on disk is compared byte-for-byte with
-the one shipped in the image, so an upgraded image updates the skill on the next
-restart and an unchanged one costs a few file reads. A tenant that *edited* a
+Idempotency is content-based: the shipped bundle's content hash is compared with
+the one the row already points at, so an upgraded image updates the skill on the
+next restart and an unchanged one costs one existence probe. A tenant that *edited* a
 built-in skill has its row flipped to ``manual`` by the update endpoints, and
 this seeder then leaves it alone forever — silently reverting a customer's edits
 on upgrade would be far worse than letting their copy drift.
@@ -26,6 +30,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, current_tenant_id, set_current_tenant_id
 from bisheng.database.models.tenant import TenantDao
@@ -38,6 +43,7 @@ from bisheng.linsight.domain.services.skill_store import (
     DISPLAY_NAME_META_KEY,
     SKILL_MD,
     SkillStore,
+    bundle_content_hash,
     parse_skill_md,
     validate_skill_name,
 )
@@ -97,16 +103,21 @@ def discover_builtin_bundles() -> dict[str, tuple[dict, dict[str, bytes]]]:
     return found
 
 
-def _installed_matches(store: SkillStore, tenant_id: int, name: str, files: dict[str, bytes]) -> bool:
-    """True when the on-disk bundle is byte-identical to the shipped one."""
-    try:
-        installed = {
-            entry["path"]: store.read_bytes(tenant_id, name, entry["path"])
-            for entry in store.list_files(tenant_id, name)
-        }
-    except Exception:  # missing dir, unreadable file — treat as "needs rewrite"
+def _already_published(store: SkillStore, existing, tenant_id: int, name: str, shipped_hash: str) -> bool:
+    """True when this tenant's row already points at the shipped bundle *and* the object is there.
+
+    The hash comparison alone would be cheaper still, but it would also drop a
+    property the previous byte-for-byte check had for free: if the stored bundle
+    is deleted or corrupted out-of-band, the next boot repairs it. Confirming the
+    object exists keeps that self-healing while staying O(1) per skill.
+    """
+    if existing.content_hash != shipped_hash:
         return False
-    return installed == files
+    try:
+        return store.exists(tenant_id, name, shipped_hash)
+    except Exception:  # storage hiccup — treat as "needs rewrite", the PUT is idempotent
+        logger.debug("built-in skill {!r} existence probe failed for tenant {}", name, tenant_id)
+        return False
 
 
 def _display_name_of(meta: dict, name: str) -> str:
@@ -125,18 +136,20 @@ async def _seed_one(store: SkillStore, tenant_id: int, name: str, meta: dict, fi
     if existing and existing.source != SKILL_SOURCE_BUILTIN:
         # The tenant forked it (any edit through the API flips source to manual).
         return "forked"
-    if existing and _installed_matches(store, tenant_id, name, files):
+    shipped_hash = bundle_content_hash(files)
+    if existing and _already_published(store, existing, tenant_id, name, shipped_hash):
         return "unchanged"
 
-    size = store.write_bundle(tenant_id, name, files)
+    ref = store.write_bundle(tenant_id, name, files)
     display_name = _display_name_of(meta, name)
     description = str(meta["description"]).strip()
 
     if existing:
         existing.display_name = display_name
         existing.description = description
-        existing.size = size
-        existing.object_path = store.object_path(tenant_id, name)
+        existing.size = ref.size
+        existing.content_hash = ref.content_hash
+        existing.object_path = ref.object_key
         await LinsightSkillDao.update(existing)
         return "updated"
 
@@ -149,14 +162,17 @@ async def _seed_one(store: SkillStore, tenant_id: int, name: str, meta: dict, fi
                 description=description,
                 enabled=True,
                 source=SKILL_SOURCE_BUILTIN,
-                object_path=store.object_path(tenant_id, name),
-                size=size,
+                object_path=ref.object_key,
+                content_hash=ref.content_hash,
+                size=ref.size,
             )
         )
         return "created"
-    except Exception:
+    except IntegrityError:
         # Several API replicas boot at once; uq_linsight_skill_tenant_name makes
-        # the loser's INSERT fail, and the winner already wrote the same bytes.
+        # the loser's INSERT fail, and the winner published the identical bytes.
+        # Only the uniqueness collision is benign — anything else (bad column,
+        # dead connection, DM8 dialect error) must not masquerade as a race.
         logger.debug("built-in skill {!r} insert lost a race for tenant {}", name, tenant_id)
         return "raced"
 

@@ -14,8 +14,9 @@
 import { useMemo } from 'react';
 import { DeepStepGroup } from './DeepStepGroup';
 import { useExecutionLive } from './executionLive';
-import { readIngestProgress } from './execTypes';
+import { readIngestProgress, readSkillLoadFailure } from './execTypes';
 import { IngestPhaseRow } from './IngestPhaseRow';
+import { SkillLoadFailureRow } from './SkillLoadFailureRow';
 import { IntentRow } from './IntentRow';
 import { KnowledgeRow } from './KnowledgeRow';
 import { ToolRowLite } from './ToolRowLite';
@@ -105,6 +106,9 @@ export function ExecutionTimeline({ history }: ExecutionTimelineProps) {
                 }
                 if (readIngestProgress(step)) {
                     return <IngestPhaseRow key={step.callId} step={step} />;
+                }
+                if (readSkillLoadFailure(step)) {
+                    return <SkillLoadFailureRow key={step.callId} step={step} />;
                 }
                 return <ToolRowLite key={step.callId} step={step} />;
             })}

@@ -133,6 +133,9 @@ _RECURSION_LIMIT_MARGIN = 20
 _INGEST_STEP_NAME = "ingest_uploads"
 # Phases that close the row (status="end"); anything else keeps it spinning.
 _INGEST_TERMINAL_PHASES = frozenset({"done", "failed", "aborted"})
+# Same contract, for the row saying a selected skill could not be loaded. Mirrored
+# in the client's execTypes.ts alongside the ingest row.
+_SKILL_LOAD_FAILED_STEP_NAME = "skill_load_failed"
 
 
 def _resolve_recursion_limit(linsight_conf) -> int:
@@ -1013,9 +1016,11 @@ class LinsightWorkflowTask:
         # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
         # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
         # fresh agent each time. skills_present gates attaching the skills middleware.
-        copied_skills = await materialize_session_skills(
+        skills = await materialize_session_skills(
             backend, session_model.tenant_id, getattr(session_model, "skills", None)
         )
+        if skills.failed:
+            await self._push_skill_load_failure(session_model.id, skills.failed)
         return await create_linsight_agent(
             session_model=session_model,
             tools=tools,
@@ -1024,9 +1029,39 @@ class LinsightWorkflowTask:
             svid=session_model.id,
             checkpointer=checkpointer,
             backend=backend,
-            skills_present=bool(copied_skills),
+            skills_present=bool(skills.copied),
             turn_budget_sink=self._turn_budget,
         )
+
+    async def _push_skill_load_failure(self, svid: str, names: list[str]) -> None:
+        """Tell the user a skill they picked is not available for this run.
+
+        Silence here is what made the local-disk era so hard to diagnose: the
+        model just behaved as if the skill had never been selected. The task
+        still runs — one unavailable skill is not worth discarding the work — but
+        the gap is now on the timeline instead of only in a worker log.
+
+        Carries only DATA (the skill names); wording lives in the client's locale
+        files, because this row is persisted and a backend-formatted string would
+        stay in the wrong language after a language switch.
+        """
+        try:
+            step = ExecStep(
+                task_id=svid,
+                call_id=f"{svid}-skill-load-failed",
+                call_reason="",
+                name=_SKILL_LOAD_FAILED_STEP_NAME,
+                step_type="tool",
+                status="end",
+                output="",
+                extra_info={"skill_load_failed": {"names": names}},
+            )
+            await self._state_manager.add_execution_task_step(svid, step=step)
+            await self._state_manager.push_message(
+                MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=step.model_dump())
+            )
+        except Exception as e:
+            logger.warning(f"Failed to push skill-load-failure step for {svid}: {e}")
 
     async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:
         """Cross-turn continuity: copy the previous turn's deliverables/sources

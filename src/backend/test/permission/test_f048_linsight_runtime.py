@@ -16,6 +16,8 @@ from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
 from bisheng.linsight.domain.schemas.skill_schema import SkillCreateForm
 from bisheng.linsight.domain.services import skill_service as skill_module
 from bisheng.linsight.domain.services.skill_service import SkillService
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
+
 from bisheng.linsight.domain.services.skill_store import SkillStore
 from bisheng.linsight.worker import encode_queue_item, parse_queue_item
 
@@ -176,7 +178,7 @@ async def test_skill_creation_waits_for_durable_owner_projection(
     monkeypatch.setattr(skill_module, "LinsightSkillDao", _SkillDao)
     owner = _OwnerProjection()
     service = SkillService(
-        store=SkillStore(root=tmp_path),
+        store=SkillStore(root=tmp_path, minio=FakeMinioStorage()),
         owner_projection=owner,
     )
 
@@ -204,7 +206,7 @@ async def test_skill_owner_projection_failure_is_not_best_effort(
     _SkillDao.row = None
     monkeypatch.setattr(skill_module, "LinsightSkillDao", _SkillDao)
     service = SkillService(
-        store=SkillStore(root=tmp_path),
+        store=SkillStore(root=tmp_path, minio=FakeMinioStorage()),
         owner_projection=_OwnerProjection(RuntimeError("projection failed")),
     )
 

@@ -26,78 +26,14 @@ from bisheng.linsight.domain.services.workspace_backend import (
     WorkspaceBackend,
 )
 
-
-# ---------------------------------------------------------------------------
-# Fake MinIO: in-memory object store keyed by (bucket, object_name)
-# ---------------------------------------------------------------------------
-class FakeMinioStorage:
-    """Minimal in-memory stand-in for ``MinioStorage`` (sync + async surface)."""
-
-    def __init__(self) -> None:
-        self.bucket = "bisheng"
-        self.tmp_bucket = "tmp-dir"
-        # store[(bucket, object_name)] = bytes
-        self.store: dict[tuple[str, str], bytes] = {}
-        self.minio_client_sync = _FakeRawClient(self.store, self.bucket)
-
-    # async surface used by WorkspaceBackend's a* methods --------------------
-    async def put_object(self, *, bucket_name=None, object_name, file, **kwargs):
-        bucket = bucket_name or self.bucket
-        data = file if isinstance(file, bytes) else bytes(file)
-        self.store[(bucket, object_name)] = data
-
-    async def get_object(self, bucket_name=None, object_name=None):
-        bucket = bucket_name or self.bucket
-        return self.store.get((bucket, object_name))
-
-    # sync surface ----------------------------------------------------------
-    def put_object_sync(self, *, bucket_name=None, object_name, file, **kwargs):
-        bucket = bucket_name or self.bucket
-        data = file if isinstance(file, bytes) else bytes(file)
-        self.store[(bucket, object_name)] = data
-
-    def get_object_sync(self, bucket_name=None, object_name=None):
-        bucket = bucket_name or self.bucket
-        return self.store.get((bucket, object_name))
-
-    async def object_exists(self, bucket_name=None, object_name=None):
-        bucket = bucket_name or self.bucket
-        return (bucket, object_name) in self.store
-
-
-class _FakeRawClient:
-    """Stands in for ``minio.Minio`` (only ``list_objects`` is used)."""
-
-    def __init__(self, store: dict[tuple[str, str], bytes], bucket: str) -> None:
-        self._store = store
-        self._bucket = bucket
-
-    def list_objects(self, bucket_name, prefix="", recursive=True):
-        for (bucket, name), data in sorted(self._store.items()):
-            if bucket != bucket_name:
-                continue
-            if prefix and not name.startswith(prefix):
-                continue
-            yield _FakeObject(name, len(data))
-
-
-class _FakeObject:
-    def __init__(self, object_name: str, size: int) -> None:
-        self.object_name = object_name
-        self.size = size
-        self.is_dir = False
-        self.last_modified = None
-        self.etag = "abc"
+# The in-memory MinIO fake lives in fixtures/ — the skill store suite needs the
+# same one. ``fake_minio`` is re-exported so pytest still resolves the fixture.
+from test.linsight.fixtures.fake_minio import FakeMinioStorage, fake_minio  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-@pytest.fixture()
-def fake_minio():
-    return FakeMinioStorage()
-
-
 @pytest.fixture()
 def file_dir():
     with tempfile.TemporaryDirectory() as d:
