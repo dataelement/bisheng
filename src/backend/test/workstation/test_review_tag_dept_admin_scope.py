@@ -366,3 +366,39 @@ async def test_review_tag_scope_allows_predicates():
     assert scope.allows_space_for_uploader(space_id=20, level="team", uploader_id=5) is True
     assert scope.allows_space_for_uploader(space_id=20, level="team_ks", uploader_id=5) is False
     assert scope.allows_space_for_uploader(space_id=20, level="personal", uploader_id=6) is False
+
+
+@pytest.mark.asyncio
+async def test_link_in_review_scope_uses_file_uploader_not_tagger():
+    """他人给组织成员文件打标时，团队库待审归文件上传人的组织管理员。"""
+    from bisheng.workstation.domain.repositories.review_tags_repository import ReviewTagsRepositoryImpl
+
+    repo = ReviewTagsRepositoryImpl(session=AsyncMock(), tags_repository=AsyncMock())
+    repo.tags_repository.get_knowledgefile_by_resource_id = AsyncMock(
+        return_value=SimpleNamespace(
+            id=15,
+            knowledge_id=20,
+            file_name="doc.pdf",
+            file_type="pdf",
+            user_id=42,
+        )
+    )
+    repo._level_for_space = AsyncMock(return_value="team")
+    link = SimpleNamespace(resource_id="15", user_id=1)
+    tag = SimpleNamespace(user_id=1)
+
+    org_of_uploader = ReviewTagScope(org_uploader_ids=frozenset({42}))
+    assert await repo.link_in_review_scope(link, tag, 1, org_of_uploader) is True
+
+    org_of_tagger = ReviewTagScope(org_uploader_ids=frozenset({1}))
+    assert await repo.link_in_review_scope(link, tag, 1, org_of_tagger) is False
+
+
+def test_org_uploader_sql_matches_knowledge_file_user_id():
+    from bisheng.workstation.domain.repositories.review_tags_repository import ReviewTagsRepositoryImpl
+
+    repo = ReviewTagsRepositoryImpl(session=AsyncMock(), tags_repository=AsyncMock())
+    clause = repo._org_uploader_match_clause(1, {42})
+    compiled = str(clause.compile(compile_kwargs={"literal_binds": True})).lower().replace("`", "")
+    assert "knowledgefile.user_id" in compiled
+    assert "review_tag_link.user_id" not in compiled

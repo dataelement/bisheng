@@ -75,14 +75,13 @@ class ReviewTagsRepositoryImpl:
         return or_(business_match, link_match)
 
     def _org_uploader_match_clause(self, tenant_id: int, uploader_ids: set[int]):
-        """组织管理员范围：团队/个人库，且上传人在组织内。"""
+        """组织管理员范围：团队/个人库，且**文件上传人**在组织内。
+
+        必须用 ``knowledge_file.user_id``，不能用 review_tag / review_tag_link.user_id：
+        后者是打标人。他人（如超管）给组织成员文件打标时，待审应仍归上传人组织管理员。
+        """
         uploader_id_list = sorted(int(uid) for uid in uploader_ids)
         org_levels = sorted(ORG_UPLOADER_REVIEW_LEVELS)
-        # link.user_id>0 用 link，否则回退 tag.user_id
-        effective_uploader = func.coalesce(
-            func.nullif(ReviewTagLink.user_id, 0),
-            ReviewTag.user_id,
-        )
         org_link_match = exists(
             select(1)
             .select_from(ReviewTagLink)
@@ -100,9 +99,10 @@ class ReviewTagsRepositoryImpl:
                 ReviewTagLink.is_deleted == False,  # noqa: E712
                 KnowledgeFile.tenant_id == tenant_id,
                 KnowledgeSpaceScope.level.in_(org_levels),
-                effective_uploader.in_(uploader_id_list),
+                KnowledgeFile.user_id.in_(uploader_id_list),
             )
         )
+        # 无文件挂接的遗留空间级待审：没有 knowledge_file，只能回退 tag.user_id。
         org_business_match = and_(
             ReviewTag.business_type.in_(
                 [
@@ -734,8 +734,9 @@ class ReviewTagsRepositoryImpl:
         """单条 link 是否在审核范围内。"""
         if scope.full_tenant:
             return True
-        space_id, _, _, _ = await self._resolve_file_target_from_link(link, tenant_id)
-        uploader_id = int(link.user_id or 0) or int(tag.user_id or 0)
+        space_id, _, _, _, file_uploader_id = await self._resolve_file_target_from_link(link, tenant_id)
+        # 有文件时按上传人；无文件才回退打标人（遗留无挂接行）。
+        uploader_id = int(file_uploader_id or 0) or int(link.user_id or 0) or int(tag.user_id or 0)
         level = await self._level_for_space(space_id)
         return scope.allows_space_for_uploader(space_id=space_id, level=level, uploader_id=uploader_id)
 
@@ -804,30 +805,37 @@ class ReviewTagsRepositoryImpl:
         self,
         link,
         tenant_id: int,
-    ) -> tuple[int | None, int | None, str | None, str | None]:
+    ) -> tuple[int | None, int | None, str | None, str | None, int | None]:
+        """从 link 解析空间、文件及文件上传人。
+
+        Returns:
+            (space_id, file_id, file_name, file_type, file_uploader_id)
+        """
         knowledgefile = await self.tags_repository.get_knowledgefile_by_resource_id(
             link.resource_id,
             tenant_id,
         )
         if not knowledgefile or knowledgefile.id is None:
-            return None, None, None, None
+            return None, None, None, None, None
         space_id = int(knowledgefile.knowledge_id) if knowledgefile.knowledge_id else None
         file_id = int(knowledgefile.id)
         file_name = knowledgefile.file_name
         file_type = knowledgefile.file_type
-        return space_id, file_id, file_name, file_type
+        raw_uploader = getattr(knowledgefile, "user_id", None)
+        file_uploader_id = int(raw_uploader) if raw_uploader else None
+        return space_id, file_id, file_name, file_type, file_uploader_id
 
     async def _resolve_primary_file_for_tag(
         self,
         tag_id: int,
         user_id: int,
         tenant_id: int,
-    ) -> tuple[int | None, int | None, str | None, str | None]:
+    ) -> tuple[int | None, int | None, str | None, str | None, int | None]:
         links = await self.get_review_tag_link_list_by_tag_id([tag_id], tenant_id)
         preferred = next((link for link in links or [] if int(link.user_id or 0) == user_id), None)
         chosen = preferred or ((links or [None])[0])
         if chosen is None:
-            return None, None, None, None
+            return None, None, None, None, None
         return await self._resolve_file_target_from_link(chosen, tenant_id)
 
     async def list_submitter_notification_targets(
@@ -855,8 +863,15 @@ class ReviewTagsRepositoryImpl:
             file_id: int | None = None
             file_name: str | None = None
             file_type: str | None = None
+            file_uploader_id: int | None = None
             if tag.id is not None:
-                resolved_space, resolved_file, resolved_name, resolved_type = await self._resolve_primary_file_for_tag(
+                (
+                    resolved_space,
+                    resolved_file,
+                    resolved_name,
+                    resolved_type,
+                    file_uploader_id,
+                ) = await self._resolve_primary_file_for_tag(
                     int(tag.id),
                     user_id,
                     tenant_id,
@@ -868,7 +883,8 @@ class ReviewTagsRepositoryImpl:
                 file_type = resolved_type
             if effective is not None:
                 level = await self._level_for_space(space_id)
-                if not effective.allows_space_for_uploader(space_id=space_id, level=level, uploader_id=user_id):
+                scope_uploader = file_uploader_id or user_id
+                if not effective.allows_space_for_uploader(space_id=space_id, level=level, uploader_id=scope_uploader):
                     continue
             existing = user_targets.get(user_id)
             if existing is None or (existing.knowledge_space_id is None and space_id is not None):
@@ -894,7 +910,7 @@ class ReviewTagsRepositoryImpl:
                         continue
                 elif effective is not None and parent_tag is None:
                     continue
-                space_id, file_id, file_name, file_type = await self._resolve_file_target_from_link(link, tenant_id)
+                space_id, file_id, file_name, file_type, _ = await self._resolve_file_target_from_link(link, tenant_id)
                 if space_id is None:
                     space_id = self._space_id_from_review_tag(parent_tag) if parent_tag else None
                     if space_id is None and parent_tag and parent_tag.id is not None:
