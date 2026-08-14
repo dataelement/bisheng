@@ -252,7 +252,15 @@ class ApprovalCenterService:
         comment: str | None = None,
         ip_address: str | None = None,
     ):
-        service = cls(instance_repository=ApprovalInstanceRepository)
+        # The approval-center dialog decides tasks of every scenario, including the
+        # decision-delivery ones (F045/F046), whose policy check needs the bootstrapped
+        # registry. Compose it exactly like the public decision application service.
+        from bisheng.bootstrap.approval_scenarios import get_approval_scenario_registry
+
+        service = cls(
+            instance_repository=ApprovalInstanceRepository,
+            registry=get_approval_scenario_registry(),
+        )
         await service.decide_task(
             task_id=task_id,
             action=action,

@@ -570,3 +570,35 @@ async def test_invite_withdraw_notification_failure_keeps_withdrawn_terminal(rep
     refreshed = await ApprovalInstanceRepository.get_instance(instance.id)
     assert result == {"status": "withdrawn"}
     assert refreshed.status == ApprovalInstanceStatus.WITHDRAWN
+
+
+@pytest.mark.asyncio
+async def test_decide_task_api_composes_bootstrapped_registry(monkeypatch):
+    """The approval-center dialog decides decision-delivery tasks (F045/F046) too, and their
+    policy check needs the bootstrapped registry — composing without it made every approval
+    of an invite/file-change task fail with RuntimeError (HTTP 500)."""
+
+    registry = object()
+    captured: dict[str, object] = {}
+
+    async def _capture(self, **_kwargs):
+        captured["registry"] = self.registry
+
+    monkeypatch.setattr(
+        "bisheng.bootstrap.approval_scenarios.get_approval_scenario_registry",
+        lambda: registry,
+    )
+
+    with (
+        patch.object(ApprovalCenterService, "decide_task", new=_capture),
+        patch.object(ApprovalInstanceRepository, "get_task", new=AsyncMock(return_value=None)),
+    ):
+        await ApprovalCenterService.decide_task_api(
+            task_id=1,
+            action="approve",
+            operator_user_id=9,
+            operator_user_name="bob",
+            operator_tenant_id=1,
+        )
+
+    assert captured["registry"] is registry
