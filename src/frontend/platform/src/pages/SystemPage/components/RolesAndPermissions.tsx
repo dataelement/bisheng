@@ -36,6 +36,7 @@ import {
   type RelationModel,
   updateRelationModelApi,
 } from "@/controllers/API/permission"
+import { filterAvailablePermissionIds } from "./relationModelPermissions"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { message } from "@/components/bs-ui/toast/use-toast"
 import { useContext, useEffect, useMemo, useState } from "react"
@@ -44,8 +45,6 @@ import Roles from "./Roles"
 
 type TemplatePermission = { id: string; label: string; relation: string }
 type TemplateSection = { title: string; columns: { title: string; items: TemplatePermission[] }[] }
-
-const HIDDEN_RELATION_PERMISSION_IDS = new Set(["share_folder", "share_file"])
 
 const RELATION_LEVEL: Record<string, number> = {
   viewer: 1,
@@ -104,17 +103,6 @@ const DEFAULT_RELATION_MODELS: RelationModel[] = [
   { id: "editor", name: "可编辑", relation: "editor", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
   { id: "viewer", name: "可查看", relation: "viewer", grant_tier: "usage", permissions: [], permissions_explicit: false, is_system: true },
 ]
-
-const filterHiddenTemplatePermissions = (section: TemplateSection): TemplateSection => ({
-  ...section,
-  columns: section.columns.map((column) => ({
-    ...column,
-    items: column.items.filter((item) => !HIDDEN_RELATION_PERMISSION_IDS.has(item.id)),
-  })),
-})
-
-const filterHiddenPermissionIds = (permissionIds: string[]) =>
-  permissionIds.filter((id) => !HIDDEN_RELATION_PERMISSION_IDS.has(id))
 
 const CHANNEL_OPERATION_PERMISSION_IDS = new Set([
   "view_channel",
@@ -194,7 +182,6 @@ const TEMPLATE_SECTIONS: TemplateSection[] = [
           { id: "rename_file", label: "", relation: "can_edit" },
           { id: "delete_file", label: "", relation: "can_delete" },
           { id: "download_file", label: "", relation: "can_read" },
-          { id: "share_file", label: "", relation: "can_manage" },
           { id: "manage_file_relation", label: "", relation: "can_manage" },
         ],
       },
@@ -288,7 +275,6 @@ const PERMISSION_TEMPLATE_IDS = new Set<string>([
   "rename_file",
   "delete_file",
   "download_file",
-  "share_file",
   "manage_file_relation",
   "view_app",
   "use_app",
@@ -432,7 +418,7 @@ export default function RolesAndPermissions() {
       (knowledgeLibraryTemplate || TEMPLATE_SECTIONS[2]) as TemplateSection,
     ]
     if (toolTemplate) sections.push(toolTemplate as TemplateSection)
-    return sections.map(filterHiddenTemplatePermissions)
+    return sections
   }, [applicationTemplate, channelTemplate, knowledgeTemplate, knowledgeLibraryTemplate, toolTemplate])
 
   const defaultPermissionIdsForRelation = (relation: ModelRelation): string[] => {
@@ -465,7 +451,7 @@ export default function RolesAndPermissions() {
     if (!currentModel) return
     const permissions = currentModel.permissions || []
     if (currentModel.permissions_explicit !== false) {
-      setSelectedPermissionIds(filterHiddenPermissionIds(permissions))
+      setSelectedPermissionIds(filterAvailablePermissionIds(permissions, templateSections))
       return
     }
     const ids = templateSections.flatMap((section) =>
