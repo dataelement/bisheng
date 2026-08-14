@@ -648,9 +648,7 @@ async def _grant_departments_search(
     )
 
 
-async def _grant_departments_path_tree(
-    *, tenant_id: int, dept_id: int, restrict_root_path: str | None = None
-) -> dict:
+async def _grant_departments_path_tree(*, tenant_id: int, dept_id: int, restrict_root_path: str | None = None) -> dict:
     return await GrantSubjectQueryService().get_departments_path_tree(
         tenant_id=tenant_id, dept_id=dept_id, restrict_root_path=restrict_root_path
     )
@@ -662,6 +660,7 @@ async def _list_knowledge_space_grant_user_groups(
     return await GrantSubjectQueryService().list_user_groups(
         tenant_id=tenant_id, keyword=keyword, login_user=login_user
     )
+
 
 async def _resolve_grant_subject_tenant_id(
     *,
@@ -810,6 +809,18 @@ async def _add_creator_owner_entry(
     creator_id = int(creator_id)
     creator_is_permanent = resource_type == "knowledge_space"
 
+    # F045 AC-04/AC-12: a department knowledge space has NO front-facing creator —
+    # Knowledge.user_id records the operating super admin for auditing only, and
+    # must not be synthesized back into the permission list. The space's owner
+    # figure is its single space admin (surfaced via the manager binding).
+    if creator_is_permanent and str(resource_id).isdigit():
+        from bisheng.knowledge.domain.models.department_knowledge_space import (
+            DepartmentKnowledgeSpaceDao,
+        )
+
+        if await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(resource_id)) is not None:
+            return permissions
+
     existing_creator_owner = next(
         (
             item
@@ -868,6 +879,18 @@ async def authorize_resource(
         ResourceAuthorizationService,
     )
 
+    # F045 AC-09: a department space without a space admin blocks NEW grants
+    # (revokes stay allowed so cleanup is never locked out).
+    if resource_type == "knowledge_space" and request.grants and str(resource_id).isdigit():
+        from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+            DepartmentKnowledgeSpaceService,
+        )
+
+        try:
+            await DepartmentKnowledgeSpaceService.ensure_space_not_pending_admin(int(resource_id))
+        except BaseErrorCode as error:
+            return error.__class__.return_resp(msg=error.message)
+
     service = ResourceAuthorizationService(
         get_relation_models=_get_relation_models,
         get_bindings=_get_bindings,
@@ -881,6 +904,7 @@ async def authorize_resource(
     except BaseErrorCode as error:
         return error.__class__.return_resp(msg=error.message)
     return resp_200(None)
+
 
 @router.get("/creation-grant-subjects")
 async def get_creation_grant_subjects(

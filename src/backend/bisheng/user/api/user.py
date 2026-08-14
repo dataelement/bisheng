@@ -731,6 +731,17 @@ async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = 
         session.refresh(db_user)
     if disabled_just_now:
         await UserService.ainvalidate_jwt_after_account_disabled(db_user.user_id)
+        # F045: a disabled account cannot stay the single admin of a department
+        # knowledge space — flip those spaces to pending-admin and notify the
+        # super admins. Lazy import keeps user → knowledge off the module graph.
+        from bisheng.knowledge.domain.services.department_knowledge_space_service import (
+            DepartmentKnowledgeSpaceService,
+        )
+
+        await DepartmentKnowledgeSpaceService.handle_admin_invalidated(
+            db_user.user_id,
+            operator_user_id=login_user.user_id,
+        )
     update_user_delete_hook(request, login_user, db_user)
     return resp_200()
 

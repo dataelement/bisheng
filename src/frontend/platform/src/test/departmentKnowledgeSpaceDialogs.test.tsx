@@ -169,17 +169,17 @@ describe("department knowledge space dialogs", () => {
 
     await screen.findByText("可见部门");
     // Visible binding shows the "已配置" badge; a hidden one shows "已隐藏".
-    expect(screen.getByText("已配置")).toBeInTheDocument();
-    expect(screen.getByText("已隐藏")).toBeInTheDocument();
+    expect(screen.getByText("bench.departmentKnowledgeSpaceConfigured")).toBeInTheDocument();
+    expect(screen.getByText("bench.departmentKnowledgeSpaceHidden")).toBeInTheDocument();
     // No diff yet: the visible department starts checked, the hidden one unchecked.
-    expect(screen.getByText("暂无变更")).toBeInTheDocument();
+    expect(screen.getByText("bench.departmentKnowledgeSpaceNoChanges")).toBeInTheDocument();
 
     // Uncheck the already-configured department -> stages a hide.
     const visibleRow = screen.getByText("可见部门").closest("[data-depth]") as HTMLElement;
     fireEvent.click(within(visibleRow).getByRole("checkbox"));
-    await screen.findByText(/待隐藏/);
+    await screen.findByText(/bench\.departmentKnowledgeSpacePendingHide/);
 
-    fireEvent.click(screen.getByText("保存"));
+    fireEvent.click(screen.getByText("bench.departmentKnowledgeSpaceSave"));
     await waitFor(() => {
       expect(mockedSetVisibility).toHaveBeenCalledWith([1], true);
     });

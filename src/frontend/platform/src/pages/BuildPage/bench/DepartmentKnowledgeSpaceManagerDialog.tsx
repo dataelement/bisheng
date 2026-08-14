@@ -1,4 +1,7 @@
 import { LazyDepartmentTree, useLazyDepartmentTree } from "@/components/bs-comp/department";
+import DepartmentUsersSelect, {
+  type DepartmentUserOption,
+} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect";
 import { Button } from "@/components/bs-ui/button";
 import { Checkbox } from "@/components/bs-ui/checkBox";
 import {
@@ -27,7 +30,7 @@ interface Props {
   onChanged?: () => void;
 }
 
-type Binding = { isHidden: boolean; name: string };
+type Binding = { isHidden: boolean; name: string; pendingAdmin: boolean };
 
 export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onChanged }: Props) {
   const { t } = useTranslation();
@@ -40,6 +43,8 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
   // department_id -> binding (visibility + name), including hidden ones so they can be restored.
   const [bindingByDept, setBindingByDept] = useState<Map<number, Binding>>(new Map());
   const [selectedDeptIds, setSelectedDeptIds] = useState<Set<number>>(new Set());
+  // F045: every pending-create department must carry exactly one space admin.
+  const [adminByDept, setAdminByDept] = useState<Map<number, DepartmentUserOption>>(new Map());
   const [saving, setSaving] = useState(false);
   // Names learned from the lazy tree as nodes render/toggle, so the change-preview
   // can label a pending department even when it isn't currently rendered.
@@ -55,7 +60,11 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
       for (const item of spaceRes) {
         if (typeof item.department_id !== "number") continue;
         const isHidden = Boolean(item.is_hidden);
-        nextBindings.set(item.department_id, { isHidden, name: item.department_name || "" });
+        nextBindings.set(item.department_id, {
+          isHidden,
+          name: item.department_name || "",
+          pendingAdmin: Boolean(item.pending_admin),
+        });
         if (item.department_name) nameRef.current.set(item.department_id, item.department_name);
         if (!isHidden) visible.add(item.department_id);
       }
@@ -64,6 +73,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
     // Visible-bound departments start checked; unchecking stages a hide, checking
     // a hidden one stages a restore.
     setSelectedDeptIds(visible);
+    setAdminByDept(new Map());
   }, []);
 
   useEffect(() => {
@@ -101,6 +111,11 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
     [visibleBoundIds, selectedDeptIds],
   );
   const hasChanges = pendingCreate.length + pendingRestore.length + pendingHide.length > 0;
+  // F045: creation is blocked until every pending space has its admin picked.
+  const missingAdminIds = useMemo(
+    () => pendingCreate.filter((id) => !adminByDept.get(id)),
+    [pendingCreate, adminByDept],
+  );
 
   const nameOf = (id: number) => nameRef.current.get(id) || bindingByDept.get(id)?.name || String(id);
 
@@ -111,6 +126,15 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  };
+
+  const setDeptAdmin = (deptId: number, users: DepartmentUserOption[]) => {
+    setAdminByDept((prev) => {
+      const next = new Map(prev);
+      if (users.length) next.set(deptId, users[0]);
+      else next.delete(deptId);
       return next;
     });
   };
@@ -150,11 +174,18 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
   };
 
   const handleSave = async () => {
-    if (!hasChanges) return;
+    if (!hasChanges || missingAdminIds.length) return;
     setSaving(true);
     let ok = true;
     if (ok && pendingCreate.length) {
-      const res = await captureAndAlertRequestErrorHoc(batchCreateDepartmentKnowledgeSpacesApi(pendingCreate));
+      const res = await captureAndAlertRequestErrorHoc(
+        batchCreateDepartmentKnowledgeSpacesApi(
+          pendingCreate.map((department_id) => ({
+            department_id,
+            admin_user_id: Number(adminByDept.get(department_id)!.value),
+          })),
+        ),
+      );
       if (!res) ok = false;
     }
     if (ok && pendingHide.length) {
@@ -173,7 +204,7 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
     }
     toast({
       title: t("prompt"),
-      description: t("bench.departmentKnowledgeSpaceSaveSuccess", "保存成功"),
+      description: t("bench.departmentKnowledgeSpaceSaveSuccess"),
       variant: "success",
     });
     onOpenChange(false);
@@ -191,22 +222,29 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
   const renderRowSuffix = (node: DepartmentTreeNode) => {
     if (visibleBoundIds.has(node.id)) {
       return (
-        <span className="ml-auto shrink-0 rounded bg-[#E8F3FF] px-2 py-0.5 text-xs text-[#165DFF]">
-          {t("bench.departmentKnowledgeSpaceConfigured", "已配置")}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          {bindingByDept.get(node.id)?.pendingAdmin && (
+            <span className="rounded bg-[#FFF7E8] px-2 py-0.5 text-xs text-[#D25F00]">
+              {t("bench.departmentKnowledgeSpacePendingAdmin")}
+            </span>
+          )}
+          <span className="rounded bg-[#E8F3FF] px-2 py-0.5 text-xs text-[#165DFF]">
+            {t("bench.departmentKnowledgeSpaceConfigured")}
+          </span>
         </span>
       );
     }
     if (hiddenBoundIds.has(node.id)) {
       return (
         <span className="ml-auto shrink-0 rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#86909C]">
-          {t("bench.departmentKnowledgeSpaceHidden", "已隐藏")}
+          {t("bench.departmentKnowledgeSpaceHidden")}
         </span>
       );
     }
     return null;
   };
 
-  const renderChangeGroup = (title: string, deptIds: number[], tone: string, withDefaultName: boolean) => {
+  const renderChangeGroup = (title: string, deptIds: number[], tone: string, withCreateFields: boolean) => {
     if (!deptIds.length) return null;
     return (
       <div>
@@ -217,22 +255,40 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
           {deptIds.map((deptId) => (
             <div
               key={deptId}
-              className="flex items-center justify-between rounded-md border border-[#E5E6EB] bg-white px-3 py-2"
+              className="flex items-start justify-between rounded-md border border-[#E5E6EB] bg-white px-3 py-2"
             >
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className={`size-1.5 shrink-0 rounded-full ${tone}`} />
                   <span className="truncate text-sm text-[#1D2129]">{nameOf(deptId)}</span>
                 </div>
-                {withDefaultName && (
-                  <div className="mt-1 pl-3.5 text-xs text-[#86909C]">
-                    {t("bench.departmentKnowledgeSpaceDefaultName", "默认空间名")}：{`${nameOf(deptId)}的知识空间`}
-                  </div>
+                {withCreateFields && (
+                  <>
+                    <div className="mt-1 pl-3.5 text-xs text-[#86909C]">
+                      {t("bench.departmentKnowledgeSpaceDefaultName")}：
+                      {t("bench.departmentKnowledgeSpaceDefaultNameValue", { name: nameOf(deptId) })}
+                    </div>
+                    {/* F045: the single space admin is mandatory per new space. */}
+                    <div className="mt-2 flex items-center gap-2 pl-3.5">
+                      <span className="shrink-0 text-xs text-[#4E5969]">
+                        <span className="text-[#F53F3F]">*</span>
+                        {t("bench.departmentKnowledgeSpaceAdminLabel")}
+                      </span>
+                      <DepartmentUsersSelect
+                        multiple={false}
+                        className="min-w-0 flex-1"
+                        value={adminByDept.get(deptId) ? [adminByDept.get(deptId)!] : []}
+                        onChange={(users) => setDeptAdmin(deptId, users)}
+                        placeholder={t("bench.departmentKnowledgeSpaceAdminSearchPlaceholder")}
+                        searchPlaceholder={t("bench.departmentKnowledgeSpaceAdminSearchPlaceholder")}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
               <button
                 type="button"
-                className="text-[#86909C] hover:text-[#F53F3F]"
+                className="ml-2 mt-0.5 shrink-0 text-[#86909C] hover:text-[#F53F3F]"
                 onClick={() => toggleDept(deptId)}
               >
                 <Plus className="size-4 rotate-45" />
@@ -248,21 +304,16 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[920px]">
         <DialogHeader>
-          <DialogTitle>{t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}</DialogTitle>
-          <DialogDescription>
-            {t(
-              "bench.departmentKnowledgeSpaceManagerDesc2",
-              "勾选部门创建知识空间，取消勾选已配置部门可将其从列表隐藏（不会删除空间与数据）。",
-            )}
-          </DialogDescription>
+          <DialogTitle>{t("bench.departmentKnowledgeSpaceManager")}</DialogTitle>
+          <DialogDescription>{t("bench.departmentKnowledgeSpaceManagerDesc2")}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-[1.1fr_0.9fr] gap-5 py-2">
           <div className="flex h-[460px] flex-col rounded-lg border border-[#ECECEC] bg-white p-4">
             <div className="mb-3 flex shrink-0 justify-end">
               <Button variant="outline" onClick={toggleSelectAll}>
                 {allShowSelected
-                  ? t("bench.departmentKnowledgeSpaceClearAll", "取消全选")
-                  : t("bench.departmentKnowledgeSpaceSelectAll", "全选可创建部门")}
+                  ? t("bench.departmentKnowledgeSpaceClearAll")
+                  : t("bench.departmentKnowledgeSpaceSelectAll")}
               </Button>
             </div>
             <LazyDepartmentTree
@@ -274,35 +325,30 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
           </div>
           <div className="rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
             <p className="text-sm font-medium text-[#1D2129]">
-              {t("bench.departmentKnowledgeSpaceChangePreview", "变更预览")}
+              {t("bench.departmentKnowledgeSpaceChangePreview")}
             </p>
-            <p className="mt-1 text-sm text-[#86909C]">
-              {t(
-                "bench.departmentKnowledgeSpaceSelectedDesc",
-                "默认生成“XX部门的知识空间”，超级管理员为 owner，部门管理员默认为 manager。",
-              )}
-            </p>
+            <p className="mt-1 text-sm text-[#86909C]">{t("bench.departmentKnowledgeSpaceSelectedDesc")}</p>
             <div className="mt-4 max-h-[380px] space-y-4 overflow-y-auto">
               {!hasChanges ? (
                 <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
-                  {t("bench.departmentKnowledgeSpaceNoChanges", "暂无变更")}
+                  {t("bench.departmentKnowledgeSpaceNoChanges")}
                 </div>
               ) : (
                 <>
                   {renderChangeGroup(
-                    t("bench.departmentKnowledgeSpacePendingCreate", "待创建"),
+                    t("bench.departmentKnowledgeSpacePendingCreate"),
                     pendingCreate,
                     "bg-[#00B42A]",
                     true,
                   )}
                   {renderChangeGroup(
-                    t("bench.departmentKnowledgeSpacePendingRestore", "待恢复显示"),
+                    t("bench.departmentKnowledgeSpacePendingRestore"),
                     pendingRestore,
                     "bg-[#165DFF]",
                     false,
                   )}
                   {renderChangeGroup(
-                    t("bench.departmentKnowledgeSpacePendingHide", "待隐藏"),
+                    t("bench.departmentKnowledgeSpacePendingHide"),
                     pendingHide,
                     "bg-[#F53F3F]",
                     false,
@@ -313,12 +359,17 @@ export function DepartmentKnowledgeSpaceManagerDialog({ open, onOpenChange, onCh
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            {t("cancel")}
-          </Button>
-          <Button disabled={saving || !hasChanges} onClick={handleSave}>
-            {t("bench.departmentKnowledgeSpaceSave", "保存")}
-          </Button>
+          <div className="flex w-full items-center justify-end gap-3">
+            {hasChanges && missingAdminIds.length > 0 && (
+              <span className="text-xs text-[#F53F3F]">{t("bench.departmentKnowledgeSpaceAdminRequired")}</span>
+            )}
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              {t("cancel")}
+            </Button>
+            <Button disabled={saving || !hasChanges || missingAdminIds.length > 0} onClick={handleSave}>
+              {t("bench.departmentKnowledgeSpaceSave")}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -780,15 +780,6 @@ def _wire_reconcile(monkeypatch, *, memberships, guest_status="active", guest=Tr
     monkeypatch.setattr(mod.DepartmentChangeHandler, "execute_async", execute)
     # `_remove_department_membership` (vacate path) touches these too.
     monkeypatch.setattr(mod.DepartmentAdminGrantDao, "adelete", AsyncMock())
-    from bisheng.knowledge.domain.services import (
-        department_knowledge_space_service as ks_module,
-    )
-
-    monkeypatch.setattr(
-        ks_module.DepartmentKnowledgeSpaceService,
-        "cleanup_removed_department_admins",
-        AsyncMock(),
-    )
     return SimpleNamespace(add=add, remove=remove, execute=execute, dept_lookup=dept_lookup)
 
 

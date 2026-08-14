@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, UniqueConstraint, text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, UniqueConstraint, text, update
 from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -31,7 +31,17 @@ class DepartmentKnowledgeSpaceBase(SQLModelSerializable):
         ),
         description="Knowledge Space id",
     )
-    created_by: int = Field(default=0, index=True, description="Creator user id")
+    created_by: int = Field(default=0, index=True, description="Creator user id (audit only, never surfaced)")
+    admin_user_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=True,
+            index=True,
+            comment="F045: the single space admin; NULL means the space is pending admin configuration",
+        ),
+        description="The single space admin user id; NULL = pending admin configuration",
+    )
     approval_enabled: bool = Field(
         default=True,
         description="Whether uploads in this department knowledge space require approval",
@@ -103,6 +113,7 @@ class DepartmentKnowledgeSpaceDao(DepartmentKnowledgeSpaceBase):
         department_id: int,
         space_id: int,
         created_by: int,
+        admin_user_id: int | None = None,
         approval_enabled: bool = True,
         sensitive_check_enabled: bool = False,
     ) -> DepartmentKnowledgeSpace:
@@ -111,6 +122,7 @@ class DepartmentKnowledgeSpaceDao(DepartmentKnowledgeSpaceBase):
             department_id=department_id,
             space_id=space_id,
             created_by=created_by,
+            admin_user_id=admin_user_id,
             approval_enabled=approval_enabled,
             sensitive_check_enabled=sensitive_check_enabled,
         )
@@ -158,6 +170,61 @@ class DepartmentKnowledgeSpaceDao(DepartmentKnowledgeSpaceBase):
             if changed:
                 await session.commit()
             return changed
+
+    @classmethod
+    async def aget_by_admin_user_id(
+        cls,
+        admin_user_id: int,
+    ) -> list[DepartmentKnowledgeSpace]:
+        """All department spaces currently administered by ``admin_user_id``."""
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(DepartmentKnowledgeSpace).where(
+                    DepartmentKnowledgeSpace.admin_user_id == admin_user_id,
+                )
+            )
+            return result.all()
+
+    @classmethod
+    async def areplace_admin(
+        cls,
+        *,
+        row_id: int,
+        expected_admin_user_id: int | None,
+        new_admin_user_id: int | None,
+    ) -> bool:
+        """Atomically swap the space admin, guarded by the expected current value.
+
+        Uses a conditional single-row UPDATE so two concurrent replacements can
+        never interleave into a lost update: the second writer sees a stale
+        ``expected_admin_user_id`` and gets ``False``. The row is re-read via a
+        tenant-filtered SELECT first, so the bulk-UPDATE tenant-injection gap
+        (backend AGENTS.md pitfall) does not apply — the WHERE is on the PK.
+        """
+        async with get_async_db_session() as session:
+            result = await session.exec(
+                select(DepartmentKnowledgeSpace).where(
+                    DepartmentKnowledgeSpace.id == row_id,
+                )
+            )
+            row = result.first()
+            if row is None or row.admin_user_id != expected_admin_user_id:
+                return False
+            stmt = (
+                update(DepartmentKnowledgeSpace)
+                .where(
+                    DepartmentKnowledgeSpace.id == row_id,
+                    (
+                        DepartmentKnowledgeSpace.admin_user_id.is_(None)
+                        if expected_admin_user_id is None
+                        else DepartmentKnowledgeSpace.admin_user_id == expected_admin_user_id
+                    ),
+                )
+                .values(admin_user_id=new_admin_user_id)
+            )
+            exec_result = await session.exec(stmt)
+            await session.commit()
+            return exec_result.rowcount == 1
 
     @classmethod
     async def aget_by_department_id(

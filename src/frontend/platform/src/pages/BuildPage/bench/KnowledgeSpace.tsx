@@ -21,6 +21,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DepartmentKnowledgeSpaceManagerDialog } from "./DepartmentKnowledgeSpaceManagerDialog";
+import { DepartmentSpaceRow } from "./DepartmentSpaceRow";
 import ConfigInheritanceBanner, { resolveConfigEnvelope } from "./ConfigInheritanceBanner";
 import {
     KnowledgeSpaceSensitivePolicy,
@@ -216,10 +217,10 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                         <div className="flex items-center justify-between gap-4">
                                             <div>
                                                 <p className="text-lg font-bold">
-                                                    {t("bench.departmentKnowledgeSpace", "部门知识空间")}
+                                                    {t("bench.departmentKnowledgeSpace")}
                                                 </p>
                                                 <p className="mt-1 text-sm text-[#86909C]">
-                                                    {t("bench.departmentKnowledgeSpaceDesc", "统一管理部门知识空间创建，并查看已绑定部门的知识空间。")}
+                                                    {t("bench.departmentKnowledgeSpaceDesc")}
                                                 </p>
                                             </div>
                                             <Button
@@ -227,17 +228,17 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                                 className="bg-gray-50"
                                                 onClick={() => setManagerOpen(true)}
                                             >
-                                                {t("bench.departmentKnowledgeSpaceManager", "部门知识空间管理")}
+                                                {t("bench.departmentKnowledgeSpaceManager")}
                                             </Button>
                                         </div>
                                         <div className="mt-5 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                                             <div className="flex items-center justify-between gap-4">
                                                 <div>
                                                     <p className="text-sm font-medium text-[#1D2129]">
-                                                        {t("bench.departmentKnowledgeSpaceCreatedList", "已创建知识空间")}
+                                                        {t("bench.departmentKnowledgeSpaceCreatedList")}
                                                     </p>
                                                     <p className="mt-1 text-sm text-[#86909C]">
-                                                        {t("bench.departmentKnowledgeSpaceCreatedListDesc", "已绑定部门的知识空间会统一展示在这里。")}
+                                                        {t("bench.departmentKnowledgeSpaceCreatedListDesc")}
                                                     </p>
                                                 </div>
                                                 <span className="rounded bg-white px-2.5 py-1 text-xs text-[#4E5969] border border-[#E5E6EB]">
@@ -251,30 +252,15 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                                     </div>
                                                 ) : !departmentSpaces.length ? (
                                                     <div className="rounded-lg border border-dashed border-[#D9DDE5] bg-white px-4 py-8 text-center text-sm text-[#86909C]">
-                                                        {t("bench.departmentKnowledgeSpaceCreatedEmpty", "暂无已创建的部门知识空间")}
+                                                        {t("bench.departmentKnowledgeSpaceCreatedEmpty")}
                                                     </div>
                                                 ) : (
                                                     departmentSpaces.map((space) => (
-                                                        <div
+                                                        <DepartmentSpaceRow
                                                             key={space.id}
-                                                            className="rounded-lg border border-[#E5E6EB] bg-white px-4 py-3"
-                                                        >
-                                                            <div className="flex items-start justify-between gap-4">
-                                                                <div className="min-w-0">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <p className="truncate text-sm font-medium text-[#1D2129]">
-                                                                            {space.name}
-                                                                        </p>
-                                                                        <span className="rounded bg-[#F2F3F5] px-2 py-0.5 text-xs text-[#4E5969]">
-                                                                            {space.department_name || "--"}
-                                                                        </span>
-                                                                    </div>
-                                                                    <p className="mt-2 text-xs text-[#86909C]">
-                                                                        {t("bench.departmentKnowledgeSpaceDepartmentLabel", "所属部门")}：{space.department_name || "--"}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                        </div>
+                                                            space={space}
+                                                            onChanged={loadDepartmentSpaces}
+                                                        />
                                                     ))
                                                 )}
                                             </div>

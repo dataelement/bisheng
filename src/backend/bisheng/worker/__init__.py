@@ -15,6 +15,7 @@ from bisheng.worker.knowledge.scheduler import (
     reconcile_file_scheduler_task,
     trigger_dispatch_task,
 )
+from bisheng.worker.knowledge.space_admin_reconcile import reconcile_department_space_admins
 from bisheng.worker.permission.retry_failed_tuples import retry_failed_tuples
 from bisheng.worker.telemetry.mid_table import (
     sync_mid_app_increment,

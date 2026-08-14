@@ -1,5 +1,8 @@
 import { SubjectSearchDepartment } from "@/components/bs-comp/permission/SubjectSearchDepartment"
 import type { SelectedSubject } from "@/components/bs-comp/permission/types"
+import DepartmentUsersSelect, {
+  type DepartmentUserOption,
+} from "@/components/bs-comp/selectComponent/DepartmentUsersSelect"
 import { Button } from "@/components/bs-ui/button"
 import {
   Dialog,
@@ -34,6 +37,8 @@ export function DepartmentSpaceDialog({
   const { t } = useTranslation("bs")
   const [selected, setSelected] = useState<SelectedSubject[]>([])
   const [departmentSpaces, setDepartmentSpaces] = useState<DepartmentKnowledgeSpaceSummary[]>([])
+  // F045: every new department space needs its single space admin picked.
+  const [adminByDept, setAdminByDept] = useState<Map<number, DepartmentUserOption>>(new Map())
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -41,6 +46,7 @@ export function DepartmentSpaceDialog({
     if (!open) {
       setSelected([])
       setDepartmentSpaces([])
+      setAdminByDept(new Map())
       setLoading(false)
       setSubmitting(false)
       return
@@ -83,6 +89,20 @@ export function DepartmentSpaceDialog({
     [existingDepartmentIdSet, selected]
   )
 
+  const missingAdminIds = useMemo(
+    () => selectedDepartmentIds.filter((id) => !adminByDept.get(id)),
+    [adminByDept, selectedDepartmentIds]
+  )
+
+  const setDeptAdmin = (deptId: number, users: DepartmentUserOption[]) => {
+    setAdminByDept((prev) => {
+      const next = new Map(prev)
+      if (users.length) next.set(deptId, users[0])
+      else next.delete(deptId)
+      return next
+    })
+  }
+
   const handleSubmit = async () => {
     if (!selectedDepartmentIds.length) {
       toast({
@@ -92,10 +112,23 @@ export function DepartmentSpaceDialog({
       })
       return
     }
+    if (missingAdminIds.length) {
+      toast({
+        title: t("prompt"),
+        variant: "warning",
+        description: t("departmentSpace.adminRequired"),
+      })
+      return
+    }
 
     setSubmitting(true)
     const res = await captureAndAlertRequestErrorHoc(
-      batchCreateDepartmentKnowledgeSpacesApi(selectedDepartmentIds)
+      batchCreateDepartmentKnowledgeSpacesApi(
+        selectedDepartmentIds.map((department_id) => ({
+          department_id,
+          admin_user_id: Number(adminByDept.get(department_id)!.value),
+        }))
+      )
     )
     setSubmitting(false)
 
@@ -153,6 +186,34 @@ export function DepartmentSpaceDialog({
             </p>
           </div>
 
+          {/* F045: one mandatory space admin per new space. */}
+          {selectedDepartmentIds.length > 0 && (
+            <div className="space-y-2">
+              <Label>
+                <span className="text-red-500">*</span>
+                {t("departmentSpace.adminLabel")}
+              </Label>
+              <div className="max-h-[180px] space-y-2 overflow-y-auto">
+                {selectedDepartmentIds.map((deptId) => {
+                  const subject = selected.find((s) => s.id === deptId)
+                  return (
+                    <div key={deptId} className="flex items-center gap-3">
+                      <span className="w-40 shrink-0 truncate text-sm">{subject?.name || deptId}</span>
+                      <DepartmentUsersSelect
+                        multiple={false}
+                        className="min-w-0 flex-1"
+                        value={adminByDept.get(deptId) ? [adminByDept.get(deptId)!] : []}
+                        onChange={(users) => setDeptAdmin(deptId, users)}
+                        placeholder={t("departmentSpace.adminSearchPlaceholder")}
+                        searchPlaceholder={t("departmentSpace.adminSearchPlaceholder")}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>{t("departmentSpace.defaultRules")}</Label>
             <div className="rounded-md border px-4 py-3 text-sm text-muted-foreground">
@@ -170,7 +231,10 @@ export function DepartmentSpaceDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("cancel")}
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !selectedDepartmentIds.length}>
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || !selectedDepartmentIds.length || missingAdminIds.length > 0}
+          >
             {submitting ? t("departmentSpace.submitting") : t("departmentSpace.createAction")}
           </Button>
         </DialogFooter>

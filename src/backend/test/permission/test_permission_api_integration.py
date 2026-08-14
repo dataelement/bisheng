@@ -693,10 +693,17 @@ class TestPermissionApiIntegration:
             ResourcePermissionItem(subject_type="user", subject_id=7, subject_name="creator", relation="owner"),
             ResourcePermissionItem(subject_type="user", subject_id=9, subject_name="co-owner", relation="owner"),
         ]
-        with patch(
-            "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
-            new_callable=AsyncMock,
-            return_value=7,
+        with (
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+                new_callable=AsyncMock,
+                return_value=7,
+            ),
+            patch(
+                "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             out = await _add_creator_owner_entry(
                 resource_type="knowledge_space", resource_id="134", permissions=perms, model_map=model_map
@@ -715,10 +722,17 @@ class TestPermissionApiIntegration:
         perms = [
             ResourcePermissionItem(subject_type="user", subject_id=9, subject_name="co-owner", relation="owner"),
         ]
-        with patch(
-            "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
-            new_callable=AsyncMock,
-            return_value=7,
+        with (
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+                new_callable=AsyncMock,
+                return_value=7,
+            ),
+            patch(
+                "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
         ):
             out = await _add_creator_owner_entry(
                 resource_type="knowledge_space", resource_id="134", permissions=perms, model_map=model_map
@@ -726,6 +740,33 @@ class TestPermissionApiIntegration:
         by_id = {int(i.subject_id): i for i in out}
         assert 7 in by_id and by_id[7].relation == "owner" and by_id[7].is_creator is True
         assert 9 in by_id
+
+    @pytest.mark.asyncio
+    async def test_add_creator_owner_entry_skips_department_space_creator(self):
+        """F045 AC-04/AC-12: a department space never surfaces its creator — the
+        operating super admin stays audit-only, no synthesized owner row."""
+        from types import SimpleNamespace
+
+        from bisheng.permission.api.endpoints.resource_permission import _add_creator_owner_entry
+
+        model_map = {"owner": {"id": "owner", "name": "所有者"}}
+        perms = []
+        with (
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService._get_resource_creator",
+                new_callable=AsyncMock,
+                return_value=1,
+            ),
+            patch(
+                "bisheng.knowledge.domain.models.department_knowledge_space.DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=SimpleNamespace(space_id=134, admin_user_id=7),
+            ),
+        ):
+            out = await _add_creator_owner_entry(
+                resource_type="knowledge_space", resource_id="134", permissions=perms, model_map=model_map
+            )
+        assert out == []
 
     @pytest.mark.asyncio
     async def test_add_creator_owner_entry_omits_non_kspace_creator_when_other_owner_exists(self):
@@ -924,8 +965,7 @@ class TestPermissionApiIntegration:
 
         with (
             patch(
-                "bisheng.permission.api.endpoints.resource_permission."
-                "GrantSubjectQueryService.query_resource_users",
+                "bisheng.permission.api.endpoints.resource_permission.GrantSubjectQueryService.query_resource_users",
                 new_callable=AsyncMock,
                 return_value=[
                     {

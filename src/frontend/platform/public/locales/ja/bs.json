@@ -1088,7 +1088,35 @@
     "fetchKbFailed": "ナレッジベース取得に失敗しました",
     "addMoreModels": "モデルを追加",
     "home": "ホーム",
-    "appCenter": "アプリ"
+    "appCenter": "アプリ",
+    "departmentKnowledgeSpace": "部門ナレッジスペース",
+    "departmentKnowledgeSpaceDesc": "部門ナレッジスペースの作成を一元管理し、バインド済みのスペースを確認します。",
+    "departmentKnowledgeSpaceManager": "部門ナレッジスペース管理",
+    "departmentKnowledgeSpaceManagerDesc2": "部門をチェックしてナレッジスペースを作成します。設定済み部門のチェックを外すと一覧から非表示になります（スペースとデータは保持されます）。",
+    "departmentKnowledgeSpaceCreatedList": "作成済みナレッジスペース",
+    "departmentKnowledgeSpaceCreatedListDesc": "部門にバインドされたナレッジスペースはここに一覧表示されます。",
+    "departmentKnowledgeSpaceCreatedEmpty": "作成済みの部門ナレッジスペースはありません",
+    "departmentKnowledgeSpaceDepartmentLabel": "所属部門",
+    "departmentKnowledgeSpaceChangePreview": "変更プレビュー",
+    "departmentKnowledgeSpaceSelectedDesc": "デフォルトで「◯◯部門のナレッジスペース」が作成されます。新しいスペースごとに責任者の指定が必須です。スーパー管理者は作成のみを行い、スペースのメンバーや権限には入りません。",
+    "departmentKnowledgeSpaceNoChanges": "変更はありません",
+    "departmentKnowledgeSpacePendingCreate": "作成待ち",
+    "departmentKnowledgeSpacePendingRestore": "再表示待ち",
+    "departmentKnowledgeSpacePendingHide": "非表示待ち",
+    "departmentKnowledgeSpaceDefaultName": "デフォルトのスペース名",
+    "departmentKnowledgeSpaceConfigured": "設定済み",
+    "departmentKnowledgeSpaceHidden": "非表示",
+    "departmentKnowledgeSpaceSelectAll": "作成可能な部門をすべて選択",
+    "departmentKnowledgeSpaceClearAll": "選択をすべて解除",
+    "departmentKnowledgeSpaceSave": "保存",
+    "departmentKnowledgeSpaceSaveSuccess": "保存しました",
+    "departmentKnowledgeSpaceAdminLabel": "スペース責任者",
+    "departmentKnowledgeSpaceAdminSearchPlaceholder": "組織内のユーザーを検索",
+    "departmentKnowledgeSpaceAdminRequired": "新しいスペースごとにスペース責任者を選択してください",
+    "departmentKnowledgeSpacePendingAdmin": "責任者未設定",
+    "departmentKnowledgeSpaceReplaceAdmin": "責任者を変更",
+    "departmentKnowledgeSpaceReplaceAdminSuccess": "責任者を更新しました",
+    "departmentKnowledgeSpaceDefaultNameValue": "{{name}}的知识空间"
   },
   "tools": {
     "addTool": "ツール追加",
@@ -2010,5 +2038,8 @@
       "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
     }
-  }
+  },
+  "departmentSpace.adminLabel": "スペース責任者",
+  "departmentSpace.adminSearchPlaceholder": "組織内のユーザーを検索",
+  "departmentSpace.adminRequired": "新しいスペースごとにスペース責任者を選択してください"
 }

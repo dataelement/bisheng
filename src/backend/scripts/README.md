@@ -184,6 +184,29 @@ Options:
 
 - `--apply`: perform the revokes; default is dry-run. Irreversible (revokes group members' access) — review dry-run output first.
 
+### `migrate_department_space_admin.py`
+
+One-off F045 normalization to the single-space-admin model. Department knowledge
+spaces used to derive admins from the creating super admin (CREATOR row + `owner`
+tuple) and the auto-synced department admins; F045 replaces both with one explicit
+admin in `department_knowledge_space.admin_user_id`.
+
+Behavior (per binding with `admin_user_id IS NULL`; normalized rows skipped → idempotent):
+
+- exactly one valid ADMIN member → adopted as the space admin (column + `space_admin` member row + `manager` tuple)
+- zero or multiple valid ADMINs → space left in the pending-admin state for the super admin to fix in the UI
+- non-adopted ADMIN members demoted (department_admin-sourced revert/remove; manual → MEMBER), `manager` tuples revoked
+- creator footprint cleared: CREATOR member rows deleted, `owner` tuple revoked (audit columns untouched)
+
+Usage:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/migrate_department_space_admin.py            # dry-run
+PYTHONPATH=./ .venv/bin/python scripts/migrate_department_space_admin.py --apply    # execute
+# or: bash scripts/migrate_department_space_admin.sh --apply
+```
+
 ### `permission_migration.sh`
 
 Manual runner for the F006 historical permission migration from RBAC to ReBAC.

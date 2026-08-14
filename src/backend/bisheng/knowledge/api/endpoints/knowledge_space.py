@@ -18,6 +18,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDownloadReq,
     ChatFolderReq,
     ChatReq,
+    DepartmentKnowledgeSpaceAdminReplaceReq,
     DepartmentKnowledgeSpaceBatchCreateReq,
     DepartmentKnowledgeSpaceVisibilityReq,
     FileCreateReq,
@@ -233,6 +234,26 @@ async def set_department_spaces_visibility(
             req=req,
         )
         return resp_200({"changed": changed})
+    except BaseErrorCode as e:
+        return e.return_resp_instance()
+
+
+@router.put("/department/{department_id}/admin")
+async def replace_department_space_admin(
+    department_id: int,
+    req: DepartmentKnowledgeSpaceAdminReplaceReq,
+    request: Request,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+) -> Any:
+    """F045: atomically replace the single space admin (super admin only)."""
+    try:
+        space = await DepartmentKnowledgeSpaceService.replace_admin(
+            request=request,
+            login_user=login_user,
+            department_id=department_id,
+            new_admin_user_id=req.admin_user_id,
+        )
+        return resp_200(space)
     except BaseErrorCode as e:
         return e.return_resp_instance()
 

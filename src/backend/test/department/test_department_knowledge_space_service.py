@@ -6,12 +6,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceExistsError
-from bisheng.common.models.space_channel_member import (
-    BusinessTypeEnum,
-    MembershipStatusEnum,
-    SpaceChannelMember,
-    UserRoleEnum,
-)
 from bisheng.knowledge.domain.models.knowledge import (
     AuthTypeEnum,
     Knowledge,
@@ -191,10 +185,16 @@ def _make_department(*, dept_id: int = 10, name: str = "财务部"):
     )
 
 
+def _stub_settings():
+    return SimpleNamespace(multi_tenant=SimpleNamespace(enabled=False))
+
+
 @pytest.mark.asyncio
 async def test_batch_create_spaces_creates_binding_and_returns_infos():
     DepartmentKnowledgeSpaceService = _load_service_class()
-    req = DepartmentKnowledgeSpaceBatchCreateReq(items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)])
+    req = DepartmentKnowledgeSpaceBatchCreateReq(
+        items=[DepartmentKnowledgeSpaceBatchItem(department_id=10, admin_user_id=2)]
+    )
     login_user = _make_login_user()
     department = _make_department()
     created_space = SimpleNamespace(id=101)
@@ -221,18 +221,26 @@ async def test_batch_create_spaces_creates_binding_and_returns_infos():
             new_callable=AsyncMock,
         ) as mock_binding_create,
         patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentService.aget_admins",
-            new_callable=AsyncMock,
-            return_value=[{"user_id": 2, "user_name": "dept-admin"}],
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._grant_default_department_admins",
-            new_callable=AsyncMock,
-        ) as mock_grant_admins,
-        patch(
             "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._grant_department_members_viewer",
             new_callable=AsyncMock,
         ) as mock_grant_department_viewer,
+        patch(
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.settings",
+            _stub_settings(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.UserDao.aget_user",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(user_id=2, delete=0),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._materialize_space_admin",
+            new_callable=AsyncMock,
+        ) as mock_materialize,
+        patch(
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceService._notify",
+            new_callable=AsyncMock,
+        ),
         patch(
             "bisheng.knowledge.domain.services.department_knowledge_space_service.KnowledgeSpaceService.create_knowledge_space",
             new_callable=AsyncMock,
@@ -256,9 +264,10 @@ async def test_batch_create_spaces_creates_binding_and_returns_infos():
         department_id=10,
         space_id=101,
         created_by=1,
+        admin_user_id=2,
     )
     mock_grant_department_viewer.assert_awaited_once_with(space_id=101, department_id=10)
-    mock_grant_admins.assert_awaited_once()
+    mock_materialize.assert_awaited_once_with(space_id=101, user_id=2)
 
 
 @pytest.mark.asyncio
@@ -300,94 +309,6 @@ async def test_batch_create_spaces_requires_super_admin():
             login_user=_make_login_user(is_admin=False),
             req=req,
         )
-
-
-@pytest.mark.asyncio
-async def test_grant_default_department_admins_promotes_manual_member_consistently():
-    DepartmentKnowledgeSpaceService = _load_service_class()
-    existing_member = SpaceChannelMember(
-        business_id="101",
-        business_type=BusinessTypeEnum.SPACE,
-        user_id=2,
-        user_role=UserRoleEnum.MEMBER,
-        status=MembershipStatusEnum.ACTIVE,
-        membership_source="manual",
-    )
-
-    with (
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.async_find_member",
-            new_callable=AsyncMock,
-            return_value=existing_member,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.update",
-            new_callable=AsyncMock,
-        ) as mock_update,
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.PermissionService.authorize",
-            new_callable=AsyncMock,
-        ) as mock_authorize,
-    ):
-        await DepartmentKnowledgeSpaceService._grant_default_department_admins(
-            request=SimpleNamespace(),
-            login_user=_make_login_user(),
-            space_id=101,
-            admin_user_ids=[2],
-        )
-
-    assert existing_member.user_role == UserRoleEnum.ADMIN
-    assert existing_member.membership_source == "department_admin"
-    assert existing_member.department_admin_promoted_from_role == UserRoleEnum.MEMBER.value
-    mock_update.assert_awaited_once_with(existing_member)
-    grant = mock_authorize.await_args.kwargs["grants"][0]
-    assert grant.subject_type == "user"
-    assert grant.subject_id == 2
-    assert grant.relation == "manager"
-
-
-@pytest.mark.asyncio
-async def test_sync_removed_admin_restores_promoted_manual_member_role():
-    DepartmentKnowledgeSpaceService = _load_service_class()
-    existing_member = SpaceChannelMember(
-        business_id="101",
-        business_type=BusinessTypeEnum.SPACE,
-        user_id=2,
-        user_role=UserRoleEnum.ADMIN,
-        status=MembershipStatusEnum.ACTIVE,
-        membership_source="department_admin",
-        department_admin_promoted_from_role=UserRoleEnum.MEMBER.value,
-    )
-
-    with (
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.async_find_member",
-            new_callable=AsyncMock,
-            return_value=existing_member,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.update",
-            new_callable=AsyncMock,
-        ) as mock_update,
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.PermissionService.authorize",
-            new_callable=AsyncMock,
-        ) as mock_authorize,
-    ):
-        await DepartmentKnowledgeSpaceService._sync_removed_admin(
-            space_service=None,
-            space_id=101,
-            user_id=2,
-        )
-
-    assert existing_member.user_role == UserRoleEnum.MEMBER
-    assert existing_member.membership_source == "manual"
-    assert existing_member.department_admin_promoted_from_role is None
-    mock_update.assert_awaited_once_with(existing_member)
-    revoke = mock_authorize.await_args.kwargs["revokes"][0]
-    assert revoke.subject_type == "user"
-    assert revoke.subject_id == 2
-    assert revoke.relation == "manager"
 
 
 @pytest.mark.asyncio
@@ -759,7 +680,9 @@ async def test_batch_create_defaults_to_unpublished():
     DepartmentKnowledgeSpaceService = _load_service_class()
     assert DepartmentKnowledgeSpaceService.DEFAULT_IS_RELEASED is False
 
-    req = DepartmentKnowledgeSpaceBatchCreateReq(items=[DepartmentKnowledgeSpaceBatchItem(department_id=10)])
+    req = DepartmentKnowledgeSpaceBatchCreateReq(
+        items=[DepartmentKnowledgeSpaceBatchItem(department_id=10, admin_user_id=2)]
+    )
     department = _make_department()
 
     with (
@@ -778,16 +701,21 @@ async def test_batch_create_defaults_to_unpublished():
             new_callable=AsyncMock,
         ),
         patch(
-            f"{_SERVICE_MODULE}.DepartmentService.aget_admins",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
-        patch(
-            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._grant_default_department_admins",
-            new_callable=AsyncMock,
-        ),
-        patch(
             f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._grant_department_members_viewer",
+            new_callable=AsyncMock,
+        ),
+        patch(f"{_SERVICE_MODULE}.settings", _stub_settings()),
+        patch(
+            f"{_SERVICE_MODULE}.UserDao.aget_user",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(user_id=2, delete=0),
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._materialize_space_admin",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            f"{_SERVICE_MODULE}.DepartmentKnowledgeSpaceService._notify",
             new_callable=AsyncMock,
         ),
         patch(

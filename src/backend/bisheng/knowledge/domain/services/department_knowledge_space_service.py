@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 
 from fastapi import Request
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.department import DepartmentNotFoundError
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceExistsError
+from bisheng.common.errcode.knowledge_space import (
+    DepartmentKnowledgeSpaceExistsError,
+    SpaceAdminConflictError,
+    SpaceAdminInvalidUserError,
+    SpaceAdminRequiredError,
+    SpaceNotFoundError,
+    SpacePendingAdminError,
+)
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -16,8 +23,11 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
+from bisheng.common.services.config_service import settings
+from bisheng.core.context.tenant import bypass_tenant_filter, get_current_tenant_id, set_current_tenant_id
+from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-from bisheng.department.domain.services.department_service import DepartmentService
+from bisheng.database.models.tenant import UserTenantDao
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
@@ -27,15 +37,24 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceVisibilityReq,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
-    SPACE_ADMIN_REVOKED_MESSAGE,
-    SPACE_MEMBER_REMOVED_MESSAGE,
     KnowledgeSpaceInfoResp,
     KnowledgeSpaceService,
 )
+from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem, AuthorizeRevokeItem
 from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.user.domain.models.user import UserDao
 
 _logger = logging.getLogger(__name__)
+
+# Notification action codes (client i18n key: com_notifications_action_<code>).
+SPACE_ADMIN_ASSIGNED_MESSAGE = "assigned_knowledge_space_admin"
+SPACE_ADMIN_REVOKED_MESSAGE = "revoked_knowledge_space_admin"
+# F045: sent to super admins when a department space loses its admin.
+SPACE_PENDING_ADMIN_MESSAGE = "pending_knowledge_space_admin"
+
+# F045: membership_source marking the materialized single-space-admin row.
+SPACE_ADMIN_MEMBERSHIP_SOURCE = "space_admin"
 
 
 class DepartmentKnowledgeSpaceService:
@@ -67,53 +86,13 @@ class DepartmentKnowledgeSpaceService:
         return dept_map
 
     @classmethod
-    async def _grant_default_department_admins(
-        cls,
-        *,
-        request: Request,
-        login_user: UserPayload,
-        space_id: int,
-        admin_user_ids: Iterable[int],
-    ) -> None:
-        for admin_user_id in sorted(set(int(uid) for uid in admin_user_ids if int(uid) != login_user.user_id)):
-            existing = await SpaceChannelMemberDao.async_find_member(space_id, admin_user_id)
-            if existing is not None:
-                if existing.user_role == UserRoleEnum.CREATOR:
-                    continue
-                if existing.membership_source == "department_admin":
-                    if existing.user_role != UserRoleEnum.ADMIN:
-                        existing.user_role = UserRoleEnum.ADMIN
-                        existing.status = MembershipStatusEnum.ACTIVE
-                        await SpaceChannelMemberDao.update(existing)
-                    await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
-                    continue
-                if existing.user_role == UserRoleEnum.ADMIN:
-                    if existing.status != MembershipStatusEnum.ACTIVE:
-                        existing.status = MembershipStatusEnum.ACTIVE
-                        await SpaceChannelMemberDao.update(existing)
-                    await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
-                    continue
-                existing.department_admin_promoted_from_role = existing.user_role.value
-                existing.user_role = UserRoleEnum.ADMIN
-                existing.status = MembershipStatusEnum.ACTIVE
-                existing.membership_source = "department_admin"
-                await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
-                continue
+    async def _grant_space_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+        """Write the ``knowledge_space#manager`` tuple for the space admin.
 
-            member = SpaceChannelMember(
-                business_id=str(space_id),
-                business_type=BusinessTypeEnum.SPACE,
-                user_id=admin_user_id,
-                user_role=UserRoleEnum.ADMIN,
-                status=MembershipStatusEnum.ACTIVE,
-                membership_source="department_admin",
-            )
-            await SpaceChannelMemberDao.async_insert_member(member)
-            await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
-
-    @classmethod
-    async def _grant_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+        FGA failure is retried once by ``PermissionService`` internals and then
+        logged: the DB column stays the source of truth and the reconcile task
+        (T012) repairs the tuple later, so the swap itself must not roll back.
+        """
         try:
             await PermissionService.authorize(
                 object_type="knowledge_space",
@@ -129,14 +108,14 @@ class DepartmentKnowledgeSpaceService:
             )
         except Exception as e:
             _logger.warning(
-                "Failed to write department admin manager tuple for space %s user %s: %s",
+                "Failed to write space admin manager tuple for space %s user %s: %s",
                 space_id,
                 user_id,
                 e,
             )
 
     @classmethod
-    async def _revoke_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+    async def _revoke_space_admin_manager(cls, *, space_id: int, user_id: int) -> None:
         try:
             await PermissionService.authorize(
                 object_type="knowledge_space",
@@ -152,11 +131,264 @@ class DepartmentKnowledgeSpaceService:
             )
         except Exception as e:
             _logger.warning(
-                "Failed to delete department admin manager tuple for space %s user %s: %s",
+                "Failed to delete space admin manager tuple for space %s user %s: %s",
                 space_id,
                 user_id,
                 e,
             )
+
+    @classmethod
+    async def _validate_admin_candidate(cls, *, user_id: int | None, tenant_id: int) -> int:
+        """AC-02: the space admin must be an active user of the current tenant.
+
+        Returns the validated user id. ``None``/0 → SpaceAdminRequiredError
+        (AC-01); unknown, deleted/disabled, or out-of-tenant user →
+        SpaceAdminInvalidUserError.
+        """
+        if not user_id:
+            raise SpaceAdminRequiredError()
+        user = await UserDao.aget_user(int(user_id))
+        if user is None or user.delete:
+            raise SpaceAdminInvalidUserError()
+        if settings.multi_tenant.enabled:
+            user_tenant = await UserTenantDao.aget_user_tenant(int(user_id), int(tenant_id))
+            if user_tenant is None or user_tenant.is_active != 1:
+                raise SpaceAdminInvalidUserError()
+        return int(user_id)
+
+    @classmethod
+    async def _materialize_space_admin(cls, *, space_id: int, user_id: int) -> None:
+        """Materialize the single space admin: ADMIN member row + manager tuple.
+
+        The ``department_knowledge_space.admin_user_id`` column is the source of
+        truth; this row/tuple pair only makes the admin visible to the member UI
+        and the approval resolver (design decision 2).
+        """
+        existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
+        if existing is not None:
+            if existing.membership_source != SPACE_ADMIN_MEMBERSHIP_SOURCE:
+                # Remember the pre-promotion role so a later replacement can
+                # demote back instead of dropping the membership (AC-07).
+                existing.department_admin_promoted_from_role = (
+                    existing.user_role.value if existing.user_role != UserRoleEnum.ADMIN else None
+                )
+                existing.membership_source = SPACE_ADMIN_MEMBERSHIP_SOURCE
+            existing.user_role = UserRoleEnum.ADMIN
+            existing.status = MembershipStatusEnum.ACTIVE
+            await SpaceChannelMemberDao.update(existing)
+        else:
+            member = SpaceChannelMember(
+                business_id=str(space_id),
+                business_type=BusinessTypeEnum.SPACE,
+                user_id=user_id,
+                user_role=UserRoleEnum.ADMIN,
+                status=MembershipStatusEnum.ACTIVE,
+                membership_source=SPACE_ADMIN_MEMBERSHIP_SOURCE,
+            )
+            await SpaceChannelMemberDao.async_insert_member(member)
+        await cls._grant_space_admin_manager(space_id=space_id, user_id=user_id)
+
+    @classmethod
+    async def _dematerialize_space_admin(cls, *, space_id: int, user_id: int) -> None:
+        """Clear the space-admin materialization for ``user_id`` (AC-07).
+
+        A member promoted from an ordinary role reverts to it; a pure admin row
+        is removed. The manager tuple is revoked either way.
+        """
+        existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
+        if existing is not None and existing.membership_source == SPACE_ADMIN_MEMBERSHIP_SOURCE:
+            previous_role = existing.department_admin_promoted_from_role
+            if previous_role:
+                existing.user_role = UserRoleEnum(previous_role)
+                existing.membership_source = "manual"
+                existing.department_admin_promoted_from_role = None
+                existing.status = MembershipStatusEnum.ACTIVE
+                await SpaceChannelMemberDao.update(existing)
+            else:
+                await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
+        await cls._revoke_space_admin_manager(space_id=space_id, user_id=user_id)
+
+    @classmethod
+    async def _super_admin_user_ids(cls) -> list[int]:
+        """Platform super admins (AdminRole users) — notification receivers only.
+
+        Never written into any space relation (AC-10).
+        """
+        from bisheng.database.constants import AdminRole
+        from bisheng.user.domain.models.user_role import UserRoleDao
+
+        rows = await UserRoleDao.aget_roles_user([AdminRole])
+        return sorted({int(row.user_id) for row in rows})
+
+    @classmethod
+    async def _notify(
+        cls,
+        *,
+        sender_user_id: int,
+        receiver_user_ids: list[int],
+        action_code: str,
+        space_id: int,
+        navigable: bool = False,
+    ) -> None:
+        """Best-effort in-app notification; failures never break the main flow."""
+        receivers = [uid for uid in receiver_user_ids if uid and uid != sender_user_id]
+        if not receivers:
+            return
+        try:
+            from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+            from bisheng.message.api.dependencies import get_message_service as _get_message_service
+
+            space = await KnowledgeDao.aquery_by_id(space_id)
+            space_name = space.name if space else str(space_id)
+            async with get_async_db_session() as session:
+                message_service = await _get_message_service(session)
+                await message_service.send_generic_notify(
+                    sender=sender_user_id,
+                    receiver_user_ids=receivers,
+                    content_item_list=build_notify_content(
+                        action_code=action_code,
+                        target_name=space_name,
+                        business_type="knowledge_space_id",
+                        business_id=space_id,
+                        navigable=navigable,
+                    ),
+                    action_code=action_code,
+                )
+        except Exception:
+            _logger.exception(
+                "Failed to send %s notification for space %s",
+                action_code,
+                space_id,
+            )
+
+    @classmethod
+    async def is_space_pending_admin(cls, space_id: int) -> bool:
+        """True iff ``space_id`` is a department space currently without an admin."""
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(int(space_id))
+        return binding is not None and binding.admin_user_id is None
+
+    @classmethod
+    async def ensure_space_not_pending_admin(cls, space_id: int) -> None:
+        """AC-09 gate: block admin-gated operations while the space has no admin."""
+        if await cls.is_space_pending_admin(space_id):
+            raise SpacePendingAdminError()
+
+    @classmethod
+    async def replace_admin(
+        cls,
+        *,
+        request: Request,
+        login_user: UserPayload,
+        department_id: int,
+        new_admin_user_id: int,
+    ) -> KnowledgeSpaceInfoResp:
+        """Atomically swap the space admin (AC-05/06, super admin only).
+
+        Order matters: the DB column swap is the atomic commit point; the new
+        admin is materialized before the old one is torn down so the member/
+        approver surface never passes through a zero-admin state.
+        """
+        cls._ensure_super_admin(login_user)
+        binding = await DepartmentKnowledgeSpaceDao.aget_by_department_id(int(department_id))
+        if binding is None:
+            raise SpaceNotFoundError()
+        new_admin = await cls._validate_admin_candidate(
+            user_id=new_admin_user_id,
+            tenant_id=login_user.tenant_id,
+        )
+        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
+        previous_admin = binding.admin_user_id
+        if previous_admin == new_admin:
+            await cls._materialize_space_admin(space_id=binding.space_id, user_id=new_admin)
+            return await space_service.get_space_info(binding.space_id)
+
+        swapped = await DepartmentKnowledgeSpaceDao.areplace_admin(
+            row_id=binding.id,
+            expected_admin_user_id=previous_admin,
+            new_admin_user_id=new_admin,
+        )
+        if not swapped:
+            # A concurrent replacement won the conditional UPDATE; the caller
+            # retries against the fresh state (AC-06: no interleaved result).
+            raise SpaceAdminConflictError()
+
+        await cls._materialize_space_admin(space_id=binding.space_id, user_id=new_admin)
+        if previous_admin:
+            await cls._dematerialize_space_admin(space_id=binding.space_id, user_id=previous_admin)
+            await cls._notify(
+                sender_user_id=login_user.user_id,
+                receiver_user_ids=[previous_admin],
+                action_code=SPACE_ADMIN_REVOKED_MESSAGE,
+                space_id=binding.space_id,
+            )
+        await cls._notify(
+            sender_user_id=login_user.user_id,
+            receiver_user_ids=[new_admin],
+            action_code=SPACE_ADMIN_ASSIGNED_MESSAGE,
+            space_id=binding.space_id,
+            navigable=True,
+        )
+        return await space_service.get_space_info(binding.space_id)
+
+    @classmethod
+    async def handle_admin_invalidated(
+        cls,
+        user_id: int,
+        *,
+        operator_user_id: int | None = None,
+        except_tenant_id: int | None = None,
+    ) -> int:
+        """AC-08: the admin account was deactivated / deleted / moved out.
+
+        Marks every department space administered by ``user_id`` as pending
+        admin configuration (column → NULL), tears down the materialization and
+        notifies the super admins. Never auto-promotes anyone (AC-10). Returns
+        the number of spaces flipped to pending.
+
+        ``except_tenant_id`` serves the tenant-relocation entry: spaces in the
+        tenant the user *moved into* keep their admin; everything else flips.
+        The enumeration bypasses the tenant filter (relocation/SSO callers run
+        outside the affected tenant's context) and each row is processed under
+        its own tenant context, mirroring the Celery-Beat multi-tenant pattern.
+        """
+        with bypass_tenant_filter():
+            rows = await DepartmentKnowledgeSpaceDao.aget_by_admin_user_id(int(user_id))
+        if except_tenant_id is not None:
+            rows = [row for row in rows if int(row.tenant_id or 0) != int(except_tenant_id)]
+        if not rows:
+            return 0
+        super_admin_ids = await cls._super_admin_user_ids()
+        flipped = 0
+        for row in rows:
+            previous_tenant = get_current_tenant_id()
+            if row.tenant_id and row.tenant_id != previous_tenant:
+                set_current_tenant_id(int(row.tenant_id))
+            try:
+                swapped = await DepartmentKnowledgeSpaceDao.areplace_admin(
+                    row_id=row.id,
+                    expected_admin_user_id=int(user_id),
+                    new_admin_user_id=None,
+                )
+                if not swapped:
+                    continue  # a super admin already re-assigned this space concurrently
+                await cls._dematerialize_space_admin(space_id=row.space_id, user_id=int(user_id))
+                await cls._notify(
+                    sender_user_id=operator_user_id or int(user_id),
+                    receiver_user_ids=super_admin_ids,
+                    action_code=SPACE_PENDING_ADMIN_MESSAGE,
+                    space_id=row.space_id,
+                )
+                flipped += 1
+            finally:
+                if previous_tenant is not None and row.tenant_id and row.tenant_id != previous_tenant:
+                    set_current_tenant_id(previous_tenant)
+        if flipped:
+            _logger.info(
+                "Marked %s department knowledge space(s) pending admin after user %s invalidation",
+                flipped,
+                user_id,
+            )
+        return flipped
 
     @classmethod
     async def _grant_department_members_viewer(
@@ -187,105 +419,6 @@ class DepartmentKnowledgeSpaceService:
             )
 
     @classmethod
-    async def _sync_added_admin(
-        cls,
-        *,
-        space_service: KnowledgeSpaceService,
-        space_id: int,
-        login_user: UserPayload,
-        user_id: int,
-    ) -> None:
-        if user_id == login_user.user_id:
-            return
-        existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
-        if existing is not None:
-            if existing.user_role == UserRoleEnum.CREATOR:
-                return
-            if existing.membership_source == "department_admin":
-                existing.user_role = UserRoleEnum.ADMIN
-                existing.status = MembershipStatusEnum.ACTIVE
-                await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
-                return
-            if existing.user_role == UserRoleEnum.ADMIN:
-                if existing.status != MembershipStatusEnum.ACTIVE:
-                    existing.status = MembershipStatusEnum.ACTIVE
-                    await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
-                return
-            existing.department_admin_promoted_from_role = existing.user_role.value
-            existing.user_role = UserRoleEnum.ADMIN
-            existing.status = MembershipStatusEnum.ACTIVE
-            existing.membership_source = "department_admin"
-            await SpaceChannelMemberDao.update(existing)
-            await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
-            return
-
-        member = SpaceChannelMember(
-            business_id=str(space_id),
-            business_type=BusinessTypeEnum.SPACE,
-            user_id=user_id,
-            user_role=UserRoleEnum.ADMIN,
-            status=MembershipStatusEnum.ACTIVE,
-            membership_source="department_admin",
-        )
-        await SpaceChannelMemberDao.async_insert_member(member)
-        await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
-
-    @classmethod
-    async def _sync_removed_admin(
-        cls,
-        *,
-        space_id: int,
-        user_id: int,
-        space_service: KnowledgeSpaceService | None = None,
-    ) -> None:
-        """Revoke the department-admin space binding for ``user_id``.
-
-        Clears both materialized copies of the derived admin status: the
-        ``space_channel_member`` row (delete, or demote back to the role the
-        member held before being promoted) and the ``knowledge_space#manager``
-        OpenFGA tuple.
-
-        ``space_service`` is only needed to notify the affected user. Paths that
-        carry no ``login_user`` (调岗 / SSO 同步 / 账号删除) pass ``None`` — the
-        binding is still cleaned, the notification is simply skipped.
-        """
-        existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
-        if existing is None or existing.user_role == UserRoleEnum.CREATOR:
-            return
-        if existing.membership_source == "department_admin":
-            previous_role = existing.department_admin_promoted_from_role
-            if previous_role:
-                existing.user_role = UserRoleEnum(previous_role)
-                existing.membership_source = "manual"
-                existing.department_admin_promoted_from_role = None
-                existing.status = MembershipStatusEnum.ACTIVE
-                await SpaceChannelMemberDao.update(existing)
-                await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
-                if space_service is not None and not await space_service._user_can_manage_space(user_id, space_id):
-                    await space_service._send_space_event_notification(
-                        action_code=SPACE_ADMIN_REVOKED_MESSAGE,
-                        receiver_user_ids=[user_id],
-                        space_id=space_id,
-                        navigable=True,
-                    )
-                return
-            await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
-            await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
-            if space_service is not None and not await space_service._user_can_read_space(user_id, space_id):
-                await space_service._send_space_event_notification(
-                    action_code=SPACE_MEMBER_REMOVED_MESSAGE,
-                    receiver_user_ids=[user_id],
-                    space_id=space_id,
-                    navigable=False,
-                )
-            return
-        if existing.user_role == UserRoleEnum.ADMIN:
-            return
-        await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
-
-    @classmethod
     async def batch_create_spaces(
         cls,
         *,
@@ -309,10 +442,24 @@ class DepartmentKnowledgeSpaceService:
                 msg=f"Department knowledge space already exists: {sorted({row.department_id for row in existing})}"
             )
 
+        # AC-01/02: validate every space admin up front — the whole batch is
+        # rejected before any space is created, so a bad item cannot leave a
+        # partially-created batch behind.
+        admin_by_dept: dict[int, int] = {}
+        for item in req.items:
+            admin_by_dept[int(item.department_id)] = await cls._validate_admin_candidate(
+                user_id=item.admin_user_id,
+                tenant_id=login_user.tenant_id,
+            )
+
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
         created_spaces: list[KnowledgeSpaceInfoResp] = []
         for item in req.items:
             dept = dept_map[int(item.department_id)]
+            admin_user_id = admin_by_dept[int(item.department_id)]
+            # AC-04: the creating super admin leaves no front-facing footprint —
+            # no CREATOR member row, no owner tuple. Knowledge.user_id and
+            # DepartmentKnowledgeSpace.created_by keep the audit trail only.
             space = await space_service.create_knowledge_space(
                 name=item.name or cls._build_default_name(dept.name),
                 description=item.description or cls._build_default_description(dept.name),
@@ -320,82 +467,29 @@ class DepartmentKnowledgeSpaceService:
                 auth_type=item.auth_type or cls.DEFAULT_AUTH_TYPE,
                 is_released=cls.DEFAULT_IS_RELEASED if item.is_released is None else item.is_released,
                 skip_user_limit=True,
+                materialize_creator=False,
             )
             await DepartmentKnowledgeSpaceDao.acreate(
                 tenant_id=login_user.tenant_id,
                 department_id=dept.id,
                 space_id=space.id,
                 created_by=login_user.user_id,
+                admin_user_id=admin_user_id,
             )
             await cls._grant_department_members_viewer(
                 space_id=space.id,
                 department_id=dept.id,
             )
-            admin_rows = await DepartmentService.aget_admins(dept.dept_id, login_user)
-            await cls._grant_default_department_admins(
-                request=request,
-                login_user=login_user,
+            await cls._materialize_space_admin(space_id=space.id, user_id=admin_user_id)
+            await cls._notify(
+                sender_user_id=login_user.user_id,
+                receiver_user_ids=[admin_user_id],
+                action_code=SPACE_ADMIN_ASSIGNED_MESSAGE,
                 space_id=space.id,
-                admin_user_ids=[row["user_id"] for row in admin_rows],
+                navigable=True,
             )
             created_spaces.append(await space_service.get_space_info(space.id))
         return created_spaces
-
-    @classmethod
-    async def sync_department_admin_memberships(
-        cls,
-        *,
-        request: Request | None,
-        login_user: UserPayload,
-        department_id: int,
-        added_user_ids: Sequence[int],
-        removed_user_ids: Sequence[int],
-    ) -> None:
-        space_id = await DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id(department_id)
-        if not space_id:
-            return
-
-        if request is None:
-            request = Request(scope={"type": "http"})
-        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
-        for user_id in sorted(set(int(uid) for uid in added_user_ids)):
-            await cls._sync_added_admin(
-                space_service=space_service,
-                space_id=space_id,
-                login_user=login_user,
-                user_id=user_id,
-            )
-
-        for user_id in sorted(set(int(uid) for uid in removed_user_ids)):
-            await cls._sync_removed_admin(
-                space_service=space_service,
-                space_id=space_id,
-                user_id=user_id,
-            )
-
-    @classmethod
-    async def cleanup_removed_department_admins(
-        cls,
-        *,
-        department_id: int,
-        user_ids: Sequence[int],
-    ) -> None:
-        """Clear the space binding for users who lost department-admin status.
-
-        For revoke paths that carry no ``login_user`` — 调岗
-        (``_apply_local_primary_department_change``), SSO 同步 and 账号删除 — which
-        previously dropped only ``DepartmentAdminGrant`` + the ``department#admin``
-        tuple, leaving the derived ``space_channel_member`` row and the
-        ``knowledge_space#manager`` tuple behind (越权 residue). Idempotent and a
-        no-op when the department owns no knowledge space.
-        """
-        if not user_ids:
-            return
-        space_id = await DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id(department_id)
-        if not space_id:
-            return
-        for user_id in sorted(set(int(uid) for uid in user_ids)):
-            await cls._sync_removed_admin(space_id=space_id, user_id=user_id)
 
     @classmethod
     async def get_user_department_spaces(
