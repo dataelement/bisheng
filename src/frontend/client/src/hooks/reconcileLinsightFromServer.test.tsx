@@ -15,9 +15,12 @@
  */
 import { renderHook, act } from '@testing-library/react';
 import React from 'react';
+// Test harness for the EXISTING recoil-backed useLinsightManager; ledger #5 bans
+// new atoms/selectors, not the provider needed to render the store under test.
+// eslint-disable-next-line no-restricted-imports
 import { RecoilRoot } from 'recoil';
 import { getLinsightSessionVersionList, getLinsightTaskList } from '~/api/linsight';
-import { SopStatus } from '~/store/linsight';
+import { SopStatus, type LinsightInfo } from '~/store/linsight';
 import { useLinsightManager } from './useLinsightManager';
 
 // sse.js ships ESM that jest does not transform; useLinsightManager only needs
@@ -54,7 +57,10 @@ const liveSnapshot = {
     output_result: null,
     file_list: [],
     queueCount: 0,
-} as any;
+    // Deliberately partial: this is the slice the WS pump had actually filled
+    // in, not a complete LinsightInfo. `as unknown as` keeps the fixture honest
+    // (no invented fields) without reaching for `any`.
+} as unknown as Omit<LinsightInfo, 'id'>;
 
 /** What the DB actually held: everything finished. */
 const serverTasks = [
@@ -82,6 +88,8 @@ describe('reconcileLinsightFromServer', () => {
                 message_id: 4242,
                 liked: 1,
                 output_result: {
+                    // Fixture data: a model answer in Chinese, not UI copy to localize.
+                    // eslint-disable-next-line no-restricted-syntax
                     answer: '所有5项交付物已全部生成完毕。',
                     final_files: [{ file_name: 'D1_Tanzania_Parameter_Viewer.html' }],
                 },
@@ -98,11 +106,12 @@ describe('reconcileLinsightFromServer', () => {
         expect(adopted).toBe(true);
         const info = result.current.getLinsight(VERSION_ID)!;
         expect(info.status).toBe(SopStatus.completed);
+        // eslint-disable-next-line no-restricted-syntax -- asserts on the fixture above.
         expect(info.output_result.answer).toContain('交付物');
         expect(info.file_list).toHaveLength(1);
         // The frozen progress count converges too — the whole point of pulling
         // the task list rather than just flipping the session status.
-        expect(info.tasks.map((t: any) => t.status)).toEqual(['success', 'success']);
+        expect(info.tasks.map((t) => t.status)).toEqual(['success', 'success']);
         // Like/dislike must target the persisted row, mirroring final_result.
         expect(info.message_id).toBe(4242);
         expect(info.liked).toBe(1);
