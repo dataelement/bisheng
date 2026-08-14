@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi import Request, UploadFile
 from loguru import logger
@@ -136,6 +137,9 @@ class FilelibSyncService:
         endpoint_tag: str = "sync",
         trigger_type: str | None = None,
         allow_personal_fallback: bool = True,
+        target_folder_path_override: str | None = None,
+        target_folder_id_override: int | None = None,
+        extra_user_metadata: dict[str, Any] | None = None,
     ) -> FilelibSyncResponseData:
         self._require_dynamic_source_id(params)
         created_file: KnowledgeFile | None = None
@@ -155,7 +159,15 @@ class FilelibSyncService:
                 allow_personal_fallback=allow_personal_fallback,
             )
             if not target.used_personal_fallback:
-                folder_id = await self._resolve_target_folder(int(target.space.id), identity)
+                if target_folder_id_override is not None:
+                    folder_id = int(target_folder_id_override)
+                elif target_folder_path_override is not None:
+                    folder_id = await self._resolve_folder_path_override(
+                        int(target.space.id),
+                        target_folder_path_override,
+                    )
+                else:
+                    folder_id = await self._resolve_target_folder(int(target.space.id), identity)
                 target = ResolvedFileSyncTarget(
                     space=target.space,
                     folder_id=folder_id,
@@ -239,6 +251,8 @@ class FilelibSyncService:
             }
             if trigger_type is not None:
                 user_metadata["filelib_sync_trigger"] = trigger_type
+            if extra_user_metadata:
+                user_metadata.update(extra_user_metadata)
             if target.used_personal_fallback:
                 user_metadata[FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY] = (
                     FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE
@@ -643,6 +657,24 @@ class FilelibSyncService:
             raise FilelibSyncNotFoundError(msg="personal fallback folder cannot be created") from exc
         except SpacePermissionDeniedError as exc:
             raise FilelibSyncPermissionDeniedError(msg="no permission to create personal fallback folder") from exc
+        if folder is None:
+            return None
+        return int(folder.id)
+
+    async def _resolve_folder_path_override(
+        self,
+        knowledge_id: int,
+        folder_path: str,
+    ) -> int | None:
+        try:
+            folder = await self.knowledge_space_service.find_or_create_folder_path_for_file_sync(
+                knowledge_id,
+                folder_path,
+            )
+        except SpaceFolderNotFoundError as exc:
+            raise FilelibSyncNotFoundError(msg="configured folder path does not exist") from exc
+        except SpacePermissionDeniedError as exc:
+            raise FilelibSyncPermissionDeniedError(msg="no permission to create target folder") from exc
         if folder is None:
             return None
         return int(folder.id)

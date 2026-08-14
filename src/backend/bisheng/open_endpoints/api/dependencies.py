@@ -43,6 +43,7 @@ from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_reposito
     FilelibSyncRepository,
 )
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
+from bisheng.open_endpoints.domain.services.inspection_standard_sync_service import InspectionStandardSyncService
 from bisheng.open_endpoints.domain.services.filelib_user_context_service import (
     EXTERNAL_USER_ID_MAX_LENGTH,
     FilelibUserContextService,
@@ -193,3 +194,9 @@ async def get_filelib_sync_service(
         repository=repository,
         knowledge_space_service=knowledge_space_service,
     )
+
+
+async def get_inspection_standard_sync_service(
+    filelib_sync_service: FilelibSyncService = Depends(get_filelib_sync_service),
+) -> InspectionStandardSyncService:
+    return InspectionStandardSyncService(filelib_sync_service=filelib_sync_service)
