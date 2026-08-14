@@ -65,6 +65,33 @@ async def test_cursor_rejects_changed_query_context():
         await service.begin(changed, cursor=cursor)
 
 
+async def test_condition_cursor_rejects_changed_order_relation_or_mode():
+    service, repository, _ = build_service()
+    repository.open_pit.return_value = "pit-conditions"
+    original = KnowledgeFulltextAdvancedSearchQuery(
+        space_ids=[1],
+        conditions=[
+            {"relation": None, "field": "content", "match_mode": "exact", "value": "制度"},
+            {"relation": "and", "field": "tags", "match_mode": "exact", "value": "设备"},
+        ],
+    )
+    changed = KnowledgeFulltextAdvancedSearchQuery(
+        space_ids=[1],
+        conditions=[
+            {"relation": None, "field": "content", "match_mode": "fuzzy", "value": "制度"},
+            {"relation": "or", "field": "tags", "match_mode": "exact", "value": "设备"},
+        ],
+    )
+    session = await service.begin(original, cursor=None)
+    cursor = service.encode_next_cursor(
+        session,
+        sort_values=[2.0, "2026-01-01", 10, 99],
+    )
+
+    with pytest.raises(KnowledgeInvalidCursorError):
+        await service.begin(changed, cursor=cursor)
+
+
 async def test_mapping_incompatibility_fails_closed_before_opening_pit():
     service, repository, index_repository = build_service()
     index_repository.validate_read_index.side_effect = KnowledgeFulltextIndexConfigurationError("bad")

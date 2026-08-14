@@ -6175,29 +6175,37 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return self._build_shougang_portal_cursor_response([], False, None)
 
         space_ids = [int(space.id) for space in spaces]
-        query = KnowledgeFulltextAdvancedSearchQuery(
-            space_ids=space_ids,
-            space_level=self._space_level_value(req.space_level),
-            business_domain_code=req.business_domain_code,
-            document_type=req.document_type,
-            file_subcategory_code=req.file_subcategory_code,
-            file_ext=req.file_ext,
-            tag=req.tag,
-            all_keywords=req.all_keywords,
-            exact_phrase=req.exact_phrase,
-            any_keywords=req.any_keywords,
-            exclude_keywords=req.exclude_keywords,
-            search_field=req.search_field,
-            original_uploader_id=req.original_uploader_id,
-            original_knowledge_id=req.original_knowledge_id,
-            preview_count_min=req.preview_count_min,
-            preview_count_max=req.preview_count_max,
-            download_count_min=req.download_count_min,
-            download_count_max=req.download_count_max,
-            updated_from=req.updated_from,
-            updated_to=req.updated_to,
-            sort=req.sort,
-        )
+        if req.conditions is not None:
+            query = KnowledgeFulltextAdvancedSearchQuery(
+                version=req.version,
+                space_ids=space_ids,
+                conditions=req.conditions,
+                sort=req.sort,
+            )
+        else:
+            query = KnowledgeFulltextAdvancedSearchQuery(
+                space_ids=space_ids,
+                space_level=self._space_level_value(req.space_level),
+                business_domain_code=req.business_domain_code,
+                document_type=req.document_type,
+                file_subcategory_code=req.file_subcategory_code,
+                file_ext=req.file_ext,
+                tag=req.tag,
+                all_keywords=req.all_keywords,
+                exact_phrase=req.exact_phrase,
+                any_keywords=req.any_keywords,
+                exclude_keywords=req.exclude_keywords,
+                search_field=req.search_field,
+                original_uploader_id=req.original_uploader_id,
+                original_knowledge_id=req.original_knowledge_id,
+                preview_count_min=req.preview_count_min,
+                preview_count_max=req.preview_count_max,
+                download_count_min=req.download_count_min,
+                download_count_max=req.download_count_max,
+                updated_from=req.updated_from,
+                updated_to=req.updated_to,
+                sort=req.sort,
+            )
         limit = min(max(int(req.limit or 20), 1), 100)
         search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
         session = await search_service.begin(query, cursor=req.cursor)
@@ -6290,7 +6298,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "has_keywords={} has_uploader_filter={} has_source_filter={} "
                 "has_count_filter={} scanned_hits={} visible_hits={} batches={} "
                 "duration_ms={}",
-                req.search_field,
+                "conditions" if req.conditions is not None else req.search_field,
                 req.sort,
                 query.has_keywords,
                 req.original_uploader_id is not None,
@@ -6319,7 +6327,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             logger.warning(
                 "portal advanced fulltext search failed: field={} sort={} "
                 "stage={} exception_type={} scanned_hits={} batches={} duration_ms={}",
-                req.search_field,
+                "conditions" if req.conditions is not None else req.search_field,
                 req.sort,
                 failure_stage,
                 type(exc).__name__,

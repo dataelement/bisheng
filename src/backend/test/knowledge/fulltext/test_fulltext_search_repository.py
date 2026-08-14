@@ -99,6 +99,110 @@ def test_content_field_scope_does_not_search_other_fields():
     assert "summary.substring" not in serialized
 
 
+def test_file_name_field_scope_does_not_search_hidden_display_title():
+    repository, _ = repository_with_client()
+    query = KnowledgeFulltextAdvancedSearchQuery(
+        space_ids=[1],
+        all_keywords="天气预报",
+        search_field="file_name",
+    )
+
+    serialized = json.dumps(repository.build_query(query), ensure_ascii=False)
+
+    assert '"file_name"' in serialized
+    assert '"file_name.substring"' in serialized
+    assert '"display_title"' not in serialized
+    assert '"display_title.substring"' not in serialized
+
+
+def test_condition_contract_normalizes_first_relation_and_rejects_invalid_modes():
+    query = KnowledgeFulltextAdvancedSearchQuery(
+        space_ids=[1],
+        conditions=[
+            {
+                "relation": "or",
+                "field": "all",
+                "match_mode": "fuzzy",
+                "value": "制度",
+            },
+            {
+                "relation": "and",
+                "field": "knowledge_id",
+                "match_mode": "exact",
+                "value": 1,
+            },
+        ],
+    )
+
+    assert query.conditions is not None
+    assert query.conditions[0].relation is None
+    with pytest.raises(ValidationError, match="literal_error"):
+        KnowledgeFulltextAdvancedSearchQuery(
+            space_ids=[1],
+            conditions=[
+                {
+                    "relation": None,
+                    "field": "knowledge_id",
+                    "match_mode": "fuzzy",
+                    "value": 1,
+                }
+            ],
+        )
+    with pytest.raises(ValidationError, match="whitespace"):
+        KnowledgeFulltextAdvancedSearchQuery(
+            space_ids=[1],
+            conditions=[
+                {
+                    "relation": None,
+                    "field": "content",
+                    "match_mode": "fuzzy",
+                    "value": "设备 故障",
+                }
+            ],
+        )
+
+
+def test_condition_query_is_left_associative_and_keeps_scope_outside_expression():
+    repository, _ = repository_with_client()
+    query = KnowledgeFulltextAdvancedSearchQuery(
+        space_ids=[2, 1],
+        conditions=[
+            {"relation": None, "field": "file_name", "match_mode": "exact", "value": "A"},
+            {"relation": "or", "field": "summary", "match_mode": "fuzzy", "value": "B"},
+            {"relation": "and", "field": "tags", "match_mode": "exact", "value": "C"},
+            {"relation": "not", "field": "preview_count", "match_mode": "exact", "range": {"min": 0, "max": 10}},
+        ],
+    )
+
+    result = repository.build_query(query)
+    expression = result["bool"]["must"][0]
+    serialized = json.dumps(expression, ensure_ascii=False)
+
+    assert result["bool"]["filter"] == [{"terms": {"knowledge_id": [1, 2]}}]
+    assert expression["bool"]["must_not"]
+    assert expression["bool"]["must"][0]["bool"]["must"]
+    assert '"minimum_should_match": 1' in serialized
+    assert '"match_phrase": {"file_name"' in serialized
+    assert '"summary.substring"' in serialized
+    assert '"term": {"tags.keyword": "C"}' in serialized
+    assert '"display_title"' not in serialized
+
+
+def test_empty_conditions_compile_to_match_all_with_permission_scope():
+    repository, _ = repository_with_client()
+
+    result = repository.build_query(
+        KnowledgeFulltextAdvancedSearchQuery(space_ids=[7], conditions=[])
+    )
+
+    assert result == {
+        "bool": {
+            "filter": [{"terms": {"knowledge_id": [7]}}],
+            "must": [{"match_all": {}}],
+        }
+    }
+
+
 @pytest.mark.parametrize(
     ("sort", "has_keywords", "expected_fields"),
     [

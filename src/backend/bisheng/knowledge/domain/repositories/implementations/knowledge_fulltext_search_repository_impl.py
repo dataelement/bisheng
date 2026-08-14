@@ -13,10 +13,18 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_fulltext_search_
 )
 from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
     KnowledgeFulltextAdvancedSearchQuery,
+    KnowledgeFulltextCondition,
+    KnowledgeFulltextConditionMatchMode,
+    KnowledgeFulltextConditionRelation,
+    KnowledgeFulltextCountCondition,
+    KnowledgeFulltextDateCondition,
+    KnowledgeFulltextDocumentCategoryCondition,
     KnowledgeFulltextSearchBatch,
     KnowledgeFulltextSearchField,
     KnowledgeFulltextSearchHit,
     KnowledgeFulltextSearchSort,
+    KnowledgeFulltextSelectCondition,
+    KnowledgeFulltextTextCondition,
     KnowledgeFulltextUploaderSupport,
 )
 
@@ -28,7 +36,7 @@ _SEARCH_FIELD_MAP: dict[KnowledgeFulltextSearchField, tuple[str, ...]] = {
         "summary",
         "content",
     ),
-    KnowledgeFulltextSearchField.FILE_NAME: ("file_name", "display_title"),
+    KnowledgeFulltextSearchField.FILE_NAME: ("file_name",),
     KnowledgeFulltextSearchField.SUMMARY: ("summary",),
     KnowledgeFulltextSearchField.TAGS: ("tags",),
     KnowledgeFulltextSearchField.CONTENT: ("content",),
@@ -117,6 +125,104 @@ class KnowledgeFulltextSearchRepositoryImpl(KnowledgeFulltextSearchRepository):
                 )
         return {"dis_max": {"queries": queries, "tie_breaker": 0.1}}
 
+    def _condition_text_clause(
+        self,
+        condition: KnowledgeFulltextTextCondition,
+    ) -> dict[str, Any]:
+        search_field = KnowledgeFulltextSearchField(condition.field)
+        if (
+            condition.field == KnowledgeFulltextSearchField.TAGS.value
+            and condition.match_mode == KnowledgeFulltextConditionMatchMode.EXACT
+        ):
+            return {"term": {"tags.keyword": condition.value}}
+
+        queries: list[dict[str, Any]] = []
+        for field in _SEARCH_FIELD_MAP[search_field]:
+            boost = self._field_boost(field, search_field)
+            if condition.match_mode == KnowledgeFulltextConditionMatchMode.EXACT:
+                queries.append(
+                    {"match_phrase": {field: {"query": condition.value, "boost": boost}}}
+                )
+            else:
+                queries.append(
+                    {
+                        "match": {
+                            f"{field}.substring": {
+                                "query": condition.value,
+                                "operator": "and",
+                                "boost": boost,
+                            }
+                        }
+                    }
+                )
+        if len(queries) == 1:
+            return queries[0]
+        return {"dis_max": {"queries": queries, "tie_breaker": 0.1}}
+
+    def _condition_clause(self, condition: KnowledgeFulltextCondition) -> dict[str, Any]:
+        if isinstance(condition, KnowledgeFulltextTextCondition):
+            return self._condition_text_clause(condition)
+        if isinstance(condition, KnowledgeFulltextSelectCondition):
+            field_map = {
+                "knowledge_level": "knowledge_level",
+                "knowledge_id": "knowledge_id",
+                "business_domain_code": "business_domain_code",
+                "file_ext": "file_ext",
+                "original_uploader_id": "original_uploader_id",
+                "original_knowledge_id": "original_knowledge_id",
+            }
+            return {"term": {field_map[condition.field]: condition.value}}
+        if isinstance(condition, KnowledgeFulltextDocumentCategoryCondition):
+            clauses: list[dict[str, Any]] = []
+            if condition.value.document_type is not None:
+                clauses.append(
+                    {"term": {"document_category_code": condition.value.document_type}}
+                )
+            if condition.value.file_subcategory_code is not None:
+                clauses.append(
+                    {"term": {"file_subcategory_code": condition.value.file_subcategory_code}}
+                )
+            return clauses[0] if len(clauses) == 1 else {"bool": {"must": clauses}}
+        if isinstance(condition, KnowledgeFulltextCountCondition):
+            clause = self._count_range_clause(
+                condition.field,
+                condition.range.min,
+                condition.range.max,
+            )
+            if clause is None:  # pragma: no cover - schema guarantees one bound
+                return {"match_all": {}}
+            return clause
+        if isinstance(condition, KnowledgeFulltextDateCondition):
+            bounds: dict[str, str] = {}
+            if condition.range.from_date is not None:
+                bounds["gte"] = condition.range.from_date.isoformat()
+            if condition.range.to is not None:
+                bounds["lt"] = (condition.range.to + timedelta(days=1)).isoformat()
+            return {"range": {"updated_at": bounds}}
+        raise TypeError(f"Unsupported fulltext condition: {type(condition).__name__}")
+
+    def _compile_conditions(
+        self,
+        conditions: list[KnowledgeFulltextCondition],
+    ) -> dict[str, Any]:
+        if not conditions:
+            return {"match_all": {}}
+        expression = self._condition_clause(conditions[0])
+        for condition in conditions[1:]:
+            current = self._condition_clause(condition)
+            if condition.relation == KnowledgeFulltextConditionRelation.OR:
+                expression = {
+                    "bool": {
+                        "should": [expression, current],
+                        "minimum_should_match": 1,
+                    }
+                }
+            elif condition.relation == KnowledgeFulltextConditionRelation.NOT:
+                expression = {"bool": {"must": [expression], "must_not": [current]}}
+            else:
+                expression = {"bool": {"must": [expression, current]}}
+        return expression
+
     @staticmethod
     def _count_range_clause(
         field: str,
@@ -144,6 +250,14 @@ class KnowledgeFulltextSearchRepositoryImpl(KnowledgeFulltextSearchRepository):
         }
 
     def build_query(self, query: KnowledgeFulltextAdvancedSearchQuery) -> dict[str, Any]:
+        if query.conditions is not None:
+            return {
+                "bool": {
+                    "filter": [{"terms": {"knowledge_id": query.space_ids}}],
+                    "must": [self._compile_conditions(query.conditions)],
+                }
+            }
+
         must: list[dict[str, Any]] = []
         must_not: list[dict[str, Any]] = []
         filters: list[dict[str, Any]] = [{"terms": {"knowledge_id": query.space_ids}}]

@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
+from bisheng.knowledge.domain import knowledge_fulltext_constants
 from bisheng.knowledge.domain.constants import normalize_business_domain_code, normalize_file_category_code
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
@@ -21,6 +22,9 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
 )
 from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
     KnowledgeDocumentEntryCapabilities,
+)
+from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
+    KnowledgeFulltextCondition,
 )
 from bisheng.knowledge.domain.schemas.portal_hot_search_schema import PortalHotSearchItem
 
@@ -539,6 +543,13 @@ class ShougangPortalFileSearchReq(ShougangPortalFileBrowseReq):
 
 
 class ShougangPortalAdvancedFileSearchReq(ShougangPortalFileBrowseReq):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1] = 1
+    conditions: list[KnowledgeFulltextCondition] | None = Field(
+        default=None,
+        max_length=knowledge_fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_MAX_CONDITIONS,
+    )
     all_keywords: str | None = Field(default=None, max_length=200)
     exact_phrase: str | None = Field(default=None, max_length=200)
     any_keywords: str | None = Field(default=None, max_length=200)
@@ -578,6 +589,35 @@ class ShougangPortalAdvancedFileSearchReq(ShougangPortalFileBrowseReq):
         ):
             if lower is not None and upper is not None and lower > upper:
                 raise ValueError(f"{name}_min must not be greater than {name}_max")
+        if self.conditions is not None:
+            legacy_fields = {
+                "space_level",
+                "business_domain_code",
+                "document_type",
+                "file_subcategory_code",
+                "file_ext",
+                "tag",
+                "all_keywords",
+                "exact_phrase",
+                "any_keywords",
+                "exclude_keywords",
+                "search_field",
+                "original_uploader_id",
+                "original_knowledge_id",
+                "preview_count_min",
+                "preview_count_max",
+                "download_count_min",
+                "download_count_max",
+                "updated_from",
+                "updated_to",
+            }
+            if self.model_fields_set.intersection(legacy_fields):
+                raise ValueError("conditions and legacy advanced-search fields are mutually exclusive")
+            if self.conditions:
+                self.conditions[0].relation = None
+                for condition in self.conditions[1:]:
+                    if condition.relation is None:
+                        raise ValueError("conditions after the first require relation")
         return self
 
 

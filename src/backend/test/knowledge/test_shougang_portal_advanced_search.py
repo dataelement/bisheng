@@ -358,6 +358,21 @@ def test_advanced_search_rejects_reversed_date_range():
         )
 
 
+def test_advanced_search_conditions_cannot_mix_with_legacy_fields():
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        ShougangPortalAdvancedFileSearchReq(
+            conditions=[
+                {
+                    "relation": None,
+                    "field": "content",
+                    "match_mode": "exact",
+                    "value": "设备故障",
+                }
+            ],
+            all_keywords="旧参数",
+        )
+
+
 @pytest.mark.parametrize(
     "factory",
     [
