@@ -145,7 +145,22 @@ async def _seed_terminal_instance(
     applicant_user_id: int = 7,
     approver_user_id: int = 9,
     status: str = ApprovalInstanceStatus.PENDING,
+    target_in_detail_snapshot: bool = False,
 ) -> tuple[ApprovalInstance, ApprovalTask]:
+    # Real F045 submissions keep the invitee in `detail_snapshot` and reserve
+    # `payload_snapshot` for the decision-delivery envelope; older instances carry it in
+    # the payload. Seed either shape so both stay covered.
+    payload_snapshot = {
+        "completion_mode": DECISION_DELIVERY_COMPLETION_MODE,
+        "business_request_type": "test_business_request",
+        "business_request_id": request_suffix,
+        "request_fingerprint": f"fingerprint:{request_suffix}",
+    }
+    detail_snapshot: dict = {}
+    if target_in_detail_snapshot:
+        detail_snapshot["target_user_id"] = approver_user_id
+    else:
+        payload_snapshot["target_user_id"] = approver_user_id
     instance = await ApprovalInstanceRepository.create_instance(
         ApprovalInstance(
             tenant_id=TENANT_ID,
@@ -160,14 +175,8 @@ async def _seed_terminal_instance(
             applicant_user_name="applicant",
             status=status,
             current_node_name="review",
-            payload_snapshot={
-                "completion_mode": DECISION_DELIVERY_COMPLETION_MODE,
-                "business_request_type": "test_business_request",
-                "business_request_id": request_suffix,
-                "request_fingerprint": f"fingerprint:{request_suffix}",
-                "target_user_id": approver_user_id,
-            },
-            detail_snapshot={},
+            payload_snapshot=payload_snapshot,
+            detail_snapshot=detail_snapshot,
         )
     )
     task = await ApprovalInstanceRepository.create_task(
@@ -570,3 +579,39 @@ async def test_f046_policy_failure_is_fail_closed_and_writes_no_terminal_event(t
     assert (await ApprovalInstanceRepository.get_instance(instance.id)).status == ApprovalInstanceStatus.PENDING
     assert (await ApprovalInstanceRepository.get_task(task.id)).status == ApprovalTaskStatus.PENDING
     assert await _events(terminal_decision_db, instance_id=instance.id) == []
+
+
+async def test_f045_invitee_approves_with_target_user_in_detail_snapshot(terminal_decision_db) -> None:
+    """The invitee's own confirmation must pass the self-confirmation guard.
+
+    Production F045 instances keep `target_user_id` in `detail_snapshot`, so reading it
+    from `payload_snapshot` denied every invitee their own invite.
+    """
+
+    instance, task = await _seed_terminal_instance(
+        scenario_code=F045_SCENARIO,
+        approver_user_id=9,
+        target_in_detail_snapshot=True,
+    )
+    policy = StubPolicy(scenario_code=F045_SCENARIO, allowed_operator_user_id=9)
+    service = _center(policy)
+
+    with (
+        _mock_center_side_effects()[0],
+        _mock_center_side_effects()[1],
+        _mock_center_side_effects()[2],
+        _mock_center_side_effects()[3],
+    ):
+        await service.decide_task(
+            task_id=task.id,
+            action="approve",
+            operator_user_id=9,
+            operator_user_name="invitee",
+            operator_tenant_id=TENANT_ID,
+        )
+
+    saved = await ApprovalInstanceRepository.get_instance(instance.id)
+    events = await _events(terminal_decision_db, instance_id=instance.id)
+    assert saved.status == ApprovalInstanceStatus.APPROVED
+    assert len(events) == 1
+    _assert_event(events[0], instance=instance, decision="approved", operator_user_id=9)

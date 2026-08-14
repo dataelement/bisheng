@@ -963,6 +963,30 @@ class ApprovalCenterService:
                     getattr(callback, "__qualname__", repr(callback)),
                 )
 
+    @staticmethod
+    def _resolve_self_confirmation_target_user_id(instance: ApprovalInstance) -> int:
+        """Return the invitee this self-confirmation instance belongs to (0 when absent).
+
+        F045 stores the invitee in ``detail_snapshot``; ``payload_snapshot`` carries the
+        decision-delivery envelope (business_request_*, link_snapshot) instead, so reading
+        only the payload denied every invitee their own confirmation. Keep the payload as a
+        fallback for instances submitted through the legacy handler path.
+        """
+
+        for snapshot in (instance.detail_snapshot, instance.payload_snapshot):
+            raw = (snapshot or {}).get("target_user_id")
+            if raw in (None, ""):
+                continue
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "approval instance {} carries a non-numeric target_user_id={!r}",
+                    instance.id,
+                    raw,
+                )
+        return 0
+
     async def _decide_locked_task(
         self,
         *,
@@ -986,7 +1010,7 @@ class ApprovalCenterService:
 
         is_self_confirmation = instance.scenario_code == "resource_user_invite_confirmation"
         if is_self_confirmation:
-            target_user_id = int((instance.payload_snapshot or {}).get("target_user_id", 0))
+            target_user_id = self._resolve_self_confirmation_target_user_id(instance)
             if task.approver_user_id != operator_user_id or target_user_id != operator_user_id:
                 raise ApprovalRequestPermissionDeniedError()
         elif not operator_is_admin and task.approver_user_id != operator_user_id:
@@ -1357,7 +1381,7 @@ class ApprovalCenterService:
         if instance.tenant_id != operator_tenant_id:
             raise ApprovalRequestPermissionDeniedError()
         if instance.scenario_code == "resource_user_invite_confirmation":
-            target_user_id = int((instance.payload_snapshot or {}).get("target_user_id", 0))
+            target_user_id = self._resolve_self_confirmation_target_user_id(instance)
             if task.approver_user_id != operator_user_id or target_user_id != operator_user_id:
                 raise ApprovalRequestPermissionDeniedError()
             decision = await self.instance_repository.decide_single_task(
