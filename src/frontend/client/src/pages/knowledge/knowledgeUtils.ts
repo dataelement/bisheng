@@ -28,6 +28,24 @@ export function isKnowledgeApprovalRejected(file: KnowledgeFile): boolean {
     return file.approvalStatus === "rejected" || file.approvalStatus === "sensitive_rejected";
 }
 
+/**
+ * UI-only status-filter value for files awaiting upload approval.
+ *
+ * Pending uploads are not part of the formal file list — they come from a
+ * separate endpoint and are merged client-side — so they have no `file_status`
+ * number the backend could filter on. The toolbar therefore carries this
+ * sentinel alongside the real `FileStatus` values, and the page strips it
+ * before handing the filter to the list query.
+ */
+export const PENDING_REVIEW_FILTER = "pending_review_filter";
+
+export type FileStatusFilter = FileStatus | typeof PENDING_REVIEW_FILTER;
+
+/** The backend-backed subset of a toolbar filter selection. */
+export function toBackendStatusFilter(filter: FileStatusFilter[]): FileStatus[] {
+    return filter.filter((value): value is FileStatus => value !== PENDING_REVIEW_FILTER);
+}
+
 export {
     isWebLinkKnowledgeFile,
     resolveWebLinkDisplayName,

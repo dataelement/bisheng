@@ -1586,7 +1586,20 @@
     "fullscreen": "全屏",
     "exit_fullscreen": "退出全屏",
     "volume": "音量",
-    "progress": "播放进度"
+    "progress": "播放进度",
+    "filter": "筛选",
+    "sort": "排序",
+    "list_view": "列表视图",
+    "card_view": "卡片视图",
+    "filter_file_status": "筛选文件状态",
+    "pending_review_status": "待审核",
+    "batch_group_pending": "待审核文件",
+    "batch_group_reviewed": "已审核文件",
+    "batch_reject_success": "已拒绝 {{0}} 项",
+    "batch_reject_failed": "批量拒绝失败",
+    "batch_approve_success": "已同意 {{0}} 项",
+    "sort_by_size_label": "大小",
+    "select_all": "全选"
   },
   "com_deep_thinking": {
     "running": "正在深度思考（已用 {{0}} 秒）...",

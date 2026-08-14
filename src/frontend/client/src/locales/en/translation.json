@@ -1659,7 +1659,20 @@
     "fullscreen": "Full screen",
     "exit_fullscreen": "Exit full screen",
     "volume": "Volume",
-    "progress": "Playback progress"
+    "progress": "Playback progress",
+    "filter": "Filter",
+    "sort": "Sort",
+    "list_view": "List view",
+    "card_view": "Card view",
+    "filter_file_status": "Filter by status",
+    "pending_review_status": "Pending review",
+    "batch_group_pending": "Pending files",
+    "batch_group_reviewed": "Reviewed files",
+    "batch_reject_success": "Rejected {{0}} item(s)",
+    "batch_reject_failed": "Batch reject failed",
+    "batch_approve_success": "Approved {{0}} item(s)",
+    "sort_by_size_label": "Sort by size",
+    "select_all": "Select all"
   },
   "com_deep_thinking": {
     "running": "Thinking deeply ({{0}}s elapsed)...",
