@@ -147,7 +147,7 @@ class KnowledgeFulltextSearchRepositoryImpl(KnowledgeFulltextSearchRepository):
                 queries.append(
                     {
                         "match": {
-                            f"{field}.substring": {
+                            field: {
                                 "query": condition.value,
                                 "operator": "and",
                                 "boost": boost,

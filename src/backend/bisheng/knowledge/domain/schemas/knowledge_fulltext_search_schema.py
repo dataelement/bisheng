@@ -55,18 +55,6 @@ class KnowledgeFulltextTextCondition(StrictSchema):
             raise ValueError("condition value must not be empty")
         return normalized
 
-    @model_validator(mode="after")
-    def validate_fuzzy_value(self):
-        if self.match_mode == KnowledgeFulltextConditionMatchMode.FUZZY:
-            if any(char.isspace() for char in self.value):
-                raise ValueError("fuzzy condition value must not contain whitespace")
-            if len(self.value) > constants.KNOWLEDGE_FULLTEXT_NGRAM_MAX:
-                raise ValueError(
-                    f"fuzzy condition value must contain at most "
-                    f"{constants.KNOWLEDGE_FULLTEXT_NGRAM_MAX} characters"
-                )
-        return self
-
 
 class KnowledgeFulltextSelectCondition(StrictSchema):
     relation: KnowledgeFulltextConditionRelation | None = None
