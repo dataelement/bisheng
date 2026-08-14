@@ -12,7 +12,7 @@ import json
 from hashlib import sha256
 from typing import Any
 
-MODEL_VERSION = "f048-v1"
+MODEL_VERSION = "f048-v2"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -94,6 +94,13 @@ SYSTEM_SHARED_ACTION_TYPES: dict[str, frozenset[str]] = {
     "download": frozenset({"knowledge_space", "folder", "knowledge_file"}),
     "use": frozenset({"knowledge_library", "workflow", "assistant", "tool"}),
 }
+
+# These resource types are enumerated directly by ListObjects.  Folder and
+# file visibility stays compositional because their list endpoints fetch a
+# business candidate page first and then BatchCheck inherited permissions.
+FLAT_VISIBLE_RESOURCE_TYPES: frozenset[str] = frozenset(set(MIGRATED_RESOURCE_TYPES) - set(PARENT_TYPES)) | frozenset(
+    OWNER_PROJECTION_RESOURCE_TYPES
+)
 
 
 def _this() -> dict:
@@ -327,13 +334,22 @@ def _system_relation(
     return _union(*children)
 
 
+def _system_visible_relation(*, parent_types: tuple[str, ...]) -> dict:
+    children: list[dict] = [
+        _computed("public_reader"),
+        _from("shared_with", "member"),
+    ]
+    if parent_types:
+        children.append(_from("parent", "system_visible"))
+    return _union(*children)
+
+
 def _resource_type(type_name: str, action_codes: tuple[str, ...]) -> dict:
     parent_types = PARENT_TYPES.get(type_name, ())
     relations: dict[str, dict] = {
         "grant": _this(),
         "permission_enabled": _this(),
         "custom_mode": _this(),
-        "visible": _this(),
         "shared_with": _this(),
         "public_reader": _this(),
         "system_download_marker": _this(),
@@ -343,7 +359,6 @@ def _resource_type(type_name: str, action_codes: tuple[str, ...]) -> dict:
         "grant": {"directly_related_user_types": [{"type": "permission_grant"}]},
         "permission_enabled": {"directly_related_user_types": [_wildcard_user_type()]},
         "custom_mode": {"directly_related_user_types": [_wildcard_user_type()]},
-        "visible": {"directly_related_user_types": _visible_subject_types()},
         "shared_with": {"directly_related_user_types": [{"type": "tenant"}]},
         "public_reader": {"directly_related_user_types": [_wildcard_user_type()]},
         "system_download_marker": {"directly_related_user_types": [_wildcard_user_type()]},
@@ -354,6 +369,35 @@ def _resource_type(type_name: str, action_codes: tuple[str, ...]) -> dict:
         relations["inherit_mode"] = _this()
         metadata["parent"] = {"directly_related_user_types": [{"type": parent_type} for parent_type in parent_types]}
         metadata["inherit_mode"] = {"directly_related_user_types": [_wildcard_user_type()]}
+
+    relations["system_visible"] = _system_visible_relation(
+        parent_types=parent_types,
+    )
+    if type_name in FLAT_VISIBLE_RESOURCE_TYPES:
+        # Keep the top-level hot path as one direct relation so reverse
+        # enumeration is proportional to the user's visible set. Public and
+        # tenant-shared predicates stay as a second shallow system branch.
+        relations["visible"] = _union(
+            _this(),
+            _computed("system_visible"),
+        )
+    else:
+        # Child resources are checked from business candidates.  Their local
+        # custom grants remain direct, while ordinary inheritance and system
+        # visibility stay in the graph instead of being fanned out to every
+        # descendant.
+        relations["inherited_visible"] = _intersection(
+            _from("parent", "visible"),
+            _computed("inherit_mode"),
+        )
+        relations["visible"] = _union(
+            _this(),
+            _computed("inherited_visible"),
+            _computed("system_visible"),
+        )
+    metadata["visible"] = {
+        "directly_related_user_types": _visible_subject_types(),
+    }
 
     for action in action_codes:
         relations[f"ordinary_can_{action}_from_grant"] = _from(

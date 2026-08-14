@@ -13,8 +13,8 @@
 |---|---|---|
 | spec.md | ✅ 已评审 | 原 Spec 已确认；新增可见性与停用/删除语义已经回写 |
 | design.md | ✅ 已评审 | 24 项复审 LGTM；用户于 2026-08-13 明确确认 Design ★ |
-| tasks.md | ✅ 已拆解 | T144～T190 已按单槽 visible、迁移和列表入口拆解；21 项 tasks 评审 LGTM |
-| 实现 | ⏳ 环境验证中 | T144～T188 已实现并完成定向回归；T189 真实 MySQL/DM8、业务 API/UI、故障注入与迁移窗口验证待执行，T190 待其闭环 |
+| tasks.md | ✅ 已拆解 | T144～T194 已按单槽 visible、迁移、列表入口和旧迁移环境对账拆解 |
+| 实现 | ⏳ 环境验证中 | T144～T188、T191～T194 已实现并完成定向回归；T189 真实 MySQL/DM8、业务 API/UI、故障注入与迁移窗口验证待执行，T190 待其闭环 |
 
 ---
 
@@ -37,7 +37,7 @@
 - 本计划不使用“测试降级”；需要 OpenFGA、MySQL、DM8 的测试标为中央集成环境执行，但仍保留
   自动化断言，不把本 Feature 范围内验证延迟到未来。
 - T001～T143 记录的是本次可见性增量前的已完成实现基线，其中关于 inactive fail closed、
-  深层 visible 等描述不代表本次目标语义；T144～T190 是经本次 Design ★ 确认后的唯一增量
+  深层 visible 等描述不代表本次目标语义；T144～T194 是经本次 Design ★ 确认后的唯一增量
   实施计划，不能把历史任务的完成标记当作单槽 visible/停用保留授权已经实现的证据。
 - 本增量不新增 Worker/Celery 调用入口；既有 Worker 若经共享 Permission facade 使用新模型，
   继续由 `before_task_publish` header 传 `tenant_id`、`task_prerun` 恢复 ContextVar，禁止默认租户。
@@ -1594,6 +1594,39 @@
     实际偏差与验证证据，不保留 A/B/深层 visible 为运行时说明，不修改 Constitution C1～C7。
   - **验收**：T189 报告无未关闭 blocker，`git diff --check` 与文档本地链接检查通过
   - **依赖**：T189
+
+---
+
+## Wave 14 — 旧版 F048 迁移环境前向对账
+
+- [x] **T191：修正顶层枚举与子资源继承 visible 边界测试**
+  - **文件**：`src/backend/test/permission/test_f048_authorization_model.py`
+  - **测试**：顶层资源保持直接单槽+浅层 system 分支；folder/file 保留本地直接、parent+mode
+    继承和 system 传播；不存在 A/B/switch，也不展开部门/用户组成员或父级来源。
+  - **依赖**：T148, T160, T171
+
+- [x] **T192：实现 F048 v2 visible 模型边界**
+  - **文件**：`src/backend/bisheng/core/openfga/authorization_model_f048.py`
+  - **逻辑**：Authorization Model 版本升为 `f048-v2`；只为需要完整枚举的顶层资源展平 Grant
+    visible，folder/file 继续通过 canonical parent 继承，system/public/shared 不受 mode gate。
+  - **验收**：T191 与 model checksum 稳定性测试通过
+  - **依赖**：T191
+
+- [x] **T193：生产级 visible 对账命令测试**
+  - **文件**：`src/backend/test/permission/test_f048_visible_reconcile_cli.py`
+  - **测试**：覆盖默认 dry-run、apply Store 二次确认、多来源聚合去重、缺失 tuple 补写计划，
+    并证明无 Grant source 的 visible 只报告不自动删除。
+  - **依赖**：T159, T192
+
+- [x] **T194：实现旧迁移环境前向对账与 immutable model/Catalog 切换**
+  - **文件**：`src/backend/scripts/reconcile_f048_visible_projection.py`,
+    `src/backend/bisheng/permission/application/catalog_api.py`, `src/backend/scripts/README.md`
+  - **逻辑**：以 SQL Grant/assignee 重建 source projection；默认 dry-run，apply 要求停流、Store
+    /operator 确认、无在途 operation，旧 model 切换需显式确认；同 Store 发布/复用最终 model，
+    先补写并 higher-consistency 验证，再用 no-op Catalog release 前向切换且不修改历史
+    migration run；多余 tuple 只报告，stale source 阻断自动写入。
+  - **验收**：T193、Catalog runtime 回归、ruff、diff-check 通过
+  - **依赖**：T192, T193
 
 ---
 

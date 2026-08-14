@@ -423,6 +423,17 @@ reader 同时检查三个 marker scope：Catalog publish 用 global；tenant/dep
   其他必须跨越 100-tuple 边界原子切换的全局可见政策，再单独评估版本化索引/A-B；不能在没有
   该语义的情况下承担永久 switch 查询成本，也不能用数据库 ALLOW 替代 OpenFGA。
 
+#### 顶层枚举资源与继承型子资源的边界
+
+- `knowledge_space`、`knowledge_library`、workflow/assistant/tool/channel/dashboard 等需要完整
+  可见 ID 枚举的顶层资源，`visible` 由本地直接单槽与浅层 `system_visible` 组成；Grant 来源
+  直接投影到本级，public/shared 仍由显式系统 relation 计算，不进入 Grant source projection。
+- `folder`、`knowledge_file` 的列表采用业务候选优先，因此不把父资源授权展开到每个后代。
+  它们的 `visible` 是“本地直接单槽 + `inherit_mode` 下的 parent visible + 不受 mode gate 的
+  system visible”。CUSTOM 子资源的本地 Grant 仍产生直接单槽，继承来源不产生子资源 source 行。
+- 该边界保证知识空间 `ListObjects` 不反向遍历 Grant/model，同时保留文件候选 BatchCheck 的
+  父级继承语义；禁止为了统一形态向海量 folder/file 扇出 visible tuple。
+
 ### 决策 14：列表先枚举可见 ID 还是先取业务候选，由数据分布与端到端成本决定
 
 - **备选**：
@@ -1746,6 +1757,25 @@ CREATED
 `READY_TO_START` 是 migration run 的终态，状态为 `COMPLETED`。D4 同一事务将目标
 `authorization_model_release` 置为 `ACTIVE` 并退役来源 release；D5 是应用重启与启服阶段，
 不再修改 data migration run，也不引入第三个 migration CLI 子命令。
+
+#### 已完成旧版 F048 迁移环境的前向对账
+
+旧版 F048 migration run 已到 `READY_TO_START/COMPLETED` 时不得重置、篡改或创建第二个正式
+migration run。使用 `scripts/reconcile_f048_visible_projection.py` 执行独立的前向对账：
+
+1. 默认 dry-run，以 SQL `PermissionGrant/PermissionGrantAssignee` 为 Grant 可见来源真相，重算
+   source projection 与聚合直接 tuple；system/public/shared 只报告，不从 OpenFGA 反推授权。
+2. `--apply` 必须确认 Store ID 和操作人，并要求 runtime heartbeat 和在途 projection operation
+   均为零；旧 model 切换还必须显式指定 `--allow-model-upgrade`。生产、开发、测试使用同一逻辑，
+   不按环境名放宽门禁。
+3. 若 CURRENT Catalog 仍引用旧 F048 model，在同一 Store 发布最终 immutable model，先补 SQL
+   source projection 和缺失 visible tuple并 higher-consistency 验证，再发布一个无业务动作/
+   模型变化的新 Catalog release 绑定新 Authorization Model release，最后退休旧 release。
+4. 多余 direct visible tuple 首版只报告不删除，因为它可能由 system owner 等非 Grant canonical
+   来源贡献；存在 stale Grant source projection 时 apply 整体阻断，来源分类完成前不得把
+   “无 Grant source”直接解释为应撤销或形成 SQL/tuple 不一致。
+5. 任一步失败保持停流，重复执行同一命令按 model checksum、Catalog idempotency key、source
+   fingerprint 和 tuple key 前向续跑；成功后重启服务，由稳定 Store name 自动发现新 model。
 
 ### 8.3 正式迁移命令与启服门禁
 

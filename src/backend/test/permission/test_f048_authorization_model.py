@@ -257,12 +257,14 @@ def test_inherit_uses_only_canonical_parent_and_projected_system_visibility_igno
     }
     evaluator = ModelEvaluator(build_authorization_model_f048(), tuples)
     assert evaluator.check("user:7", "can_download", child)
+    assert evaluator.check("user:7", "visible", child)
 
     custom_child = ModelEvaluator(
         build_authorization_model_f048(),
         tuples - {("user:*", "inherit_mode", child)} | {("user:*", "custom_mode", child)},
     )
     assert not custom_child.check("user:7", "can_download", child)
+    assert not custom_child.check("user:7", "visible", child)
 
     system_custom_child = ModelEvaluator(
         build_authorization_model_f048(),
@@ -270,11 +272,25 @@ def test_inherit_uses_only_canonical_parent_and_projected_system_visibility_igno
         | {
             ("user:*", "custom_mode", child),
             ("user:*", "public_reader", parent),
-            ("user:*", "visible", child),
         },
     )
     assert system_custom_child.check("user:99", "visible", child)
     assert system_custom_child.check("user:99", "can_download", child)
+
+
+def test_only_top_level_resources_use_pure_flat_visible() -> None:
+    model = build_authorization_model_f048()
+    types = {definition["type"]: definition for definition in model["type_definitions"]}
+
+    for resource_type in ("knowledge_space", "workflow"):
+        visible = types[resource_type]["relations"]["visible"]
+        assert visible["union"]["child"][0] == {"this": {}}
+        assert visible["union"]["child"][1] == {"computedUserset": {"relation": "system_visible"}}
+    for resource_type in ("folder", "knowledge_file"):
+        relations = types[resource_type]["relations"]
+        assert relations["visible"] != {"this": {}}
+        assert "inherited_visible" in relations
+        assert "system_visible" in relations
 
 
 def test_department_subtree_and_user_group_usersets_are_not_expanded() -> None:
@@ -336,10 +352,8 @@ def test_shared_system_read_is_resource_specific_and_read_only() -> None:
     base = {
         ("user:7", "member", "tenant:child"),
         ("tenant:child", "shared_with", "knowledge_library:k1"),
-        ("tenant:child#member", "visible", "knowledge_library:k1"),
         ("user:*", "permission_enabled", "knowledge_library:k1"),
         ("tenant:child", "shared_with", "knowledge_file:f1"),
-        ("tenant:child#member", "visible", "knowledge_file:f1"),
         ("user:*", "permission_enabled", "knowledge_file:f1"),
     }
     evaluator = ModelEvaluator(model, base)
@@ -353,14 +367,20 @@ def test_shared_system_read_is_resource_specific_and_read_only() -> None:
 def test_visible_is_single_slot_shallow_and_has_no_ab_switch() -> None:
     model = build_authorization_model_f048()
     types = {definition["type"]: definition for definition in model["type_definitions"]}
-    for type_name in ("knowledge_space", "folder", "knowledge_file", "dashboard"):
+    for type_name in ("knowledge_space", "dashboard"):
         relations = types[type_name]["relations"]
         assert "visible" in relations
-        assert relations["visible"] == {"this": {}}
+        assert relations["visible"]["union"]["child"][0] == {"this": {}}
         assert "ordinary_visible" not in relations
         assert "protected_visible" not in relations
-        assert "inherited_visible" not in relations
-        assert "system_visible" not in relations
+        assert all("visible_a" not in relation and "visible_b" not in relation for relation in relations)
+        assert all("visibility_switch" not in relation for relation in relations)
+
+    for type_name in ("folder", "knowledge_file"):
+        relations = types[type_name]["relations"]
+        assert relations["visible"] != {"this": {}}
+        assert "inherited_visible" in relations
+        assert "system_visible" in relations
         assert all("visible_a" not in relation and "visible_b" not in relation for relation in relations)
         assert all("visibility_switch" not in relation for relation in relations)
 

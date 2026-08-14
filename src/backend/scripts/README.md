@@ -31,6 +31,52 @@ Options:
 
 ## Permission Scripts
 
+### `reconcile_f048_visible_projection.py`
+
+Audit and repair environments that already completed an older F048 data
+migration before the final flattened-visible design. The command is available
+in production as well as development/test; safety comes from the same
+maintenance and consistency gates, not from an environment-name allowlist.
+
+Run dry-run first from `src/backend/` with the live `config`:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
+```
+
+The JSON report includes canonical Grant/assignee source counts, persisted
+source differences, expected/live checksums, missing tuples, and unowned
+visible tuples. Unowned tuples are never deleted automatically because
+system/public/shared visibility is not owned by the Grant source projection.
+
+For apply, stop ingress traffic and all API/Worker/Linsight processes, wait for
+their F048 heartbeat TTL to expire, and copy the dry-run `store_id` into the
+explicit confirmation:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --apply \
+  --confirm-store-id <store-id> \
+  --operator-id <operator-user-id> \
+  --allow-model-upgrade
+```
+
+`--allow-model-upgrade` is required only when dry-run reports that CURRENT
+still points at an older F048 model. Apply exits with code `3` before writing
+when Store confirmation differs, a runtime heartbeat or projection operation
+is active, the CURRENT Catalog has an unrelated/non-resumable fence, canonical
+SQL data is incomplete, or stale source projections would require a classified
+revocation. It publishes/reuses the final immutable model in the same Store,
+rebuilds Grant-derived source rows, writes
+only missing direct `visible` tuples in batches of at most 90, verifies them
+with higher consistency, then publishes a no-op Catalog release bound to the
+new Authorization Model release. It does not create or modify a formal
+`permission_migration_run`. Re-running after an interruption is forward-only
+and idempotent. Restart all permission-using processes after success; they
+discover the latest model through the stable Store name and validate the new
+SQL CURRENT Catalog pin.
+
 ### `reconcile_f048_projection_operations.py`
 
 Inspect and recover explicitly selected F048 permission projection ledger

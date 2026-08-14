@@ -326,6 +326,73 @@ class SqlCatalogState:
             raise AuthorizationModelMismatchError(msg="Catalog authorization model release is missing")
         return row
 
+    async def bind_draft_authorization_release(
+        self,
+        *,
+        draft_id: int,
+        authorization_release_id: int,
+    ) -> None:
+        """Bind an unpublished complete draft to an immutable model release.
+
+        Normal Catalog edits inherit the current authorization-model release.
+        A forward model upgrade uses this narrow maintenance hook after the
+        no-op draft has been fully materialized and before publication.
+        """
+
+        with bypass_tenant_filter():
+            async with self._session_factory() as session:
+                async with session.begin():
+                    draft = (
+                        (
+                            await session.execute(
+                                select(PermissionCatalogRelease)
+                                .where(PermissionCatalogRelease.id == draft_id)
+                                .with_for_update()
+                            )
+                        )
+                        .scalars()
+                        .first()
+                    )
+                    model_release = await session.get(
+                        AuthorizationModelRelease,
+                        authorization_release_id,
+                    )
+                    if draft is None:
+                        raise PermissionPublishNotReadyError(msg="Authorization model Catalog draft is missing")
+                    if draft.required_authorization_model_release_id == authorization_release_id and draft.status in {
+                        "DRAFT",
+                        "PROJECTING",
+                        "COMMITTED",
+                        "CURRENT",
+                    }:
+                        return
+                    if draft.status != "DRAFT":
+                        raise PermissionPublishNotReadyError(
+                            msg="Authorization model can only be bound to a DRAFT Catalog"
+                        )
+                    predecessor = (
+                        await session.get(PermissionCatalogRelease, draft.predecessor_id)
+                        if draft is not None and draft.predecessor_id is not None
+                        else None
+                    )
+                    predecessor_model = (
+                        await session.get(
+                            AuthorizationModelRelease,
+                            predecessor.required_authorization_model_release_id,
+                        )
+                        if predecessor is not None
+                        else None
+                    )
+                    if (
+                        model_release is None
+                        or predecessor_model is None
+                        or model_release.store_id != predecessor_model.store_id
+                    ):
+                        raise AuthorizationModelMismatchError(
+                            msg="Authorization model release Store differs from the Catalog predecessor"
+                        )
+                    draft.required_authorization_model_release_id = authorization_release_id
+
     async def grant_references(
         self,
     ) -> dict[str, tuple[str, ...]]:
@@ -411,17 +478,9 @@ class SqlCatalogState:
                 pending_source_count=sum(source.state == "PENDING" for source in model_sources),
                 failed_source_count=sum(source.state not in {"ACTIVE", "PENDING"} for source in model_sources),
                 live_tuple_count=len(
-                    {
-                        source.tuple_fingerprint
-                        for source in model_sources
-                        if source.state == "ACTIVE"
-                    }
+                    {source.tuple_fingerprint for source in model_sources if source.state == "ACTIVE"}
                 ),
-                residual_checksum=(
-                    sha256("\n".join(residual_rows).encode()).hexdigest()
-                    if residual_rows
-                    else None
-                ),
+                residual_checksum=(sha256("\n".join(residual_rows).encode()).hexdigest() if residual_rows else None),
             )
         return summaries
 
@@ -1449,9 +1508,7 @@ class F048CatalogApi:
                     custom_models=customs,
                     standard_allow_same_level=standard_policy,
                     grant_references=(await self._state.grant_references()),
-                    model_reference_summaries=(
-                        await self._state.model_reference_summaries(deleted_model_keys)
-                    ),
+                    model_reference_summaries=(await self._state.model_reference_summaries(deleted_model_keys)),
                     draft_owner_id=operator_id,
                     idempotency_key=request.idempotency_key,
                     expires_at=_utc_now_naive() + timedelta(minutes=10),
