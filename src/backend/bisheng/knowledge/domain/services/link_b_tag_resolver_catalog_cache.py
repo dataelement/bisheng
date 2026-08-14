@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
+
+from loguru import logger
 
 from bisheng.database.models.review_tags import ReviewTag
 from bisheng.database.models.tag import TagResourceTypeEnum
@@ -14,8 +15,6 @@ from bisheng.knowledge.domain.schemas.link_b_tag_resolver_schema import (
     CachedPendingReviewTagRow,
     LinkBTagResolverCatalogSnapshot,
 )
-
-logger = logging.getLogger(__name__)
 
 LINK_B_CATALOG_CACHE_TTL = 120
 LINK_B_CATALOG_KEY_VERSION = "v1"

@@ -36,7 +36,7 @@ def test_load_uses_process_cache_on_second_call():
     assert second.library_by_key == {"行业情报": "行业情报"}
 
 
-def test_load_falls_back_to_db_when_redis_unavailable():
+def test_load_falls_back_to_db_when_redis_unavailable(caplog):
     payload = {
         "library_by_key": {"标签A": "标签A"},
         "pending_rows": [],
@@ -47,6 +47,10 @@ def test_load_falls_back_to_db_when_redis_unavailable():
         patch.object(LinkBTagResolverCatalogCache, "_get_redis_cache", return_value=None),
         patch.object(LinkBTagResolverCatalogCache, "_set_redis_cache") as set_redis,
         patch.object(LinkBTagResolverCatalogCache, "_load_payload_from_db", return_value=payload),
+        caplog.at_level(
+            "INFO",
+            logger="bisheng.knowledge.domain.services.link_b_tag_resolver_catalog_cache",
+        ),
     ):
         snapshot = LinkBTagResolverCatalogCache.load_sync(2, TagResourceTypeEnum.AI_AUTO_TAG)
 

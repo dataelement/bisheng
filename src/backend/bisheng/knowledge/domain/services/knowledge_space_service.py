@@ -127,6 +127,7 @@ from bisheng.knowledge.domain.constants import (
     parse_shougang_file_encoding_codes,
 )
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain import knowledge_fulltext_constants as fulltext_constants
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
@@ -183,6 +184,9 @@ from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
 from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
     KnowledgeDocumentEntryCapabilities,
 )
+from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
+    KnowledgeFulltextAdvancedSearchQuery,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     GroupedKnowledgeSpacesResp,
     KnowledgeSpaceCreateOptionDepartment,
@@ -194,6 +198,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp,
     RemoveSpaceMemberRequest,
     ShougangPortalAdvancedFileSearchReq,
+    ShougangPortalAdvancedUploaderItemResp,
+    ShougangPortalAdvancedUploaderSearchReq,
     ShougangPortalCategoryFileCountItem,
     ShougangPortalDomainBindableSpaceResp,
     ShougangPortalDomainFileCountItem,
@@ -344,6 +350,9 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
         KnowledgeFileSimilarityCandidateRepository,
     )
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
+        KnowledgeFileRepository,
+    )
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_space_scope_repository import (
         KnowledgeSpaceScopeRepository,
     )
@@ -354,7 +363,11 @@ if TYPE_CHECKING:
         KnowledgeDocumentDurableReferenceResolver,
         KnowledgeDocumentEntryResolver,
     )
+    from bisheng.knowledge.domain.services.knowledge_fulltext_search_service import (
+        KnowledgeFulltextSearchService,
+    )
     from bisheng.message.domain.services.message_service import MessageService
+    from bisheng.user.domain.repositories.interfaces.user_repository import UserRepository
 
 
 def _get_space_migrate_task() -> Any:
@@ -620,6 +633,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
         self.similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository | None = None
+        self.knowledge_file_repo: KnowledgeFileRepository | None = None
+        self.user_repository: UserRepository | None = None
+        self.knowledge_fulltext_search_service: KnowledgeFulltextSearchService | None = None
         self.department_space_binding_repo: DepartmentSpaceBindingRepository | None = None
         self.knowledge_space_scope_repo: KnowledgeSpaceScopeRepository | None = None
         self._created_space_scope_by_id: dict[
@@ -2396,8 +2412,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         explicit_file_space_by_id: dict[int, int] = {}
         grant_parent_space_ids: set[int] = set()
         if scope == "portal_configured":
-            if bool(self.login_user.is_admin()):
-                explicit_space_ids.update(space_kind_by_id)
+            is_global_admin = bool(self.login_user.is_admin())
+            if is_global_admin:
+                memberships = await SpaceChannelMemberDao.async_get_user_space_members(
+                    int(self.login_user.user_id)
+                )
+                readable_ids: list[str] = []
+                manageable_ids: list[str] = []
             else:
                 memberships, readable_ids, manageable_ids = await asyncio.gather(
                     SpaceChannelMemberDao.async_get_user_space_members(
@@ -2416,17 +2437,44 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         login_user=self.login_user,
                     ),
                 )
-                explicit_space_ids.update(
-                    int(member.business_id)
-                    for member in memberships
-                    if str(getattr(member, "business_id", "")).isdigit()
-                    and int(member.business_id) in scope_by_space_id
+
+            explicit_space_ids.update(
+                int(member.business_id)
+                for member in memberships
+                if str(getattr(member, "business_id", "")).isdigit()
+                and int(member.business_id) in scope_by_space_id
+                and (
+                    not is_global_admin
+                    or space_kind_by_id.get(int(member.business_id)) != "personal"
                 )
-                explicit_space_ids.update(
-                    int(item.space_id)
-                    for item in scopes
-                    if int(getattr(item, "created_by", 0) or 0) == int(self.login_user.user_id)
+            )
+            explicit_space_ids.update(
+                int(item.space_id)
+                for item in scopes
+                if int(getattr(item, "created_by", 0) or 0)
+                == int(self.login_user.user_id)
+            )
+
+            if is_global_admin:
+                binding_candidate_ids = sorted(
+                    {
+                        space_id
+                        for space_id, kind in space_kind_by_id.items()
+                        if kind != "personal"
+                    }
+                    - discoverable_space_ids
+                    - explicit_space_ids
                 )
+                if binding_candidate_ids:
+                    explicit_space_ids.update(
+                        int(space_id)
+                        for space_id in await FineGrainedPermissionService.filter_object_ids_by_explicit_binding_async(
+                            self.login_user,
+                            "knowledge_space",
+                            binding_candidate_ids,
+                        )
+                    )
+            else:
                 manageable_space_ids = {
                     int(space_id)
                     for space_id in manageable_ids or []
@@ -6120,6 +6168,239 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         req: ShougangPortalAdvancedFileSearchReq,
     ) -> dict:
+        spaces, effective_discovery_scope, trusted_public_scope = (
+            await self._resolve_shougang_portal_advanced_search_spaces(req)
+        )
+        if not spaces:
+            return self._build_shougang_portal_cursor_response([], False, None)
+
+        space_ids = [int(space.id) for space in spaces]
+        query = KnowledgeFulltextAdvancedSearchQuery(
+            space_ids=space_ids,
+            space_level=self._space_level_value(req.space_level),
+            business_domain_code=req.business_domain_code,
+            document_type=req.document_type,
+            file_subcategory_code=req.file_subcategory_code,
+            file_ext=req.file_ext,
+            tag=req.tag,
+            all_keywords=req.all_keywords,
+            exact_phrase=req.exact_phrase,
+            any_keywords=req.any_keywords,
+            exclude_keywords=req.exclude_keywords,
+            search_field=req.search_field,
+            original_uploader_id=req.original_uploader_id,
+            original_knowledge_id=req.original_knowledge_id,
+            preview_count_min=req.preview_count_min,
+            preview_count_max=req.preview_count_max,
+            download_count_min=req.download_count_min,
+            download_count_max=req.download_count_max,
+            updated_from=req.updated_from,
+            updated_to=req.updated_to,
+            sort=req.sort,
+        )
+        limit = min(max(int(req.limit or 20), 1), 100)
+        search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
+        session = await search_service.begin(query, cursor=req.cursor)
+        visible_files: list[tuple[KnowledgeFile, list[Any]]] = []
+        scanned_hits = 0
+        scanned_batches = 0
+        exhausted = False
+        started_at = time.monotonic()
+        close_pit = False
+        failure_stage = "search"
+        try:
+            while (
+                len(visible_files) <= limit
+                and scanned_hits < fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_MAX_SCAN_HITS
+            ):
+                batch_size = min(
+                    fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_BATCH_SIZE,
+                    fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_MAX_SCAN_HITS
+                    - scanned_hits,
+                )
+                batch = await search_service.fetch(query, session, size=batch_size)
+                scanned_batches += 1
+                scanned_hits += len(batch.hits)
+                failure_stage = "database_recheck"
+                raw_files = list(
+                    await file_repository.find_by_ids(
+                        [hit.file_id for hit in batch.hits]
+                    )
+                )
+                valid_files = self._restore_valid_fulltext_files(
+                    raw_files,
+                    hits=batch.hits,
+                    space_ids=set(space_ids),
+                )
+                failure_stage = "permission_filter"
+                if trusted_public_scope:
+                    visible_batch = self._accept_shougang_portal_public_files(valid_files)
+                else:
+                    visible_batch = await self._filter_shougang_portal_search_files(
+                        valid_files,
+                        spaces=spaces,
+                        defer_department_access=effective_discovery_scope
+                        == "public_and_department",
+                    )
+                visible_ids = {int(file.id) for file in visible_batch}
+                sort_by_file_id = {
+                    hit.file_id: list(hit.sort_values) for hit in batch.hits
+                }
+                for file in valid_files:
+                    file_id = int(file.id)
+                    if file_id not in visible_ids:
+                        continue
+                    visible_files.append((file, sort_by_file_id[file_id]))
+                    if len(visible_files) > limit:
+                        break
+                exhausted = batch.exhausted
+                if len(visible_files) > limit or exhausted:
+                    break
+                failure_stage = "search"
+
+            page_pairs = visible_files[:limit]
+            page_files = [file for file, _ in page_pairs]
+            if len(visible_files) > limit:
+                has_more = True
+                cursor_sort = page_pairs[-1][1]
+            elif exhausted:
+                has_more = False
+                cursor_sort = None
+                close_pit = True
+            else:
+                has_more = True
+                cursor_sort = list(session.search_after or [])
+
+            failure_stage = "response_mapping"
+            page_items = await self._map_shougang_portal_files_to_items(
+                files=page_files,
+                spaces=spaces,
+                file_ext=req.file_ext,
+                document_type=req.document_type,
+                file_subcategory_code=req.file_subcategory_code,
+                include_source_paths=True,
+            )
+            next_cursor = (
+                search_service.encode_next_cursor(session, sort_values=cursor_sort)
+                if has_more and cursor_sort
+                else None
+            )
+            logger.info(
+                "portal advanced fulltext search completed: field={} sort={} "
+                "has_keywords={} has_uploader_filter={} has_source_filter={} "
+                "has_count_filter={} scanned_hits={} visible_hits={} batches={} "
+                "duration_ms={}",
+                req.search_field,
+                req.sort,
+                query.has_keywords,
+                req.original_uploader_id is not None,
+                req.original_knowledge_id is not None,
+                any(
+                    value is not None
+                    for value in (
+                        req.preview_count_min,
+                        req.preview_count_max,
+                        req.download_count_min,
+                        req.download_count_max,
+                    )
+                ),
+                scanned_hits,
+                len(page_files),
+                scanned_batches,
+                int((time.monotonic() - started_at) * 1000),
+            )
+            return self._build_shougang_portal_cursor_response(
+                page_items,
+                has_more,
+                next_cursor,
+            )
+        except Exception as exc:
+            close_pit = True
+            logger.warning(
+                "portal advanced fulltext search failed: field={} sort={} "
+                "stage={} exception_type={} scanned_hits={} batches={} duration_ms={}",
+                req.search_field,
+                req.sort,
+                failure_stage,
+                type(exc).__name__,
+                scanned_hits,
+                scanned_batches,
+                int((time.monotonic() - started_at) * 1000),
+            )
+            raise
+        finally:
+            if close_pit:
+                await search_service.close(session)
+
+    async def search_shougang_portal_advanced_uploaders(
+        self,
+        req: ShougangPortalAdvancedUploaderSearchReq,
+    ) -> dict:
+        spaces, _, trusted_public_scope = (
+            await self._resolve_shougang_portal_advanced_search_spaces(req)
+        )
+        if not spaces:
+            return {"data": []}
+        search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
+        if self.user_repository is None:
+            raise RuntimeError("User repository is not initialized")
+
+        users = await self.user_repository.list_active_by_name(
+            req.q,
+            limit=fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_CANDIDATE_LIMIT,
+        )
+        if not users:
+            return {"data": []}
+        space_ids = [int(space.id) for space in spaces]
+        supports = await search_service.find_uploader_supports(
+            space_ids=space_ids,
+            uploader_ids=[int(user.user_id) for user in users],
+            per_uploader_limit=fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_SUPPORT_LIMIT,
+        )
+        support_file_ids = list(
+            dict.fromkeys(file_id for support in supports for file_id in support.file_ids)
+        )
+        files = list(await file_repository.find_by_ids(support_file_ids))
+        valid_files = self._restore_valid_fulltext_files(
+            files,
+            hits=None,
+            space_ids=set(space_ids),
+        )
+        if trusted_public_scope:
+            visible_files = self._accept_shougang_portal_public_files(valid_files)
+        else:
+            visible_files = await self._filter_shougang_portal_search_files(
+                valid_files,
+                spaces=spaces,
+                defer_department_access=False,
+            )
+        visible_ids = {int(file.id) for file in visible_files}
+        supported_user_ids = {
+            support.user_id
+            for support in supports
+            if visible_ids.intersection(support.file_ids)
+        }
+        candidates = [
+            ShougangPortalAdvancedUploaderItemResp(
+                user_id=int(user.user_id),
+                user_name=str(user.user_name),
+            )
+            for user in users
+            if int(user.user_id) in supported_user_ids
+        ]
+        candidates.sort(key=lambda item: (item.user_name.casefold(), item.user_id))
+        return {
+            "data": [
+                item.model_dump(mode="json")
+                for item in candidates[: min(req.limit, fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_RESULT_LIMIT)]
+            ]
+        }
+
+    async def _resolve_shougang_portal_advanced_search_spaces(
+        self,
+        req: ShougangPortalAdvancedFileSearchReq
+        | ShougangPortalAdvancedUploaderSearchReq,
+    ) -> tuple[list[Knowledge], str, bool]:
         effective_discovery_scope = "public" if req.public_only else req.discovery_scope
         trusted_public_scope = effective_discovery_scope == "public"
         if effective_discovery_scope != "legacy":
@@ -6136,99 +6417,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 req.space_ids,
                 req.space_level,
             )
-        if not spaces:
-            return self._build_shougang_portal_cursor_response([], False, None)
+        return spaces, effective_discovery_scope, trusted_public_scope
 
-        space_ids = [int(space.id) for space in spaces]
-        tag_ids = await self._get_shougang_portal_tag_ids_for_spaces(space_ids, req.tag)
-        if req.tag and not tag_ids:
-            return self._build_shougang_portal_cursor_response([], False, None)
+    def _require_shougang_portal_fulltext_dependencies(self):
+        if self.knowledge_fulltext_search_service is None:
+            raise RuntimeError("Knowledge fulltext search service is not initialized")
+        if self.knowledge_file_repo is None:
+            raise RuntimeError("Knowledge file repository is not initialized")
+        return self.knowledge_fulltext_search_service, self.knowledge_file_repo
 
-        from bisheng.common.cursor import CursorDecodeError, decode_cursor
-
-        cursor_context = self._shougang_portal_advanced_file_cursor_context(
-            req,
-            space_ids,
-        )
-        try:
-            batch_cursor = decode_cursor(
-                req.cursor,
-                expected_key_len=2,
-                expected_context=cursor_context,
-            )
-        except CursorDecodeError as exc:
-            raise KnowledgeInvalidCursorError(exception=exc)
-
-        limit = min(max(int(req.limit or 20), 1), 100)
-        order_sort = self._shougang_portal_order_sort(req.sort)
-        visible_files: list[KnowledgeFile] = []
-        fetch_limit = max(limit + 1, PORTAL_LIST_CURSOR_SCAN_BATCH_SIZE)
-        while True:
-            raw_files = await KnowledgeFileDao.asearch_portal_advanced_cursor(
-                knowledge_ids=space_ids,
-                status=[KnowledgeFileStatus.SUCCESS.value],
-                tag_ids=tag_ids,
-                file_ext=req.file_ext,
-                document_type=req.document_type,
-                file_subcategory_code=req.file_subcategory_code,
-                business_domain_code=req.business_domain_code,
-                all_keywords=req.all_keywords,
-                exact_phrase=req.exact_phrase,
-                any_keywords=req.any_keywords,
-                exclude_keywords=req.exclude_keywords,
-                search_field=req.search_field,
-                updated_from=req.updated_from,
-                updated_to=req.updated_to,
-                order_sort=order_sort,
-                cursor=batch_cursor,
-                limit=fetch_limit,
-            )
-            if not raw_files:
-                break
-
-            if trusted_public_scope:
-                visible_batch = self._accept_shougang_portal_public_files(raw_files)
-            else:
-                visible_batch = await self._filter_shougang_portal_search_files(
-                    raw_files,
-                    spaces=spaces,
-                    defer_department_access=effective_discovery_scope
-                    == "public_and_department",
-                )
-            visible_ids = {int(file.id) for file in visible_batch}
-            for file in raw_files:
-                if int(file.id) not in visible_ids:
-                    continue
-                visible_files.append(file)
-                if len(visible_files) > limit:
-                    break
-
-            if len(visible_files) > limit:
-                break
-            last_db_file = raw_files[-1]
-            batch_cursor = [last_db_file.update_time, last_db_file.id]
-            if len(raw_files) < fetch_limit:
-                break
-
-        has_more = len(visible_files) > limit
-        page_files = visible_files[:limit]
-        if not page_files:
-            return self._build_shougang_portal_cursor_response([], False, None)
-
-        page_items = await self._map_shougang_portal_files_to_items(
-            files=page_files,
-            spaces=spaces,
-            file_ext=req.file_ext,
-            document_type=req.document_type,
-            file_subcategory_code=req.file_subcategory_code,
-            include_source_paths=True,
-        )
-        next_cursor = self._encode_shougang_portal_file_cursor(page_files[-1], cursor_context) if has_more else None
-        return self._build_shougang_portal_cursor_response(
-            page_items,
-            has_more,
-            next_cursor,
-        )
+    @staticmethod
+    def _restore_valid_fulltext_files(
+        files: list[KnowledgeFile],
+        *,
+        hits: list[Any] | None,
+        space_ids: set[int],
+    ) -> list[KnowledgeFile]:
+        valid_by_id = {
+            int(file.id): file
+            for file in files
+            if file.id is not None
+            and int(file.knowledge_id) in space_ids
+            and int(file.file_type) == FileType.FILE.value
+            and int(file.status) == KnowledgeFileStatus.SUCCESS.value
+            and file.deleted_at is None
+        }
+        if hits is None:
+            return [file for file in files if int(file.id) in valid_by_id]
+        return [valid_by_id[hit.file_id] for hit in hits if hit.file_id in valid_by_id]
 
     async def record_shougang_portal_recommendation_behavior(
         self,

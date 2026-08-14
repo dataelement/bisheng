@@ -496,6 +496,7 @@ def _discovery_scope(
     owner_type: KnowledgeSpaceOwnerTypeEnum,
     owner_id: int,
     enabled: bool,
+    created_by: int = 0,
 ) -> KnowledgeSpaceScope:
     return KnowledgeSpaceScope(
         id=space_id,
@@ -504,6 +505,7 @@ def _discovery_scope(
         level=level,
         owner_type=owner_type,
         owner_id=owner_id,
+        created_by=created_by,
         portal_discovery_enabled=enabled,
     )
 
@@ -681,6 +683,112 @@ async def test_portal_discovery_resolver_separates_configured_spaces_and_single_
     grant_repository = service.department_file_view_access_service.grant_repository
     grant_repository.list_active_by_user.assert_awaited_once_with(tenant_id=1, user_id=7)
     service.department_file_view_access_service.evaluate_files.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_portal_configured_admin_only_keeps_owned_joined_or_explicit_private_spaces(
+) -> None:
+    login_user = Mock(user_id=7, user_name="管理员", tenant_id=1)
+    login_user.is_admin.return_value = True
+    service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
+    scopes = [
+        _discovery_scope(
+            10,
+            KnowledgeSpaceLevelEnum.PUBLIC,
+            KnowledgeSpaceOwnerTypeEnum.TENANT_ROOT_DEPARTMENT,
+            1,
+            True,
+        ),
+        _discovery_scope(
+            40,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            41,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            7,
+            False,
+            7,
+        ),
+        _discovery_scope(
+            42,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            43,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            50,
+            KnowledgeSpaceLevelEnum.PERSONAL,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+            8,
+        ),
+        _discovery_scope(
+            51,
+            KnowledgeSpaceLevelEnum.PERSONAL,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            7,
+            False,
+            7,
+        ),
+    ]
+    service.knowledge_space_scope_repo = Mock(
+        list_portal_candidates=AsyncMock(return_value=scopes)
+    )
+    service.department_space_binding_repo = Mock(
+        find_by_space_ids=AsyncMock(return_value=[])
+    )
+    service.department_file_view_access_service = Mock(grant_repository=None)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "SpaceChannelMemberDao.async_get_user_space_members",
+            new_callable=AsyncMock,
+            return_value=[Mock(business_id="42"), Mock(business_id="50")],
+        ) as get_memberships,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "PermissionService.list_accessible_ids",
+            new_callable=AsyncMock,
+        ) as list_accessible_ids,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "FineGrainedPermissionService.filter_object_ids_by_explicit_binding_async",
+            new_callable=AsyncMock,
+            return_value=["43"],
+        ) as filter_explicit_bindings,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_by_ids",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+    ):
+        result = await service.resolve_portal_discovery(scope="portal_configured")
+
+    assert result.discoverable_space_ids == [10]
+    assert result.explicitly_visible_space_ids == [41, 42, 43, 51]
+    assert result.query_space_ids == [10, 41, 42, 43, 51]
+    get_memberships.assert_awaited_once_with(7)
+    list_accessible_ids.assert_not_awaited()
+    filter_explicit_bindings.assert_awaited_once_with(
+        login_user,
+        "knowledge_space",
+        [40, 43],
+    )
 
 
 @pytest.mark.asyncio

@@ -28,6 +28,12 @@ from bisheng.database.models.tag import (
 from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
     KnowledgeTagLibraryLinkDao,
 )
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    KnowledgeFulltextFileRef,
+    request_file_sync_intents,
+    request_file_sync_intents_sync,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_tag_library_schema import KnowledgeSpaceTagLibraryTreeItem
 from bisheng.knowledge.domain.schemas.link_b_tag_resolver_schema import (
     PendingReviewTagMatch,
@@ -968,6 +974,17 @@ class TagLibraryTagService:
                     )
                 )
             try:
+                request_file_sync_intents_sync(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(file_id),
+                            knowledge_id=int(space_id),
+                            tenant_id=int(tenant_id or 1),
+                        )
+                    ],
+                    trigger_type="approved_file_tags_updated",
+                )
                 session.commit()
             except IntegrityError:
                 session.rollback()
@@ -1253,6 +1270,10 @@ class TagLibraryTagService:
             for tag in existing:
                 if tag.id is not None and tag.name:
                     old_id_by_key[(tag.name, tag.resource_type)] = int(tag.id)
+            affected_files = await cls._load_files_for_tag_ids(
+                session,
+                list(old_id_by_key.values()),
+            )
             await session.exec(
                 delete(Tag).where(
                     Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
@@ -1338,6 +1359,11 @@ class TagLibraryTagService:
                 new_tags=new_tags,
                 now=now,
             )
+            await request_file_sync_intents(
+                session,
+                affected_files,
+                trigger_type="tag_library_replaced",
+            )
             await session.commit()
         await cls.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
         return system, manual, ai
@@ -1346,26 +1372,61 @@ class TagLibraryTagService:
     async def delete_for_library(cls, library_id: int) -> None:
         tenant_id: int | None = None
         async with get_async_db_session() as session:
-            tenant_row = (
+            tag_rows = (
                 await session.exec(
-                    select(Tag.tenant_id)
-                    .where(
+                    select(Tag.id, Tag.tenant_id).where(
                         Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
                         Tag.business_id == cls._business_id(library_id),
                     )
-                    .limit(1)
                 )
-            ).first()
-            if tenant_row is not None:
-                tenant_id = int(tenant_row)
+            ).all()
+            if tag_rows:
+                tenant_id = int(tag_rows[0][1])
+            affected_files = await cls._load_files_for_tag_ids(
+                session,
+                [int(row[0]) for row in tag_rows],
+            )
             await session.exec(
                 delete(Tag).where(
                     Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
                     Tag.business_id == cls._business_id(library_id),
                 )
             )
+            await request_file_sync_intents(
+                session,
+                affected_files,
+                trigger_type="tag_library_deleted",
+            )
             await session.commit()
         await cls.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
+
+    @staticmethod
+    async def _load_files_for_tag_ids(
+        session,
+        tag_ids: list[int],
+    ) -> list[KnowledgeFulltextFileRef]:
+        if not tag_ids:
+            return []
+        resource_ids = (
+            await session.exec(
+                select(TagLink.resource_id).where(
+                    TagLink.tag_id.in_(tag_ids),
+                    TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                )
+            )
+        ).all()
+        file_ids = sorted({int(resource_id) for resource_id in resource_ids if str(resource_id).isdigit()})
+        if not file_ids:
+            return []
+        files = (await session.exec(select(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)))).all()
+        return [
+            KnowledgeFulltextFileRef(
+                file_id=int(item.id),
+                knowledge_id=int(item.knowledge_id),
+                tenant_id=int(item.tenant_id or 1),
+            )
+            for item in files
+        ]
 
     @classmethod
     async def collect_space_portal_tag_map(cls, space_ids: list[int]) -> dict[str, list[Tag]]:

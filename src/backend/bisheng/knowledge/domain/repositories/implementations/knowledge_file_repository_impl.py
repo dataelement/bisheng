@@ -24,6 +24,10 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    commit_tracked_fulltext_changes,
+    track_fulltext_file_changes,
+)
 
 
 class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], KnowledgeFileRepository):
@@ -31,6 +35,36 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
 
     def __init__(self, session: AsyncSession):
         super().__init__(session, KnowledgeFile)
+        track_fulltext_file_changes(session)
+
+    async def save(self, entity: KnowledgeFile) -> KnowledgeFile:
+        self.session.add(entity)
+        await commit_tracked_fulltext_changes(
+            self.session,
+            trigger_type="knowledge_file_repository_saved",
+        )
+        await self.session.refresh(entity)
+        return entity
+
+    async def update(self, entity: KnowledgeFile) -> KnowledgeFile:
+        merged = await self.session.merge(entity)
+        await commit_tracked_fulltext_changes(
+            self.session,
+            trigger_type="knowledge_file_repository_updated",
+        )
+        await self.session.refresh(merged)
+        return merged
+
+    async def delete(self, entity_id: int) -> bool:
+        entity = await self.find_by_id(entity_id)
+        if entity is None:
+            return False
+        await self.session.delete(entity)
+        await commit_tracked_fulltext_changes(
+            self.session,
+            trigger_type="knowledge_file_repository_deleted",
+        )
+        return True
 
     async def find_by_ids(self, entity_ids: list[int]) -> Sequence[KnowledgeFile]:
         """Fetch multiple KnowledgeFile rows by id list.
@@ -341,6 +375,32 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         )
         await self.session.flush()
         return int(result.rowcount or 0)
+
+    async def request_projection_rebuild(self, entry_id: int) -> bool:
+        result = await self.session.execute(
+            update(KnowledgeFile)
+            .where(
+                KnowledgeFile.id == entry_id,
+                KnowledgeFile.reference_document_id.is_not(None),
+                col(KnowledgeFile.entry_type).in_(
+                    [
+                        KnowledgeFileEntryType.PUBLISH.value,
+                        KnowledgeFileEntryType.SHARE.value,
+                    ]
+                ),
+                KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+                KnowledgeFile.projection_status == KnowledgeFileProjectionStatus.READY.value,
+                KnowledgeFile.projection_lease_owner.is_(None),
+            )
+            .values(
+                projection_status=KnowledgeFileProjectionStatus.PENDING.value,
+                projection_next_retry_at=None,
+                projection_lease_owner=None,
+                projection_lease_until=None,
+            )
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0) == 1
 
     @staticmethod
     def _projection_candidate_predicate(now: datetime):

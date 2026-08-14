@@ -40,6 +40,11 @@ from bisheng.knowledge.domain.schemas.knowledge_recycle import (
     RecycleRestorePreviewResponse,
     RecycleRestoreRequest,
 )
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    KnowledgeFulltextFileRef,
+    request_file_delete_intents,
+    request_file_sync_intents,
+)
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
     KnowledgeSpaceContentStat,
 )
@@ -194,6 +199,19 @@ class KnowledgeRecycleService:
             )
             for item in items:
                 session.add(item)
+            await request_file_delete_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(record.id),
+                        knowledge_id=int(record.knowledge_id),
+                        tenant_id=int(record.tenant_id or self.login_user.tenant_id),
+                    )
+                    for record in records
+                    if record.file_type == FileType.FILE.value
+                ],
+                trigger_type="recycle_soft_delete",
+            )
             await session.commit()
 
         logger.info(
@@ -372,6 +390,19 @@ class KnowledgeRecycleService:
             )
 
         async with get_async_db_session() as session:
+            await request_file_delete_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(item.file_id),
+                        knowledge_id=int(item.knowledge_id),
+                        tenant_id=int(item.tenant_id or self.login_user.tenant_id),
+                    )
+                    for item in all_items
+                    if int(item.file_type) == FileType.FILE.value
+                ],
+                trigger_type="recycle_purged",
+            )
             if file_ids:
                 await session.execute(delete(KnowledgeFile).where(col(KnowledgeFile.id).in_(file_ids)))
             await session.execute(
@@ -590,6 +621,30 @@ class KnowledgeRecycleService:
                     )
                 await session.execute(
                     delete(KnowledgeRecycleItem).where(KnowledgeRecycleItem.recycle_batch_id == item.recycle_batch_id)
+                )
+                restored_files = (
+                    (
+                        await session.execute(
+                            select(KnowledgeFile).where(
+                                col(KnowledgeFile.id).in_(batch_file_ids),
+                                KnowledgeFile.file_type == FileType.FILE.value,
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                await request_file_sync_intents(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(record.id),
+                            knowledge_id=int(record.knowledge_id),
+                            tenant_id=int(record.tenant_id or self.login_user.tenant_id),
+                        )
+                        for record in restored_files
+                    ],
+                    trigger_type="recycle_restored",
                 )
                 await session.commit()
 

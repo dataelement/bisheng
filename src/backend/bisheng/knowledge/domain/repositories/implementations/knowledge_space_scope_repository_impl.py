@@ -12,6 +12,9 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpace
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_space_scope_repository import (
     KnowledgeSpaceScopeRepository,
 )
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    request_knowledge_intent,
+)
 
 
 class KnowledgeSpaceScopeRepositoryImpl(
@@ -63,6 +66,12 @@ class KnowledgeSpaceScopeRepositoryImpl(
             raise ValueError(f"KnowledgeSpaceScope not found for space_id={space_id}")
         scope.portal_discovery_enabled = bool(enabled)
         self.session.add(scope)
+        await request_knowledge_intent(
+            self.session,
+            knowledge_id=space_id,
+            tenant_id=int(scope.tenant_id or 1),
+            trigger_type="knowledge_scope_updated",
+        )
         await self.session.commit()
         await self.session.refresh(scope)
         return scope
@@ -84,6 +93,12 @@ class KnowledgeSpaceScopeRepositoryImpl(
         scope.portal_discovery_enabled = bool(enabled)
         self.session.add(space)
         self.session.add(scope)
+        await request_knowledge_intent(
+            self.session,
+            knowledge_id=int(space.id),
+            tenant_id=int(space.tenant_id or scope.tenant_id or 1),
+            trigger_type="knowledge_scope_updated",
+        )
         return scope
 
     async def update_space_and_portal_discovery(

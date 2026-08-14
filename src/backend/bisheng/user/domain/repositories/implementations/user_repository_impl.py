@@ -1,7 +1,7 @@
 from typing import Union
 
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
@@ -90,6 +90,24 @@ class UserRepositoryImpl(BaseRepositoryImpl[User, int], UserRepository):
         statement = select(User).where(
             User.external_id == external_id,
             User.delete == 0,
+        )
+        result = await self.session.exec(statement)
+        return list(result.all())
+
+    async def list_active_by_name(self, keyword: str, *, limit: int) -> list[User]:
+        normalized = " ".join(keyword.split())
+        if not normalized:
+            raise ValueError("keyword must not be empty")
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        statement = (
+            select(User)
+            .where(
+                User.delete == 0,
+                col(User.user_name).contains(normalized, autoescape=True),
+            )
+            .order_by(User.user_name.asc(), User.user_id.asc())
+            .limit(limit)
         )
         result = await self.session.exec(statement)
         return list(result.all())

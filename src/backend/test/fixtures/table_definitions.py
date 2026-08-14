@@ -491,6 +491,36 @@ CREATE TABLE IF NOT EXISTS knowledge_file_similarity_candidate (
     CONSTRAINT uk_kf_similarity_source_document UNIQUE (source_file_id, candidate_document_id)
 )"""
 
+TABLE_KNOWLEDGE_FULLTEXT_OUTBOX = """\
+CREATE TABLE IF NOT EXISTS knowledge_fulltext_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    aggregate_type VARCHAR(16) NOT NULL,
+    aggregate_id INTEGER NOT NULL,
+    knowledge_id INTEGER,
+    desired_action VARCHAR(32) NOT NULL,
+    desired_revision INTEGER NOT NULL DEFAULT 1,
+    applied_revision INTEGER NOT NULL DEFAULT 0,
+    trigger_type VARCHAR(64) NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'pending',
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    max_retries INTEGER NOT NULL DEFAULT 8,
+    next_retry_at DATETIME,
+    lease_owner VARCHAR(64),
+    lease_until DATETIME,
+    fanout_cursor JSON,
+    payload_snapshot JSON,
+    error_summary TEXT,
+    last_success_at DATETIME,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(tenant_id, aggregate_type, aggregate_id)
+)"""
+
+INDEX_KNOWLEDGE_FULLTEXT_OUTBOX_DISPATCH = """\
+CREATE INDEX IF NOT EXISTS ix_kfo_dispatch
+    ON knowledge_fulltext_outbox (status, next_retry_at, lease_until, update_time)"""
+
 INDEX_KNOWLEDGE_FILE_SIMILARITY_TENANT = """\
 CREATE INDEX IF NOT EXISTS ix_kf_similarity_tenant_id
     ON knowledge_file_similarity_candidate (tenant_id)"""
@@ -923,6 +953,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "knowledge_document": TABLE_KNOWLEDGE_DOCUMENT,
     "knowledge_document_version": TABLE_KNOWLEDGE_DOCUMENT_VERSION,
     "knowledge_file_similarity_candidate": TABLE_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE,
+    "knowledge_fulltext_outbox": TABLE_KNOWLEDGE_FULLTEXT_OUTBOX,
     "t_gpts_tools": TABLE_GPTS_TOOLS,
     "channel": TABLE_CHANNEL,
     # F018: owner transfer targets the standalone assistant table.
@@ -951,6 +982,7 @@ INDEX_DEFINITIONS: list[str] = [
     INDEX_KNOWLEDGE_FILE_SIMILARITY_SOURCE,
     INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_FILE,
     INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_DOCUMENT,
+    INDEX_KNOWLEDGE_FULLTEXT_OUTBOX_DISPATCH,
     INDEX_MESSAGE_PUSH_OUTBOX_TENANT,
     INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY,
     INDEX_MESSAGE_PUSH_OUTBOX_INBOX_MESSAGE,
@@ -997,6 +1029,8 @@ def create_tables(engine: Engine, *table_names: str) -> None:
             conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_SOURCE))
             conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_FILE))
             conn.execute(text(INDEX_KNOWLEDGE_FILE_SIMILARITY_CANDIDATE_DOCUMENT))
+        if "knowledge_fulltext_outbox" in table_names:
+            conn.execute(text(INDEX_KNOWLEDGE_FULLTEXT_OUTBOX_DISPATCH))
         if "message_push_outbox" in table_names:
             conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_TENANT))
             conn.execute(text(INDEX_MESSAGE_PUSH_OUTBOX_STATUS_NEXT_RETRY))

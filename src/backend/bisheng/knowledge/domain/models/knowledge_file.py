@@ -706,6 +706,24 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def add_file(cls, knowledge_file: KnowledgeFile) -> KnowledgeFile:
         with get_sync_db_session() as session:
             session.add(knowledge_file)
+            session.flush()
+            if knowledge_file.file_type == FileType.FILE.value:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    KnowledgeFulltextFileRef,
+                    request_file_sync_intents_sync,
+                )
+
+                request_file_sync_intents_sync(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(knowledge_file.id),
+                            knowledge_id=int(knowledge_file.knowledge_id),
+                            tenant_id=int(knowledge_file.tenant_id or 1),
+                        )
+                    ],
+                    trigger_type="knowledge_file_created",
+                )
             session.commit()
             session.refresh(knowledge_file)
         return knowledge_file
@@ -760,6 +778,24 @@ class KnowledgeFileDao(KnowledgeFileBase):
     def update(cls, knowledge_file):
         with get_sync_db_session() as session:
             session.add(knowledge_file)
+            session.flush()
+            if knowledge_file.file_type == FileType.FILE.value:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    KnowledgeFulltextFileRef,
+                    request_file_sync_intents_sync,
+                )
+
+                request_file_sync_intents_sync(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(knowledge_file.id),
+                            knowledge_id=int(knowledge_file.knowledge_id),
+                            tenant_id=int(knowledge_file.tenant_id or 1),
+                        )
+                    ],
+                    trigger_type="knowledge_file_updated",
+                )
             session.commit()
             session.refresh(knowledge_file)
         return knowledge_file
@@ -768,6 +804,44 @@ class KnowledgeFileDao(KnowledgeFileBase):
     async def async_update(cls, knowledge_file):
         async with get_async_db_session() as session:
             session.add(knowledge_file)
+            await session.flush()
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                KnowledgeFulltextFileRef,
+                request_file_sync_intents,
+            )
+
+            if knowledge_file.file_type == FileType.FILE.value:
+                affected_files = [knowledge_file]
+                trigger_type = "knowledge_file_updated"
+            else:
+                prefix = f"{knowledge_file.file_level_path or ''}/{int(knowledge_file.id)}"
+                affected_files = list(
+                    (
+                        await session.exec(
+                            select(KnowledgeFile).where(
+                                KnowledgeFile.knowledge_id == knowledge_file.knowledge_id,
+                                KnowledgeFile.file_type == FileType.FILE.value,
+                                or_(
+                                    col(KnowledgeFile.file_level_path) == prefix,
+                                    col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                                ),
+                            )
+                        )
+                    ).all()
+                )
+                trigger_type = "knowledge_folder_updated"
+            await request_file_sync_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(item.id),
+                        knowledge_id=int(item.knowledge_id),
+                        tenant_id=int(item.tenant_id or 1),
+                    )
+                    for item in affected_files
+                ],
+                trigger_type=trigger_type,
+            )
             await session.commit()
             await session.refresh(knowledge_file)
         return knowledge_file
@@ -795,6 +869,25 @@ class KnowledgeFileDao(KnowledgeFileBase):
             return False
         async with get_async_db_session() as session:
             session.add_all(knowledge_files)
+            await session.flush()
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                KnowledgeFulltextFileRef,
+                request_file_sync_intents,
+            )
+
+            await request_file_sync_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(item.id),
+                        knowledge_id=int(item.knowledge_id),
+                        tenant_id=int(item.tenant_id or 1),
+                    )
+                    for item in knowledge_files
+                    if item.file_type == FileType.FILE.value
+                ],
+                trigger_type="knowledge_files_updated",
+            )
             await session.commit()
             return True
 
@@ -805,7 +898,36 @@ class KnowledgeFileDao(KnowledgeFileBase):
             update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value, remark=reason)
         )
         with get_sync_db_session() as session:
+            files = session.exec(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.id.in_(file_ids),
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                )
+            ).all()
             session.exec(statement)
+            if status.value in {
+                KnowledgeFileStatus.SUCCESS.value,
+                KnowledgeFileStatus.FAILED.value,
+                KnowledgeFileStatus.TIMEOUT.value,
+                KnowledgeFileStatus.VIOLATION.value,
+            }:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    KnowledgeFulltextFileRef,
+                    request_file_sync_intents_sync,
+                )
+
+                request_file_sync_intents_sync(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(item.id),
+                            knowledge_id=int(item.knowledge_id),
+                            tenant_id=int(item.tenant_id or 1),
+                        )
+                        for item in files
+                    ],
+                    trigger_type="knowledge_file_status_finalized",
+                )
             session.commit()
 
     @classmethod
@@ -815,7 +937,38 @@ class KnowledgeFileDao(KnowledgeFileBase):
             update(KnowledgeFile).where(KnowledgeFile.id.in_(file_ids)).values(status=status.value, remark=reason)
         )
         async with get_async_db_session() as session:
+            files = (
+                await session.exec(
+                    select(KnowledgeFile).where(
+                        KnowledgeFile.id.in_(file_ids),
+                        KnowledgeFile.file_type == FileType.FILE.value,
+                    )
+                )
+            ).all()
             await session.exec(statement)
+            if status.value in {
+                KnowledgeFileStatus.SUCCESS.value,
+                KnowledgeFileStatus.FAILED.value,
+                KnowledgeFileStatus.TIMEOUT.value,
+                KnowledgeFileStatus.VIOLATION.value,
+            }:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    KnowledgeFulltextFileRef,
+                    request_file_sync_intents,
+                )
+
+                await request_file_sync_intents(
+                    session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=int(item.id),
+                            knowledge_id=int(item.knowledge_id),
+                            tenant_id=int(item.tenant_id or 1),
+                        )
+                        for item in files
+                    ],
+                    trigger_type="knowledge_file_status_finalized",
+                )
             await session.commit()
 
     @classmethod
