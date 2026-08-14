@@ -10,3 +10,6 @@ export * from './components/Toast';
 // have to be identical across the apps for a support handover to work — the
 // copy and the artwork are passed in, so the contract above still holds.
 export * from './components/ErrorPage';
+// Empty-state / status illustrations. Inline SVG driven by the --illus-* palette
+// (blue ⇄ green + grey draft) — artwork only, so the contract above holds.
+export * from './components/Illustration';

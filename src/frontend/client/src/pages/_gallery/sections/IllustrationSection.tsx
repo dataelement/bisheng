@@ -1,6 +1,6 @@
 /**
  * Illustration section — all themed inline-SVG illustrations from
- * src/components/illustrations/, rendered side by side in the three color
+ * @bisheng/ui (re-exported at ~/components/illustrations), rendered in the three color
  * modes (blue theme / green theme / grey draft) so the designer can audit the
  * whole set at a glance. Spec source: packages/ui/docs/基础-色彩规范.mdx §5 +
  * BRAND-THEME-HANDOFF.md §3.1.
@@ -21,8 +21,10 @@ import {
   ListWebLinkIllustration,
   NoPermissionIllustration,
   SuccessIllustration,
+  SystemErrorIllustration,
   SystemMaintenanceIllustration,
 } from '~/components/illustrations';
+import type { IllustrationProps } from '~/components/illustrations';
 import { ComponentPage, ExampleGroup, ExampleGrid, ExampleCard, CompareTable } from '../components/kit';
 
 /* ------------------------------------------------------------------ *
@@ -53,7 +55,7 @@ const BLUE_ILLUS_VARS = {
 interface IllustrationDef {
   name: string;
   usage: string;
-  Comp: ComponentType<{ className?: string; grey?: boolean }>;
+  Comp: ComponentType<IllustrationProps>;
 }
 
 const ILLUSTRATIONS: IllustrationDef[] = [
@@ -91,6 +93,12 @@ const ILLUSTRATIONS: IllustrationDef[] = [
     name: 'SystemMaintenanceIllustration',
     usage: '系统维护 — 后端 500 全屏维护弹层',
     Comp: SystemMaintenanceIllustration,
+  },
+  {
+    name: 'SystemErrorIllustration',
+    // eslint-disable-next-line no-restricted-syntax -- DEV-only gallery inventory copy, never shipped; i18n would put design-tool strings in the user-facing bundle.
+    usage: '系统错误 — 前端路由异常兜底页',
+    Comp: SystemErrorIllustration,
   },
 ];
 

@@ -88,6 +88,15 @@
   --brand-main: 22 93 255;   /* #165DFF */
   --brand-muted: 87 115 180; /* #5773B4 — muted/low-sat brand accent */
 
+  /* ---------- Illustration palette (基础-色彩规范 §5) ----------
+   * Illustrations use --illus-* rather than --brand-* so the green theme can
+   * render their own vivid green ramp instead of the darker UI brand green.
+   * Blue mode mirrors the brand blue. Consumed via inline `style` on the SVG —
+   * presentation attributes ignore var(), so there are no Tailwind classes. */
+  --illus-100: 190 218 255;  /* #BEDAFF */
+  --illus-300: 106 161 255;  /* #6AA1FF */
+  --illus-500: 22 93 255;    /* #165DFF */
+
   /* ---------- Button semantic tokens (组件-Button按钮.md §5.1) ---------- */
   --btn-gray-text: 82 88 101;      /* #525865 — default-color button text */
   --btn-gray-solid-bg: 82 88 101;  /* #525865 — default SOLID fill (+white text) */
@@ -177,6 +186,28 @@
   --brand-900: 6 50 22;      /* #063216 */
   --brand-main: 22 156 71;   /* #169C47 */
   --brand-muted: 92 138 119; /* #5C8A77 */
+
+  /* Illustration palette — green mode keeps the source SVGs' vivid greens so the
+     illustrations match their original artwork (not the darker UI brand green). */
+  --illus-100: 221 240 232;  /* #DDF0E8 */
+  --illus-300: 162 215 181;  /* #A2D7B5 */
+  --illus-500: 22 156 71;    /* #169C47 */
+}
+
+/* Illustration grey mode — THEME-INDEPENDENT. Add `illus-grey` to an illustration
+ * itself (the `grey` prop does this) or to any ancestor for a global toggle, and
+ * it renders greyscale whatever the brand theme is. Declared AFTER .theme-green
+ * so it wins when both land on the same element. Only the illustration greens go
+ * grey — white accents stay white (they don't read --illus-*); the whole drawing
+ * dims to 80% per design. */
+.illus-grey {
+  --illus-100: 229 229 229;  /* #E5E5E5 */
+  --illus-300: 229 229 229;  /* #E5E5E5 — pure white washed out on white bg (e.g. CrawlingIllustration's magnifier halo), so grey collapses 300 onto 100; blue/green keep their own mid tone */
+  --illus-500: 188 188 188;  /* #BCBCBC */
+}
+.illus-grey.brand-illustration,
+.illus-grey .brand-illustration {
+  opacity: 0.8;
 }
 
 /* Brand primary button — GREEN theme override (组件-Button按钮.md §6.2,

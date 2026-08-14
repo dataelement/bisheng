@@ -91,6 +91,28 @@ const BRAND = {
 };
 
 /* ------------------------------------------------------------------ *
+ * Illustration palette (§5) — a SEPARATE ramp from the brand one: the green
+ * theme renders the illustrations' own vivid greens rather than the darker UI
+ * brand green, so artwork keeps looking like the artwork. `grey` is the
+ * theme-independent draft mode (`.illus-grey`, whole drawing at 80% opacity).
+ * No Tailwind classes: SVG presentation attributes ignore var(), so components
+ * set `style={{ fill: 'rgb(var(--illus-500))' }}` instead.
+ * Runtime carriers: :root / .theme-green / .illus-grey in tokens.css.
+ * ------------------------------------------------------------------ */
+
+const ILLUS_STEPS = ['100', '300', '500'];
+
+const ILLUS = {
+  role: { '100': '浅底 / 大色块', '300': '中间调 / 点缀', '500': '主体' },
+  blue:  { '100': '#BEDAFF', '300': '#6AA1FF', '500': '#165DFF' },
+  green: { '100': '#DDF0E8', '300': '#A2D7B5', '500': '#169C47' },
+  // Grey collapses 300 onto 100 on purpose — pure white washed out on white
+  // backgrounds (e.g. CrawlingIllustration's magnifier halo).
+  grey:  { '100': '#E5E5E5', '300': '#E5E5E5', '500': '#BCBCBC' },
+  greyOpacity: 0.8,
+};
+
+/* ------------------------------------------------------------------ *
  * Neutral primitive — gray 1–10 (§2.1). Numbered = the lightness
  * scale itself; components consume the semantic layer below, not this.
  * `channels` = "r g b" for rgb(var(--arco-gray-N)/α).
@@ -287,6 +309,8 @@ module.exports = {
   FONT_WEIGHT,
   BRAND,
   BRAND_STEPS,
+  ILLUS,
+  ILLUS_STEPS,
   GRAY,
   TEXT,
   FILL,
