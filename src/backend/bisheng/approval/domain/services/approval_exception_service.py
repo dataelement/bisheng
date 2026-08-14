@@ -493,6 +493,14 @@ class ApprovalExceptionService:
                 scenario_code = instance.scenario_code
                 payload_snapshot = dict(instance.payload_snapshot or {})
                 exception_type = exception.exception_type
+                is_decision_delivery = self.instance_repository.is_decision_delivery_instance(instance)
+
+        if is_decision_delivery:
+            # Cancelling an exception is a terminal decision too — the business domain only
+            # learns about it through the delivery worker.
+            from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
+
+            ApprovalCenterService._dispatch_decision_delivery(tenant_id)
 
         await self._write_audit_log(
             action="approval.exception.cancel",

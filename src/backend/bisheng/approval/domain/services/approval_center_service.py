@@ -531,6 +531,9 @@ class ApprovalCenterService:
                 saved_handler_key = saved.handler_key
                 saved_business_name = saved.business_name
                 saved_payload_snapshot = dict(saved.payload_snapshot or {})
+                saved_is_decision_delivery = ApprovalInstanceRepository.is_decision_delivery_instance(saved)
+        if saved_is_decision_delivery:
+            cls._dispatch_decision_delivery(saved_tenant_id)
         await cls._write_audit_log(
             tenant_id=saved_tenant_id,
             operator_user_id=operator_user_id,
@@ -1036,6 +1039,10 @@ class ApprovalCenterService:
                 decision="rejected",
                 operator_user_id=operator_user_id,
             )
+            if self.instance_repository.is_decision_delivery_instance(instance):
+                post_commit_effects.append_durable(
+                    (self.__class__._dispatch_decision_delivery, (int(instance.tenant_id),), {})
+                )
         else:
             task.status = ApprovalTaskStatus.APPROVED
             node_approved = task.node_mode == "or" or all(
@@ -1278,6 +1285,9 @@ class ApprovalCenterService:
                 instance=instance,
                 decision="approved",
                 operator_user_id=operator_user_id,
+            )
+            post_commit_effects.append_durable(
+                (self.__class__._dispatch_decision_delivery, (int(instance.tenant_id),), {})
             )
             post_commit_effects.append(
                 (
@@ -1758,6 +1768,23 @@ class ApprovalCenterService:
         if tenant_id <= 0:
             raise ValueError("a positive tenant_id is required to dispatch an approval outbox")
         execute_approval_outbox.apply_async(args=[outbox_id], headers={"tenant_id": tenant_id})
+
+    @staticmethod
+    def _dispatch_decision_delivery(tenant_id: int) -> None:
+        """Wake the delivery worker after a terminal decision event was committed.
+
+        The outbox row stays authoritative — the worker claims the next pending event for
+        this tenant, so a duplicate dispatch is harmless and a lost one only delays
+        delivery. Without this the F045/F046 events sat in `approval_decision_outbox`
+        forever and the approved invite/file change never reached its business domain.
+        """
+
+        from bisheng.worker.approval.decision_delivery_tasks import deliver_approval_decision
+
+        tenant_id = int(tenant_id)
+        if tenant_id <= 0:
+            raise ValueError("a positive tenant_id is required to dispatch a decision delivery")
+        deliver_approval_decision.apply_async(headers={"tenant_id": tenant_id})
 
     @classmethod
     async def _write_audit_log(

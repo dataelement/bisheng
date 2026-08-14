@@ -615,3 +615,32 @@ async def test_f045_invitee_approves_with_target_user_in_detail_snapshot(termina
     assert saved.status == ApprovalInstanceStatus.APPROVED
     assert len(events) == 1
     _assert_event(events[0], instance=instance, decision="approved", operator_user_id=9)
+
+
+async def test_terminal_decision_dispatches_the_delivery_worker(terminal_decision_db) -> None:
+    """A committed decision event must wake the delivery worker.
+
+    Nothing else polls `approval_decision_outbox`, so a missing dispatch leaves the event
+    pending forever and the approved business request never advances.
+    """
+
+    instance, task = await _seed_terminal_instance()
+    service = _center(StubPolicy(scenario_code=F046_SCENARIO))
+
+    with (
+        _mock_center_side_effects()[0],
+        _mock_center_side_effects()[1],
+        _mock_center_side_effects()[2],
+        _mock_center_side_effects()[3],
+        patch.object(ApprovalCenterService, "_dispatch_decision_delivery") as dispatch,
+    ):
+        await service.decide_task(
+            task_id=task.id,
+            action="approve",
+            operator_user_id=task.approver_user_id,
+            operator_user_name="reviewer",
+            operator_tenant_id=TENANT_ID,
+        )
+
+    assert len(await _events(terminal_decision_db, instance_id=instance.id)) == 1
+    dispatch.assert_called_once_with(TENANT_ID)
