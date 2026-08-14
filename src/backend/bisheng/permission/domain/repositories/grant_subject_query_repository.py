@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import or_
 from sqlmodel import col, select
 
 from bisheng.core import database as database_module
 from bisheng.core.context import tenant as tenant_context
+
+#: Job grades starting with this prefix are leadership grades, which must not be
+#: offered as grant subjects. Upstream guarantees the uppercase prefix.
+_LEADER_JOB_GRADE_PREFIX = "A"
 
 
 @dataclass(frozen=True)
@@ -103,7 +108,15 @@ class GrantSubjectQueryRepository:
                 )
                 statement = (
                     select(User.user_id, User.user_name, User.external_id)
-                    .where(User.delete == 0, active_member)
+                    .where(
+                        User.delete == 0,
+                        active_member,
+                        # Leadership grades are never grantable; unset job_grade is.
+                        or_(
+                            User.job_grade.is_(None),
+                            ~User.job_grade.like(f"{_LEADER_JOB_GRADE_PREFIX}%"),
+                        ),
+                    )
                     .order_by(User.user_id.desc())
                 )
                 if restrict_dept_path is not None:
