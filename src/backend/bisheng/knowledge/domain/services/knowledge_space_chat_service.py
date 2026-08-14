@@ -311,7 +311,7 @@ class KnowledgeSpaceChatService:
             app_type=ApplicationTypeEnum.DAILY_CHAT,
             user_id=user_id,
         )
-        title = await generate_conversation_title_async(question=question, llm=llm, answer=answer)
+        title = await generate_conversation_title_async(question=question, llm=llm)
         await MessageSessionDao.update_session_name(chat_id, title)
 
     async def single_file_history(

@@ -597,7 +597,7 @@ class RedisCallback(BaseCallback):
                     )
                 )
                 thread_pool.submit(
-                    f"workflow_generate_title_{self.chat_id}", self.generate_session_title, message.message
+                    f"workflow_generate_title_{self.chat_id}", self.generate_session_title
                 )
 
                 # RecordTelemetryJournal
@@ -643,7 +643,7 @@ class RedisCallback(BaseCallback):
             return ""
         return json.dumps(message, ensure_ascii=False)
 
-    def generate_session_title(self, answer: str):
+    def generate_session_title(self):
         if not self.new_session:
             return
         if self.new_session.name:
@@ -665,7 +665,7 @@ class RedisCallback(BaseCallback):
             app_type=ApplicationTypeEnum.DAILY_CHAT,
             user_id=self.user_id,
         )
-        title = generate_conversation_title_sync(question=question, llm=llm, answer=answer)
+        title = generate_conversation_title_sync(question=question, llm=llm)
         MessageSessionDao.update_session_name_sync(self.new_session.chat_id, title)
         self.new_session.name = title
 
