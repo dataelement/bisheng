@@ -20,12 +20,106 @@ from bisheng.database.models.review_tags import ApproveOrRejectEnum
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.workstation.domain.repositories.review_tags_repository import ReviewTagsRepositoryImpl
 from bisheng.workstation.domain.schemas.review_tags_schema import (
+    ROLE_MANAGED_REVIEW_LEVELS,
     ApproveOrRejectRequest,
+    ReviewTagScope,
     ReviewTagSubmitterTarget,
 )
 from bisheng.workstation.domain.services.review_tag_notification_service import (
     ReviewTagNotificationService,
 )
+
+
+async def _resolve_fga_role_managed_space_ids(login_user: UserPayload) -> frozenset[int]:
+    """解析 public/department/team_ks 下具备 can_manage 的空间（OpenFGA + 成员表 fallback）。"""
+    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    user_id = int(login_user.user_id)
+    candidate_ids: list[int] = []
+
+    raw_ids = await PermissionService.list_accessible_ids(
+        user_id=user_id,
+        relation="can_manage",
+        object_type="knowledge_space",
+        login_user=login_user,
+    )
+    if raw_ids:
+        candidate_ids = [int(i) for i in raw_ids if str(i).isdigit()]
+
+    if not candidate_ids:
+        managed_members = await SpaceChannelMemberDao.async_get_user_managed_members(user_id)
+        for member in managed_members or []:
+            business_id = str(getattr(member, "business_id", "") or "").strip()
+            if business_id.isdigit():
+                candidate_ids.append(int(business_id))
+
+    if not candidate_ids:
+        return frozenset()
+
+    scope_map = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(candidate_ids)
+    role_space_ids: set[int] = set()
+    for space_id in candidate_ids:
+        scope_row = scope_map.get(space_id)
+        level = str(getattr(scope_row, "level", "") or "") if scope_row else ""
+        if level in ROLE_MANAGED_REVIEW_LEVELS:
+            role_space_ids.add(int(space_id))
+    return frozenset(role_space_ids)
+
+
+async def resolve_review_tag_scope_for_user(login_user: UserPayload) -> ReviewTagScope:
+    """解析当前用户的标签审核范围（不依赖 DB session）。
+
+    Raises:
+        ReviewTagPermissionDeniedError: 无任何审核能力时抛出。
+    """
+    if bool(getattr(login_user, "is_global_super", False)):
+        return ReviewTagScope(full_tenant=True)
+    is_admin_fn = getattr(login_user, "is_admin", None)
+    if callable(is_admin_fn) and is_admin_fn():
+        return ReviewTagScope(full_tenant=True)
+
+    has_tenant_admin = getattr(login_user, "has_tenant_admin", None)
+    if callable(has_tenant_admin):
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+
+        tid = get_current_tenant_id()
+        if tid is None:
+            tid = getattr(login_user, "tenant_id", None)
+        if tid is not None and int(tid) != DEFAULT_TENANT_ID and await has_tenant_admin(int(tid)):
+            return ReviewTagScope(full_tenant=True)
+
+    role_space_ids = await _resolve_fga_role_managed_space_ids(login_user)
+
+    from bisheng.database.models.department import DepartmentDao
+    from bisheng.knowledge.domain.services.department_admin_member_access import (
+        aget_dept_admin_scoped_user_ids,
+    )
+
+    admin_depts = await DepartmentDao.aget_user_admin_departments(int(login_user.user_id))
+    org_uploader_ids: frozenset[int] | None = None
+    if admin_depts:
+        scoped = await aget_dept_admin_scoped_user_ids(int(login_user.user_id))
+        org_uploader_ids = frozenset(int(uid) for uid in (scoped or set()))
+
+    scope = ReviewTagScope(
+        full_tenant=False,
+        role_managed_space_ids=role_space_ids,
+        org_uploader_ids=org_uploader_ids,
+    )
+    if not scope.has_review_capacity():
+        raise ReviewTagPermissionDeniedError()
+    return scope
+
+
+async def user_can_review_tags(login_user: UserPayload) -> bool:
+    """供 /user/info 等轻量接口判断是否展示标签审核入口。"""
+    try:
+        await resolve_review_tag_scope_for_user(login_user)
+        return True
+    except ReviewTagPermissionDeniedError:
+        return False
 
 
 class WorkStationTagsService(BaseService):
@@ -44,77 +138,49 @@ class WorkStationTagsService(BaseService):
         self.review_tags_repository = review_tags_repository
         self.login_user = login_user
 
+    async def resolve_review_tag_scope(self) -> ReviewTagScope:
+        """解析当前登录用户的标签审核范围。"""
+        return await resolve_review_tag_scope_for_user(self.login_user)
+
     async def resolve_reviewable_space_ids(self) -> set[int] | None:
-        """Return managed space ids for the current reviewer.
+        """兼容旧调用：全租户返回 None；否则返回 role 管理空间并集（不含上传人维度）。
 
-        ``None`` means full-tenant access (global super / RBAC admin / child
-        tenant admin). A ``set`` (possibly empty) means org department-admin
-        scope, including department-bound spaces and personal spaces owned by
-        members under managed departments. Raises when the caller cannot review
-        tags at all.
+        新代码应使用 ``resolve_review_tag_scope``。Tag Console 门禁已拆开，勿再依赖本方法做权限判定。
         """
-        login_user = self.login_user
-        if bool(getattr(login_user, "is_global_super", False)):
+        scope = await self.resolve_review_tag_scope()
+        if scope.full_tenant:
             return None
-        is_admin_fn = getattr(login_user, "is_admin", None)
-        if callable(is_admin_fn) and is_admin_fn():
-            return None
+        return set(scope.role_managed_space_ids)
 
-        # Child tenant admin — same gate as Platform workbench config.
-        has_tenant_admin = getattr(login_user, "has_tenant_admin", None)
-        if callable(has_tenant_admin):
-            from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
-
-            tid = get_current_tenant_id()
-            if tid is None:
-                tid = getattr(login_user, "tenant_id", None)
-            if tid is not None and int(tid) != DEFAULT_TENANT_ID and await has_tenant_admin(int(tid)):
-                return None
-
-        from bisheng.database.models.department import DepartmentDao
-        from bisheng.knowledge.domain.models.department_knowledge_space import (
-            DepartmentKnowledgeSpaceDao,
-        )
-
-        admin_depts = await DepartmentDao.aget_user_admin_departments(int(login_user.user_id))
-        if not admin_depts:
-            raise ReviewTagPermissionDeniedError()
-
-        dept_ids: set[int] = set()
-        for dept in admin_depts:
-            if getattr(dept, "id", None) is None:
-                continue
-            dept_ids.add(int(dept.id))
-            path = getattr(dept, "path", None)
-            if path:
-                dept_ids.update(int(i) for i in await DepartmentDao.aget_subtree_ids(path))
-
-        bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(sorted(dept_ids))
-        space_ids = {int(binding.space_id) for binding in bindings or [] if getattr(binding, "space_id", None)}
-
-        from bisheng.knowledge.domain.services.department_admin_member_access import (
-            aget_dept_admin_scoped_user_ids,
-            aget_member_personal_space_ids,
-        )
-
-        scoped_user_ids = await aget_dept_admin_scoped_user_ids(int(login_user.user_id))
-        if scoped_user_ids:
-            space_ids.update(await aget_member_personal_space_ids(scoped_user_ids))
-        return space_ids
-
-    def _ensure_knowledge_in_scope(self, knowledge_id: int | None, space_ids: set[int] | None) -> None:
-        """Reject approve when department admin picks a space outside scope."""
-        if space_ids is None:
+    async def _ensure_knowledge_in_scope(self, knowledge_id: int | None, scope: ReviewTagScope) -> None:
+        """通过时校验目标知识库是否在审核范围内。"""
+        if scope.full_tenant:
             return
-        if knowledge_id is None or int(knowledge_id) not in space_ids:
+        if knowledge_id is None:
             raise ReviewTagSpaceOutOfScopeError()
+        kid = int(knowledge_id)
+        if kid in scope.role_managed_space_ids:
+            return
+        if scope.org_uploader_ids is None:
+            raise ReviewTagSpaceOutOfScopeError()
+        from bisheng.knowledge.domain.models.knowledge_space_scope import (
+            KnowledgeSpaceLevelEnum,
+            KnowledgeSpaceScopeDao,
+        )
+
+        scope_row = await KnowledgeSpaceScopeDao.aget_by_space_id(kid)
+        level = str(getattr(scope_row, "level", "") or "") if scope_row else ""
+        if level not in (KnowledgeSpaceLevelEnum.TEAM.value, KnowledgeSpaceLevelEnum.PERSONAL.value):
+            raise ReviewTagSpaceOutOfScopeError()
+        # 组织管理员可将通过结果落到团队/个人库；空间本身须为这两类。
+        return
 
     async def delete_review_tag(
         self, tag_name: str, business_type: TagBusinessTypeEnum, resource_type: TagResourceTypeEnum, tenant_id: int
     ):
-        space_ids = await self.resolve_reviewable_space_ids()
+        scope = await self.resolve_review_tag_scope()
         review_tag_list = await self.review_tags_repository.get_review_tag_list_by_tag_name(
-            tag_name, resource_type, tenant_id, space_ids=space_ids
+            tag_name, resource_type, tenant_id, scope=scope
         )
         if review_tag_list:
             for review_tag in review_tag_list:
@@ -124,19 +190,19 @@ class WorkStationTagsService(BaseService):
             await self.session.commit()
 
     async def approve_or_reject_review_tag(self, data: ApproveOrRejectRequest, tenant_id: int):
-        space_ids = await self.resolve_reviewable_space_ids()
+        scope = await self.resolve_review_tag_scope()
         existed_tag_list = []
         submitter_targets = await self.review_tags_repository.list_submitter_notification_targets(
             data.tag_name,
             data.resource_type,
             tenant_id,
             exclude_user_id=self.login_user.user_id,
-            space_ids=space_ids,
+            scope=scope,
         )
         if data and data.status == ApproveOrRejectEnum.APPROVE:
             if not data.tag_library_id or not data.knowledge_id:
                 raise KnowledgeSpaceTagLibraryInvalidError(msg="请选择导入的标签库")
-            self._ensure_knowledge_in_scope(data.knowledge_id, space_ids)
+            await self._ensure_knowledge_in_scope(data.knowledge_id, scope)
             from bisheng.database.models.tag import TagBusinessTypeEnum
             from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
                 KnowledgeSpaceTagLibraryService,
@@ -146,7 +212,7 @@ class WorkStationTagsService(BaseService):
                 data.tag_name,
                 data.resource_type,
                 tenant_id,
-                space_ids=space_ids,
+                scope=scope,
             )
             if not review_tag_list:
                 raise ReviewTagNotFoundError.http_exception()
@@ -171,13 +237,11 @@ class WorkStationTagsService(BaseService):
                 data.resource_type,
                 tenant_id,
                 skip_library_add=True,
-                space_ids=space_ids,
-                # The library the reviewer picked, so the move lands there
-                # instead of in whichever library proposed the tag.
+                scope=scope,
                 target_library_id=int(data.tag_library_id),
             )
             await self.review_tags_repository.approve_review_tag(
-                data.tag_name, data.resource_type, tenant_id, space_ids=space_ids
+                data.tag_name, data.resource_type, tenant_id, scope=scope
             )
             await self.session.commit()
             from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
@@ -185,7 +249,7 @@ class WorkStationTagsService(BaseService):
             await TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
         elif data and data.status == ApproveOrRejectEnum.REJECT:
             pending = await self.review_tags_repository.get_review_tag_list_by_tag_name(
-                data.tag_name, data.resource_type, tenant_id, space_ids=space_ids
+                data.tag_name, data.resource_type, tenant_id, scope=scope
             )
             if not pending:
                 raise ReviewTagNotFoundError.http_exception()
@@ -194,7 +258,7 @@ class WorkStationTagsService(BaseService):
                 data.reject_reason,
                 data.resource_type,
                 tenant_id,
-                space_ids=space_ids,
+                scope=scope,
                 reviewer_id=getattr(self.login_user, "user_id", None),
             )
             await self.session.commit()
@@ -235,11 +299,18 @@ class WorkStationTagsService(BaseService):
         tenant_id: int,
         *,
         skip_library_add: bool = False,
+        scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
         target_library_id: int | None = None,
     ):
+        if scope is None:
+            # 兼容旧测试：未传 scope 时，space_ids=None 全量；set 视为仅 role 空间。
+            if space_ids is None:
+                scope = ReviewTagScope(full_tenant=True)
+            else:
+                scope = ReviewTagScope(role_managed_space_ids=frozenset(int(i) for i in space_ids))
         review_tag_list = await self.review_tags_repository.get_review_tag_list_by_tag_name(
-            tag_name, resource_type, tenant_id, space_ids=space_ids
+            tag_name, resource_type, tenant_id, scope=scope
         )
         existed_tag_list = []
         if not review_tag_list:
@@ -270,14 +341,10 @@ class WorkStationTagsService(BaseService):
             )
             if not review_tag_link:
                 review_tag_link = []
-            # When scoped, only move links whose file belongs to managed spaces.
-            if space_ids is not None:
+            if not scope.full_tenant:
                 filtered_links = []
                 for link in review_tag_link:
-                    space_id, _, _, _ = await self.review_tags_repository._resolve_file_target_from_link(
-                        link, tenant_id
-                    )
-                    if space_id is not None and int(space_id) in space_ids:
+                    if await self.review_tags_repository.link_in_review_scope(link, review_tag, tenant_id, scope):
                         filtered_links.append(link)
                 review_tag_link = filtered_links
             await self.review_tags_repository.approve_tag_to_move(
@@ -333,7 +400,7 @@ class WorkStationTagsService(BaseService):
         return result_list
 
     async def list_review_tag_by_page(self, page: int, page_size: int, tenant_id: int, keyword: str = ""):
-        space_ids = await self.resolve_reviewable_space_ids()
+        scope = await self.resolve_review_tag_scope()
         if not page or page < 1:
             raise TagPageParamsIsError.http_exception()
         if not page_size or page_size < 1:
@@ -341,18 +408,18 @@ class WorkStationTagsService(BaseService):
 
         normalized_keyword = (keyword or "").strip()
         group_tag_list = await self.review_tags_repository.get_review_tag_group_list_by_page(
-            page, page_size, tenant_id, normalized_keyword, space_ids=space_ids
+            page, page_size, tenant_id, normalized_keyword, scope=scope
         )
         result_list = []
         if group_tag_list and len(group_tag_list) > 0:
             for group_tag in group_tag_list:
                 tag_obj = await self.review_tags_repository.get_review_tag_resource_info_by_tag(
-                    group_tag["name"], group_tag["resource_type"], tenant_id, space_ids=space_ids
+                    group_tag["name"], group_tag["resource_type"], tenant_id, scope=scope
                 )
                 if tag_obj:
                     result_list.append(tag_obj)
         total_count = await self.review_tags_repository.get_review_tag_group_count_by_page(
-            tenant_id, normalized_keyword, space_ids=space_ids
+            tenant_id, normalized_keyword, scope=scope
         )
         return {"data": result_list or [], "total": total_count or 0}
 
@@ -371,7 +438,6 @@ class WorkStationTagsService(BaseService):
                 )
                 if tag_obj:
                     result_list.append(tag_obj)
-        # 查找没有的数据
         data_list = await self.list_tag_library_by_keyword(keyword, tenant_id)
         if len(result_list) < page_size and data_list and len(data_list) > 0:
             count = min(page_size - len(result_list), len(data_list))

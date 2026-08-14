@@ -17151,6 +17151,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await self._build_tag_lookup_resp(space_id, tag)
 
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag:
+        """新增空间标签：一律写入待审 ReviewTag。"""
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
         normalized = (tag_name or "").strip()

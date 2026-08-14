@@ -56,10 +56,9 @@ from bisheng.workstation.domain.services.workstation_tags_service import WorkSta
 class TagConsoleService:
     """Reads for the console's library mode.
 
-    Permission reuses ``WorkStationTagsService.resolve_reviewable_space_ids()``:
-    it raises for anyone who may not review tags at all, which is exactly the gate
-    this page needs. Its *return value* is only used by review mode — library mode
-    is deliberately tenant-wide (AD-12).
+    Tag Console 库管理门禁独立于门户标签审核 scope：仅超管 / 租户管理员 /
+    部门管理员可进入。库 admin/creator 即使能审标签，也不能获得全租户库管理权。
+    控制台内审核子能力仍委托 ``WorkStationTagsService``（走 ReviewTagScope）。
     """
 
     def __init__(
@@ -78,8 +77,32 @@ class TagConsoleService:
             raise TagConsolePageParamsError()
 
     async def _ensure_can_manage_tags(self) -> None:
-        """Raises when the caller may not manage tags; scope value unused here."""
-        await self.tags_service.resolve_reviewable_space_ids()
+        """仅放行超管 / RBAC admin / 子租户管理员 / 部门管理员。"""
+        from bisheng.common.errcode.tag import ReviewTagPermissionDeniedError
+
+        login_user = self.login_user
+        if bool(getattr(login_user, "is_global_super", False)):
+            return
+        is_admin_fn = getattr(login_user, "is_admin", None)
+        if callable(is_admin_fn) and is_admin_fn():
+            return
+
+        has_tenant_admin = getattr(login_user, "has_tenant_admin", None)
+        if callable(has_tenant_admin):
+            from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
+
+            tid = get_current_tenant_id()
+            if tid is None:
+                tid = getattr(login_user, "tenant_id", None)
+            if tid is not None and int(tid) != DEFAULT_TENANT_ID and await has_tenant_admin(int(tid)):
+                return
+
+        from bisheng.database.models.department import DepartmentDao
+
+        admin_depts = await DepartmentDao.aget_user_admin_departments(int(login_user.user_id))
+        if admin_depts:
+            return
+        raise ReviewTagPermissionDeniedError()
 
     async def search(self, req: TagConsoleSearchReq, tenant_id: int) -> TagConsoleSearchResp:
         self._validate_page(req)

@@ -47,7 +47,13 @@ def _build_service(found: list[Tag], calls: list[str]):
     tags_service = AsyncMock()
     tags_service.resolve_reviewable_space_ids.return_value = None
     return TagConsoleService(
-        login_user=SimpleNamespace(user_id=1, tenant_id=TENANT_ID),
+        login_user=SimpleNamespace(
+            user_id=1,
+            tenant_id=TENANT_ID,
+            is_global_super=False,
+            is_admin=lambda: True,
+            has_tenant_admin=AsyncMock(return_value=False),
+        ),
         repository=repository,
         tags_service=tags_service,
     )

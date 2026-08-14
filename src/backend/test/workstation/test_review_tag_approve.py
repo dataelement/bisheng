@@ -21,7 +21,11 @@ workstation_tags_service = importlib.reload(
 
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, TagResourceTypeEnum
-from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejectRequest, ReviewTagSubmitterTarget
+from bisheng.workstation.domain.schemas.review_tags_schema import (
+    ApproveOrRejectRequest,
+    ReviewTagScope,
+    ReviewTagSubmitterTarget,
+)
 
 WorkStationTagsService = workstation_tags_service.WorkStationTagsService
 
@@ -112,9 +116,7 @@ async def test_approve_review_tag_imports_to_selected_library():
         TagResourceTypeEnum.AI_AUTO_TAG,
         1,
         skip_library_add=True,
-        space_ids=None,
-        # The chosen library travels with the move; without it the tag would be
-        # filed under whichever library proposed it.
+        scope=ReviewTagScope(full_tenant=True),
         target_library_id=10,
     )
     service.review_tags_repository.approve_review_tag.assert_awaited_once()
