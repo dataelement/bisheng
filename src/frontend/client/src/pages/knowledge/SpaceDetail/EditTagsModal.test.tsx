@@ -175,41 +175,6 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
-    it("saves exempt approved create into tag_ids instead of review_tag_ids", async () => {
-        const user = userEvent.setup();
-        jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
-        jest.mocked(addSpaceTagApi).mockResolvedValue({
-            id: 99,
-            name: "免审标签",
-            business_type: "tag_library",
-            resource_type: "manual_tag",
-            review_status: 1,
-            is_bound_to_space: true,
-        });
-
-        render(
-            <EditTagsModal
-                isOpen
-                onClose={jest.fn()}
-                spaceId="100"
-                fileId="1"
-                initialTagIds={[]}
-            />,
-        );
-
-        await waitFor(() => expect(screen.getByRole("textbox")).not.toBeDisabled());
-
-        const input = screen.getByRole("textbox");
-        await user.type(input, "免审标签");
-        await user.keyboard("{Enter}");
-        await user.click(screen.getByText("com_knowledge.confirm"));
-
-        await waitFor(() => {
-            expect(addSpaceTagApi).toHaveBeenCalledWith("100", "免审标签");
-            expect(updateFileTagsApi).toHaveBeenCalledWith("100", "1", [99], []);
-        });
-    });
-
     it("saves multiple manually created tags into review_tag_ids", async () => {
         const user = userEvent.setup();
         jest.mocked(getSpaceTagsApi).mockResolvedValue([]);

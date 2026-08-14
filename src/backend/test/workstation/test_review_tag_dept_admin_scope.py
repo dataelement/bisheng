@@ -30,6 +30,7 @@ from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejec
 
 WorkStationTagsService = workstation_tags_service.WorkStationTagsService
 resolve_review_tag_scope_for_user = workstation_tags_service.resolve_review_tag_scope_for_user
+user_can_review_tags = workstation_tags_service.user_can_review_tags
 
 
 def _build_service(*, is_global_super: bool = False) -> WorkStationTagsService:
@@ -50,16 +51,24 @@ def _build_service(*, is_global_super: bool = False) -> WorkStationTagsService:
     )
 
 
-@pytest.mark.asyncio
-async def test_resolve_review_tag_scope_denies_ordinary_user():
-    login_user = SimpleNamespace(
+def _login_user():
+    return SimpleNamespace(
         user_id=9,
         tenant_id=1,
         is_global_super=False,
         is_admin=lambda: False,
         has_tenant_admin=AsyncMock(return_value=False),
     )
+
+
+@pytest.mark.asyncio
+async def test_resolve_review_tag_scope_denies_ordinary_user():
+    login_user = _login_user()
     with (
+        patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService.list_accessible_ids",
+            new=AsyncMock(return_value=[]),
+        ),
         patch(
             "bisheng.common.models.space_channel_member.SpaceChannelMemberDao.async_get_user_managed_members",
             new=AsyncMock(return_value=[]),
@@ -75,23 +84,11 @@ async def test_resolve_review_tag_scope_denies_ordinary_user():
 
 @pytest.mark.asyncio
 async def test_resolve_review_tag_scope_for_space_admin_role_libraries_only():
-    login_user = SimpleNamespace(
-        user_id=9,
-        tenant_id=1,
-        is_global_super=False,
-        is_admin=lambda: False,
-        has_tenant_admin=AsyncMock(return_value=False),
-    )
+    login_user = _login_user()
     with (
         patch(
-            "bisheng.common.models.space_channel_member.SpaceChannelMemberDao.async_get_user_managed_members",
-            new=AsyncMock(
-                return_value=[
-                    SimpleNamespace(business_id="100"),
-                    SimpleNamespace(business_id="200"),
-                    SimpleNamespace(business_id="300"),
-                ]
-            ),
+            "bisheng.permission.domain.services.permission_service.PermissionService.list_accessible_ids",
+            new=AsyncMock(return_value=["100", "200", "300"]),
         ),
         patch(
             "bisheng.knowledge.domain.models.knowledge_space_scope.KnowledgeSpaceScopeDao.aget_map_by_space_ids",
@@ -99,7 +96,7 @@ async def test_resolve_review_tag_scope_for_space_admin_role_libraries_only():
                 return_value={
                     100: SimpleNamespace(level="public"),
                     200: SimpleNamespace(level="team_ks"),
-                    300: SimpleNamespace(level="team"),  # 团队库不进 role 范围
+                    300: SimpleNamespace(level="team"),
                 }
             ),
         ),
@@ -116,15 +113,39 @@ async def test_resolve_review_tag_scope_for_space_admin_role_libraries_only():
 
 
 @pytest.mark.asyncio
-async def test_resolve_review_tag_scope_for_department_admin_org_uploaders_only():
-    login_user = SimpleNamespace(
-        user_id=9,
-        tenant_id=1,
-        is_global_super=False,
-        is_admin=lambda: False,
-        has_tenant_admin=AsyncMock(return_value=False),
-    )
+async def test_resolve_review_tag_scope_falls_back_to_member_table():
+    login_user = _login_user()
     with (
+        patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService.list_accessible_ids",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "bisheng.common.models.space_channel_member.SpaceChannelMemberDao.async_get_user_managed_members",
+            new=AsyncMock(return_value=[SimpleNamespace(business_id="100")]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_space_scope.KnowledgeSpaceScopeDao.aget_map_by_space_ids",
+            new=AsyncMock(return_value={100: SimpleNamespace(level="department")}),
+        ),
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_user_admin_departments",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        scope = await resolve_review_tag_scope_for_user(login_user)
+
+    assert scope.role_managed_space_ids == frozenset({100})
+
+
+@pytest.mark.asyncio
+async def test_resolve_review_tag_scope_for_department_admin_org_uploaders_only():
+    login_user = _login_user()
+    with (
+        patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService.list_accessible_ids",
+            new=AsyncMock(return_value=[]),
+        ),
         patch(
             "bisheng.common.models.space_channel_member.SpaceChannelMemberDao.async_get_user_managed_members",
             new=AsyncMock(return_value=[]),
@@ -147,17 +168,11 @@ async def test_resolve_review_tag_scope_for_department_admin_org_uploaders_only(
 
 @pytest.mark.asyncio
 async def test_resolve_review_tag_scope_combines_role_and_org():
-    login_user = SimpleNamespace(
-        user_id=9,
-        tenant_id=1,
-        is_global_super=False,
-        is_admin=lambda: False,
-        has_tenant_admin=AsyncMock(return_value=False),
-    )
+    login_user = _login_user()
     with (
         patch(
-            "bisheng.common.models.space_channel_member.SpaceChannelMemberDao.async_get_user_managed_members",
-            new=AsyncMock(return_value=[SimpleNamespace(business_id="100")]),
+            "bisheng.permission.domain.services.permission_service.PermissionService.list_accessible_ids",
+            new=AsyncMock(return_value=["100"]),
         ),
         patch(
             "bisheng.knowledge.domain.models.knowledge_space_scope.KnowledgeSpaceScopeDao.aget_map_by_space_ids",
@@ -176,6 +191,24 @@ async def test_resolve_review_tag_scope_combines_role_and_org():
 
     assert scope.role_managed_space_ids == frozenset({100})
     assert scope.org_uploader_ids == frozenset({7})
+
+
+@pytest.mark.asyncio
+async def test_user_can_review_tags():
+    login_user = _login_user()
+    with patch.object(
+        workstation_tags_service,
+        "resolve_review_tag_scope_for_user",
+        new=AsyncMock(return_value=ReviewTagScope(org_uploader_ids=frozenset({1}))),
+    ):
+        assert await user_can_review_tags(login_user) is True
+
+    with patch.object(
+        workstation_tags_service,
+        "resolve_review_tag_scope_for_user",
+        new=AsyncMock(side_effect=ReviewTagPermissionDeniedError()),
+    ):
+        assert await user_can_review_tags(login_user) is False
 
 
 @pytest.mark.asyncio
@@ -202,9 +235,7 @@ async def test_list_review_tag_by_page_passes_scope():
 @pytest.mark.asyncio
 async def test_approve_rejects_role_library_outside_scope():
     service = _build_service()
-    service.resolve_review_tag_scope = AsyncMock(
-        return_value=ReviewTagScope(role_managed_space_ids=frozenset({100}))
-    )
+    service.resolve_review_tag_scope = AsyncMock(return_value=ReviewTagScope(role_managed_space_ids=frozenset({100})))
     service.review_tags_repository.list_submitter_notification_targets = AsyncMock(return_value=[])
     data = ApproveOrRejectRequest(
         tag_name="cross",

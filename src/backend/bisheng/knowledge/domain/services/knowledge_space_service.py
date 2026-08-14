@@ -16829,64 +16829,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag = await self._find_space_tag_by_name(space_id, tag_name)
         return await self._build_tag_lookup_resp(space_id, tag)
 
-    async def _should_skip_space_tag_review(self, space_id: int) -> bool:
-        """判断当前用户在该空间新增标签是否可免审直接入库。
-
-        - public / department：空间 admin 或 creator
-        - team / team_ks / personal：任一部门的部门管理员
-        """
-        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
-        level_raw = getattr(scope, "level", None) if scope else None
-        level = str(getattr(level_raw, "value", level_raw) or "")
-
-        if level in (
-            KnowledgeSpaceLevelEnum.PUBLIC.value,
-            KnowledgeSpaceLevelEnum.DEPARTMENT.value,
-        ):
-            role = await SpaceChannelMemberDao.async_get_active_member_role(
-                space_id, int(self.login_user.user_id)
-            )
-            return role in (UserRoleEnum.ADMIN, UserRoleEnum.CREATOR)
-
-        if level in (
-            KnowledgeSpaceLevelEnum.TEAM.value,
-            KnowledgeSpaceLevelEnum.TEAM_KS.value,
-            KnowledgeSpaceLevelEnum.PERSONAL.value,
-        ):
-            from bisheng.database.models.department import DepartmentDao
-
-            admin_depts = await DepartmentDao.aget_user_admin_departments(int(self.login_user.user_id))
-            return bool(admin_depts)
-
-        return False
-
-    async def _create_approved_space_tag(self, space_id: int, library_id: int, tag_name: str) -> Tag:
-        """免审路径：将标签直接写入绑定标签库（与审核通过后一致）。"""
-        tag_library_service = KnowledgeSpaceTagLibraryService(self.login_user)
-        await tag_library_service.append_review_tag(
-            library_id=library_id,
-            knowledge_id=space_id,
-            tag_name=tag_name,
-            review_resource_type=TagResourceTypeEnum.MANUAL_TAG.value,
-            require_bound_library=True,
-        )
-        tag = await TagLibraryTagService.find_library_tag_by_name(
-            tenant_id=int(self.login_user.tenant_id),
-            tag_name=tag_name,
-        )
-        if tag is not None:
-            return tag
-        # replace_tags 后偶发查不到时兜底写入同一标签库
-        return await TagLibraryTagService.get_or_create_library_tag_async(
-            space_id=space_id,
-            tag_name=tag_name,
-            user_id=int(self.login_user.user_id),
-            tenant_id=int(self.login_user.tenant_id),
-            resource_type=TagResourceTypeEnum.MANUAL_TAG,
-        )
-
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag:
-        """新增空间标签：默认写入待审 ReviewTag；符合免审条件时直接写入正式 Tag。"""
+        """新增空间标签：一律写入待审 ReviewTag。"""
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
         normalized = (tag_name or "").strip()
@@ -16901,9 +16845,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         library_id = await self._resolve_primary_library_for_space(space_id)
         await self._require_review_tag_feature_enabled()
-
-        if await self._should_skip_space_tag_review(space_id):
-            return await self._create_approved_space_tag(space_id, library_id, normalized)
 
         new_tag = ReviewTag(
             name=normalized,

@@ -30,6 +30,44 @@ from bisheng.workstation.domain.services.review_tag_notification_service import 
 )
 
 
+async def _resolve_fga_role_managed_space_ids(login_user: UserPayload) -> frozenset[int]:
+    """解析 public/department/team_ks 下具备 can_manage 的空间（OpenFGA + 成员表 fallback）。"""
+    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    user_id = int(login_user.user_id)
+    candidate_ids: list[int] = []
+
+    raw_ids = await PermissionService.list_accessible_ids(
+        user_id=user_id,
+        relation="can_manage",
+        object_type="knowledge_space",
+        login_user=login_user,
+    )
+    if raw_ids:
+        candidate_ids = [int(i) for i in raw_ids if str(i).isdigit()]
+
+    if not candidate_ids:
+        managed_members = await SpaceChannelMemberDao.async_get_user_managed_members(user_id)
+        for member in managed_members or []:
+            business_id = str(getattr(member, "business_id", "") or "").strip()
+            if business_id.isdigit():
+                candidate_ids.append(int(business_id))
+
+    if not candidate_ids:
+        return frozenset()
+
+    scope_map = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(candidate_ids)
+    role_space_ids: set[int] = set()
+    for space_id in candidate_ids:
+        scope_row = scope_map.get(space_id)
+        level = str(getattr(scope_row, "level", "") or "") if scope_row else ""
+        if level in ROLE_MANAGED_REVIEW_LEVELS:
+            role_space_ids.add(int(space_id))
+    return frozenset(role_space_ids)
+
+
 async def resolve_review_tag_scope_for_user(login_user: UserPayload) -> ReviewTagScope:
     """解析当前用户的标签审核范围（不依赖 DB session）。
 
@@ -52,27 +90,12 @@ async def resolve_review_tag_scope_for_user(login_user: UserPayload) -> ReviewTa
         if tid is not None and int(tid) != DEFAULT_TENANT_ID and await has_tenant_admin(int(tid)):
             return ReviewTagScope(full_tenant=True)
 
-    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
+    role_space_ids = await _resolve_fga_role_managed_space_ids(login_user)
+
     from bisheng.database.models.department import DepartmentDao
-    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao
     from bisheng.knowledge.domain.services.department_admin_member_access import (
         aget_dept_admin_scoped_user_ids,
     )
-
-    role_space_ids: set[int] = set()
-    managed_members = await SpaceChannelMemberDao.async_get_user_managed_members(int(login_user.user_id))
-    candidate_ids: list[int] = []
-    for member in managed_members or []:
-        business_id = str(getattr(member, "business_id", "") or "").strip()
-        if business_id.isdigit():
-            candidate_ids.append(int(business_id))
-    if candidate_ids:
-        scope_map = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(candidate_ids)
-        for space_id in candidate_ids:
-            scope_row = scope_map.get(space_id)
-            level = str(getattr(scope_row, "level", "") or "") if scope_row else ""
-            if level in ROLE_MANAGED_REVIEW_LEVELS:
-                role_space_ids.add(int(space_id))
 
     admin_depts = await DepartmentDao.aget_user_admin_departments(int(login_user.user_id))
     org_uploader_ids: frozenset[int] | None = None
@@ -82,7 +105,7 @@ async def resolve_review_tag_scope_for_user(login_user: UserPayload) -> ReviewTa
 
     scope = ReviewTagScope(
         full_tenant=False,
-        role_managed_space_ids=frozenset(role_space_ids),
+        role_managed_space_ids=role_space_ids,
         org_uploader_ids=org_uploader_ids,
     )
     if not scope.has_review_capacity():
@@ -401,7 +424,6 @@ class WorkStationTagsService(BaseService):
                 )
                 if tag_obj:
                     result_list.append(tag_obj)
-        # 查找没有的数据
         data_list = await self.list_tag_library_by_keyword(keyword, tenant_id)
         if len(result_list) < page_size and data_list and len(data_list) > 0:
             count = min(page_size - len(result_list), len(data_list))
