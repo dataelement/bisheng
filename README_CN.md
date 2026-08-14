@@ -120,5 +120,5 @@ Bisheng 采用了以下依赖库:
 <!--
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=dataelement/bisheng&type=Date)](https://star-history.com/#dataelement/bisheng&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=dataelement/bisheng&type=Date)](https://star-history.dera.page/#dataelement/bisheng&Date)
 -->
