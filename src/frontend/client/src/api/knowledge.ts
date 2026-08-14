@@ -752,7 +752,10 @@ export async function getMineSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return extractKnowledgeSpaceList(res).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map((raw) => ({
+        ...mapSpace(raw),
+        spaceKind: "normal",
+    }));
 }
 
 /**
@@ -766,7 +769,10 @@ export async function getJoinedSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return extractKnowledgeSpaceList(res).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map((raw) => ({
+        ...mapSpace(raw),
+        spaceKind: "normal",
+    }));
 }
 
 /**
@@ -794,7 +800,10 @@ export async function getDepartmentSpacesApi(params?: {
             order_by: params?.order_by,
         },
     });
-    return extractKnowledgeSpaceList(res).map(mapSpace);
+    return extractKnowledgeSpaceList(res).map((raw) => ({
+        ...mapSpace(raw),
+        spaceKind: "department",
+    }));
 }
 
 /**

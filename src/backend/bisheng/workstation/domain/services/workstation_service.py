@@ -243,16 +243,49 @@ class WorkStationService(BaseService):
         await TenantWorkstationConfigDao.aupsert(cls._current_tenant_id(), key.value, payload)
 
     @classmethod
+    def _read_tool_rows(cls, tool_type_ids: list) -> tuple[dict, dict]:
+        """Read the parent types + their children for ``tool_type_ids``."""
+        tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
+        exists_tool_type = {tool.id: tool for tool in tool_type_info}
+        tool_info = GptsToolsDao.get_list_by_type(list(exists_tool_type.keys()))
+        return exists_tool_type, {tool.id: tool for tool in tool_info}
+
+    @classmethod
     def sync_tool_info(cls, tools: list[dict]) -> list[dict]:
-        """Synchronize tool metadata from persistent storage."""
+        """Synchronize tool metadata from persistent storage.
+
+        Tools the lookup cannot find are dropped — that is how an admin's
+        deletion propagates into saved configs. But "not found" is also what a
+        narrowed visible-tenant IN-list produces for the config owner's own
+        rows, and the caller cannot tell the two apart: the config page
+        round-trips what it is shown, so a filtered read would persist as a
+        cleared tool pool. When anything fails to resolve, re-read pinned to the
+        tenant that owns the config (``strict_tenant_filter`` narrows to
+        ``tenant_id = current`` — it never widens) before believing the drop.
+        """
         if not tools:
             return []
         normalized_tools = [cls._to_plain_dict(tool) for tool in tools]
         tool_type_ids = [tool.get("id") for tool in normalized_tools if tool]
-        tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
-        exists_tool_type = {tool.id: tool for tool in tool_type_info}
-        tool_info = GptsToolsDao.get_list_by_type(list(exists_tool_type.keys()))
-        exists_tool_info = {tool.id: tool for tool in tool_info}
+        exists_tool_type, exists_tool_info = cls._read_tool_rows(tool_type_ids)
+
+        missing = [tid for tid in tool_type_ids if tid not in exists_tool_type]
+        if missing:
+            with strict_tenant_filter():
+                strict_type, strict_info = cls._read_tool_rows(tool_type_ids)
+            # Keep whichever read resolved more; a genuine deletion resolves
+            # neither way and still drops out below.
+            if len(strict_type) > len(exists_tool_type):
+                logger.warning(
+                    "workstation config tool sync: {} of {} tool group(s) unresolved under the request's "
+                    "tenant filter, recovered {} with a strict re-read (tenant={})",
+                    len(missing),
+                    len(tool_type_ids),
+                    len(strict_type) - len(exists_tool_type),
+                    cls._current_tenant_id(),
+                )
+                exists_tool_type, exists_tool_info = strict_type, strict_info
+
         new_tools = []
         for tool in normalized_tools:
             if not tool:
@@ -691,18 +724,36 @@ class WorkStationService(BaseService):
         return await cls.get_daily_chat_config()
 
     @classmethod
-    async def get_daily_chat_config_with_meta(cls) -> tuple[WorkstationConfig | None, bool, int, bool]:
+    async def get_daily_chat_config_with_meta(cls) -> tuple[WorkstationConfig | None, bool, int, bool, bool]:
+        """Resolve the daily config plus its provenance.
+
+        The fifth element is ``is_fallback``: True when nothing was stored for
+        this tenant (or Root) and the returned config is the built-in default
+        rather than anything an admin saved. Callers that write the config back
+        must not treat a fallback as "the admin's current settings" — the admin
+        UI round-trips what it is given, so persisting a fallback silently
+        replaces a real config with defaults.
+        """
         value, inherited, source_tenant_id, has_override = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
         ret = cls.parse_config(config)
+        is_fallback = ret is None
         if ret is None:
+            logger.warning(
+                "daily workstation config falling back to built-in defaults: tenant={} source_tenant={} "
+                "inherited={} has_override={} (no stored value resolved)",
+                cls._current_tenant_id(),
+                source_tenant_id,
+                inherited,
+                has_override,
+            )
             ret = await cls._abuild_default_daily_config()
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
             ret = await cls._aproject_daily_config_for_current_tenant(ret, source_tenant_id)
         ret = cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
-        return ret, inherited, source_tenant_id, has_override
+        return ret, inherited, source_tenant_id, has_override, is_fallback
 
     @classmethod
     async def get_linsight_config(cls) -> LinsightConfig | None:

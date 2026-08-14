@@ -1,10 +1,12 @@
 """F048 OpenFGA client pin, consistency, and atomic limit contracts.
 
-覆盖 AC: AC-30, AC-31, AC-32, AC-34, AC-69, AC-109, AC-111, AC-112
+覆盖 AC: AC-30, AC-31, AC-32, AC-34, AC-69, AC-109, AC-111, AC-112,
+AC-160, AC-161, AC-162, AC-163, AC-168, AC-169, AC-170, AC-171
 """
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -17,7 +19,11 @@ from bisheng.core.openfga.client import (
     OPENFGA_WRITE_TUPLE_LIMIT,
     FGAClient,
 )
-from bisheng.core.openfga.exceptions import FGAClientError, FGAWriteError
+from bisheng.core.openfga.exceptions import (
+    FGAClientError,
+    FGAConnectionError,
+    FGAWriteError,
+)
 
 
 @pytest.fixture
@@ -77,6 +83,82 @@ async def test_check_batch_and_list_are_model_scoped_with_consistency(
         body = call.args[1]
         assert body["authorization_model_id"] == "model-f048"
         assert body["consistency"] == "HIGHER_CONSISTENCY"
+
+
+@pytest.mark.asyncio
+async def test_stream_list_objects_consumes_normal_end_and_preserves_model_pin(
+    client: FGAClient,
+) -> None:
+    captured = {}
+
+    async def stream(path, body):
+        captured.update(path=path, body=body)
+        yield {"result": {"object": "workflow:w1"}}
+        yield {"result": {"object": "workflow:w1"}}
+        yield {"result": {"object": "workflow:w2"}}
+
+    client._streamed_post = stream
+
+    assert await client.stream_list_objects(
+        user="user:7",
+        relation="visible",
+        type="workflow",
+        consistency="HIGHER_CONSISTENCY",
+    ) == ("workflow:w1", "workflow:w1", "workflow:w2")
+    assert captured["path"] == "/stores/store-1/streamed-list-objects"
+    assert captured["body"] == {
+        "user": "user:7",
+        "relation": "visible",
+        "type": "workflow",
+        "authorization_model_id": "model-f048",
+        "consistency": "HIGHER_CONSISTENCY",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "error",
+    (
+        FGAConnectionError("deadline"),
+        FGAClientError("service error"),
+    ),
+)
+async def test_stream_list_objects_never_returns_prefix_after_error(
+    client: FGAClient,
+    error: Exception,
+) -> None:
+    async def stream(path, body):
+        del path, body
+        yield {"object": "workflow:prefix"}
+        raise error
+
+    client._streamed_post = stream
+
+    with pytest.raises(type(error), match=str(error)):
+        await client.stream_list_objects(
+            user="user:7",
+            relation="visible",
+            type="workflow",
+        )
+
+
+@pytest.mark.asyncio
+async def test_stream_list_objects_propagates_cancellation_without_prefix(
+    client: FGAClient,
+) -> None:
+    async def stream(path, body):
+        del path, body
+        yield {"object": "workflow:prefix"}
+        raise asyncio.CancelledError
+
+    client._streamed_post = stream
+
+    with pytest.raises(asyncio.CancelledError):
+        await client.stream_list_objects(
+            user="user:7",
+            relation="visible",
+            type="workflow",
+        )
 
 
 @pytest.mark.asyncio
@@ -229,10 +311,34 @@ async def test_write_is_single_model_and_enforces_openfga_limit(
     client._post.assert_called_once()
     body = client._post.call_args.args[1]
     assert body["authorization_model_id"] == "model-f048"
+    assert "on_duplicate" not in body["writes"]
 
     with pytest.raises(FGAWriteError):
         await client.write_tuples(writes=tuples, deletes=[tuples[0]])
     assert client._post.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_write_can_ignore_duplicate_tuples_for_reconciliation(
+    client: FGAClient,
+) -> None:
+    client._post = AsyncMock(return_value={})
+    relationship = {
+        "user": "department:7#member",
+        "relation": "visible",
+        "object": "knowledge_space:42",
+    }
+
+    await client.write_tuples(
+        writes=[relationship],
+        ignore_duplicate_writes=True,
+    )
+
+    body = client._post.call_args.args[1]
+    assert body["writes"] == {
+        "tuple_keys": [relationship],
+        "on_duplicate": "ignore",
+    }
 
 
 def test_business_atomic_limit_is_stricter_than_service_limit() -> None:

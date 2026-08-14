@@ -179,7 +179,7 @@ async def test_video_block_becomes_serializable():
 
 
 async def test_image_blocks_preserved():
-    mw = ModelContentGuardMiddleware()
+    mw = ModelContentGuardMiddleware(supports_vision=True)
     image_block = {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA"}}
     request = FakeModelRequest(messages=[HumanMessage(content=[image_block])])
     seen = {}
@@ -260,7 +260,7 @@ async def test_backend_binary_error_without_code_interpreter():
 async def test_ordinary_tool_error_passes_through():
     """Only OUR binary marker is upgraded; a plain not-found must stay verbatim."""
     msg = ToolMessage(content="Error: File '/output/nope.md' not found", name="read_file", tool_call_id="c1")
-    mw = BinaryReadGuardMiddleware(has_code_interpreter=True)
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=True, supports_vision=True)
     result = await mw.awrap_tool_call(read_call("/output/nope.md"), handler_returning(msg))
 
     assert result.content == "Error: File '/output/nope.md' not found"
@@ -277,7 +277,7 @@ async def test_valid_image_block_survives_read_guard():
         name="read_file",
         tool_call_id="c1",
     )
-    mw = BinaryReadGuardMiddleware(has_code_interpreter=True)
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=True, supports_vision=True)
     result = await mw.awrap_tool_call(read_call("/output/chart.png"), handler_returning(msg))
 
     assert isinstance(result.content, list)
@@ -300,7 +300,7 @@ async def test_corrupt_image_block_replaced_by_read_guard():
 
 
 async def test_corrupt_image_stripped_before_model_call():
-    mw = ModelContentGuardMiddleware(has_code_interpreter=False)
+    mw = ModelContentGuardMiddleware(has_code_interpreter=False, supports_vision=True)
     request = FakeModelRequest(
         messages=[HumanMessage(content=[{"type": "image", "base64": "���", "mime_type": "image/png"}])]
     )
@@ -321,7 +321,7 @@ async def test_corrupt_image_stripped_before_model_call():
 
 async def test_http_image_url_is_not_flagged():
     """No inline payload to validate — a plain URL must pass untouched."""
-    mw = ModelContentGuardMiddleware()
+    mw = ModelContentGuardMiddleware(supports_vision=True)
     block = {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}}
     request = FakeModelRequest(messages=[HumanMessage(content=[block])])
     seen = {}
@@ -334,11 +334,234 @@ async def test_http_image_url_is_not_flagged():
     assert seen["messages"][0].content == [block]
 
 
+# --------------------------------------------------------------------------
+# Layer 2 — tool-message images are relocated into a user turn
+# --------------------------------------------------------------------------
+
+
+def image_tool_message(path="/scratch/S1_p5.png", tool_call_id="c1", payload="aGk="):
+    """The exact shape deepagents' `read_file` returns for an image
+    (`deepagents/middleware/filesystem.py`): a multimodal block in the TOOL role."""
+    return ToolMessage(
+        content_blocks=[{"type": "image", "base64": payload, "mime_type": "image/png"}],
+        name="read_file",
+        tool_call_id=tool_call_id,
+        additional_kwargs={"read_file_path": path, "read_file_media_type": "image/png"},
+    )
+
+
+def ai_tool_call(*ids):
+    return AIMessage(
+        content="",
+        tool_calls=[{"name": "read_file", "args": {"file_path": f"/scratch/{i}.png"}, "id": i} for i in ids],
+    )
+
+
+async def collect(mw, messages):
+    request = FakeModelRequest(messages=messages)
+    seen = {}
+
+    async def handler(req):
+        seen["messages"] = req.messages
+        return AIMessage(content="ok")
+
+    await mw.awrap_model_call(request, handler)
+    return request, seen["messages"]
+
+
+async def test_tool_image_relocated_into_a_user_turn():
+    """Regression: Kimi K3 answers `image_url parts are supported only in user
+    messages` with a 400 that fails the whole session. Every mainstream endpoint
+    accepts an image in the user role, so the block is MOVED rather than dropped
+    (dropping it would regress the scanned-page workflow this feature exists for)."""
+    mw = ModelContentGuardMiddleware(supports_vision=True)
+    request, out = await collect(mw, [ai_tool_call("c1"), image_tool_message()])
+
+    assert len(out) == 3
+
+    tool_payload = _convert_message_to_dict(out[1])
+    assert tool_payload["role"] == "tool"
+    # the tool result survives as non-empty text, and names the file it read
+    assert all(b["type"] == "text" for b in tool_payload["content"])
+    assert "/scratch/S1_p5.png" in tool_payload["content"][0]["text"]
+
+    carrier = _convert_message_to_dict(out[2])
+    assert carrier["role"] == "user"
+    assert [b["type"] for b in carrier["content"]] == ["text", "text", "image_url"]
+    assert carrier["content"][2]["image_url"]["url"] == "data:image/png;base64,aGk="
+
+    # request-only: the state/checkpoint copy keeps the original shape, so this is
+    # reversible and a rollback cannot leave a rewritten history behind.
+    assert request.messages[1].content[0]["type"] == "image"
+
+
+async def test_carrier_goes_after_the_whole_tool_batch():
+    """Ordering rule: every tool message answering one `tool_calls` batch must be
+    contiguous and precede any other role. Inserting the carrier directly after the
+    image-bearing tool message would split the batch — trading a 400 for a 400."""
+    mw = ModelContentGuardMiddleware(supports_vision=True)
+    _, out = await collect(
+        mw,
+        [
+            ai_tool_call("c1", "c2"),
+            image_tool_message(tool_call_id="c1"),
+            ToolMessage(content="plain text result", name="read_file", tool_call_id="c2"),
+            AIMessage(content="done"),
+        ],
+    )
+
+    assert [_convert_message_to_dict(m)["role"] for m in out] == ["assistant", "tool", "tool", "user", "assistant"]
+
+
+async def test_each_tool_batch_gets_its_own_carrier():
+    mw = ModelContentGuardMiddleware(supports_vision=True)
+    _, out = await collect(
+        mw,
+        [
+            ai_tool_call("c1"),
+            image_tool_message(tool_call_id="c1"),
+            ai_tool_call("c2"),
+            image_tool_message(path="/scratch/b.png", tool_call_id="c2"),
+        ],
+    )
+
+    assert [_convert_message_to_dict(m)["role"] for m in out] == [
+        "assistant",
+        "tool",
+        "user",
+        "assistant",
+        "tool",
+        "user",
+    ]
+
+
+async def test_multiple_relocated_images_keep_order():
+    mw = ModelContentGuardMiddleware(supports_vision=True)
+    _, out = await collect(
+        mw,
+        [
+            ai_tool_call("c1", "c2"),
+            image_tool_message(path="/scratch/a.png", tool_call_id="c1", payload="YQ=="),
+            image_tool_message(path="/scratch/b.png", tool_call_id="c2", payload="Yg=="),
+        ],
+    )
+
+    carrier = out[3]
+    labels = [b["text"] for b in carrier.content if b["type"] == "text"]
+    assert "/scratch/a.png" in labels[1]
+    assert "/scratch/b.png" in labels[2]
+    assert [b["base64"] for b in carrier.content if b["type"] == "image"] == ["YQ==", "Yg=="]
+
+
+async def test_openai_native_image_url_in_a_tool_message_is_relocated():
+    """The other shape an image arrives in — same role problem, same fix."""
+    mw = ModelContentGuardMiddleware(supports_vision=True)
+    block = {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGk="}}
+    _, out = await collect(
+        mw,
+        [ai_tool_call("c1"), ToolMessage(content=[block], name="read_file", tool_call_id="c1")],
+    )
+
+    assert _convert_message_to_dict(out[1])["role"] == "tool"
+    assert all(b["type"] == "text" for b in out[1].content)
+    assert out[2].content[-1] == block
+
+
+async def test_user_images_are_not_relocated():
+    """Only the tool role is the problem — a human attachment is already legal and
+    must not gain a spurious carrier turn."""
+    mw = ModelContentGuardMiddleware(supports_vision=True)
+    block = {"type": "image", "base64": "aGk=", "mime_type": "image/png"}
+    _, out = await collect(mw, [HumanMessage(content=[block])])
+
+    assert len(out) == 1
+    assert out[0].content == [block]
+
+
+async def test_corrupt_tool_image_is_stripped_not_relocated():
+    """A payload that is not real base64 stays useless in any role: moving it would
+    only relocate the 400. It keeps the strip path, and adds no carrier turn."""
+    mw = ModelContentGuardMiddleware(has_code_interpreter=False, supports_vision=True)
+    _, out = await collect(
+        mw,
+        [
+            ai_tool_call("c1"),
+            ToolMessage(
+                content=[{"type": "image", "base64": "���", "mime_type": "image/png"}],
+                name="read_file",
+                tool_call_id="c1",
+            ),
+        ],
+    )
+
+    assert len(out) == 2
+    assert out[1].content[0]["type"] == "text"
+    assert "base64" in out[1].content[0]["text"]
+
+
+# --------------------------------------------------------------------------
+# The `visual` gate — a model with no declared vision capability gets no image
+# --------------------------------------------------------------------------
+
+
+async def test_image_read_refused_when_the_model_has_no_vision():
+    """`WSModel.visual` off means the endpoint would reject the image (or the model
+    would see nothing). Refuse at the TOOL layer, where the hint can name why."""
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=True, supports_vision=False)
+    msg = image_tool_message(path="/scratch/page5.png")
+    result = await mw.awrap_tool_call(read_call("/scratch/page5.png"), handler_returning(msg))
+
+    assert isinstance(result.content, str)
+    assert "/scratch/page5.png" in result.content
+    assert "视觉" in result.content  # names the checkbox the admin has to tick
+    assert "bisheng_code_interpreter" in result.content  # the route that still works
+    assert result.additional_kwargs == {}
+
+
+async def test_no_vision_hint_forbids_guessing():
+    """Honesty over a plausible answer: a model told nothing will describe the page
+    anyway. The hint must demand it says the check did not happen."""
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=True, supports_vision=False)
+    result = await mw.awrap_tool_call(read_call("/scratch/p.png"), handler_returning(image_tool_message()))
+
+    assert "不要凭猜测描述图片内容" in result.content
+    assert "never guess" in result.content
+
+
+async def test_no_vision_hint_omits_unbound_code_interpreter():
+    """prompt ⟺ tool lockstep, same rule as the binary hint."""
+    mw = BinaryReadGuardMiddleware(has_code_interpreter=False, supports_vision=False)
+    result = await mw.awrap_tool_call(read_call("/scratch/p.png"), handler_returning(image_tool_message()))
+
+    assert "bisheng_code_interpreter" not in result.content
+
+
+async def test_no_vision_model_call_strips_images_in_any_role():
+    """Backstop for images the tool guard never saw — the real case is a replayed
+    checkpoint from a turn that ran on a vision model before the admin switched it."""
+    mw = ModelContentGuardMiddleware(supports_vision=False)
+    block = {"type": "image", "base64": "aGk=", "mime_type": "image/png"}
+    _, out = await collect(mw, [HumanMessage(content=[block]), ai_tool_call("c1"), image_tool_message()])
+
+    assert len(out) == 3  # no carrier turn was added
+    assert out[0].content[0]["type"] == "text"
+    assert out[2].content[0]["type"] == "text"
+    assert all("image_url" not in str(_convert_message_to_dict(m)) for m in out)
+
+
+def test_guards_fail_closed_on_vision():
+    """Both guards default to no-vision: a call site that forgets the flag must lose
+    image reads, never leak a payload the endpoint would reject."""
+    assert BinaryReadGuardMiddleware()._supports_vision is False
+    assert ModelContentGuardMiddleware()._supports_vision is False
+
+
 def test_build_binary_guards_pairs_both_layers():
     """A new subagent must get both guards by construction — its subgraph is never
     wrapped by the parent's middleware."""
     from bisheng.linsight.domain.services.binary_content_guard import build_binary_guards
 
-    guards = build_binary_guards(has_code_interpreter=True)
+    guards = build_binary_guards(has_code_interpreter=True, supports_vision=True)
     assert [type(g).__name__ for g in guards] == ["BinaryReadGuardMiddleware", "ModelContentGuardMiddleware"]
     assert all(g._has_code_interpreter for g in guards)
+    assert all(g._supports_vision for g in guards)

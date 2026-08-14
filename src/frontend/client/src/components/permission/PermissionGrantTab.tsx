@@ -405,6 +405,9 @@ export function PermissionGrantTab({
           {assignees.map((assignee) => {
             const editable = isEditable(assignee, context);
             const removed = removedIds.has(assignee.assignee_id);
+            const currentIsGrantable = models.some(
+              (model) => model.key === assignee.model.key,
+            );
             return (
               <div
                 key={assignee.assignee_id}
@@ -441,6 +444,11 @@ export function PermissionGrantTab({
                   }
                   className="h-10 rounded-md border border-[#D9D9D9] bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
                 >
+                  {!currentIsGrantable && (
+                    <option value={assignee.model.key}>
+                      {assignee.model.name}
+                    </option>
+                  )}
                   {models.map((model) => (
                     <option key={model.key} value={model.key}>
                       {model.name}

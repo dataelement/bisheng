@@ -23,6 +23,33 @@ import { isMediaAttachmentFile, type MediaParsingState } from "~/utils/mediaAtta
 
 const NO_PARENT = "00000000-0000-0000-0000-000000000000";
 
+/** Poll cadence for the post-handoff attachment fetch (see the handoff handler).
+ *
+ * Two-speed on purpose. A small batch lands in seconds and deserves a snappy
+ * first paint; a big one is the reason this poll exists at all — 12 bid PDFs
+ * measured 19 minutes of ETL — and a fixed fast cadence would have to run for
+ * hundreds of round-trips to cover it. So: fast while the common case plays out,
+ * then back off and simply outlast the slow case.
+ *
+ * The deadline is a real bound, not a guess at the worst case: the per-file ETL
+ * ceiling is 600s (settings.etl4lm.timeout) and the batch size is capped by the
+ * folder-upload limits, so a pathological batch CAN outlive 30 minutes. Past the
+ * deadline the drawer degrades to "visible after a refresh", which is where it
+ * was before this poll existed — never to a timer that runs for the session's
+ * lifetime. */
+const INGEST_POLL_FAST_MS = 3000;
+const INGEST_POLL_SLOW_MS = 15000;
+/** Round-trips kept at the fast cadence before backing off (~1 minute). */
+const INGEST_POLL_FAST_ATTEMPTS = 20;
+const INGEST_POLL_DEADLINE_MS = 30 * 60 * 1000;
+/** Backend SessionVersionStatusEnum values after which nothing will be ingested. */
+const TERMINAL_SV_STATUSES = new Set([
+    "completed",
+    "failed",
+    "terminated",
+    "sop_generation_failed",
+]);
+
 /** The fields of an input-box attachment that decide whether it can be sent.
     Backends disagree on the path key (filepath / file_path / file_url), so all
     three count as "the upload landed somewhere we can point at". */
@@ -95,6 +122,22 @@ export default function useAiChat(initialConversationId: string = "new", isLings
     const internalConvoIdRef = useRef(conversationId);
     internalConvoIdRef.current = conversationId;
 
+    // Timer for the post-handoff attachment poll. `generation` fences a request
+    // that is already in flight: clearing the timeout alone would still let its
+    // `.then` re-arm a new one after we unmounted or switched conversations.
+    const ingestPollRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; generation: number }>({
+        timer: null,
+        generation: 0,
+    });
+    const cancelIngestPoll = useCallback(() => {
+        if (ingestPollRef.current.timer) {
+            clearTimeout(ingestPollRef.current.timer);
+            ingestPollRef.current.timer = null;
+        }
+        ingestPollRef.current.generation += 1;
+    }, []);
+    useEffect(() => () => cancelIngestPoll(), [cancelIngestPoll]);
+
     // --- Sync internal state when external conversationId prop changes ---
     // This is essential for sidebar navigation: clicking a different conversation
     // changes initialConversationId. But we must NOT reset when WE navigated
@@ -117,6 +160,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
         abortSSE();
         setSseSubmission(null);
         setIsStreaming(false);
+        // The poll belongs to the conversation we are leaving.
+        cancelIngestPoll();
         setIsLoading(initialConversationId !== "new");
         setMessages([]);
         setTitle("");
@@ -506,58 +551,89 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                             updateLinsight(svid, { taskError: String(err), status: SopStatus.Stoped });
                         });
 
-                    // The handoff event carries no files; the backend has already
-                    // processed the uploaded sources for this SV. Pull them so the
-                    // workspace drawer (uploaded-files group + header button) shows
-                    // live instead of only after a page refresh.
+                    // The handoff event carries no files. Attachment ingest no longer
+                    // runs inside the submit request — the linsight worker materializes
+                    // uploads/* just before the run — so at handoff time this SV's row
+                    // still has files=[] and the single shot this used to be always
+                    // missed, leaving the workspace drawer (uploaded-files group +
+                    // header button) empty until a manual refresh. Poll instead: stop
+                    // as soon as the files land, stop when the run can no longer
+                    // produce any, and give up at INGEST_POLL_DEADLINE_MS so a
+                    // pathological batch degrades to "visible after refresh" rather
+                    // than to an unbounded timer.
                     if (chat_id) {
-                        getLinsightSessionVersionList(chat_id, '')
-                            .then((versions: any[]) => {
-                                const item = (versions || []).find((v: any) => v.id === svid);
-                                if (item?.files?.length) {
-                                    updateLinsight(svid, {
-                                        files: item.files.map((f: any) => ({
-                                            ...f,
-                                            file_name: decodeURIComponent(f.original_filename),
-                                        })),
-                                    } as any);
+                        cancelIngestPoll();
+                        const pollGeneration = ingestPollRef.current.generation;
+                        const pollDeadline = Date.now() + INGEST_POLL_DEADLINE_MS;
+                        let attempts = 0;
+                        const scheduleNextIngestPoll = () => {
+                            if (ingestPollRef.current.generation !== pollGeneration) return;
+                            if (Date.now() >= pollDeadline) return;
+                            const delay =
+                                attempts < INGEST_POLL_FAST_ATTEMPTS
+                                    ? INGEST_POLL_FAST_MS
+                                    : INGEST_POLL_SLOW_MS;
+                            ingestPollRef.current.timer = setTimeout(pollIngestedFiles, delay);
+                        };
+                        const pollIngestedFiles = () => {
+                            attempts += 1;
+                            getLinsightSessionVersionList(chat_id, '')
+                                .then((versions: any[]) => {
+                                    if (ingestPollRef.current.generation !== pollGeneration) return;
+                                    const item = (versions || []).find((v: any) => v.id === svid);
+                                    if (item?.files?.length) {
+                                        updateLinsight(svid, {
+                                            files: item.files.map((f: any) => ({
+                                                ...f,
+                                                file_name: decodeURIComponent(f.original_filename),
+                                            })),
+                                        } as any);
 
-                                    // Stamp the user question's attachment chips with each
-                                    // file's parse result so a failed attachment shows its
-                                    // failed state live (not only after a refresh).
-                                    const statusById = new Map<string, any>(
-                                        item.files
-                                            .filter((f: any) => f?.file_id != null)
-                                            .map((f: any) => [String(f.file_id), f]),
-                                    );
-                                    setMessages((prev) =>
-                                        prev.map((m) =>
-                                            m.messageId === realUserMessageId && m.files?.length
-                                                ? {
-                                                      ...m,
-                                                      files: m.files.map((mf: any) => {
-                                                          const p = statusById.get(String(mf.file_id));
-                                                          return p
-                                                              ? {
-                                                                    ...mf,
-                                                                    valid: p.valid,
-                                                                    parsing_status: p.parsing_status,
-                                                                    error_message: p.error_message,
-                                                                    ...(p.cover_filepath
-                                                                        ? { cover_filepath: p.cover_filepath }
-                                                                        : {}),
-                                                                }
-                                                              : mf;
-                                                      }),
-                                                  }
-                                                : m,
-                                        ),
-                                    );
-                                }
-                            })
-                            .catch(() => {
-                                /* best-effort: drawer still works after refresh */
-                            });
+                                        // Stamp the user question's attachment chips with each
+                                        // file's parse result so a failed attachment shows its
+                                        // failed state live (not only after a refresh).
+                                        const statusById = new Map<string, any>(
+                                            item.files
+                                                .filter((f: any) => f?.file_id != null)
+                                                .map((f: any) => [String(f.file_id), f]),
+                                        );
+                                        setMessages((prev) =>
+                                            prev.map((m) =>
+                                                m.messageId === realUserMessageId && m.files?.length
+                                                    ? {
+                                                          ...m,
+                                                          files: m.files.map((mf: any) => {
+                                                              const p = statusById.get(String(mf.file_id));
+                                                              return p
+                                                                  ? {
+                                                                        ...mf,
+                                                                        valid: p.valid,
+                                                                        parsing_status: p.parsing_status,
+                                                                        error_message: p.error_message,
+                                                                        ...(p.cover_filepath
+                                                                            ? { cover_filepath: p.cover_filepath }
+                                                                            : {}),
+                                                                    }
+                                                                  : mf;
+                                                          }),
+                                                      }
+                                                    : m,
+                                            ),
+                                        );
+                                        return;
+                                    }
+                                    // A terminated / failed / completed run will never
+                                    // ingest anything more; keeping the timer alive would
+                                    // just poll a settled row for two minutes.
+                                    if (item && TERMINAL_SV_STATUSES.has(item.status)) return;
+                                    scheduleNextIngestPoll();
+                                })
+                                .catch(() => {
+                                    // best-effort: drawer still works after refresh
+                                    scheduleNextIngestPoll();
+                                });
+                        };
+                        pollIngestedFiles();
                     }
 
                     // Promote the placeholder assistant row to a task turn so the

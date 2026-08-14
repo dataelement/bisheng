@@ -6,7 +6,9 @@ All methods are async. Connection errors raise FGAConnectionError (AD-03 fail-cl
 
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -165,19 +167,56 @@ class FGAClient:
         data = await self._post(f"/stores/{self._store_id}/list-objects", body)
         return data.get("objects", [])
 
+    async def stream_list_objects(
+        self,
+        user: str,
+        relation: str,
+        type: str,
+        consistency: str | None = None,
+    ) -> tuple[str, ...]:
+        """Consume StreamedListObjects completely before returning any object."""
+
+        body = {
+            "user": user,
+            "relation": relation,
+            "type": type,
+            "authorization_model_id": self._model_id,
+        }
+        if consistency:
+            body["consistency"] = consistency
+        objects: list[str] = []
+        async for item in self._streamed_post(
+            f"/stores/{self._store_id}/streamed-list-objects",
+            body,
+        ):
+            # OpenFGA v1.15.1 wraps each NDJSON item in ``result``. Accept the
+            # unwrapped shape as well for compatible proxies and test doubles.
+            result = item.get("result", item)
+            object_key = result.get("object") if isinstance(result, dict) else None
+            if not isinstance(object_key, str) or not object_key:
+                raise FGAClientError("OpenFGA StreamedListObjects returned an invalid item")
+            objects.append(object_key)
+        return tuple(objects)
+
     # ── Tuple CRUD ───────────────────────────────────────────────
 
     async def write_tuples(
         self,
         writes: list[dict] | None = None,
         deletes: list[dict] | None = None,
+        *,
+        ignore_duplicate_writes: bool = False,
     ) -> None:
         """Batch write and/or delete tuples.
 
         Each tuple: {"user": "user:7", "relation": "owner", "object": "workflow:abc"}
         Raises FGAWriteError when the atomic request is invalid or fails.
         """
-        body = self._build_write_body(writes, deletes)
+        body = self._build_write_body(
+            writes,
+            deletes,
+            ignore_duplicate_writes=ignore_duplicate_writes,
+        )
         if body is None:
             return
 
@@ -193,9 +232,15 @@ class FGAClient:
         self,
         writes: list[dict] | None = None,
         deletes: list[dict] | None = None,
+        *,
+        ignore_duplicate_writes: bool = False,
     ) -> None:
         """Synchronous tuple write for Celery tasks without an asyncio loop."""
-        body = self._build_write_body(writes, deletes)
+        body = self._build_write_body(
+            writes,
+            deletes,
+            ignore_duplicate_writes=ignore_duplicate_writes,
+        )
         if body is None:
             return
 
@@ -211,6 +256,8 @@ class FGAClient:
         self,
         writes: list[dict] | None = None,
         deletes: list[dict] | None = None,
+        *,
+        ignore_duplicate_writes: bool = False,
     ) -> dict | None:
         """Assemble the OpenFGA write request body, or None when nothing to do."""
         operation_count = len(writes or ()) + len(deletes or ())
@@ -218,7 +265,12 @@ class FGAClient:
             raise FGAWriteError(f"OpenFGA Write exceeds {OPENFGA_WRITE_TUPLE_LIMIT} tuple operations")
         body: dict[str, Any] = {}
         if writes:
-            body["writes"] = {"tuple_keys": [self._tuple_key(t) for t in writes]}
+            write_payload: dict[str, Any] = {
+                "tuple_keys": [self._tuple_key(t) for t in writes],
+            }
+            if ignore_duplicate_writes:
+                write_payload["on_duplicate"] = "ignore"
+            body["writes"] = write_payload
         if deletes:
             body["deletes"] = {"tuple_keys": [self._tuple_key(t) for t in deletes]}
         return body if body else None
@@ -411,6 +463,40 @@ class FGAClient:
             detail = resp.text[:500]
             raise FGAClientError(f"OpenFGA {resp.status_code}: {detail}")
         return resp.json()
+
+    async def _streamed_post(
+        self,
+        path: str,
+        body: dict,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield validated NDJSON objects and fail if the stream is incomplete."""
+
+        try:
+            async with self._http.stream(
+                "POST",
+                path,
+                json=body,
+                headers={"Accept": "application/x-ndjson"},
+            ) as resp:
+                if resp.status_code >= 400:
+                    await resp.aread()
+                    raise FGAClientError(f"OpenFGA {resp.status_code}: {resp.text[:500]}")
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise FGAClientError("OpenFGA streamed an invalid NDJSON item") from exc
+                    if not isinstance(item, dict):
+                        raise FGAClientError("OpenFGA streamed a non-object NDJSON item")
+                    yield item
+        except FGAClientError:
+            raise
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise FGAConnectionError(f"OpenFGA stream incomplete: {exc}") from exc
+        except httpx.HTTPError as exc:
+            raise FGAClientError(f"OpenFGA stream HTTP error: {exc}") from exc
 
     def _post_sync(self, path: str, body: dict) -> dict:
         """POST JSON synchronously and return parsed response."""

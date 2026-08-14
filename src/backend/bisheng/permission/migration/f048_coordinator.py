@@ -15,9 +15,17 @@ from bisheng.core.openfga.authorization_model_f048 import (
     authorization_model_checksum,
     build_authorization_model_f048,
 )
+from bisheng.permission.domain.services.grant_source_service import (
+    GrantModelSnapshot,
+    GrantSnapshot,
+    GrantSourceRecord,
+)
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
     derive_permission_models,
+)
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompiler,
 )
 from bisheng.permission.migration.f048_mode_mapper import (
     ModeMappingResult,
@@ -421,6 +429,60 @@ def _compile_target_tuples(
                 ("protected_assignee" if assignee.protected else "ordinary_assignee"),
                 grant_object,
             )
+
+    active_by_model = {
+        model.model_key: model.active for model in model_mapping.custom_models
+    }
+    grants_by_tenant: dict[int, list[GrantSnapshot]] = {}
+    source_id = 0
+    for grant in tuple_mapping.grants:
+        sources: list[GrantSourceRecord] = []
+        for assignee in grant.assignees:
+            source_id += 1
+            projected_subject = f"{assignee.subject_type}:{assignee.subject_id}"
+            if assignee.userset_relation:
+                projected_subject += f"#{assignee.userset_relation}"
+            sources.append(
+                GrantSourceRecord(
+                    source_id=source_id,
+                    subject_type=assignee.subject_type,
+                    subject_id=assignee.subject_id,
+                    userset_relation=assignee.userset_relation,
+                    include_children=assignee.include_children,
+                    source_type=assignee.source_type,
+                    source_ref=assignee.source_ref,
+                    source_locator=(f"migration:{assignee.source_type}:{assignee.source_ref}")[:256],
+                    source_fingerprint=assignee.source_checksum,
+                    projected_subject=projected_subject,
+                    protected=assignee.protected,
+                )
+            )
+        grants_by_tenant.setdefault(grant.tenant_id, []).append(
+            GrantSnapshot(
+                grant_id=grant.grant_key,
+                tenant_id=grant.tenant_id,
+                resource_type=grant.resource_type,
+                resource_id=grant.resource_id,
+                model=GrantModelSnapshot(
+                    model_key=grant.model_key,
+                    active=active_by_model.get(grant.model_key, True),
+                    action_codes=(),
+                ),
+                active=True,
+                sources=tuple(sources),
+            )
+        )
+    visibility_compiler = VisibilityProjectionCompiler()
+    for tenant_id, grants in sorted(grants_by_tenant.items()):
+        visibility = visibility_compiler.compile(
+            tenant_id=tenant_id,
+            grants=tuple(grants),
+            existing_sources=(),
+        )
+        for delta in visibility.deltas:
+            if delta.action != "WRITE":
+                raise ValueError("initial visibility compilation produced a delete")
+            add(delta.user, delta.relation, delta.object)
     for mode in mode_mapping.modes:
         resource_object = mode.resource_key
         add("user:*", f"{mode.mode.casefold()}_mode", resource_object)
@@ -431,7 +493,7 @@ def _compile_target_tuples(
         if resource.ownership_kind.upper() != "SYSTEM" or not resource.system_allowlisted:
             continue
         resource_object = f"{resource.resource_type}:{resource.resource_id}"
-        add("user:*", "system_visible_marker", resource_object)
+        add("user:*", "visible", resource_object)
         if resource.resource_type in {
             "knowledge_library",
             "workflow",

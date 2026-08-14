@@ -27,9 +27,13 @@ from bisheng.permission.domain.models import (
     PermissionGrantAssignee,
     PermissionModel,
     PermissionModelAction,
+    PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
-from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.schemas import (
+    VerifiedPermissionTarget,
+    VisibleSourceProjectionDTO,
+)
 from bisheng.permission.domain.services.grant_service import (
     GrantMutationContext,
 )
@@ -51,6 +55,9 @@ from bisheng.permission.domain.services.permission_explain_service import (
     PermissionSourceExplanation,
 )
 from bisheng.permission.domain.services.projection_plan import ProjectionOutcome
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompilation,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +285,32 @@ class SqlPermissionControlState:
                 )
             )
         return tuple(result)
+
+    async def load_visible_sources(
+        self,
+        *,
+        target: VerifiedPermissionTarget,
+    ) -> tuple[VisibleSourceProjectionDTO, ...]:
+        """Load the complete active contribution set for one resource scope."""
+
+        async with get_async_db_session() as session:
+            rows = list(
+                (
+                    await session.execute(
+                        select(PermissionVisibleSourceProjection)
+                        .where(
+                            PermissionVisibleSourceProjection.tenant_id == target.tenant_id,
+                            PermissionVisibleSourceProjection.resource_type == target.resource_type,
+                            PermissionVisibleSourceProjection.resource_id == target.resource_id,
+                            PermissionVisibleSourceProjection.state == "ACTIVE",
+                        )
+                        .order_by(PermissionVisibleSourceProjection.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return tuple(self._visible_source_snapshot(row) for row in rows)
 
     async def inherited_grants(
         self,
@@ -622,6 +655,7 @@ class SqlPermissionControlState:
         self,
         context: GrantMutationContext,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation | None,
         *,
         idempotency_key: str,
         operation_id: int,
@@ -670,14 +704,21 @@ class SqlPermissionControlState:
                             )
                             .values(state="PENDING_DELETE")
                         )
+                if visibility is not None:
+                    await self._prepare_visible_sources(
+                        session,
+                        tenant_id=context.target.tenant_id,
+                        visibility=visibility,
+                        operation_id=operation_id,
+                    )
 
     async def finalize_grants(
         self,
         context: GrantMutationContext,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation | None,
         outcome: ProjectionOutcome,
     ) -> None:
-        del outcome
         async with get_async_db_session() as session:
             async with session.begin():
                 for grant in grants:
@@ -716,6 +757,13 @@ class SqlPermissionControlState:
                             state="INACTIVE",
                             version=PermissionGrantAssignee.version + 1,
                         )
+                    )
+                if visibility is not None:
+                    await self._finalize_visible_sources(
+                        session,
+                        tenant_id=context.target.tenant_id,
+                        visibility=visibility,
+                        operation_id=outcome.operation_id,
                     )
 
     async def allocate_source_ids(self, count: int) -> tuple[int, ...]:
@@ -783,6 +831,7 @@ class SqlPermissionControlState:
         await self.prepare_grants(
             grant_context,
             grants,
+            None,
             idempotency_key=idempotency_key,
             operation_id=operation_id,
         )
@@ -806,7 +855,7 @@ class SqlPermissionControlState:
             models=tuple(grant.model for grant in grants),
             grants=grants,
         )
-        await self.finalize_grants(grant_context, grants, outcome)
+        await self.finalize_grants(grant_context, grants, None, outcome)
         async with get_async_db_session() as session:
             async with session.begin():
                 await session.execute(
@@ -953,6 +1002,29 @@ class SqlPermissionControlState:
         )
 
     @staticmethod
+    def _visible_source_snapshot(
+        row: PermissionVisibleSourceProjection,
+    ) -> VisibleSourceProjectionDTO:
+        return VisibleSourceProjectionDTO(
+            tenant_id=int(row.tenant_id or 0),
+            resource_type=row.resource_type,
+            resource_id=row.resource_id,
+            visibility_class=row.visibility_class,
+            projected_subject=row.projected_subject,
+            source_kind=row.source_kind,
+            source_owner_key=row.source_owner_key,
+            source_locator=row.source_locator,
+            source_fingerprint=row.source_fingerprint,
+            contribution_fingerprint=row.contribution_fingerprint,
+            model_key=row.model_key,
+            source_version=row.source_version,
+            tuple_fingerprint=row.tuple_fingerprint,
+            state=row.state,
+            operation_id=row.operation_id,
+            migration_item_id=row.migration_item_id,
+        )
+
+    @staticmethod
     def _owner_projection_grants(
         context: OwnerProjectionContext,
         owner_grant: GrantSnapshot | None,
@@ -1066,6 +1138,113 @@ class SqlPermissionControlState:
             row.state = state
             row.projection_state = projection_state
         return row
+
+    @staticmethod
+    async def _prepare_visible_sources(
+        session,
+        *,
+        tenant_id: int,
+        visibility: VisibilityProjectionCompilation,
+        operation_id: int,
+    ) -> None:
+        desired = (*visibility.active_sources, *visibility.retired_sources)
+        for source in desired:
+            row = (
+                (
+                    await session.execute(
+                        select(PermissionVisibleSourceProjection)
+                        .where(
+                            PermissionVisibleSourceProjection.tenant_id == tenant_id,
+                            PermissionVisibleSourceProjection.resource_type == source.resource_type,
+                            PermissionVisibleSourceProjection.resource_id == source.resource_id,
+                            PermissionVisibleSourceProjection.visibility_class == source.visibility_class,
+                            PermissionVisibleSourceProjection.projected_subject == source.projected_subject,
+                            PermissionVisibleSourceProjection.contribution_fingerprint
+                            == source.contribution_fingerprint,
+                        )
+                        .with_for_update()
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if row is None:
+                row = PermissionVisibleSourceProjection(
+                    tenant_id=tenant_id,
+                    resource_type=source.resource_type,
+                    resource_id=source.resource_id,
+                    visibility_class=source.visibility_class,
+                    projected_subject=source.projected_subject,
+                    source_kind=source.source_kind,
+                    source_owner_key=source.source_owner_key,
+                    source_locator=source.source_locator,
+                    source_fingerprint=source.source_fingerprint,
+                    contribution_fingerprint=source.contribution_fingerprint,
+                    model_key=source.model_key,
+                    source_version=source.source_version,
+                    tuple_fingerprint=source.tuple_fingerprint,
+                    state="PENDING",
+                    operation_id=operation_id,
+                    migration_item_id=source.migration_item_id,
+                )
+                session.add(row)
+                continue
+
+            immutable_fields = (
+                "resource_type",
+                "resource_id",
+                "visibility_class",
+                "projected_subject",
+                "source_kind",
+                "source_owner_key",
+                "source_locator",
+                "source_fingerprint",
+                "contribution_fingerprint",
+                "model_key",
+                "tuple_fingerprint",
+            )
+            if any(getattr(row, field) != getattr(source, field) for field in immutable_fields):
+                raise PermissionVersionConflictError(
+                    msg="Visible source contribution fingerprint collision",
+                )
+            if source.source_version < row.source_version:
+                raise PermissionVersionConflictError(msg="Visible source version is stale")
+            row.source_version = source.source_version
+            row.state = "PENDING"
+            row.operation_id = operation_id
+            session.add(row)
+
+        await session.flush()
+
+    @staticmethod
+    async def _finalize_visible_sources(
+        session,
+        *,
+        tenant_id: int,
+        visibility: VisibilityProjectionCompilation,
+        operation_id: int,
+    ) -> None:
+        for sources, state in (
+            (visibility.active_sources, "ACTIVE"),
+            (visibility.retired_sources, "RETIRED"),
+        ):
+            fingerprints = tuple(source.contribution_fingerprint for source in sources)
+            if not fingerprints:
+                continue
+            result = await session.execute(
+                update(PermissionVisibleSourceProjection)
+                .where(
+                    PermissionVisibleSourceProjection.tenant_id == tenant_id,
+                    PermissionVisibleSourceProjection.operation_id == operation_id,
+                    col(PermissionVisibleSourceProjection.contribution_fingerprint).in_(fingerprints),
+                    col(PermissionVisibleSourceProjection.state).in_(("PENDING", state)),
+                )
+                .values(state=state)
+            )
+            if result.rowcount != len(fingerprints):
+                raise PermissionVersionConflictError(
+                    msg="Visible source after-state changed before projection finalize",
+                )
 
     @staticmethod
     async def _upsert_assignee(
@@ -1207,6 +1386,7 @@ class SqlGrantMutationState:
         self,
         context,
         grants,
+        visibility,
         *,
         idempotency_key,
         operation_id,
@@ -1214,12 +1394,13 @@ class SqlGrantMutationState:
         await self._state.prepare_grants(
             context,
             grants,
+            visibility,
             idempotency_key=idempotency_key,
             operation_id=operation_id,
         )
 
-    async def finalize(self, context, grants, outcome) -> None:
-        await self._state.finalize_grants(context, grants, outcome)
+    async def finalize(self, context, grants, visibility, outcome) -> None:
+        await self._state.finalize_grants(context, grants, visibility, outcome)
 
 
 class SqlModeState:

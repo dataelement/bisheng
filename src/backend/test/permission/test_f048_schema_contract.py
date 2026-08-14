@@ -24,6 +24,9 @@ from bisheng.core.database.alembic.versions import f048_permission_model_grants 
 from bisheng.core.database.alembic.versions import (
     v3_0_0_f048_migration_item_message_longtext as message_revision,
 )
+from bisheng.core.database.alembic.versions import (
+    v3_0_0_f048_visible_source_projection as visible_revision,
+)
 from bisheng.core.database.dialect_helpers import LargeText
 from bisheng.permission.domain import models as permission_models
 
@@ -31,6 +34,9 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 REVISION_PATH = BACKEND_ROOT / "bisheng/core/database/alembic/versions/f048_permission_model_grants.py"
 MESSAGE_REVISION_PATH = (
     BACKEND_ROOT / "bisheng/core/database/alembic/versions/v3_0_0_f048_migration_item_message_longtext.py"
+)
+VISIBLE_REVISION_PATH = (
+    BACKEND_ROOT / "bisheng/core/database/alembic/versions/v3_0_0_f048_visible_source_projection.py"
 )
 
 F048_TABLES = {
@@ -46,9 +52,11 @@ F048_TABLES = {
     "resource_permission_mode",
     "permission_projection_operation",
     "permission_projection_tuple",
+    "permission_visible_source_projection",
     "permission_migration_run",
     "permission_migration_item",
 }
+BASE_REVISION_TABLES = F048_TABLES - {"permission_visible_source_projection"}
 
 TENANT_TABLES = {
     "permission_grant",
@@ -56,6 +64,7 @@ TENANT_TABLES = {
     "resource_permission_mode",
     "permission_projection_operation",
     "permission_projection_tuple",
+    "permission_visible_source_projection",
 }
 
 
@@ -117,6 +126,7 @@ def test_f048_unique_and_foreign_key_contract() -> None:
         "uq_resource_permission_mode",
         "uq_perm_projection_idempotency",
         "uq_perm_projection_tuple",
+        "uq_perm_visible_source_contribution",
         "uq_perm_migration_environment",
         "uq_perm_migration_item_source",
     } <= unique_names
@@ -139,7 +149,32 @@ def test_f048_revision_is_the_single_alembic_head() -> None:
         "script_location",
         str(BACKEND_ROOT / "bisheng/core/database/alembic"),
     )
-    assert ScriptDirectory.from_config(config).get_heads() == ["f048_migration_item_message_longtext"]
+    assert ScriptDirectory.from_config(config).get_heads() == ["f048_visible_source_projection"]
+
+
+def test_f048_visible_projection_revision_is_static_ddl_only() -> None:
+    source = VISIBLE_REVISION_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    called_names = {
+        node.func.attr for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+
+    assert visible_revision.down_revision == "linsight_pending_files"
+    assert visible_revision.revision == "f048_visible_source_projection"
+    assert {"create_table", "create_index", "drop_table"} <= called_names
+    assert not {"execute", "bulk_insert"} & called_names
+
+
+def test_f048_visible_projection_revision_is_idempotent_and_downgrades() -> None:
+    engine = sa.create_engine("sqlite://")
+    with engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            visible_revision.upgrade()
+            assert "permission_visible_source_projection" in inspect(connection).get_table_names()
+            visible_revision.upgrade()
+            visible_revision.downgrade()
+            assert "permission_visible_source_projection" not in inspect(connection).get_table_names()
 
 
 def test_f048_message_revision_is_static_ddl_only() -> None:
@@ -189,10 +224,10 @@ def test_f048_revision_upgrade_is_idempotent_and_downgrades() -> None:
         context = MigrationContext.configure(connection)
         with Operations.context(context):
             revision.upgrade()
-            assert F048_TABLES <= set(inspect(connection).get_table_names())
+            assert BASE_REVISION_TABLES <= set(inspect(connection).get_table_names())
             revision.upgrade()
             revision.downgrade()
-            assert not (F048_TABLES & set(inspect(connection).get_table_names()))
+            assert not (BASE_REVISION_TABLES & set(inspect(connection).get_table_names()))
 
 
 def test_f048_tables_compile_for_mysql_without_native_enum_or_json() -> None:

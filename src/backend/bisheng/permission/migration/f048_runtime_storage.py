@@ -33,14 +33,23 @@ from bisheng.permission.domain.models import (
     PermissionMigrationRun,
     PermissionModel,
     PermissionModelAction,
+    PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
 from bisheng.permission.domain.repositories.migration_repository import (
     MigrationRepository,
 )
+from bisheng.permission.domain.services.grant_source_service import (
+    GrantModelSnapshot,
+    GrantSnapshot,
+    GrantSourceRecord,
+)
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
     derive_permission_models,
+)
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompiler,
 )
 from bisheng.permission.migration.f048_coordinator import (
     INITIAL_CATALOG_RELEASE_KEY,
@@ -715,6 +724,21 @@ class SqlOpenFGAMigrationTargetWriter:
                     .scalars()
                     .all()
                 )
+                visible_sources = list(
+                    (
+                        await session.execute(
+                            select(PermissionVisibleSourceProjection).order_by(
+                                PermissionVisibleSourceProjection.tenant_id,
+                                PermissionVisibleSourceProjection.resource_type,
+                                PermissionVisibleSourceProjection.resource_id,
+                                PermissionVisibleSourceProjection.projected_subject,
+                                PermissionVisibleSourceProjection.contribution_fingerprint,
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
         action_code_by_id = {int(row.id): row.code for row in actions if row.id is not None}
         model_key_by_id = {int(row.id): row.model_key for row in models if row.id is not None}
         grant_key_by_id = {
@@ -727,6 +751,23 @@ class SqlOpenFGAMigrationTargetWriter:
             for row in grants
             if row.id is not None
         }
+        assignee_key_by_id = {
+            int(row.id): (
+                grant_key_by_id[int(row.grant_id)],
+                row.source_fingerprint,
+            )
+            for row in assignees
+            if row.id is not None
+        }
+
+        def logical_visible_owner(row: PermissionVisibleSourceProjection):
+            if row.source_kind != "GRANT_ASSIGNEE":
+                return row.source_owner_key
+            _, separator, source_id = row.source_owner_key.partition(":")
+            if not separator or not source_id.isdigit():
+                return row.source_owner_key
+            return ("GRANT_ASSIGNEE", assignee_key_by_id.get(int(source_id)))
+
         payload = {
             "release": {
                 "release_key": release.release_key,
@@ -813,6 +854,24 @@ class SqlOpenFGAMigrationTargetWriter:
                     row.projection_state,
                 )
                 for row in modes
+            ],
+            "visible_sources": [
+                (
+                    row.tenant_id,
+                    row.resource_type,
+                    row.resource_id,
+                    row.visibility_class,
+                    row.projected_subject,
+                    row.source_kind,
+                    logical_visible_owner(row),
+                    row.source_locator,
+                    row.source_fingerprint,
+                    row.model_key,
+                    row.source_version,
+                    row.tuple_fingerprint,
+                    row.state,
+                )
+                for row in visible_sources
             ],
         }
         return _checksum(payload)
@@ -1006,23 +1065,103 @@ class SqlOpenFGAMigrationTargetWriter:
                                 .first()
                             )
                             if existing is None:
-                                session.add(
-                                    PermissionGrantAssignee(
+                                existing = PermissionGrantAssignee(
+                                    tenant_id=mapped.tenant_id,
+                                    grant_id=grant.id,
+                                    subject_type=assignee.subject_type,
+                                    subject_id=assignee.subject_id,
+                                    userset_relation=assignee.userset_relation,
+                                    include_children=assignee.include_children,
+                                    source_type=assignee.source_type,
+                                    source_ref=assignee.source_ref[:256],
+                                    source_locator=source_locator,
+                                    source_fingerprint=assignee.source_checksum,
+                                    projected_subject=projected,
+                                    protected=assignee.protected,
+                                    state="ACTIVE",
+                                )
+                                session.add(existing)
+                                await session.flush()
+                            if existing.id is None:
+                                raise RuntimeError("Grant assignee row was not flushed")
+
+                            source = GrantSourceRecord(
+                                source_id=int(existing.id),
+                                subject_type=existing.subject_type,
+                                subject_id=existing.subject_id,
+                                userset_relation=existing.userset_relation,
+                                include_children=existing.include_children,
+                                source_type=existing.source_type,
+                                source_ref=existing.source_ref,
+                                source_locator=existing.source_locator,
+                                source_fingerprint=existing.source_fingerprint,
+                                projected_subject=existing.projected_subject,
+                                protected=existing.protected,
+                                active=existing.state == "ACTIVE",
+                                version=existing.version,
+                            )
+                            visibility = VisibilityProjectionCompiler().compile(
+                                tenant_id=mapped.tenant_id,
+                                grants=(
+                                    GrantSnapshot(
+                                        grant_id=str(grant.id),
                                         tenant_id=mapped.tenant_id,
-                                        grant_id=grant.id,
-                                        subject_type=assignee.subject_type,
-                                        subject_id=assignee.subject_id,
-                                        userset_relation=(assignee.userset_relation),
-                                        include_children=(assignee.include_children),
-                                        source_type=assignee.source_type,
-                                        source_ref=assignee.source_ref[:256],
-                                        source_locator=source_locator,
-                                        source_fingerprint=(assignee.source_checksum),
-                                        projected_subject=projected,
-                                        protected=assignee.protected,
-                                        state="ACTIVE",
+                                        resource_type=mapped.resource_type,
+                                        resource_id=mapped.resource_id,
+                                        model=GrantModelSnapshot(
+                                            model_key=mapped.model_key,
+                                            active=True,
+                                            action_codes=(),
+                                        ),
+                                        active=True,
+                                        sources=(source,),
+                                    ),
+                                ),
+                                existing_sources=(),
+                            )
+                            projection = visibility.active_sources[0]
+                            visible_row = (
+                                (
+                                    await session.execute(
+                                        select(PermissionVisibleSourceProjection).where(
+                                            PermissionVisibleSourceProjection.tenant_id == projection.tenant_id,
+                                            PermissionVisibleSourceProjection.contribution_fingerprint
+                                            == projection.contribution_fingerprint,
+                                        )
                                     )
                                 )
+                                .scalars()
+                                .first()
+                            )
+                            if visible_row is None:
+                                session.add(
+                                    PermissionVisibleSourceProjection(
+                                        **projection.model_dump(),
+                                    )
+                                )
+                            else:
+                                immutable_fields = (
+                                    "resource_type",
+                                    "resource_id",
+                                    "visibility_class",
+                                    "projected_subject",
+                                    "source_kind",
+                                    "source_owner_key",
+                                    "source_locator",
+                                    "source_fingerprint",
+                                    "contribution_fingerprint",
+                                    "model_key",
+                                    "tuple_fingerprint",
+                                )
+                                if any(
+                                    getattr(visible_row, field) != getattr(projection, field)
+                                    for field in immutable_fields
+                                ):
+                                    raise PermissionVersionConflictError(
+                                        msg="Visible source differs from migration checkpoint"
+                                    )
+                                visible_row.source_version = projection.source_version
+                                visible_row.state = projection.state
 
     async def _upsert_modes(self, modes: tuple[Any, ...]) -> None:
         with bypass_tenant_filter():

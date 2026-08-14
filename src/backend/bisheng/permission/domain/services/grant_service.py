@@ -19,17 +19,25 @@ from bisheng.permission.domain.models import (
     PermissionProjectionOperation,
     ProjectionOperationStatus,
 )
-from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.schemas import (
+    VerifiedPermissionTarget,
+    VisibleSourceProjectionDTO,
+)
 from bisheng.permission.domain.services.grant_source_service import (
     GrantModelSnapshot,
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
 )
+from bisheng.permission.domain.services.projection_plan import merge_projection_deltas
 from bisheng.permission.domain.services.projection_service import (
     ProjectionOutcome,
     ProjectionPlan,
     ProjectionTupleDelta,
+)
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompilation,
+    VisibilityProjectionCompiler,
 )
 
 
@@ -67,6 +75,7 @@ class GrantMutationContext:
     capabilities: tuple[GrantCapability, ...]
     models: tuple[GrantModelSnapshot, ...]
     grants: tuple[GrantSnapshot, ...]
+    existing_visible_sources: tuple[VisibleSourceProjectionDTO, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +105,7 @@ class GrantMutationStatePort(Protocol):
         self,
         context: GrantMutationContext,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation,
         *,
         idempotency_key: str,
         operation_id: int,
@@ -105,6 +115,7 @@ class GrantMutationStatePort(Protocol):
         self,
         context: GrantMutationContext,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation,
         outcome: ProjectionOutcome,
     ) -> None: ...
 
@@ -128,11 +139,13 @@ class GrantService:
         projection: GrantProjectionPort,
         state: GrantMutationStatePort,
         events: GrantEventPort | None = None,
+        visibility_compiler: VisibilityProjectionCompiler | None = None,
     ) -> None:
         self._sources = source_service
         self._projection = projection
         self._state = state
         self._events = events or _NullEvents()
+        self._visibility = visibility_compiler or VisibilityProjectionCompiler()
 
     def grantable_models(
         self,
@@ -188,8 +201,7 @@ class GrantService:
         if context.system_authorized:
             return
         if not any(
-            capability.model.active
-            and capability.model.derived_level is not None
+            capability.model.derived_level is not None
             and "manage_permission" in capability.model.action_codes
             for capability in context.capabilities
         ):
@@ -230,7 +242,15 @@ class GrantService:
             compiled.extend(deltas)
 
         final_grants = tuple(grants[model_key] for model_key in grant_order)
-        net_deltas = self._net_deltas(tuple(compiled))
+        visibility = self._visibility.compile(
+            tenant_id=context.target.tenant_id,
+            grants=final_grants,
+            existing_sources=context.existing_visible_sources,
+        )
+        net_deltas = merge_projection_deltas(
+            self._net_deltas(tuple(compiled)),
+            visibility.deltas,
+        )
         plan = ProjectionPlan(
             tenant_id=context.target.tenant_id,
             idempotency_key=idempotency_key,
@@ -251,6 +271,7 @@ class GrantService:
                 await self._state.prepare(
                     context,
                     final_grants,
+                    visibility,
                     idempotency_key=idempotency_key,
                     operation_id=int(operation.id),
                 )
@@ -258,7 +279,7 @@ class GrantService:
                 await self._projection.abandon_prepared(plan, exc)
                 raise
         outcome = await self._projection.execute(plan)
-        await self._state.finalize(context, final_grants, outcome)
+        await self._state.finalize(context, final_grants, visibility, outcome)
         await self._emit(context, outcome, len(changes), len(net_deltas))
         return GrantMutationResult(
             grants=final_grants,
@@ -273,8 +294,7 @@ class GrantService:
     ) -> bool:
         source = capability.model
         if (
-            not source.active
-            or source.derived_level is None
+            source.derived_level is None
             or target.derived_level is None
             or "manage_permission" not in source.action_codes
         ):
@@ -325,7 +345,7 @@ class GrantService:
             raise PermissionVersionConflictError(msg="Grant assignee version changed")
         if source.protected:
             raise ProtectedAssignmentMutationError(msg="Protected permission source cannot be changed")
-        self.require_grantable_model(context, source_model_key)
+        self.require_manageable_existing_model(context, source_model_key)
         source_grant = grants[source_model_key]
 
         if operation == "REMOVE":
@@ -351,6 +371,22 @@ class GrantService:
         grants[source_model_key] = mutation.source_grant
         grants[target_model.model_key] = mutation.target_grant
         return mutation.deltas
+
+    def require_manageable_existing_model(
+        self,
+        context: GrantMutationContext,
+        model_key: str,
+    ) -> GrantModelSnapshot:
+        """Authorize cleanup of an existing binding even after model deactivation."""
+
+        model = next((row for row in context.models if row.model_key == model_key), None)
+        if model is None or model.derived_level is None or not model.action_codes:
+            raise PermissionModelStateConflictError(msg=f"Permission model is unavailable: {model_key}")
+        if not context.system_authorized and not any(
+            self._capability_allows(capability, model) for capability in context.capabilities
+        ):
+            raise GrantLevelForbiddenError(msg=f"Actor cannot manage permission model: {model_key}")
+        return model
 
     @staticmethod
     def _target_grant(

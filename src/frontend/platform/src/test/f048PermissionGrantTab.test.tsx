@@ -242,4 +242,56 @@ describe("F048 PermissionGrantTab", () => {
       expect(screen.getByText("grant.conflict")).toBeInTheDocument()
     })
   })
+
+  it("keeps an inactive existing row while excluding it from ADD and MOVE targets", async () => {
+    vi.mocked(getGrantablePermissionModelsApi).mockResolvedValueOnce([
+      { key: "viewer", name: "Viewer", level: 1, active: true },
+      { key: "editor", name: "Editor", level: 2, active: true },
+      { key: "retired-editor", name: "Retired editor", level: 3, active: false },
+    ])
+    const inactiveAssignee: PermissionGrantAssignee = {
+      ...editableAssignee,
+      model: {
+        key: "retired-editor",
+        name: "Retired editor",
+        level: 3,
+        active: false,
+      },
+    }
+    render(
+      <PermissionGrantTab
+        resourceType="workflow"
+        resourceId="flow-1"
+        context={context}
+        assignees={[inactiveAssignee]}
+        onSuccess={vi.fn()}
+      />,
+    )
+
+    const rowModel = await screen.findByLabelText("grant.model.41")
+    expect(rowModel).toHaveValue("retired-editor")
+    expect(rowModel).toHaveTextContent("Retired editor")
+    expect(screen.getByLabelText("grant.addModel")).not.toHaveTextContent(
+      "Retired editor",
+    )
+
+    fireEvent.change(rowModel, { target: { value: "editor" } })
+    fireEvent.click(screen.getByRole("button", { name: "grant.move.41" }))
+    await waitFor(() => {
+      expect(mutateResourceGrantsApi).toHaveBeenCalledWith(
+        "workflow",
+        "flow-1",
+        expect.objectContaining({
+          changes: [
+            {
+              op: "MOVE",
+              assignee_id: "41",
+              expected_assignee_version: 2,
+              target_model_key: "editor",
+            },
+          ],
+        }),
+      )
+    })
+  })
 })

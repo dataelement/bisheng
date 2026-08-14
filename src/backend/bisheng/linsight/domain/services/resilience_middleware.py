@@ -77,6 +77,53 @@ _TRUNCATION_FINISH_REASONS = frozenset({"length", "max_tokens", "max_output_toke
 
 
 # ---------------------------------------------------------------------------
+# Incomplete-stream guard
+#
+# A provider can close the SSE stream mid-turn WITHOUT raising anything: httpx
+# sees a clean EOF, the openai SDK simply stops yielding chunks, and langchain
+# hands back whatever it had accumulated. Nothing in the retry path above ever
+# runs, because nothing failed.
+#
+# Measured on 114 (2026-08-13, grok4.6 via tokenrouter, 147k-token context): the
+# model emitted one line of narration ("正在撰写完整参数清单与 D2 数据表。") and the
+# stream closed before the ``write_file`` call it was about to make. The result
+# was an AIMessage with NO tool calls — which deepagents reads as "the agent is
+# done" — so a run with 3 of its 5 steps still pending completed "successfully"
+# with that narration as its final answer and as its only deliverable.
+#
+# Fingerprint of a stream that never finished (all three must hold):
+#   - no finish_reason / stop_reason — a completed OpenAI-compatible or Anthropic
+#     stream always carries one;
+#   - no input token usage — the usage chunk is the last thing a completed stream
+#     sends, and ``input_tokens`` is never legitimately 0 (a provider that omits
+#     usage entirely still reports finish_reason, so this stays a confirmation
+#     signal, never the sole trigger);
+#   - no tool call at all — the only shape that silently routes the graph to END.
+#     A stream cut mid-tool-call is deliberately EXCLUDED: the graph keeps running
+#     (the tool errors out and the L2 truncation nudge / L3 loop breaker take
+#     over), so it is neither silent nor worth re-sending a six-figure-token
+#     request over.
+# ---------------------------------------------------------------------------
+
+
+class IncompleteStreamError(ConnectionError):
+    """The provider closed the response stream before the model finished its turn.
+
+    Subclasses ``ConnectionError`` deliberately — that IS what happened at the
+    transport layer, and it makes ``classify_behavior`` bucket this as RETRYABLE and
+    ``label_error`` render the network-timeout card, without teaching the shared
+    classifier about a Linsight-only exception type.
+    """
+
+
+# Retries for an incomplete stream. Deliberately small and SEPARATE from both the
+# exception-retry and truncation budgets: every attempt re-sends the entire request
+# (147k input tokens in the measured case), so this spends a bounded amount of money
+# to avoid silently truncating the run.
+_INCOMPLETE_STREAM_RETRY_LIMIT = 2
+
+
+# ---------------------------------------------------------------------------
 # Turn budget + soft landing
 #
 # The run's real gate is a MODEL-TURN budget, not LangGraph's ``recursion_limit``
@@ -211,6 +258,30 @@ def _is_truncated_tool_call(response: object) -> bool:
     if finish not in _TRUNCATION_FINISH_REASONS:
         return False
     return bool(getattr(ai, "tool_calls", None)) or bool(getattr(ai, "invalid_tool_calls", None))
+
+
+def _is_incomplete_stream_response(response: object) -> bool:
+    """True when the provider closed the stream before the model finished its turn.
+
+    Vendor-agnostic, and deliberately a three-way conjunction — see the
+    ``IncompleteStreamError`` block above for why each conjunct is needed and why a
+    stream cut mid-tool-call is excluded.
+    """
+    ai = _response_ai_message(response)
+    if ai is None:
+        return False
+    meta = getattr(ai, "response_metadata", None) or {}
+    # No provider metadata at all → not a provider stream (a synthetic/degraded
+    # message, or a non-streaming shim). langchain fills model_name from the very
+    # first chunk, so a real stream — finished or cut off — always carries something.
+    if not meta:
+        return False
+    if meta.get("finish_reason") or meta.get("stop_reason"):
+        return False
+    if getattr(ai, "tool_calls", None) or getattr(ai, "invalid_tool_calls", None):
+        return False
+    usage = getattr(ai, "usage_metadata", None) or {}
+    return not usage.get("input_tokens")
 
 
 def _with_truncation_nudge(request: ModelRequest) -> ModelRequest:
@@ -562,6 +633,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
+        incomplete_attempts = 0
         while True:
             try:
                 response = await handler(current)
@@ -594,6 +666,32 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 )
                 current = _with_truncation_nudge(current)
                 continue
+            # Incomplete-stream guard: a stream closed mid-turn yields a tool-call-less
+            # AIMessage that the graph reads as a clean finish. Re-send the call; only
+            # when it keeps coming back incomplete do we fail (main graph) / degrade
+            # (subagent) — the run is never allowed to silently pass off a cut-off
+            # narration as its answer.
+            if _is_incomplete_stream_response(response):
+                if incomplete_attempts < _INCOMPLETE_STREAM_RETRY_LIMIT:
+                    delay = self._delay(incomplete_attempts)
+                    logger.warning(
+                        "[linsight-resilience] incomplete stream response "
+                        "(no finish_reason, no usage, no tool call) "
+                        "(attempt {}/{}); sleeping {:.1f}s",
+                        incomplete_attempts + 1,
+                        _INCOMPLETE_STREAM_RETRY_LIMIT,
+                        delay,
+                    )
+                    incomplete_attempts += 1
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                    continue
+                return self._degrade_or_raise(
+                    IncompleteStreamError(
+                        f"provider closed the response stream before the turn finished "
+                        f"({_INCOMPLETE_STREAM_RETRY_LIMIT + 1} attempts)"
+                    )
+                )
             # Two-phase turn accounting: the soft-landing STAGE had to be picked before
             # the call (it shapes the request), but whether this turn did any real work
             # is only knowable from the response. Refund here — the loop's SINGLE
@@ -613,6 +711,7 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
         current, budget_key = self._apply_turn_budget(request)
         exc_attempts = 0
         trunc_attempts = 0
+        incomplete_attempts = 0
         while True:
             try:
                 response = handler(current)
@@ -632,6 +731,20 @@ class LinsightModelResilienceMiddleware(AgentMiddleware):
                 trunc_attempts += 1
                 current = _with_truncation_nudge(current)
                 continue
+            # Incomplete-stream guard — see the async twin above.
+            if _is_incomplete_stream_response(response):
+                if incomplete_attempts < _INCOMPLETE_STREAM_RETRY_LIMIT:
+                    delay = self._delay(incomplete_attempts)
+                    incomplete_attempts += 1
+                    if delay > 0:
+                        time.sleep(delay)
+                    continue
+                return self._degrade_or_raise(
+                    IncompleteStreamError(
+                        f"provider closed the response stream before the turn finished "
+                        f"({_INCOMPLETE_STREAM_RETRY_LIMIT + 1} attempts)"
+                    )
+                )
             # Refund a pure state-maintenance turn — see the async twin above for why
             # this sits at the loop's single success exit.
             if _is_state_only_turn(response):

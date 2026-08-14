@@ -207,13 +207,13 @@ describe("F048 Client PermissionGrantTab", () => {
         changes: [
           {
             op: "MOVE",
-            assignee_id: 1,
+            assignee_id: "1",
             expected_assignee_version: 2,
             target_model_key: "editor",
           },
           {
             op: "REMOVE",
-            assignee_id: 2,
+            assignee_id: "2",
             expected_assignee_version: 2,
           },
           {
@@ -256,6 +256,54 @@ describe("F048 Client PermissionGrantTab", () => {
         name: "f048_permission.grant.remove.3",
       }),
     ).toBeDisabled();
+  });
+
+  it("keeps an inactive existing row but excludes it from ADD and MOVE targets", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        context={context}
+        assignees={[
+          existing("8", {
+            model: {
+              key: "inactive",
+              name: "Inactive",
+              level: 3,
+              active: false,
+            },
+          }),
+        ]}
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    const rowModel = await screen.findByLabelText(
+      "f048_permission.grant.model.8",
+    );
+    expect(rowModel).toHaveValue("inactive");
+    expect(rowModel).toHaveTextContent("Inactive");
+    expect(
+      screen.getByLabelText("f048_permission.grant.add_model"),
+    ).not.toHaveTextContent("Inactive");
+
+    fireEvent.change(rowModel, { target: { value: "editor" } });
+    fireEvent.click(
+      screen.getByRole("button", { name: "f048_permission.grant.submit" }),
+    );
+    await waitFor(() => expect(mockedMutate).toHaveBeenCalledTimes(1));
+    expect(mockedMutate.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        changes: [
+          {
+            op: "MOVE",
+            assignee_id: "8",
+            expected_assignee_version: 2,
+            target_model_key: "editor",
+          },
+        ],
+      }),
+    );
   });
 
   it("locks a subject who already holds a grant, whatever model is selected", async () => {

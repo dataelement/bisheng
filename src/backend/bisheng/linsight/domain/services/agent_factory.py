@@ -271,7 +271,7 @@ def _build_linsight_system_prompt(
         exec_line = (
             "   - 需要资料时用 search_knowledge_base 检索知识库/知识空间；"
             "读写文件用 write_file / read_file / edit_file / ls。\n"
-            "   - 用户上传的音视频（mp3/mp4 等）已在 submit 阶段 ASR 转写为 uploads/*.md；"
+            "   - 用户上传的音视频（mp3/mp4 等）已由 ASR 转写为 uploads/*.md；"
             "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
             "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
@@ -293,7 +293,7 @@ def _build_linsight_system_prompt(
             "   - 读写文件用 write_file / read_file / edit_file / ls；若用户上传了文件，"
             "用 ls / read_file 在工作区中查阅。本次任务没有可检索的知识库/知识空间，"
             "请基于已有资料与自身知识完成，不要调用任何知识库检索工具。\n"
-            "   - 用户上传的音视频（mp3/mp4 等）已在 submit 阶段 ASR 转写为 uploads/*.md；"
+            "   - 用户上传的音视频（mp3/mp4 等）已由 ASR 转写为 uploads/*.md；"
             "<uploaded_files> 中 path 为转写文本、name 为原始文件名。"
             "read_file(path) 即可获取内容，勿推断为「扩展名标注有误」或「实际是文本文件」。"
         )
@@ -758,7 +758,7 @@ async def create_linsight_agent(
     from deepagents import create_deep_agent
 
     svid = svid or session_model.id
-    model = await _resolve_model(session_model, model_id)
+    model, supports_vision = await _resolve_model(session_model, model_id)
 
     if backend is None:
         backend = _default_backend(svid, file_dir)
@@ -792,7 +792,7 @@ async def create_linsight_agent(
     middlewares: list = [
         build_resilience_middleware(linsight_conf, is_subagent=False, budget_sink=turn_budget_sink),
         build_tool_loop_breaker_middleware(linsight_conf, is_subagent=False),
-        *build_binary_guards(has_code_interpreter),
+        *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
     ]
 
     # F035 Track D — skills (RE-ENABLED 2026-06-24, Fork X). The run's allowed skill
@@ -866,7 +866,7 @@ async def create_linsight_agent(
         # reading an original would fail the whole task. It sees the same code
         # interpreter as the main graph (not in _SUBAGENT_TOOL_DENY), so the flag
         # carries over; revisit if it is ever added to that deny list.
-        *build_binary_guards(has_code_interpreter),
+        *build_binary_guards(has_code_interpreter, supports_vision=supports_vision),
         # Same tail language directive on the subagent's own stack (last -> after
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.
@@ -899,12 +899,21 @@ async def create_linsight_agent(
     )
 
 
-async def _resolve_model(session_model, model_id: str | None) -> BaseChatModel:
+async def _resolve_model(session_model, model_id: str | None) -> tuple[BaseChatModel, bool]:
     """Resolve the per-task model via LLMService (design §2.2 / §2.2.1).
 
     Priority: per-task ``model_id`` -> tenant Linsight default model. Tenant
     resolution + share fallback live inside ``get_bisheng_linsight_llm``
     (INV-T18: tenant_id is threaded explicitly in the Worker subprocess).
+
+    Returns ``(model, supports_vision)``. ``supports_vision`` is the admin-declared
+    ``WSModel.visual`` flag — the 视觉 column in 系统模型设置 → 工作台模型, which
+    daily chat already gates image attachments on. Linsight picks its model from
+    that SAME list (``models[]``, the id ``linsight_default_model_id`` selects
+    from), so the lookup is always resolvable; a model id that is somehow absent
+    reads as False, matching the field's own default. Returned from here rather
+    than fetched separately because ``workbench_conf`` is already in hand —
+    ``get_workbench_llm`` re-validates model refs and is not free to call twice.
     """
     workbench_conf = await LLMService.get_workbench_llm(tenant_id=session_model.tenant_id)
     linsight_conf = settings.get_linsight_conf()
@@ -920,11 +929,16 @@ async def _resolve_model(session_model, model_id: str | None) -> BaseChatModel:
                 "linsight_default_model_id is not configured"
             )
 
-    return await LLMService.get_bisheng_linsight_llm(
+    supports_vision = any(
+        str(entry.id) == str(resolved_id) and bool(entry.visual) for entry in (workbench_conf.models or [])
+    )
+
+    model = await LLMService.get_bisheng_linsight_llm(
         invoke_user_id=session_model.user_id,
         model_id=resolved_id,
         temperature=linsight_conf.default_temperature,
     )
+    return model, supports_vision
 
 
 def _default_backend(svid: str, file_dir: str | None):

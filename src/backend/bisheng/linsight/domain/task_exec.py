@@ -126,6 +126,14 @@ _STEPS_PER_MODEL_TURN = 4
 # Headroom for the once-per-run before_agent nodes and the closing turn.
 _RECURSION_LIMIT_MARGIN = 20
 
+# Machine name on the attachment-ingest progress row. The client matches on it (and
+# on extra_info.ingest_progress) to render localized copy, so it is a CONTRACT: this
+# string is mirrored in client/src/components/Linsight/Execution/execTypes.ts and
+# changing one side alone leaves the row rendering its raw token to the user.
+_INGEST_STEP_NAME = "ingest_uploads"
+# Phases that close the row (status="end"); anything else keeps it spinning.
+_INGEST_TERMINAL_PHASES = frozenset({"done", "failed", "aborted"})
+
 
 def _resolve_recursion_limit(linsight_conf) -> int:
     """LangGraph ``recursion_limit`` for one task run — always above the turn budget.
@@ -225,13 +233,34 @@ class LinsightWorkflowTask:
             # Start Termination Monitoring
             await self._start_termination_monitor(session_model)
 
-            # Initialization file directory
-            self.file_dir = await self._init_file_directory(session_model)
+            # Claim the session BEFORE the (now possibly multi-minute) attachment
+            # ingest: a duplicate queue item for the same svid — submit enqueues
+            # AND the browser's start-execute may still land — is rejected by
+            # _is_session_in_progress, which keys only on IN_PROGRESS. It also
+            # brings the row into the worker-startup crash sweep's scan, which
+            # force-FAILs an IN_PROGRESS row whose owner node is dead; a worker
+            # killed mid-ingest is thus reported as failed instead of sitting at
+            # NOT_STARTED forever with nobody to pick it up (the attachments
+            # survive on pending_files, and /workbench/continue re-ingests them).
+            await self._update_session_status(session_model, SessionVersionStatusEnum.IN_PROGRESS)
 
             # F035 problem 2: ensure the session-level pseudo task row exists so
             # planning/wrap-up/direct-answer steps (mapper routes them to
-            # task_id = svid) are persisted and survive a refresh.
+            # task_id = svid) are persisted and survive a refresh. It also carries
+            # the ingest progress steps pushed just below.
             await self._ensure_session_pseudo_task(session_model)
+
+            await self._ingest_pending_attachments(session_model)
+            # The ingest can hold the run for minutes, and _execute_workflow opens
+            # with an UNCONDITIONAL IN_PROGRESS write. A stop that landed inside
+            # that window would be overwritten by it, and nothing writes a
+            # terminal status afterwards — the session then shows as running
+            # forever, unstoppable. Re-read the authoritative status here rather
+            # than trusting the monitor's polling interval to have caught up.
+            await self._check_termination_now()
+
+            # Initialization file directory
+            self.file_dir = await self._init_file_directory(session_model)
 
             yield session_model
 
@@ -389,10 +418,18 @@ class LinsightWorkflowTask:
         session_model = await self._get_session_model(self.session_version_id)
         try:
             await self._start_termination_monitor(session_model)
-            self.file_dir = await self._init_file_directory(session_model)
             # F035 problem 2: resume/continue can also produce session-level
-            # (task_id = svid) steps; ensure the pseudo task row is present.
+            # (task_id = svid) steps; ensure the pseudo task row is present. It
+            # now has to precede the ingest, which hangs its progress steps off it.
             await self._ensure_session_pseudo_task(session_model)
+            # Normally a no-op: the fresh run already drained pending_files. It is
+            # NOT dead code, because this is the only second chance the column
+            # ever gets — a worker killed mid-ingest leaves the row FAILED with
+            # pending_files intact, and FAILED is one of the two statuses
+            # /workbench/continue accepts. Without this the follow-up turn would
+            # run with no attachments at all and the refs would sit there forever.
+            await self._ingest_pending_attachments(session_model)
+            self.file_dir = await self._init_file_directory(session_model)
             yield session_model
         finally:
             await self._cleanup_resources()
@@ -687,7 +724,11 @@ class LinsightWorkflowTask:
         Worker subprocess).
         """
         try:
-            return await _resolve_model(session_model, getattr(session_model, "model", None))
+            # ``_resolve_model`` also reports the model's declared vision capability,
+            # which only the agent's guards consume — this helper LLM never carries
+            # attachments, so the flag is dropped here.
+            model, _supports_vision = await _resolve_model(session_model, getattr(session_model, "model", None))
+            return model
         except Exception as e:
             # Keep the generic user-facing message, but chain + log the real
             # cause so the original stack trace surfaces (project error-handling
@@ -696,6 +737,124 @@ class LinsightWorkflowTask:
             raise TaskExecutionError(
                 "The task has been terminated, please contact the administrator to check the status of the Ideas task execution model"
             ) from e
+
+    async def _push_ingest_step(
+        self,
+        svid: str,
+        call_id: str,
+        *,
+        phase: str,
+        done: int,
+        total: int,
+        file_name: str = "",
+        output: str = "",
+    ) -> None:
+        """Publish one attachment-ingest progress frame on the session pseudo task.
+
+        Carries only DATA — the row's wording lives in the client's locale files.
+        A backend-formatted label would be a Chinese string on a Japanese user's
+        timeline, and it lands in persisted history, so it would stay wrong after
+        a language switch. ``ExecStep.extra_info`` is the documented channel for
+        exactly this ("额外信息，包含文件上传等其他信息") and the client already
+        threads it through to ``MergedStep.extraInfo``.
+
+        Stable ``call_id`` on purpose: ``add_execution_task_step`` upserts by it,
+        so the twelve progress frames of a twelve-file batch collapse into ONE
+        history row that keeps re-rendering, instead of twelve dead rows.
+        """
+        try:
+            step = ExecStep(
+                task_id=svid,
+                call_id=call_id,
+                call_reason="",
+                name=_INGEST_STEP_NAME,
+                step_type="tool",
+                status="end" if phase in _INGEST_TERMINAL_PHASES else "start",
+                output=output,
+                extra_info={"ingest_progress": {"phase": phase, "done": done, "total": total, "file_name": file_name}},
+            )
+            await self._state_manager.add_execution_task_step(svid, step=step)
+            await self._state_manager.push_message(
+                MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=step.model_dump())
+            )
+        except Exception as e:
+            # Progress rendering is not worth failing an ingest over.
+            logger.warning(f"Failed to push ingest progress step for {svid}: {e}")
+
+    async def _ingest_pending_attachments(self, session_model: LinsightSessionVersion) -> None:
+        """Materialize deferred attachments before anything reads them.
+
+        Deadline: this MUST complete before ``_init_file_directory`` (the local
+        prefetch), before ``_generate_tools`` (the code interpreter snapshots
+        ``os.walk(file_dir)``) and before ``prepare_file_list`` (the 可用文件
+        pointer block) — and before WorkspaceBackend serves ``read_file``, since
+        ingestion is what physically PUTs ``workspace/{svid}/uploads/*``.
+
+        A per-file failure never gets here: ``_process_submitted_files`` degrades
+        it to ``valid=False`` and carries on, so a ten-file task still runs when
+        one attachment is unreadable. Anything that DOES escape is systemic —
+        storage unreachable, a malformed ref — and is raised, not swallowed.
+        Swallowing it would leave ``files`` empty and let the agent answer a
+        question about "the attached report" with no attachment at all: a
+        confident answer about a document it never saw, with one muted timeline
+        row as the only trace. ``pending_files`` is left intact so
+        /workbench/continue can retry the same batch.
+        """
+        pending = session_model.pending_files
+        if not pending:
+            return
+
+        svid = session_model.id
+        total = len(pending)
+        call_id = f"ingest_uploads_{svid}"
+
+        async def on_progress(done: int, count: int, file_name: str) -> None:
+            await self._push_ingest_step(svid, call_id, phase="running", done=done, total=count, file_name=file_name)
+
+        # The progress frames render as ordinary tool rows (step_type="tool"), which
+        # the step logger deliberately does not spell out; log the boundaries here
+        # so "where did the 19 minutes go" stays greppable from the worker log.
+        logger.info(f"Ingesting {total} deferred attachment(s): session_version_id={svid}")
+        try:
+            # First frame before any byte is touched: the worker has already taken
+            # the task off the queue, so without this the timeline sits empty for
+            # however long the first file takes to parse.
+            await self._push_ingest_step(svid, call_id, phase="running", done=0, total=total)
+
+            ingested = await LinsightWorkbenchImpl.ingest_pending_files(
+                session_model,
+                on_progress=on_progress,
+                should_abort=lambda: self._is_terminated,
+            )
+            if not ingested:
+                return
+
+            # Writes the row and THEN the Redis snapshot (set_session_version_info
+            # is DB-first). The order is load-bearing: the IN_PROGRESS flip above
+            # already cached a snapshot carrying files=None, and
+            # get_session_version_info reads Redis first — skipping this refresh
+            # would shadow the freshly ingested files for the whole run.
+            await self._state_manager.set_session_version_info(session_model)
+        except Exception as e:
+            logger.exception(f"Pending attachment ingest failed: session_version_id={svid}: {e}")
+            # The raw exception text rides in `output` (a diagnostic detail the row
+            # shows verbatim), never in the label.
+            await self._push_ingest_step(svid, call_id, phase="failed", done=0, total=total, output=str(e)[:500])
+            raise TaskExecutionError(f"Failed to ingest uploaded attachments: {e}") from e
+
+        # The chips on the question row were persisted before anything was known
+        # about these files; stamp the parse result onto them now that it exists.
+        # Best-effort by design — a history nicety must not fail a run whose
+        # attachments are already in place.
+        try:
+            await linsight_execute_utils.annotate_task_user_turn_files(session_model)
+        except Exception as e:
+            logger.warning(f"Failed to annotate question attachments for {svid}: {e}")
+
+        done = len(session_model.files or [])
+        phase = "aborted" if self._is_terminated else "done"
+        logger.info(f"Deferred attachment ingest {phase} {done}/{total}: session_version_id={svid}")
+        await self._push_ingest_step(svid, call_id, phase=phase, done=done, total=total)
 
     @create_cache_folder_async
     async def _init_file_directory(self, session_model: LinsightSessionVersion) -> str:
@@ -1564,6 +1723,18 @@ class LinsightWorkflowTask:
         if self._is_terminated:
             logger.info("Termination signal detected, ready to terminate agent task")
             raise UserTerminationError("Task terminated by user")
+
+    async def _check_termination_now(self):
+        """``_check_termination`` against the authoritative status, not the flag.
+
+        The monitor only samples every ``USER_TERMINATION_CHECK_INTERVAL``, so
+        right after a step that can run for minutes the in-process flag may still
+        say "running" for a session the user already stopped. Callers that are
+        about to write status unconditionally need the fresh answer.
+        """
+        if await self._check_user_termination():
+            self._is_terminated = True
+        self._check_termination()
 
     async def _start_termination_monitor(self, session_model: LinsightSessionVersion):
         """Start Termination Monitoring"""

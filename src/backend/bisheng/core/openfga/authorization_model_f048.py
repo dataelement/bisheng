@@ -12,7 +12,7 @@ import json
 from hashlib import sha256
 from typing import Any
 
-MODEL_VERSION = "f048-v1"
+MODEL_VERSION = "f048-v2"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -95,6 +95,13 @@ SYSTEM_SHARED_ACTION_TYPES: dict[str, frozenset[str]] = {
     "use": frozenset({"knowledge_library", "workflow", "assistant", "tool"}),
 }
 
+# These resource types are enumerated directly by ListObjects.  Folder and
+# file visibility stays compositional because their list endpoints fetch a
+# business candidate page first and then BatchCheck inherited permissions.
+FLAT_VISIBLE_RESOURCE_TYPES: frozenset[str] = frozenset(set(MIGRATED_RESOURCE_TYPES) - set(PARENT_TYPES)) | frozenset(
+    OWNER_PROJECTION_RESOURCE_TYPES
+)
+
 
 def _this() -> dict:
     return {"this": {}}
@@ -134,6 +141,16 @@ def _subject_types() -> list[dict]:
         {"type": "department", "relation": "subtree_member"},
         {"type": "user_group", "relation": "member"},
         {"type": "user_group", "relation": "admin"},
+    ]
+
+
+def _visible_subject_types() -> list[dict]:
+    """Subjects that canonical owner adapters may flatten into visibility."""
+
+    return [
+        *_subject_types(),
+        {"type": "tenant", "relation": "member"},
+        _wildcard_user_type(),
     ]
 
 
@@ -209,9 +226,10 @@ def _model_release_type(action_codes: tuple[str, ...]) -> dict:
     relations: dict[str, dict] = {
         "catalog": _this(),
         "enabled_marker": _this(),
+        "published": _from("catalog", "active"),
         "active": _intersection(
             _computed("enabled_marker"),
-            _from("catalog", "active"),
+            _computed("published"),
         ),
     }
     metadata: dict[str, dict] = {
@@ -222,7 +240,7 @@ def _model_release_type(action_codes: tuple[str, ...]) -> dict:
         marker = f"{action}_marker"
         relations[marker] = _this()
         relations[f"can_{action}"] = _intersection(
-            _computed("active"),
+            _computed("published"),
             _computed(marker),
         )
         metadata[marker] = {"directly_related_user_types": [_wildcard_user_type()]}
@@ -230,7 +248,7 @@ def _model_release_type(action_codes: tuple[str, ...]) -> dict:
         marker = f"grant_level_{level}_marker"
         relations[marker] = _this()
         relations[f"can_grant_level_{level}"] = _intersection(
-            _computed("active"),
+            _computed("published"),
             _computed(marker),
         )
         metadata[marker] = {"directly_related_user_types": [_wildcard_user_type()]}
@@ -266,14 +284,6 @@ def _permission_grant_type(action_codes: tuple[str, ...]) -> dict:
         "model": _this(),
         "ordinary_assignee": _this(),
         "protected_assignee": _this(),
-        "ordinary_visible": _intersection(
-            _computed("ordinary_assignee"),
-            _from("model", "active"),
-        ),
-        "protected_visible": _intersection(
-            _computed("protected_assignee"),
-            _from("model", "active"),
-        ),
     }
     metadata = {
         "model": {"directly_related_user_types": [{"type": "permission_model"}]},
@@ -309,30 +319,28 @@ def _system_relation(
     *,
     type_name: str,
     parent_types: tuple[str, ...],
-    action: str | None,
+    action: str,
 ) -> dict:
-    children: list[dict] = []
-    if action is None:
+    children: list[dict] = [_computed(f"system_{action}_marker")]
+    if type_name in SYSTEM_SHARED_ACTION_TYPES[action]:
         children.extend(
             (
-                _computed("system_visible_marker"),
                 _computed("public_reader"),
                 _from("shared_with", "member"),
             )
         )
-        if parent_types:
-            children.append(_from("parent", "system_visible"))
-    else:
-        children.append(_computed(f"system_{action}_marker"))
-        if type_name in SYSTEM_SHARED_ACTION_TYPES[action]:
-            children.extend(
-                (
-                    _computed("public_reader"),
-                    _from("shared_with", "member"),
-                )
-            )
-        if parent_types:
-            children.append(_from("parent", f"system_can_{action}"))
+    if parent_types:
+        children.append(_from("parent", f"system_can_{action}"))
+    return _union(*children)
+
+
+def _system_visible_relation(*, parent_types: tuple[str, ...]) -> dict:
+    children: list[dict] = [
+        _computed("public_reader"),
+        _from("shared_with", "member"),
+    ]
+    if parent_types:
+        children.append(_from("parent", "system_visible"))
     return _union(*children)
 
 
@@ -344,20 +352,8 @@ def _resource_type(type_name: str, action_codes: tuple[str, ...]) -> dict:
         "custom_mode": _this(),
         "shared_with": _this(),
         "public_reader": _this(),
-        "system_visible_marker": _this(),
         "system_download_marker": _this(),
         "system_use_marker": _this(),
-        "ordinary_visible_from_grant": _from("grant", "ordinary_visible"),
-        "protected_visible_from_grant": _from("grant", "protected_visible"),
-        "ordinary_custom_visible": _intersection(
-            _computed("ordinary_visible_from_grant"),
-            _computed("custom_mode"),
-        ),
-        "system_visible": _system_relation(
-            type_name=type_name,
-            parent_types=parent_types,
-            action=None,
-        ),
     }
     metadata: dict[str, dict] = {
         "grant": {"directly_related_user_types": [{"type": "permission_grant"}]},
@@ -365,31 +361,43 @@ def _resource_type(type_name: str, action_codes: tuple[str, ...]) -> dict:
         "custom_mode": {"directly_related_user_types": [_wildcard_user_type()]},
         "shared_with": {"directly_related_user_types": [{"type": "tenant"}]},
         "public_reader": {"directly_related_user_types": [_wildcard_user_type()]},
-        "system_visible_marker": {"directly_related_user_types": [_wildcard_user_type()]},
         "system_download_marker": {"directly_related_user_types": [_wildcard_user_type()]},
         "system_use_marker": {"directly_related_user_types": [_wildcard_user_type()]},
     }
-
-    visible_children = [
-        _computed("protected_visible_from_grant"),
-        _computed("ordinary_custom_visible"),
-        _computed("system_visible"),
-    ]
     if parent_types:
         relations["parent"] = _this()
         relations["inherit_mode"] = _this()
+        metadata["parent"] = {"directly_related_user_types": [{"type": parent_type} for parent_type in parent_types]}
+        metadata["inherit_mode"] = {"directly_related_user_types": [_wildcard_user_type()]}
+
+    relations["system_visible"] = _system_visible_relation(
+        parent_types=parent_types,
+    )
+    if type_name in FLAT_VISIBLE_RESOURCE_TYPES:
+        # Keep the top-level hot path as one direct relation so reverse
+        # enumeration is proportional to the user's visible set. Public and
+        # tenant-shared predicates stay as a second shallow system branch.
+        relations["visible"] = _union(
+            _this(),
+            _computed("system_visible"),
+        )
+    else:
+        # Child resources are checked from business candidates.  Their local
+        # custom grants remain direct, while ordinary inheritance and system
+        # visibility stay in the graph instead of being fanned out to every
+        # descendant.
         relations["inherited_visible"] = _intersection(
             _from("parent", "visible"),
             _computed("inherit_mode"),
         )
-        visible_children.append(_computed("inherited_visible"))
-        metadata["parent"] = {"directly_related_user_types": [{"type": parent_type} for parent_type in parent_types]}
-        metadata["inherit_mode"] = {"directly_related_user_types": [_wildcard_user_type()]}
-
-    relations["visible"] = _intersection(
-        _computed("permission_enabled"),
-        _union(*visible_children),
-    )
+        relations["visible"] = _union(
+            _this(),
+            _computed("inherited_visible"),
+            _computed("system_visible"),
+        )
+    metadata["visible"] = {
+        "directly_related_user_types": _visible_subject_types(),
+    }
 
     for action in action_codes:
         relations[f"ordinary_can_{action}_from_grant"] = _from(

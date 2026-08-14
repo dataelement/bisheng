@@ -1,7 +1,8 @@
 """F048 concrete-action decision facade contracts.
 
 覆盖 AC: AC-28, AC-29, AC-30, AC-31, AC-32, AC-33, AC-34, AC-35,
-AC-63, AC-65, AC-69, AC-155
+AC-63, AC-65, AC-69, AC-155, AC-160, AC-161, AC-162, AC-163,
+AC-168, AC-169, AC-170, AC-171
 """
 
 from __future__ import annotations
@@ -10,11 +11,15 @@ import pytest
 
 from bisheng.common.errcode.permission import (
     InvalidCatalogActionError,
+    PermissionEnumerationIncompleteError,
     PermissionFGAUnavailableError,
     PermissionProjectionFailedError,
     PermissionPublishNotReadyError,
 )
-from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.schemas import (
+    VerifiedPermissionTarget,
+    VisibilityEnumerationStatus,
+)
 from bisheng.permission.domain.services.permission_service import (
     F048PermissionService,
     PermissionActor,
@@ -88,13 +93,20 @@ class FakeFGA:
         self.checks.append((user, relation, object, consistency))
         if self.fail:
             raise RuntimeError("openfga down")
+        if relation == "visible" and self.objects:
+            return object in self.objects
         return self.allowed
 
     async def batch_check(self, checks, consistency=None):
         self.batches.append((checks, consistency))
         if self.fail:
             raise RuntimeError("openfga down")
-        return [row["object"].endswith(":allow") for row in checks]
+        return [
+            row["object"] in self.objects
+            if row["relation"] == "visible" and self.objects
+            else row["object"].endswith(":allow")
+            for row in checks
+        ]
 
     async def list_objects(
         self,
@@ -108,6 +120,19 @@ class FakeFGA:
         if self.fail:
             raise RuntimeError("openfga down")
         return self.objects
+
+    async def stream_list_objects(
+        self,
+        *,
+        user,
+        relation,
+        type,
+        consistency=None,
+    ):
+        self.lists.append((user, relation, type, consistency))
+        if self.fail:
+            raise RuntimeError("openfga stream failed")
+        return tuple(self.objects)
 
 
 class FakeListPolicy:
@@ -302,6 +327,108 @@ async def test_visible_batch_uses_one_openfga_batch_without_action_alias() -> No
     checks, _ = fga.batches[0]
     assert len(checks) == 2
     assert all(row["relation"] == "visible" for row in checks)
+
+
+@pytest.mark.asyncio
+async def test_visible_checks_never_expand_super_or_tenant_admin_scope() -> None:
+    service, _, _, _, fga, _, _ = _service()
+    fga.allowed = False
+
+    assert not await service.check_visible(_actor(super_admin=True), _target())
+    assert not await service.check_visible(
+        _actor(tenant_admin_ids=frozenset({7})),
+        _target(),
+    )
+    assert [row[1] for row in fga.checks] == ["visible", "visible"]
+
+    results = await service.batch_check_visible(
+        _actor(super_admin=True),
+        (_target("allow"), _target("deny")),
+    )
+    assert results == (True, False)
+    assert len(fga.batches) == 1
+
+
+@pytest.mark.asyncio
+async def test_complete_visible_enumeration_is_deduplicated_and_consistent() -> None:
+    service, _, _, marker, fga, _, _ = _service()
+    marker.higher = True
+    fga.objects = ["workflow:allow", "workflow:allow", "workflow:second"]
+
+    result = await service.list_visible_objects(
+        _actor(super_admin=True),
+        resource_type="workflow",
+        max_results=5_000,
+    )
+
+    assert result.status is VisibilityEnumerationStatus.NORMAL
+    assert result.object_ids == ("allow", "second")
+    assert fga.lists[-1] == (
+        "user:100",
+        "visible",
+        "workflow",
+        "HIGHER_CONSISTENCY",
+    )
+    candidate_ids = ("allow", "second", "deny")
+    single = tuple(
+        [await service.check_visible(_actor(), _target(resource_id)) for resource_id in candidate_ids]
+    )
+    batch = await service.batch_check_visible(
+        _actor(),
+        tuple(_target(resource_id) for resource_id in candidate_ids),
+    )
+    assert single == batch == (True, True, False)
+    assert tuple(resource_id for resource_id, allowed in zip(candidate_ids, batch, strict=True) if allowed) == (
+        result.object_ids
+    )
+
+
+@pytest.mark.asyncio
+async def test_visible_enumeration_capacity_error_and_no_sql_allow_fallback() -> None:
+    service, _, _, _, fga, _, _ = _service()
+    fga.objects = [f"workflow:{index}" for index in range(5_000)]
+    accepted = await service.list_visible_objects(
+        _actor(),
+        resource_type="workflow",
+        max_results=5_000,
+    )
+    assert len(accepted.object_ids) == 5_000
+
+    fga.objects.append("workflow:5000")
+    with pytest.raises(PermissionEnumerationIncompleteError):
+        await service.list_visible_objects(
+            _actor(),
+            resource_type="workflow",
+            max_results=5_000,
+        )
+
+    fga.objects = []
+    denied = await service.list_visible_objects(
+        _actor(),
+        resource_type="workflow",
+        max_results=5_000,
+    )
+    assert denied.object_ids == ()
+
+
+@pytest.mark.asyncio
+async def test_visible_enumeration_tenant_fence_and_stream_error_are_explicit() -> None:
+    service, _, _, _, fga, _, _ = _service()
+    with pytest.raises(PermissionEnumerationIncompleteError):
+        await service.list_visible_objects(
+            _actor(tenant_id=0),
+            resource_type="workflow",
+            max_results=5_000,
+        )
+    assert fga.lists == []
+
+    fga.fail = True
+    with pytest.raises(PermissionEnumerationIncompleteError):
+        await service.list_visible_objects(
+            _actor(),
+            resource_type="workflow",
+            max_results=5_000,
+        )
 
 
 @pytest.mark.asyncio

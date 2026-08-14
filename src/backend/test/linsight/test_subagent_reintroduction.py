@@ -281,7 +281,9 @@ def test_stream_mapper_namespaced_tool_keeps_real_step_type():
     # B1: namespace no longer rewrites step_type — knowledge inference wins
     assert step.step_type == "knowledge"
     assert step.extra_info.get("namespace") == sub_ns[0]
-    assert step.call_id == "call_sub_1"
+    # Emitted ids are minted from the provider's (StreamContext.tool_seq); the raw
+    # id stays as the prefix.
+    assert step.call_id.startswith("call_sub_1#")
 
     # sanity contrast: the SAME tool with ns=None is the same (knowledge) step
     main_mapper = StreamEventMapper(svid=SVID)

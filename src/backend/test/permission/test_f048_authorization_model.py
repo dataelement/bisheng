@@ -2,7 +2,7 @@
 
 覆盖 AC: AC-02, AC-04, AC-07, AC-08, AC-15, AC-19, AC-20, AC-21,
 AC-22, AC-26, AC-28, AC-29, AC-33, AC-36, AC-37, AC-38, AC-39,
-AC-40, AC-41, AC-45, AC-46, AC-47
+AC-40, AC-41, AC-45, AC-46, AC-47, AC-159, AC-161, AC-163, AC-164
 """
 
 from __future__ import annotations
@@ -144,6 +144,7 @@ def _resource_grant_tuples(
     subject: str,
     protected: bool = False,
     custom: bool = True,
+    flattened_visible: bool = True,
 ) -> set[TupleKey]:
     relation = "protected_assignee" if protected else "ordinary_assignee"
     tuples: set[TupleKey] = {
@@ -154,6 +155,8 @@ def _resource_grant_tuples(
     }
     if custom:
         tuples.add(("user:*", "custom_mode", resource))
+    if flattened_visible:
+        tuples.add((subject, "visible", resource))
     return tuples
 
 
@@ -208,6 +211,7 @@ def test_catalog_model_and_permission_enabled_are_all_required() -> None:
             tuples - {required_tuple},
         )
         assert not without_required.check("user:7", "can_edit", resource)
+        assert without_required.check("user:7", "visible", resource)
 
 
 def test_custom_gate_blocks_ordinary_but_not_protected_assignment() -> None:
@@ -235,7 +239,7 @@ def test_custom_gate_blocks_ordinary_but_not_protected_assignment() -> None:
     assert evaluator.check("user:8", "can_edit", resource)
 
 
-def test_inherit_uses_only_canonical_parent_and_system_visibility_ignores_mode() -> None:
+def test_inherit_uses_only_canonical_parent_and_projected_system_visibility_ignores_mode() -> None:
     parent = "knowledge_space:s1"
     child = "knowledge_file:f1"
     grant = "permission_grant:g1"
@@ -253,12 +257,14 @@ def test_inherit_uses_only_canonical_parent_and_system_visibility_ignores_mode()
     }
     evaluator = ModelEvaluator(build_authorization_model_f048(), tuples)
     assert evaluator.check("user:7", "can_download", child)
+    assert evaluator.check("user:7", "visible", child)
 
     custom_child = ModelEvaluator(
         build_authorization_model_f048(),
         tuples - {("user:*", "inherit_mode", child)} | {("user:*", "custom_mode", child)},
     )
     assert not custom_child.check("user:7", "can_download", child)
+    assert not custom_child.check("user:7", "visible", child)
 
     system_custom_child = ModelEvaluator(
         build_authorization_model_f048(),
@@ -270,6 +276,21 @@ def test_inherit_uses_only_canonical_parent_and_system_visibility_ignores_mode()
     )
     assert system_custom_child.check("user:99", "visible", child)
     assert system_custom_child.check("user:99", "can_download", child)
+
+
+def test_only_top_level_resources_use_pure_flat_visible() -> None:
+    model = build_authorization_model_f048()
+    types = {definition["type"]: definition for definition in model["type_definitions"]}
+
+    for resource_type in ("knowledge_space", "workflow"):
+        visible = types[resource_type]["relations"]["visible"]
+        assert visible["union"]["child"][0] == {"this": {}}
+        assert visible["union"]["child"][1] == {"computedUserset": {"relation": "system_visible"}}
+    for resource_type in ("folder", "knowledge_file"):
+        relations = types[resource_type]["relations"]
+        assert relations["visible"] != {"this": {}}
+        assert "inherited_visible" in relations
+        assert "system_visible" in relations
 
 
 def test_department_subtree_and_user_group_usersets_are_not_expanded() -> None:
@@ -341,3 +362,83 @@ def test_shared_system_read_is_resource_specific_and_read_only() -> None:
     assert not evaluator.check("user:7", "can_edit", "knowledge_library:k1")
     assert evaluator.check("user:7", "can_download", "knowledge_file:f1")
     assert not evaluator.check("user:7", "can_use", "knowledge_file:f1")
+
+
+def test_visible_is_single_slot_shallow_and_has_no_ab_switch() -> None:
+    model = build_authorization_model_f048()
+    types = {definition["type"]: definition for definition in model["type_definitions"]}
+    for type_name in ("knowledge_space", "dashboard"):
+        relations = types[type_name]["relations"]
+        assert "visible" in relations
+        assert relations["visible"]["union"]["child"][0] == {"this": {}}
+        assert "ordinary_visible" not in relations
+        assert "protected_visible" not in relations
+        assert all("visible_a" not in relation and "visible_b" not in relation for relation in relations)
+        assert all("visibility_switch" not in relation for relation in relations)
+
+    for type_name in ("folder", "knowledge_file"):
+        relations = types[type_name]["relations"]
+        assert relations["visible"] != {"this": {}}
+        assert "inherited_visible" in relations
+        assert "system_visible" in relations
+        assert all("visible_a" not in relation and "visible_b" not in relation for relation in relations)
+        assert all("visibility_switch" not in relation for relation in relations)
+
+    grant_relations = types["permission_grant"]["relations"]
+    assert "ordinary_visible" not in grant_relations
+    assert "protected_visible" not in grant_relations
+
+    resource = "knowledge_space:s1"
+    evaluator = ModelEvaluator(
+        model,
+        {
+            ("department:17#member", "visible", resource),
+            ("user:7", "member", "department:17"),
+        },
+    )
+    assert evaluator.check("user:7", "visible", resource)
+
+
+def test_inactive_model_keeps_existing_visible_actions_and_manage() -> None:
+    resource = "workflow:w-inactive"
+    grant = "permission_grant:g-inactive"
+    release = "permission_model_release:catalog-1~editor"
+    tuples = _active_model_tuples(actions=("edit", "manage_permission"))
+    tuples.remove(("user:*", "enabled_marker", release))
+    tuples |= _resource_grant_tuples(
+        resource=resource,
+        grant=grant,
+        model_key="editor",
+        subject="user:7",
+    )
+
+    evaluator = ModelEvaluator(build_authorization_model_f048(), tuples)
+    assert evaluator.check("user:7", "visible", resource)
+    assert evaluator.check("user:7", "can_edit", resource)
+    assert evaluator.check("user:7", "can_manage_permission", resource)
+
+    missing_model = ModelEvaluator(
+        build_authorization_model_f048(),
+        tuples
+        - {
+            (release, "release", "permission_model:editor"),
+            ("user:7", "visible", resource),
+        },
+    )
+    assert not missing_model.check("user:7", "visible", resource)
+    assert not missing_model.check("user:7", "can_edit", resource)
+    assert not missing_model.check("user:7", "can_manage_permission", resource)
+
+
+def test_admin_identity_does_not_expand_personal_visible_set() -> None:
+    resource = "knowledge_space:private"
+    evaluator = ModelEvaluator(
+        build_authorization_model_f048(),
+        {
+            ("user:1", "super_admin", "system:root"),
+            ("user:1", "admin", "tenant:1"),
+            ("user:*", "permission_enabled", resource),
+            ("user:*", "custom_mode", resource),
+        },
+    )
+    assert not evaluator.check("user:1", "visible", resource)

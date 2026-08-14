@@ -70,7 +70,7 @@ interface ModelCatalogPanelProps {
   onCreateDraft: (
     changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
-  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
+  onDeleteModel: (modelKey: string) => Promise<PermissionCatalogDraft>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -237,41 +237,15 @@ export function RolesAndPermissions() {
     setImpactOpen(true)
   }
 
-  /** Delete a model in one go: draft the removal and publish it immediately.
-   *
-   * Deleting used to mean deactivate, publish, delete, publish — four steps for
-   * one removal, and the middle publish was easy to skip, leaving the model in
-   * place. A deletable model is switched off (the editor will not offer deletion
-   * otherwise) and referenced by no grant, so there is nothing for a separate
-   * impact review to weigh. When the author has flipped the switch but not yet
-   * published it, that deactivation rides along in this batch — the server
-   * judges the precondition on what the batch publishes, not on the release it
-   * started from.
-   */
-  const handleDeleteModel = async (modelKey: string, wasActive: boolean) => {
+  const handleDeleteModel = async (
+    modelKey: string,
+  ): Promise<PermissionCatalogDraft> => {
     if (!catalog) throw new Error("permission Catalog is not loaded")
-    const changes: PermissionCatalogChange[] = wasActive
-      ? [
-          { type: "SET_MODEL_ACTIVE", model_key: modelKey, active: false },
-          { type: "DELETE_MODEL", model_key: modelKey },
-        ]
-      : [{ type: "DELETE_MODEL", model_key: modelKey }]
     try {
-      // Deletion is refused while drafting, not at publish — ask for the
-      // envelope on both legs or the reason is lost on the first one.
-      const draft = await handleCreateDraft(changes, { silent: true })
-      await handlePublish(
-        draft.draft_id,
-        {
-          expected_current_release_id: catalog.id,
-          idempotency_key: createIdempotencyKey("catalog-publish"),
-          confirmed: true,
-        },
-        // Ask for the envelope: the failure below needs the reason the server
-        // sent, and the default rejection is a bare message string.
+      return await handleCreateDraft(
+        [{ type: "DELETE_MODEL", model_key: modelKey }],
         { silent: true },
       )
-      setSelectedModelKey(null)
     } catch (error) {
       // Nothing else reports this: the request layer only auto-toasts a couple of
       // special codes, and a failed publish would otherwise close the dialog and
@@ -286,8 +260,11 @@ export function RolesAndPermissions() {
         description:
           detail?.reason === "referenced_by_grants"
             ? t("model.deleteBlockedByGrants", { count: detail.reference_count ?? 0 })
+            : detail?.reason === "projection_residual"
+              ? t("model.deleteBlockedByResidual")
             : t("model.deleteFailed"),
       })
+      throw error
     }
   }
 

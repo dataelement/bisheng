@@ -4,6 +4,13 @@ export interface ConfigEnvelopeMeta {
     inherited_from_root?: boolean;
     source_tenant_id?: number;
     has_override?: boolean;
+    /**
+     * Nothing was stored for this scope, so `data` is the backend's built-in
+     * default rather than anything an admin saved. The config forms round-trip
+     * whatever they are given, so saving a fallback would persist defaults over
+     * a real config — see the save guard in `bench/index.tsx`.
+     */
+    is_fallback?: boolean;
 }
 
 export function resolveConfigEnvelope<T>(value: any): { data: T | null; meta: ConfigEnvelopeMeta } {
@@ -13,12 +20,20 @@ export function resolveConfigEnvelope<T>(value: any): { data: T | null; meta: Co
         "data" in value &&
         ("inherited_from_root" in value || "has_override" in value || "source_tenant_id" in value)
     ) {
+        const envelope = value as {
+            data?: T;
+            inherited_from_root?: unknown;
+            source_tenant_id?: unknown;
+            has_override?: unknown;
+            is_fallback?: unknown;
+        };
         return {
-            data: (value as any).data ?? null,
+            data: envelope.data ?? null,
             meta: {
-                inherited_from_root: !!(value as any).inherited_from_root,
-                source_tenant_id: typeof (value as any).source_tenant_id === "number" ? (value as any).source_tenant_id : undefined,
-                has_override: !!(value as any).has_override,
+                inherited_from_root: !!envelope.inherited_from_root,
+                source_tenant_id: typeof envelope.source_tenant_id === "number" ? envelope.source_tenant_id : undefined,
+                has_override: !!envelope.has_override,
+                is_fallback: !!envelope.is_fallback,
             },
         };
     }

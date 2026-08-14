@@ -1,7 +1,7 @@
 # 用户、菜单与资源权限架构
 
 > 现状版本：v3.0.0-beta1 / F048
-> 最后更新：2026-08-06
+> 最后更新：2026-08-13
 > 规范来源：`features/v3.0.0-beta1/048-rebac-permission-model-grants/`
 
 BiSheng 的权限体系分为三个互不替代的层面：
@@ -156,9 +156,12 @@ OpenFGA model。它是一个**不可变、可校验的全局权限语义版本**
 - 发布时通过一个 active release gate 原子切换新语义；
 - 既有 Grant 只引用稳定的 `model_key`，无需按资源/成员 fan-out 重写。
 
-代价是 Check/List 的关系图多一层 Catalog/model intersection。因此不能
-宣称零性能损失；Check、BatchCheck、ListObjects 必须由 BENCH-01 量化，
-业务列表默认采用候选 cursor + BatchCheck。
+具体 action 的 Check/List 关系图仍包含 Catalog/model intersection，不能
+宣称零性能损失；Check、BatchCheck、ListObjects 必须由 BENCH-01 量化。
+`visible` 则是独立的单槽浅层执行索引，不展开具体 action 图。业务列表不设
+统一默认路径，而是按业务候选总量 `N_db`、用户可见数 `V`、可见率、业务过滤
+选择性、继承/CUSTOM 比例与端到端成本，在“完整可见 ID 优先”和“业务候选
+优先 + BatchCheck”之间逐入口选择。
 
 ### 3.2 动作集合
 
@@ -177,8 +180,9 @@ OpenFGA model。它是一个**不可变、可校验的全局权限语义版本**
 | `publish` | workflow、assistant |
 | `unpublish` | workflow、assistant |
 
-`visible` 是内部可见性 relation，不是可配置 action。调用方不能用
-`visible` 代替具体业务动作。
+`visible` 是内部可见性 relation，不是可配置 action。对资源存在任一合法
+授权来源即产生 shallow `visible` contribution；调用方不能用 `visible`
+代替具体业务动作。
 
 ### 3.3 level 与标准模型重算
 
@@ -202,6 +206,13 @@ OpenFGA model。它是一个**不可变、可校验的全局权限语义版本**
 自定义 model 显式选择 action，derived level 是其中有效动作的最高
 level。选择项失效或未分配 level 时保留选择来源，但不产生运行时权限；
 active 自定义 model 若最终没有有效动作会阻止发布。
+
+`active` 只表示模型能否作为新增授权或 MOVE 的目标，不是既有授权的
+运行时开关：模型停用后禁止新增/转入，但既有 Grant 的 `visible`、具体
+action 和 `manage_permission` 均保持，且仍允许精确 REMOVE/MOVE OUT。
+模型删除不要求先停用，但必须先清理所有 active/pending/failed Grant、
+assignee、source projection 和 live tuple 残留；引用与残留均为零后，新
+Catalog 才移除 `model_key`，历史 release 仍作为 RETIRED 快照保留。
 
 ---
 
@@ -250,6 +261,24 @@ tenant + resource_type + resource_id + model_key
 `owner` 是 level 4 标准 model，不是一个拥有特殊数据库查询权限的
 关系。能否授予同级 model 由 `allow_same_level` 和
 `manage_permission` 共同约束。
+
+### 4.4 单槽 visible 来源投影
+
+每个有效 owner/Grant assignee 来源都编译为一条可重建 contribution，写入
+`permission_visible_source_projection`。投影保留 source owner、model、
+locator、version、operation/migration item 和 checksum，用于引用计数、
+迁移追溯、对账与清理，但不参与读取时的 ALLOW 判定。
+
+OpenFGA 资源上只有一个直接 `visible` relation，不存在 `visible_a`、
+`visible_b`、slot 或全局 switch。同一 resource/relation/subject 即使来自
+direct、部门、用户组、protected owner 或多个 model，也只保留一条聚合
+live tuple；撤销单一来源只退休对应 contribution，最后一个来源退休时才
+删除聚合 tuple。system/public/shared 和继承语义同样投影为资源本级 shallow
+visible，但不伪造为普通 Grant source。
+
+Grant mutation 在同一 durable projection operation 中冻结 action tuple 与
+visible contribution 的 after-state，并在一个 OpenFGA Write 中原子提交；
+编译后的 writes+deletes 超过 90 时整体拒绝，不拆批报告部分成功。
 
 ---
 
@@ -370,18 +399,37 @@ business resolve → VerifiedPermissionTarget
 → consistency marker → OpenFGA Check
 ```
 
-业务列表：
+业务列表按入口采用两种路径之一：
 
 ```text
-业务数据库 keyset cursor 取 ≤100 个候选
+可见 ID 优先：完整消费 StreamedListObjects(visible)
+→ 正常 EOF、去重、tenant fence 和容量检查后一次性交付 ID 集
+→ 业务数据库按 ID 过滤、状态、排序并加载详情
+
+候选优先：业务数据库 keyset cursor 取有界候选
 → 每个候选由业务 adapter 验证
-→ OpenFGA BatchCheck
-→ 保留允许项并继续 cursor
+→ OpenFGA BatchCheck(visible)
+→ 保留允许项，不足一页则从最后扫描候选继续
 ```
 
-`ListObjects` 只允许已通过 BENCH-01 的特定入口使用。它不负责加载
-业务数据、tenant/status 过滤或通用分页；结果超过批准上限时必须报错，
-不能把 OpenFGA 默认 1,000 条上限静默当作全集。
+完整可见枚举只允许通过 `PermissionService.list_visible_objects()` 使用，
+底层必须完整消费 StreamedListObjects。deadline、取消、服务错误、异常对象
+类型、非正常结束或超过调用方容量均返回 25014，不交付部分前缀，也不从 SQL
+source projection 补 ALLOW。该路径不执行 super admin / tenant admin 扩权。
+
+当前入口选择：
+
+- `knowledge/space/joined`：可见 ID 优先，容量 5,000；按 500 ID 分块查询
+  数据库，排除 canonical 本人创建并稳定排序，不读 `space_channel_member`、
+  成员角色，也不重复 visible 检查；
+- `knowledge/space/department`：先从部门绑定与部门表得到小候选集，再做一次
+  有界 `batch_check_visible`，最后查询空间详情；
+- 知识空间文件/文件夹列表：业务候选优先，使用稳定 `(sort_key,id)` cursor
+  跨批填页；即使多数子资源继承父空间权限，也必须对最终子资源做 BatchCheck。
+
+具体 action 的 `ListObjects` 仍只允许 BENCH-01 批准的特定入口使用。它不
+负责加载业务数据、tenant/status 过滤或通用分页；结果超过批准上限时必须
+报错，不能把 OpenFGA 默认限制静默当作全集。
 
 ---
 
@@ -483,6 +531,7 @@ REMOVE，必须携带 resource、Catalog 和 assignee 乐观版本。
 - `resource_permission_mode`
 - `permission_projection_operation`
 - `permission_projection_tuple`
+- `permission_visible_source_projection`
 
 ### 9.3 正式数据迁移
 
@@ -513,9 +562,11 @@ src/backend/scripts/migrate_f048_permission_data.py
    Celery/Linsight 暂停任务消费；
 2. D1：API 正常启动链执行 Alembic upgrade，确认单 head；
 3. D2：运维进入 backend 容器执行脚本；脚本确认 ready F048 heartbeat=0，
-   两次稳定源扫描并冻结 run/item/checksum；
-4. D3：在同一 Store 发布一个 F048 model，分批写 SQL/FGA；
-5. D4：higher-consistency 验证后，仅删除记录到 run 的 legacy tuple；两份 legacy
+   两次稳定源扫描并冻结唯一 run/item/checksum；
+4. D3：直接从旧系统 Config、tuple、owner 和 canonical 业务事实编译最终
+   Grant/assignee/source contribution，在同一 Store 发布一个最终 F048 model，分批写 SQL/FGA；
+5. D4：验证 contribution、aggregate/live tuple、source/target checksum、无来源 tuple=0、
+   streamed visible 集合与 canonical oracle 一致后，仅删除记录到 run 的 legacy tuple；两份 legacy
    Config 原始行保留为只读排障证据，但不再参与任何运行时读写或授权判断；
 6. D5：迁移成功后重启全部 backend 进程，自动发现新 model 并绑定 SQL CURRENT Catalog；
 7. D6：smoke、全实例 heartbeat 和语义校验通过后，迁移门禁自动解除。
@@ -523,8 +574,9 @@ src/backend/scripts/migrate_f048_permission_data.py
 脚本 DB scan batch=500，FGA write batch≤90，每批写 checkpoint。崩溃后
 必须携带同一个 `run-id` 从 frozen items 前向恢复。
 
-没有 preview、dry-run、rollback、cleanup、Store switch 或 model A/B
-并行窗口。迁移失败时保持应用迁移门禁和 F048 runtime 不就绪，修复同一 run 的前向路径。
+没有 preview、dry-run、rollback、cleanup、Store switch、中间 F048 model、
+model A/B 或第二次迁移。迁移失败时保持应用迁移门禁和 F048 runtime 不就绪，
+只允许携带同一 `run-id`、固定 Store/source model 的前向恢复。
 
 ---
 
@@ -570,11 +622,18 @@ OpenFGA 使用 JSON log，并暴露 `:2112/metrics`。RPC histogram 在部署中
 
 - `permission_decision`
 - `permission_projection`
+- `permission_visibility_projection`
+- `permission_visible_list`
 - `permission_catalog_publish`
 - `permission_roster_explain`
 - `permission_migration`
 
 日志不得记录用户名、部门名、资源名、token 或 legacy Config 原文。
+
+`permission_visibility_projection` 记录 source count、unique tuple、stale/orphan、
+checksum 与耗时；`permission_visible_list` 记录 strategy、candidate/visible/scanned、
+scan amplification、stream_completed、capacity 及 DB/FGA/total 耗时。无来源 tuple、
+删除残留、stream incomplete、joined 容量达到 80% 或候选扫描放大超过阈值必须告警。
 
 ---
 
@@ -611,11 +670,13 @@ OpenFGA 使用 JSON log，并暴露 `:2112/metrics`。RPC histogram 在部署中
 | Grant policy | `bisheng/permission/domain/services/grant_service.py` |
 | mode policy | `bisheng/permission/domain/services/mode_service.py` |
 | durable projection | `bisheng/permission/domain/services/projection_service.py` |
+| shallow visible 编译与对账 | `bisheng/permission/domain/services/visibility_projection_service.py` |
 | 业务 target registry | `bisheng/permission/application/resource_authorization.py` |
 | runtime facade | `bisheng/permission/application/runtime.py` |
 | API composition | `bisheng/api/services/f048_permission_runtime.py` |
 | Catalog/Grant/decision endpoints | `bisheng/permission/api/endpoints/` |
 | Alembic DDL | `bisheng/core/database/alembic/versions/f048_permission_model_grants.py` |
+| visible source DDL | `bisheng/core/database/alembic/versions/v3_0_0_f048_visible_source_projection.py` |
 | 数据迁移 CLI | `scripts/migrate_f048_permission_data.py` |
 | BENCH-01 | `scripts/benchmark_f048_permission_paths.py` |
 

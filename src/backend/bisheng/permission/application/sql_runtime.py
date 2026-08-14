@@ -27,6 +27,7 @@ from bisheng.permission.domain.models import (
     PermissionCatalogRelease,
     PermissionGrant,
     PermissionGrantAssignee,
+    PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
 from bisheng.permission.domain.repositories.projection_repository import (
@@ -601,6 +602,48 @@ class SqlProjectionFinalizer:
                             update_time=func.now(),
                         )
                     )
+
+                visible_sources = list(
+                    (
+                        await session.execute(
+                            select(PermissionVisibleSourceProjection)
+                            .where(
+                                PermissionVisibleSourceProjection.tenant_id == plan.tenant_id,
+                                PermissionVisibleSourceProjection.operation_id == operation_id,
+                                PermissionVisibleSourceProjection.state == "PENDING",
+                            )
+                            .with_for_update()
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                for source in visible_sources:
+                    prefix = "grant_assignee:"
+                    if source.source_kind != "GRANT_ASSIGNEE" or not source.source_owner_key.startswith(prefix):
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery cannot infer its canonical owner state",
+                        )
+                    try:
+                        assignee_id = int(source.source_owner_key.removeprefix(prefix))
+                    except ValueError as exc:
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery owner identity is invalid",
+                        ) from exc
+                    assignee_state = (
+                        await session.execute(
+                            select(PermissionGrantAssignee.state).where(
+                                PermissionGrantAssignee.tenant_id == plan.tenant_id,
+                                PermissionGrantAssignee.id == assignee_id,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if assignee_state not in {"ACTIVE", "INACTIVE"}:
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery owner state is incomplete",
+                        )
+                    source.state = "ACTIVE" if assignee_state == "ACTIVE" else "RETIRED"
+                    session.add(source)
 
                 target_mode = self._target_mode(plan)
                 mode_values: dict[str, object] = {

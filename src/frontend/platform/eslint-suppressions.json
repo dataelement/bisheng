@@ -1572,7 +1572,7 @@
   },
   "src/pages/BuildPage/bench/ConfigInheritanceBanner.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 1
     },
     "no-restricted-syntax": {
       "count": 3

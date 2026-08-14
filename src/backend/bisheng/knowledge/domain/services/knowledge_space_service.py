@@ -6,6 +6,7 @@ import tempfile
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -41,6 +42,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceTenantMismatchError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -48,6 +50,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
@@ -86,6 +89,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
+    KnowledgeSpaceListItemResp,
     SpaceSubscriptionStatusEnum,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
@@ -112,6 +116,7 @@ from bisheng.permission.application.access import (
 )
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
+    batch_check_business_visible,
     check_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
@@ -178,6 +183,8 @@ _RESOURCE_ACTIONS = {
 _logger = logging.getLogger(__name__)
 
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
+_JOINED_VISIBLE_MAX_RESULTS = 5_000
+_JOINED_DB_ID_BATCH_SIZE = 500
 # F040: keyword-search batch-scan window. A batch shrunk by ReBAC visibility
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
@@ -1435,7 +1442,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # ──────────────────────────── Listings ────────────────────────────────────
 
-    async def _format_member_spaces(self, members: list[SpaceChannelMember], order_by: str) -> list[KnowledgeRead]:
+    async def _format_basic_spaces(self, space_ids: list[int], order_by: str) -> list[KnowledgeRead]:
+        """Format an already-authorized space list with only per-user pin state."""
+        if not space_ids:
+            return []
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
+        return await self._format_basic_space_rows(spaces)
+
+    async def _format_basic_space_rows(self, spaces: list[Knowledge]) -> list[KnowledgeRead]:
+        """Format already-loaded rows without permission, count, or metadata reads."""
+
+        if not spaces:
+            return []
+        pinned_ids = await KnowledgeSpaceUserPinDao.list_pinned_space_ids(self.login_user.user_id)
+        results = [
+            KnowledgeRead(
+                **space.model_dump(),
+                is_pinned=space.id in pinned_ids,
+            )
+            for space in spaces
+        ]
+        return [item for item in results if item.is_pinned] + [item for item in results if not item.is_pinned]
+
+    @staticmethod
+    def _sort_joined_space_rows(spaces: list[Knowledge], order_by: str) -> list[Knowledge]:
+        """Restore one deterministic business order after chunked ID queries."""
+
+        if order_by == "name":
+            return sorted(spaces, key=lambda row: (row.name.casefold(), int(row.id or 0)))
+        if order_by == "create_time":
+            return sorted(
+                spaces,
+                key=lambda row: (row.create_time or datetime.min, int(row.id or 0)),
+                reverse=True,
+            )
+        return sorted(
+            spaces,
+            key=lambda row: (row.update_time or datetime.min, int(row.id or 0)),
+            reverse=True,
+        )
+
+    async def _format_member_spaces(
+        self,
+        members: list[SpaceChannelMember],
+        order_by: str,
+    ) -> list[KnowledgeSpaceListItemResp]:
         if not members:
             return []
 
@@ -1452,7 +1504,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             if one.id in pinned_ids:
                 pinned_spaces.append(
-                    KnowledgeSpaceInfoResp(
+                    KnowledgeSpaceListItemResp(
                         **one.model_dump(),
                         is_pinned=True,
                         user_role=member_conf.user_role,
@@ -1462,7 +1514,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             else:
                 normal_spaces.append(
-                    KnowledgeSpaceInfoResp(
+                    KnowledgeSpaceListItemResp(
                         **one.model_dump(),
                         is_pinned=False,
                         user_role=member_conf.user_role,
@@ -1470,11 +1522,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         is_followed=True,
                     )
                 )
-        ordered = pinned_spaces + normal_spaces
-        await self._populate_root_file_counts(ordered)
-        return await self._decorate_department_metadata(ordered)
+        return pinned_spaces + normal_spaces
 
-    async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
+    async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeSpaceListItemResp]:
         members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)
         if members:
             department_space_ids = set(
@@ -1526,23 +1576,60 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def get_my_followed_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
-        """
-        Return the spaces the current user follows (non-creator).
-        Pinned spaces always appear first; within each pinned/non-pinned group
-        the caller-specified order_by is applied.
-        """
-        # Fetch members ordered by is_pinned DESC so we know which are pinned
-        members = await SpaceChannelMemberDao.async_get_user_followed_members(self.login_user.user_id)
-        space_ids = {int(member.business_id) for member in members}
-        if not self.login_user.is_admin():
-            space_ids.update(await self._scan_space_action_ids("visible"))
-        return await self._format_accessible_spaces(
-            list(space_ids),
-            order_by,
-            memberships=members,
-            exclude_created=True,
-            required_action="visible",
+        """Return complete personally visible spaces created by another user."""
+
+        started = perf_counter()
+        runtime = await get_f048_runtime()
+        actor = await self._permission_actor()
+        fga_started = perf_counter()
+        visible = await runtime.list_visible_objects(
+            actor,
+            resource_type="knowledge_space",
+            max_results=_JOINED_VISIBLE_MAX_RESULTS,
         )
+        fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+        try:
+            visible_ids = [int(resource_id) for resource_id in visible.object_ids]
+        except (TypeError, ValueError) as exc:
+            raise PermissionEnumerationIncompleteError(
+                msg="Knowledge-space visible enumeration returned an invalid resource ID",
+                exception=exc,
+            ) from exc
+
+        spaces: list[Knowledge] = []
+        db_started = perf_counter()
+        for offset in range(0, len(visible_ids), _JOINED_DB_ID_BATCH_SIZE):
+            spaces.extend(
+                await KnowledgeDao.async_get_joined_spaces_by_visible_ids(
+                    visible_ids[offset : offset + _JOINED_DB_ID_BATCH_SIZE],
+                    tenant_id=actor.current_tenant_id,
+                    exclude_creator_id=actor.user_id,
+                    order_by=order_by,
+                )
+            )
+        result = await self._format_basic_space_rows(self._sort_joined_space_rows(spaces, order_by))
+        emit_metric(
+            "permission_visible_list",
+            tenant=actor.current_tenant_id,
+            resource_type="knowledge_space",
+            strategy="visible_ids_first_joined",
+            candidate_count=len(visible_ids),
+            visible_count=len(visible_ids),
+            scanned_count=len(visible_ids),
+            scan_amplification=1 if visible_ids else 0,
+            stream_completed=True,
+            capacity=_JOINED_VISIBLE_MAX_RESULTS,
+            db_elapsed_ms=(perf_counter() - db_started) * 1000,
+            fga_elapsed_ms=fga_elapsed_ms,
+            total_elapsed_ms=(perf_counter() - started) * 1000,
+            returned_count=len(result),
+            alert=(
+                "capacity_80_percent"
+                if len(visible_ids) >= _JOINED_VISIBLE_MAX_RESULTS * 0.8
+                else None
+            ),
+        )
+        return result
 
     async def alist_mine_and_joined_cursor(
         self,
@@ -2030,14 +2117,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for resource_type, resource_ids in by_type.items():
             if not resource_ids:
                 continue
-            action_map = await self._batch_actions(
-                resource_type,
-                resource_ids,
-                ("visible",),
+            visible_map = await batch_check_business_visible(
+                self.login_user,
+                resource_type=resource_type,
+                resource_ids=resource_ids,
             )
             for resource_id in resource_ids:
                 permissions[(resource_type, str(resource_id))] = (
-                    {"visible"} if "visible" in action_map.get(str(resource_id), frozenset()) else set()
+                    {"visible"} if visible_map.get(str(resource_id), False) else set()
                 )
         return [
             item
@@ -2062,19 +2149,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_size: int,
         cursor: list | None = None,
         exclude_file_ids: list[int] | None = None,
-    ) -> tuple[list[KnowledgeFile], bool]:
+    ) -> tuple[list[KnowledgeFile], bool, list | None]:
         """F027 cursor-paginated scan: keep fetching batches via keyset, fold
         through ReBAC filtering, stop once we've accumulated ``page_size + 1``
         visible items (the +1 probes ``has_more``) or the DB is exhausted.
 
-        Returns ``(visible_page_items, has_more)`` — the visible items are
-        already truncated to ``page_size`` if ``has_more`` is True.
+        Returns visible items, ``has_more``, and the last consumed candidate
+        key. The response cursor must resume after that candidate, not after the
+        last visible row, so denied rows are not rescanned on the next page.
         """
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         visible_page_items: list[KnowledgeFile] = []
         permission_context = await self._build_child_permission_context(space_id)
         batch_cursor: list | None = list(cursor) if cursor else None
+        resume_cursor: list | None = None
+        scanned_candidates = 0
+
+        def candidate_cursor(item: KnowledgeFile) -> list:
+            return [
+                item.file_type,
+                _compute_ext_rank_python(item.file_name),
+                item.update_time,
+                item.id,
+            ]
 
         while True:
             batch_items = await SpaceFileDao.async_list_children(
@@ -2098,28 +2196,56 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_id=space_id,
                 context=permission_context,
             )
-            for item in visible_batch:
-                visible_page_items.append(item)
-                if len(visible_page_items) > page_size:
-                    # Got the +1 probe — done scanning.
-                    return visible_page_items[:page_size], True
+            visible_ids = {item.id for item in visible_batch}
+            for item in batch_items:
+                if item.id in visible_ids:
+                    if len(visible_page_items) == page_size:
+                        amplification = scanned_candidates / max(len(visible_page_items), 1)
+                        emit_metric(
+                            "permission_visible_list",
+                            resource_type="space_child",
+                            strategy="candidate_first_batch_check",
+                            candidate_count=scanned_candidates,
+                            visible_count=len(visible_page_items),
+                            scanned_candidates=scanned_candidates,
+                            returned_items=len(visible_page_items),
+                            scanned_count=scanned_candidates,
+                            scan_amplification=amplification,
+                            stream_completed=True,
+                            has_more=True,
+                            alert="scan_amplification" if amplification > 10 else None,
+                        )
+                        return visible_page_items, True, resume_cursor
+                    visible_page_items.append(item)
+                scanned_candidates += 1
+                resume_cursor = candidate_cursor(item)
 
             # Advance batch_cursor to the LAST DB row of this batch (not last
             # visible) so the next batch picks up strictly after; if we used
             # the last visible, items filtered out between them would be
             # re-emitted on the next batch.
             last_db = batch_items[-1]
-            batch_cursor = [
-                last_db.file_type,
-                _compute_ext_rank_python(last_db.file_name),
-                last_db.update_time,
-                last_db.id,
-            ]
+            batch_cursor = candidate_cursor(last_db)
 
             if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
                 break
 
-        return visible_page_items, False
+        amplification = scanned_candidates / max(len(visible_page_items), 1)
+        emit_metric(
+            "permission_visible_list",
+            resource_type="space_child",
+            strategy="candidate_first_batch_check",
+            candidate_count=scanned_candidates,
+            visible_count=len(visible_page_items),
+            scanned_candidates=scanned_candidates,
+            returned_items=len(visible_page_items),
+            scanned_count=scanned_candidates,
+            scan_amplification=amplification,
+            stream_completed=True,
+            has_more=False,
+            alert="scan_amplification" if amplification > 10 else None,
+        )
+        return visible_page_items, False, None
 
     async def _scan_visible_search_items(
         self,
@@ -2202,7 +2328,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
-        from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         await self._require_read_permission(space_id)
         if parent_id:
@@ -2229,7 +2354,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if self.version_repo is not None:
             exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
 
-        visible_page_items, has_more = await self._scan_visible_child_items(
+        visible_page_items, has_more, scan_cursor = await self._scan_visible_child_items(
             space_id=space_id,
             parent_id=parent_id,
             file_ids=file_ids,
@@ -2248,17 +2373,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         data = await self._handle_file_folder_extra_info(visible_page_items)
 
         next_cursor: str | None = None
-        if has_more and visible_page_items:
-            last = visible_page_items[-1]
-            next_cursor = encode_cursor(
-                (
-                    last.file_type,
-                    _compute_ext_rank_python(last.file_name),
-                    last.update_time,
-                    last.id,
-                ),
-                context=context,
-            )
+        if has_more and scan_cursor:
+            next_cursor = encode_cursor(scan_cursor, context=context)
 
         return PageInfiniteCursorData(
             data=data,

@@ -1,4 +1,3 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip"
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { Input } from "@/components/bs-ui/input"
@@ -40,7 +39,7 @@ interface ModelEditorProps {
   onCreateDraft: (
     changes: PermissionCatalogChange[],
   ) => Promise<PermissionCatalogDraft>
-  onDeleteModel: (modelKey: string, wasActive: boolean) => Promise<void>
+  onDeleteModel: (modelKey: string) => Promise<PermissionCatalogDraft>
   onReviewImpact: (draft: PermissionCatalogDraft) => void
 }
 
@@ -77,6 +76,7 @@ export function ModelEditor({
   const [selectedPreset, setSelectedPreset] = useState("")
   const [draft, setDraft] = useState<PermissionCatalogDraft | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleteBlocked, setDeleteBlocked] = useState(false)
 
   const isStandard = model.kind === "STANDARD"
   const eligibleActions = useMemo(
@@ -157,6 +157,7 @@ export function ModelEditor({
     setSelected(new Set(model.action_codes))
     setSelectedPreset("")
     setDraft(null)
+    setDeleteBlocked(false)
   }, [model])
 
   const handleActionChange = (actionCode: string, checked: boolean) => {
@@ -229,21 +230,19 @@ export function ModelEditor({
   }
 
   const handleDelete = () => {
-    if (disabled || saving || createMode || isStandard || active) return
-    // Deleting publishes itself — the old deactivate-publish-delete-publish
-    // dance lost people halfway through. Turning the model off stays the
-    // author's move, since it is the one precondition they can see and undo,
-    // but the switch they just flipped counts: gating on the *saved* state
-    // meant flipping it off changed nothing until a separate publish, which
-    // reads as a dead button. `model.active` tells the caller whether that
-    // deactivation still has to ride along in the same batch.
+    if (disabled || saving || createMode || isStandard) return
     bsConfirm({
       desc: t("model.confirmDelete", { name: model.name }),
       okTxt: t("model.delete"),
       async onOk(next) {
         setSaving(true)
+        setDeleteBlocked(false)
         try {
-          await onDeleteModel(model.key, model.active)
+          const deleteDraft = await onDeleteModel(model.key)
+          setDraft(deleteDraft)
+          onReviewImpact(deleteDraft)
+        } catch {
+          setDeleteBlocked(true)
         } finally {
           setSaving(false)
           next()
@@ -482,28 +481,25 @@ export function ModelEditor({
           </div>
         )}
         {!isStandard && !createMode && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {/* A disabled button swallows pointer events, so the tooltip
-                    needs a wrapper to hear the hover. */}
-                <span className="inline-flex">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="text-destructive"
-                    disabled={disabled || saving || active}
-                    onClick={handleDelete}
-                  >
-                    {t("model.delete")}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {active && (
-                <TooltipContent>{t("model.disableBeforeDelete")}</TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
+          <div className="mr-auto flex min-w-0 items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0 text-destructive"
+              disabled={disabled || saving}
+              onClick={handleDelete}
+            >
+              {t("model.delete")}
+            </Button>
+            <span
+              className={deleteBlocked ? "text-xs text-destructive" : "text-xs text-muted-foreground"}
+              role={deleteBlocked ? "alert" : undefined}
+            >
+              {deleteBlocked
+                ? t("model.deleteBlocked")
+                : t("model.deleteRequirement")}
+            </span>
+          </div>
         )}
         <Button
           type="button"

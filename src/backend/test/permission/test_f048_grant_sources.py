@@ -1,6 +1,7 @@
 """F048 Grant source identity and reference-count contracts.
 
-覆盖 AC: AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25, AC-26, AC-27
+覆盖 AC: AC-15, AC-19, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25,
+AC-26, AC-27, AC-164, AC-166, AC-167
 """
 
 from __future__ import annotations
@@ -181,7 +182,40 @@ def test_different_models_coexist_and_effective_actions_are_a_union() -> None:
     assert service.effective_action_union(
         (editor, inactive),
         projected_subjects=frozenset({"user:100", "department:17#member"}),
-    ) == ("edit",)
+    ) == ("download", "edit")
+
+
+def test_inactive_source_model_keeps_existing_binding_and_allows_precise_revoke() -> None:
+    service = GrantSourceService()
+    direct = service.canonicalize_source(
+        source_id=1,
+        subject_type="user",
+        subject_id="100",
+        source_type="DIRECT",
+    )
+    membership = service.canonicalize_source(
+        source_id=2,
+        subject_type="user",
+        subject_id="100",
+        source_type="SPACE_MEMBERSHIP",
+        source_ref="573",
+    )
+    grant = service.add_source(
+        _grant("g-custom", "custom", ("download",)),
+        direct,
+    ).grant
+    grant = service.add_source(grant, membership).grant
+    inactive = replace(grant, model=replace(grant.model, active=False))
+
+    assert service.effective_action_union(
+        (inactive,),
+        projected_subjects=frozenset({"user:100"}),
+    ) == ("download",)
+    first_revoke = service.remove_source(inactive, source_id=1)
+    assert first_revoke.deltas == ()
+    last_revoke = service.remove_source(first_revoke.grant, source_id=2)
+    assert last_revoke.grant.active is False
+    assert [row.action for row in last_revoke.deltas] == ["DELETE", "DELETE", "DELETE"]
 
 
 def test_remove_one_source_does_not_remove_other_model_or_source() -> None:

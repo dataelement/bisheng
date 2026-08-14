@@ -34,14 +34,20 @@ from bisheng.permission.domain.models import (
     PermissionGrant,
     PermissionGrantAssignee,
     PermissionProjectionOperation,
+    PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
 from bisheng.permission.domain.services.grant_source_service import (
+    GrantModelSnapshot,
+    GrantSnapshot,
     GrantSourceService,
 )
 from bisheng.permission.domain.services.projection_plan import (
     ProjectionPlan,
     ProjectionTupleDelta,
+)
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompiler,
 )
 
 
@@ -64,6 +70,9 @@ async def session_factory(
     metadata = sa.MetaData()
     for name in (
         "permission_projection_operation",
+        "permission_migration_run",
+        "permission_migration_item",
+        "permission_visible_source_projection",
         "permission_grant",
         "permission_grant_assignee",
         "resource_permission_mode",
@@ -193,6 +202,44 @@ async def _seed_projecting_state(session_factory) -> int:
                         ),
                     )
                 )
+                session.add_all(
+                    (
+                        PermissionVisibleSourceProjection(
+                            tenant_id=7,
+                            resource_type="folder",
+                            resource_id="42",
+                            visibility_class="ordinary",
+                            projected_subject="user:11",
+                            source_kind="GRANT_ASSIGNEE",
+                            source_owner_key="grant_assignee:101",
+                            source_locator="direct:user:11",
+                            source_fingerprint="d" * 64,
+                            contribution_fingerprint="1" * 64,
+                            model_key="viewer",
+                            source_version=1,
+                            tuple_fingerprint="2" * 64,
+                            state="PENDING",
+                            operation_id=int(operation.id),
+                        ),
+                        PermissionVisibleSourceProjection(
+                            tenant_id=7,
+                            resource_type="folder",
+                            resource_id="42",
+                            visibility_class="ordinary",
+                            projected_subject="user:12",
+                            source_kind="GRANT_ASSIGNEE",
+                            source_owner_key="grant_assignee:102",
+                            source_locator="direct:user:12",
+                            source_fingerprint="e" * 64,
+                            contribution_fingerprint="3" * 64,
+                            model_key="viewer",
+                            source_version=4,
+                            tuple_fingerprint="4" * 64,
+                            state="PENDING",
+                            operation_id=int(operation.id),
+                        ),
+                    )
+                )
             return int(operation.id)
 
 
@@ -227,6 +274,15 @@ async def test_resource_finalizer_atomically_converges_and_replays(
             assignees = list(
                 (await session.execute(select(PermissionGrantAssignee).order_by(PermissionGrantAssignee.id))).scalars()
             )
+            visible_sources = list(
+                (
+                    await session.execute(
+                        select(PermissionVisibleSourceProjection).order_by(
+                            PermissionVisibleSourceProjection.id
+                        )
+                    )
+                ).scalars()
+            )
 
     assert (mode.version, mode.projection_state, mode.mode) == (
         4,
@@ -238,6 +294,7 @@ async def test_resource_finalizer_atomically_converges_and_replays(
         ("ACTIVE", 1),
         ("INACTIVE", 5),
     ]
+    assert [row.state for row in visible_sources] == ["ACTIVE", "RETIRED"]
 
 
 @pytest.mark.asyncio
@@ -302,6 +359,110 @@ async def test_assignee_move_preserves_identity_and_advances_version(
                 assert moved.id == 101
                 assert moved.grant_id == target_grant.id
                 assert moved.version == 2
+
+
+@pytest.mark.asyncio
+async def test_visible_source_after_state_is_frozen_then_finalized(
+    session_factory,
+) -> None:
+    source = GrantSourceService().canonicalize_source(
+        source_id=201,
+        subject_type="user",
+        subject_id="21",
+        source_type="DIRECT",
+    )
+    grant = GrantSnapshot(
+        grant_id="g-viewer",
+        tenant_id=7,
+        resource_type="folder",
+        resource_id="42",
+        model=GrantModelSnapshot(
+            model_key="viewer",
+            active=True,
+            action_codes=("download",),
+            derived_level=1,
+        ),
+        active=True,
+        sources=(source,),
+    )
+    compiler = VisibilityProjectionCompiler()
+    added = compiler.compile(
+        tenant_id=7,
+        grants=(grant,),
+        existing_sources=(),
+    )
+
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            async with session.begin():
+                operation = PermissionProjectionOperation(
+                    tenant_id=7,
+                    idempotency_key="visible-add",
+                    request_checksum="a" * 64,
+                    operation_type="GRANT_MUTATION",
+                    scope_type="resource",
+                    scope_key="folder:42",
+                    expected_version=3,
+                    target_version=4,
+                    store_id="store",
+                    model_id="model",
+                    status="PREPARED",
+                    before_checksum="b" * 64,
+                    after_checksum="c" * 64,
+                    operator_id=9,
+                )
+                session.add(operation)
+                await session.flush()
+                operation_id = int(operation.id)
+                await SqlPermissionControlState._prepare_visible_sources(
+                    session,
+                    tenant_id=7,
+                    visibility=added,
+                    operation_id=operation_id,
+                )
+        async with session_factory() as session:
+            pending = (await session.execute(select(PermissionVisibleSourceProjection))).scalars().one()
+            assert (pending.state, pending.operation_id) == ("PENDING", operation_id)
+        async with session_factory() as session:
+            async with session.begin():
+                await SqlPermissionControlState._finalize_visible_sources(
+                    session,
+                    tenant_id=7,
+                    visibility=added,
+                    operation_id=operation_id,
+                )
+        async with session_factory() as session:
+            active = (await session.execute(select(PermissionVisibleSourceProjection))).scalars().one()
+            assert active.state == "ACTIVE"
+
+    removed = compiler.compile(
+        tenant_id=7,
+        grants=(replace(grant, active=False, sources=()),),
+        existing_sources=added.active_sources,
+    )
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            async with session.begin():
+                await SqlPermissionControlState._prepare_visible_sources(
+                    session,
+                    tenant_id=7,
+                    visibility=removed,
+                    operation_id=operation_id,
+                )
+        async with session_factory() as session:
+            pending = (await session.execute(select(PermissionVisibleSourceProjection))).scalars().one()
+            assert pending.state == "PENDING"
+        async with session_factory() as session:
+            async with session.begin():
+                await SqlPermissionControlState._finalize_visible_sources(
+                    session,
+                    tenant_id=7,
+                    visibility=removed,
+                    operation_id=operation_id,
+                )
+        async with session_factory() as session:
+            retired = (await session.execute(select(PermissionVisibleSourceProjection))).scalars().one()
+            assert retired.state == "RETIRED"
 
 
 def test_resource_claim_rejects_competing_same_version_operation() -> None:

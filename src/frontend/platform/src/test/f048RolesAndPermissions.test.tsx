@@ -59,7 +59,8 @@ vi.mock("@/pages/SystemPage/components/permission/ModelEditor", () => ({
   ModelEditor: (props: {
     model: { key: string }
     createMode?: boolean
-    onDeleteModel?: (modelKey: string, wasActive: boolean) => Promise<void>
+    onDeleteModel?: (modelKey: string) => Promise<{ draft_id: number }>
+    onReviewImpact: (draft: { draft_id: number }) => void
   }) => {
     childCalls.modelEditor(props)
     return (
@@ -67,7 +68,12 @@ vi.mock("@/pages/SystemPage/components/permission/ModelEditor", () => ({
         {props.createMode ? "create" : props.model.key}
         <button
           type="button"
-          onClick={() => void props.onDeleteModel?.(props.model.key, false)}
+          onClick={() =>
+            void props
+              .onDeleteModel?.(props.model.key)
+              .then((draft) => props.onReviewImpact(draft))
+              .catch(() => undefined)
+          }
         >
           model-editor.delete
         </button>
@@ -339,12 +345,9 @@ describe("F048 RolesAndPermissions", () => {
   })
 
   it("falls back to the plain failure when the server sends no reason", async () => {
-    vi.mocked(publishPermissionCatalogDraftApi).mockRejectedValueOnce(
+    vi.mocked(createPermissionCatalogDraftApi).mockRejectedValueOnce(
       "some other failure",
     )
-    vi.mocked(createPermissionCatalogDraftApi).mockResolvedValueOnce({
-      draft_id: 31,
-    } as never)
 
     renderWithUser({ role: "admin", is_global_super: true })
     await waitFor(() => expect(getPermissionCatalogApi).toHaveBeenCalled())

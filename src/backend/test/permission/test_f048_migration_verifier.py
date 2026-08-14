@@ -65,8 +65,6 @@ def _evidence(**overrides) -> MigrationVerificationEvidence:
                 store_id="store-live",
                 model_id="new-model",
                 catalog_release_id=9,
-                dual_model_mode=False,
-                legacy_model_id=None,
             ),
             InstancePinEvidence(
                 role="worker",
@@ -74,10 +72,12 @@ def _evidence(**overrides) -> MigrationVerificationEvidence:
                 store_id="store-live",
                 model_id="new-model",
                 catalog_release_id=9,
-                dual_model_mode=False,
-                legacy_model_id=None,
             ),
         ),
+        "visible_source_checksum_matches": True,
+        "visible_aggregate_checksum_matches": True,
+        "unattributed_visible_count": 0,
+        "visible_stream_complete": True,
     }
     values.update(overrides)
     return MigrationVerificationEvidence(**values)
@@ -150,6 +150,10 @@ async def test_verifier_allows_retained_legacy_config_audit_rows():
         ("unapproved_manual_count", 1, "UNAPPROVED_MANUAL_ITEMS"),
         ("cross_tenant_count", 1, "CROSS_TENANT_FACTS"),
         ("invalid_owner_count", 1, "INVALID_OWNER_FACTS"),
+        ("unattributed_visible_count", 1, "UNATTRIBUTED_VISIBLE_TUPLES"),
+        ("visible_source_checksum_matches", False, "VISIBLE_SOURCE_CHECKSUM_MISMATCH"),
+        ("visible_aggregate_checksum_matches", False, "VISIBLE_AGGREGATE_CHECKSUM_MISMATCH"),
+        ("visible_stream_complete", False, "VISIBLE_STREAM_INCOMPLETE"),
         ("actual_target_checksum", "x" * 64, "TARGET_CHECKSUM_MISMATCH"),
     ],
 )
@@ -176,8 +180,6 @@ async def test_verifier_blocks_semantic_failure_or_mixed_runtime_pins():
             store_id="store-live",
             model_id="legacy",
             catalog_release_id=9,
-            dual_model_mode=True,
-            legacy_model_id="legacy",
         ),
     )
     verifier = F048MigrationVerifier(

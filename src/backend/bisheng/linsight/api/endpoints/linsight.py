@@ -202,7 +202,7 @@ async def submit_linsight_workbench(
 
             response_data = {
                 "message_session": message_session_model.model_dump(),
-                "linsight_session_version": linsight_session_version_model.model_dump(),
+                "linsight_session_version": linsight_session_version_model.public_dump(),
             }
         except BaseErrorCode as e:
             # Typed business errors (folder-upload limits, …) keep their own code so
@@ -577,7 +577,7 @@ async def get_linsight_session_version_list(
     # version's linked task message_id + liked so the standalone linsight page can
     # rate through the shared /liked endpoint and re-highlight on reload (same as
     # the in-conversation task turn).
-    version_dumps = [model.model_dump() for model in linsight_session_version_models]
+    version_dumps = [model.public_dump() for model in linsight_session_version_models]
     # ChatMessage is tenant-aware too — without the same widening, a cross-tenant
     # share recipient silently loses the like/dislike state.
     with bypass_tenant_filter_if(share_link is not None):

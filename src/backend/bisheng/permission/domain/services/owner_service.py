@@ -123,7 +123,7 @@ class F048OwnerProjectionService:
             grant = None
             source = None
             marker_relations = (
-                "system_visible_marker",
+                "visible",
                 *(f"system_{action}_marker" for action in context.system_action_codes if action != "visible"),
             )
             protected_deltas = tuple(

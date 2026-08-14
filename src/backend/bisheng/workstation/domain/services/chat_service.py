@@ -2177,13 +2177,15 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
     )
 
     # Enqueue HERE, not from the browser after it receives the handoff below.
-    # submit_user_question parses every attachment inline, so this request can run
-    # for minutes on a multi-file task; a user who stops waiting (refresh, closed
-    # tab, proxy timeout) never sends the follow-up start-execute, and the session
-    # is stranded at NOT_STARTED with no one to pick it up. Enqueueing server-side
-    # decouples "the task runs" from "the client is still listening". The client's
-    # start-execute remains as a late retry and is safe to arrive after this: the
-    # executor rejects re-entry on an already-running session.
+    # Attachment parsing no longer happens in this request (submit parks the raw
+    # refs in pending_files and the worker ingests them), so the request itself is
+    # fast — but the run must not depend on the browser coming back at all: a user
+    # who refreshes, closes the tab or hits a proxy timeout never sends the
+    # follow-up start-execute, and the session is stranded at NOT_STARTED with no
+    # one to pick it up. Enqueueing server-side decouples "the task runs" from
+    # "the client is still listening". The client's start-execute remains as a
+    # late retry and is safe to arrive after this: the executor rejects re-entry
+    # on an already-running session.
     from bisheng.linsight.domain import utils as linsight_execute_utils
 
     try:

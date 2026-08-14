@@ -30,6 +30,10 @@ from .f048 import (
     PermissionTupleAction,
     ResourcePermissionModeDTO,
     VerifiedPermissionTarget,
+    VisibilityEnumerationStatus,
+    VisibleObjectEnumerationRequest,
+    VisibleObjectEnumerationResult,
+    VisibleSourceProjectionDTO,
 )
 
 __all__ = [
@@ -64,4 +68,8 @@ __all__ = [
     "PermissionTupleAction",
     "ResourcePermissionModeDTO",
     "VerifiedPermissionTarget",
+    "VisibilityEnumerationStatus",
+    "VisibleObjectEnumerationRequest",
+    "VisibleObjectEnumerationResult",
+    "VisibleSourceProjectionDTO",
 ]
