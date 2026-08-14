@@ -38,8 +38,8 @@ function canRetry(detail: FileChangeDetail): boolean {
     return detail.action === "upload" && detail.status === "failed";
 }
 
-function canCleanup(detail: FileChangeDetail): boolean {
-    return detail.action === "upload" && detail.status === "failed";
+export function canCleanup(detail: FileChangeDetail): boolean {
+    return detail.action === "upload" && Boolean(detail.canCleanup);
 }
 
 export function FileChangeApprovalDetail({
@@ -126,7 +126,9 @@ export function FileChangeApprovalDetail({
                         )}
                         {canCleanup(detail) && onCleanup && (
                             <Button color="danger" variant="outline" onClick={() => onCleanup(detail.requestId)}>
-                                {localize("com_knowledge.file_change_cleanup")}
+                                {detail.approvalStatus === "pending"
+                                    ? localize("com_approval_action_withdraw")
+                                    : localize("com_knowledge.file_change_cleanup")}
                             </Button>
                         )}
                         {canRetry(detail) && onRetry && (

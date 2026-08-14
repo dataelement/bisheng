@@ -201,7 +201,9 @@ class KnowledgeSpaceFileChangeApplicationService:
         page_size: int = 20,
     ) -> KnowledgeSpacePendingUploadCursorResp:
         tenant_id = self._tenant_id(viewer)
-        requested = tuple(dict.fromkeys([*(str(value) for value in statuses or () if value), *([str(status)] if status else [])]))
+        requested = tuple(
+            dict.fromkeys([*(str(value) for value in statuses or () if value), *([str(status)] if status else [])])
+        )
         public_states = requested or self._BUSINESS_STATES
         if any(value not in self._BUSINESS_STATES for value in public_states):
             raise SpaceFileChangeInvalidStateError()
@@ -296,13 +298,18 @@ class KnowledgeSpaceFileChangeApplicationService:
         view, can_approve = await self._require_visible(
             tenant_id=self._tenant_id(viewer), space_id=space_id, request_id=request_id, viewer=viewer
         )
-        return await self._build_detail(view=view, can_approve=can_approve)
+        return await self._build_detail(
+            view=view,
+            can_approve=can_approve,
+            can_cleanup=int(view.request.applicant_user_id) == int(viewer.user_id),
+        )
 
     async def _build_detail(
         self,
         *,
         view: FileChangeRequestView,
         can_approve: bool,
+        can_cleanup: bool = False,
         status_override: str | None = None,
     ) -> KnowledgeSpaceFileChangeDetailResp:
         tenant_id = int(view.request.tenant_id)
@@ -311,6 +318,7 @@ class KnowledgeSpaceFileChangeApplicationService:
         request = view.request
         snapshot = dict(request.action_snapshot or {})
         instance_id = self._instance_id(view)
+        approval_status = approval_statuses.get(instance_id)
         return KnowledgeSpaceFileChangeDetailResp(
             request_id=int(request.id),
             space_id=int(request.space_id),
@@ -327,7 +335,7 @@ class KnowledgeSpaceFileChangeApplicationService:
             status=self._public_business_status(
                 status_override or str(projection.get("status") or request.execution_state)
             ),
-            approval_status=approval_statuses.get(instance_id),
+            approval_status=approval_status,
             action_detail=FileChangeActionDetail(
                 old_name=snapshot.get("old_name"),
                 new_name=snapshot.get("new_name"),
@@ -339,6 +347,25 @@ class KnowledgeSpaceFileChangeApplicationService:
                 relative_path=snapshot.get("relative_path"),
             ),
             can_approve=can_approve,
+            can_cleanup=(
+                can_cleanup
+                and request.action == KnowledgeSpaceFileChangeAction.UPLOAD
+                and (
+                    (
+                        approval_status in {"pending", "rejected", "withdrawn", "cancelled"}
+                        and request.execution_state
+                        in {
+                            KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
+                            KnowledgeSpaceFileChangeExecutionState.QUEUED,
+                            KnowledgeSpaceFileChangeExecutionState.FAILED,
+                        }
+                    )
+                    or (
+                        approval_status == "approved"
+                        and request.execution_state == KnowledgeSpaceFileChangeExecutionState.FAILED
+                    )
+                )
+            ),
             failure_reason=projection.get("failure_reason"),
             create_time=request.create_time,
             update_time=request.update_time,
@@ -514,7 +541,9 @@ class KnowledgeSpaceFileChangeApplicationService:
                     result = BatchApprovalResult.FAILED
                     error_code = int(exc.code)
                     error_message = str(exc.message)
-                    retryable = isinstance(exc, (SpaceFileChangeApproverUnavailableError, SpaceFileChangeInvalidStateError))
+                    retryable = isinstance(
+                        exc, (SpaceFileChangeApproverUnavailableError, SpaceFileChangeInvalidStateError)
+                    )
                 except Exception:
                     logger.exception(
                         "F046 batch approval failed: tenant_id={} request_id={} instance_id={}",

@@ -419,6 +419,7 @@ export interface FileChangeDetail {
     approvalStatus?: string;
     actionDetail: FileChangeActionDetail;
     canApprove: boolean;
+    canCleanup?: boolean;
     failureReason?: string;
     createTime?: string;
     updateTime?: string;
@@ -517,6 +518,7 @@ interface RawFileChangeDetail {
     approval_status?: string | null;
     action_detail?: RawFileChangeActionDetail;
     can_approve?: boolean;
+    can_cleanup?: boolean;
     failure_reason?: string | null;
     create_time?: string | null;
     update_time?: string | null;
@@ -1851,6 +1853,7 @@ function mapFileChangeDetail(raw: RawFileChangeDetail): FileChangeDetail {
         approvalStatus: raw.approval_status ?? undefined,
         actionDetail: mapFileChangeActionDetail(raw.action_detail),
         canApprove: Boolean(raw.can_approve),
+        canCleanup: Boolean(raw.can_cleanup),
         failureReason: raw.failure_reason ?? undefined,
         createTime: raw.create_time ?? undefined,
         updateTime: raw.update_time ?? undefined,

@@ -72,7 +72,12 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
-import { getFileChangeLockState, projectPendingUploadAsKnowledgeFile, useFileChangeApproval } from "../hooks/useFileChangeApproval";
+import {
+    getFileChangeLockState,
+    projectPendingUploadAsKnowledgeFile,
+    selectApprovablePendingUploads,
+    useFileChangeApproval,
+} from "../hooks/useFileChangeApproval";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -860,7 +865,14 @@ export function KnowledgeSpaceContent({
     };
     const handleBatchApproveFileChanges = async (requestIds: number[]) => {
         try {
-            await fileChangeApproval.batchApprove(requestIds);
+            const result = await fileChangeApproval.batchApprove(requestIds);
+            showToast({
+                message: localize("com_knowledge.file_change_batch_result", {
+                    0: result.successCount,
+                    1: result.failureCount,
+                }),
+                status: result.failureCount > 0 ? "warning" : "success",
+            });
         } catch {
             showToast({ message: localize("com_approval_toast_failed"), status: "error" });
         }
@@ -1376,6 +1388,13 @@ export function KnowledgeSpaceContent({
                 onTriggerWebLink={triggerWebLink}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
+                approvablePendingUploadCount={selectApprovablePendingUploads(fileChangeApproval.pendingItems).length}
+                onBatchApprovePendingUploads={() => {
+                    void handleBatchApproveFileChanges(
+                        selectApprovablePendingUploads(fileChangeApproval.pendingItems).map((item) => item.requestId),
+                    );
+                }}
+                batchApprovingPendingUploads={fileChangeApproval.batchApproving}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}

@@ -237,6 +237,7 @@ class KnowledgeSpaceFileChangeDetailResp(_FileChangeOutput):
     approval_status: str | None = None
     action_detail: FileChangeActionDetail = Field(default_factory=FileChangeActionDetail)
     can_approve: bool = False
+    can_cleanup: bool = False
     failure_reason: str | None = None
     create_time: datetime | None = None
     update_time: datetime | None = None

@@ -176,11 +176,7 @@ def _service(
         get_request_views_by_request_ids=AsyncMock(return_value=views),
     )
     approval_status_port = _ApprovalStatusPort(
-        approval_statuses
-        or {
-            int(view.request.approval_instance_id): "approved"
-            for view in views
-        }
+        approval_statuses or {int(view.request.approval_instance_id): "approved" for view in views}
     )
     projection_loader = AsyncMock(
         side_effect=lambda view: {
@@ -234,14 +230,17 @@ def test_public_business_status_vocabulary_is_knowledge_owned() -> None:
     public_values = {member.value for member in FileChangeApprovalStatus}
 
     assert set(BUSINESS_STATES) <= public_values
-    assert not {
-        "executing",
-        "executed",
-        "execute_failed",
-        "parsing",
-        "parse_failed",
-        "published",
-    } & public_values
+    assert (
+        not {
+            "executing",
+            "executed",
+            "execute_failed",
+            "parsing",
+            "parse_failed",
+            "published",
+        }
+        & public_values
+    )
 
 
 async def test_internal_not_started_is_visible_as_queued_with_pending_approval() -> None:
@@ -260,6 +259,7 @@ async def test_internal_not_started_is_visible_as_queued_with_pending_approval()
 
     assert detail.status == KnowledgeSpaceFileChangeExecutionState.QUEUED
     assert detail.approval_status == "pending"
+    assert detail.can_cleanup is True
     assert listing.data[0].status == KnowledgeSpaceFileChangeExecutionState.QUEUED
     assert listing.data[0].approval_status == "pending"
     assert set(service.repository_factory().list_upload_request_views.await_args.kwargs["execution_states"]) == {
@@ -267,6 +267,24 @@ async def test_internal_not_started_is_visible_as_queued_with_pending_approval()
         KnowledgeSpaceFileChangeExecutionState.QUEUED,
     }
     assert status_port.calls
+
+
+async def test_pending_upload_cleanup_is_not_exposed_to_space_approvers() -> None:
+    view = _view(
+        request_id=41,
+        approval_instance_id=301,
+        execution_state=KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
+    )
+    service, _approval_exception, _status_port, _coordinator, _dispatcher = _service(
+        [view],
+        approval_statuses={301: "pending"},
+    )
+    service.current_approver_checker = AsyncMock(return_value=True)
+
+    detail = await service.get_detail(space_id=SPACE_ID, request_id=41, viewer=_viewer(user_id=99))
+
+    assert detail.can_approve is True
+    assert detail.can_cleanup is False
 
 
 @pytest.mark.parametrize("execution_state", BUSINESS_STATES)

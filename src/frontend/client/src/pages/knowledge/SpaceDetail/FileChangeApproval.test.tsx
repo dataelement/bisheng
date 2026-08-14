@@ -25,7 +25,7 @@ import {
     summarizeBatchApprovalResult,
     useFileChangeApproval,
 } from "../hooks/useFileChangeApproval";
-import { FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
+import { canCleanup, FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
 
 jest.mock("~/api/knowledge", () => ({
     ...jest.requireActual("~/api/knowledge"),
@@ -396,6 +396,25 @@ describe("F046 file change approval projection", () => {
             { requestId: 3, approvalInstanceId: 13, uploadId: "u3", fileName: "c.pdf", fileSize: 1, applicantUserId: 2, status: "applying", approvalStatus: "approved", canApprove: true },
         ];
         expect(selectApprovablePendingUploads(uploads).map((item) => item.requestId)).toEqual([1]);
+    });
+
+    it("shows cleanup only when the backend grants it to the uploader", () => {
+        const detail = {
+            requestId: 1,
+            spaceId: 10,
+            action: "upload",
+            resourceType: "file",
+            resourceName: "a.pdf",
+            applicantUserId: 2,
+            status: "queued",
+            approvalStatus: "pending",
+            actionDetail: {},
+            canApprove: false,
+            canCleanup: true,
+        } satisfies FileChangeDetail;
+
+        expect(canCleanup(detail)).toBe(true);
+        expect(canCleanup({ ...detail, canCleanup: false })).toBe(false);
     });
 
     it("projects a staged upload into its directory without creating a formal file identity", () => {

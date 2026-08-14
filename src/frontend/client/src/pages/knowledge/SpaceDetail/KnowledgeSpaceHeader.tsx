@@ -44,6 +44,9 @@ interface KnowledgeSpaceHeaderProps {
     onTriggerWebLink: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
+    approvablePendingUploadCount?: number;
+    onBatchApprovePendingUploads?: () => void;
+    batchApprovingPendingUploads?: boolean;
 
     // Batch Operation Props
     selectedCount: number;
@@ -93,6 +96,9 @@ export function KnowledgeSpaceHeader({
     onTriggerWebLink,
     canCreateFolder = false,
     canUploadFile = false,
+    approvablePendingUploadCount = 0,
+    onBatchApprovePendingUploads,
+    batchApprovingPendingUploads = false,
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
@@ -127,7 +133,8 @@ export function KnowledgeSpaceHeader({
     const showFilterSortCluster = showFilterButton || showSortButton;
     // Include the view-mode toggle here so the trailing button group still renders for
     // viewers (no add menu, not admin, no selection) who only have the toggle to show.
-    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold || showViewModeTabs;
+    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold
+        || approvablePendingUploadCount > 0 || showViewModeTabs;
 
     const viewModeToggleButton = showViewModeTabs ? (
         <Button
@@ -253,6 +260,17 @@ export function KnowledgeSpaceHeader({
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
             {viewModeToggleButton}
+            {approvablePendingUploadCount > 0 && onBatchApprovePendingUploads && (
+                <Button
+                    size="sm"
+                    onClick={onBatchApprovePendingUploads}
+                    disabled={batchApprovingPendingUploads}
+                    className="h-8 rounded-md font-normal"
+                >
+                    {localize("com_knowledge.file_change_batch_approve")}
+                    {` (${approvablePendingUploadCount})`}
+                </Button>
+            )}
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
