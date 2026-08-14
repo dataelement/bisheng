@@ -160,8 +160,18 @@ function ToastRow({ item, closeLabel }: { item: ToastItem; closeLabel: string })
             onFocus={() => setPaused(true)}
             onBlur={() => setPaused(false)}
           >
-            {/* Decorative: the live region already says which kind it is (§9). */}
-            <Icon aria-hidden className={cn('size-4 shrink-0', meta.iconColor)} />
+            {/* Decorative: the live region already says which kind it is (§9).
+                On a wrapped toast the icon rides the FIRST line instead of the
+                block's centre — a one-line-tall box centres it on that line
+                (the var remaps per breakpoint, so no hardcoded offset). */}
+            <span
+              className={cn(
+                'flex shrink-0',
+                multiline && 'h-[var(--leading-body)] items-center self-start',
+              )}
+            >
+              <Icon aria-hidden className={cn('size-4', meta.iconColor)} />
+            </span>
             {/* 主文字色, not the semantic color — a whole sentence in orange or
                 green is hard to read on a tinted surface (§4). */}
             <div className="ml-2 min-w-0 text-body text-text-1">
@@ -189,7 +199,9 @@ function ToastRow({ item, closeLabel }: { item: ToastItem; closeLabel: string })
               <button
                 type="button"
                 aria-label={closeLabel}
-                className="btn-touch-hit relative ml-2 shrink-0 text-text-3 transition-colors hover:text-text-1"
+                // Faint by default (§5.3): it is an escape hatch, not something
+                // to draw the eye. 16px from the copy, same as the action button.
+                className="btn-touch-hit relative ml-4 shrink-0 text-text-4 transition-colors hover:text-text-1"
                 onClick={() => dismissToast(item.id)}
               >
                 <Outlined.Close className="size-3.5" />
