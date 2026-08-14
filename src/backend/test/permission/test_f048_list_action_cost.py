@@ -120,3 +120,27 @@ async def test_an_ordinary_user_still_goes_through_resolution(monkeypatch, count
     )
 
     assert counted.resolutions == 3
+
+
+@pytest.mark.parametrize(
+    "actor",
+    [
+        PermissionActor(user_id=1, current_tenant_id=1, super_admin=True),
+        PermissionActor(user_id=2, current_tenant_id=7, tenant_admin_tenant_ids=frozenset({7})),
+    ],
+)
+async def test_visible_batch_never_expands_admin_identity(
+    monkeypatch,
+    counted,
+    actor: PermissionActor,
+) -> None:
+    _actor_resolver(monkeypatch, actor)
+
+    granted = await business_authorization.batch_check_business_visible(
+        object(),
+        resource_type="knowledge_file",
+        resource_ids=["1", "2", "3"],
+    )
+
+    assert counted.resolutions == 3
+    assert granted == {"1": True, "2": True, "3": True}

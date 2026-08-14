@@ -1,7 +1,7 @@
 """F048 grant-level and protected-assignment orchestration contracts.
 
-覆盖 AC: AC-36, AC-37, AC-38, AC-39, AC-40, AC-41, AC-42, AC-43,
-AC-44, AC-157
+覆盖 AC: AC-15, AC-36, AC-37, AC-38, AC-39, AC-40, AC-41, AC-42,
+AC-43, AC-44, AC-164, AC-166, AC-167, AC-170, AC-157
 """
 
 from __future__ import annotations
@@ -30,6 +30,9 @@ from bisheng.permission.domain.services.grant_source_service import (
     GrantSourceService,
 )
 from bisheng.permission.domain.services.projection_service import ProjectionOutcome
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompiler,
+)
 
 
 class FakeProjection:
@@ -64,14 +67,15 @@ class FakeGrantState:
         self,
         context,
         grants,
+        visibility,
         *,
         idempotency_key: str,
         operation_id: int,
     ) -> None:
-        self.prepared.append((context, grants, idempotency_key, operation_id))
+        self.prepared.append((context, grants, visibility, idempotency_key, operation_id))
 
-    async def finalize(self, context, grants, outcome) -> None:
-        self.finalized.append((context, grants, outcome))
+    async def finalize(self, context, grants, visibility, outcome) -> None:
+        self.finalized.append((context, grants, visibility, outcome))
 
 
 class FakeEvents:
@@ -154,6 +158,7 @@ def _context(
         capabilities=capabilities,
         models=models,
         grants=grants or tuple(_grant(model) for model in models),
+        existing_visible_sources=(),
     )
 
 
@@ -412,3 +417,145 @@ def test_inactive_target_model_is_not_grantable() -> None:
     context = replace(context, models=models)
     with pytest.raises(PermissionModelStateConflictError):
         service.require_grantable_model(context, "viewer")
+
+
+@pytest.mark.asyncio
+async def test_add_commits_action_and_single_slot_visible_in_one_operation() -> None:
+    service, source_service, projection, state, _ = _service()
+    capability = GrantCapability(
+        model=_model("owner", 4, "manage_permission", allow_same_level=True),
+        source_key="owner-source",
+    )
+    context = _context(capabilities=(capability,))
+    source = source_service.canonicalize_source(
+        source_id=40,
+        subject_type="user",
+        subject_id="400",
+        source_type="DIRECT",
+    )
+
+    await service.mutate(
+        context,
+        changes=(CanonicalGrantChange(operation="ADD", model_key="viewer", source=source),),
+        expected_resource_version=4,
+        expected_catalog_release_id=12,
+        idempotency_key="add-visible",
+    )
+
+    plan = projection.plans[0]
+    assert {row.relation for row in plan.deltas} >= {
+        "ordinary_assignee",
+        "visible",
+    }
+    assert all("slot" not in row.relation and not row.relation.endswith(("_a", "_b")) for row in plan.deltas)
+    prepared_visibility = state.prepared[0][2]
+    assert [row.model_key for row in prepared_visibility.active_sources] == ["viewer"]
+
+
+@pytest.mark.asyncio
+async def test_inactive_source_model_allows_precise_remove_and_visible_revoke() -> None:
+    service, source_service, projection, state, _ = _service()
+    inactive_viewer = _model("viewer", 1, "download", active=False)
+    source = source_service.canonicalize_source(
+        source_id=41,
+        subject_type="user",
+        subject_id="401",
+        source_type="DIRECT",
+    )
+    seeded = source_service.add_source(
+        _grant(replace(inactive_viewer, active=True)),
+        source,
+    ).grant
+    seeded = replace(seeded, model=inactive_viewer)
+    base = _context(
+        capabilities=(
+            GrantCapability(
+                model=_model("owner", 4, "manage_permission", allow_same_level=True),
+                source_key="owner-source",
+            ),
+        )
+    )
+    models = (inactive_viewer, *base.models[1:])
+    grants = (seeded, *base.grants[1:])
+    existing = VisibilityProjectionCompiler().compile(
+        tenant_id=7,
+        grants=grants,
+        existing_sources=(),
+    ).active_sources
+    context = replace(
+        base,
+        models=models,
+        grants=grants,
+        existing_visible_sources=existing,
+    )
+
+    await service.mutate(
+        context,
+        changes=(
+            CanonicalGrantChange(
+                operation="REMOVE",
+                assignee_id=41,
+                expected_assignee_version=1,
+            ),
+        ),
+        expected_resource_version=4,
+        expected_catalog_release_id=12,
+        idempotency_key="remove-inactive-visible",
+    )
+
+    assert {row.relation for row in projection.plans[0].deltas} >= {
+        "ordinary_assignee",
+        "visible",
+    }
+    prepared_visibility = state.prepared[0][2]
+    assert prepared_visibility.active_sources == ()
+    assert len(prepared_visibility.retired_sources) == 1
+
+
+@pytest.mark.asyncio
+async def test_move_freezes_action_and_single_slot_contribution_in_same_operation() -> None:
+    service, source_service, projection, state, _ = _service()
+    source = source_service.canonicalize_source(
+        source_id=42,
+        subject_type="user",
+        subject_id="402",
+        source_type="DIRECT",
+    )
+    base = _context(
+        capabilities=(
+            GrantCapability(
+                model=_model("owner", 4, "manage_permission", allow_same_level=True),
+                source_key="owner-source",
+            ),
+        )
+    )
+    viewer = source_service.add_source(base.grants[0], source).grant
+    grants = (viewer, *base.grants[1:])
+    existing = VisibilityProjectionCompiler().compile(
+        tenant_id=7,
+        grants=grants,
+        existing_sources=(),
+    ).active_sources
+    context = replace(base, grants=grants, existing_visible_sources=existing)
+
+    await service.mutate(
+        context,
+        changes=(
+            CanonicalGrantChange(
+                operation="MOVE",
+                assignee_id=42,
+                expected_assignee_version=1,
+                target_model_key="editor",
+            ),
+        ),
+        expected_resource_version=4,
+        expected_catalog_release_id=12,
+        idempotency_key="move-visible",
+    )
+
+    assert projection.plans[0].operation_type == "GRANT_MUTATION"
+    assert "ordinary_assignee" in {row.relation for row in projection.plans[0].deltas}
+    visibility = state.prepared[0][2]
+    assert [row.model_key for row in visibility.active_sources] == ["editor"]
+    assert [row.model_key for row in visibility.retired_sources] == ["viewer"]
+    assert visibility.deltas == ()

@@ -77,9 +77,10 @@ const draft = {
   },
 }
 
+const { confirmSpy } = vi.hoisted(() => ({ confirmSpy: vi.fn() }))
+
 vi.mock("@/components/bs-ui/alertDialog/useConfirm", () => ({
-  bsConfirm: (params: { onOk?: (next: () => void) => void }) =>
-    params.onOk?.(() => {}),
+  bsConfirm: confirmSpy,
 }))
 
 describe("ModelEditor", () => {
@@ -91,6 +92,11 @@ describe("ModelEditor", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     onCreateDraft.mockResolvedValue(draft)
+    onDeleteModel.mockResolvedValue(draft)
+    confirmSpy.mockImplementation(
+      (params: { onOk?: (next: () => void) => void }) =>
+        params.onOk?.(() => {}),
+    )
   })
 
   it("keeps standard fields read-only but allows eligible same-level policy", async () => {
@@ -317,10 +323,7 @@ describe("ModelEditor", () => {
     ).toBeInTheDocument()
   })
 
-  it("will not delete a model that is still switched on", async () => {
-    // Turning it off is the one precondition the author can see and undo, and
-    // the server refuses the deletion anyway. Doing it for them hid what the
-    // deletion cost.
+  it("keeps active as an assignability switch rather than a deletion precondition", async () => {
     render(
       <ModelEditor
         model={customModel}
@@ -332,14 +335,23 @@ describe("ModelEditor", () => {
     )
 
     const button = screen.getByRole("button", { name: "model.delete" })
-    expect(button).toBeDisabled()
+    expect(screen.getByText("model.activeHint")).toBeInTheDocument()
+    expect(screen.getByText("model.deleteRequirement")).toBeInTheDocument()
+    expect(button).toBeEnabled()
     fireEvent.click(button)
-    expect(onDeleteModel).not.toHaveBeenCalled()
+
+    await waitFor(() => {
+      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key)
+      expect(onReviewImpact).toHaveBeenCalledWith(draft)
+    })
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "impact.pending",
+    )
+    expect(onCreateDraft).not.toHaveBeenCalled()
   })
 
-  it("deletes an inactive model in one action", async () => {
-    // Deleting used to mean deactivate, publish, delete, publish. The middle
-    // publish was easy to skip, and the model then survived the refresh.
+  it("shows the zero-reference guidance when deletion draft creation is blocked", async () => {
+    onDeleteModel.mockRejectedValueOnce(new Error("25004"))
     render(
       <ModelEditor
         model={{ ...customModel, active: false }}
@@ -350,40 +362,13 @@ describe("ModelEditor", () => {
       />,
     )
 
-    expect(screen.getByRole("button", { name: "model.delete" })).toBeEnabled()
-    fireEvent.click(screen.getByRole("button", { name: "model.delete" }))
-
-    await waitFor(() => {
-      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, false)
-    })
-    // No draft is left dangling for someone to publish later.
-    expect(onCreateDraft).not.toHaveBeenCalled()
-  })
-
-  it("frees the delete button as soon as the switch is turned off", async () => {
-    // Reading the saved state instead meant flipping the switch changed
-    // nothing until a separate publish — the button just sat there dead. The
-    // unpublished deactivation is handed to the caller to send along.
-    render(
-      <ModelEditor
-        model={customModel}
-        actions={actions}
-        onCreateDraft={onCreateDraft}
-        onDeleteModel={onDeleteModel}
-        onReviewImpact={onReviewImpact}
-      />,
-    )
-
-    expect(screen.getByRole("button", { name: "model.delete" })).toBeDisabled()
-    fireEvent.click(screen.getByLabelText("model.active"))
-
     const button = screen.getByRole("button", { name: "model.delete" })
-    expect(button).toBeEnabled()
     fireEvent.click(button)
 
-    await waitFor(() => {
-      expect(onDeleteModel).toHaveBeenCalledWith(customModel.key, true)
-    })
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "model.deleteBlocked",
+    )
+    expect(onReviewImpact).not.toHaveBeenCalled()
   })
 
   it("blocks invalid custom selections until unavailable actions are removed", () => {

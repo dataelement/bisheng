@@ -67,6 +67,12 @@ class CatalogChangeType(StrEnum):
     SET_ALLOW_SAME_LEVEL = "SET_ALLOW_SAME_LEVEL"
 
 
+class VisibilityEnumerationStatus(StrEnum):
+    """Terminal states that are safe to hand to a business list caller."""
+
+    NORMAL = "NORMAL"
+
+
 class StrictRequestModel(BaseModel):
     """Base class that rejects undeclared, server-owned request fields."""
 
@@ -352,6 +358,63 @@ class PermissionMutation(BaseModel):
     fga_user: str = Field(min_length=1, max_length=256)
     relation: str = Field(min_length=1, max_length=64)
     fga_object: str = Field(min_length=1, max_length=256)
+
+
+class VisibleObjectEnumerationRequest(BaseModel):
+    """Bounded internal request for one complete visible-object enumeration."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    tenant_id: int = Field(gt=0)
+    resource_type: str = Field(min_length=1, max_length=64)
+    fga_user: str = Field(min_length=1, max_length=256)
+    max_results: int = Field(gt=0, le=5_000)
+
+
+class VisibleObjectEnumerationResult(BaseModel):
+    """Immutable result emitted only after the upstream stream ends normally."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    resource_type: str = Field(min_length=1, max_length=64)
+    object_ids: tuple[str, ...] = ()
+    max_results: int = Field(gt=0, le=5_000)
+    status: VisibilityEnumerationStatus
+
+    @model_validator(mode="after")
+    def validate_complete_set(self) -> VisibleObjectEnumerationResult:
+        if self.status is not VisibilityEnumerationStatus.NORMAL:
+            raise ValueError("only normally completed enumeration results may be delivered")
+        if len(self.object_ids) > self.max_results:
+            raise ValueError("enumeration result exceeds max_results")
+        if len(set(self.object_ids)) != len(self.object_ids):
+            raise ValueError("enumeration result must already be deduplicated")
+        if any(not object_id or len(object_id) > 64 for object_id in self.object_ids):
+            raise ValueError("enumeration result contains an invalid resource ID")
+        return self
+
+
+class VisibleSourceProjectionDTO(BaseModel):
+    """Canonical source contribution used to compile one flattened visible tuple."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    tenant_id: int = Field(gt=0)
+    resource_type: str = Field(min_length=1, max_length=64)
+    resource_id: str = Field(min_length=1, max_length=64)
+    visibility_class: str = Field(min_length=1, max_length=64)
+    projected_subject: str = Field(min_length=1, max_length=256)
+    source_kind: str = Field(min_length=1, max_length=64)
+    source_owner_key: str = Field(min_length=1, max_length=256)
+    source_locator: str = Field(min_length=1, max_length=256)
+    source_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    contribution_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    model_key: str | None = Field(default=None, min_length=1, max_length=64)
+    source_version: int = Field(ge=0)
+    tuple_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    state: str = Field(min_length=1, max_length=64)
+    operation_id: int | None = Field(default=None, gt=0)
+    migration_item_id: int | None = Field(default=None, gt=0)
 
 
 class PermissionCheckRequest(StrictRequestModel):

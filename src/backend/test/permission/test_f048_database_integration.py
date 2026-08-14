@@ -30,6 +30,9 @@ from sqlalchemy.engine import Connection, Engine, make_url
 from bisheng.core.database.alembic.versions import (
     f048_permission_model_grants as revision,
 )
+from bisheng.core.database.alembic.versions import (
+    v3_0_0_f048_visible_source_projection as visible_revision,
+)
 
 REVISION_PATH = Path(revision.__file__)
 F048_TABLES = (
@@ -47,30 +50,39 @@ F048_TABLES = (
     "resource_permission_mode",
     "permission_migration_run",
     "permission_migration_item",
+    "permission_visible_source_projection",
 )
 LIVE_ENABLED = os.environ.get("F048_DATABASE_INTEGRATION") == "1"
 _DML = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE|MERGE)\s", re.IGNORECASE)
 
 
 def test_alembic_revision_is_schema_only() -> None:
-    source = REVISION_PATH.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    imported_modules = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module}
-    assert imported_modules <= {
-        "collections.abc",
-        "alembic",
-        "bisheng.core.database.alembic_helpers.online",
-    }
-    assert not _DML.search(source)
-    assert "session" not in {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    for path in (REVISION_PATH, Path(visible_revision.__file__)):
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        imported_modules = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module
+        }
+        assert imported_modules <= {
+            "collections.abc",
+            "alembic",
+            "bisheng.core.database.alembic_helpers.online",
+        }
+        assert not _DML.search(source)
+        assert "session" not in {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
     assert revision.revision == "f048_permission_grants"
     assert revision.down_revision == "f044_llm_status_time"
+    assert visible_revision.revision == "f048_visible_source_projection"
 
 
 def test_revision_declares_expected_schema_and_resume_constraints() -> None:
     source = REVISION_PATH.read_text(encoding="utf-8")
-    for table in F048_TABLES:
+    visible_source = Path(visible_revision.__file__).read_text(encoding="utf-8")
+    for table in F048_TABLES[:-1]:
         assert f'"{table}"' in source
+    assert "permission_visible_source_projection" in visible_source
     for constraint in (
         "uq_auth_model_release",
         "uq_perm_catalog_version",
@@ -80,8 +92,10 @@ def test_revision_declares_expected_schema_and_resume_constraints() -> None:
         "uq_perm_migration_environment",
         "uq_perm_migration_item_source",
         "ix_perm_migration_item_resume",
+        "uq_perm_visible_source_contribution",
+        "ix_perm_visible_source_owner",
     ):
-        assert constraint in source
+        assert constraint in source or constraint in visible_source
     assert "dashboard" in source
     assert "tenant_id" in source
 
@@ -140,6 +154,14 @@ def _apply_revision(
         lambda table, index: any(item["name"] == index for item in inspector.get_indexes(table)),
     )
     revision.upgrade()
+    inspector = sa.inspect(connection)
+    monkeypatch.setattr(visible_revision, "op", operations)
+    monkeypatch.setattr(
+        visible_revision,
+        "table_exists",
+        lambda table: inspector.has_table(table),
+    )
+    visible_revision.upgrade()
 
 
 def _assert_schema(engine: Engine) -> None:
@@ -151,18 +173,35 @@ def _assert_schema(engine: Engine) -> None:
         "resource_permission_mode": {"uq_resource_permission_mode"},
         "permission_migration_run": {"uq_perm_migration_environment"},
         "permission_migration_item": {"uq_perm_migration_item_source"},
+        "permission_visible_source_projection": {
+            "uq_perm_visible_source_contribution"
+        },
     }
     for table, required in expected_uniques.items():
         names = {str(item.get("name")) for item in inspector.get_unique_constraints(table)}
         assert required.issubset(names)
     resume_indexes = {str(item.get("name")) for item in inspector.get_indexes("permission_migration_item")}
     assert "ix_perm_migration_item_resume" in resume_indexes
+    visible_indexes = {
+        str(item.get("name"))
+        for item in inspector.get_indexes("permission_visible_source_projection")
+    }
+    assert {
+        "ix_perm_visible_resource_subject",
+        "ix_perm_visible_model_state",
+        "ix_perm_visible_source_owner",
+    }.issubset(visible_indexes)
 
 
 def _exercise_checkpoint_contract(engine: Engine) -> None:
     metadata = sa.MetaData()
     run = sa.Table("permission_migration_run", metadata, autoload_with=engine)
     item = sa.Table("permission_migration_item", metadata, autoload_with=engine)
+    visible = sa.Table(
+        "permission_visible_source_projection",
+        metadata,
+        autoload_with=engine,
+    )
     fingerprint = "1" * 64
     source_checksum = "2" * 64
     target_checksum = "3" * 64
@@ -206,6 +245,24 @@ def _exercise_checkpoint_contract(engine: Engine) -> None:
                     (3, 2, "c" * 64),
                 )
             ],
+        )
+        connection.execute(
+            visible.insert().values(
+                tenant_id=1,
+                resource_type="workflow",
+                resource_id="1",
+                visibility_class="ordinary",
+                projected_subject="user:7",
+                source_kind="GRANT_ASSIGNEE",
+                source_owner_key="grant_assignee:11",
+                source_locator="migration:DIRECT:grant:1",
+                source_fingerprint="4" * 64,
+                contribution_fingerprint="5" * 64,
+                model_key="viewer",
+                source_version=1,
+                tuple_fingerprint="6" * 64,
+                state="ACTIVE",
+            )
         )
 
     with engine.begin() as connection:
@@ -293,6 +350,26 @@ def _exercise_checkpoint_contract(engine: Engine) -> None:
                     source_checksum="d" * 64,
                     status="PENDING",
                     severity="INFO",
+                )
+            )
+    with pytest.raises(sa.exc.IntegrityError):
+        with engine.begin() as connection:
+            connection.execute(
+                visible.insert().values(
+                    tenant_id=1,
+                    resource_type="workflow",
+                    resource_id="1",
+                    visibility_class="ordinary",
+                    projected_subject="user:7",
+                    source_kind="GRANT_ASSIGNEE",
+                    source_owner_key="grant_assignee:12",
+                    source_locator="migration:DIRECT:grant:2",
+                    source_fingerprint="7" * 64,
+                    contribution_fingerprint="5" * 64,
+                    model_key="viewer",
+                    source_version=1,
+                    tuple_fingerprint="6" * 64,
+                    state="ACTIVE",
                 )
             )
 

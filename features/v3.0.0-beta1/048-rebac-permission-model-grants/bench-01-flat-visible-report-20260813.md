@@ -1,5 +1,96 @@
 # BENCH-01 初版：知识空间 `visible` 展平关系性能验证
 
+## 0. v1.15.1 单槽直接 `visible` 发布门禁（2026-08-13）
+
+### 0.1 结论
+
+T162 发布门禁通过。在 `192.168.106.116` 的测试后端容器内，使用官方
+OpenFGA v1.15.1 预编译产物（SHA-256
+`5f06f0d263a450fcc081e5e7b6bec4649e8da5f6c9d84c9718e5ba213158eec9`）启动仅监听
+`127.0.0.1` 的内存 datastore 实例，不修改 v1.14.2 业务容器，不写业务 Store。
+
+30 轮正式样本与 2 轮预热均使用 `HIGHER_CONSISTENCY`，串行并发度 1。
+完整消费 StreamedListObjects 至正常 EOF 后才记录成功；所有结果数和集合
+checksum 与 canonical oracle 一致，错误率为 0，720/720 个请求都能关联服务端
+dispatch/datastore read。
+
+### 0.2 固定环境与校验和
+
+| 项目 | 值 |
+|---|---|
+| OpenFGA | v1.15.1，commit `1db35fb8b33d7512666e49e6b75cbd2cca8c4694` |
+| 运行方式 | 测试容器内独立进程，memory datastore，HTTP `127.0.0.1:18080` |
+| Store | `01KZXGMMNNVM0CR1SK7YV0JF29` |
+| Authorization Model | `01KZXGMY99KRNR71W8DCS3SA05` |
+| model checksum | `cdcb8c337e756305966082e0d9cd5540e794692e614a048de9f8efbbf168350f` |
+| required relations checksum | `54a9eeff8904de4b8b237a019aa7080ac0d53183ae7e35ee98d7237a7da877d4` |
+| contract checksum | `80a80489bf4f3ae01f5b1f3519cd275b10a92f16dd58df5fa1378de48c608912` |
+| dataset/source/visible checksum | `d083c56f...ab22` / `9e2e7699...0df0` / `f185c204...994e` |
+| OpenFGA tuple 数 | 41,666 |
+| 业务分布 | 代表性合成数据，非生产脱敏样本 |
+
+目标 DSL 的列表执行关系只有一个可直接写入的单槽：
+
+```text
+resource#visible:
+  [user,
+   user:*,
+   department#member,
+   department#subtree_member,
+   user_group#member,
+   user_group#admin,
+   tenant#member]
+```
+
+`ordinary/protected` 仅保留在 SQL source projection 的来源审计字段，不再是 OpenFGA
+`visible` 查询图的中间 relation。system/public/shared/parent 继承由各 Owner adapter
+计算有效来源后同样投影为直接 `visible` tuple；具体 action 仍保持
+Grant/Model/Catalog ReBAC 图。模型中没有 A/B relation 或 switch。
+
+### 0.3 完整可见枚举结果
+
+| `N_db` | `V` | 来源 | P50 | P95 | P99 | 门槛 | 结果 |
+|---:|---:|---|---:|---:|---:|---:|---|
+| 10,000 | 10 | direct | 2.936 ms | 4.094 ms | 4.293 ms | 50 ms | PASS |
+| 10,000 | 100 | department userset | 4.969 ms | 6.630 ms | 8.041 ms | 100 ms | PASS |
+| 10,000 | 1,000 | group userset | 20.006 ms | 25.167 ms | 27.962 ms | 300 ms | PASS |
+| 10,000 | 5,000 | system wildcard | 84.307 ms | 106.659 ms | 109.454 ms | 1,000 ms | PASS |
+| 100,000 | 10 | direct | 4.058 ms | 5.618 ms | 7.110 ms | 50 ms | PASS |
+| 100,000 | 100 | department userset | 4.977 ms | 7.203 ms | 22.753 ms | 100 ms | PASS |
+| 100,000 | 1,000 | group userset | 20.589 ms | 26.592 ms | 46.046 ms | 300 ms | PASS |
+| 100,000 | 5,000 | direct+department+group 重叠 | 84.357 ms | 119.068 ms | 129.705 ms | 1,000 ms | PASS |
+
+Check 合并 240 个样本，P50/P95/P99 为 `3.455/6.095/8.540 ms`。逻辑
+BatchCheck 20/50/100 的 P95 为 `11.736/20.738/39.422 ms`；v1.15.1 单次
+BatchCheck 最多 50 项，因此 100 候选使用业务侧 `2×50` 并合并结果，没有
+发送非法的 100-check 请求。
+
+### 0.4 业务路径对比
+
+| 入口 | 选定路径 | `N_db` | `V` | `p=V/N_db` | 候选通过率 | 扫描行 | 放大 | P50/P95/P99 |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| joined | visible ID-first | 100,000 | 100 | 0.001 | 1.00 | 100 | 5.0 | 6.049 / 8.660 / 9.463 ms |
+| department | candidate-first | 200 | 100 | 0.5 | 0.50 | 50 | 2.5 | 16.677 / 24.900 / 30.473 ms |
+| file | candidate-first | 100,000 | 5,000 | 0.05 | 0.95 | 100 | 2.0 | 36.326 / 49.156 / 63.290 ms |
+
+这里的 `N_db`、排序、候选通过率和扫描行由 checksum-pinned 合成业务数据
+驱动，不冒充生产 MySQL/DM8 延迟。该结果确认本次入口选择：joined 在资源总量大、
+可见范围小时使用 ID-first；department 候选小、file 在父级继承下候选通过率高，
+使用 candidate-first + 分块 BatchCheck。MySQL/DM8 的分块 `IN`、排序与 cursor 一致性仍由
+后续业务入口集成测试覆盖。
+
+### 0.5 首轮失败及修正
+
+首轮 v1.15.1 运行暴露 builder 虽然已把 Grant-derived tuple 放到资源上，但
+`visible` 仍定义为 `permission_enabled AND (ordinary_custom/protected/system/inherit)`。强一致实时
+样本中，`V=100/1,000/5,000` 约为 `148 ms/1.33 s/6.8 s`，5,000 结果产生
+约 10,000 dispatch，明确不达标。根因是查询图仍然按每个候选资源计算中间
+intersection，而不是部门/用户组 userset本身。
+
+修正为可直接写入的单一 `visible` relation 后，同样数据、一致性和服务版本下
+才得到上述通过结果。这个失败过程保留为门禁价值证据：不能只看 tuple 是否
+在 resource 上，必须验证最终业务 relation 的完整 DSL 和服务端执行计数。
+
 ## 1. 结论
 
 在 `192.168.106.116` 的现有 OpenFGA 服务中新建隔离 Store，使用相同数据分别测试：

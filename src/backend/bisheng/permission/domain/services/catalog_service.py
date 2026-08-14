@@ -18,6 +18,7 @@ from loguru import logger
 from bisheng.common.errcode.permission import (
     AuthorizationModelMismatchError,
     PermissionImpactExpiredError,
+    PermissionModelStateConflictError,
     PermissionProjectionFailedError,
     PermissionPublishNotReadyError,
 )
@@ -30,10 +31,12 @@ from bisheng.permission.domain.services.catalog_policy import (
 )
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
+    ModelReferenceSummary,
     PermissionModelImpact,
     PermissionModelRelease,
     calculate_model_impact,
     derive_permission_models,
+    ensure_model_deletable,
 )
 
 
@@ -68,6 +71,7 @@ class CatalogDraftBuildInput:
     custom_models: tuple[CustomModelSelection, ...] = ()
     standard_allow_same_level: Mapping[str, bool] = field(default_factory=dict)
     grant_references: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    model_reference_summaries: Mapping[str, ModelReferenceSummary] = field(default_factory=dict)
     draft_owner_id: int = 0
     idempotency_key: str = ""
     expires_at: datetime | None = None
@@ -259,6 +263,25 @@ class CatalogService:
             custom_models=build.custom_models,
             standard_allow_same_level=build.standard_allow_same_level,
         )
+        before_by_key = {model.model_key: model for model in build.before_models.models}
+        after_keys = {model.model_key for model in model_release.models}
+        deleted_models = tuple(
+            before_by_key[model_key]
+            for model_key in sorted(set(before_by_key) - after_keys)
+        )
+        for model in deleted_models:
+            references = build.model_reference_summaries.get(model.model_key)
+            if references is None:
+                raise PermissionModelStateConflictError(
+                    msg=f"Model reference audit is missing: {model.model_key}"
+                )
+            try:
+                ensure_model_deletable(model, references=references)
+            except ValueError as exc:
+                raise PermissionModelStateConflictError(
+                    exception=exc,
+                    msg=str(exc),
+                ) from exc
         custom_action_map = {
             model.model_key: frozenset(model.selected_action_codes)
             for model in build.before_models.models

@@ -348,7 +348,7 @@ class GrantSourceService:
         actions = {
             action
             for grant in grants
-            if grant.active and grant.model.active
+            if grant.active
             if any(source.active and source.projected_subject in projected_subjects for source in grant.sources)
             for action in grant.model.action_codes
         }

@@ -1,24 +1,11 @@
-"""Prepare and run the F048 BENCH-01 permission performance contract.
+#!/usr/bin/env python3
+"""Run the F048 single-slot visibility BENCH-01 contract.
 
-The script only accepts a non-production environment and an explicitly pinned
-OpenFGA Store.  It never creates or switches a Store, never runs the F048 data
-migration, and never maintains an old/new authorization-model pair.  Historical
-latency samples are read from the signed fixture; every live request uses the
-single F048 model supplied by ``--model-id``.
-
-Examples (run from ``src/backend``):
-
-    PYTHONPATH=./ .venv/bin/python scripts/benchmark_f048_permission_paths.py \
-      prepare --environment performance --api-url http://127.0.0.1:8080 \
-      --store-id <dedicated-benchmark-store> --apply
-
-    PYTHONPATH=./ .venv/bin/python scripts/benchmark_f048_permission_paths.py \
-      run --environment performance --api-url http://127.0.0.1:8080 \
-      --store-id <same-store> --model-id <prepare-output-model-id> \
-      --openfga-log /path/to/openfga-benchmark.jsonl --output report.json
-
-The bundled fixture is synthetic and can only exercise the harness.  A formal
-release run must supply a checksum-pinned, production-derived sanitized fixture.
+The harness writes only to an explicitly supplied non-production OpenFGA
+Store.  The compact fixture describes database cardinality independently from
+the projected visibility tuples so 10k/100k business resource populations do
+not require fake invisible OpenFGA objects.  Every enumeration consumes
+StreamedListObjects to a normal EOF before it records a successful sample.
 """
 
 from __future__ import annotations
@@ -28,14 +15,15 @@ import asyncio
 import json
 import math
 import os
+import re
 import sys
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Protocol
 from uuid import uuid4
 
 import httpx
@@ -52,12 +40,22 @@ from bisheng.core.openfga.authorization_model_f048 import (  # noqa: E402
 OPENFGA_VERSION = "1.15.1"
 WRITE_BATCH_SIZE = 90
 BATCH_CHECK_SIZES = (20, 50, 100)
-CONTRACT_VERSION = "f048-bench-01-v1"
+OPENFGA_BATCH_CHECK_LIMIT = 50
+RESOURCE_SCALES = (10_000, 100_000)
+VISIBLE_RESULT_SIZES = (10, 100, 1_000, 5_000)
+SOURCE_KINDS = frozenset({"direct", "department", "group", "system", "multi_source"})
+CONTRACT_VERSION = "f048-bench-01-v2"
 EXIT_OK = 0
 EXIT_INVALID_CONTRACT = 2
 EXIT_GATE_FAILED = 3
 EXIT_RUNTIME_ERROR = 4
-DEFAULT_FIXTURE = Path(_BACKEND_ROOT) / "test" / "permission" / "fixtures" / "f048_bench_contract.synthetic.json"
+DEFAULT_FIXTURE = (
+    Path(_BACKEND_ROOT)
+    / "test"
+    / "permission"
+    / "fixtures"
+    / "f048_bench_contract.synthetic.json"
+)
 _PRODUCTION_ENVIRONMENTS = {
     "prod",
     "production",
@@ -66,10 +64,11 @@ _PRODUCTION_ENVIRONMENTS = {
     "正式",
     "生产",
 }
+_AB_RELATION_PATTERN = re.compile(r"(?:^|_)(?:slot_[ab]|visible_[ab]|visibility_switch)(?:$|_)")
 
 
 class BenchmarkContractError(ValueError):
-    """The fixture, environment, or runtime pin is not safe to execute."""
+    """The fixture, environment, or runtime pin is unsafe or incomplete."""
 
 
 def canonical_json(value: Any) -> bytes:
@@ -123,113 +122,77 @@ def summarize(values: Iterable[float]) -> dict[str, float | int]:
 def object_keys(scenario: dict[str, Any]) -> list[str]:
     resource_type = str(scenario["resource_type"])
     prefix = str(scenario["resource_id_prefix"])
-    return [f"{resource_type}:{prefix}{index:04d}" for index in range(1, int(scenario["result_count"]) + 1)]
+    return [
+        f"{resource_type}:{prefix}{index:05d}"
+        for index in range(1, int(scenario["visible_count"]) + 1)
+    ]
 
 
 def object_set_checksum(scenario: dict[str, Any]) -> str:
     return checksum(sorted(object_keys(scenario)))
 
 
-def _base_release_tuples(profile: dict[str, Any]) -> list[dict[str, str]]:
-    catalog = f"permission_catalog_release:{profile['catalog_release_id']}"
-    release = f"permission_model_release:{profile['model_release_id']}"
-    model = f"permission_model:{profile['permission_model_id']}"
-    actions = sorted({str(item["action"]) for item in profile["scenarios"]})
-    tuples = [
-        {"user": "user:*", "relation": "active", "object": catalog},
-        {"user": catalog, "relation": "catalog", "object": release},
-        {"user": "user:*", "relation": "enabled_marker", "object": release},
-        {"user": release, "relation": "release", "object": model},
-    ]
-    tuples.extend({"user": "user:*", "relation": f"{action}_marker", "object": release} for action in actions)
-    return tuples
+def _source_tuples(scenario: dict[str, Any]) -> list[dict[str, str]]:
+    actor = f"user:{scenario['actor_id']}"
+    name = str(scenario["name"])
+    source_kind = str(scenario["source_kind"])
+    tuples: list[dict[str, str]] = []
+    subject = actor
+    if source_kind in {"department", "multi_source"}:
+        department = f"department:bench-{name}"
+        tuples.append({"user": actor, "relation": "member", "object": department})
+        if source_kind == "department":
+            subject = f"{department}#member"
+    if source_kind in {"group", "multi_source"}:
+        group = f"user_group:bench-{name}"
+        tuples.append({"user": actor, "relation": "member", "object": group})
+        if source_kind == "group":
+            subject = f"{group}#member"
 
-
-def _grant_tuples(
-    *,
-    profile: dict[str, Any],
-    scenario: dict[str, Any],
-    resource: str,
-    actor: str,
-    suffix: str = "",
-) -> list[dict[str, str]]:
-    model = f"permission_model:{profile['permission_model_id']}"
-    grant_id = resource.replace(":", "-") + suffix
-    grant = f"permission_grant:{grant_id}"
-    subject_kind = str(scenario["subject_kind"])
-    tuples = [
-        {"user": model, "relation": "model", "object": grant},
-        {"user": grant, "relation": "grant", "object": resource},
-    ]
-    if subject_kind == "department":
-        department = f"department:bench-{scenario['name']}"
-        tuples.extend(
-            (
-                {"user": actor, "relation": "member", "object": department},
+    for resource in object_keys(scenario):
+        if source_kind == "system":
+            tuples.append(
                 {
-                    "user": f"{department}#member",
-                    "relation": "ordinary_assignee",
-                    "object": grant,
-                },
+                    "user": "user:*",
+                    "relation": "visible",
+                    "object": resource,
+                }
             )
-        )
-    elif subject_kind == "group":
-        group = f"user_group:bench-{scenario['name']}"
-        tuples.extend(
-            (
-                {"user": actor, "relation": "member", "object": group},
+        elif source_kind == "multi_source":
+            tuples.extend(
+                (
+                    {"user": actor, "relation": "visible", "object": resource},
+                    {
+                        "user": f"department:bench-{name}#member",
+                        "relation": "visible",
+                        "object": resource,
+                    },
+                    {
+                        "user": f"user_group:bench-{name}#member",
+                        "relation": "visible",
+                        "object": resource,
+                    },
+                )
+            )
+        else:
+            tuples.append(
                 {
-                    "user": f"{group}#member",
-                    "relation": "ordinary_assignee",
-                    "object": grant,
-                },
+                    "user": subject,
+                    "relation": "visible",
+                    "object": resource,
+                }
             )
-        )
-    else:
-        tuples.append(
-            {
-                "user": actor,
-                "relation": "ordinary_assignee",
-                "object": grant,
-            }
-        )
     return tuples
 
 
 def build_dataset_tuples(contract: dict[str, Any]) -> list[dict[str, str]]:
-    """Expand the compact fixture into deterministic OpenFGA tuple keys."""
+    """Expand canonical shallow visibility sources into deterministic tuples."""
 
-    profile = contract["dataset"]["profile"]
-    tuples = _base_release_tuples(profile)
-    for scenario in profile["scenarios"]:
-        actor = f"user:{scenario['actor_id']}"
-        resources = object_keys(scenario)
-        if scenario["subject_kind"] == "inherit":
-            parent = f"knowledge_space:bench-parent-{scenario['name']}"
-            parent_scenario = dict(scenario, subject_kind="direct")
-            tuples.extend(
-                _grant_tuples(
-                    profile=profile,
-                    scenario=parent_scenario,
-                    resource=parent,
-                    actor=actor,
-                )
-            )
-            tuples.extend(
-                (
-                    {
-                        "user": "user:*",
-                        "relation": "permission_enabled",
-                        "object": parent,
-                    },
-                    {
-                        "user": "user:*",
-                        "relation": "custom_mode",
-                        "object": parent,
-                    },
-                )
-            )
-            for resource in resources:
+    tuples: list[dict[str, str]] = []
+    for scenario in contract["dataset"]["scenarios"]:
+        tuples.extend(_source_tuples(scenario))
+        if scenario["source_kind"] != "system":
+            for resource in object_keys(scenario):
                 tuples.extend(
                     (
                         {
@@ -239,53 +202,92 @@ def build_dataset_tuples(contract: dict[str, Any]) -> list[dict[str, str]]:
                         },
                         {
                             "user": "user:*",
-                            "relation": "inherit_mode",
+                            "relation": "custom_mode",
                             "object": resource,
                         },
-                        {"user": parent, "relation": "parent", "object": resource},
                     )
                 )
-            continue
-
-        for resource in resources:
-            tuples.extend(
-                _grant_tuples(
-                    profile=profile,
-                    scenario=scenario,
-                    resource=resource,
-                    actor=actor,
-                )
-            )
-            if scenario["subject_kind"] == "multi_grant":
-                tuples.extend(
-                    _grant_tuples(
-                        profile=profile,
-                        scenario=dict(scenario, subject_kind="direct"),
-                        resource=resource,
-                        actor=actor,
-                        suffix="-second",
-                    )
-                )
-            tuples.extend(
-                (
+        else:
+            for resource in object_keys(scenario):
+                tuples.append(
                     {
                         "user": "user:*",
                         "relation": "permission_enabled",
                         "object": resource,
-                    },
-                    {
-                        "user": "user:*",
-                        "relation": "custom_mode",
-                        "object": resource,
-                    },
+                    }
                 )
-            )
-    deduplicated = {(item["user"], item["relation"], item["object"]): item for item in tuples}
+    deduplicated = {
+        (item["user"], item["relation"], item["object"]): item for item in tuples
+    }
     return [deduplicated[key] for key in sorted(deduplicated)]
+
+
+def source_checksum(contract: dict[str, Any]) -> str:
+    sources = [
+        item
+        for item in build_dataset_tuples(contract)
+        if item["relation"] not in {"permission_enabled", "custom_mode"}
+    ]
+    return checksum(sources)
+
+
+def visible_checksum(contract: dict[str, Any]) -> str:
+    return checksum(
+        {
+            str(item["name"]): object_set_checksum(item)
+            for item in contract["dataset"]["scenarios"]
+        }
+    )
 
 
 def dataset_checksum(contract: dict[str, Any]) -> str:
     return checksum(build_dataset_tuples(contract))
+
+
+def model_has_ab_slots(model: dict[str, Any]) -> bool:
+    for definition in model["type_definitions"]:
+        for relation in definition.get("relations", {}):
+            if _AB_RELATION_PATTERN.search(relation):
+                return True
+    return False
+
+
+def _validate_distribution(contract: dict[str, Any]) -> None:
+    scenarios = contract["dataset"]["scenarios"]
+    pairs = {
+        (int(item["resource_count"]), int(item["visible_count"]))
+        for item in scenarios
+    }
+    required_pairs = {
+        (resource_count, visible_count)
+        for resource_count in RESOURCE_SCALES
+        for visible_count in VISIBLE_RESULT_SIZES
+    }
+    if not required_pairs.issubset(pairs):
+        raise BenchmarkContractError(
+            f"fixture lacks N_db/V scenarios: {sorted(required_pairs - pairs)}"
+        )
+    kinds = {str(item["source_kind"]) for item in scenarios}
+    if not SOURCE_KINDS.issubset(kinds):
+        raise BenchmarkContractError(
+            f"fixture lacks source kinds: {sorted(SOURCE_KINDS - kinds)}"
+        )
+    if len({str(item["actor_id"]) for item in scenarios}) != len(scenarios):
+        raise BenchmarkContractError("benchmark scenario actors must be unique")
+    system_types = {
+        str(item["resource_type"])
+        for item in scenarios
+        if item["source_kind"] == "system"
+    }
+    other_types = {
+        str(item["resource_type"])
+        for item in scenarios
+        if item["source_kind"] != "system"
+    }
+    if system_types.intersection(other_types):
+        raise BenchmarkContractError(
+            "system wildcard scenarios must use isolated resource types"
+        )
 
 
 def load_contract(
@@ -302,35 +304,43 @@ def load_contract(
     embedded = str(contract.get("contract_checksum", ""))
     calculated = contract_checksum(contract)
     if embedded != calculated:
-        raise BenchmarkContractError(f"fixture checksum mismatch: expected {embedded}, calculated {calculated}")
+        raise BenchmarkContractError(
+            f"fixture checksum mismatch: expected {embedded}, calculated {calculated}"
+        )
     if expected_checksum and expected_checksum != calculated:
-        raise BenchmarkContractError("fixture does not match --expected-contract-checksum")
-    model_checksum = authorization_model_checksum(build_authorization_model_f048())
-    if contract.get("authorization_model_checksum") != model_checksum:
+        raise BenchmarkContractError(
+            "fixture does not match --expected-contract-checksum"
+        )
+    model = build_authorization_model_f048()
+    if model_has_ab_slots(model):
+        raise BenchmarkContractError("target model contains an A/B visibility relation")
+    if contract.get("authorization_model_checksum") != authorization_model_checksum(model):
         raise BenchmarkContractError("fixture authorization model checksum drift")
+    _validate_distribution(contract)
+    for scenario in contract["dataset"]["scenarios"]:
+        if int(scenario["visible_count"]) > int(scenario["resource_count"]):
+            raise BenchmarkContractError(
+                f"visible_count exceeds resource_count for {scenario['name']}"
+            )
+        if scenario.get("expected_object_checksum") != object_set_checksum(scenario):
+            raise BenchmarkContractError(
+                f"object checksum drift for scenario {scenario['name']}"
+            )
     calculated_dataset = dataset_checksum(contract)
     if contract["dataset"].get("dataset_checksum") != calculated_dataset:
         raise BenchmarkContractError("fixture expanded dataset checksum drift")
-    scenarios = contract["dataset"]["profile"]["scenarios"]
-    names = {str(item["name"]) for item in scenarios}
-    required = {
-        "direct",
-        "department",
-        "group",
-        "inherit",
-        "multi_grant",
-        "result_10",
-        "result_100",
-        "result_1000",
-    }
-    if not required.issubset(names):
-        raise BenchmarkContractError(f"fixture lacks required scenarios: {sorted(required - names)}")
-    for scenario in scenarios:
-        if scenario.get("expected_object_checksum") != object_set_checksum(scenario):
-            raise BenchmarkContractError(f"object checksum drift for scenario {scenario['name']}")
-    baseline_sizes = {int(value) for value in contract["baseline"]["batch_check_ms"]}
-    if baseline_sizes != set(BATCH_CHECK_SIZES):
-        raise BenchmarkContractError("baseline must contain BatchCheck 20/50/100")
+    if contract["dataset"].get("source_checksum") != source_checksum(contract):
+        raise BenchmarkContractError("fixture source checksum drift")
+    if contract["dataset"].get("visible_checksum") != visible_checksum(contract):
+        raise BenchmarkContractError("fixture visible checksum drift")
+    if {int(value) for value in contract["limits"]["batch_check_p95_ms"]} != set(
+        BATCH_CHECK_SIZES
+    ):
+        raise BenchmarkContractError("limits must contain BatchCheck 20/50/100")
+    if {int(value) for value in contract["limits"]["stream_p95_ms"]} != set(
+        VISIBLE_RESULT_SIZES
+    ):
+        raise BenchmarkContractError("limits must contain visible 10/100/1000/5000")
     return contract
 
 
@@ -343,10 +353,61 @@ class RequestSample:
     error: str | None = None
     result_count: int | None = None
     result_checksum: str | None = None
+    stream_completed: bool | None = None
+    strategy: str | None = None
+    n_db: int | None = None
+    visible_total: int | None = None
+    selectivity: float | None = None
+    candidate_pass_rate: float | None = None
+    db_rows: int | None = None
+    scanned_count: int | None = None
+    scan_amplification: float | None = None
+
+
+def strategy_metrics(
+    *,
+    n_db: int,
+    visible_total: int,
+    page_size: int,
+    scanned_count: int,
+) -> dict[str, float | int]:
+    if n_db <= 0 or visible_total < 0 or page_size <= 0 or scanned_count < 0:
+        raise BenchmarkContractError("invalid list strategy cardinality")
+    selectivity = visible_total / n_db
+    returned = min(page_size, visible_total)
+    amplification = scanned_count / max(1, returned)
+    return {
+        "n_db": n_db,
+        "visible_total": visible_total,
+        "selectivity": round(selectivity, 8),
+        "scanned_count": scanned_count,
+        "scan_amplification": round(amplification, 8),
+    }
+
+
+class BenchmarkClient(Protocol):
+    async def health(self) -> None: ...
+
+    async def verify_model(self, expected_checksum: str) -> None: ...
+
+    async def check(self, query: dict[str, str]) -> tuple[bool, str]: ...
+
+    async def batch_check(
+        self,
+        queries: list[dict[str, str]],
+    ) -> tuple[list[bool], str]: ...
+
+    async def stream_list_objects(
+        self,
+        *,
+        user: str,
+        relation: str,
+        resource_type: str,
+    ) -> tuple[list[str], str, bool]: ...
 
 
 class InstrumentedOpenFGAClient:
-    """Minimal benchmark-only REST client with request-id correlation."""
+    """Minimal v1.15.1 REST client with request-id correlation."""
 
     def __init__(
         self,
@@ -373,7 +434,9 @@ class InstrumentedOpenFGAClient:
             raise BenchmarkContractError("OpenFGA health status is not SERVING")
 
     async def verify_model(self, expected_checksum: str) -> None:
-        response = await self._http.get(f"/stores/{self.store_id}/authorization-models/{self.model_id}")
+        response = await self._http.get(
+            f"/stores/{self.store_id}/authorization-models/{self.model_id}"
+        )
         response.raise_for_status()
         value = response.json().get("authorization_model", response.json())
         model = {
@@ -383,7 +446,11 @@ class InstrumentedOpenFGAClient:
         if authorization_model_checksum(model) != expected_checksum:
             raise BenchmarkContractError("live OpenFGA model checksum mismatch")
 
-    async def _post(self, path: str, body: dict[str, Any]) -> tuple[dict, str]:
+    async def _post(
+        self,
+        path: str,
+        body: dict[str, Any],
+    ) -> tuple[dict[str, Any], str]:
         request_id = f"f048-bench-{uuid4().hex}"
         response = await self._http.post(
             path,
@@ -391,7 +458,7 @@ class InstrumentedOpenFGAClient:
             headers={"X-Request-ID": request_id},
         )
         response.raise_for_status()
-        return response.json(), request_id
+        return response.json(), response.headers.get("x-request-id", request_id)
 
     async def check(self, query: dict[str, str]) -> tuple[bool, str]:
         data, request_id = await self._post(
@@ -399,6 +466,7 @@ class InstrumentedOpenFGAClient:
             {
                 "tuple_key": query,
                 "authorization_model_id": self.model_id,
+                "consistency": "HIGHER_CONSISTENCY",
             },
         )
         return bool(data.get("allowed")), request_id
@@ -411,29 +479,56 @@ class InstrumentedOpenFGAClient:
             f"/stores/{self.store_id}/batch-check",
             {
                 "authorization_model_id": self.model_id,
-                "checks": [{"tuple_key": query, "correlation_id": str(index)} for index, query in enumerate(queries)],
+                "consistency": "HIGHER_CONSISTENCY",
+                "checks": [
+                    {"tuple_key": query, "correlation_id": str(index)}
+                    for index, query in enumerate(queries)
+                ],
             },
         )
         result = data.get("result", {})
-        return [bool(result.get(str(index), {}).get("allowed")) for index in range(len(queries))], request_id
+        return [
+            bool(result.get(str(index), {}).get("allowed"))
+            for index in range(len(queries))
+        ], request_id
 
-    async def list_objects(
+    async def stream_list_objects(
         self,
         *,
         user: str,
         relation: str,
         resource_type: str,
-    ) -> tuple[list[str], str]:
-        data, request_id = await self._post(
-            f"/stores/{self.store_id}/list-objects",
-            {
+    ) -> tuple[list[str], str, bool]:
+        request_id = f"f048-bench-{uuid4().hex}"
+        objects: list[str] = []
+        async with self._http.stream(
+            "POST",
+            f"/stores/{self.store_id}/streamed-list-objects",
+            json={
                 "user": user,
                 "relation": relation,
                 "type": resource_type,
                 "authorization_model_id": self.model_id,
+                "consistency": "HIGHER_CONSISTENCY",
             },
-        )
-        return list(data.get("objects", ())), request_id
+            headers={
+                "X-Request-ID": request_id,
+                "Accept": "application/x-ndjson",
+            },
+        ) as response:
+            response.raise_for_status()
+            request_id = response.headers.get("x-request-id", request_id)
+            async for line in response.aiter_lines():
+                if not line.strip():
+                    continue
+                payload = json.loads(line)
+                object_key = payload.get("result", {}).get("object")
+                if not isinstance(object_key, str):
+                    raise BenchmarkContractError(
+                        "StreamedListObjects returned an invalid item"
+                    )
+                objects.append(object_key)
+        return objects, request_id, True
 
 
 class DatasetPreparer:
@@ -459,12 +554,13 @@ class DatasetPreparer:
         model_id = response.json()["authorization_model_id"]
         tuples = build_dataset_tuples(contract)
         for offset in range(0, len(tuples), WRITE_BATCH_SIZE):
-            batch = tuples[offset : offset + WRITE_BATCH_SIZE]
             write = await self._http.post(
                 f"/stores/{self.store_id}/write",
                 json={
                     "authorization_model_id": model_id,
-                    "writes": {"tuple_keys": batch},
+                    "writes": {
+                        "tuple_keys": tuples[offset : offset + WRITE_BATCH_SIZE]
+                    },
                 },
             )
             write.raise_for_status()
@@ -473,40 +569,56 @@ class DatasetPreparer:
             "model_id": model_id,
             "authorization_model_checksum": authorization_model_checksum(model),
             "dataset_checksum": dataset_checksum(contract),
+            "source_checksum": source_checksum(contract),
+            "visible_checksum": visible_checksum(contract),
             "tuple_count": len(tuples),
         }
 
 
 def _scenario_map(contract: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {str(item["name"]): item for item in contract["dataset"]["profile"]["scenarios"]}
+    return {
+        str(item["name"]): item for item in contract["dataset"]["scenarios"]
+    }
 
 
 def _query(scenario: dict[str, Any], object_key: str) -> dict[str, str]:
     return {
         "user": f"user:{scenario['actor_id']}",
-        "relation": f"can_{scenario['action']}",
+        "relation": "visible",
         "object": object_key,
     }
 
 
-async def _timed_call(
+def _invisible_object(scenario: dict[str, Any], index: int) -> str:
+    return (
+        f"{scenario['resource_type']}:{scenario['resource_id_prefix']}"
+        f"invisible-{index:05d}"
+    )
+
+
+async def _timed_value(
     *,
     operation: str,
     scenario: str,
-    call,
-    validate,
+    call: Any,
+    validate: Any,
 ) -> RequestSample:
     started = perf_counter()
     try:
         result, request_id = await call()
         validate(result)
+        request_ids = (
+            (request_id,)
+            if isinstance(request_id, str)
+            else tuple(request_id)
+        )
         return RequestSample(
             operation=operation,
             scenario=scenario,
             elapsed_ms=(perf_counter() - started) * 1000,
-            request_ids=(request_id,),
-            result_count=(len(result) if isinstance(result, list) else None),
-            result_checksum=(checksum(sorted(result)) if isinstance(result, list) else None),
+            request_ids=request_ids,
+            result_count=len(result) if isinstance(result, list) else None,
+            result_checksum=checksum(sorted(result)) if isinstance(result, list) else None,
         )
     except Exception as exc:
         return RequestSample(
@@ -518,8 +630,164 @@ async def _timed_call(
         )
 
 
+async def _bounded_batch_check(
+    client: BenchmarkClient,
+    queries: list[dict[str, str]],
+) -> tuple[list[bool], tuple[str, ...]]:
+    allowed: list[bool] = []
+    request_ids: list[str] = []
+    for offset in range(0, len(queries), OPENFGA_BATCH_CHECK_LIMIT):
+        chunk_allowed, request_id = await client.batch_check(
+            queries[offset : offset + OPENFGA_BATCH_CHECK_LIMIT]
+        )
+        allowed.extend(chunk_allowed)
+        request_ids.append(request_id)
+    return allowed, tuple(request_ids)
+
+
+async def _stream_sample(
+    client: BenchmarkClient,
+    scenario: dict[str, Any],
+    *,
+    operation: str = "stream_list_objects",
+) -> RequestSample:
+    started = perf_counter()
+    try:
+        objects, request_id, completed = await client.stream_list_objects(
+            user=f"user:{scenario['actor_id']}",
+            relation="visible",
+            resource_type=str(scenario["resource_type"]),
+        )
+        expected = object_keys(scenario)
+        if not completed or sorted(set(objects)) != sorted(expected):
+            raise BenchmarkContractError(
+                "StreamedListObjects result set mismatch, truncation, or abnormal EOF"
+            )
+        return RequestSample(
+            operation=operation,
+            scenario=str(scenario["name"]),
+            elapsed_ms=(perf_counter() - started) * 1000,
+            request_ids=(request_id,),
+            result_count=len(set(objects)),
+            result_checksum=checksum(sorted(set(objects))),
+            stream_completed=True,
+        )
+    except Exception as exc:
+        return RequestSample(
+            operation=operation,
+            scenario=str(scenario["name"]),
+            elapsed_ms=(perf_counter() - started) * 1000,
+            request_ids=(),
+            error=f"{type(exc).__name__}: {exc}",
+            stream_completed=False,
+        )
+
+
+async def _candidate_chain_sample(
+    client: BenchmarkClient,
+    *,
+    name: str,
+    scenario: dict[str, Any],
+    n_db: int,
+    visible_total: int,
+    selectivity: float,
+    page_size: int,
+    batch_size: int,
+) -> RequestSample:
+    started = perf_counter()
+    request_ids: list[str] = []
+    visible: list[str] = []
+    scanned = 0
+    error: str | None = None
+    expected_visible = object_keys(scenario)
+    if not 0 < selectivity <= 1:
+        raise BenchmarkContractError("business path selectivity must be in (0, 1]")
+    try:
+        visible_index = 0
+        invisible_index = 0
+        while len(visible) < min(page_size, visible_total) and scanned < n_db:
+            candidates: list[str] = []
+            for _ in range(min(batch_size, n_db - scanned)):
+                position = scanned + len(candidates)
+                should_be_visible = (
+                    visible_index < visible_total
+                    and position % max(1, round(1 / selectivity)) == 0
+                )
+                if should_be_visible:
+                    candidates.append(expected_visible[visible_index])
+                    visible_index += 1
+                else:
+                    invisible_index += 1
+                    candidates.append(_invisible_object(scenario, invisible_index))
+            allowed, chunk_request_ids = await _bounded_batch_check(
+                client,
+                [_query(scenario, item) for item in candidates]
+            )
+            request_ids.extend(chunk_request_ids)
+            scanned += len(candidates)
+            visible.extend(
+                item
+                for item, is_allowed in zip(candidates, allowed, strict=True)
+                if is_allowed
+            )
+        visible = visible[:page_size]
+        if len(visible) != min(page_size, visible_total):
+            raise BenchmarkContractError("candidate-first path did not fill the page")
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+    metrics = strategy_metrics(
+        n_db=n_db,
+        visible_total=visible_total,
+        page_size=page_size,
+        scanned_count=scanned,
+    )
+    return RequestSample(
+        operation="business_path",
+        scenario=name,
+        elapsed_ms=(perf_counter() - started) * 1000,
+        request_ids=tuple(request_ids),
+        error=error,
+        result_count=len(visible),
+        result_checksum=checksum(visible),
+        strategy="candidate_first",
+        candidate_pass_rate=selectivity,
+        db_rows=scanned,
+        **metrics,
+    )
+
+
+async def _id_first_chain_sample(
+    client: BenchmarkClient,
+    *,
+    name: str,
+    scenario: dict[str, Any],
+    page_size: int,
+) -> RequestSample:
+    sample = await _stream_sample(client, scenario, operation="business_path")
+    visible_total = int(scenario["visible_count"])
+    n_db = int(scenario["resource_count"])
+    db_rows = visible_total
+    metrics = strategy_metrics(
+        n_db=n_db,
+        visible_total=visible_total,
+        page_size=page_size,
+        scanned_count=db_rows,
+    )
+    sample.scenario = name
+    sample.strategy = "visible_id_first"
+    sample.result_count = min(page_size, visible_total)
+    sample.db_rows = db_rows
+    sample.n_db = int(metrics["n_db"])
+    sample.visible_total = int(metrics["visible_total"])
+    sample.selectivity = float(metrics["selectivity"])
+    sample.candidate_pass_rate = 1.0
+    sample.scanned_count = int(metrics["scanned_count"])
+    sample.scan_amplification = float(metrics["scan_amplification"])
+    return sample
+
+
 async def run_workloads(
-    client: InstrumentedOpenFGAClient,
+    client: BenchmarkClient,
     contract: dict[str, Any],
     *,
     iterations: int,
@@ -531,85 +799,86 @@ async def run_workloads(
     await client.verify_model(contract["authorization_model_checksum"])
 
     async def run_once(record: bool) -> None:
-        for name, scenario in scenarios.items():
+        for scenario in scenarios.values():
             first = object_keys(scenario)[0]
-            sample = await _timed_call(
+            sample = await _timed_value(
                 operation="check",
-                scenario=name,
+                scenario=str(scenario["name"]),
                 call=lambda s=scenario, o=first: client.check(_query(s, o)),
                 validate=lambda allowed: (
-                    None if allowed else (_ for _ in ()).throw(BenchmarkContractError("expected Check ALLOW"))
+                    None
+                    if allowed
+                    else (_ for _ in ()).throw(
+                        BenchmarkContractError("expected visible Check ALLOW")
+                    )
                 ),
             )
             if record:
                 samples.append(sample)
 
-        batch_scenario = scenarios["result_1000"]
+        batch_scenario = max(
+            scenarios.values(), key=lambda item: int(item["visible_count"])
+        )
         batch_objects = object_keys(batch_scenario)
         for size in BATCH_CHECK_SIZES:
-            queries = [_query(batch_scenario, object_key) for object_key in batch_objects[:size]]
-            sample = await _timed_call(
+            queries = [
+                _query(batch_scenario, object_key)
+                for object_key in batch_objects[:size]
+            ]
+            sample = await _timed_value(
                 operation="batch_check",
                 scenario=str(size),
-                call=lambda q=queries: client.batch_check(q),
+                call=lambda q=queries: _bounded_batch_check(client, q),
                 validate=lambda allowed, expected=size: (
                     None
                     if len(allowed) == expected and all(allowed)
-                    else (_ for _ in ()).throw(BenchmarkContractError(f"BatchCheck {expected} result mismatch"))
+                    else (_ for _ in ()).throw(
+                        BenchmarkContractError(
+                            f"visible BatchCheck {expected} result mismatch"
+                        )
+                    )
                 ),
             )
             if record:
                 samples.append(sample)
 
-        for name, scenario in scenarios.items():
-            expected_objects = object_keys(scenario)
-            sample = await _timed_call(
-                operation="list_objects",
-                scenario=name,
-                call=lambda s=scenario: client.list_objects(
-                    user=f"user:{s['actor_id']}",
-                    relation=f"can_{s['action']}",
-                    resource_type=str(s["resource_type"]),
-                ),
-                validate=lambda objects, expected=expected_objects: (
-                    None
-                    if sorted(objects) == sorted(expected)
-                    else (_ for _ in ()).throw(BenchmarkContractError("ListObjects result set mismatch or truncation"))
-                ),
-            )
+        for scenario in scenarios.values():
+            sample = await _stream_sample(client, scenario)
             if record:
                 samples.append(sample)
 
-        cursor_contract = contract["dataset"]["profile"]["business_cursor"]
-        cursor_scenario = scenarios[str(cursor_contract["scenario"])]
-        candidates = object_keys(cursor_scenario)[: int(cursor_contract["candidate_count"])]
-        page_size = int(cursor_contract["page_size"])
-        started = perf_counter()
-        request_ids: list[str] = []
-        visible: list[str] = []
-        error: str | None = None
-        try:
-            for offset in range(0, len(candidates), page_size):
-                page = candidates[offset : offset + page_size]
-                allowed, request_id = await client.batch_check([_query(cursor_scenario, item) for item in page])
-                request_ids.append(request_id)
-                visible.extend(item for item, is_allowed in zip(page, allowed, strict=True) if is_allowed)
-            if visible != candidates:
-                raise BenchmarkContractError("business cursor fingerprint mismatch")
-        except Exception as exc:
-            error = f"{type(exc).__name__}: {exc}"
+        paths = contract["dataset"]["business_paths"]
+        joined = paths["joined"]
+        joined_sample = await _id_first_chain_sample(
+            client,
+            name="joined",
+            scenario=scenarios[str(joined["scenario"])],
+            page_size=int(joined["page_size"]),
+        )
+        department = paths["department"]
+        department_sample = await _candidate_chain_sample(
+            client,
+            name="department",
+            scenario=scenarios[str(department["scenario"])],
+            n_db=int(department["n_db"]),
+            visible_total=int(department["visible_total"]),
+            selectivity=float(department["selectivity"]),
+            page_size=int(department["page_size"]),
+            batch_size=int(department["batch_size"]),
+        )
+        file_path = paths["file"]
+        file_sample = await _candidate_chain_sample(
+            client,
+            name="file",
+            scenario=scenarios[str(file_path["scenario"])],
+            n_db=int(file_path["n_db"]),
+            visible_total=int(file_path["visible_total"]),
+            selectivity=float(file_path["selectivity"]),
+            page_size=int(file_path["page_size"]),
+            batch_size=int(file_path["batch_size"]),
+        )
         if record:
-            samples.append(
-                RequestSample(
-                    operation="business_cursor",
-                    scenario=str(cursor_contract["scenario"]),
-                    elapsed_ms=(perf_counter() - started) * 1000,
-                    request_ids=tuple(request_ids),
-                    error=error,
-                    result_count=len(visible),
-                    result_checksum=checksum(visible),
-                )
-            )
+            samples.extend((joined_sample, department_sample, file_sample))
 
     for _ in range(warmup):
         await run_once(False)
@@ -648,11 +917,19 @@ def read_openfga_metrics(
             fields = _merged_log_fields(json.loads(line))
         except (json.JSONDecodeError, TypeError):
             continue
-        request_id = str(fields.get("request_id") or fields.get("request.id") or fields.get("x-request-id") or "")
+        request_id = str(
+            fields.get("request_id")
+            or fields.get("request.id")
+            or fields.get("x-request-id")
+            or ""
+        )
         if request_id not in request_ids:
             continue
         dispatch = _coerce_int(fields.get("dispatch_count"))
-        reads = _coerce_int(fields.get("datastore_query_count") or fields.get("datastore_read_count"))
+        reads = _coerce_int(
+            fields.get("datastore_query_count")
+            or fields.get("datastore_read_count")
+        )
         if dispatch is not None and reads is not None:
             metrics[request_id] = {
                 "dispatch_count": dispatch,
@@ -661,16 +938,9 @@ def read_openfga_metrics(
     return metrics
 
 
-def _sample_payload(sample: RequestSample) -> dict[str, Any]:
-    return {
-        "operation": sample.operation,
-        "scenario": sample.scenario,
-        "elapsed_ms": round(sample.elapsed_ms, 6),
-        "request_ids": list(sample.request_ids),
-        "error": sample.error,
-        "result_count": sample.result_count,
-        "result_checksum": sample.result_checksum,
-    }
+def _summary_or_none(values: Iterable[float]) -> dict[str, float | int] | None:
+    collected = tuple(values)
+    return summarize(collected) if collected else None
 
 
 def evaluate(
@@ -683,125 +953,140 @@ def evaluate(
         grouped[(sample.operation, sample.scenario)].append(sample)
     successful = [sample for sample in samples if sample.error is None]
     error_rate = 1 - (len(successful) / len(samples)) if samples else 1.0
-    baseline = contract["baseline"]
     limits = contract["limits"]
 
-    check_values = [sample.elapsed_ms for sample in successful if sample.operation == "check"]
-    check_summary = summarize(check_values)
-    old_check = summarize(baseline["check_ms"])
-    check_limit = max(
-        old_check["p95_ms"] * float(limits["check_p95_multiplier"]),
-        old_check["p95_ms"] + float(limits["check_p95_absolute_ms"]),
+    check = [sample for sample in successful if sample.operation == "check"]
+    check_summary = _summary_or_none(sample.elapsed_ms for sample in check)
+    check_passed = (
+        check_summary is not None
+        and
+        len(check) == len(contract["dataset"]["scenarios"])
+        * int(contract["run"]["iterations"])
+        and check_summary["p95_ms"] <= float(limits["check_p95_ms"])
     )
-    check_gate = check_summary["p95_ms"] <= check_limit and error_rate < float(limits["max_error_rate"])
 
     batch_report: dict[str, Any] = {}
-    batch_gate = True
     for size in BATCH_CHECK_SIZES:
-        values = [
-            sample.elapsed_ms
-            for sample in successful
-            if sample.operation == "batch_check" and sample.scenario == str(size)
-        ]
-        summary = summarize(values)
-        old = summarize(baseline["batch_check_ms"][str(size)])
-        limit = old["p95_ms"] * float(limits["batch_p95_multiplier"])
-        passed = summary["p95_ms"] <= limit
-        batch_gate = batch_gate and passed
-        batch_report[str(size)] = {
-            "new": summary,
-            "baseline": old,
-            "p95_limit_ms": round(limit, 6),
-            "passed": passed,
-        }
+        group = grouped[("batch_check", str(size))]
+        summary = _summary_or_none(
+            sample.elapsed_ms for sample in group if sample.error is None
+        )
+        passed = bool(group) and all(sample.error is None for sample in group)
+        passed = passed and summary is not None and summary["p95_ms"] <= float(
+            limits["batch_check_p95_ms"][str(size)]
+        )
+        batch_report[str(size)] = {"latency": summary, "passed": passed}
 
-    scenario_by_name = _scenario_map(contract)
-    list_report: dict[str, Any] = {}
-    list_gate = True
-    for name, scenario in scenario_by_name.items():
-        group = grouped[("list_objects", name)]
+    stream_report: dict[str, Any] = {}
+    for scenario in contract["dataset"]["scenarios"]:
+        name = str(scenario["name"])
+        group = grouped[("stream_list_objects", name)]
         valid = bool(group) and all(
             sample.error is None
-            and sample.result_count == int(scenario["result_count"])
+            and sample.stream_completed is True
+            and sample.result_count == int(scenario["visible_count"])
             and sample.result_checksum == scenario["expected_object_checksum"]
             for sample in group
         )
-        list_gate = list_gate and valid
-        list_report[name] = {
-            "latency": summarize(sample.elapsed_ms for sample in group if sample.error is None),
-            "expected_count": int(scenario["result_count"]),
-            "expected_checksum": scenario["expected_object_checksum"],
+        latency = _summary_or_none(
+            sample.elapsed_ms for sample in group if sample.error is None
+        )
+        limit = float(limits["stream_p95_ms"][str(scenario["visible_count"])])
+        passed = (
+            valid
+            and latency is not None
+            and latency["p95_ms"] <= limit
+        )
+        stream_report[name] = {
+            "resource_count": int(scenario["resource_count"]),
+            "visible_count": int(scenario["visible_count"]),
+            "source_kind": scenario["source_kind"],
+            "latency": latency,
+            "p95_limit_ms": limit,
+            "stream_completed": valid,
+            "passed": passed,
+        }
+
+    path_report: dict[str, Any] = {}
+    for name in ("joined", "department", "file"):
+        group = grouped[("business_path", name)]
+        valid = bool(group) and all(sample.error is None for sample in group)
+        path_report[name] = {
+            "strategy": group[0].strategy if group else None,
+            "latency": _summary_or_none(
+                sample.elapsed_ms for sample in group if sample.error is None
+            ),
+            "n_db": group[0].n_db if group else None,
+            "visible_total": group[0].visible_total if group else None,
+            "selectivity": group[0].selectivity if group else None,
+            "candidate_pass_rate": (
+                group[0].candidate_pass_rate if group else None
+            ),
+            "db_rows": _summary_or_none(
+                float(sample.db_rows or 0)
+                for sample in group
+                if sample.error is None
+            ),
+            "scan_amplification": _summary_or_none(
+                float(sample.scan_amplification or 0)
+                for sample in group
+                if sample.error is None
+            ),
             "passed": valid,
         }
 
-    cursor = [sample for sample in successful if sample.operation == "business_cursor"]
-    cursor_summary = summarize(sample.elapsed_ms for sample in cursor)
-    old_cursor = summarize(baseline["business_cursor_ms"])
-    cursor_limit = old_cursor["p95_ms"] * float(limits["business_cursor_p95_multiplier"])
-    cursor_contract = contract["dataset"]["profile"]["business_cursor"]
-    expected_cursor_objects = object_keys(scenario_by_name[str(cursor_contract["scenario"])])[
-        : int(cursor_contract["candidate_count"])
-    ]
-    cursor_gate = (
-        cursor_summary["p95_ms"] <= cursor_limit
-        and bool(cursor)
-        and all(
-            sample.result_count == len(expected_cursor_objects)
-            and sample.result_checksum == checksum(expected_cursor_objects)
-            for sample in cursor
-        )
-    )
-
-    request_ids = {request_id for sample in samples for request_id in sample.request_ids}
+    request_ids = {
+        request_id for sample in samples for request_id in sample.request_ids
+    }
     observed_ids = request_ids.intersection(metrics)
-    observability_gate = bool(request_ids) and observed_ids == request_ids
-    metric_report = {
+    observability_passed = bool(request_ids) and observed_ids == request_ids
+    observability = {
         "request_count": len(request_ids),
         "observed_request_count": len(observed_ids),
-        "dispatch": (summarize(metrics[item]["dispatch_count"] for item in observed_ids) if observed_ids else None),
-        "datastore_reads": (
-            summarize(metrics[item]["datastore_query_count"] for item in observed_ids) if observed_ids else None
+        "dispatch": _summary_or_none(
+            float(metrics[item]["dispatch_count"]) for item in observed_ids
         ),
-        "passed": observability_gate,
+        "datastore_reads": _summary_or_none(
+            float(metrics[item]["datastore_query_count"]) for item in observed_ids
+        ),
+        "passed": observability_passed,
     }
-    fixture_gate = bool(contract["dataset"]["production_derived"])
     performance_passed = all(
         (
-            check_gate,
-            batch_gate,
-            list_gate,
-            cursor_gate,
-            observability_gate,
+            check_passed,
+            all(item["passed"] for item in batch_report.values()),
+            all(item["passed"] for item in stream_report.values()),
+            all(item["passed"] for item in path_report.values()),
+            observability_passed,
             error_rate < float(limits["max_error_rate"]),
         )
+    )
+    distribution_accepted = bool(
+        contract["dataset"].get("production_derived")
+        or contract["dataset"].get("representative_distribution")
     )
     return {
         "contract_version": contract["contract_version"],
         "contract_checksum": contract["contract_checksum"],
-        "dataset_checksum": contract["dataset"]["dataset_checksum"],
         "authorization_model_checksum": contract["authorization_model_checksum"],
+        "dataset_checksum": contract["dataset"]["dataset_checksum"],
+        "source_checksum": contract["dataset"]["source_checksum"],
+        "visible_checksum": contract["dataset"]["visible_checksum"],
         "openfga_version": OPENFGA_VERSION,
         "dataset_source": contract["dataset"]["source"],
-        "production_derived": fixture_gate,
+        "production_derived": bool(contract["dataset"].get("production_derived")),
+        "representative_distribution": bool(
+            contract["dataset"].get("representative_distribution")
+        ),
         "error_rate": round(error_rate, 8),
-        "check": {
-            "new": check_summary,
-            "baseline": old_check,
-            "p95_limit_ms": round(check_limit, 6),
-            "passed": check_gate,
-        },
+        "check": {"latency": check_summary, "passed": check_passed},
         "batch_check": batch_report,
-        "list_objects": list_report,
-        "business_cursor": {
-            "new": cursor_summary,
-            "baseline": old_cursor,
-            "p95_limit_ms": round(cursor_limit, 6),
-            "passed": cursor_gate,
-        },
-        "openfga_observability": metric_report,
+        "streamed_list_objects": stream_report,
+        "business_paths": path_report,
+        "openfga_observability": observability,
         "performance_passed": performance_passed,
-        "release_ready": performance_passed and fixture_gate,
-        "samples": [_sample_payload(sample) for sample in samples],
+        "release_ready": performance_passed and distribution_accepted,
+        "samples": [asdict(sample) for sample in samples],
     }
 
 
@@ -821,7 +1106,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--apply",
         action="store_true",
         required=True,
-        help="Required acknowledgement for benchmark Store writes",
+        help="Required acknowledgement for writes to the dedicated benchmark Store",
     )
     run = subparsers.choices["run"]
     run.add_argument("--model-id", required=True)
@@ -832,7 +1117,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     run.add_argument(
         "--allow-synthetic",
         action="store_true",
-        help="Harness smoke only; report remains release_ready=false",
+        help="Allow the checksum-pinned representative synthetic fixture",
     )
     return parser.parse_args(argv)
 
@@ -854,15 +1139,22 @@ async def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         finally:
             await preparer.close()
 
-    if not contract["dataset"]["production_derived"] and not args.allow_synthetic:
+    if not contract["dataset"].get("production_derived") and not args.allow_synthetic:
         raise BenchmarkContractError(
-            "formal BENCH-01 requires a production-derived sanitized fixture; "
-            "use --allow-synthetic only to smoke-test the harness"
+            "this BENCH-01 fixture is synthetic; use --allow-synthetic only in a dedicated benchmark environment"
         )
     iterations = args.iterations or int(contract["run"]["iterations"])
-    warmup = args.warmup if args.warmup is not None else int(contract["run"]["warmup"])
+    warmup = (
+        args.warmup
+        if args.warmup is not None
+        else int(contract["run"]["warmup"])
+    )
     if iterations < 1 or warmup < 0:
-        raise BenchmarkContractError("iterations must be positive and warmup non-negative")
+        raise BenchmarkContractError(
+            "iterations must be positive and warmup non-negative"
+        )
+    runtime_contract = json.loads(json.dumps(contract))
+    runtime_contract["run"]["iterations"] = iterations
     client = InstrumentedOpenFGAClient(
         api_url=args.api_url,
         store_id=args.store_id,
@@ -872,22 +1164,26 @@ async def execute(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     try:
         samples = await run_workloads(
             client,
-            contract,
+            runtime_contract,
             iterations=iterations,
             warmup=warmup,
         )
     finally:
         await client.close()
-    request_ids = {request_id for sample in samples for request_id in sample.request_ids}
+    request_ids = {
+        request_id for sample in samples for request_id in sample.request_ids
+    }
     metrics = read_openfga_metrics(args.openfga_log, request_ids)
-    report = evaluate(contract, samples, metrics)
+    report = evaluate(runtime_contract, samples, metrics)
     if args.output:
         args.output.write_text(
             json.dumps(report, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-    passed = report["performance_passed"] and (report["release_ready"] or args.allow_synthetic)
-    return (EXIT_OK if passed else EXIT_GATE_FAILED), report
+    return (
+        EXIT_OK if report["release_ready"] else EXIT_GATE_FAILED,
+        report,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

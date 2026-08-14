@@ -123,9 +123,11 @@ that needs an OpenFGA projection.
    PYTHONPATH=./ .venv/bin/alembic heads
    ```
 
-   Both commands must identify `f048_migration_item_message_longtext` as the
-   head. This follow-up DDL widens the frozen source payload column before the
-   data script records large legacy Config values.
+   Both commands must identify `f048_visible_source_projection` as the head.
+   Its predecessor `f048_migration_item_message_longtext` widens the frozen
+   source payload column before the data script records large legacy Config
+   values; the head then creates the single-slot visible source projection
+   table required by migration and D4 verification.
 4. Do not proceed if Redis is unavailable, a ready F048 runtime heartbeat
    remains, dashboard tenant attribution is ambiguous, an unresolved failed
    tuple exists, or the source watermark changes between scans.
@@ -171,21 +173,23 @@ completed batch is idempotent.
 
 After migrate reports `VERIFYING`, leave the automatic migration gate in place
 and do not restart the processes yet. Do not query Store/model/Catalog tables
-for values to copy into configuration. Ensure
-`force_write_model=false`, `dual_model_mode=false`, and leave
-`legacy_model_id` empty, then run:
+for values to copy into configuration. The migration always reuses the durable
+Store, source model and target model pinned by the original run; operators
+cannot replace them with command-line parameters. Then run:
 
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
   verify --run-id <run-id>
 ```
 
-Verification independently rebuilds source and target checksums, requires exact
-target tuple counts, checks high-risk dashboard/download semantics, preserves
-allowed Store facts, requires the run target release to be the one referenced
-by the SQL CURRENT Catalog, and requires legacy tuple and blocker counts to be
-zero. The report still records the retained legacy Config count for audit, but
-that count does not block verification. Success moves the run to
+Verification independently rebuilds source and target checksums, requires one
+traceable visible contribution for every legal assignee, validates the
+deduplicated direct `visible` aggregate and complete streamed enumeration,
+checks high-risk dashboard/download semantics, preserves allowed Store facts,
+requires the run target release to be the one referenced by the SQL CURRENT
+Catalog, and requires unattributed visible tuples, legacy tuples and blockers
+to be zero. The report still records the retained legacy Config count for
+audit, but that count does not block verification. Success moves the run to
 `READY_TO_START`; restart API and Worker processes so they discover the new
 F048 model and automatically remove the migration gate.
 
@@ -197,8 +201,9 @@ Store name or missing Store/model still fails startup. A predecessor checksum
 keeps the process alive but not ready for the explicit migration; after the
 post-migration restart, any model/Catalog mismatch fails readiness.
 
-There is no preview, dry-run, cleanup, rollback, Store switch, dual-model
-window, or automatic startup migration. A failure keeps maintenance active and
+There is no preview, dry-run, cleanup, rollback, Store replacement,
+intermediate permission model, relation-slot switch, second migration, or
+automatic API/Celery startup migration. A failure keeps maintenance active and
 is repaired only by a forward fix against the same run and target model.
 
 Exit codes:

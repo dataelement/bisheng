@@ -83,7 +83,7 @@ async def _create_store(http: httpx.AsyncClient) -> str:
     return str(response.json()["id"])
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def openfga_runtime():
     metadata = _runtime_metadata()
     api_url = os.environ.get("F048_OPENFGA_API_URL", "http://127.0.0.1:8080")
@@ -227,6 +227,12 @@ async def test_same_store_single_new_model_and_model_checksum(
         }
     assert authorization_model_checksum(live_model) == authorization_model_checksum(build_authorization_model_f048())
 
+    serialized = json.dumps(live_model, sort_keys=True)
+    assert '"visible"' in serialized
+    assert "visible_a" not in serialized
+    assert "visible_b" not in serialized
+    assert "visible_switch" not in serialized
+
 
 async def test_real_check_batch_list_and_higher_consistency_semantics(
     openfga_runtime: OpenFGARuntime,
@@ -242,6 +248,35 @@ async def test_real_check_batch_list_and_higher_consistency_semantics(
     )
     tuples.extend(
         (
+            {
+                "user": "user:1",
+                "relation": "visible",
+                "object": "workflow:direct",
+            },
+            {
+                "user": "department:visible-engineering#member",
+                "relation": "visible",
+                "object": "workflow:department",
+            },
+            {
+                "user": "user_group:reviewers#member",
+                "relation": "visible",
+                "object": "workflow:group",
+            },
+            {
+                "user": "user:*",
+                "relation": "visible",
+                "object": "workflow:system",
+            },
+        )
+    )
+    tuples.extend(
+        (
+            {
+                "user": "user:1",
+                "relation": "member",
+                "object": "department:visible-engineering",
+            },
             {
                 "user": "user:2",
                 "relation": "member",
@@ -346,6 +381,37 @@ async def test_real_check_batch_list_and_higher_consistency_semantics(
         consistency="HIGHER_CONSISTENCY",
     ) == ["workflow:direct"]
 
+    expected_visible = {
+        "workflow:department",
+        "workflow:direct",
+        "workflow:system",
+    }
+    assert await client.check(
+        "user:1",
+        "visible",
+        "workflow:direct",
+        consistency="HIGHER_CONSISTENCY",
+    )
+    assert await client.batch_check(
+        [
+            {
+                "user": "user:1",
+                "relation": "visible",
+                "object": object_key,
+            }
+            for object_key in sorted(expected_visible | {"workflow:group"})
+        ],
+        consistency="HIGHER_CONSISTENCY",
+    ) == [True, True, False, True]
+    assert set(
+        await client.stream_list_objects(
+            "user:1",
+            "visible",
+            "workflow",
+            consistency="HIGHER_CONSISTENCY",
+        )
+    ) == expected_visible
+
 
 async def test_store_scoped_legacy_delete_with_new_model(
     openfga_runtime: OpenFGARuntime,
@@ -356,12 +422,16 @@ async def test_store_scoped_legacy_delete_with_new_model(
         "object": "workflow:legacy",
     }
     await openfga_runtime.old_client.write_tuples(writes=[legacy])
-    assert await openfga_runtime.old_client.read_tuples(
+    stored = await openfga_runtime.old_client.read_tuples(
         user=legacy["user"],
         relation=legacy["relation"],
         object=legacy["object"],
         consistency="HIGHER_CONSISTENCY",
-    ) == [legacy]
+    )
+    assert [
+        {key: row[key] for key in ("user", "relation", "object")}
+        for row in stored
+    ] == [legacy]
     await openfga_runtime.client.delete_tuples_store_scoped([legacy])
     assert (
         await openfga_runtime.old_client.read_tuples(

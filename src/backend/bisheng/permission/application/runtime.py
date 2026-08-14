@@ -36,7 +36,10 @@ from bisheng.permission.application.sql_runtime import (
     stable_grant_key,
 )
 from bisheng.permission.domain.models import ProjectionOperationStatus
-from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.schemas import (
+    VerifiedPermissionTarget,
+    VisibleObjectEnumerationResult,
+)
 from bisheng.permission.domain.services.grant_service import (
     CanonicalGrantChange,
     GrantCapability,
@@ -187,6 +190,21 @@ class F048PermissionRuntime:
             actor,
             resource_type=resource_type,
             action=action,
+            max_results=max_results,
+        )
+
+    async def list_visible_objects(
+        self,
+        actor: PermissionActor,
+        *,
+        resource_type: str,
+        max_results: int,
+    ) -> VisibleObjectEnumerationResult:
+        """Expose complete visible enumeration through the sole online facade."""
+
+        return await self._decision.list_visible_objects(
+            actor,
+            resource_type=resource_type,
             max_results=max_results,
         )
 
@@ -577,6 +595,7 @@ class F048PermissionRuntime:
             target=target,
             models=models,
         )
+        visible_sources = await self._state.load_visible_sources(target=target)
         system_authorized = self._system_authorized(actor, target)
         capabilities = () if system_authorized else await self._grant_capabilities(actor, target)
         return GrantMutationContext(
@@ -590,6 +609,7 @@ class F048PermissionRuntime:
             capabilities=capabilities,
             models=models,
             grants=grants,
+            existing_visible_sources=visible_sources,
         )
 
     async def grantable_models(

@@ -27,8 +27,10 @@ from .migration import (
 from .projection import (
     PermissionProjectionOperation,
     PermissionProjectionTuple,
+    PermissionVisibleSourceProjection,
     ProjectionOperationStatus,
     ProjectionTupleStatus,
+    VisibleSourceProjectionState,
 )
 
 __all__ = [
@@ -50,8 +52,10 @@ __all__ = [
     "PermissionModelAction",
     "PermissionProjectionOperation",
     "PermissionProjectionTuple",
+    "PermissionVisibleSourceProjection",
     "ProjectionOperationStatus",
     "ProjectionState",
     "ProjectionTupleStatus",
     "ResourcePermissionMode",
+    "VisibleSourceProjectionState",
 ]

@@ -82,6 +82,9 @@ TABLE_NAMES = (
     "permission_catalog_projection_tuple",
     "permission_projection_operation",
     "permission_projection_tuple",
+    "permission_migration_run",
+    "permission_migration_item",
+    "permission_visible_source_projection",
     "permission_grant",
     "permission_grant_assignee",
     "resource_permission_mode",
@@ -980,29 +983,35 @@ async def test_deactivate_and_delete_in_one_batch(
     assert "collaborator" not in {row.model_key for row in rows}
 
 
-async def test_an_active_model_alone_is_still_refused(
+async def test_active_model_can_be_deleted_when_reference_audit_is_zero(
     session_factory: SessionFactory,
 ) -> None:
-    """The guard itself stays: deleting a live model needs the deactivation."""
-
-    from bisheng.common.errcode.permission import PermissionModelStateConflictError
+    """Active controls future assignment, not whether a zero-ref model can delete."""
 
     fga = InMemoryCatalogFGA()
     marker = FakeCatalogMarker()
     current = await _seed_current(session_factory, fga)
     api = _api(session_factory, fga, marker)
 
-    with pytest.raises(PermissionModelStateConflictError):
-        await api.create_draft(
-            request=CatalogDraftRequest(
-                idempotency_key="delete-while-active",
-                base_release_id=int(current.id),
-                changes=(
-                    CatalogChangeRequest(
-                        type=CatalogChangeType.DELETE_MODEL,
-                        model_key="collaborator",
-                    ),
+    draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="delete-while-active",
+            base_release_id=int(current.id),
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.DELETE_MODEL,
+                    model_key="collaborator",
                 ),
             ),
-            operator_id=7,
+        ),
+        operator_id=7,
+    )
+    async with session_factory() as session:
+        rows = list(
+            (
+                await session.execute(
+                    select(PermissionModel).where(PermissionModel.catalog_release_id == draft["draft_id"])
+                )
+            ).scalars()
         )
+    assert "collaborator" not in {row.model_key for row in rows}

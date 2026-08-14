@@ -16,7 +16,6 @@ import re
 import subprocess
 from pathlib import Path
 
-
 _BISHENG = Path(__file__).resolve().parents[2] / "bisheng"
 
 
@@ -32,7 +31,7 @@ def _grep_count(pattern: str, *paths: str, extra_args: list[str] | None = None) 
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode == 1:  # 1 = no matches, normal
         return 0
-    lines = [l for l in proc.stdout.splitlines() if l.strip()]
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
     return len(lines)
 
 
@@ -110,7 +109,7 @@ def test_scan_visible_child_items_has_cursor_loop_invariants():
     body = m.group(0)
     assert "batch_cursor" in body
     assert "_compute_ext_rank_python" in body
-    assert re.search(r"len\(visible_page_items\)\s*>\s*page_size", body)
+    assert re.search(r"len\(visible_page_items\)\s*==\s*page_size", body)
     # The old OFFSET-style scan_page state is gone
     assert "scan_page" not in body
 

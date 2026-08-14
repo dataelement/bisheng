@@ -15,6 +15,7 @@ from bisheng.permission.domain.models import (
     PermissionMigrationRun,
     PermissionProjectionOperation,
     PermissionProjectionTuple,
+    PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
 
@@ -235,6 +236,87 @@ class PermissionProjectionRepositoryPort(PermissionRepositoryTransactionPort):
     @abstractmethod
     async def aget_operation_checksum(self, operation_id: int) -> str | None:
         """Return a checksum rebuilt from normalized tuple rows."""
+
+    @abstractmethod
+    async def aupsert_visible_source(
+        self,
+        source: PermissionVisibleSourceProjection,
+    ) -> PermissionVisibleSourceProjection:
+        """Persist one canonical visible contribution idempotently."""
+
+    @abstractmethod
+    async def aretire_visible_source(
+        self,
+        *,
+        projection_id: int,
+        expected_source_version: int,
+        operation_id: int | None,
+    ) -> bool:
+        """Retire one contribution without deleting its audit identity."""
+
+    @abstractmethod
+    async def acount_active_visible_sources(
+        self,
+        *,
+        resource_type: str,
+        resource_id: str,
+        visibility_class: str,
+        projected_subject: str,
+    ) -> int:
+        """Count active contributions to one flattened visible tuple."""
+
+    @abstractmethod
+    async def aget_visible_model_cursor(
+        self,
+        *,
+        model_key: str,
+        states: tuple[str, ...],
+        after_id: int,
+        limit: int,
+    ) -> tuple[list[PermissionVisibleSourceProjection], int | None]:
+        """Return the current tenant's model references in stable ID order."""
+
+    @abstractmethod
+    async def aget_visible_source_cursor(
+        self,
+        *,
+        source_kind: str,
+        source_owner_key: str,
+        states: tuple[str, ...],
+        after_id: int,
+        limit: int,
+    ) -> tuple[list[PermissionVisibleSourceProjection], int | None]:
+        """Return source-owner contributions in stable ID order."""
+
+    @abstractmethod
+    async def aget_visible_migration_cursor(
+        self,
+        *,
+        migration_item_id: int,
+        after_id: int,
+        limit: int,
+    ) -> tuple[list[PermissionVisibleSourceProjection], int | None]:
+        """Return contributions linked to one formal migration item."""
+
+    @abstractmethod
+    async def aget_visible_operation_sources(
+        self,
+        operation_id: int,
+    ) -> list[PermissionVisibleSourceProjection]:
+        """Return contributions frozen by one projection operation."""
+
+    @abstractmethod
+    async def aget_visible_operation_checksum(self, operation_id: int) -> str | None:
+        """Return the canonical source checksum for one operation."""
+
+    @abstractmethod
+    async def aget_visible_source_checksum(
+        self,
+        *,
+        states: tuple[str, ...],
+        model_key: str | None = None,
+    ) -> str | None:
+        """Return a tenant-scoped checksum for residual verification."""
 
 
 class PermissionMigrationRepositoryPort(PermissionRepositoryTransactionPort):

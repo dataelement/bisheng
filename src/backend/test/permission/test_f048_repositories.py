@@ -1,6 +1,7 @@
 """F048 repository idempotency, version, cursor, and tenant contracts.
 
-覆盖 AC: AC-19, AC-25, AC-27, AC-68, AC-93, AC-94, AC-143, AC-147
+覆盖 AC: AC-19, AC-25, AC-27, AC-68, AC-93, AC-94, AC-143, AC-147,
+AC-165, AC-166, AC-168, AC-169, AC-171
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from bisheng.permission.domain.models import (
     PermissionMigrationRun,
     PermissionProjectionOperation,
     PermissionProjectionTuple,
+    PermissionVisibleSourceProjection,
 )
 from bisheng.permission.domain.repositories.catalog_repository import CatalogRepository
 from bisheng.permission.domain.repositories.grant_repository import GrantRepository
@@ -54,6 +56,7 @@ F048_TABLE_NAMES = (
     "resource_permission_mode",
     "permission_migration_run",
     "permission_migration_item",
+    "permission_visible_source_projection",
 )
 
 
@@ -79,6 +82,7 @@ async def session_factory() -> AsyncIterator[SessionFactory]:
             "permission_projection_operation",
             "permission_projection_tuple",
             "permission_migration_item",
+            "permission_visible_source_projection",
         }
     )
     tenant_filter.register_tenant_filter_events()
@@ -331,6 +335,215 @@ async def test_projection_operation_idempotency_checksum_and_status_cas(
         target_status="COMMITTED",
     )
     assert await repository.aget_operation_checksum(stored.id) is not None
+
+
+def _visible_source(
+    *,
+    owner: str,
+    fingerprint_char: str,
+    model_key: str = "viewer",
+    operation_id: int | None = None,
+    migration_item_id: int | None = None,
+) -> PermissionVisibleSourceProjection:
+    return PermissionVisibleSourceProjection(
+        resource_type="knowledge_space",
+        resource_id="100",
+        visibility_class="ordinary",
+        projected_subject="user:7",
+        source_kind="GRANT_ASSIGNEE",
+        source_owner_key=owner,
+        source_locator=f"direct:user:{owner}",
+        source_fingerprint=fingerprint_char * 64,
+        contribution_fingerprint=fingerprint_char * 64,
+        model_key=model_key,
+        source_version=1,
+        tuple_fingerprint="f" * 64,
+        state="ACTIVE",
+        operation_id=operation_id,
+        migration_item_id=migration_item_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_visible_source_contribution_uniqueness_reference_count_and_retire(
+    session_factory: SessionFactory,
+) -> None:
+    repository = ProjectionRepository(session_factory)
+    first = await repository.aupsert_visible_source(
+        _visible_source(owner="grant_assignee:1", fingerprint_char="a")
+    )
+    duplicate = await repository.aupsert_visible_source(
+        _visible_source(owner="grant_assignee:1", fingerprint_char="a")
+    )
+    second = await repository.aupsert_visible_source(
+        _visible_source(owner="grant_assignee:2", fingerprint_char="b")
+    )
+
+    assert duplicate.id == first.id
+    assert second.id != first.id
+    assert await repository.acount_active_visible_sources(
+        resource_type="knowledge_space",
+        resource_id="100",
+        visibility_class="ordinary",
+        projected_subject="user:7",
+    ) == 2
+
+    checksum_before = await repository.aget_visible_source_checksum(states=("ACTIVE",))
+    assert checksum_before is not None
+    assert await repository.aretire_visible_source(
+        projection_id=first.id,
+        expected_source_version=1,
+        operation_id=None,
+    )
+    assert await repository.aretire_visible_source(
+        projection_id=first.id,
+        expected_source_version=1,
+        operation_id=None,
+    )
+    assert await repository.acount_active_visible_sources(
+        resource_type="knowledge_space",
+        resource_id="100",
+        visibility_class="ordinary",
+        projected_subject="user:7",
+    ) == 1
+    assert await repository.aget_visible_source_checksum(states=("ACTIVE",)) != checksum_before
+
+
+@pytest.mark.asyncio
+async def test_visible_source_model_owner_cursor_and_tenant_isolation(
+    session_factory: SessionFactory,
+) -> None:
+    repository = ProjectionRepository(session_factory)
+    first = await repository.aupsert_visible_source(
+        _visible_source(owner="grant_assignee:1", fingerprint_char="a", model_key="editor")
+    )
+    second = await repository.aupsert_visible_source(
+        _visible_source(owner="grant_assignee:2", fingerprint_char="b", model_key="editor")
+    )
+
+    model_page, model_cursor = await repository.aget_visible_model_cursor(
+        model_key="editor",
+        states=("ACTIVE",),
+        after_id=0,
+        limit=1,
+    )
+    assert [row.id for row in model_page] == [first.id]
+    assert model_cursor == first.id
+    owner_page, owner_cursor = await repository.aget_visible_source_cursor(
+        source_kind="GRANT_ASSIGNEE",
+        source_owner_key="grant_assignee:2",
+        states=("ACTIVE",),
+        after_id=0,
+        limit=10,
+    )
+    assert [row.id for row in owner_page] == [second.id]
+    assert owner_cursor is None
+
+    token = set_current_tenant_id(2)
+    try:
+        tenant_two = await repository.aupsert_visible_source(
+            _visible_source(owner="grant_assignee:3", fingerprint_char="c", model_key="editor")
+        )
+        tenant_two_page, _ = await repository.aget_visible_model_cursor(
+            model_key="editor",
+            states=("ACTIVE",),
+            after_id=0,
+            limit=10,
+        )
+        assert [row.id for row in tenant_two_page] == [tenant_two.id]
+        assert await repository.aget_visible_source_checksum(states=("ACTIVE",)) is not None
+    finally:
+        current_tenant_id.reset(token)
+
+    tenant_one_page, _ = await repository.aget_visible_model_cursor(
+        model_key="editor",
+        states=("ACTIVE",),
+        after_id=0,
+        limit=10,
+    )
+    assert [row.id for row in tenant_one_page] == [first.id, second.id]
+
+
+@pytest.mark.asyncio
+async def test_visible_source_operation_and_migration_item_traceability(
+    session_factory: SessionFactory,
+) -> None:
+    projection_repository = ProjectionRepository(session_factory)
+    migration_repository = MigrationRepository(session_factory)
+    operation = await projection_repository.acreate_operation(
+        PermissionProjectionOperation(
+            idempotency_key="visible-op",
+            request_checksum="a" * 64,
+            operation_type="VISIBLE_SOURCE_RECONCILE",
+            scope_type="RESOURCE",
+            scope_key="knowledge_space:100",
+            expected_version=1,
+            target_version=2,
+            store_id="store",
+            model_id="model",
+            before_checksum="b" * 64,
+            after_checksum="c" * 64,
+            operator_id=7,
+        ),
+        [],
+    )
+    run = await migration_repository.aget_or_create_run(
+        PermissionMigrationRun(
+            environment_fingerprint="d" * 64,
+            phase="D2",
+            store_id="store",
+            source_model_id="old",
+            target_model_id="new",
+        )
+    )
+    item = await migration_repository.aupsert_item(
+        PermissionMigrationItem(
+            run_id=run.id,
+            tenant_id=1,
+            source_kind="MODEL_MAPPING",
+            source_locator="mapping:model:viewer",
+            source_checksum="e" * 64,
+            status="MIGRATED",
+            severity="INFO",
+        )
+    )
+    stored = await projection_repository.aupsert_visible_source(
+        _visible_source(
+            owner="grant_assignee:4",
+            fingerprint_char="d",
+            operation_id=operation.id,
+            migration_item_id=item.id,
+        )
+    )
+
+    operation_rows = await projection_repository.aget_visible_operation_sources(operation.id)
+    assert [row.id for row in operation_rows] == [stored.id]
+    assert await projection_repository.aget_visible_operation_checksum(operation.id) is not None
+    migration_rows, cursor = await projection_repository.aget_visible_migration_cursor(
+        migration_item_id=item.id,
+        after_id=0,
+        limit=10,
+    )
+    assert [row.id for row in migration_rows] == [stored.id]
+    assert cursor is None
+
+
+def test_visible_source_schema_has_no_ab_slot() -> None:
+    table = SQLModel.metadata.tables["permission_visible_source_projection"]
+    assert "visibility_slot" not in table.c
+    unique_columns = {
+        tuple(column.name for column in constraint.columns)
+        for constraint in table.constraints
+        if isinstance(constraint, sa.UniqueConstraint)
+    }
+    assert (
+        "tenant_id",
+        "resource_type",
+        "resource_id",
+        "visibility_class",
+        "projected_subject",
+        "contribution_fingerprint",
+    ) in unique_columns
 
 
 @pytest.mark.asyncio

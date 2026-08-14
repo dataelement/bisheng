@@ -135,3 +135,61 @@ async def batch_check_business_actions(
                 if is_allowed:
                     result[resource_id].add(action)
     return {resource_id: frozenset(action_codes) for resource_id, action_codes in result.items()}
+
+
+async def batch_check_business_visible(
+    login_user: LoginPermissionIdentity,
+    *,
+    resource_type: str,
+    resource_ids: Iterable[str | int],
+) -> dict[str, bool]:
+    """Resolve bounded business candidates and check final visible without admin expansion."""
+
+    normalized_ids = tuple(dict.fromkeys(str(value) for value in resource_ids))
+    if not normalized_ids:
+        return {}
+
+    actor = await resolve_permission_actor(login_user)
+    registry = await get_f048_resource_registry()
+    resolved = await asyncio.gather(
+        *(
+            registry.resolve(
+                resource_type=resource_type,
+                resource_id=resource_id,
+                actor=actor,
+                action="visible",
+            )
+            for resource_id in normalized_ids
+        ),
+        return_exceptions=True,
+    )
+    result = dict.fromkeys(normalized_ids, False)
+    targets: list[VerifiedPermissionTarget] = []
+    target_ids: list[str] = []
+    for resource_id, resolution in zip(normalized_ids, resolved, strict=True):
+        if isinstance(
+            resolution,
+            (
+                InvalidCatalogActionError,
+                PermissionInvalidResourceError,
+                PermissionPublishNotReadyError,
+            ),
+        ):
+            continue
+        if isinstance(resolution, BaseException):
+            raise resolution
+        targets.append(resolution)
+        target_ids.append(resource_id)
+
+    runtime = await get_f048_runtime()
+    for offset in range(0, len(targets), _MAX_BATCH_CHECKS):
+        batch_targets = tuple(targets[offset : offset + _MAX_BATCH_CHECKS])
+        batch_ids = target_ids[offset : offset + _MAX_BATCH_CHECKS]
+        allowed = await runtime.batch_check_actions(
+            actor,
+            batch_targets,
+            "visible",
+        )
+        for resource_id, is_allowed in zip(batch_ids, allowed, strict=True):
+            result[resource_id] = bool(is_allowed)
+    return result

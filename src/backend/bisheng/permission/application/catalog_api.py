@@ -44,6 +44,7 @@ from bisheng.permission.domain.models import (
     PermissionModel,
     PermissionModelAction,
     PermissionProjectionOperation,
+    PermissionVisibleSourceProjection,
 )
 from bisheng.permission.domain.schemas import (
     CatalogChangeRequest,
@@ -68,11 +69,11 @@ from bisheng.permission.domain.services.catalog_service import (
 )
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
+    ModelReferenceSummary,
     PermissionModelImpact,
     PermissionModelRelease,
     derive_permission_models,
     effective_model_action_codes,
-    ensure_model_deletable,
 )
 
 SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
@@ -348,6 +349,81 @@ class SqlCatalogState:
                 )
             )
         return {key: tuple(sorted(values)) for key, values in references.items()}
+
+    async def model_reference_summaries(
+        self,
+        model_keys: tuple[str, ...],
+    ) -> dict[str, ModelReferenceSummary]:
+        """Build the fail-closed cross-tenant deletion audit for model keys."""
+
+        summaries = {model_key: ModelReferenceSummary() for model_key in model_keys}
+        if not summaries:
+            return summaries
+        with bypass_tenant_filter():
+            async with self._session_factory() as session:
+                grants = list(
+                    (
+                        await session.execute(
+                            select(PermissionGrant).where(
+                                col(PermissionGrant.model_key).in_(model_keys),
+                                PermissionGrant.state != "INACTIVE",
+                            )
+                        )
+                    ).scalars()
+                )
+                sources = list(
+                    (
+                        await session.execute(
+                            select(PermissionVisibleSourceProjection).where(
+                                col(PermissionVisibleSourceProjection.model_key).in_(model_keys),
+                                PermissionVisibleSourceProjection.state != "RETIRED",
+                            )
+                        )
+                    ).scalars()
+                )
+
+        grants_by_model: dict[str, list[PermissionGrant]] = {}
+        for grant in grants:
+            grants_by_model.setdefault(grant.model_key, []).append(grant)
+        sources_by_model: dict[str, list[PermissionVisibleSourceProjection]] = {}
+        for source in sources:
+            if source.model_key is not None:
+                sources_by_model.setdefault(source.model_key, []).append(source)
+
+        for model_key in model_keys:
+            model_grants = grants_by_model.get(model_key, ())
+            model_sources = sources_by_model.get(model_key, ())
+            residual_rows = sorted(
+                "\0".join(
+                    (
+                        source.contribution_fingerprint,
+                        source.tuple_fingerprint,
+                        source.state,
+                    )
+                )
+                for source in model_sources
+            )
+            summaries[model_key] = ModelReferenceSummary(
+                active_grant_count=sum(grant.state == "ACTIVE" for grant in model_grants),
+                pending_grant_count=sum(grant.state == "PENDING" for grant in model_grants),
+                failed_grant_count=sum(grant.state not in {"ACTIVE", "PENDING"} for grant in model_grants),
+                active_source_count=sum(source.state == "ACTIVE" for source in model_sources),
+                pending_source_count=sum(source.state == "PENDING" for source in model_sources),
+                failed_source_count=sum(source.state not in {"ACTIVE", "PENDING"} for source in model_sources),
+                live_tuple_count=len(
+                    {
+                        source.tuple_fingerprint
+                        for source in model_sources
+                        if source.state == "ACTIVE"
+                    }
+                ),
+                residual_checksum=(
+                    sha256("\n".join(residual_rows).encode()).hexdigest()
+                    if residual_rows
+                    else None
+                ),
+            )
+        return summaries
 
     async def prepare_publish(
         self,
@@ -1352,6 +1428,14 @@ class F048CatalogApi:
             request.changes,
             before,
         )
+        custom_keys = {model.model_key for model in customs}
+        deleted_model_keys = tuple(
+            sorted(
+                model.model_key
+                for model in before.model_release.models
+                if model.kind == "CUSTOM" and model.model_key not in custom_keys
+            )
+        )
         try:
             draft = await self._service.build_draft(
                 CatalogDraftBuildInput(
@@ -1365,6 +1449,9 @@ class F048CatalogApi:
                     custom_models=customs,
                     standard_allow_same_level=standard_policy,
                     grant_references=(await self._state.grant_references()),
+                    model_reference_summaries=(
+                        await self._state.model_reference_summaries(deleted_model_keys)
+                    ),
                     draft_owner_id=operator_id,
                     idempotency_key=request.idempotency_key,
                     expires_at=_utc_now_naive() + timedelta(minutes=10),
@@ -1572,29 +1659,6 @@ class F048CatalogApi:
                 )
             elif kind == CatalogChangeType.DELETE_MODEL:
                 model = self._custom_model(change.model_key, custom_by_key)
-                derived = next(item for item in before.model_release.models if item.model_key == model.model_key)
-                references = await self._state.grant_references()
-                reference_count = len(references.get(model.model_key, ()))
-                try:
-                    # Judge "is it disabled" on the state this batch publishes, not
-                    # on the base release. Reading the base meant a batch that
-                    # deactivates and then deletes was refused for being active,
-                    # forcing two separate publications to remove one model.
-                    ensure_model_deletable(
-                        replace(derived, active=model.active),
-                        reference_count=reference_count,
-                    )
-                except ValueError as exc:
-                    # 25004 covers several model-state conflicts, so its generic
-                    # copy cannot name the blocker. Say which one it is, and how
-                    # much is in the way, or the caller only learns "state does
-                    # not allow this".
-                    raise PermissionModelStateConflictError(
-                        exception=exc,
-                        msg=str(exc),
-                        reason="referenced_by_grants" if reference_count else "model_is_active",
-                        reference_count=reference_count,
-                    ) from exc
                 del custom_by_key[model.model_key]
             elif kind == CatalogChangeType.SET_ALLOW_SAME_LEVEL:
                 if change.allow_same_level is None or not change.model_key:

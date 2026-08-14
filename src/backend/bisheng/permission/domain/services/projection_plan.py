@@ -161,6 +161,25 @@ def normalize_projection_plan(plan: ProjectionPlan) -> ProjectionPlan:
     return replace(plan, deltas=deltas)
 
 
+def merge_projection_deltas(
+    *delta_groups: tuple[ProjectionTupleDelta, ...],
+) -> tuple[ProjectionTupleDelta, ...]:
+    """Merge action and visibility deltas into one deterministic operation."""
+
+    ordered = sorted(
+        (delta for group in delta_groups for delta in group),
+        key=lambda row: (
+            _PHASE_ORDER.get(row.phase.upper(), len(_PHASE_ORDER)),
+            row.user,
+            row.relation,
+            row.object,
+            row.action,
+            row.sequence,
+        ),
+    )
+    return tuple(replace(delta, sequence=index) for index, delta in enumerate(ordered))
+
+
 def projection_request_checksum(plan: ProjectionPlan) -> str:
     return _checksum(
         {

@@ -1,6 +1,7 @@
 """Durable F048 projection-ledger contracts.
 
-覆盖 AC: AC-16, AC-54, AC-66, AC-67, AC-68, AC-69, AC-70, AC-143
+覆盖 AC: AC-15, AC-16, AC-54, AC-66, AC-67, AC-68, AC-69, AC-70,
+AC-143, AC-164, AC-166, AC-167, AC-170
 """
 
 from __future__ import annotations
@@ -294,6 +295,45 @@ async def test_prepare_stage_recent_commit_verify_and_finalize_order() -> None:
     assert finalizer.calls == 1
     assert scope.fenced is False
     assert events.rows[-1][0] == "permission_projection"
+
+
+@pytest.mark.asyncio
+async def test_action_and_single_slot_visible_are_one_atomic_commit() -> None:
+    plan = _plan(
+        ProjectionTupleDelta(
+            phase="COMMIT",
+            sequence=0,
+            action="WRITE",
+            user="user:100",
+            relation="ordinary_assignee",
+            object="permission_grant:g-viewer",
+        ),
+        ProjectionTupleDelta(
+            phase="COMMIT",
+            sequence=1,
+            action="WRITE",
+            user="user:100",
+            relation="visible",
+            object="workflow:42",
+        ),
+    )
+    service, repository, marker, scope, fga, finalizer, _ = _service(plan)
+
+    outcome = await service.execute(plan)
+
+    assert outcome.status == ProjectionOperationStatus.FINALIZED
+    assert repository.operation.status == ProjectionOperationStatus.FINALIZED
+    assert marker.log == ["recent"]
+    assert scope.fenced is False
+    assert finalizer.calls == 1
+    assert len(fga.calls) == 1
+    writes, deletes = fga.calls[0]
+    assert deletes == ()
+    assert {row.relation for row in writes} == {
+        "ordinary_assignee",
+        "visible",
+    }
+    assert all("slot" not in row.relation and not row.relation.endswith(("_a", "_b")) for row in writes)
 
 
 @pytest.mark.asyncio

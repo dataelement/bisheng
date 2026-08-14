@@ -74,6 +74,52 @@ class PermissionModelImpact:
     checksum: str
 
 
+@dataclass(frozen=True, slots=True)
+class ModelReferenceSummary:
+    """Cross-tenant deletion gate for one stable model key."""
+
+    active_grant_count: int = 0
+    pending_grant_count: int = 0
+    failed_grant_count: int = 0
+    active_source_count: int = 0
+    pending_source_count: int = 0
+    failed_source_count: int = 0
+    live_tuple_count: int = 0
+    residual_checksum: str | None = None
+
+    def __post_init__(self) -> None:
+        counts = (
+            self.active_grant_count,
+            self.pending_grant_count,
+            self.failed_grant_count,
+            self.active_source_count,
+            self.pending_source_count,
+            self.failed_source_count,
+            self.live_tuple_count,
+        )
+        if any(count < 0 for count in counts):
+            raise ValueError("model reference counts must be non-negative")
+        if self.residual_checksum is not None and (
+            len(self.residual_checksum) != 64
+            or any(character not in "0123456789abcdef" for character in self.residual_checksum)
+        ):
+            raise ValueError("model residual checksum must be lowercase SHA-256")
+
+    @property
+    def reference_count(self) -> int:
+        return sum(
+            (
+                self.active_grant_count,
+                self.pending_grant_count,
+                self.failed_grant_count,
+                self.active_source_count,
+                self.pending_source_count,
+                self.failed_source_count,
+                self.live_tuple_count,
+            )
+        )
+
+
 def _checksum(payload: object) -> str:
     serialized = json.dumps(
         payload,
@@ -253,8 +299,6 @@ def effective_model_action_codes(
 ) -> tuple[str, ...]:
     """Intersect a model with active actions applicable to one resource."""
 
-    if not model.active:
-        return ()
     model_actions = set(model.action_codes)
     return tuple(
         action.code
@@ -264,6 +308,13 @@ def effective_model_action_codes(
         and action.level is not None
         and resource_type in action.resource_types
     )
+
+
+def ensure_model_assignable(model: DerivedPermissionModel) -> None:
+    """Reject inactive models only when selecting a target for ADD or MOVE."""
+
+    if not model.active:
+        raise ValueError(f"permission model {model.model_key} is inactive")
 
 
 def with_allow_same_level(
@@ -305,16 +356,14 @@ def validate_standard_model_update(
 def ensure_model_deletable(
     model: DerivedPermissionModel,
     *,
-    reference_count: int,
+    references: ModelReferenceSummary,
 ) -> None:
-    """Permit final deletion only for an inactive, unreferenced custom model."""
+    """Permit final deletion only after every durable/live reference is zero."""
 
     if model.kind == "STANDARD":
         raise ValueError("standard models cannot be deleted")
-    if model.active:
-        raise ValueError("custom model must be inactive before deletion")
-    if reference_count:
-        raise ValueError("custom model is still referenced by Grants")
+    if references.reference_count or references.residual_checksum is not None:
+        raise ValueError("custom model is still referenced by Grants, sources, or live tuples")
 
 
 def initialize_from_preset(

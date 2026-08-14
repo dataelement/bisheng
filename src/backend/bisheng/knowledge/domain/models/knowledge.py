@@ -707,6 +707,31 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
+    async def async_get_joined_spaces_by_visible_ids(
+        cls,
+        space_ids: list[int],
+        *,
+        tenant_id: int,
+        exclude_creator_id: int,
+        order_by: str = "update_time",
+    ) -> list[Knowledge]:
+        """Load one bounded joined-space ID chunk under canonical DB filters."""
+
+        if not space_ids:
+            return []
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(space_ids),
+            Knowledge.tenant_id == tenant_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.state == KnowledgeState.PUBLISHED.value,
+            Knowledge.user_id != exclude_creator_id,
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_public_spaces(cls, order_by: str = "update_time") -> list[Knowledge]:
         """Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square)"""
         statement = select(Knowledge).where(
@@ -884,8 +909,8 @@ class KnowledgeDao(KnowledgeBase):
     @staticmethod
     def _apply_space_order(statement, order_by: str):
         if order_by == "create_time":
-            return statement.order_by(Knowledge.create_time.desc())
+            return statement.order_by(Knowledge.create_time.desc(), Knowledge.id.desc())
         elif order_by == "name":
-            return statement.order_by(Knowledge.name.asc())
+            return statement.order_by(Knowledge.name.asc(), Knowledge.id.asc())
         else:
-            return statement.order_by(Knowledge.update_time.desc())
+            return statement.order_by(Knowledge.update_time.desc(), Knowledge.id.desc())

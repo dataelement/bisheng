@@ -6,7 +6,9 @@ All methods are async. Connection errors raise FGAConnectionError (AD-03 fail-cl
 
 from __future__ import annotations
 
+import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -164,6 +166,37 @@ class FGAClient:
             body["consistency"] = consistency
         data = await self._post(f"/stores/{self._store_id}/list-objects", body)
         return data.get("objects", [])
+
+    async def stream_list_objects(
+        self,
+        user: str,
+        relation: str,
+        type: str,
+        consistency: str | None = None,
+    ) -> tuple[str, ...]:
+        """Consume StreamedListObjects completely before returning any object."""
+
+        body = {
+            "user": user,
+            "relation": relation,
+            "type": type,
+            "authorization_model_id": self._model_id,
+        }
+        if consistency:
+            body["consistency"] = consistency
+        objects: list[str] = []
+        async for item in self._streamed_post(
+            f"/stores/{self._store_id}/streamed-list-objects",
+            body,
+        ):
+            # OpenFGA v1.15.1 wraps each NDJSON item in ``result``. Accept the
+            # unwrapped shape as well for compatible proxies and test doubles.
+            result = item.get("result", item)
+            object_key = result.get("object") if isinstance(result, dict) else None
+            if not isinstance(object_key, str) or not object_key:
+                raise FGAClientError("OpenFGA StreamedListObjects returned an invalid item")
+            objects.append(object_key)
+        return tuple(objects)
 
     # ── Tuple CRUD ───────────────────────────────────────────────
 
@@ -411,6 +444,40 @@ class FGAClient:
             detail = resp.text[:500]
             raise FGAClientError(f"OpenFGA {resp.status_code}: {detail}")
         return resp.json()
+
+    async def _streamed_post(
+        self,
+        path: str,
+        body: dict,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield validated NDJSON objects and fail if the stream is incomplete."""
+
+        try:
+            async with self._http.stream(
+                "POST",
+                path,
+                json=body,
+                headers={"Accept": "application/x-ndjson"},
+            ) as resp:
+                if resp.status_code >= 400:
+                    await resp.aread()
+                    raise FGAClientError(f"OpenFGA {resp.status_code}: {resp.text[:500]}")
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise FGAClientError("OpenFGA streamed an invalid NDJSON item") from exc
+                    if not isinstance(item, dict):
+                        raise FGAClientError("OpenFGA streamed a non-object NDJSON item")
+                    yield item
+        except FGAClientError:
+            raise
+        except (httpx.ConnectError, httpx.TimeoutException) as exc:
+            raise FGAConnectionError(f"OpenFGA stream incomplete: {exc}") from exc
+        except httpx.HTTPError as exc:
+            raise FGAClientError(f"OpenFGA stream HTTP error: {exc}") from exc
 
     def _post_sync(self, path: str, body: dict) -> dict:
         """POST JSON synchronously and return parsed response."""

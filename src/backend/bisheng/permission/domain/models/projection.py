@@ -40,6 +40,13 @@ class ProjectionTupleStatus(StrEnum):
     FAILED_CLOSED = "FAILED_CLOSED"
 
 
+class VisibleSourceProjectionState(StrEnum):
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    RETIRED = "RETIRED"
+    FAILED_CLOSED = "FAILED_CLOSED"
+
+
 class PermissionProjectionOperation(SQLModelSerializable, table=True):
     __tablename__ = "permission_projection_operation"
     __table_args__ = (
@@ -161,6 +168,120 @@ class PermissionProjectionTuple(SQLModelSerializable, table=True):
     status: str = Field(
         default=ProjectionTupleStatus.PENDING.value,
         sa_column=Column(String(64), nullable=False, server_default=text("'PENDING'")),
+    )
+    create_time: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime,
+            nullable=False,
+            server_default=text("CURRENT_TIMESTAMP"),
+        ),
+    )
+    update_time: datetime | None = Field(
+        default=None,
+        sa_column=Column(
+            DateTime,
+            nullable=False,
+            server_default=UPDATE_TIME_SERVER_DEFAULT,
+        ),
+    )
+
+
+class PermissionVisibleSourceProjection(SQLModelSerializable, table=True):
+    """Rebuildable source index for one flattened visible relation."""
+
+    __tablename__ = "permission_visible_source_projection"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "resource_type",
+            "resource_id",
+            "visibility_class",
+            "projected_subject",
+            "contribution_fingerprint",
+            name="uq_perm_visible_source_contribution",
+        ),
+        Index(
+            "ix_perm_visible_resource_subject",
+            "tenant_id",
+            "resource_type",
+            "resource_id",
+            "visibility_class",
+            "projected_subject",
+            "state",
+        ),
+        Index(
+            "ix_perm_visible_model_state",
+            "model_key",
+            "state",
+            "tenant_id",
+            "id",
+        ),
+        Index(
+            "ix_perm_visible_source_owner",
+            "tenant_id",
+            "source_kind",
+            "source_owner_key",
+            "state",
+            "id",
+        ),
+        Index(
+            "ix_perm_visible_operation",
+            "tenant_id",
+            "operation_id",
+            "state",
+            "id",
+        ),
+        Index(
+            "ix_perm_visible_migration_item",
+            "migration_item_id",
+            "state",
+            "id",
+        ),
+    )
+
+    id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
+    )
+    tenant_id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger, nullable=False, index=True),
+    )
+    resource_type: str = Field(sa_column=Column(String(64), nullable=False))
+    resource_id: str = Field(sa_column=Column(String(64), nullable=False))
+    visibility_class: str = Field(sa_column=Column(String(64), nullable=False))
+    projected_subject: str = Field(sa_column=Column(String(256), nullable=False))
+    source_kind: str = Field(sa_column=Column(String(64), nullable=False))
+    source_owner_key: str = Field(sa_column=Column(String(256), nullable=False))
+    source_locator: str = Field(sa_column=Column(String(256), nullable=False))
+    source_fingerprint: str = Field(sa_column=Column(CHAR(64), nullable=False))
+    contribution_fingerprint: str = Field(sa_column=Column(CHAR(64), nullable=False))
+    model_key: str | None = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
+    source_version: int = Field(sa_column=Column(BigInteger, nullable=False))
+    tuple_fingerprint: str = Field(sa_column=Column(CHAR(64), nullable=False))
+    state: str = Field(
+        default=VisibleSourceProjectionState.PENDING.value,
+        sa_column=Column(String(64), nullable=False, server_default=text("'PENDING'")),
+    )
+    operation_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger,
+            ForeignKey("permission_projection_operation.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
+    )
+    migration_item_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger,
+            ForeignKey("permission_migration_item.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
     )
     create_time: datetime | None = Field(
         default=None,

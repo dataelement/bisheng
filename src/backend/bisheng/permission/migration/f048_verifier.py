@@ -19,8 +19,6 @@ class InstancePinEvidence:
     store_id: str
     model_id: str
     catalog_release_id: int | None
-    dual_model_mode: bool
-    legacy_model_id: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +41,10 @@ class MigrationVerificationEvidence:
     model_checksum_matches: bool
     semantic_results: Mapping[str, bool]
     instance_pins: tuple[InstancePinEvidence, ...]
+    visible_source_checksum_matches: bool = True
+    visible_aggregate_checksum_matches: bool = True
+    unattributed_visible_count: int = 0
+    visible_stream_complete: bool = True
 
 
 class MigrationVerificationStorePort(Protocol):
@@ -90,8 +92,6 @@ def _pin_reasons(
             not pin.ready
             or pin.store_id != run.store_id
             or pin.model_id != run.target_model_id
-            or pin.dual_model_mode
-            or pin.legacy_model_id is not None
             for pin in pins
         )
     )
@@ -121,12 +121,19 @@ def _block_reasons(
         ("INVALID_OWNER_FACTS", evidence.invalid_owner_count),
         ("FAILED_TUPLES_REMAIN", evidence.failed_tuple_count),
         ("LEGACY_TUPLES_REMAIN", evidence.legacy_tuple_count),
+        ("UNATTRIBUTED_VISIBLE_TUPLES", evidence.unattributed_visible_count),
     )
     reasons.extend(reason for reason, count in count_gates if count)
     if not evidence.preserved_tuple_checksum_matches:
         reasons.append("PRESERVED_TUPLE_CHECKSUM_MISMATCH")
     if not evidence.model_checksum_matches:
         reasons.append("MODEL_CHECKSUM_MISMATCH")
+    if not evidence.visible_source_checksum_matches:
+        reasons.append("VISIBLE_SOURCE_CHECKSUM_MISMATCH")
+    if not evidence.visible_aggregate_checksum_matches:
+        reasons.append("VISIBLE_AGGREGATE_CHECKSUM_MISMATCH")
+    if not evidence.visible_stream_complete:
+        reasons.append("VISIBLE_STREAM_INCOMPLETE")
     reasons.extend(
         f"SEMANTIC_CHECK_FAILED:{name}" for name, passed in sorted(evidence.semantic_results.items()) if not passed
     )

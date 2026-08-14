@@ -7,6 +7,33 @@
 > 数据前缀：`e2e-f048-permission-`
 > 安全要求：禁止连接生产；禁止删除此前缀之外的任何数据。
 
+## 0. 2026-08-13 可见性增量必验矩阵
+
+以下场景是本次单槽 `visible` 增量的发布门禁，不能被后文旧 F048 通用清单替代：
+
+- [ ] 创建五个由他人创建的知识空间，分别通过 direct user、department userset、
+  user-group userset、主动订阅迁移来源和 system/shared Owner 来源授权同一普通用户；
+  `GET /knowledge/space/joined` 返回五个空间且不依赖 `space_channel_member` 行或成员角色。
+- [ ] 同一用户创建的空间即使存在 `visible` 也不出现在 joined；平台超管和租户管理员使用
+  相同账号来源集合时结果与普通用户一致，不因管理员身份扩展到全部空间。
+- [ ] 为同一知识空间制造 direct + department + group 多来源；逐个撤销时，前两个撤销不删除
+  聚合 `visible`，最后一个来源撤销后 Check、BatchCheck 和完整枚举才同时变为不可见。
+- [ ] 停用仍被引用的自定义模型：已有成员的 visible、具体 action 和
+  `manage_permission` 不变；ADD/MOVE 目标不再包含该模型，Platform/Client 既有行仍展示并可
+  MOVE/REMOVE。删除不要求先停用，但引用或 projection/live residual 非零时返回 25004。
+- [ ] 部门空间列表先查询部门绑定得到有限候选空间 ID，只执行一次分块 BatchCheck；不先枚举
+  全平台知识空间，也不重复逐项 visible 校验，响应不返回 `manage_permission` 或部门元数据。
+- [ ] 文件列表按业务排序跨至少三批取候选并 BatchCheck；首批可见项不足时继续扫描，填满页面
+  后 cursor 指向最后消费候选，下一页无重复/遗漏；父空间可见不能替代子项最终 visible。
+- [ ] 为一个用户准备 5,001 个知识空间 visible 结果，joined 返回明确容量错误，不返回 200
+  截断集合；4,000 个结果触发 80% capacity 告警指标。
+- [ ] 在 StreamedListObjects 输出部分结果后断开连接，joined 整体失败且
+  `stream_completed=false`；停止 OpenFGA 后 Check/BatchCheck/list 均不从 SQL、旧 binding、
+  creator 或管理员身份回退产生 ALLOW。
+- [ ] 校验 `permission_visibility_projection` 与 `permission_visible_list` 指标包含 source/tuple/
+  checksum/stale/orphan、strategy/candidate/visible/scanned/amplification/capacity 和各阶段耗时，
+  且不包含姓名、资源名、Config 原文或 token。
+
 ## 1. 环境与账号
 
 - [ ] API、Platform、Client、Worker、Linsight Worker 使用同一构建版本。

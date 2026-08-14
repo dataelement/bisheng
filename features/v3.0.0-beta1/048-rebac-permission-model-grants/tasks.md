@@ -11,10 +11,10 @@
 
 | 步骤 | 状态 | 备注 |
 |---|---|---|
-| spec.md | ✅ 本次迭代已进入 Design | 原 Spec 已确认；用户于 2026-08-13 指示按新增可见性需求更新 Design |
-| design.md | 🔲 本次迭代待用户确认 | 单槽浅层 visible、停用保留已有授权、删除前清零绑定及旧系统单次迁移口径已完成 24 项复审，结果 LGTM；尚未取得本次 Design ★ |
-| tasks.md | ⏸ 待 Design ★ 后更新 | 原 140 项已完成；本次可见性增量任务尚未拆解 |
-| 实现 | ⏸ 本次迭代未开始 | 原 F048 功能与迁移脚本已完成；不得把 BENCH-01 原型当作本次生产实现 |
+| spec.md | ✅ 已评审 | 原 Spec 已确认；新增可见性与停用/删除语义已经回写 |
+| design.md | ✅ 已评审 | 24 项复审 LGTM；用户于 2026-08-13 明确确认 Design ★ |
+| tasks.md | ✅ 已拆解 | T144～T190 已按单槽 visible、迁移和列表入口拆解；21 项 tasks 评审 LGTM |
+| 实现 | ⏳ 环境验证中 | T144～T188 已实现并完成定向回归；T189 真实 MySQL/DM8、业务 API/UI、故障注入与迁移窗口验证待执行，T190 待其闭环 |
 
 ---
 
@@ -37,8 +37,10 @@
 - 本计划不使用“测试降级”；需要 OpenFGA、MySQL、DM8 的测试标为中央集成环境执行，但仍保留
   自动化断言，不把本 Feature 范围内验证延迟到未来。
 - T001～T143 记录的是本次可见性增量前的已完成实现基线，其中关于 inactive fail closed、
-  深层 visible 等描述不代表本次目标语义；待 Design ★ 确认后，必须新增任务成对修改测试与
-  实现，不能把历史任务的完成标记当作单槽 visible/停用保留授权已经实现的证据。
+  深层 visible 等描述不代表本次目标语义；T144～T190 是经本次 Design ★ 确认后的唯一增量
+  实施计划，不能把历史任务的完成标记当作单槽 visible/停用保留授权已经实现的证据。
+- 本增量不新增 Worker/Celery 调用入口；既有 Worker 若经共享 Permission facade 使用新模型，
+  继续由 `before_task_publish` header 传 `tenant_id`、`task_prerun` 恢复 ContextVar，禁止默认租户。
 
 ### 跨 Feature 与共享文件影响
 
@@ -47,7 +49,7 @@
 | F004/F006/F007/F008 | F048 直接替代旧资源四档、Config 模型与成员 UI；T126～T134 必须证明旧路径对已迁移资源不可达 |
 | F017 shared resource | T063/T064 只保留精确 ID 跨 tenant 只读业务加载，不把 shared relation 改成普通 Grant |
 | F018 owner transfer | 按 OQ-07 与 INV-25，T049/T050 删除交接 API；其他 owner 仍作为 ordinary source 并存 |
-| F027/F036/F040 列表性能 | 原任务的“统一候选优先”结论已被本次 Design 取代；每个入口按代表性数据选择可见 ID 优先或业务候选优先，待 Design ★ 后新增任务 |
+| F027/F036/F040 列表性能 | 原任务的“统一候选优先”结论已被本次 Design 取代；T160～T172 按代表性数据分别验证可见 ID 优先与业务候选优先，不恢复 fetch-all |
 | `core/openfga/client.py` / `discovery.py` / `manager.py` | T017～T020 是共享运行时变更；llm_server/llm_model 只保留显式 legacy allowlist，其他资源禁止 dual；latest 只用于启动发现并必须匹配 SQL CURRENT Catalog |
 | Constitution C4 | T027/T028 将 F048 原子路径切到 durable projection ledger；旧单 tuple 路径的 `failed_tuple` 不被误删 |
 
@@ -1168,6 +1170,433 @@
 
 ---
 
+## Wave 9 — 单槽 visible 基础设施与权限核心
+
+### 基础设施
+
+- [x] **T144：补齐可见枚举错误码与领域 schema**
+  - **文件**：`src/backend/bisheng/common/errcode/permission.py`,
+    `src/backend/bisheng/permission/domain/schemas/f048.py`
+  - **逻辑**：登记 `25014 PermissionEnumerationIncomplete`；定义内部完整枚举请求/结果、
+    `max_results`、正常结束状态和 source projection DTO。不得把部分结果包装成成功响应，
+    不新增公开 ListObjects HTTP API。
+  - **依赖**：T001, T002
+
+- [x] **T145：建立单槽 visible source projection 表与 DDL**
+  - **文件**：`src/backend/bisheng/permission/domain/models/projection.py`,
+    `src/backend/bisheng/core/database/alembic/versions/v3_0_0_f048_visible_source_projection.py`
+  - **逻辑**：新增 `permission_visible_source_projection`，字段和唯一键严格按 Design §4.5.2，
+    不含 `visibility_slot`；索引支持 resource/subject 聚合、model 引用清理和 migration item
+    对账。revision 只做 MySQL/DM8 可移植 DDL；正式数据迁移开始后不提供应用级 downgrade，
+    revision downgrade 只允许在尚未创建 data migration run 时按 child→table 删除新结构。
+  - **依赖**：T003, T005, T008
+
+### 后端 Domain（Test-First）
+
+- [x] **T146：source projection Repository 合同测试**
+  - **文件**：`src/backend/test/permission/test_f048_repositories.py`
+  - **测试**：验证单槽 contribution 唯一性、同 subject 多来源引用计数、model/source cursor、
+    operation/migration item 关联、tenant 自动过滤、残留 checksum 和幂等 retire；禁止
+    `visibility_slot` 字段与跨租户聚合。
+  - **覆盖 AC**：AC-165, AC-166, AC-168, AC-169, AC-171
+  - **依赖**：T145
+
+- [x] **T147：实现 source projection Repository**
+  - **文件**：`src/backend/bisheng/permission/domain/repositories/projection_repository.py`
+  - **逻辑**：提供 contribution upsert/retire、resource-subject active count、model 引用/残留
+    cursor、operation checksum 和 migration batch API；只读写 permission 控制面表，不产生 ALLOW。
+  - **验收**：T146 全部通过
+  - **依赖**：T146
+
+- [x] **T148：单槽 Authorization Model 语义测试**
+  - **文件**：`src/backend/test/permission/test_f048_authorization_model.py`
+  - **测试**：用真实 model JSON 证明 resource `visible` 只经过单槽 ordinary/protected/system/
+    parent+mode，不存在 A/B/switch；inactive 模型的既有 Grant 继续 visible/具体 action/
+    `manage_permission`，但模型缺失或已删除 fail closed；管理员身份不扩大个人 visible。
+  - **覆盖 AC**：AC-15, AC-27, AC-28, AC-159, AC-161, AC-163, AC-164
+  - **依赖**：T144
+
+- [x] **T149：实现单槽 Authorization Model builder**
+  - **文件**：`src/backend/bisheng/core/openfga/authorization_model_f048.py`
+  - **逻辑**：删除 model active 对既有 Grant 的运行时交集和深层 visible 反向枚举；保留 Catalog
+    published/action 图，新增 ordinary/protected 浅层 visible relation，system/parent/mode 语义
+    不变；不得引入 `permission_visibility_switch` 或 `visible_a/visible_b`。
+  - **验收**：T148 全部通过且 model checksum 更新
+  - **依赖**：T148
+
+- [x] **T150：模型停用与删除零引用门禁测试**
+  - **文件**：`src/backend/test/permission/test_f048_model_policy.py`,
+    `src/backend/test/permission/test_f048_catalog_service.py`
+  - **测试**：覆盖 inactive 禁止 ADD/MOVE target、既有 Grant 和 manage 能力保持、停用不产生
+    visible delta、删除不要求先停用、任一 active/pending/failed Grant 或 source/live 残留均
+    阻断删除；零引用时新 Catalog 移除 model_key，RETIRED 历史快照保留。
+  - **覆盖 AC**：AC-15, AC-17, AC-27, AC-164, AC-165, AC-167
+  - **依赖**：T147, T149
+
+- [x] **T151：实现模型可分配状态与删除协议**
+  - **文件**：`src/backend/bisheng/permission/domain/services/model_policy.py`,
+    `src/backend/bisheng/permission/domain/services/catalog_service.py`
+  - **逻辑**：把 `active` 收窄为 Grant command 的 target 可分配校验；impact 仍覆盖 inactive
+    模型定义变化对既有 Grant 的 action 影响。`DELETE_MODEL` 在跨 tenant 引用和残留 checksum
+    为零后，通过新 Catalog 不再包含 model_key 生效，不物理改写历史 release。
+  - **验收**：T150 全部通过
+  - **依赖**：T150
+
+- [x] **T152：VisibilityProjectionCompiler 来源聚合测试**
+  - **文件**：`src/backend/test/permission/test_f048_visibility_projection.py`
+  - **测试**：覆盖 direct/department/subtree/group/protected、多模型、多来源、visibility-only
+    模型和 inactive 既有 binding；同 resource/relation/subject 只写一个 live tuple，撤销一个来源
+    保留其他来源，最后来源才删除；system 来源不写入 Grant source projection。
+  - **覆盖 AC**：AC-159, AC-164, AC-165, AC-166, AC-168, AC-169, AC-171
+  - **依赖**：T147, T149
+
+- [x] **T153：实现 VisibilityProjectionCompiler**
+  - **文件**：`src/backend/bisheng/permission/domain/services/visibility_projection_service.py`,
+    `src/backend/bisheng/permission/domain/services/projection_plan.py`
+  - **逻辑**：从 canonical Grant assignee 编译单槽 contribution、引用计数与 aggregate tuple delta；
+    contribution fingerprint 包含 source owner/model，聚合 key 不含 model/slot。编译器为纯授权投影，
+    不查询业务表、不展开部门/用户组成员、不参与读取 fallback。
+  - **验收**：T152 全部通过
+  - **依赖**：T152
+
+- [x] **T154：Grant mutation 与单槽投影原子性测试**
+  - **文件**：`src/backend/test/permission/test_f048_grant_sources.py`,
+    `src/backend/test/permission/test_f048_projection_service.py`
+  - **测试**：覆盖 ADD/MOVE/REMOVE 的 action+visible 同 operation 提交、inactive target 拒绝、
+    inactive source 允许精确撤销、跨来源最后引用、50/51 change 和 90/91 tuple 边界、marker
+    预置失败与 COMMIT_UNKNOWN；不得双写 A/B。
+  - **覆盖 AC**：AC-15, AC-164, AC-166, AC-167, AC-170
+  - **依赖**：T151, T153
+
+- [x] **T155：接入 Grant mutation 单槽投影**
+  - **文件**：`src/backend/bisheng/permission/domain/services/grant_service.py`,
+    `src/backend/bisheng/permission/domain/services/projection_service.py`
+  - **逻辑**：在同一 SQL prepare 冻结 assignee 与 contribution after-state，预置 recent marker，
+    一个 OpenFGA Write 提交 action 和单槽 visible delta，higher-consistency 校验后 finalize；
+    编译后超过 90 整体拒绝，不跨批报告部分成功。
+  - **验收**：T154 全部通过
+  - **依赖**：T154
+
+- [x] **T156：完整 visible 枚举 facade 测试**
+  - **文件**：`src/backend/test/permission/test_f048_fga_client.py`,
+    `src/backend/test/permission/test_f048_permission_service.py`
+  - **测试**：覆盖 StreamedListObjects 正常结束、去重、deadline/取消/服务错误、容量
+    5,000/5,001、tenant fence、recent marker consistency 和管理员无扩权；单资源 Check、
+    BatchCheck 与完整枚举集合 checksum 相同，SQL/source projection 不补 ALLOW。
+  - **覆盖 AC**：AC-160, AC-161, AC-162, AC-163, AC-168, AC-169, AC-170, AC-171
+  - **依赖**：T149, T155
+
+- [x] **T157：实现 StreamedListObjects 与 list_visible_objects**
+  - **文件**：`src/backend/bisheng/core/openfga/client.py`,
+    `src/backend/bisheng/permission/domain/services/permission_action_service.py`
+  - **逻辑**：client 完整消费 stream 并显式 model pin/consistency；permission facade 只在正常
+    结束且未超过调用方 `max_results` 时一次性交付不可变去重 ID 集。visible 路径只做 tenant
+    fence，不执行 super_admin/tenant_admin shortcut，不返回部分前缀。
+  - **验收**：T156 全部通过
+  - **依赖**：T156
+
+- [x] **T158：单槽残留对账与恢复测试**
+  - **文件**：`src/backend/test/permission/test_f048_visibility_reconcile.py`
+  - **测试**：构造缺失、重复、无来源和 source/live checksum 混合集；证明只修复差异来源，
+    不删除其他贡献；删除模型在 reconcile 完成前持续返回 25004，FAILED_CLOSED 不被脚本猜测放行。
+  - **覆盖 AC**：AC-165, AC-167, AC-168, AC-170, AC-171
+  - **依赖**：T153, T155
+
+- [x] **T159：实现 visible source reconcile**
+  - **文件**：`src/backend/bisheng/permission/domain/services/visibility_projection_service.py`,
+    `src/backend/scripts/reconcile_f048_projection_operations.py`
+  - **逻辑**：从 canonical contribution 重算 aggregate checksum，默认 dry-run；`--apply` 只通过
+    领域 reconcile operation 补差异。Store/model/scope fence、ledger 或来源不完整时保持
+    FAILED_CLOSED，脚本不得直接 UPDATE operation 状态或绕过 PermissionService 写 tuple。
+  - **验收**：T158 全部通过
+  - **依赖**：T158
+
+---
+
+## Wave 10 — BENCH 门禁与知识空间列表接入
+
+### 性能门禁（先于业务入口）
+
+- [x] **T160：扩展 BENCH-01 性能合同测试**
+  - **文件**：`src/backend/test/permission/test_f048_performance_contract.py`
+  - **测试**：固定 10k/100k 资源、visible 10/100/1,000/5,000、direct/department/group/system/
+    多来源数据 checksum；比较单槽 ListObjects、20/50/100 BatchCheck 和业务 candidate scan，
+    断言 stream 完整、无 A/B relation、结果不静默截断，并记录 `N_db/V/p` 与扫描放大。
+  - **覆盖 AC**：AC-160, AC-161, AC-162, AC-163, AC-168, AC-175, AC-176
+  - **依赖**：T157
+
+- [x] **T161：实现 BENCH-01 v1.15.1 数据集与脚本**
+  - **文件**：`src/backend/scripts/benchmark_f048_permission_paths.py`,
+    `src/backend/test/permission/fixtures/f048_bench_contract.synthetic.json`
+  - **逻辑**：输出 model/dataset/source/visible checksum、P50/P95/P99、dispatch/datastore reads、
+    DB rows 和 scan amplification；支持单槽 Check/BatchCheck/StreamedListObjects 及 joined/
+    department/file 两条完整链路，不连接生产、不充当迁移 dry-run。
+  - **验收**：T160 全部通过
+  - **依赖**：T160
+
+- [x] **T162：执行 pinned v1.15.1 BENCH-01 发布门禁**
+  - **文件**：`features/v3.0.0-beta1/048-rebac-permission-model-grants/bench-01-flat-visible-report-20260813.md`
+  - **验证**：在镜像 digest 固定的 v1.15.1 环境运行 T161；记录完整 DSL、并发与代表性分布。
+    完整枚举 P95 按 Design §7.2 的 50/100/300/1,000ms 门槛，集合 checksum 必须等于 canonical
+    oracle；joined 只有门禁通过才允许接入 ID-first。报告保留 v1.14.2/A-B 数据为历史对照，
+    不把合成结果冒充生产分布。
+  - **覆盖 AC**：AC-160, AC-161, AC-162, AC-163, AC-168, AC-175, AC-176
+  - **依赖**：T149, T157, T161
+
+### 已完成的轻量列表基线
+
+- [x] **T163：mine 轻量列表回归测试**
+  - **文件**：`src/backend/test/knowledge/test_space_listing_pin_source.py`
+  - **测试**：证明 mine 仍按 DB order+用户 pin 分组，且响应不再包含/计算根目录 `file_num`
+    或部门装饰字段；已于提交 `e14d64f73` 通过。
+  - **覆盖 AC**：AC-31, AC-175, AC-176
+  - **依赖**：T140
+
+- [x] **T164：实现 mine 轻量列表响应**
+  - **文件**：`src/backend/bisheng/knowledge/domain/schemas/knowledge_space_schema.py`,
+    `src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`
+  - **逻辑**：`KnowledgeSpaceListItemResp` 只保留基础空间与 pin/follow/subscription/role；
+    `_format_member_spaces` 不调用根文件计数和部门元数据装饰。已提交 `e14d64f73`。
+  - **验收**：T163 全部通过
+  - **依赖**：T163
+
+- [x] **T165：department 候选优先与轻量响应测试**
+  - **文件**：`src/backend/test/department/test_department_knowledge_space_service.py`
+  - **测试**：从部门绑定空间候选执行一次 visible BatchCheck，仅把可见 ID 交给轻量 DB formatter；
+    不读取 `space_channel_member`、不重复 visible、不补 manage/file count/部门元数据。已于提交
+    `e14d64f73` 通过。
+  - **覆盖 AC**：AC-161, AC-175, AC-176
+  - **依赖**：T140
+
+- [x] **T166：实现 department 后端轻量列表**
+  - **文件**：`src/backend/bisheng/knowledge/domain/services/department_knowledge_space_service.py`
+  - **逻辑**：binding candidates→单次 bounded visible BatchCheck→`_format_basic_spaces`；只返回
+    业务基础字段与 pin 状态。已提交 `e14d64f73`。
+  - **验收**：T165 全部通过
+  - **依赖**：T165
+
+### 前端 Client（Test-First）
+
+- [x] **T167：Client department spaceKind 映射测试**
+  - **文件**：`src/frontend/client/src/api/knowledge.test.ts`
+  - **测试**：department API 不再返回部门元数据时，Client 根据调用入口稳定映射
+    `spaceKind="department"`；mine/joined 仍为 normal，不依赖后端 `space_kind` 默认值。
+  - **覆盖 AC**：AC-161, AC-175, AC-176
+  - **依赖**：T166
+
+- [x] **T168：复核 Client department spaceKind 映射实现**
+  - **文件**：`src/frontend/client/src/api/knowledge.ts`
+  - **逻辑**：`getDepartmentSpacesApi` 在 `mapSpace` 后补稳定 `spaceKind="department"`；代码已在
+    `e14d64f73` 预置，本任务以 T167、单文件 ESLint 和 Client strict typecheck 全通过为完成条件。
+  - **验收**：T167 全部通过
+  - **依赖**：T167
+
+### 后端业务列表（Test-First）
+
+- [x] **T169：joined 可见 ID 优先合同测试**
+  - **文件**：`src/backend/test/knowledge/test_space_joined_visible_ids.py`
+  - **测试**：direct/department/group/manual subscription/其他合法来源全部由完整 visible ID
+    集进入候选；排除 canonical 本人创建、应用 tenant/status/type/order 过滤；不读 membership/
+    role、不重复 Check、不返回 manage/file count/部门元数据。普通用户、超管、租管采用相同
+    个人 visible 来源；stream 失败或 5,001 明确返回 25014。
+  - **覆盖 AC**：AC-159, AC-160, AC-161, AC-162, AC-163, AC-168, AC-169, AC-170, AC-171, AC-172
+  - **依赖**：T162
+
+- [x] **T170：实现 joined 可见 ID 优先链路**
+  - **文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`
+  - **逻辑**：`list_visible_objects("knowledge_space", max_results=5000)`→DB 500-ID 分块详情查询→
+    canonical creator 排除与稳定 `order_by` 归并；删除 `_scan_space_action_ids("visible")`、
+    membership/role candidate 和 `_format_accessible_spaces` 的重复 visible。主动订阅只有已投影
+    为 canonical Grant/source 时生效。
+  - **验收**：T169 全部通过
+  - **依赖**：T169
+
+- [x] **T171：文件/文件夹候选优先稳定游标测试**
+  - **文件**：`src/backend/test/knowledge/test_file_visible_candidate_pagination.py`
+  - **测试**：高继承/高可见率、少量 CUSTOM deny、首批不足一页、跨多批填页、候选耗尽、
+    排序同值和 cursor 重试；每批只做 bounded BatchCheck，父空间 ALLOW 不能替代子资源最终
+    visible，页间不重复/漏项并记录 scan amplification。
+  - **覆盖 AC**：AC-161, AC-173, AC-174, AC-175, AC-176
+  - **依赖**：T162
+
+- [x] **T172：实现文件/文件夹候选优先续取**
+  - **文件**：`src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`,
+    `src/backend/bisheng/knowledge/domain/models/knowledge_file.py`
+  - **逻辑**：业务 Repository 以稳定 `(sort_key,id)` cursor 有界取候选，Service 对每批构造
+    verified target 并 `batch_check_visible`；不足 page_size 继续扫描，next cursor 基于最后扫描
+    候选而非最后可见项。不得先枚举全部可见子资源或把继承概率当 ALLOW。
+  - **验收**：T171 全部通过
+  - **依赖**：T171
+
+---
+
+## Wave 11 — 旧系统单次迁移与 D4 门禁
+
+### 后端 scripts / Migration（Test-First）
+
+- [x] **T173：旧来源到单槽 contribution 迁移测试**
+  - **文件**：`src/backend/test/permission/test_f048_tuple_mapper.py`,
+    `src/backend/test/permission/test_f048_migration_coordinator.py`
+  - **测试**：旧四档 tuple+唯一 binding→canonical Grant/assignee→一条 contribution；显式
+    inactive 模型的既有合法 binding 继续迁移，orphan binding 不复活，direct+membership
+    同授权去重但保留追溯；system/public/shared 不写 Grant projection；不得生成 switch/A-B。
+  - **覆盖 AC**：AC-159, AC-164, AC-166, AC-168, AC-169, AC-177
+  - **依赖**：T153, T162
+
+- [x] **T174：实现迁移 target 单槽编译**
+  - **文件**：`src/backend/bisheng/permission/migration/f048_tuple_mapper.py`,
+    `src/backend/bisheng/permission/migration/f048_coordinator.py`
+  - **逻辑**：在原唯一 PermissionMigrationRun 中复用 VisibilityProjectionCompiler，从旧 Config/
+    tuple/Owner facts 直接生成最终 Grant/assignee/source/aggregate tuple；每批≤90、持久化 source
+    与 target checksum 后才退休 legacy，不发布中间深层-visible model。
+  - **验收**：T173 全部通过
+  - **依赖**：T173
+
+- [x] **T175：D4 单槽完整性与删除门禁测试**
+  - **文件**：`src/backend/test/permission/test_f048_migration_verifier.py`,
+    `src/backend/test/permission/test_f048_migration_runtime.py`
+  - **测试**：验证每个合法 assignee 一条 contribution、source/aggregate checksum、无来源 tuple=0、
+    inactive binding 保持、orphan=0、单资源/BatchCheck/streamed list oracle 一致；任一 residual
+    或不完整 stream 阻断 READY_TO_START/模型删除，resume 只前向修复。
+  - **覆盖 AC**：AC-161, AC-165, AC-167, AC-168, AC-170, AC-171, AC-177
+  - **依赖**：T174
+
+- [x] **T176：实现 D4 单槽 verifier**
+  - **文件**：`src/backend/bisheng/permission/migration/f048_verifier.py`,
+    `src/backend/bisheng/permission/migration/f048_runtime_verification.py`
+  - **逻辑**：移除 A/B/switch gate，新增单槽 contribution/aggregate/live checksum、模型引用残留、
+    streamed visible 完整性和 canonical oracle；source item 继续按 `(source_kind,source_locator)`
+    在应用层排序，preserved tuple 继续排除计划退休项。
+  - **验收**：T175 全部通过
+  - **依赖**：T175
+
+- [x] **T177：数据迁移 CLI 单 run 合同测试**
+  - **文件**：`src/backend/test/permission/test_f048_migration_cli.py`
+  - **测试**：`migrate --apply` 和 `verify --run-id` 只复用原 run/checkpoint；拒绝 second migration、
+    中间 F048 model、A/B 参数、Store 替换和 startup/Celery 调用；resume 固定 durable Store/model。
+  - **覆盖 AC**：AC-167, AC-170, AC-177
+  - **依赖**：T176
+
+- [x] **T178：更新正式迁移入口与 runbook**
+  - **文件**：`src/backend/scripts/migrate_f048_permission_data.py`,
+    `src/backend/scripts/README.md`
+  - **逻辑**：CLI 调用 T174/T176 的单槽 migration/verifier；runbook 写明 D0 停流、DDL-only
+    Alembic、同 Store 单 model、单 run checkpoint、失败保持维护与前向修复，删除 A/B/switch
+    命令和二次迁移说明。不得保存凭据或把 `--apply` 描述成 dry-run。
+  - **验收**：T177 全部通过
+  - **依赖**：T177
+
+---
+
+## Wave 12 — Platform / Client 模型生命周期交互
+
+### 前端 Platform（Vitest Test-First）
+
+- [x] **T179：Platform 模型停用/删除交互测试**
+  - **文件**：`src/frontend/platform/src/test/f048ModelEditor.test.tsx`
+  - **测试**：停用提示为“不能再用它授权，已有授权不受影响”；有引用或 residual 的 delete
+    显示 25004 指引且不暗示停用即撤权；零引用后才能确认 DELETE_MODEL draft，历史影响数可见。
+  - **覆盖 AC**：AC-15, AC-17, AC-164, AC-165, AC-167
+  - **依赖**：T151
+
+- [x] **T180：实现 Platform ModelEditor 生命周期语义**
+  - **文件**：`src/frontend/platform/src/pages/SystemPage/components/permission/ModelEditor.tsx`
+  - **逻辑**：active switch 只控制可分配性；删除对话框展示引用/残留 blocker 和先撤销或替换
+    绑定的操作指引。复用现有 i18n key 和 request wrapper，不引入新状态库或硬编码中文。
+  - **验收**：T179、Platform 单文件 lint/typecheck 通过
+  - **依赖**：T179
+
+- [x] **T181：Platform GrantTab inactive 行测试**
+  - **文件**：`src/frontend/platform/src/test/f048PermissionGrantTab.test.tsx`
+  - **测试**：inactive 模型不出现在 ADD/MOVE target，但既有行仍展示原模型和权限，可 MOVE
+    到 active 模型或 REMOVE；包含 manage_permission 的 inactive 来源仍允许管理，不由 UI 隐藏。
+  - **覆盖 AC**：AC-15, AC-164, AC-166
+  - **依赖**：T151
+
+- [x] **T182：实现 Platform GrantTab inactive 展示**
+  - **文件**：`src/frontend/platform/src/components/bs-comp/permission/PermissionGrantTab.tsx`
+  - **逻辑**：target options 过滤 inactive，现有 assignee row 不过滤；保留 editable/protected/
+    source 服务端字段，MOVE/REMOVE 精确使用 assignee version，不在前端重算权限。
+  - **验收**：T181、Platform 单文件 lint/typecheck 通过
+  - **依赖**：T181
+
+### 前端 Client（Jest Test-First）
+
+- [x] **T183：Client GrantTab inactive 行测试**
+  - **文件**：`src/frontend/client/src/components/permission/PermissionGrantTab.test.tsx`
+  - **测试**：与 Platform 同合同：新增/变更目标不含 inactive，既有 inactive 行及其来源/动作
+    保持展示并可精确 MOVE/REMOVE，protected 行仍锁定，403 不在组件分支处理。
+  - **覆盖 AC**：AC-15, AC-164, AC-166
+  - **依赖**：T151
+
+- [x] **T184：实现 Client GrantTab inactive 展示**
+  - **文件**：`src/frontend/client/src/components/permission/PermissionGrantTab.tsx`
+  - **逻辑**：使用 Client request wrapper/react-query v4 与本地状态；按服务端 target/row 字段
+    分别过滤和展示，不新增 Recoil，不硬编码中文，不增加 403 业务分支。
+  - **验收**：T183、Client 单文件 lint/strict typecheck 通过
+  - **依赖**：T183
+
+---
+
+## Wave 13 — 集成、可观测、E2E 与文档收口
+
+### 后端集成与可观测（Test-First）
+
+- [x] **T185：真实 OpenFGA v1.15.1 单槽集成测试**
+  - **文件**：`src/backend/test/permission/test_f048_openfga_integration.py`
+  - **测试**：在固定 digest 验证单槽 model tests、direct/department/group/system、多来源、
+    inactive 既有授权保持、具体 action 不展平、Check/BatchCheck/StreamedListObjects 同集合、
+    higher consistency、atomic Write 与 max resolve depth；模型中不得存在 A/B/switch relation。
+  - **覆盖 AC**：AC-15, AC-28, AC-159, AC-161, AC-163, AC-164, AC-166, AC-170, AC-171
+  - **依赖**：T157, T159, T162
+
+- [x] **T186：MySQL/DM8 单槽 schema 与迁移集成测试**
+  - **文件**：`src/backend/test/permission/test_f048_database_integration.py`
+  - **测试**：在 disposable MySQL/DM8 验证新表/索引/唯一键、tenant filter、cursor/checkpoint、
+    single contribution、resume 与 D4 checksum；Alembic 只做 DDL且单 head，正式脚本不由启动调用。
+  - **覆盖 AC**：AC-165, AC-167, AC-168, AC-169, AC-171, AC-177
+  - **依赖**：T145, T178
+
+- [x] **T187：visible 投影与列表可观测测试**
+  - **文件**：`src/backend/test/permission/test_f048_visibility_observability.py`
+  - **测试**：断言 projection source/unique tuple/reconcile/checksum/stale/orphan 指标，以及列表
+    strategy/candidate/visible/scanned/amplification/stream_completed/capacity/DB-FGA-total 耗时；日志
+    不含姓名、资源名、Config 原文或 token，达到容量/放大/无来源阈值告警。
+  - **覆盖 AC**：AC-167, AC-168, AC-171, AC-175, AC-176
+  - **依赖**：T159, T170, T172
+
+- [x] **T188：实现 visible 投影与列表可观测**
+  - **文件**：`src/backend/bisheng/permission/domain/services/visibility_projection_service.py`,
+    `src/backend/bisheng/permission/domain/services/permission_action_service.py`
+  - **逻辑**：按 Design §7.3 写结构化 metric-log 与审计 ID/checksum；无来源 tuple、删除残留、
+    stream incomplete、joined 容量 80% 和 candidate scan amplification 超阈值告警，不记录 PII。
+  - **验收**：T187 全部通过
+  - **依赖**：T187
+
+### E2E 与文档
+
+- [ ] **T189：执行 F048 可见性增量 E2E**
+  - **文件**：`features/v3.0.0-beta1/048-rebac-permission-model-grants/e2e-checklist.md`,
+    `features/v3.0.0-beta1/048-rebac-permission-model-grants/e2e-test-report.md`
+  - **验证**：使用 `/e2e-test` 生成/执行 API E2E 与页面手工清单；覆盖模型停用保持/新增拒绝、
+    删除零引用门禁、多来源最后撤销、joined 五类来源+本人创建排除+管理员无扩权、department
+    单次 BatchCheck、file 跨批填页、5,001 容量错误、OpenFGA 故障无 SQL fallback，以及
+    Platform/Client inactive 行一致。运行 backend focused suite、arch-guard、frontend lint/
+    typecheck/check-i18n；无法执行的真实环境项必须明确记录，不能写成通过。
+  - **覆盖 AC**：AC-15, AC-17, AC-27, AC-28, AC-159, AC-160, AC-161, AC-162, AC-163, AC-164, AC-165, AC-166, AC-167, AC-168, AC-169, AC-170, AC-171, AC-172, AC-173, AC-174, AC-175, AC-176, AC-177
+  - **依赖**：T168, T170, T172, T178, T180, T182, T184, T185, T186, T188
+
+- [ ] **T190：回写权限架构现状与增量偏差**
+  - **文件**：`docs/architecture/10-permission-rbac.md`,
+    `features/v3.0.0-beta1/048-rebac-permission-model-grants/tasks.md`
+  - **逻辑**：实现完成后把单槽 shallow visible、source projection、inactive 可分配语义、删除
+    零引用协议、完整 streamed 枚举、数据驱动列表路径和旧系统单 run 迁移写为当前事实；记录
+    实际偏差与验证证据，不保留 A/B/深层 visible 为运行时说明，不修改 Constitution C1～C7。
+  - **验收**：T189 报告无未关闭 blocker，`git diff --check` 与文档本地链接检查通过
+  - **依赖**：T189
+
+---
+
 ## 实际偏差记录
 
 > 只记录一句话指针；设计原因和反直觉事实回写 [design.md](./design.md)。
@@ -1200,3 +1629,7 @@
 - 116 的 D4 verify 进一步发现 MySQL collation 顺序与 Python 冻结顺序不同，以及 preserved
   核对仍包含计划删除的 stale/canonical-false tuple；T143 只修正取证算法，不修改已经完成的
   target tuple 写入和 legacy tuple 退休结果。
+- T185 在 116 的真实 OpenFGA v1.15.1 集成中发现 StreamedListObjects NDJSON 使用
+  `{"result":{"object":"..."}}` 包络；client 增加该官方运行时形态并保留未包络代理兼容，
+  单槽集合语义不变。T189 当前为 PARTIAL：真实 MySQL/DM8、业务 API/UI、故障注入、5,001
+  容量和 D0～D6 尚无环境证据，因此 T189/T190 不标完成。

@@ -334,6 +334,81 @@ async def test_formal_migration_uses_same_store_batches_and_delete_after_verify(
     assert store.items
 
 
+async def test_formal_migration_compiles_one_single_slot_visible_aggregate() -> None:
+    writer = FakeTargetWriter()
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(_snapshot()),
+        run_store=FakeRunStore(),
+        model_publisher=FakeModelPublisher(),
+        target_writer=writer,
+    )
+
+    await coordinator.migrate(
+        expected_store_id="store-live",
+        lock_token="operator-1",
+    )
+
+    visible = [
+        row
+        for row in writer.written_tuples
+        if row == {
+            "user": "user:11",
+            "relation": "visible",
+            "object": "workflow:wf-1",
+        }
+    ]
+    assert len(visible) == 1
+    assert all(
+        "slot" not in row["relation"].casefold()
+        and "switch" not in row["relation"].casefold()
+        and row["relation"] not in {"visiblea", "visibleb"}
+        for row in writer.written_tuples
+    )
+
+
+async def test_inactive_custom_binding_keeps_existing_visible_contribution() -> None:
+    base = _snapshot()
+    snapshot = replace(
+        base,
+        config_sources=(
+            LegacyConfigSource(
+                key="permission_relation_models_v1",
+                row_version="2",
+                raw_value=(
+                    '[{"id":"custom-inactive","name":"legacy",'
+                    '"permissions":["edit"],"active":false}]'
+                ),
+            ),
+            LegacyConfigSource(
+                key="permission_relation_model_bindings_v1",
+                row_version="2",
+                raw_value=(
+                    '[{"binding_key":"binding-inactive","tenant_id":7,'
+                    '"resource_type":"workflow","resource_id":"wf-1",'
+                    '"relation":"editor","model_id":"custom-inactive",'
+                    '"subject_type":"user","subject_id":"22"}]'
+                ),
+            ),
+        ),
+        tuples=(*base.tuples, LegacyTupleSource(tenant_id=7, user="user:22", relation="editor", object="workflow:wf-1")),
+    )
+    writer = FakeTargetWriter()
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(snapshot),
+        run_store=FakeRunStore(frozen_snapshot=snapshot),
+        model_publisher=FakeModelPublisher(),
+        target_writer=writer,
+    )
+
+    await coordinator.migrate(expected_store_id="store-live", lock_token="operator-1")
+
+    assert {
+        "user": "user:22",
+        "relation": "visible",
+        "object": "workflow:wf-1",
+    } in writer.written_tuples
+
+
 async def test_formal_migration_writes_department_child_mirror() -> None:
     base = _snapshot()
     snapshot = replace(
