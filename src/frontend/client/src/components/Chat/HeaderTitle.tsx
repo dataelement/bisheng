@@ -1,7 +1,7 @@
 import { Outlined } from 'bisheng-icons';
 import { useLocation } from 'react-router-dom';
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
-import { cn } from '~/utils';
+import { cn, displayConversationTitle } from '~/utils';
 import ShareChat from '../Share/ShareChat';
 
 const types = {
@@ -26,10 +26,7 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
   const isNarrowViewport = usePrefersMobileLayout();
   const isAppChatRoute = pathname.includes('/app/');
   const isAppChatCompact = useMediaQuery('(max-width: 1023px)');
-  const normalizedTitle =
-    conversation?.title != null && String(conversation.title).trim() !== ''
-      ? String(conversation.title).trim()
-      : localize('com_ui_new_chat');
+  const normalizedTitle = displayConversationTitle(conversation?.title, localize('com_ui_new_chat'));
   // Title + share are merged into MobileNav on H5；应用内对话在 768–1023 同样走合并顶栏，避免与 AppRoot 悬浮钮重复一行。
   if (isNarrowViewport || (isAppChatRoute && isAppChatCompact)) {
     return null;

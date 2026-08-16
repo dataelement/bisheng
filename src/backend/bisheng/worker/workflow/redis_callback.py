@@ -646,9 +646,12 @@ class RedisCallback(BaseCallback):
     def generate_session_title(self, answer: str):
         if not self.new_session:
             return
-        if self.new_session.name:
+        # Re-entrancy guard. Previously implemented by stuffing "New Chat" into the
+        # in-memory name; an explicit flag keeps the placeholder string out entirely
+        # (stored placeholders are empty — the client localizes them).
+        if self.new_session.name or getattr(self, "_session_title_generated", False):
             return
-        self.new_session.name = "New Chat"
+        self._session_title_generated = True
 
         question = ""
         input_message = ChatMessageDao.get_messages_by_chat_id(self.chat_id, [WorkflowEventType.UserInput.value], 1)

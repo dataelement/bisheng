@@ -15,7 +15,7 @@ import { useLocalize, usePrefersMobileLayout, useNavigateToConvo } from "~/hooks
 import { useToastContext } from "~/Providers";
 import store from "~/store";
 import { conversationTaskRunningState } from "~/store/linsight";
-import { cn } from "~/utils";
+import { cn, displayConversationTitle, isPlaceholderConversationTitle } from "~/utils";
 import { ConvoOptions } from "./ConvoOptions";
 
 type KeyEvent = KeyboardEvent<HTMLInputElement>;
@@ -89,7 +89,8 @@ export default function Conversation({
 
   const renameHandler = useCallback(() => {
     setIsPopoverActive(false);
-    setTitleInput(title);
+    // Placeholder titles are UI copy, not the stored name — start from empty.
+    setTitleInput(isPlaceholderConversationTitle(title) ? "" : title);
     setRenaming(true);
   }, [title]);
 
@@ -232,7 +233,7 @@ export default function Conversation({
           className={cn(
             "flex grow cursor-pointer items-center gap-[8px] overflow-hidden whitespace-nowrap break-all"
           )}
-          title={title ?? ""}
+          title={displayConversationTitle(title, localize("com_ui_new_chat"))}
         >
           {/* <EndpointIcon
             conversation={conversation}
@@ -245,7 +246,9 @@ export default function Conversation({
             onDoubleClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setTitleInput(title);
+              // Renaming a placeholder-titled conversation starts from an empty
+              // input — the placeholder is UI copy, not the stored name.
+              setTitleInput(isPlaceholderConversationTitle(title) ? "" : title);
               setRenaming(true);
             }}
             alt={conversation?.flowType}
@@ -253,7 +256,7 @@ export default function Conversation({
             {/* F035: conversation list no longer distinguishes daily vs task
                 mode — the leading icon is removed for both (unified list). */}
             <span className="text-[#1A1A1A] text-[14px] leading-[20px] font-normal truncate">
-              {title}
+              {displayConversationTitle(title, localize("com_ui_new_chat"))}
             </span>
           </div>
         </a>

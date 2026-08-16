@@ -195,7 +195,7 @@ class LinsightWorkbenchImpl:
                 # session type, so flow_type=LINSIGHT(20) is no longer minted here.
                 message_session = MessageSession(
                     chat_id=chat_id,
-                    name="New Chat",
+                    name="",  # placeholder title is rendered client-side via i18n, never stored
                     flow_type=FlowType.WORKSTATION.value,
                     user_id=login_user.user_id,
                 )
@@ -667,7 +667,9 @@ class LinsightWorkbenchImpl:
     # Chat titles live in message_session.name (VARCHAR(255)); a reasoning model
     # can emit far more than a title (a whole <think> block), so clamp the length.
     _TITLE_MAX_CHARS = 50
-    _FALLBACK_TITLE = "New Chat"
+    # Empty = "no usable title": stored as-is and localized as the placeholder by
+    # the client (stored "New Chat" strings are legacy data).
+    _FALLBACK_TITLE = ""
 
     @classmethod
     def _normalize_title(cls, content: Any, question: str) -> str:

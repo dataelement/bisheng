@@ -62,7 +62,6 @@ export default function MobileNav({
   const queryClient = useQueryClient();
   const { newConversation } = useNewConvo();
   const conversation = useRecoilValue(store.conversationByIndex(0));
-  const { title = 'New Chat' } = conversation || {};
   const chatMobileHeader = useRecoilValue(store.chatMobileHeaderState);
   const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
   /** H5: 标题下拉(对话列表)展开状态 */

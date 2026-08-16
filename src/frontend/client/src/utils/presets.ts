@@ -1,4 +1,5 @@
 import type { TPreset, TPlugin } from '~/types/chat';
+import { isPlaceholderConversationTitle } from './conversationTitle';
 import { EModelEndpoint } from '~/types/chat';
 
 type TEndpoints = Array<string | EModelEndpoint>;
@@ -37,7 +38,7 @@ export const getPresetTitle = (preset: TPreset, mention?: boolean) => {
   ) {
     title = label + ': ';
     label = '';
-  } else if (presetTitle != null && presetTitle && presetTitle.trim() !== 'New Chat') {
+  } else if (presetTitle != null && !isPlaceholderConversationTitle(presetTitle)) {
     title = presetTitle + ': ';
   }
 

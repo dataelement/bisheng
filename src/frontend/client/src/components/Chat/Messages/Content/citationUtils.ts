@@ -1,5 +1,6 @@
 import type { ChatCitation } from '~/api/chatApi';
 import { getFilePathApi } from '~/api/chat/data-service';
+import { PLACEHOLDER_CONVERSATION_TITLE_RE } from '~/utils/conversationTitle';
 
 export type CitationDisplayData = {
   label: number;
@@ -265,7 +266,7 @@ export function getCitationDocumentName(detail?: ChatCitation | null) {
     .map((item) => String(item || '').trim())
     .filter(Boolean)
     // Avoid using chat-session titles as document names.
-    .filter((item) => !/^(new chat|新对话)$/i.test(item));
+    .filter((item) => !PLACEHOLDER_CONVERSATION_TITLE_RE.test(item.trim()));
 
   return normalized[0] || '文档预览';
 }

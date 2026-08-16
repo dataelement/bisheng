@@ -97,7 +97,7 @@ async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
         await MessageSessionDao.async_insert_one(
             MessageSession(
                 chat_id=conversation_id,
-                name="New Chat",
+                name="",  # placeholder title is rendered client-side via i18n, never stored
                 flow_type=FlowType.WORKSTATION.value,
                 user_id=login_user.user_id,
             )
@@ -1181,7 +1181,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
         await MessageSessionDao.async_insert_one(
             MessageSession(
                 chat_id=conversation_id,
-                name="New Chat",
+                name="",  # placeholder title is rendered client-side via i18n, never stored
                 flow_type=FlowType.WORKSTATION.value,
                 user_id=login_user.user_id,
             )

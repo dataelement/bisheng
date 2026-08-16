@@ -5,7 +5,7 @@ import { NotificationSeverity } from '~/common';
 import type { AppConversation, AppItem, ConversationGroup } from '~/@types/app';
 import { getAppConversationsApi, getAssistantDetailApi, getFlowApi } from '~/api/apps';
 import { groupConversationsByTime, getAppShareUrl } from '~/pages/apps/appUtils';
-import { copyText, generateUUID } from '~/utils';
+import { copyText, displayConversationTitle, generateUUID } from '~/utils';
 import { useToastContext } from '~/Providers';
 import {
   appConversationsState,
@@ -53,7 +53,7 @@ export function useAppSidebar() {
       const list: AppConversation[] = (res.data?.list || []).map((item: any) => {
         return {
           id: item.chat_id,
-          title: item.name || item.flow_name || '新对话',
+          title: displayConversationTitle(item.name || item.flow_name, localize('com_ui_new_chat')),
           flowId: item.flow_id || flowId,
           flowType: Number(item.flow_type || flowType),
           updatedAt: item.update_time || '',
@@ -75,7 +75,7 @@ export function useAppSidebar() {
     } finally {
       setLoading(false);
     }
-  }, [flowId, flowType, setConversations]);
+  }, [flowId, flowType, localize, setConversations]);
 
   /** Grouped conversations by time */
   const groups: ConversationGroup[] = groupConversationsByTime(conversations);

@@ -9,6 +9,7 @@ import { ShareContext } from '~/Providers';
 import { Spinner } from '~/components/svg';
 import Footer from '../Chat/Footer';
 import { toSharedChatMessages } from './shareMessageAdapters';
+import { displayConversationTitle } from '~/utils';
 
 function SharedView() {
   const localize = useLocalize();
@@ -19,12 +20,13 @@ function SharedView() {
   const hasMessages = messages.length > 0;
   const { activeCitationMessageId, citationPanelElement, onOpenCitationPanel } = useCitationReferencePanel({ hasMessages });
 
-  // configure document title
+  // configure document title (placeholder-titled conversations localize)
+  const shareTitle = data ? displayConversationTitle(data.title, localize('com_ui_new_chat')) : undefined;
   let docTitle = '';
-  if (config?.appTitle != null && data?.title != null) {
-    docTitle = `${data.title} | ${config.appTitle}`;
+  if (config?.appTitle != null && shareTitle != null) {
+    docTitle = `${shareTitle} | ${config.appTitle}`;
   } else {
-    docTitle = data?.title ?? config?.appTitle ?? document.title;
+    docTitle = shareTitle ?? config?.appTitle ?? document.title;
   }
 
   useDocumentTitle(docTitle);
@@ -40,7 +42,7 @@ function SharedView() {
     content = (
       <>
         <div className="final-completion group mx-auto flex w-full max-w-[800px] flex-col gap-3 px-4 pb-6 pt-4 sm:px-0 touch-mobile:max-w-full touch-mobile:px-3">
-          <h1 className="text-4xl font-bold">{data.title}</h1>
+          <h1 className="text-4xl font-bold">{shareTitle}</h1>
           <div className="border-b border-border-medium pb-6 text-base text-text-secondary">
             {new Date(data.createdAt).toLocaleDateString('en-US', {
               month: 'long',

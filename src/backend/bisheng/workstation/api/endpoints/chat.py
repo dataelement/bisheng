@@ -36,11 +36,13 @@ async def gen_title(conversationId: str = Body(..., embed=True), login_user=Logi
     while waited < deadline_s:
         session = await MessageSessionDao.async_get_one(conversationId)
         name = session.name if session else None
+        # "New Chat" is the legacy stored placeholder — new rows store "" and the
+        # client renders the localized placeholder itself.
         if name and name != "New Chat":
             break
         await asyncio.sleep(interval_s)
         waited += interval_s
-    return resp_200(data={"title": name or "New Chat"})
+    return resp_200(data={"title": name if name and name != "New Chat" else ""})
 
 
 @router.get("/messages/{conversationId}")

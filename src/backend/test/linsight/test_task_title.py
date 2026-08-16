@@ -48,9 +48,11 @@ class TestFallbackTitle:
         out = LinsightWorkbenchImpl._fallback_title("问" * 100)
         assert len(out) == LinsightWorkbenchImpl._TITLE_MAX_CHARS
 
-    def test_empty_question_returns_placeholder(self):
-        assert LinsightWorkbenchImpl._fallback_title("") == "New Chat"
-        assert LinsightWorkbenchImpl._fallback_title("   ") == "New Chat"
+    def test_empty_question_returns_empty_placeholder(self):
+        # Placeholder titles are no longer stored — empty means "unnamed" and the
+        # client renders the localized placeholder itself.
+        assert LinsightWorkbenchImpl._fallback_title("") == ""
+        assert LinsightWorkbenchImpl._fallback_title("   ") == ""
 
 
 class TestTaskTitleGenerate:
