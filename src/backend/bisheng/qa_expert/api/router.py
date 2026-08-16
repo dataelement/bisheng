@@ -7,6 +7,7 @@ router.include_router(qa_router)
 """
 
 from fastapi import APIRouter
+
 from bisheng.qa_expert.api import endpoints
 
 # 创建路由
@@ -25,6 +26,8 @@ router.add_api_route(
 )
 router.add_api_route("/experts", endpoints.create_expert, methods=["POST"])
 router.add_api_route("/experts/{expert_id}", endpoints.update_expert, methods=["PUT"])
+router.add_api_route("/experts/{expert_id}/disable", endpoints.disable_expert, methods=["POST"])
+router.add_api_route("/experts/{expert_id}/enable", endpoints.enable_expert, methods=["POST"])
 router.add_api_route("/experts/{expert_id}", endpoints.delete_expert, methods=["DELETE"])
 router.add_api_route("/experts/name/{expert_name}", endpoints.expertsinfo, methods=["GET"])
 router.add_api_route("/experts/userid/{user_id}", endpoints.expertsinfo_id, methods=["GET"])
@@ -37,10 +40,31 @@ router.add_api_route("/questions", endpoints.create_question, methods=["POST"])
 router.add_api_route("/questions", endpoints.list_questions, methods=["GET"])
 # 静态路由必须放在 /questions/{question_id} 动态路由之前
 router.add_api_route("/questions/answer_count/domain", endpoints.get_answer_count_by_domain, methods=["GET"])
+router.add_api_route("/questions/similar", endpoints.list_similar_questions, methods=["GET"])
 router.add_api_route("/questions/{question_id}", endpoints.update_question, methods=["PUT"])
 router.add_api_route("/questions/{question_id}", endpoints.get_question_detail, methods=["GET"])
 router.add_api_route("/questions/{question_id}/adopt", endpoints.adopt_answer, methods=["POST"])
 router.add_api_route("/questions/{question_id}", endpoints.delete_question, methods=["DELETE"])
+router.add_api_route(
+    "/questions/{question_id}/publish-requests",
+    endpoints.create_publish_request,
+    methods=["POST"],
+)
+router.add_api_route(
+    "/publish-requests/{request_id}/approve",
+    endpoints.approve_publish_request,
+    methods=["POST"],
+)
+router.add_api_route(
+    "/publish-requests/{request_id}/reject",
+    endpoints.reject_publish_request,
+    methods=["POST"],
+)
+router.add_api_route(
+    "/publish-requests/{request_id}",
+    endpoints.get_publish_request,
+    methods=["GET"],
+)
 
 
 # 回答管理

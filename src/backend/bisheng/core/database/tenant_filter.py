@@ -47,6 +47,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.database.models.audit_log",
     "bisheng.database.models.department",
     "bisheng.database.models.message",
+    "bisheng.database.models.qa_expert",
     "bisheng.database.models.session",
     "bisheng.knowledge.domain.models.knowledge",
     "bisheng.knowledge.domain.models.department_knowledge_space",

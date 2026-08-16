@@ -125,6 +125,20 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     qa_expert_answered: "com_notifications_action_qa_expert_answered",
     qa_answer_commented: "com_notifications_action_qa_answer_commented",
     qa_answer_accepted: "com_notifications_action_qa_answer_accepted",
+    qa_expert_publish_started: "com_notifications_action_qa_expert_publish_started",
+    qa_publish_started: "com_notifications_action_qa_expert_publish_started",
+    qa_expert_publish_approver_added: "com_notifications_action_qa_expert_publish_approver_added",
+    qa_publish_approver_added: "com_notifications_action_qa_expert_publish_approver_added",
+    qa_expert_publish_approved: "com_notifications_action_qa_expert_publish_approved",
+    qa_publish_approved: "com_notifications_action_qa_expert_publish_approved",
+    qa_expert_publish_rejected: "com_notifications_action_qa_expert_publish_rejected",
+    qa_publish_rejected: "com_notifications_action_qa_expert_publish_rejected",
+    qa_expert_publish_expired: "com_notifications_action_qa_expert_publish_expired",
+    qa_publish_expired: "com_notifications_action_qa_expert_publish_expired",
+    qa_expert_publish_ended: "com_notifications_action_qa_expert_publish_ended",
+    qa_publish_ended: "com_notifications_action_qa_expert_publish_ended",
+    qa_expert_publish_default_approved: "com_notifications_action_qa_expert_publish_approved",
+    qa_publish_default_approved: "com_notifications_action_qa_expert_publish_approved",
     // 收藏的源文件发生变更（名称/位置/标签/分类·业务域/版本）
     favorite_source_renamed: "com_notifications_action_favorite_source_renamed",
     favorite_source_moved: "com_notifications_action_favorite_source_moved",
@@ -173,6 +187,23 @@ const QA_EXPERT_ACTION_CODES = new Set([
     "qa_expert_answered",
     "qa_answer_commented",
     "qa_answer_accepted",
+    "qa_expert_publish_approved",
+    "qa_publish_approved",
+    "qa_expert_publish_rejected",
+    "qa_publish_rejected",
+    "qa_expert_publish_expired",
+    "qa_publish_expired",
+    "qa_expert_publish_ended",
+    "qa_publish_ended",
+    "qa_expert_publish_default_approved",
+    "qa_publish_default_approved",
+]);
+
+const QA_PUBLISH_TODO_ACTION_CODES = new Set([
+    "qa_expert_publish_started",
+    "qa_publish_started",
+    "qa_expert_publish_approver_added",
+    "qa_publish_approver_added",
 ]);
 
 export function NotificationsDialog({
@@ -773,7 +804,7 @@ export function NotificationsDialog({
                 return { targetType: "space", targetId: knowledgeSpaceId };
             }
         }
-        if (businessType === "qa_question") {
+        if (businessType === "qa_question" || businessType === "qa_publish") {
             const questionId = pickId(
                 data?.question_id,
                 data?.business_id,
@@ -956,9 +987,14 @@ export function NotificationsDialog({
         };
 
         const showRightSlotDelete = dateSlotHoverId === id && canShowDeleteInDateSlot;
-        const approvalCenterTarget = isApprovalMessageType(notification.message_type, notification.action_code)
-            ? resolveApprovalCenterTarget(notification)
-            : null;
+        const isQaPublishTodo =
+            QA_PUBLISH_TODO_ACTION_CODES.has(getSystemTextCode(notification)) ||
+            QA_PUBLISH_TODO_ACTION_CODES.has(notification.action_code ?? "");
+        const approvalCenterTarget = isQaPublishTodo
+            ? { ...resolveApprovalCenterTarget(notification), tab: "my_tasks" as const }
+            : isApprovalMessageType(notification.message_type, notification.action_code)
+                ? resolveApprovalCenterTarget(notification)
+                : null;
         const canOpenApprovalCenter = Boolean(
             onOpenApprovalCenter &&
             approvalCenterTarget &&

@@ -2149,5 +2149,15 @@
   "com_approval_field_original_uploader_name": "最初のアップロード者",
   "com_approval_field_original_uploader_id": "最初のアップロード者ID",
   "com_approval_field_original_knowledge_name": "最初のナレッジスペース",
-  "com_approval_field_original_knowledge_id": "最初のナレッジスペースID"
+  "com_approval_field_original_knowledge_id": "最初のナレッジスペースID",
+  "com_notifications_action_qa_expert_invited": "専門家Q&A「{{target}}」への回答に招待されました",
+  "com_notifications_action_qa_expert_answered": "専門家Q&A「{{target}}」に回答しました",
+  "com_notifications_action_qa_answer_commented": "専門家Q&A「{{target}}」のあなたの回答にコメントしました",
+  "com_notifications_action_qa_answer_accepted": "専門家Q&A「{{target}}」のあなたの回答を採用しました",
+  "com_notifications_action_qa_expert_publish_started": "専門家Q&A「{{target}}」の公開申請を開始しました。承認管理の未処理から対応してください",
+  "com_notifications_action_qa_expert_publish_approver_added": "専門家Q&A「{{target}}」の公開承認者が更新されました",
+  "com_notifications_action_qa_expert_publish_approved": "専門家Q&A「{{target}}」は公開されました。この操作は取り消せません",
+  "com_notifications_action_qa_expert_publish_rejected": "専門家Q&A「{{target}}」の公開申請は却下されました",
+  "com_notifications_action_qa_expert_publish_expired": "専門家Q&A「{{target}}」の公開申請は期限切れです",
+  "com_notifications_action_qa_expert_publish_ended": "専門家Q&A「{{target}}」の公開申請は終了しました"
 }

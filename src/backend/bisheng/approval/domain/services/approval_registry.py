@@ -283,6 +283,15 @@ class ApprovalRegistry:
                 ],
             )
         )
+        registry.register_preset(
+            ApprovalScenarioPreset(
+                scenario_code="qa_question_publish",
+                scenario_name="专家问答转公开",
+                handler_key="qa_question_publish",
+                condition_fields=["applicant_role"],
+                approver_source_types=["direct_user"],
+            )
+        )
         return registry
 
     def register_preset(self, preset: ApprovalScenarioPreset) -> None:

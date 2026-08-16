@@ -400,7 +400,11 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
       const resp = await listMyApprovalTasksApi();
       setTaskItems(resp.data);
       const allIds = new Set(resp.data.map((t) => getId(t, "task")));
-      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
+      const preferredByInstance = target?.instanceId
+        ? resp.data.find((t) => Number(t.instance_id) === Number(target.instanceId) && (taskFilter !== "pending_me" || t.status === "pending"))
+        : null;
+      const resolvedPreferred = preferredId ?? getId(preferredByInstance, "task");
+      const validPreferred = resolvedPreferred && allIds.has(resolvedPreferred) ? resolvedPreferred : null;
       const visibleItems = taskFilter === "pending_me"
         ? resp.data.filter((t) => t.status === "pending")
         : resp.data.filter((t) => t.status !== "pending");
@@ -440,7 +444,10 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   useEffect(() => {
     if (!open) return;
-    setActiveTab(target?.tab ?? "my_tasks");
+    const nextTab = target?.tab ?? "my_tasks";
+    setActiveTab(nextTab);
+    // 通知「查看审批」进入待我处理，避免停留在已处理筛选项里找不到这条待办。
+    if (nextTab === "my_tasks") setTaskFilter("pending_me");
     setSelectedTaskId(target?.taskId ?? null);
     setSelectedInstanceId(target?.instanceId ?? null);
     setSearchQuery("");

@@ -1,0 +1,940 @@
+# ruff: noqa: RUF002
+"""F083 接口+落库流转：对照 api-data-flow-matrix.md P0。仓储不 mock。"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from bisheng.database.models.qa_expert import (
+    AnonymousAlias,
+    Answer,
+    AnswerAdopt,
+    AnswerEligibility,
+    Comment,
+    Expert,
+    PublishApprover,
+    PublishRequest,
+    Question,
+    QuestionInvite,
+)
+
+PREFIX = "/api/v1/qa_experts"
+
+
+def _ok(resp) -> dict:
+    body = resp.json()
+    assert resp.status_code == 200, body
+    return body
+
+
+async def _create_question(env, payload: dict) -> int:
+    payload = {**payload, "title": env.t(payload["title"])}
+    resp = await env.client.post(f"{PREFIX}/questions", json=payload)
+    body = _ok(resp)
+    assert body.get("status_code") == 200, body
+    data = body.get("data") or {}
+    qid = data.get("id")
+    if qid:
+        return int(qid)
+    row = await env.reload_row(Question, title=payload["title"])
+    assert row is not None
+    return int(row.id)
+
+
+async def _create_answer(env, question_id: int, content: str) -> int:
+    resp = await env.client.post(
+        f"{PREFIX}/answers",
+        json={"question_id": question_id, "content": content, "reveal_on_public": True},
+    )
+    body = _ok(resp)
+    assert body.get("status_code") == 200, body
+    data = body.get("data") or {}
+    aid = data.get("id")
+    if aid:
+        return int(aid)
+    rows = await env.reload_all(Answer, question_id=question_id)
+    assert rows
+    return int(max(rows, key=lambda r: r.id).id)
+
+
+async def _create_answer_anonymous(env, question_id: int, content: str) -> int:
+    resp = await env.client.post(
+        f"{PREFIX}/answers",
+        json={"question_id": question_id, "content": content, "anonymous": True},
+    )
+    body = _ok(resp)
+    assert body.get("status_code") == 200, body
+    data = body.get("data") or {}
+    aid = data.get("id")
+    if aid:
+        return int(aid)
+    rows = await env.reload_all(Answer, question_id=question_id)
+    assert rows
+    return int(max(rows, key=lambda r: r.id).id)
+
+
+async def test_df01_directed_persists_question_and_invite(flow_env):
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df01定向题",
+            "description": "定向正文",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [expert.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    question = await env.reload_row(Question, id=qid)
+    invites = await env.reload_all(QuestionInvite, question_id=qid)
+    assert question.question_type == "directed"
+    assert question.content_locked == 0
+    assert len(invites) == 1
+    assert invites[0].user_id == env.uid(201)
+    assert invites[0].expert_id == expert.id
+    assert question.experts_names == expert.expert_name
+    assert question.experts_names != str(expert.id)
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert detail["status_code"] == 200
+    data = detail.get("data") or {}
+    assert data.get("experts_names") == expert.expert_name
+    assert data.get("experts_names") != str(expert.id)
+    assert "定向正文" in str(data)
+    again = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert (again.get("data") or {}).get("experts_names") == expert.expert_name
+
+
+async def test_df02_public_visible_to_stranger(flow_env):
+    env = flow_env
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {"title": "df02公开题", "description": "公开正文", "business_domain": "steel", "question_type": "public"},
+    )
+    question = await env.reload_row(Question, id=qid)
+    invites = await env.reload_all(QuestionInvite, question_id=qid)
+    assert question.question_type == "public"
+    assert invites == []
+    env.as_user(env.stranger)
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert detail["status_code"] == 200
+    assert "公开正文" in str(detail.get("data"))
+
+
+async def test_df03_directed_denied_no_leak_and_absent_from_list(flow_env):
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df03机密标题",
+            "description": "机密正文",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [expert.id],
+            "asker_reveal_on_public": False,
+        },
+    )
+    env.as_user(env.stranger)
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert detail["status_code"] == 18301
+    dumped = str(detail)
+    assert "机密标题" not in dumped
+    assert "机密正文" not in dumped
+    listed = _ok(
+        await env.client.get(
+            f"{PREFIX}/questions",
+            params={"page": 1, "page_size": 50, "keyword": env.t("df03机密标题")},
+        )
+    )
+    assert listed["status_code"] == 200
+    questions = (listed.get("data") or {}).get("questions") or []
+    ids = {int(item["id"]) for item in questions if isinstance(item, dict) and item.get("id")}
+    assert qid not in ids
+    assert await env.reload_row(Question, id=qid) is not None
+
+
+async def test_df04_related_docs_persisted_as_space_file_id(flow_env):
+    env = flow_env
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df04关联文档",
+            "description": "正文仍在",
+            "business_domain": "steel",
+            "question_type": "public",
+            "related_doc_ids": ["3-8"],
+        },
+    )
+    question = await env.reload_row(Question, id=qid)
+    assert question.related_docs
+    assert "3-8" in question.related_docs
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert detail["status_code"] == 200
+    data = detail.get("data") or {}
+    views = data.get("related_doc_views") or data.get("related_docs") or []
+    if isinstance(views, list) and views and isinstance(views[0], dict):
+        assert views[0].get("unavailable_reason") == "forbidden"
+        assert views[0].get("unavailable_reason") != "not_found"
+    assert "正文仍在" in str(data)
+
+
+async def test_df05_first_answer_locks_content(flow_env):
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df05首答锁",
+            "description": "原正文",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [expert.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    await _create_answer(env, qid, "首答内容")
+    question = await env.reload_row(Question, id=qid)
+    answers = await env.reload_all(Answer, question_id=qid)
+    assert question.content_locked == 1
+    assert question.answer_count == 1
+    assert len(answers) == 1
+    env.as_user(env.asker)
+    locked_resp = _ok(
+        await env.client.put(
+            f"{PREFIX}/questions/{qid}",
+            json={"title": "改标题", "description": "改正文"},
+        )
+    )
+    assert locked_resp["status_code"] != 200
+    locked = await env.reload_row(Question, id=qid)
+    assert locked.title == env.t("df05首答锁")
+    assert locked.content_locked == 1
+
+
+async def test_df06_non_invited_answer_does_not_insert(flow_env):
+    env = flow_env
+    invited = await env.seed_expert(user_id=201, name="专家甲")
+    await env.seed_expert(user_id=203, name="专家丙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df06未受邀",
+            "description": "定向",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [invited.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(203, name="专家丙"))
+    before = await env.reload_all(Answer, question_id=qid)
+    resp = await env.client.post(
+        f"{PREFIX}/answers",
+        json={"question_id": qid, "content": "不该写入", "reveal_on_public": True},
+    )
+    body = _ok(resp)
+    assert body["status_code"] != 200
+    after = await env.reload_all(Answer, question_id=qid)
+    assert len(after) == len(before)
+
+
+async def test_df07_delete_last_answer_keeps_lock(flow_env):
+    env = flow_env
+
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df07锁不解除",
+            "description": "正文",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [expert.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    aid = await _create_answer(env, qid, "将删除的回答")
+    resp = await env.client.delete(f"{PREFIX}/answers/{aid}")
+    body = _ok(resp)
+    assert body["status_code"] == 200
+    question = await env.reload_row(Question, id=qid)
+    answer = await env.reload_row(Answer, id=aid)
+    assert question.content_locked == 1
+    assert question.answer_count == 0
+    assert answer.status == 3
+
+
+async def test_df08_public_adopt_writes_eligibility_snapshot(flow_env):
+    env = flow_env
+    expert_a = await env.seed_expert(user_id=201, name="专家A")
+    await env.seed_expert(user_id=202, name="专家B")
+    await env.seed_expert(user_id=203, name="专家C")
+    await env.seed_expert(user_id=204, name="专家D")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df08公开快照",
+            "description": "公开",
+            "business_domain": "steel",
+            "question_type": "public",
+            "invited_expert_ids": [expert_a.id],
+        },
+    )
+    env.as_user(env.user(202, name="专家B"))
+    bid = await _create_answer(env, qid, "B的回答")
+    await env.client.delete(f"{PREFIX}/answers/{bid}")
+    env.as_user(env.user(203, name="专家C"))
+    cid = await _create_answer(env, qid, "C的回答")
+    env.as_user(env.asker)
+    adopt = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": cid}))
+    assert adopt["status_code"] == 200
+    question = await env.reload_row(Question, id=qid)
+    adopts = await env.reload_all(AnswerAdopt, question_id=qid)
+    elig = await env.reload_all(AnswerEligibility, question_id=qid)
+    elig_users = {int(row.user_id) for row in elig}
+    assert question.adopt_count == 1
+    assert question.resolved_at is not None
+    assert len(adopts) == 1
+    assert elig_users == {env.uid(201), env.uid(202), env.uid(203)}
+    env.as_user(env.user(204, name="专家D"))
+    before = await env.reload_all(Answer, question_id=qid)
+    denied = _ok(
+        await env.client.post(
+            f"{PREFIX}/answers",
+            json={"question_id": qid, "content": "圈外不应写入", "reveal_on_public": True},
+        )
+    )
+    assert denied["status_code"] != 200
+    after = await env.reload_all(Answer, question_id=qid)
+    assert len(after) == len(before)
+
+
+async def test_df09_fourth_adopt_does_not_write_slot(flow_env):
+    env = flow_env
+    experts = []
+    for i in range(4):
+        experts.append(await env.seed_expert(user_id=210 + i, name=f"专家{i}"))
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {"title": "df09四次采纳", "description": "公开", "business_domain": "steel", "question_type": "public"},
+    )
+    answer_ids = []
+    for i, expert in enumerate(experts):
+        env.as_user(env.user(expert.user_id, name=expert.expert_name))
+        answer_ids.append(await _create_answer(env, qid, f"回答{i}"))
+    env.as_user(env.asker)
+    for aid in answer_ids[:3]:
+        body = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": aid}))
+        assert body["status_code"] == 200
+    fourth = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": answer_ids[3]}))
+    assert fourth["status_code"] != 200
+    question = await env.reload_row(Question, id=qid)
+    adopts = await env.reload_all(AnswerAdopt, question_id=qid)
+    assert question.adopt_count == 3
+    assert len(adopts) == 3
+
+
+async def test_df10_directed_comment_requires_effective_answer(flow_env):
+    env = flow_env
+    expert_a = await env.seed_expert(user_id=201, name="专家甲")
+    expert_b = await env.seed_expert(user_id=202, name="专家乙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df10评论门禁",
+            "description": "定向",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [expert_a.id, expert_b.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    aid = await _create_answer(env, qid, "甲先答")
+    env.as_user(env.user(202, name="专家乙"))
+    before = await env.reload_all(Comment, question_id=qid)
+    denied = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={"answer_id": aid, "content": "未答不能评", "reveal_on_public": True},
+        )
+    )
+    assert denied["status_code"] != 200
+    assert len(await env.reload_all(Comment, question_id=qid)) == len(before)
+    await _create_answer(env, qid, "乙后答")
+    allowed = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={"answer_id": aid, "content": "已答可评", "reveal_on_public": True},
+        )
+    )
+    assert allowed["status_code"] == 200
+    comments = await env.reload_all(Comment, question_id=qid)
+    assert len(comments) == 1
+    assert comments[0].content == "已答可评"
+
+
+async def test_df11_disable_expert_blocks_new_answer(flow_env):
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {"title": "df11停用", "description": "公开", "business_domain": "steel", "question_type": "public"},
+    )
+    env.as_user(env.portal_admin)
+    disabled = _ok(await env.client.post(f"{PREFIX}/experts/{expert.id}/disable"))
+    assert disabled["status_code"] == 200
+    row = await env.reload_row(Expert, id=expert.id)
+    assert row is not None
+    assert row.status == 0
+    env.as_user(env.user(201, name="专家甲"))
+    before = await env.reload_all(Answer, question_id=qid)
+    denied = _ok(
+        await env.client.post(
+            f"{PREFIX}/answers",
+            json={"question_id": qid, "content": "停用后不能答"},
+        )
+    )
+    assert denied["status_code"] != 200
+    assert len(await env.reload_all(Answer, question_id=qid)) == len(before)
+
+
+async def test_df12_non_admin_cannot_disable_expert(flow_env):
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    denied = _ok(await env.client.post(f"{PREFIX}/experts/{expert.id}/disable"))
+    assert denied["status_code"] != 200
+    row = await env.reload_row(Expert, id=expert.id)
+    assert row.status == 1
+
+
+async def test_df13_publish_approve_keeps_invites_and_blocks_outsider(flow_env):
+    env = flow_env
+    invited = await env.seed_expert(user_id=201, name="专家甲")
+    await env.seed_expert(user_id=203, name="专家丙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df13转公开",
+            "description": "定向",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [invited.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    aid = await _create_answer(env, qid, "甲的回答")
+    env.as_user(env.asker)
+    _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": aid}))
+    created = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/publish-requests", json={"duration_days": 3}))
+    assert created["status_code"] == 200
+    pending_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    pending_pub = (pending_detail.get("data") or {}).get("latest_publish_request") or {}
+    assert pending_pub.get("status") == "pending"
+    assert (pending_detail.get("data") or {}).get("active_publish_request", {}).get("status") == "pending"
+    request_id = int((created.get("data") or {}).get("id") or 0)
+    if not request_id:
+        req = await env.reload_row(PublishRequest, question_id=qid)
+        request_id = int(req.id)
+    invites_before = await env.reload_all(QuestionInvite, question_id=qid)
+    env.as_user(env.user(201, name="专家甲"))
+    approved = _ok(await env.client.post(f"{PREFIX}/publish-requests/{request_id}/approve"))
+    assert approved["status_code"] == 200
+    question = await env.reload_row(Question, id=qid)
+    request = await env.reload_row(PublishRequest, id=request_id)
+    invites_after = await env.reload_all(QuestionInvite, question_id=qid)
+    assert question.question_type == "public"
+    assert request.status == "approved"
+    approved_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    latest = (approved_detail.get("data") or {}).get("latest_publish_request") or {}
+    assert latest.get("status") == "approved"
+    assert (approved_detail.get("data") or {}).get("question_type") == "public"
+    assert (approved_detail.get("data") or {}).get("active_publish_request") in (None, {})
+    assert len(invites_after) == len(invites_before) == 1
+    env.as_user(env.user(203, name="专家丙"))
+    before = await env.reload_all(Answer, question_id=qid)
+    denied = _ok(
+        await env.client.post(
+            f"{PREFIX}/answers",
+            json={"question_id": qid, "content": "非原受邀不能答"},
+        )
+    )
+    assert denied["status_code"] != 200
+    assert len(await env.reload_all(Answer, question_id=qid)) == len(before)
+    approvers = await env.reload_all(PublishApprover, request_id=request_id)
+    assert approvers
+
+
+async def _post_as(user, method: str, path: str, json: dict | None = None):
+    """独立 ASGI 客户端，避免并发时抢共享 auth。"""
+    from test.qa_expert.conftest import _flow_app
+
+    auth = {"user": user}
+    app = _flow_app(auth)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        return await getattr(client, method)(path, json=json)
+
+
+async def test_df14_concurrent_first_answers_lock_once(flow_env):
+    env = flow_env
+    await env.seed_expert(user_id=201, name="专家甲")
+    await env.seed_expert(user_id=202, name="专家乙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {"title": "df14并发首答", "description": "公开", "business_domain": "steel", "question_type": "public"},
+    )
+    r1, r2 = await asyncio.gather(
+        _post_as(
+            env.user(201, name="专家甲"),
+            "post",
+            f"{PREFIX}/answers",
+            {"question_id": qid, "content": "甲并发答", "reveal_on_public": True},
+        ),
+        _post_as(
+            env.user(202, name="专家乙"),
+            "post",
+            f"{PREFIX}/answers",
+            {"question_id": qid, "content": "乙并发答", "reveal_on_public": True},
+        ),
+    )
+    b1, b2 = _ok(r1), _ok(r2)
+    assert b1["status_code"] == 200
+    assert b2["status_code"] == 200
+    answers = await env.reload_all(Answer, question_id=qid)
+    question = await env.reload_row(Question, id=qid)
+    assert len(answers) == 2
+    assert question.content_locked == 1
+    assert question.answer_count == 2
+
+
+async def test_df15_concurrent_adopt_uses_row_lock(flow_env):
+    env = flow_env
+    await env.seed_expert(user_id=201, name="专家甲")
+    await env.seed_expert(user_id=202, name="专家乙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {"title": "df15并发采纳", "description": "公开", "business_domain": "steel", "question_type": "public"},
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    a1 = await _create_answer(env, qid, "甲答")
+    env.as_user(env.user(202, name="专家乙"))
+    a2 = await _create_answer(env, qid, "乙答")
+    r1, r2 = await asyncio.gather(
+        _post_as(env.asker, "post", f"{PREFIX}/questions/{qid}/adopt", {"answer_id": a1}),
+        _post_as(env.asker, "post", f"{PREFIX}/questions/{qid}/adopt", {"answer_id": a2}),
+    )
+    codes = {_ok(r1)["status_code"], _ok(r2)["status_code"]}
+    assert codes == {200}
+    question = await env.reload_row(Question, id=qid)
+    adopts = await env.reload_all(AnswerAdopt, question_id=qid)
+    assert len(adopts) == 2
+    assert int(question.adopt_count) == 2
+    assert question.content_locked == 1
+
+
+async def test_df16_list_hides_anonymous_asker_name(flow_env):
+    """匿名公开题：库内 created_by 仍是真名；列表接口对路人只给别名。"""
+    env = flow_env
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df16匿名公开",
+            "description": "匿名正文",
+            "business_domain": "营销",
+            "question_type": "public",
+            "asker_anonymous": True,
+        },
+    )
+    stored = await env.reload_row(Question, id=qid)
+    assert int(stored.asker_anonymous) == 1
+    assert stored.created_by == "asker"
+
+    env.as_user(env.stranger)
+    resp = await env.client.get(
+        f"{PREFIX}/questions",
+        params={"page": 1, "page_size": 50, "keyword": env.t("df16匿名公开")},
+    )
+    body = _ok(resp)
+    assert body["status_code"] == 200
+    items = (body.get("data") or {}).get("questions") or []
+    hit = next((item for item in items if int(item.get("id")) == qid), None)
+    assert hit is not None
+    asker = hit.get("asker") or {}
+    assert asker.get("anonymous") is True
+    assert asker.get("display_name", "").startswith("匿名同事")
+    assert "real_name" not in asker
+    assert hit.get("created_by") == asker.get("display_name")
+    assert hit.get("created_by") != "asker"
+    aliases = await env.reload_all(AnonymousAlias, question_id=qid)
+    assert len(aliases) == 1
+    stored_again = await env.reload_row(Question, id=qid)
+    assert stored_again.created_by == "asker"
+
+
+async def test_df17_directed_anonymous_masks_invited_viewer(flow_env):
+    """定向匿名：库内仍是真名；受邀专家详情只见别名，且须预存转公开选项。"""
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df17定向匿名",
+            "description": "定向匿名正文",
+            "business_domain": "营销",
+            "question_type": "directed",
+            "invited_expert_ids": [expert.id],
+            "asker_anonymous": True,
+            "asker_reveal_on_public": False,
+        },
+    )
+    stored = await env.reload_row(Question, id=qid)
+    assert int(stored.asker_anonymous) == 1
+    assert int(stored.asker_reveal_on_public) == 0
+    assert stored.created_by == "asker"
+
+    env.as_user(env.user(201, name="专家甲"))
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert detail["status_code"] == 200
+    data = detail.get("data") or {}
+    asker = data.get("asker") or {}
+    assert asker.get("anonymous") is True
+    assert str(asker.get("display_name") or "").startswith("匿名同事")
+    assert "real_name" not in asker
+    assert data.get("created_by") == asker.get("display_name")
+    aliases = await env.reload_all(AnonymousAlias, question_id=qid)
+    assert len(aliases) == 1
+
+    again = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert (again.get("data") or {}).get("created_by") == asker.get("display_name")
+    stored_again = await env.reload_row(Question, id=qid)
+    assert stored_again.created_by == "asker"
+    assert len(await env.reload_all(AnonymousAlias, question_id=qid)) == 1
+
+
+async def test_df18_list_shows_latest_answer_preview(flow_env):
+    """有回答的列表卡片带最新一条；后写的覆盖先写的；采纳后 preview.adopted 与 qa_answer 一致。"""
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df18列表最新答",
+            "description": "公开正文",
+            "business_domain": "营销",
+            "question_type": "public",
+        },
+    )
+
+    async def _list_hit():
+        env.as_user(env.stranger)
+        resp = await env.client.get(
+            f"{PREFIX}/questions",
+            params={"page": 1, "page_size": 50, "keyword": env.t("df18列表最新答")},
+        )
+        body = _ok(resp)
+        assert body["status_code"] == 200
+        items = (body.get("data") or {}).get("questions") or []
+        hit = next((item for item in items if int(item.get("id")) == qid), None)
+        assert hit is not None
+        return hit
+
+    empty = await _list_hit()
+    assert not empty.get("latest_answer")
+
+    env.as_user(env.user(201, name="专家甲"))
+    first = await _create_answer(env, qid, "第一答")
+    second = await _create_answer(env, qid, "第二答")
+    preview = (await _list_hit()).get("latest_answer") or {}
+    assert preview.get("id") == second
+    assert "第二答" in str(preview.get("excerpt") or "")
+    assert "第一答" not in str(preview.get("excerpt") or "")
+    assert preview.get("adopted") is False
+    assert "专家甲" in str(preview.get("expert_name") or "")
+    rows = await env.reload_all(Answer, question_id=qid)
+    latest = max(rows, key=lambda row: int(row.id))
+    assert int(latest.id) == second
+    assert int(latest.status) != 3
+
+    env.as_user(env.asker)
+    adopt = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": second}))
+    assert adopt["status_code"] == 200
+    adopted_preview = (await _list_hit()).get("latest_answer") or {}
+    assert adopted_preview.get("id") == second
+    assert adopted_preview.get("adopted") is True
+    stored = await env.reload_row(Answer, id=second)
+    assert stored.adopted in (1, True)
+    assert first != second
+
+
+async def test_df19_followup_and_comment_anonymous_inheritance(flow_env):
+    """追问继承提问匿名；自评继承回答匿名；评他人独立选择。接口+落库+再读。"""
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    other = await env.seed_expert(user_id=202, name="专家乙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df19匿名追问",
+            "description": "匿名正文",
+            "business_domain": "营销",
+            "question_type": "public",
+            "asker_anonymous": True,
+        },
+    )
+    stored_q = await env.reload_row(Question, id=qid)
+    assert int(stored_q.asker_anonymous) == 1
+
+    follow = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={
+                "answer_id": 0,
+                "question_id": qid,
+                "content": "追问一句",
+                "is_follow_up": True,
+                "anonymous": False,
+            },
+        )
+    )
+    assert follow["status_code"] == 200
+    follow_id = int((follow.get("data") or {}).get("id") or 0)
+    follow_row = await env.reload_row(Comment, id=follow_id)
+    assert int(follow_row.anonymous) == 1
+    assert follow_row.user_name == "asker"
+
+    env.as_user(env.stranger)
+    listed = _ok(
+        await env.client.post(
+            f"{PREFIX}/allcomments",
+            json={"answer_id": 0, "question_id": qid, "page": 1, "page_size": 20},
+        )
+    )
+    assert listed["status_code"] == 200
+    comments = (listed.get("data") or {}).get("comments") or []
+    hit = next((item for item in comments if int(item.get("id")) == follow_id), None)
+    assert hit is not None
+    assert str(hit.get("user_name") or "").startswith("匿名同事")
+    assert hit.get("user_name") != "asker"
+    assert (hit.get("author") or {}).get("anonymous") is True
+    follow_again = await env.reload_row(Comment, id=follow_id)
+    assert follow_again.user_name == "asker"
+
+    env.as_user(env.user(201, name=expert.expert_name))
+    aid = await _create_answer_anonymous(env, qid, "匿名首答")
+    answer_row = await env.reload_row(Answer, id=aid)
+    assert int(answer_row.anonymous) == 1
+    assert answer_row.expert_name == expert.expert_name
+
+    env.as_user(env.stranger)
+    answers_body = _ok(await env.client.get(f"{PREFIX}/answers/{qid}"))
+    assert answers_body["status_code"] == 200
+    answers = (answers_body.get("data") or {}).get("answers") or []
+    ans_hit = next((item for item in answers if int(item.get("id")) == aid), None)
+    assert ans_hit is not None
+    assert str(ans_hit.get("expert_name") or "").startswith("匿名同事")
+    assert ans_hit.get("expert_name") != expert.expert_name
+    assert (ans_hit.get("author") or {}).get("anonymous") is True
+    answer_again = await env.reload_row(Answer, id=aid)
+    assert answer_again.expert_name == expert.expert_name
+
+    env.as_user(env.user(201, name=expert.expert_name))
+    self_comment = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={"answer_id": aid, "content": "自评补充", "anonymous": False},
+        )
+    )
+    assert self_comment["status_code"] == 200
+    self_id = int((self_comment.get("data") or {}).get("id") or 0)
+    self_row = await env.reload_row(Comment, id=self_id)
+    assert int(self_row.anonymous) == 1
+
+    env.as_user(env.user(202, name=other.expert_name))
+    other_comment = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={"answer_id": aid, "content": "他人匿名评", "anonymous": True},
+        )
+    )
+    assert other_comment["status_code"] == 200
+    other_id = int((other_comment.get("data") or {}).get("id") or 0)
+    other_row = await env.reload_row(Comment, id=other_id)
+    assert int(other_row.anonymous) == 1
+
+    env.as_user(env.stranger)
+    listed_again = _ok(
+        await env.client.post(
+            f"{PREFIX}/allcomments",
+            json={"answer_id": aid, "question_id": qid, "page": 1, "page_size": 20},
+        )
+    )
+    assert listed_again["status_code"] == 200
+    thread = (listed_again.get("data") or {}).get("comments") or []
+    self_hit = next((item for item in thread if int(item.get("id")) == self_id), None)
+    other_hit = next((item for item in thread if int(item.get("id")) == other_id), None)
+    assert self_hit is not None and str(self_hit.get("user_name") or "").startswith("匿名同事")
+    assert other_hit is not None and str(other_hit.get("user_name") or "").startswith("匿名同事")
+    assert self_hit.get("user_name") != expert.expert_name
+    stored_self = await env.reload_row(Comment, id=self_id)
+    stored_other = await env.reload_row(Comment, id=other_id)
+    assert stored_self.user_name == expert.expert_name
+    assert stored_other.user_name == other.expert_name
+
+
+async def test_df20_directed_anonymous_answer_without_reveal_rejected(flow_env):
+    """定向匿名回答未选转公开姓名：18311，qa_answer 无脏行。"""
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df20定向匿名答",
+            "description": "定向正文",
+            "business_domain": "营销",
+            "question_type": "directed",
+            "invited_expert_ids": [expert.id],
+            "asker_anonymous": True,
+            "asker_reveal_on_public": False,
+        },
+    )
+    before = await env.reload_all(Answer, question_id=qid)
+    env.as_user(env.user(201, name=expert.expert_name))
+    resp = await env.client.post(
+        f"{PREFIX}/answers",
+        json={"question_id": qid, "content": "不该写入", "anonymous": True},
+    )
+    body = _ok(resp)
+    assert body["status_code"] == 18311
+    after = await env.reload_all(Answer, question_id=qid)
+    assert len(after) == len(before)
+
+
+async def _inbox_rows(env, title: str) -> list[dict]:
+    """按站内信正文标题查 inbox_message，核转公开通知是否带 instance_id。"""
+    async with AsyncSession(env.engine, expire_on_commit=False) as session:
+        rows = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT id, action_code, receiver, content FROM inbox_message "
+                        "WHERE CAST(content AS CHAR) LIKE :p ORDER BY id"
+                    ),
+                    {"p": f"%{title}%"},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [dict(row) for row in rows]
+
+
+def _receiver_ids(raw) -> set[int]:
+    if isinstance(raw, list):
+        return {int(uid) for uid in raw}
+    if isinstance(raw, str):
+        parsed = json.loads(raw)
+        return {int(uid) for uid in parsed}
+    return set()
+
+
+async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
+    """转公开先通知相关人，待我处理有 pending task；后回答的受邀专家加入会签。"""
+    from bisheng.approval.domain.models.approval_instance import ApprovalInstance, ApprovalTask
+    from bisheng.qa_expert.domain.publish_service import PublishService
+
+    async def live_notify(self, event, question, extra=None):
+        await self._send_inbox(event, question, extra or {})
+
+    monkeypatch.setattr(PublishService, "_notify", live_notify)
+    env = flow_env
+    first = await env.seed_expert(user_id=201, name="专家甲")
+    second = await env.seed_expert(user_id=202, name="专家乙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df21转公开待办",
+            "description": "定向",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [first.id, second.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    aid = await _create_answer(env, qid, "甲先答")
+    env.as_user(env.asker)
+    _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": aid}))
+    created = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/publish-requests", json={"duration_days": 3}))
+    assert created["status_code"] == 200
+    request = await env.reload_row(PublishRequest, question_id=qid)
+    assert request is not None
+    assert request.status == "pending"
+    approvers = await env.reload_all(PublishApprover, request_id=request.id)
+    assert any(int(row.user_id) == env.uid(201) and row.decision == "pending" for row in approvers)
+    assert not any(int(row.user_id) == env.uid(202) for row in approvers)
+    instance = await env.reload_row(
+        ApprovalInstance,
+        business_key=f"qa_publish:{request.id}",
+        scenario_code="qa_question_publish",
+    )
+    assert instance is not None
+    tasks = await env.reload_all(ApprovalTask, instance_id=instance.id)
+    pending_users = {int(row.approver_user_id) for row in tasks if row.status == "pending"}
+    assert env.uid(201) in pending_users
+    assert env.uid(202) not in pending_users
+    title = env.t("df21转公开待办")
+    started_msgs = [
+        row for row in await _inbox_rows(env, title) if "publish_started" in str(row.get("action_code") or "")
+    ]
+    assert started_msgs
+    started = started_msgs[-1]
+    assert env.uid(201) in _receiver_ids(started["receiver"])
+    assert env.uid(202) not in _receiver_ids(started["receiver"])
+    assert str(instance.id) in str(started["content"])
+
+    env.as_user(env.user(202, name="专家乙"))
+    later = await _create_answer(env, qid, "乙后答")
+    assert later
+    approvers_after = await env.reload_all(PublishApprover, request_id=request.id)
+    assert any(int(row.user_id) == env.uid(202) and row.decision == "pending" for row in approvers_after)
+    tasks_after = await env.reload_all(ApprovalTask, instance_id=instance.id)
+    pending_after = {int(row.approver_user_id) for row in tasks_after if row.status == "pending"}
+    assert env.uid(202) in pending_after
+    still_pending = await env.reload_row(PublishRequest, id=request.id)
+    assert still_pending.status == "pending"
+    added_msgs = [row for row in await _inbox_rows(env, title) if "approver_added" in str(row.get("action_code") or "")]
+    assert added_msgs
+    assert env.uid(202) in _receiver_ids(added_msgs[-1]["receiver"])
+    still_tasks = await env.reload_all(ApprovalTask, instance_id=instance.id)
+    assert {int(row.approver_user_id) for row in still_tasks if row.status == "pending"} == pending_after

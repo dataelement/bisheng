@@ -1,3 +1,4 @@
+# ruff: noqa: RUF002
 """
 Expert QA API Endpoints - HTTP 路由处理层
 """
@@ -31,6 +32,7 @@ from bisheng.qa_expert.domain.schemas import (
     ExpertUpdateRequest,
     GetCommentsRequest,
     ModerateDeleteRequest,
+    PublishCreateRequest,
     QAExpertStatsResponse,
     QANotificationResponse,
     QuestionCheckRequest,
@@ -141,13 +143,19 @@ async def list_expert_filter_options(
 
 
 @router.post("/experts", response_model=ExpertResponse)
-async def create_expert(request: ExpertCreateRequest, service: ExpertService = Depends(get_expert_service)):
-    """创建专家（管理员操作）"""
+async def create_expert(
+    request: ExpertCreateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """创建专家（专家库管理员）"""
     try:
-        expert = await service.create_expert(request)
+        expert = await service.create_expert(request, user=user)
         return resp_200(data=expert)
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
     except Exception as e:
-        return resp_500(code=500, msg=str(e))
+        return resp_500(code=500, message=str(e))
 
 
 @router.put("/experts/{expert_id}", response_model=ExpertResponse)
@@ -159,26 +167,62 @@ async def update_expert(
 ):
     """更新专家信息"""
     try:
-        expert = await service.update_expert(expert_id, request)
+        expert = await service.update_expert(expert_id, request, user=user)
         return resp_200(data=expert)
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
     except Exception as e:
-        return resp_500(code=500, msg=str(e))
+        return resp_500(code=500, message=str(e))
 
 
-@router.delete("/experts/{expert_id}")
+@router.delete("/experts/{expert_id}", deprecated=True)
 async def delete_expert(
     expert_id: int,
     user: UserPayload = Depends(UserPayload.get_login_user),
     service: ExpertService = Depends(get_expert_service),
 ):
-    """删除专家"""
+    """删除专家（兼容：映射为停用）"""
     try:
-        success = await service.delete_expert(expert_id)
+        success = await service.delete_expert(expert_id, user=user)
         if not success:
-            return resp_500(code=500, msg="Failed to delete expert")
-        return resp_200(data={"message": "Expert deleted successfully"})
+            return resp_500(code=500, message="Failed to disable expert")
+        return resp_200(data={"message": "Expert disabled successfully", "deprecated": True})
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
     except Exception as e:
-        return resp_500(code=500, msg=str(e))
+        return resp_500(code=500, message=str(e))
+
+
+@router.post("/experts/{expert_id}/disable")
+async def disable_expert(
+    expert_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """停用专家"""
+    try:
+        expert = await service.disable_expert(expert_id, user)
+        return resp_200(data=_jsonable(expert))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
+
+
+@router.post("/experts/{expert_id}/enable")
+async def enable_expert(
+    expert_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: ExpertService = Depends(get_expert_service),
+):
+    """恢复专家"""
+    try:
+        expert = await service.enable_expert(expert_id, user)
+        return resp_200(data=_jsonable(expert))
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
+    except Exception as e:
+        return resp_500(code=500, message=str(e))
 
 
 @router.get("/experts/name/{expert_name}")
@@ -263,20 +307,22 @@ async def list_questions(
 ):
     """问题列表"""
 
-    user_id = user.user_id if (query.status == 3 or query.status == 4) else None
-
     questions, total = await service.list_questions(
         business_domain=query.domain,
         status=query.status,
         sort_by=query.sort_by,
-        user_id=user_id,
+        user_id=user.user_id,
         skip=(query.page - 1) * query.page_size,
         limit=query.page_size,
+        user=user,
+        list_filter=query.filter,
+        display_status=query.display_status,
+        keyword=query.keyword,
     )
 
     return resp_200(
         data={
-            "questions": questions,
+            "questions": [question_detail_payload(item) for item in questions],
             "total": total,
         }
     )
@@ -310,6 +356,74 @@ async def update_question(
     return resp_200(data=question)
 
 
+def question_detail_payload(question) -> dict:
+    """把 ORM 上挂的响应态字段打进 JSON。
+
+    SQLModel.model_dump() 只含表列。无关联文档时旧逻辑直接返回 ORM，
+    capabilities / display_status / asker 会被丢掉，详情页就会没有回答框、采纳、转公开入口。
+    """
+    if isinstance(question, dict):
+        payload = dict(question)
+    elif hasattr(question, "model_dump"):
+        payload = question.model_dump()
+    else:
+        payload = {}
+    for key in (
+        "display_status",
+        "capabilities",
+        "related_doc_views",
+        "asker",
+        "latest_answer",
+        "active_publish_request",
+        "latest_publish_request",
+        "question_type",
+        "content_locked",
+    ):
+        value = getattr(question, key, payload.get(key))
+        if value is not None:
+            payload[key] = value
+    caps = payload.get("capabilities")
+    if caps is not None and not isinstance(caps, dict):
+        payload["capabilities"] = getattr(caps, "__dict__", caps)
+    views = payload.get("related_doc_views")
+    if views:
+        payload["related_docs"] = views
+        payload["related_doc_views"] = views
+    # 匿名题不得把 created_by 真名留给前端自己藏；非管理员 JSON 改成别名。
+    asker = payload.get("asker")
+    if isinstance(asker, dict) and asker.get("anonymous") and "real_name" not in asker:
+        payload["created_by"] = asker.get("display_name")
+    return payload
+
+
+def answer_payload(answer) -> dict:
+    """回答 JSON：SQLModel dump 不含 author；匿名时 expert_name 改成别名，不写回表列。"""
+    if isinstance(answer, dict):
+        payload = dict(answer)
+        author = payload.get("author")
+    elif hasattr(answer, "model_dump"):
+        try:
+            payload = answer.model_dump(mode="json")
+        except TypeError:
+            payload = answer.model_dump()
+        author = getattr(answer, "author", payload.get("author"))
+    else:
+        payload = {}
+        author = getattr(answer, "author", None)
+    if author is not None:
+        payload["author"] = author
+    if isinstance(author, dict) and author.get("anonymous") and "real_name" not in author:
+        payload["expert_name"] = author.get("display_name")
+    return payload
+
+
+def comment_payload(comment) -> dict:
+    """评论 JSON：走 CommentDetailResponse，匿名时 user_name 为别名。"""
+    if isinstance(comment, dict):
+        return dict(comment)
+    return CommentDetailResponse.from_comment(comment).model_dump(mode="json")
+
+
 @router.get("/questions/{question_id}", response_model=QuestionDetailResponse)
 async def get_question_detail(
     question_id: int,
@@ -317,8 +431,25 @@ async def get_question_detail(
     service: QuestionService = Depends(get_question_service),
 ):
     """获取问题详情"""
-    question = await service.get_question_detail(question_id, user.user_id)
-    return resp_200(data=question)
+    question = await service.get_question_detail(question_id, user.user_id, user=user)
+    return resp_200(data=question_detail_payload(question))
+
+
+@router.get("/questions/similar", response_model=QuestionPageData)
+async def list_similar_questions(
+    text: str = Query(default="", max_length=200),
+    limit: int = Query(default=5, ge=1, le=10),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service: QuestionService = Depends(get_question_service),
+):
+    """类似问题：仅返回当前用户可见的题，不阻断发布。"""
+    questions = await service.find_similar_questions(user=user, text=text, limit=limit)
+    return resp_200(
+        data={
+            "questions": [question_detail_payload(item) for item in questions],
+            "total": len(questions),
+        }
+    )
 
 
 @router.post("/questions/{question_id}/adopt", response_model=QuestionDetailResponse)
@@ -349,7 +480,7 @@ async def delete_question(
 
         return resp_200(data={"success": success})
     except Exception as e:
-        return resp_500(code=500, msg=str(e))
+        return resp_500(code=500, message=str(e))
 
 
 # ==================== 回答管理 Endpoints ====================
@@ -370,8 +501,10 @@ async def create_answer(
     if not user.user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
-    answer = await service.create_answer(user.user_id, request, tenant_id=user.tenant_id)
-    return resp_200(data=answer)
+    answer = await service.create_answer(user.user_id, request, tenant_id=user.tenant_id, user=user)
+    if not isinstance(answer, dict):
+        answer = await service.attach_author(answer, user)
+    return resp_200(data=answer_payload(answer))
 
 
 # 根据问题id获取回答数据
@@ -385,8 +518,8 @@ async def get_answers(
     service: AnswerService = Depends(get_answer_service),
 ):
     """获取问题的所有回答"""
-    answers, total = await service.get_answers(question_id, (page - 1) * page_size, page_size, sort_by)
-    return resp_200(data={"answers": answers, "total": total})
+    answers, total = await service.get_answers(question_id, (page - 1) * page_size, page_size, sort_by, user=user)
+    return resp_200(data={"answers": [answer_payload(item) for item in answers], "total": total})
 
 
 @router.get("/questions/{question_id}/answers")
@@ -397,8 +530,8 @@ async def get_answersbyname(
     service: AnswerService = Depends(get_answer_service),
 ):
     """获取问题的所有回答"""
-    answers = await service.get_by_expertname(expert_name, question_id)
-    return resp_200(data=answers)
+    answers = await service.get_by_expertname(expert_name, question_id, user=user)
+    return resp_200(data=answer_payload(answers) if answers is not None else answers)
 
 
 @router.put("/answers/{answer_id}", response_model=AnswerDetailResponse)
@@ -422,7 +555,7 @@ async def update_answer(
 
         return resp_200(data=answer)
     except Exception as e:
-        return resp_500(code=500, msg=str(e))
+        return resp_500(code=500, message=str(e))
 
 
 @router.delete("/answers/{answer_id}")
@@ -437,7 +570,7 @@ async def delete_answer(
 
         return resp_200(data={"success": success})
     except Exception as e:
-        return resp_500(code=500, msg=str(e))
+        return resp_500(code=500, message=str(e))
 
 
 # ==================== 评论管理 Endpoints ====================
@@ -459,8 +592,9 @@ async def create_comment(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     comment = await service.create_comment(user.user_id, user.user_name, request)
-
-    return resp_200(data=comment)
+    if not isinstance(comment, dict):
+        comment = await service.attach_author(comment, user)
+    return resp_200(data=comment_payload(comment))
 
 
 @router.post("/admin/moderate-delete")
@@ -492,7 +626,7 @@ async def moderate_delete(
         return exc.return_resp_instance()
     except Exception as e:
         logger.exception("qa.moderate_delete.failed")
-        return resp_500(code=500, msg=str(e))
+        return resp_500(code=500, message=str(e))
 
 
 @router.post(
@@ -500,7 +634,7 @@ async def moderate_delete(
 )
 async def get_allcomments(
     request: GetCommentsRequest,
-    _user: UserPayload = Depends(UserPayload.get_login_user),
+    user: UserPayload = Depends(UserPayload.get_login_user),
     service: CommentService = Depends(get_comment_service),
 ):
     """获取回答的评论"""
@@ -509,6 +643,7 @@ async def get_allcomments(
         request.question_id,
         (request.page - 1) * request.page_size,
         request.page_size,
+        user=user,
     )
     page_data = CommentPageData(
         comments=[CommentDetailResponse.from_comment(comment) for comment in comments],
@@ -623,3 +758,66 @@ async def upload_file(*, file: UploadFile = File(...)):
 
     finally:
         await file.close()
+
+
+async def get_publish_service():
+    """依赖注入：转公开服务"""
+    from bisheng.qa_expert.domain.publish_service import PublishService
+
+    return PublishService()
+
+
+def _jsonable(row):
+    """把 SQLModel/Pydantic 转成可进 UnifiedResponse 的 dict。"""
+    dump = getattr(row, "model_dump", None)
+    if callable(dump):
+        try:
+            return dump(mode="json")
+        except TypeError:
+            return dump()
+    return row
+
+
+@router.post("/questions/{question_id}/publish-requests")
+async def create_publish_request(
+    question_id: int,
+    request: PublishCreateRequest,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service=Depends(get_publish_service),
+):
+    """发起转公开申请"""
+    row = await service.create_publish_request(question_id, user, request.duration_days)
+    return resp_200(data=_jsonable(row))
+
+
+@router.post("/publish-requests/{request_id}/approve")
+async def approve_publish_request(
+    request_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service=Depends(get_publish_service),
+):
+    """同意转公开"""
+    row = await service.decide_publish(request_id, user, "approved")
+    return resp_200(data=_jsonable(row))
+
+
+@router.post("/publish-requests/{request_id}/reject")
+async def reject_publish_request(
+    request_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service=Depends(get_publish_service),
+):
+    """拒绝转公开"""
+    row = await service.decide_publish(request_id, user, "rejected")
+    return resp_200(data=_jsonable(row))
+
+
+@router.get("/publish-requests/{request_id}")
+async def get_publish_request(
+    request_id: int,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+    service=Depends(get_publish_service),
+):
+    """读取转公开申请（读时惰性过期）"""
+    row = await service.get_request(request_id, user)
+    return resp_200(data=_jsonable(row))
