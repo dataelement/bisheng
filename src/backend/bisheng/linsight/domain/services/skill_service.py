@@ -74,7 +74,9 @@ class SkillService:
         return PageData(data=[SkillBrief.from_model(s) for s in skills], total=total)
 
     async def get_selectable(self) -> list[SkillSelectable]:
-        skills = await LinsightSkillDao.list_enabled()
+        # F047: frontend-hidden skills are force-included server-side and must
+        # never be discoverable from the business-facing picker.
+        skills = await LinsightSkillDao.list_enabled(include_hidden=False)
         return [
             SkillSelectable(name=s.name, display_name=s.display_name or s.name, description=s.description)
             for s in skills
@@ -165,6 +167,12 @@ class SkillService:
 
     async def set_status(self, name: str, enabled: bool) -> None:
         if not await LinsightSkillDao.set_enabled(name, enabled):
+            raise SkillNotFoundError()
+
+    async def set_frontend_hidden(self, name: str, frontend_hidden: bool) -> None:
+        # F047: hiding auto-enables in the same atomic UPDATE (AC-02); unhiding
+        # leaves the enabled flag untouched (AC-04).
+        if not await LinsightSkillDao.set_frontend_hidden(name, frontend_hidden):
             raise SkillNotFoundError()
 
     async def delete(self, tenant_id: int, name: str) -> None:

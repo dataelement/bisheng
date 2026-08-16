@@ -8,6 +8,8 @@ export interface SkillBrief {
   display_name: string;
   description: string;
   enabled: boolean;
+  /** F047: hidden from the business-facing picker; force-dispatched in task runs while enabled */
+  frontend_hidden?: boolean;
   source: 'manual' | 'sop_migrated';
   create_time?: string;
   update_time?: string;
@@ -78,6 +80,13 @@ export const skillApi = {
 
   setSkillStatus: (name: string, enabled: boolean) => {
     return axios.patch(`${SKILL_BASE}/${encodeURIComponent(name)}/status`, { enabled });
+  },
+
+  // F047: hiding auto-enables the skill in the same save (server-side).
+  setSkillFrontendHidden: (name: string, frontendHidden: boolean) => {
+    return axios.patch(`${SKILL_BASE}/${encodeURIComponent(name)}/frontend-hidden`, {
+      frontend_hidden: frontendHidden,
+    });
   },
 
   deleteSkill: (name: string) => {

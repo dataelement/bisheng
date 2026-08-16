@@ -3672,7 +3672,7 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 21
+      "count": 17
     }
   },
   "src/test/departmentPageRefresh.test.tsx": {

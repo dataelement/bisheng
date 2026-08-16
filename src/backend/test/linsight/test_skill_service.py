@@ -64,8 +64,20 @@ class FakeSkillDao:
         return items[(page - 1) * page_size : page * page_size], len(items)
 
     @classmethod
-    async def list_enabled(cls):
-        return [s for s in cls.rows.values() if s.enabled]
+    async def list_enabled(cls, *, include_hidden: bool = True):
+        rows = [s for s in cls.rows.values() if s.enabled]
+        if not include_hidden:
+            rows = [s for s in rows if not getattr(s, "frontend_hidden", False)]
+        return rows
+
+    @classmethod
+    async def set_frontend_hidden(cls, name, frontend_hidden):
+        if name not in cls.rows:
+            return False
+        cls.rows[name].frontend_hidden = frontend_hidden
+        if frontend_hidden:
+            cls.rows[name].enabled = True
+        return True
 
     @classmethod
     async def set_enabled(cls, name, enabled):

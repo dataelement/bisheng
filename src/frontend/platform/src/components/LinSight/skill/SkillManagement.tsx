@@ -77,6 +77,26 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
         }, 300);
     };
 
+    // F047: hiding removes the skill from the business-facing picker but keeps it
+    // force-dispatched in task runs; the server auto-enables it in the same save.
+    const handleHiddenToggle = (skill: SkillBrief, hidden: boolean) => {
+        setSkills(prev => prev.map(s => s.name === skill.name
+            ? { ...s, frontend_hidden: hidden, enabled: hidden ? true : s.enabled }
+            : s));
+        captureAndAlertRequestErrorHoc(skillApi.setSkillFrontendHidden(skill.name, hidden)).then(res => {
+            if (res !== false) {
+                toast({
+                    variant: 'success',
+                    description: hidden ? t('skillManage.hiddenOnToast') : t('skillManage.hiddenOffToast'),
+                });
+            } else {
+                setSkills(prev => prev.map(s => s.name === skill.name
+                    ? { ...s, frontend_hidden: !hidden, enabled: skill.enabled }
+                    : s));
+            }
+        });
+    };
+
     const handleToggle = (skill: SkillBrief, enabled: boolean) => {
         // Optimistic flip: takes effect immediately in the end-user picker (FR-5.9).
         setSkills(prev => prev.map(s => s.name === skill.name ? { ...s, enabled } : s));
@@ -173,6 +193,7 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                             <TableHead className="w-56">{t('skillManage.columns.displayName')}</TableHead>
                             <TableHead>{t('skillManage.columns.description')}</TableHead>
                             <TableHead className="w-24">{t('skillManage.columns.status')}</TableHead>
+                            <TableHead className="w-24">{t('skillManage.columns.frontendHidden')}</TableHead>
                             <TableHead className="w-40">{t('skillManage.columns.updateTime')}</TableHead>
                             <TableHead className="w-8" />
                         </TableRow>
@@ -180,7 +201,7 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                     <TableBody>
                         {skills.length === 0 && !loading && (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center text-muted-foreground py-10">{emptyHint}</TableCell>
+                                <TableCell colSpan={6} className="text-center text-muted-foreground py-10">{emptyHint}</TableCell>
                             </TableRow>
                         )}
                         {skills.map(skill => (
@@ -201,6 +222,12 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
                                 {/* Quick toggle stays inline; stop the click from opening the detail sheet */}
                                 <TableCell onClick={(e) => e.stopPropagation()}>
                                     <Switch checked={skill.enabled} onCheckedChange={(checked) => handleToggle(skill, checked)} />
+                                </TableCell>
+                                <TableCell onClick={(e) => e.stopPropagation()}>
+                                    <Switch
+                                        checked={Boolean(skill.frontend_hidden)}
+                                        onCheckedChange={(checked) => handleHiddenToggle(skill, checked)}
+                                    />
                                 </TableCell>
                                 <TableCell className="text-muted-foreground text-xs">
                                     {(skill.update_time ?? skill.create_time)?.replace('T', ' ').slice(0, 16) ?? '--'}

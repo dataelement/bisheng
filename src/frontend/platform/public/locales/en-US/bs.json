@@ -2021,7 +2021,8 @@
       "description": "Description",
       "status": "Status",
       "updateTime": "Modified",
-      "actions": "Actions"
+      "actions": "Actions",
+      "frontendHidden": "Hidden from users"
     },
     "detail": "Detail",
     "editAction": "Edit",
@@ -2092,7 +2093,9 @@
       "githubFetch": "Failed to fetch from GitHub: repo / branch / path not found or network error. Check the URL and retry",
       "githubRateLimit": "GitHub rate limit exceeded, please retry later",
       "unknown": "Operation failed, please retry"
-    }
+    },
+    "hiddenOnToast": "Hidden from users. The skill is auto-enabled and will be force-applied in task mode.",
+    "hiddenOffToast": "Visible to users again — normal selection rules restored."
   },
   "departmentSpace.adminLabel": "Space admin",
   "departmentSpace.adminSearchPlaceholder": "Search users in your organization",

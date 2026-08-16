@@ -1966,7 +1966,8 @@
       "description": "描述",
       "status": "状态",
       "updateTime": "修改时间",
-      "actions": "操作"
+      "actions": "操作",
+      "frontendHidden": "前端隐藏"
     },
     "detail": "详情",
     "editAction": "编辑",
@@ -2037,7 +2038,9 @@
       "githubFetch": "从 GitHub 拉取失败：仓库 / 分支 / 路径不存在或网络异常，请检查链接后重试",
       "githubRateLimit": "GitHub 访问已达速率限制，请稍后再试",
       "unknown": "操作失败，请重试"
-    }
+    },
+    "hiddenOnToast": "已开启前端隐藏，该技能已自动启用并将在任务模式中强制生效",
+    "hiddenOffToast": "已关闭前端隐藏，恢复前台可见与手动选择"
   },
   "departmentSpace.adminLabel": "空间负责人",
   "departmentSpace.adminSearchPlaceholder": "搜索企业内部用户",

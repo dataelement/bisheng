@@ -57,28 +57,31 @@ async def materialize_session_skills(
         tenant_id: owning tenant; scopes the on-disk bundle source path.
         selected: skill names picked for this run. Both ``None`` (field absent —
             a legacy row, or any client/caller that never sent it) and ``[]`` (the
-            UI explicitly cleared the picker) mean "no skills this run": copy
-            nothing. Only an explicit non-empty list opts in, and each name is
-            still intersected with the tenant's governance-enabled set.
+            UI explicitly cleared the picker) mean "no skills picked". Picked
+            names are intersected with the tenant's governance-enabled set; the
+            F047 frontend-hidden∩enabled set is then force-included on top —
+            those internal skills materialize on every run regardless of selection.
         store: skill disk store (injectable for tests).
 
     Returns:
         The skill names actually materialized. Empty when nothing matched — the
         caller then skips attaching the skills middleware entirely.
     """
-    # None ≡ [] ≡ "no skills for this run" — copy nothing. Treating a missing
-    # field as "copy every enabled skill" was a footgun: any request that omitted
-    # skills (a stale/cached client, a non-UI caller, a legacy row) silently
-    # loaded EVERY enabled skill, defeating the picker. Skills are strictly opt-in
-    # via an explicit name list.
-    if not selected:
-        return []
-
     store = store or SkillStore()
     # Governance gate, scoped to the current tenant (LinsightSkillDao.list_enabled
     # uses strict_tenant_filter); the worker has already restored tenant context.
-    enabled = {skill.name for skill in await LinsightSkillDao.list_enabled()}
-    wanted = {name for name in selected if name in enabled}
+    enabled_skills = await LinsightSkillDao.list_enabled()
+    enabled = {skill.name for skill in enabled_skills}
+    # F047: frontend-hidden (and enabled) skills are internal capabilities — the
+    # server force-includes them in EVERY run, even when the user selected
+    # nothing. A disabled skill never dispatches, hidden or not (AC-09).
+    hidden_forced = {skill.name for skill in enabled_skills if getattr(skill, "frontend_hidden", False)}
+
+    # User-picked skills stay strictly opt-in: None ≡ [] ≡ "none picked this
+    # run". Treating a missing field as "copy every enabled skill" was a footgun
+    # (a stale/cached client or non-UI caller silently loaded everything). Only
+    # the F047 forced set is added on top of the explicit selection.
+    wanted = ({name for name in selected if name in enabled} if selected else set()) | hidden_forced
     if not wanted:
         return []
 

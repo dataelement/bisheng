@@ -18,6 +18,7 @@ class SkillBrief(BaseModel):
     display_name: str
     description: str
     enabled: bool
+    frontend_hidden: bool = False
     source: str
     create_time: datetime | None = None
     update_time: datetime | None = None
@@ -30,6 +31,7 @@ class SkillBrief(BaseModel):
             display_name=skill.display_name or skill.name,
             description=skill.description,
             enabled=bool(skill.enabled),
+            frontend_hidden=bool(getattr(skill, "frontend_hidden", False)),
             source=skill.source,
             create_time=skill.create_time,
             # never-edited skills report their creation time as the modified time
@@ -67,6 +69,10 @@ class SkillFileContent(BaseModel):
 
 class SkillStatusUpdate(BaseModel):
     enabled: bool
+
+
+class SkillFrontendHiddenUpdate(BaseModel):
+    frontend_hidden: bool
 
 
 class SkillCreateForm(BaseModel):

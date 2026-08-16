@@ -1966,7 +1966,8 @@
       "description": "説明",
       "status": "状態",
       "updateTime": "更新日時",
-      "actions": "操作"
+      "actions": "操作",
+      "frontendHidden": "フロント非表示"
     },
     "detail": "詳細",
     "editAction": "編集",
@@ -2037,7 +2038,9 @@
       "githubFetch": "GitHub からの取得に失敗：リポジトリ / ブランチ / パスが存在しないか、ネットワークエラーです。URL を確認して再試行してください",
       "githubRateLimit": "GitHub のレート制限に達しました。しばらくしてから再試行してください",
       "unknown": "操作に失敗しました。再試行してください"
-    }
+    },
+    "hiddenOnToast": "フロント非表示を有効にしました。スキルは自動的に有効化され、タスクモードで強制適用されます。",
+    "hiddenOffToast": "フロント非表示を解除しました。通常の表示・選択ルールに戻ります。"
   },
   "departmentSpace.adminLabel": "スペース責任者",
   "departmentSpace.adminSearchPlaceholder": "組織内のユーザーを検索",

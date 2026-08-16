@@ -50,6 +50,17 @@ class LinsightSkillBase(SQLModelSerializable):
         description="Whether the skill is enabled",
         sa_column=Column("enabled", Integer, nullable=False, server_default=text("1"), comment="Enabled flag"),
     )
+    frontend_hidden: bool = Field(
+        default=False,
+        description="F047: hidden from the business-facing picker; when enabled, force-included in every task run",
+        sa_column=Column(
+            "frontend_hidden",
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="F047 frontend-hidden flag",
+        ),
+    )
     source: str = Field(
         default=SKILL_SOURCE_MANUAL,
         description="manual | sop_migrated",
@@ -166,10 +177,18 @@ class LinsightSkillDao:
                 return list(result.all()), total
 
     @classmethod
-    async def list_enabled(cls) -> list[LinsightSkill]:
+    async def list_enabled(cls, *, include_hidden: bool = True) -> list[LinsightSkill]:
+        """Enabled skills for the current tenant.
+
+        ``include_hidden=False`` serves the business-facing picker (F047: hidden
+        skills must not be discoverable); governance/provisioning callers keep
+        the default and see every enabled skill, hidden ones included.
+        """
         with strict_tenant_filter():
             async with get_async_db_session() as session:
                 statement = select(LinsightSkill).where(LinsightSkill.enabled == True)  # noqa: E712
+                if not include_hidden:
+                    statement = statement.where(LinsightSkill.frontend_hidden == False)  # noqa: E712
                 statement = statement.order_by(col(LinsightSkill.create_time).desc())
                 result = await session.exec(statement)
                 return list(result.all())
@@ -187,6 +206,29 @@ class LinsightSkillDao:
                 .where(col(LinsightSkill.name) == name)
                 .where(col(LinsightSkill.tenant_id) == tid)
                 .values(enabled=enabled, update_time=datetime.now())
+            )
+            result = await session.exec(statement)
+            await session.commit()
+            return result.rowcount > 0
+
+    @classmethod
+    async def set_frontend_hidden(cls, name: str, frontend_hidden: bool) -> bool:
+        """F047: flip the frontend-hidden flag (tenant-scoped, same pitfall as set_enabled).
+
+        Turning hiding ON also enables the skill in the SAME statement (AC-02:
+        one atomic save — a hidden-but-disabled row can never be observed from
+        this transition). Turning it OFF leaves ``enabled`` untouched (AC-04).
+        """
+        tid = get_current_tenant_id() or DEFAULT_TENANT_ID
+        values: dict = {"frontend_hidden": frontend_hidden, "update_time": datetime.now()}
+        if frontend_hidden:
+            values["enabled"] = True
+        async with get_async_db_session() as session:
+            statement = (
+                update(LinsightSkill)
+                .where(col(LinsightSkill.name) == name)
+                .where(col(LinsightSkill.tenant_id) == tid)
+                .values(**values)
             )
             result = await session.exec(statement)
             await session.commit()

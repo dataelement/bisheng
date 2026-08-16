@@ -15,6 +15,7 @@ from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.linsight.domain.schemas.skill_schema import (
     SkillCreateForm,
+    SkillFrontendHiddenUpdate,
     SkillGitHubImportRequest,
     SkillStatusUpdate,
 )
@@ -154,6 +155,18 @@ async def set_skill_status(
     login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
 ) -> UnifiedResponseModel:
     await SkillService().set_status(name, payload.enabled)
+    return resp_200({"ok": True})
+
+
+@router.patch("/{name}/frontend-hidden", summary="F047: hide from / restore to the business-facing picker")
+async def set_skill_frontend_hidden(
+    name: str,
+    payload: SkillFrontendHiddenUpdate,
+    login_user: UserPayload = Depends(UserPayload.get_tenant_admin_user),
+) -> UnifiedResponseModel:
+    """Hiding auto-enables the skill in the same save; a hidden-and-enabled
+    skill is force-included into every task run server-side."""
+    await SkillService().set_frontend_hidden(name, payload.frontend_hidden)
     return resp_200({"ok": True})
 
 
