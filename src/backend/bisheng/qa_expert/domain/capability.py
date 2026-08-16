@@ -56,7 +56,9 @@ class CapabilitySnapshot:
     user_has_effective_answer: bool = False
     has_pending_publish: bool = False
     latest_publish_status: str | None = None
+    # 仅仍 pending 的审批人；发起人默认同意后不在此集合，can_decide_publish 为 False。
     approver_user_ids: frozenset[int] = field(default_factory=frozenset)
+    viewer_publish_decision: str | None = None
 
 
 def derive_display_status(*, effective_answer_count: int, adopt_count: int) -> str:
@@ -170,6 +172,7 @@ class CapabilityResolver:
             and snapshot.latest_publish_status != "ended"
             and (is_asker or snapshot.user_has_effective_answer)
         )
+        # 只给尚未决策的审批人；发起人创建时已写入 approved，不能再点同意/拒绝。
         can_decide_publish = snapshot.has_pending_publish and uid is not None and uid in snapshot.approver_user_ids
         return CapabilityResult(
             display_status=display_status,

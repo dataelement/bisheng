@@ -454,13 +454,27 @@ async def test_df13_publish_approve_keeps_invites_and_blocks_outsider(flow_env):
     pending_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
     pending_pub = (pending_detail.get("data") or {}).get("latest_publish_request") or {}
     assert pending_pub.get("status") == "pending"
+    assert pending_pub.get("viewer_decision") == "approved"
     assert (pending_detail.get("data") or {}).get("active_publish_request", {}).get("status") == "pending"
+    assert (pending_detail.get("data") or {}).get("capabilities", {}).get("can_decide_publish") is False
     request_id = int((created.get("data") or {}).get("id") or 0)
     if not request_id:
         req = await env.reload_row(PublishRequest, question_id=qid)
         request_id = int(req.id)
-    invites_before = await env.reload_all(QuestionInvite, question_id=qid)
+    approvers_pending = await env.reload_all(PublishApprover, request_id=request_id)
+    asker_row = next(row for row in approvers_pending if int(row.user_id) == int(env.asker.user_id))
+    expert_row = next(row for row in approvers_pending if int(row.user_id) == int(env.uid(201)))
+    assert asker_row.decision == "approved"
+    assert expert_row.decision == "pending"
+    # 再读确认发起人仍是已同意且不能改口
+    again = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert (again.get("data") or {}).get("latest_publish_request", {}).get("viewer_decision") == "approved"
+    assert (again.get("data") or {}).get("capabilities", {}).get("can_decide_publish") is False
     env.as_user(env.user(201, name="专家甲"))
+    expert_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert (expert_detail.get("data") or {}).get("latest_publish_request", {}).get("viewer_decision") == "pending"
+    assert (expert_detail.get("data") or {}).get("capabilities", {}).get("can_decide_publish") is True
+    invites_before = await env.reload_all(QuestionInvite, question_id=qid)
     approved = _ok(await env.client.post(f"{PREFIX}/publish-requests/{request_id}/approve"))
     assert approved["status_code"] == 200
     question = await env.reload_row(Question, id=qid)
@@ -938,3 +952,51 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     assert env.uid(202) in _receiver_ids(added_msgs[-1]["receiver"])
     still_tasks = await env.reload_all(ApprovalTask, instance_id=instance.id)
     assert {int(row.approver_user_id) for row in still_tasks if row.status == "pending"} == pending_after
+
+
+async def test_df13_reject_keeps_viewer_decision_on_latest(flow_env):
+    """任一拒绝后申请 ended 为 rejected；详情仍返回本人 viewer_decision，供右上角展示已拒绝。"""
+    env = flow_env
+    invited = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df13拒绝决策",
+            "description": "定向",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [invited.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    aid = await _create_answer(env, qid, "甲的回答")
+    env.as_user(env.asker)
+    _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": aid}))
+    created = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/publish-requests", json={"duration_days": 3}))
+    request_id = int((created.get("data") or {}).get("id") or 0)
+    if not request_id:
+        req = await env.reload_row(PublishRequest, question_id=qid)
+        request_id = int(req.id)
+    env.as_user(env.user(201, name="专家甲"))
+    denied = _ok(await env.client.post(f"{PREFIX}/publish-requests/{request_id}/reject"))
+    assert denied["status_code"] == 200
+    request = await env.reload_row(PublishRequest, id=request_id)
+    assert request.status == "rejected"
+    expert_row = next(
+        row for row in await env.reload_all(PublishApprover, request_id=request_id) if int(row.user_id) == env.uid(201)
+    )
+    assert expert_row.decision == "rejected"
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    latest = (detail.get("data") or {}).get("latest_publish_request") or {}
+    assert latest.get("status") == "rejected"
+    assert latest.get("viewer_decision") == "rejected"
+    assert (detail.get("data") or {}).get("question_type") == "directed"
+    assert (detail.get("data") or {}).get("capabilities", {}).get("can_decide_publish") is False
+    env.as_user(env.asker)
+    asker_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    asker_latest = (asker_detail.get("data") or {}).get("latest_publish_request") or {}
+    assert asker_latest.get("status") == "rejected"
+    assert asker_latest.get("viewer_decision") == "approved"
+    assert (asker_detail.get("data") or {}).get("capabilities", {}).get("can_start_publish") is True

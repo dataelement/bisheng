@@ -52,8 +52,16 @@ ELIGIBILITY_INVITED = "invited"
 ELIGIBILITY_ANSWER = "pre_adopt_answer"
 
 
-def serialize_publish_request(row: PublishRequest) -> dict[str, Any]:
-    """详情挂载用的转公开申请摘要。"""
+def serialize_publish_request(
+    row: PublishRequest,
+    *,
+    viewer_decision: str | None = None,
+) -> dict[str, Any]:
+    """详情挂载用的转公开申请摘要。
+
+    viewer_decision 是当前登录用户在 qa_publish_approver 上的决策；
+    发起人创建时已默认同意，详情右上角据此展示「已同意」。
+    """
     expire_at = getattr(row, "expire_at", None)
     return {
         "id": int(row.id),
@@ -61,6 +69,7 @@ def serialize_publish_request(row: PublishRequest) -> dict[str, Any]:
         "duration_days": int(getattr(row, "duration_days", 0) or 0),
         "expire_at": expire_at.isoformat() if expire_at is not None else None,
         "extension_days": int(getattr(row, "extension_days", 0) or 0),
+        "viewer_decision": viewer_decision,
     }
 
 
@@ -287,9 +296,15 @@ class PublishService:
         pending_flag = pending is not None if has_pending is None else has_pending
         latest = pending or await self.request_repo.get_latest_by_question(int(question.id))
         approver_ids: set[int] = set()
-        if pending is not None:
-            for row in await self.approver_repo.list_by_request(int(pending.id)):
-                approver_ids.add(int(row.user_id))
+        viewer_decision: str | None = None
+        source = pending if pending is not None else latest
+        if source is not None:
+            for row in await self.approver_repo.list_by_request(int(source.id)):
+                if int(row.user_id) == uid:
+                    viewer_decision = str(row.decision)
+                # 已决策的人（含发起人默认同意）不再出现同意/拒绝按钮。
+                if pending is not None and str(row.decision) == DECISION_PENDING:
+                    approver_ids.add(int(row.user_id))
         return CapabilitySnapshot(
             expert=expert,
             invited_user_ids=frozenset(invited),
@@ -298,6 +313,7 @@ class PublishService:
             has_pending_publish=pending_flag,
             latest_publish_status=str(latest.status) if latest is not None else None,
             approver_user_ids=frozenset(approver_ids),
+            viewer_publish_decision=viewer_decision,
         )
 
     async def _build_approvers(
@@ -307,6 +323,7 @@ class PublishService:
         initiator,
         now: datetime,
     ) -> list[PublishApprover]:
+        """组装会签人：提问者 + 有效回答专家；发起人对应行默认 approved。"""
         tenant_id = int(getattr(question, "tenant_id", 1) or 1)
         asker_id = int(question.user_id)
         initiator_id = int(initiator.user_id)
@@ -324,6 +341,7 @@ class PublishService:
                 continue
             seen.add(uid)
             answerer_ids.append(uid)
+        # 谁发起谁默认同意：提问者发起则 asker 行直接 approved，回答专家发起则该专家行直接 approved。
         rows: list[PublishApprover] = []
         rows.append(
             PublishApprover(

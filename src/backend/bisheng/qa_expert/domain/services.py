@@ -935,7 +935,10 @@ class QuestionService:
         result = self.capability_resolver.resolve(viewer, resolved, snapshot)
         self._annotate(resolved, capabilities=result.capabilities.__dict__)
         if latest_publish is not None:
-            payload = serialize_publish_request(latest_publish)
+            payload = serialize_publish_request(
+                latest_publish,
+                viewer_decision=snapshot.viewer_publish_decision,
+            )
             self._annotate(resolved, latest_publish_request=payload)
             if str(latest_publish.status) == "pending":
                 self._annotate(resolved, active_publish_request=payload)
@@ -962,9 +965,16 @@ class QuestionService:
             latest_publish = await self.publish_request_repo.get_latest_by_question(int(question.id))
         pending = latest_publish if latest_publish is not None and str(latest_publish.status) == "pending" else None
         approver_ids: set[int] = set()
-        if pending is not None:
-            for row in await self.publish_approver_repo.list_by_request(int(pending.id)):
-                approver_ids.add(int(row.user_id))
+        viewer_decision: str | None = None
+        uid_int = int(uid) if uid else None
+        # 终态也要带回本人决策，右上角才能在拒绝后显示「已拒绝」。
+        source = pending if pending is not None else latest_publish
+        if source is not None:
+            for row in await self.publish_approver_repo.list_by_request(int(source.id)):
+                if uid_int is not None and int(row.user_id) == uid_int:
+                    viewer_decision = str(row.decision)
+                if pending is not None and str(row.decision) == "pending":
+                    approver_ids.add(int(row.user_id))
         return CapabilitySnapshot(
             expert=expert,
             invited_user_ids=frozenset(invited),
@@ -974,6 +984,7 @@ class QuestionService:
             has_pending_publish=pending is not None,
             latest_publish_status=str(latest_publish.status) if latest_publish is not None else None,
             approver_user_ids=frozenset(approver_ids),
+            viewer_publish_decision=viewer_decision,
         )
 
     async def find_similar_questions(self, user, text: str, limit: int = 5) -> list[Question]:

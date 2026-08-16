@@ -226,3 +226,27 @@ def test_ended_publish_blocks_restart():
     assert ended.capabilities.can_start_publish is False
     assert pending.capabilities.can_start_publish is False
     assert rejected.capabilities.can_start_publish is True
+
+
+def test_initiator_already_agreed_cannot_decide_again():
+    """发起人默认同意后不在 pending 审批人集合里，详情不再给同意/拒绝。"""
+    question = _question(user_id=1, question_type="directed", adopt_count=1)
+    initiator = _resolve(
+        _user(user_id=1),
+        question,
+        has_pending_publish=True,
+        effective_answer_count=1,
+        approver_user_ids=frozenset({50}),
+    )
+    pending_expert = _resolve(
+        _user(user_id=50),
+        question,
+        invited_user_ids=frozenset({50}),
+        expert=_expert(),
+        user_has_effective_answer=True,
+        has_pending_publish=True,
+        effective_answer_count=1,
+        approver_user_ids=frozenset({50}),
+    )
+    assert initiator.capabilities.can_decide_publish is False
+    assert pending_expert.capabilities.can_decide_publish is True

@@ -22,6 +22,7 @@ from bisheng.qa_expert.domain.publish_service import (
     PUBLISH_PENDING,
     PUBLISH_REJECTED,
     PublishService,
+    serialize_publish_request,
 )
 
 
@@ -208,6 +209,40 @@ async def test_asker_disabled_ends_request():
     svc.request_repo.get_pending_by_question = AsyncMock(return_value=_request())
     result = await svc.on_asker_disabled(20)
     assert result.status == PUBLISH_ENDED
+
+
+async def test_asker_initiator_is_auto_approved():
+    """提问者发起转公开：本人审批行直接 approved，回答专家仍 pending。"""
+    svc = _service()
+    now = datetime(2026, 8, 16, 12, 0, 0)
+    rows = await svc._build_approvers(_question(), _request(), _user(user_id=1), now)
+    by_user = {int(row.user_id): row for row in rows}
+    assert by_user[1].decision == DECISION_APPROVED
+    assert by_user[1].decided_at == now
+    assert by_user[50].decision == DECISION_PENDING
+    assert by_user[50].decided_at is None
+
+
+def test_serialize_exposes_viewer_decision():
+    payload = serialize_publish_request(_request(), viewer_decision="approved")
+    assert payload["viewer_decision"] == "approved"
+    assert payload["status"] == PUBLISH_PENDING
+
+
+async def test_answerer_initiator_is_auto_approved():
+    """回答专家发起转公开：该专家默认同意，提问者仍需审批。"""
+    svc = _service()
+    now = datetime(2026, 8, 16, 12, 0, 0)
+    rows = await svc._build_approvers(
+        _question(),
+        _request(initiator_user_id=50),
+        _user(user_id=50),
+        now,
+    )
+    by_user = {int(row.user_id): row for row in rows}
+    assert by_user[1].decision == DECISION_PENDING
+    assert by_user[50].decision == DECISION_APPROVED
+    assert by_user[50].decided_at == now
 
 
 async def test_extend_one_day_capped_at_three():
