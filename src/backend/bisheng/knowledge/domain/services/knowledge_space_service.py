@@ -2592,6 +2592,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         space_id: int,
         context: dict | None = None,
+        collect_permission_ids: dict[int, list[str]] | None = None,
     ) -> list[KnowledgeFile]:
         """F036-① inheritance fast-path. Visibility-equivalent to the full path under the verified
         invariant "every non-owner file/folder grant has a binding".
@@ -2602,6 +2603,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         - otherwise                                  -> inherit the ancestor-chain decision
           (computed once per distinct chain; ancestor-folder bindings are honoured inside the
           chain eval via nearest-binding-wins).
+
+        F046: pass ``collect_permission_ids`` to also capture, per VISIBLE item, the effective
+        action permission ids the visibility decision already computed (bound items: full
+        per-item eval; owned items: chain ∪ owner defaults; others: the chain result). The
+        listing endpoints attach these to the response so the client renders action menus
+        without any follow-up permission requests. The bypassed branch (admin / open mode)
+        collects nothing — the client's local admin shortcut covers it.
         """
         permission_context = context or await self._build_child_permission_context(space_id)
         if permission_context.get("read_permission_bypassed"):
@@ -2624,6 +2632,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         async def can_view(item: KnowledgeFile) -> bool:
             object_type = "folder" if item.file_type == FileType.DIR.value else "knowledge_file"
             permission_id = "view_folder" if item.file_type == FileType.DIR.value else "view_file"
+            ancestor_ids = [int(p) for p in (item.file_level_path or "").split("/") if p]
             if (object_type, str(item.id)) in bound_ff:
                 async with semaphore:
                     effective_permissions = await self._get_child_item_effective_permission_ids(
@@ -2631,12 +2640,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         space_id=space_id,
                         context=permission_context,
                     )
+                if collect_permission_ids is not None:
+                    collect_permission_ids[int(item.id)] = sorted(effective_permissions)
                 return permission_id in effective_permissions
             item_owner = getattr(item, "user_id", None)
             if item_owner is not None and item_owner == user_id:
+                if collect_permission_ids is not None:
+                    # The uploader holds the additive owner grant on top of whatever
+                    # the ancestor chain confers (rename/delete own file).
+                    owned = await chain_perms(ancestor_ids) | default_permission_ids_for_relation("owner")
+                    collect_permission_ids[int(item.id)] = sorted(owned)
                 return True
-            ancestor_ids = [int(p) for p in (item.file_level_path or "").split("/") if p]
-            return permission_id in await chain_perms(ancestor_ids)
+            inherited = await chain_perms(ancestor_ids)
+            if collect_permission_ids is not None and permission_id in inherited:
+                collect_permission_ids[int(item.id)] = sorted(inherited)
+            return permission_id in inherited
 
         visibility = await asyncio.gather(*(can_view(item) for item in items))
         return [item for item, allowed in zip(items, visibility) if allowed]
@@ -2654,6 +2672,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_size: int,
         cursor: list | None = None,
         exclude_file_ids: list[int] | None = None,
+        collect_permission_ids: dict[int, list[str]] | None = None,
     ) -> tuple[list[KnowledgeFile], bool]:
         """F027 cursor-paginated scan: keep fetching batches via keyset, fold
         through ReBAC filtering, stop once we've accumulated ``page_size + 1``
@@ -2693,6 +2712,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 batch_items,
                 space_id=space_id,
                 context=permission_context,
+                collect_permission_ids=collect_permission_ids,
             )
             for item in visible_batch:
                 visible_page_items.append(item)
@@ -2731,6 +2751,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         exclude_file_ids: list[int] | None,
         page: int,
         page_size: int,
+        collect_permission_ids: dict[int, list[str]] | None = None,
     ) -> tuple[list[KnowledgeFile], bool]:
         """F040 batch-scan for keyword search: fetch the candidate set in
         successive OFFSET windows (``id``-tie-broken for a stable order across
@@ -2773,7 +2794,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             if not batch:
                 break
-            visible.extend(await self._filter_visible_child_items(batch, space_id=space_id, context=permission_context))
+            visible.extend(
+                await self._filter_visible_child_items(
+                    batch,
+                    space_id=space_id,
+                    context=permission_context,
+                    collect_permission_ids=collect_permission_ids,
+                )
+            )
             if len(batch) < _SEARCH_SCAN_BATCH_SIZE:
                 break
 
@@ -2832,6 +2860,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if self.version_repo is not None:
             exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
 
+        # F046: capture the action permission ids the visibility filter computes
+        # anyway, so the client renders file action menus with zero follow-up
+        # permission requests. Items absent from the map serialize permission_ids
+        # as null → the client falls back to the legacy lazy per-file checks
+        # (admin/bypassed branch, older backends).
+        collected_permission_ids: dict[int, list[str]] = {}
         visible_page_items, has_more = await self._scan_visible_child_items(
             space_id=space_id,
             parent_id=parent_id,
@@ -2843,12 +2877,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             page_size=page_size,
             cursor=decoded,
             exclude_file_ids=exclude_file_ids,
+            collect_permission_ids=collected_permission_ids,
         )
 
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(visible_page_items)
 
         data = await self._handle_file_folder_extra_info(visible_page_items)
+        for item in data:
+            item["permission_ids"] = collected_permission_ids.get(int(item["id"]))
 
         next_cursor: str | None = None
         if has_more and visible_page_items:
@@ -2976,6 +3013,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # every keyword match, filtering all, then Python-slicing. A broad keyword
         # (filename LIKE) or large ES hit set could otherwise materialise thousands
         # of rows + run ReBAC over all of them just to show one page.
+        # F046: same permission-ids piggyback as list_space_children.
+        collected_permission_ids: dict[int, list[str]] = {}
         page_items, has_more = await self._scan_visible_search_items(
             space_id=space_id,
             file_name=keyword,
@@ -2988,12 +3027,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             exclude_file_ids=exclude_file_ids,
             page=page,
             page_size=page_size,
+            collect_permission_ids=collected_permission_ids,
         )
 
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(page_items)
 
         data = await self._handle_file_folder_extra_info(page_items)
+        for item in data:
+            item["permission_ids"] = collected_permission_ids.get(int(item["id"]))
         # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
         # count requires materialising every match, which is exactly what the
         # batch-scan avoids. Both consumers (client useFileManager, F030

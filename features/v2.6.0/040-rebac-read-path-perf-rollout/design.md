@@ -274,3 +274,4 @@ F040 仅改"计算/取数机制"，**不**拥有也不改下列 Feature 的语�
 | 2026-06-26 | dev 全部落地（T0~T11，T8a N/A）。关键实现偏差见 tasks.md D1–D8：T6b 最近/常用走 INV-6 豁免回退 offset+enrich-after-paginate（D6）；T6c 关键词搜索改**批扫描+提前停**、去精确 total 改 has_more（D7，含 DAO `id_tiebreaker`、F030 wrapper 与客户端 `useFileManager` 同步）；T1b 关单、T5方案2 暂缓（D8） | wave 实现 + 用户裁定 |
 | 2026-06-26 | L2 code-review（PASS）。修两处：① 频道详情 membership 取数从"最高 rank"改 `find_membership_split` 的 highest-ACTIVE gating，修复高阶 PENDING/REJECTED 行遮蔽 ACTIVE 行导致私有频道 fail-closed 误拒（多授权模型边界，新增回归测试）；② 助手 cursor scan `permission_id` 合并不一致 | `/code-review --base feat/2.6.0` |
 | 2026-07-13 | 增补 F 组：`/chat/online` 默认排序与 `/workstation/app/uncategorized` 保持外部页码契约，内部改权限预过滤 + DM8-safe keyset 有界扫描 + 精确权限上下文复用 + 页内装饰；修复“标签存在但无关联时未分类误为空”；无迁移 | 普通用户未分类接口实测 11.49s；用户确认兼容方案 |
+| 2026-08-13 | 「文件⋯菜单打开时逐文件懒查动作权限」策略被 **F046** 替换：children/search 响应逐条目附带可见性判定顺手算出的 `permission_ids`,菜单零请求;懒查仅作为字段缺失时的兜底保留。论证见 F046 design | 客户反馈菜单按钮延迟出现 |

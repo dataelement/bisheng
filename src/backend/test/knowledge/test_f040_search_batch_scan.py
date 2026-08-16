@@ -61,7 +61,7 @@ def _install(all_candidates, visible_ids, *, batch_size=4):
         counter["max_offset_end"] = max(counter["max_offset_end"], end)
         return all_candidates[start:end]
 
-    async def _fake_filter(self, items, *, space_id, context=None):
+    async def _fake_filter(self, items, *, space_id, context=None, collect_permission_ids=None):
         return [it for it in items if it.id in visible_ids]
 
     patchers = [

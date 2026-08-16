@@ -203,6 +203,11 @@ export interface KnowledgeFile {
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
     user_name?: string;           // mapped from user_name — original uploader of this file
+    /** F046: effective action permission ids prefetched with the listing (download_file,
+     *  rename_file, delete_file, manage_file_relation, … / *_folder variants).
+     *  null/undefined = not prefetched (admin bypass or older backend) → the action menu
+     *  falls back to the legacy lazy per-file permission checks. */
+    permissionIds?: string[] | null;
     // Transient UI-only fields
     isCreating?: boolean;
 }
@@ -653,6 +658,7 @@ function mapChild(raw: any, spaceId: string): KnowledgeFile {
         is_multi_version: Boolean(raw?.is_multi_version),
         has_similar: Boolean(raw?.has_similar),
         user_name: raw?.user_name ?? undefined,
+        permissionIds: Array.isArray(raw?.permission_ids) ? (raw.permission_ids as string[]) : null,
     };
 }
 
