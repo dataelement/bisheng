@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -119,6 +120,24 @@ async def test_cross_tenant_reconcile_dispatch_isolates_broker_failure_and_sets_
         {"tenant_id": 12},
         {"tenant_id": 13},
     ]
+
+
+async def test_load_active_tenant_ids_uses_canonical_tenant_model(worker, monkeypatch: pytest.MonkeyPatch):
+    from bisheng.core import database
+
+    result = SimpleNamespace(all=lambda: [11, 23])
+    session = SimpleNamespace(exec=AsyncMock(return_value=result))
+
+    @asynccontextmanager
+    async def get_session():
+        yield session
+
+    monkeypatch.setattr(database, "get_async_db_session", get_session)
+
+    assert await worker._load_active_tenant_ids() == [11, 23]
+    statement = session.exec.await_args.args[0]
+    assert 'tenant.status = :status_1' in str(statement)
+    assert statement.compile().params["status_1"] == "active"
 
 
 def test_all_tenant_task_executes_async_coordinator(worker, monkeypatch: pytest.MonkeyPatch):

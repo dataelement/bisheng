@@ -729,11 +729,11 @@ async def _load_active_tenant_ids() -> list[int]:
 
     from bisheng.core.context.tenant import bypass_tenant_filter
     from bisheng.core.database import get_async_db_session
-    from bisheng.tenant.domain.models.tenant import Tenant, TenantStatus
+    from bisheng.database.models.tenant import Tenant
 
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
-            rows = await session.exec(select(Tenant.id).where(Tenant.status == TenantStatus.ACTIVE).order_by(Tenant.id))
+            rows = await session.exec(select(Tenant.id).where(Tenant.status == "active").order_by(Tenant.id))
             return [int(row) for row in rows.all()]
 
 
