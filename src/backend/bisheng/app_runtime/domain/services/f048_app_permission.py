@@ -190,13 +190,20 @@ class F048AppPermissionAdapter:
         tenant_id = int(row.tenant_id or 0)
         if tenant_id <= 0:
             return None
+        # Non-empty by contract: VerifiedPermissionTarget requires a
+        # context_version (min_length). There is no projected permission
+        # context at creation, so it is derived from the row alone — mirrors
+        # load_permission_record's hash with an empty context part.
+        context_version = sha256((f"0|{row.update_time.isoformat() if row.update_time else '0'}").encode()).hexdigest()[
+            :64
+        ]
         return AppPermissionRecord(
             tenant_id=tenant_id,
             resource_id=row.id,
             state=str(row.state),
             owner_user_id=row.owner_user_id,
             permission_version=0,
-            context_version="",
+            context_version=context_version,
         )
 
     async def authorize_created(
