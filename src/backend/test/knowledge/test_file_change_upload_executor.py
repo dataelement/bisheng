@@ -263,6 +263,31 @@ async def test_formal_file_document_version_request_link_and_steps_commit_before
     ]
 
 
+async def test_prepare_execution_repairs_incomplete_applying_upload_without_external_effects(upload_engine):
+    set_current_tenant_id(42)
+    request_id, _stage_id = await _seed_upload_bundle(upload_engine)
+    async with AsyncSession(bind=upload_engine, expire_on_commit=False) as session, session.begin():
+        request = await session.get(KnowledgeSpaceFileChangeRequest, request_id)
+        request.execution_state = KnowledgeSpaceFileChangeExecutionState.APPLYING
+        request.execution_token = "attempt-token-1"
+        request.execution_checkpoint = {"started_at": "2026-08-17T02:42:31+00:00"}
+        session.add(request)
+    side_effects = _SideEffects(upload_engine)
+
+    result = await _executor(upload_engine, side_effects, tokens=["must-not-be-used"]).prepare_execution(
+        request_id=request_id,
+    )
+
+    assert isinstance(result, MutationExecutionDispatch)
+    assert result.execution_token == "attempt-token-1"
+    request = (await _rows(upload_engine, KnowledgeSpaceFileChangeRequest))[0]
+    assert request.executed_resource_id is not None
+    assert "formal_resource_ids" in request.execution_checkpoint
+    steps = await _rows(upload_engine, KnowledgeSpaceFileChangeExecutionStep)
+    assert {step.state for step in steps} == {KnowledgeSpaceFileChangeExecutionStepState.PENDING}
+    assert side_effects.events == []
+
+
 async def test_failure_after_formal_rows_flush_rolls_back_every_database_row(upload_engine):
     set_current_tenant_id(42)
     request_id, _stage_id = await _seed_upload_bundle(upload_engine)

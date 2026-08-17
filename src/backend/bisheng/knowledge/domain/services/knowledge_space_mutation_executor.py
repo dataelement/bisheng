@@ -232,11 +232,55 @@ class KnowledgeSpaceMutationExecutor:
             )
         raise NotImplementedError(f"F046 executor does not yet support action={action}")
 
+    async def prepare_execution(
+        self,
+        *,
+        request_id: int,
+    ) -> MutationExecutionCompleted | MutationExecutionDispatch:
+        """Persist the current generation without running external step effects."""
+
+        tenant_id = self._tenant_id()
+        async with self.session_factory() as session:
+            request = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_id(
+                tenant_id=tenant_id,
+                request_id=int(request_id),
+            )
+        if request is None:
+            raise LookupError(f"F046 request not found: {request_id}")
+        payload_snapshot = {
+            **dict(request.action_snapshot or {}),
+            "action": str(request.action),
+            "change_request_id": int(request.id),
+            "space_id": int(request.space_id),
+            "applicant_user_name": str(request.applicant_user_id),
+        }
+        if request.action == KnowledgeSpaceFileChangeAction.UPLOAD:
+            return await self._execute_upload(
+                request_id=request_id,
+                payload_snapshot=payload_snapshot,
+                dispatch_after_commit=False,
+            )
+        if request.action in {
+            KnowledgeSpaceFileChangeAction.RENAME,
+            KnowledgeSpaceFileChangeAction.MOVE,
+        }:
+            return await self._execute_rename_or_move(
+                request_id=request_id,
+                payload_snapshot=payload_snapshot,
+            )
+        if request.action == KnowledgeSpaceFileChangeAction.DELETE:
+            return await self._execute_delete_prepare(
+                request_id=request_id,
+                payload_snapshot=payload_snapshot,
+            )
+        raise NotImplementedError(f"F046 executor does not yet support action={request.action}")
+
     async def _execute_upload(
         self,
         *,
         request_id: int,
         payload_snapshot: dict,
+        dispatch_after_commit: bool = True,
     ) -> MutationExecutionCompleted | MutationExecutionDispatch:
         tenant_id = self._tenant_id()
         dispatch_context: UploadStepDispatchContext | None = None
@@ -344,16 +388,17 @@ class KnowledgeSpaceMutationExecutor:
 
         if dispatch_context is None:
             raise RuntimeError("F046 upload transaction did not produce a dispatch context")
-        try:
-            await self._dispatch_after_commit(dispatch_context, dispatch_states)
-        except Exception as exc:
-            await self._mark_upload_attempt_failed(
-                tenant_id=dispatch_context.tenant_id,
-                request_id=dispatch_context.request_id,
-                execution_token=dispatch_context.execution_token,
-                error_summary=str(exc),
-            )
-            raise
+        if dispatch_after_commit:
+            try:
+                await self._dispatch_after_commit(dispatch_context, dispatch_states)
+            except Exception as exc:
+                await self._mark_upload_attempt_failed(
+                    tenant_id=dispatch_context.tenant_id,
+                    request_id=dispatch_context.request_id,
+                    execution_token=dispatch_context.execution_token,
+                    error_summary=str(exc),
+                )
+                raise
         return MutationExecutionDispatch(execution_token=dispatch_context.execution_token, deadline=deadline)
 
     async def _execute_rename_or_move(

@@ -438,7 +438,7 @@ def test_stage_cleanup_is_an_idempotent_knowledge_service_call(worker, monkeypat
     )
 
 
-async def test_decision_dispatcher_and_initial_coordinate_use_request_only(worker, monkeypatch):
+async def test_decision_dispatcher_and_initial_coordinate_prepare_business_context(worker, monkeypatch):
     dispatcher = worker.CeleryKnowledgeSpaceFileChangeDispatcher()
     await dispatcher.dispatch(tenant_id=23, request_id=41)
     worker.coordinate_file_change_execution.apply_async.assert_called_once_with(
@@ -448,20 +448,51 @@ async def test_decision_dispatcher_and_initial_coordinate_use_request_only(worke
 
     identity = _identity()
     coordinator = SimpleNamespace(
-        begin_execution=AsyncMock(return_value=identity),
-        load_identity_by_request=AsyncMock(),
+        load_identity_by_request=AsyncMock(return_value=identity),
         dispatch_ready_steps=AsyncMock(return_value=[]),
         reconcile=AsyncMock(return_value=ExecutionReconcileStatus.RUNNING),
     )
+    executor = SimpleNamespace(
+        prepare_execution=AsyncMock(return_value=SimpleNamespace(execution_token="generation-1")),
+    )
     monkeypatch.setattr(worker, "_build_execution_coordinator", lambda: coordinator)
+    monkeypatch.setattr(worker, "_build_mutation_executor", lambda: executor)
 
     assert await worker._coordinate_execution_async(
         tenant_id=23,
         request_id=41,
         execution_token=None,
     ) == {"status": "running"}
-    coordinator.begin_execution.assert_awaited_once_with(tenant_id=23, request_id=41)
+    executor.prepare_execution.assert_awaited_once_with(request_id=41)
+    coordinator.load_identity_by_request.assert_awaited_once_with(
+        tenant_id=23,
+        request_id=41,
+        execution_token="generation-1",
+    )
+
+
+async def test_recovery_coordinate_prepares_incomplete_generation_and_ignores_old_token(worker, monkeypatch):
+    coordinator = SimpleNamespace(
+        load_identity_by_request=AsyncMock(),
+        dispatch_ready_steps=AsyncMock(),
+        reconcile=AsyncMock(),
+    )
+    executor = SimpleNamespace(
+        prepare_execution=AsyncMock(return_value=SimpleNamespace(execution_token="generation-2")),
+    )
+    monkeypatch.setattr(worker, "_build_execution_coordinator", lambda: coordinator)
+    monkeypatch.setattr(worker, "_build_mutation_executor", lambda: executor)
+
+    result = await worker._coordinate_execution_async(
+        tenant_id=23,
+        request_id=41,
+        execution_token="generation-1",
+    )
+
+    assert result == {"status": "ignored"}
+    executor.prepare_execution.assert_awaited_once_with(request_id=41)
     coordinator.load_identity_by_request.assert_not_awaited()
+    coordinator.dispatch_ready_steps.assert_not_awaited()
 
 
 @pytest.mark.parametrize("tenant_id,request_id", [(True, 41), (23, True), (0, 41), (23, 0)])

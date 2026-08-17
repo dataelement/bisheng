@@ -369,18 +369,21 @@ async def _coordinate_execution_async(
     request_id: int,
     execution_token: str | None,
 ) -> dict:
+    from bisheng.knowledge.domain.services.knowledge_space_mutation_executor import (
+        MutationExecutionCompleted,
+    )
+
     coordinator = _build_execution_coordinator()
-    if execution_token:
-        identity = await coordinator.load_identity_by_request(
-            tenant_id=int(tenant_id),
-            request_id=int(request_id),
-            execution_token=str(execution_token),
-        )
-    else:
-        identity = await coordinator.begin_execution(
-            tenant_id=int(tenant_id),
-            request_id=int(request_id),
-        )
+    prepared = await _build_mutation_executor().prepare_execution(request_id=int(request_id))
+    if isinstance(prepared, MutationExecutionCompleted):
+        return {"status": "completed"}
+    if execution_token and str(execution_token) != str(prepared.execution_token):
+        return {"status": "ignored"}
+    identity = await coordinator.load_identity_by_request(
+        tenant_id=int(tenant_id),
+        request_id=int(request_id),
+        execution_token=str(prepared.execution_token),
+    )
     if identity is None:
         return {"status": "ignored"}
     await coordinator.dispatch_ready_steps(identity=identity, dispatcher=_dispatch_file_change_step)

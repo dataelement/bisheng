@@ -177,7 +177,7 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 | `knowledge/domain/services/knowledge_space_file_change_policy_service.py` | F046 当前租户策略与单空间设置；Platform 多项保存使用一个事务，拒绝跨租户空间并整体回滚 | `save_configuration()`、`is_approval_required()`、`get_space_settings_page()` |
 | `knowledge/domain/services/knowledge_space_file_change_execution_coordinator.py` | F046 Knowledge-owned generation/step 编排；按 action 处理 retry/补偿，完成判据只认当前 token、权威 phase/guard 与 durable step | `begin_execution()`、`queue_retry()`、`reconcile()`、`is_business_complete()` |
 | `knowledge/domain/services/knowledge_space_upload_stage_service.py` | F046 opaque stage：登记临时桶对象、申请绑定后幂等复制到永久桶、预览与终态清理 | `create_stage()`、`retain_bound_stage()`、`cleanup()`、`reconcile_expired_orphan()` |
-| `knowledge/domain/services/knowledge_space_mutation_executor.py` | F046 mutation owner 编排入口：从持久化 request/step/token 恢复并校验后执行或补偿 | `execute_and_verify_step()`、`continue_compensation()`、`continue_post_cutover_cleanup()` |
+| `knowledge/domain/services/knowledge_space_mutation_executor.py` | F046 mutation owner 编排入口：先原子补齐正式文件图或 mutation/delete manifest，再从持久化 request/step/token 恢复并校验后执行或补偿 | `prepare_execution()`、`execute_and_verify_step()`、`continue_compensation()`、`continue_post_cutover_cleanup()` |
 | `knowledge/domain/services/knowledge_space_mutation_step_owner.py` | rename/move 外部副作用的稳定 owner 协议；具体实现可演进，但 worker 只经 executor 调用该协议 | `MutationStepOwner` |
 | `knowledge/domain/services/knowledge_space_mutation_read_projection_service.py` | transition 期间按 durable phase 向正式读路径投影唯一 old/new view | `list_invisible_ids()`、`authoritative_space_ids()`、`name_projection()` |
 | `knowledge/domain/services/knowledge_space_file_change_compensation_service.py` | F046 纯 Knowledge 补偿扫描 Service：校验 tenant ContextVar，以 request/step ID 返回有界 keyset 页，不查询 Approval instance/outbox | `list_watchdog_page()`、`list_step_recovery_page()`、`list_cleanup_page()`、`list_expired_orphan_stage_page()` |
@@ -338,7 +338,10 @@ F045 subscriber 把 approved 先提交为 `queued`，再派稳定 Permission req
 
 ### 6.4 F046 Knowledge saga
 
-F046 subscriber 把 approved 先提交为 `queued`，Knowledge dispatcher 只发送 tenant/request。首次 coordinate 无 token时调用 `begin_execution()`，带 token 重投只加载当前 generation；旧 token 回调忽略。
+F046 subscriber 把 approved 先提交为 `queued`，Knowledge dispatcher 只发送 tenant/request。首次 coordinate 与带 token
+恢复均先调用 Knowledge mutation owner 的 `prepare_execution()`，在同一业务事务补齐正式文件图或 mutation/delete
+manifest 和当前 generation steps；随后 coordinator 只加载已准备的当前 token，旧 token 回调忽略。准备过程幂等，
+可修复已进入 applying 但准备上下文尚未完整提交的 generation，且不会提前执行 FGA、检索或解析派发副作用。
 
 - upload：正式文件图、FGA 权限和普通解析任务调度均成功接受后才 applied；后续解析失败是普通文件状态。
 - rename/move：durable transition footprint 保证 OLD_VIEW/NEW_VIEW 单一正式视图，owner read-after-verify 后推进。
