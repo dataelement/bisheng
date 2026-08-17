@@ -44,6 +44,15 @@ from bisheng.utils import generate_uuid
 # a successful start is exactly that case).
 _UNSET: Any = object()
 
+# Plain-string mirrors of two ``AppState`` members. ``flow.py``'s UNION third
+# leg needs them and RULE-2 forbids anything under ``database/models/`` from
+# importing ``bisheng.app_runtime.domain.*`` — so the enum cannot be reached
+# from here. The duplication is kept honest by
+# ``test_build_list_third_type.test_app_state_literals_match_the_enum``, which
+# fails the moment the two drift.
+APP_STATE_ONLINE = "online"
+APP_STATE_DELETED = "deleted"
+
 
 class App(SQLModelSerializable, table=True):
     """One hosted application. The row is the app; versions hang off it."""

@@ -23,6 +23,7 @@ from bisheng.common.errcode.flow import WorkFlowInitError
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
+from bisheng.common.services.config_service import settings
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -73,15 +74,46 @@ class WorkflowResourceAuthorizationPort:
 
 
 class WorkFlowService(BaseService):
-    SUPPORTED_APP_TYPES = {FlowType.WORKFLOW.value, FlowType.ASSISTANT.value}
+    SUPPORTED_APP_TYPES = {FlowType.WORKFLOW.value, FlowType.ASSISTANT.value, FlowType.HOSTED_APP.value}
+    #: Types that only exist where the app-factory runtime layer is deployed.
+    #: Kept apart from SUPPORTED_APP_TYPES so the switch subtracts rather than
+    #: the set being rebuilt in two places (F054 design K12).
+    _RUNTIME_LAYER_APP_TYPES = frozenset({FlowType.HOSTED_APP.value})
     _FLOW_TYPE_TO_RESOURCE_TYPE = {
         FlowType.WORKFLOW.value: "workflow",
         FlowType.ASSISTANT.value: "assistant",
+        FlowType.HOSTED_APP.value: "app",
     }
 
     @classmethod
+    def enabled_app_types(cls) -> set[int]:
+        """App types this deployment lists — ``SUPPORTED_APP_TYPES`` minus what is not installed.
+
+        AC-58 requires that with the runtime layer absent the build page shows
+        neither the hosted-application type nor a single hosted card. The front
+        end hides the filter option, but a page asking for "all types" would
+        still be answered by the server, so the gate lives here as well: the
+        list contract is the backend's to keep, not the SPA's.
+        """
+        if settings.app_runtime.enabled:
+            return cls.SUPPORTED_APP_TYPES
+        return cls.SUPPORTED_APP_TYPES - cls._RUNTIME_LAYER_APP_TYPES
+
+    @classmethod
+    def _tag_resource_types(cls) -> list[ResourceTypeEnum]:
+        """Resource types the application tag filter spans (design D8, gate 5).
+
+        Miss a type here and the symptom is not an error but an always-empty
+        result once a tag is selected — the filter box works, the list is blank.
+        """
+        types = [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT]
+        if FlowType.HOSTED_APP.value in cls.enabled_app_types():
+            types.append(ResourceTypeEnum.HOSTED_APP)
+        return types
+
+    @classmethod
     def filter_supported_apps(cls, data: list[dict]) -> list[dict]:
-        return [one for one in data if one.get("flow_type") in cls.SUPPORTED_APP_TYPES]
+        return [one for one in data if one.get("flow_type") in cls.enabled_app_types()]
 
     @classmethod
     def add_extra_field(
@@ -91,7 +123,21 @@ class WorkFlowService(BaseService):
         managed: bool = False,
         writeable_ids: set[str] | None = None,
     ) -> list[dict]:
-        """Add some extra fields for app list"""
+        """Add some extra fields for app list.
+
+        Two F054 notes about hosted applications:
+
+        * ``app_state`` — the card's state badge — is **already on the row**,
+          projected by the UNION's third leg (``FlowDao._build_apps_subquery``)
+          rather than fetched here. Enriching it per row would mean one detail
+          request per card, i.e. 14 requests for a 14-card page.
+        * ``version_list`` stays empty for them, and that is correct:
+          ``FlowVersionDao`` knows nothing about ``app_version``. Their
+          read-only version dropdown has its own source,
+          ``GET /api/v1/apps/{app_id}/versions``. Do not "fix" the empty list by
+          pointing it at flow versions — that dropdown can switch a *workflow's*
+          current version.
+        """
         data = cls.filter_supported_apps(data)
         # ApplicationsIDVertical
         resource_ids = []
@@ -149,14 +195,17 @@ class WorkFlowService(BaseService):
         data: list[dict],
         actions: tuple[str, ...],
     ) -> dict[str, frozenset[str]]:
+        # One bucket per F048 resource type. A row whose type has no bucket is
+        # dropped silently and comes back with no actions at all — the symptom
+        # is "the cards render but nothing on them can be clicked", never an
+        # error (design D8, gate 2).
         grouped: dict[str, list[str]] = {
             "workflow": [],
             "assistant": [],
+            "app": [],
         }
         for item in cls.filter_supported_apps(data):
-            resource_type = cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(
-                int(item.get("flow_type") or 0)
-            )
+            resource_type = cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(int(item.get("flow_type") or 0))
             if resource_type is not None:
                 grouped[resource_type].append(str(item.get("id")))
 
@@ -192,15 +241,16 @@ class WorkFlowService(BaseService):
         search_description: bool = False,
         action: str = "use",
         cursor: Sequence | None = None,
+        app_state: str | None = None,
     ) -> tuple[list[dict], bool]:
         """Get a bounded application candidate page and check exact actions."""
         total_start = perf_counter()
-        if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
+        if flow_type is not None and flow_type not in cls.enabled_app_types():
             return [], False
 
         flow_ids = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
+            ret = TagDao.get_resources_by_tags_batch([tag_id], cls._tag_resource_types())
             if not ret:
                 return [], False
             flow_ids = [one.resource_id for one in ret]
@@ -224,6 +274,7 @@ class WorkFlowService(BaseService):
             query_page_size,
             search_description=search_description,
             cursor=cursor,
+            app_state=app_state,
         )
         logger.info(
             "[perf][workflow.list.dao] user_id={} flow_type={} page={} page_size={} skip_pagination={} "
@@ -248,17 +299,8 @@ class WorkFlowService(BaseService):
                 data,
                 tuple(dict.fromkeys((required_action, "edit"))),
             )
-            data = [
-                one
-                for one in data
-                if required_action
-                in permission_map.get(str(one.get("id")), frozenset())
-            ]
-            writeable_ids = {
-                str(app_id)
-                for app_id, action_codes in permission_map.items()
-                if "edit" in action_codes
-            }
+            data = [one for one in data if required_action in permission_map.get(str(one.get("id")), frozenset())]
+            writeable_ids = {str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes}
             logger.info(
                 "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} "
                 "action={} took_ms={:.2f}",
@@ -309,6 +351,7 @@ class WorkFlowService(BaseService):
         managed: bool,
         search_description: bool,
         required_action: str,
+        app_state: str | None = None,
     ) -> tuple[list[dict], bool, set[str]]:
         """F027 cursor-paginated scan for /workflow/list: keep fetching DB
         batches via keyset, apply ReBAC fine-grained filtering, accumulate
@@ -337,6 +380,7 @@ class WorkFlowService(BaseService):
                 _FLOW_PERMISSION_SCAN_BATCH_SIZE,
                 search_description=search_description,
                 cursor=batch_cursor,
+                app_state=app_state,
             )
             logger.info(
                 "[perf][workflow.list.dao] user_id={} flow_type={} batch_size={} rows={} db_has_more={} took_ms={:.2f}",
@@ -358,17 +402,8 @@ class WorkFlowService(BaseService):
                 batch,
                 tuple(dict.fromkeys((required_action, "edit"))),
             )
-            kept = [
-                one
-                for one in batch
-                if required_action
-                in permission_map.get(str(one.get("id")), frozenset())
-            ]
-            writeable_ids |= {
-                str(app_id)
-                for app_id, action_codes in permission_map.items()
-                if "edit" in action_codes
-            }
+            kept = [one for one in batch if required_action in permission_map.get(str(one.get("id")), frozenset())]
+            writeable_ids |= {str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes}
             logger.info(
                 "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} "
                 "action={} took_ms={:.2f}",
@@ -447,12 +482,7 @@ class WorkFlowService(BaseService):
                 batch,
                 requested_actions,
             )
-            kept = [
-                item
-                for item in batch
-                if action
-                in action_map.get(str(item.get("id")), frozenset())
-            ]
+            kept = [item for item in batch if action in action_map.get(str(item.get("id")), frozenset())]
             for item in kept:
                 item_id = str(item.get("id"))
                 visible_actions[item_id] = action_map.get(
@@ -511,7 +541,7 @@ class WorkFlowService(BaseService):
         action: str = "use",
     ) -> list[dict]:
         """Return the legacy online-app page without materializing all apps."""
-        if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
+        if flow_type is not None and flow_type not in cls.enabled_app_types():
             return []
 
         tagged_ids: list[str] | None = None
@@ -521,6 +551,10 @@ class WorkFlowService(BaseService):
                 resource_types.append(ResourceTypeEnum.WORK_FLOW)
             if flow_type in (None, FlowType.ASSISTANT.value):
                 resource_types.append(ResourceTypeEnum.ASSISTANT)
+            if flow_type in (None, FlowType.HOSTED_APP.value) and ResourceTypeEnum.HOSTED_APP in (
+                cls._tag_resource_types()
+            ):
+                resource_types.append(ResourceTypeEnum.HOSTED_APP)
             tagged_rows = await asyncio.gather(
                 *[TagDao.aget_resources_by_tags([tag_id], resource_type) for resource_type in resource_types]
             )
@@ -540,11 +574,7 @@ class WorkFlowService(BaseService):
             action=action,
             ranking_user_id=user.user_id,
         )
-        writeable_ids = {
-            app_id
-            for app_id, action_codes in action_map.items()
-            if "edit" in action_codes
-        }
+        writeable_ids = {app_id for app_id, action_codes in action_map.items() if "edit" in action_codes}
         data = cls.add_extra_field(user, data, writeable_ids=writeable_ids)
         return cls._apply_page_can_share(user, data, action_map)
 
@@ -561,6 +591,7 @@ class WorkFlowService(BaseService):
         managed: bool = False,
         search_description: bool = False,
         action: str = "use",
+        app_state: str | None = None,
     ) -> "PageInfiniteCursorData":
         """F027 cursor envelope wrapper for ``/api/v1/workflow/list``.
 
@@ -576,10 +607,7 @@ class WorkFlowService(BaseService):
 
         total_start = perf_counter()
         required_action = "edit" if managed else action
-        context = (
-            f"flow|sort=update_time|action={required_action}|"
-            f"managed={int(managed)}"
-        )
+        context = f"flow|sort=update_time|action={required_action}|managed={int(managed)}"
         try:
             decoded = decode_cursor(
                 cursor,
@@ -589,13 +617,13 @@ class WorkFlowService(BaseService):
         except CursorDecodeError as exc:
             raise AppInvalidCursorError(exception=exc)
 
-        if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
+        if flow_type is not None and flow_type not in cls.enabled_app_types():
             return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
 
         # Tag-based prefilter: empty match short-circuits to empty page.
         flow_ids: list[str] = []
         if tag_id:
-            ret = TagDao.get_resources_by_tags_batch([tag_id], [ResourceTypeEnum.WORK_FLOW, ResourceTypeEnum.ASSISTANT])
+            ret = TagDao.get_resources_by_tags_batch([tag_id], cls._tag_resource_types())
             if not ret:
                 return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
             flow_ids = [one.resource_id for one in ret]
@@ -611,6 +639,7 @@ class WorkFlowService(BaseService):
             managed=managed,
             search_description=search_description,
             required_action=required_action,
+            app_state=app_state,
         )
 
         enrich_start = perf_counter()
@@ -673,11 +702,7 @@ class WorkFlowService(BaseService):
             data,
             (action,),
         )
-        return [
-            one
-            for one in data
-            if action in action_map.get(str(one.get("id")), frozenset())
-        ]
+        return [one for one in data if action in action_map.get(str(one.get("id")), frozenset())]
 
     @classmethod
     async def aget_writeable_app_ids(cls, user: UserPayload, data: list[dict]) -> set[str]:
@@ -690,11 +715,7 @@ class WorkFlowService(BaseService):
         the F048 rework replaced.
         """
         action_map = await cls._application_action_map(user, data, ("edit",))
-        return {
-            app_id
-            for app_id, action_codes in action_map.items()
-            if "edit" in action_codes
-        }
+        return {app_id for app_id, action_codes in action_map.items() if "edit" in action_codes}
 
     @classmethod
     async def run_once(
@@ -775,11 +796,7 @@ class WorkFlowService(BaseService):
         db_flow = await FlowDao.aget_flow_by_id(flow_id)
         if not db_flow:
             raise NotFoundError()
-        required_action = (
-            "publish"
-            if status == FlowStatus.ONLINE.value
-            else "unpublish"
-        )
+        required_action = "publish" if status == FlowStatus.ONLINE.value else "unpublish"
         await require_business_action(
             login_user,
             resource_type="workflow",
@@ -994,9 +1011,11 @@ class WorkFlowService(BaseService):
         tag_id = [tag.id for tag in all_tags]
         flow_ids_not_in: list[str] = []
         if tag_id:
+            # "Uncategorised" is the complement of "tagged", so a type missing
+            # from this gather is a type whose tagged apps are wrongly reported
+            # as untagged — the mirror image of the always-empty tag filter.
             tagged_rows = await asyncio.gather(
-                TagDao.aget_resources_by_tags(tag_id, ResourceTypeEnum.WORK_FLOW),
-                TagDao.aget_resources_by_tags(tag_id, ResourceTypeEnum.ASSISTANT),
+                *[TagDao.aget_resources_by_tags(tag_id, resource_type) for resource_type in cls._tag_resource_types()]
             )
             flow_ids_not_in = list({row.resource_id for rows in tagged_rows for row in rows})
 

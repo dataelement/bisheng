@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Union
 
 from pydantic import field_validator
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, and_, case, false, func, or_, text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, and_, case, cast, false, func, null, or_, text
 from sqlmodel import Field, col, select, update
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
@@ -17,6 +17,7 @@ from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType
 from bisheng.core.database.tenant_filter import build_tenant_filter_clause
 from bisheng.core.logger import trace_id_var
+from bisheng.database.models.app import APP_STATE_DELETED, APP_STATE_ONLINE, App
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.role_access import AccessType, RoleAccess
 from bisheng.database.models.session import MessageSession
@@ -37,6 +38,10 @@ class FlowType(Enum):
     LINSIGHT = 20  # Inspiration Mode
     CHANNEL_ARTICLE = 25  # Channel Article AI Assistant
     KNOLEDGE_SPACE = 30
+    # F054: hosted application. Only a *type tag* for the shared list pipeline —
+    # the row lives in ``app``, not in ``flow`` (design D8). 35 is the next free
+    # value; 5/10/15/20/25/30 are taken.
+    HOSTED_APP = 35
 
 
 class AppEnum(Enum):
@@ -430,8 +435,9 @@ class FlowDao(FlowBase):
         limit: int = 0,
         search_description: bool = False,
         app_type_ids: dict[int, list[str]] | None = None,
+        app_state: str | None = None,
     ) -> (list[dict], int):
-        """Get all flow-based apps and assistants."""
+        """Get all flow-based apps, assistants and hosted applications."""
         sub_query = cls._build_apps_subquery()
 
         statement = select(
@@ -444,6 +450,7 @@ class FlowDao(FlowBase):
             sub_query.c.status,
             sub_query.c.create_time,
             sub_query.c.update_time,
+            sub_query.c.app_state,
         )
         count_statement = select(func.count(sub_query.c.id))
         if name:
@@ -459,6 +466,12 @@ class FlowDao(FlowBase):
         if status is not None:
             statement = statement.where(sub_query.c.status == status)
             count_statement = count_statement.where(sub_query.c.status == status)
+        if app_state:
+            # Hosted-application state (F054). The other two legs project NULL
+            # here, so an equality predicate narrows to hosted apps by itself —
+            # this filter never needs a companion ``flow_type`` condition.
+            statement = statement.where(sub_query.c.app_state == app_state)
+            count_statement = count_statement.where(sub_query.c.app_state == app_state)
         if id_list:
             statement = statement.where(sub_query.c.id.in_(id_list))
             count_statement = count_statement.where(sub_query.c.id.in_(id_list))
@@ -489,20 +502,32 @@ class FlowDao(FlowBase):
             total = session.scalar(count_statement)
         data = []
         for one in ret:
-            data.append(
-                {
-                    "id": one[0],
-                    "name": one[1],
-                    "description": one[2],
-                    "flow_type": one[3],
-                    "logo": one[4],
-                    "user_id": one[5],
-                    "status": one[6],
-                    "create_time": one[7],
-                    "update_time": one[8],
-                }
-            )
+            data.append(cls._app_row_to_dict(one))
         return data, total
+
+    @staticmethod
+    def _app_row_to_dict(one) -> dict:
+        """Map one UNION row to the list payload.
+
+        ``app_state`` is attached **only to hosted-application rows**. Workflows
+        and assistants keep the exact payload they had before F054 — a null
+        ``app_state`` on every card would be a new field in a response two
+        front-ends already parse, for no reader (AC-59).
+        """
+        item = {
+            "id": one[0],
+            "name": one[1],
+            "description": one[2],
+            "flow_type": one[3],
+            "logo": one[4],
+            "user_id": one[5],
+            "status": one[6],
+            "create_time": one[7],
+            "update_time": one[8],
+        }
+        if one[3] == FlowType.HOSTED_APP.value:
+            item["app_state"] = one[9]
+        return item
 
     @classmethod
     async def aget_all_apps(
@@ -520,8 +545,9 @@ class FlowDao(FlowBase):
         app_type_ids: dict[int, list[str]] | None = None,
         cursor: Sequence | None = None,
         ranking_user_id: int | None = None,
+        app_state: str | None = None,
     ) -> tuple[list[dict], bool]:
-        """List flow-based apps and assistants (F027 cursor-paginated).
+        """List flow-based apps, assistants and hosted applications (F027 cursor-paginated).
 
         Total-count side query removed per spec AC-11; ``has_more`` is
         detected by fetching ``limit + 1`` rows.
@@ -533,6 +559,8 @@ class FlowDao(FlowBase):
                 and ignores ``page``.
             ranking_user_id: Rank apps used by this user first, ordered by the
                 latest session create time; unused apps follow by update time.
+            app_state: F054 hosted-application state. Narrows to hosted apps on
+                its own (the other legs project NULL for that column).
 
         Returns:
             ``(data, has_more)`` — the list of app dicts and whether a
@@ -550,6 +578,7 @@ class FlowDao(FlowBase):
             sub_query.c.status,
             sub_query.c.create_time,
             sub_query.c.update_time,
+            sub_query.c.app_state,
         )
         used_rank = None
         sort_time = None
@@ -580,6 +609,9 @@ class FlowDao(FlowBase):
 
         if status is not None:
             statement = statement.where(sub_query.c.status == status)
+        if app_state:
+            # See ``get_all_apps``: hosted-application state, self-narrowing.
+            statement = statement.where(sub_query.c.app_state == app_state)
         if id_list:
             statement = statement.where(sub_query.c.id.in_(id_list))
         app_type_ids_filter = cls._build_app_type_ids_filter(sub_query, app_type_ids)
@@ -639,35 +671,40 @@ class FlowDao(FlowBase):
             ret = ret[:limit]
         data = []
         for one in ret:
-            item = {
-                "id": one[0],
-                "name": one[1],
-                "description": one[2],
-                "flow_type": one[3],
-                "logo": one[4],
-                "user_id": one[5],
-                "status": one[6],
-                "create_time": one[7],
-                "update_time": one[8],
-            }
+            item = cls._app_row_to_dict(one)
             if ranking_user_id is not None:
-                item["_used_rank"] = one[9]
-                item["_sort_time"] = one[10]
+                # Indices 9 is ``app_state``; the ranking columns are appended
+                # after it by ``add_columns`` above.
+                item["_used_rank"] = one[10]
+                item["_sort_time"] = one[11]
             data.append(item)
         return data, has_more
 
     @classmethod
     def _build_apps_subquery(cls):
-        """Build the workflow+assistant ``UNION ALL`` subquery with tenant isolation.
+        """Build the workflow+assistant+hosted-app ``UNION ALL`` subquery with tenant isolation.
 
         The ``do_orm_execute`` auto-filter (see ``core/database/tenant_filter.py``)
         only inspects the outer statement's ``column_descriptions`` /
         ``get_final_froms``. Wrapping ``select(Flow) UNION ALL select(Assistant)``
-        in ``.subquery()`` hides both tenant-aware tables behind a Subquery, so
+        in ``.subquery()`` hides every tenant-aware table behind a Subquery, so
         the listener finds no table to filter and the outer SELECT leaks cross
         tenant rows. Inject the per-table tenant clause on each inner SELECT
         before unioning so all four callers (sync/async list, time-range stats,
-        first-app) stay in lockstep with the listener's semantics.
+        first-app) stay in lockstep with the listener's semantics. **A new leg
+        that forgets its own clause leaks through all four at once** — there is
+        no auto-filter behind this to catch it (design K5 ③).
+
+        The third leg (F054 design D8) projects the ``app`` table onto the same
+        column set: ``flow_type`` becomes the constant 35, ``user_id`` becomes
+        the owner, and ``status`` is folded to 2 (online) / 1 (everything else)
+        so the existing on/off switch and ``status`` filter keep working
+        unchanged. The five real application states ride a **tenth column**,
+        ``app_state``, which the other two legs fill with a typed NULL — a UNION
+        needs one column count, and that NULL is what lets a single query carry
+        a per-type field instead of the build page fetching a detail per card.
+        ``deleted`` apps are excluded here rather than filtered later: the row
+        survives for audit, but it is not an application any list should show.
         """
         flow_select = select(
             Flow.id,
@@ -679,6 +716,7 @@ class FlowDao(FlowBase):
             Flow.status,
             Flow.create_time,
             Flow.update_time,
+            cast(null(), String(16)).label("app_state"),
         )
         assistant_select = select(
             Assistant.id,
@@ -690,7 +728,20 @@ class FlowDao(FlowBase):
             Assistant.status,
             Assistant.create_time,
             Assistant.update_time,
+            cast(null(), String(16)).label("app_state"),
         ).where(Assistant.is_delete == 0)
+        app_select = select(
+            App.id,
+            App.name,
+            App.description,
+            FlowType.HOSTED_APP.value,
+            App.logo,
+            App.owner_user_id,
+            case((App.state == APP_STATE_ONLINE, FlowStatus.ONLINE.value), else_=FlowStatus.OFFLINE.value),
+            App.create_time,
+            App.update_time,
+            col(App.state).label("app_state"),
+        ).where(App.state != APP_STATE_DELETED)
 
         flow_clause = build_tenant_filter_clause(Flow.tenant_id)
         if flow_clause is not None:
@@ -698,8 +749,11 @@ class FlowDao(FlowBase):
         assistant_clause = build_tenant_filter_clause(Assistant.tenant_id)
         if assistant_clause is not None:
             assistant_select = assistant_select.where(assistant_clause)
+        app_clause = build_tenant_filter_clause(App.tenant_id)
+        if app_clause is not None:
+            app_select = app_select.where(app_clause)
 
-        return flow_select.union_all(assistant_select).subquery()
+        return flow_select.union_all(assistant_select, app_select).subquery()
 
     @classmethod
     def _build_user_last_used_subquery(cls, user_id: int, flow_type: int | None = None):
@@ -810,6 +864,16 @@ class FlowDao(FlowBase):
     def get_all_app_by_time_range_sync(
         cls, start_time: datetime, end_time: datetime, page: int = 0, page_size: int = 0
     ):
+        """Applications created in a window — the telemetry mid-table feed.
+
+        F054 reviewed and accepted: hosted applications flow through here too,
+        because they are platform applications and leaving them out would
+        silently undercount "apps created". The consumer
+        (``worker/telemetry/mid_table.py``) reads only id / name / user_id /
+        flow_type / create_time, all of which the third leg projects, and its
+        ``convert_flow_type`` already has a total fallback — so a new type
+        widens a bucket, it cannot break the sync.
+        """
         sub_query = cls._build_apps_subquery()
 
         statement = select(
@@ -847,6 +911,12 @@ class FlowDao(FlowBase):
 
     @classmethod
     def get_first_app(cls):
+        """Oldest application — only its ``create_time`` is read.
+
+        Used by ``scripts/sync_increment_table.py`` to pick the backfill start
+        date. F054 reviewed and accepted that hosted applications participate:
+        the worst case is an earlier start date, i.e. a wider backfill window.
+        """
         sub_query = cls._build_apps_subquery()
 
         statement = select(

@@ -1,6 +1,6 @@
 """Regression tests for FlowDao's UNION ALL tenant-isolation leak.
 
-The four ``select(Flow) UNION ALL select(Assistant) AS sub`` queries on
+The four ``select(Flow) UNION ALL select(Assistant) UNION ALL select(App) AS sub`` queries on
 ``FlowDao`` (``get_all_apps`` / ``aget_all_apps`` / ``get_all_app_by_time_range_sync``
 / ``get_first_app``) historically escaped the ``do_orm_execute`` auto-filter
 because the outer SELECT only exposes a Subquery — the listener never saw
@@ -25,6 +25,7 @@ from bisheng.core.context.tenant import (
     visible_tenant_ids,
 )
 from bisheng.core.database.tenant_filter import build_tenant_filter_clause
+from bisheng.database.models.app import App
 from bisheng.database.models.assistant import Assistant
 from bisheng.database.models.flow import Flow, FlowDao
 
@@ -53,6 +54,10 @@ class TestBuildAppsSubquery:
 
         assert "flow.tenant_id IN (1, 5)" in sql
         assert "assistant.tenant_id IN (1, 5)" in sql
+        # F054's hosted-application leg. It is written by hand like the other
+        # two — the auto-filter cannot see inside a UNION subquery — and one
+        # missing clause here leaks through all four callers at once.
+        assert "app.tenant_id IN (1, 5)" in sql
 
     def test_root_tenant_with_no_visible_emits_equality(self):
         # Super admin shape: current=1, visible=None. Event listener falls
@@ -66,6 +71,7 @@ class TestBuildAppsSubquery:
 
         assert "flow.tenant_id = 1" in sql
         assert "assistant.tenant_id = 1" in sql
+        assert "app.tenant_id = 1" in sql
 
     def test_bypass_emits_no_tenant_predicate(self):
         tenant_token = set_current_tenant_id(1)
@@ -118,6 +124,18 @@ class TestBuildTenantFilterClause:
             _reset_tenant_context(tenant_token, visible_token)
 
         assert str(clause) == str(sql_false())
+
+    def test_hosted_app_column_uses_the_same_helper(self):
+        """The third leg's clause comes from the shared helper, not a hand-rolled copy."""
+        tenant_token = set_current_tenant_id(1)
+        visible_token = set_visible_tenant_ids(frozenset({1}))
+        try:
+            clause = build_tenant_filter_clause(App.tenant_id)
+        finally:
+            _reset_tenant_context(tenant_token, visible_token)
+
+        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
+        assert sql == "app.tenant_id = 1"
 
     def test_single_visible_emits_equality(self):
         tenant_token = set_current_tenant_id(1)

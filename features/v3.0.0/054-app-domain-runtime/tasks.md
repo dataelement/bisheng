@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 定稿（65 AC，同日独立审查 28 条已修订；决议-1～8） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日独立审查 16 条修订；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；`/sdd-review tasks` 独立审查 16 条已修订（补 7 个测试任务 T082a/T084a/T086a/T087a/T089a/T090a/T094a + 可观测任务 T097） |
-| 实现 | 🚧 进行中 | Wave 1（T001–T017）· Wave 2 runtime-manager（T018–T031）与 app-proxy（T036–T045）· **Wave 2 backend 入口判定（T032–T035）** · **Wave 3 领域服务与 API（T046–T057）** · **Wave 3 platform 前端（T062–T070）** 已完成；`uv run pytest test/app_runtime test/app_publish` = 346 passed / 7 skipped；platform `pnpm lint` + `pnpm typecheck` 全绿，新增前端单测 3 文件 16 例全通过（`src/test/hostedApp{Api,State,CardComponent}.test.*`）。余 T058–T061 / T071–T075（UNION 第三支与 6 组硬闸 / client 开关读取 / 114 部署）。**T062–T070 未做联调与 E2E**（后端 UNION 第三支与 `app_state` 参数尚未落地）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4；逐条偏差见文末「实际偏差记录」 |
+| 实现 | 🚧 进行中 | Wave 1（T001–T017）· Wave 2 runtime-manager（T018–T031）与 app-proxy（T036–T045）· **Wave 2 backend 入口判定（T032–T035）** · **Wave 3 领域服务与 API（T046–T057）** · **Wave 3 构建页第三类型（T058–T061）** · **Wave 3 platform 前端（T062–T070）** 已完成；`uv run pytest test/app_runtime test/app_publish` = **484 passed / 7 skipped / 1 xfailed**（其中 `test/app_runtime` 单独 229 passed / 7 skipped；总数与 T057 那批的 346 不可直接相比——F055 同期在并发补测试）；`test/workflow/test_flow_dao_tenant_isolation.py` 7 → 8 例全绿，`test/api` 20 例全绿。platform `pnpm lint` + `pnpm typecheck` 全绿，前端单测 3 文件 16 例全通过（`src/test/hostedApp{Api,State,CardComponent}.test.*`）。余 T071–T075（client 开关读取 / 114 部署与联调）。**T062–T070 的联调与 E2E 仍未做**（后端契约现已齐备，可以开跑）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4；逐条偏差见各任务的「实际偏差记录」与文末汇总 |
 
 ---
 
@@ -457,31 +457,35 @@
   **覆盖 AC**: AC-06, AC-41, AC-42, AC-43, AC-44, AC-52, AC-55, AC-65
   **依赖**: T056
 
-- [ ] **T058**: `[MVP-核心]` 构建页列表第三类型端到端测试（UNION + 6 组硬闸 + 租户隔离）
+- [x] **T058**: `[MVP-核心]` 构建页列表第三类型端到端测试（UNION + 6 组硬闸 + 租户隔离）
   **文件**: `src/backend/test/app_runtime/test_build_list_third_type.py`（新）
   **逻辑**: `test_third_type_end_to_end_non_empty`（`flow_type=35` 走完 `SUPPORTED_APP_TYPES` → UNION → `_application_action_map` 分桶 → `add_extra_field`，断言"列表非空**且带 `write` / `tags`**"——坑 28：只加 UNION 会在这里挂，且失败现象是**空列表不报错**，极易被当成"权限没配好"排查半天）→ AC-51 / `test_type_filter_returns_only_hosted_apps`→ AC-51 / `test_app_state_filter_covers_five_values`（应用态五值走**新参数 `app_state`**；`status` 列只投影 2/1 供既有开关复用——坑 8：`getAppsApi` 只放行 `status ∈ {1,2}`）→ AC-51 / `test_tenant_isolation_in_union_third_branch`（子租户账号列不出别租户应用——**UNION 子查询的自动过滤失效**，第三支必须手工 `build_tenant_filter_clause(App.tenant_id)`，今天**没有第三支范例可抄**，坑 21 / K5 ③）→ AC-51 / `test_owner_scope_and_tenant_admin_scope`→ AC-57 / `test_cursor_pagination_stable_across_three_branches`（keyset `(update_time, id)` 三支归并稳定）→ AC-51 / `test_tag_filter_and_tag_link_for_app`（标签预过滤 3 处 + `check_tag_link_permission` 认 `HOSTED_APP`；不改这组 = "筛选框在、结果恒空"，打标还会直接 404）→ AC-51 / `test_permission_bucket_populated`（`_application_action_map` 的 `grouped` 有 `"app"` 桶；不加则"有卡片但什么都点不了"）→ AC-51。
+  **实际偏差记录**: ①端到端跑的是 `WorkFlowService.get_all_flows_envelope` 真实管线（新增 conftest fixture `build_list_env`：**文件型 SQLite**，因为列表查询走 async 而 `add_extra_field` 走 sync，两个引擎必须指向同一个库，`sqlite://` 内存库做不到）。②`test_cursor_pagination_stable_across_three_branches` 改名 `test_cursor_ordering_stable_across_three_branches` + 新增 `test_cursor_keyset_predicate_spans_the_merged_subquery`：**游标翻页的往返在 SQLite 上断言不了**——cursor 里带的是 ISO-8601 字符串（`...T00:01:00`）而 SQLite 的 DATETIME 存成 `... 00:01:00`，`' ' < 'T'` 让 keyset 谓词对每一行都成立、翻页永不收敛；已用「只有 flow + assistant 两支」复现同一现象，**属 harness 既有问题、与第三支无关**，MySQL / DM8 由驱动把绑定参数转成真 DATETIME。故改为断言**三支归并后的全序**（真正被第三支威胁的性质）+ keyset 谓词确实绑在三支 union 上。③`check_tag_link_permission` 的两个用例是**同步**测试并 stub 掉 `_aget_hosted_app`：`run_async_safe` 在运行中的事件循环里会直接抛错，而跨事件循环复用 aiosqlite 引擎本身就不成立。④补 `test_app_state_literals_match_the_enum`（`flow.py` 不能 import `AppState`，见 T059 偏差①）与 `test_app_state_filter_never_matches_other_types`。⑤T059 要求的既有回归扩展落在 `test/workflow/test_flow_dao_tenant_isolation.py`（7 → 8 例，三处断言各加一条 `app.tenant_id`）。
   **覆盖 AC**: AC-51, AC-57
   **依赖**: T009, T013, T049
 
-- [ ] **T059**: `[MVP-核心]` UNION 第三支 + `FlowType` / `ResourceTypeEnum` 枚举
+- [x] **T059**: `[MVP-核心]` UNION 第三支 + `FlowType` / `ResourceTypeEnum` 枚举
   **文件**: `src/backend/bisheng/database/models/flow.py`（`FlowType:33-39` 加 `HOSTED_APP = 35`；`_build_apps_subquery:660-702` 加第三支 SELECT）, `src/backend/bisheng/database/models/group_resource.py`（`ResourceTypeEnum:14-22` 加 `HOSTED_APP = 10`）
   **逻辑**: D8：第三支把 `app` 表投影成同一列集 `(id, name, description, flow_type, logo, user_id, status, create_time, update_time)`——`flow_type` 投常量 35（避开已占 5/10/15/20/25/30）、`user_id` 投 `owner_user_id`、`status` 投 **2（已上线）/ 1（其余四态）**；租户条款**手工** `build_tenant_filter_clause(App.tenant_id)`，照 `flow_clause:695` / `assistant_clause:698` 两支自己加。`flow.py` import `database/models/app`（**同目录，不触 RULE-2**；这正是三张表落 `database/models/` 的原因，坑 27）。
   **跨 Feature（副作用登记，必读）**: `_build_apps_subquery:660` 有 **4 个调用方**，第三支会同时改变另两条与构建页无关的路径——`get_all_app_by_time_range_sync:810`（→ `api/services/workflow.py:1039` 的 `get_all_app_by_time_range`，按时间范围取应用）与 `get_first_app:849`（→ `src/backend/scripts/sync_increment_table.py:53`，**商业版增量同步**）。本任务须**显式确认**这两条路径接纳托管应用是期望行为（而非"顺带流进去"）：增量同步侧确认托管应用行（`flow_type=35`、`status` 投 2/1）不会让同步脚本按 `Flow` 语义去取不存在的字段；时间范围侧确认返回结构一致。
   **测试**: T058 相关用例通过；**并跑既有回归 `src/backend/test/workflow/test_flow_dao_tenant_isolation.py`**（覆盖 `get_all_apps` / `aget_all_apps` / `get_all_app_by_time_range_sync` / `get_first_app` 四个方法的租户隔离）——**必须扩一个第三支用例**：托管应用行经这四个方法均不跨租户泄漏（坑 21 / K5 ③：UNION 子查询自动过滤失效，第三支的手工 `build_tenant_filter_clause` 一处写漏，四个方法一起漏）。
+  **实际偏差记录**: ①**投影列集从 9 列变 10 列**：新增 `app_state`，第三支投 `App.state`，另两支投 `cast(null(), String(16))`——这是「上一批留下的卡片应用态徽标缺数据源」的落点（2026-08-17 前端批裁决 1）。放在投影而不是 `add_extra_field` 里另查一次的理由：`app_state` **同时**要能被 SQL 过滤（新参数 `app_state`），过滤器无论如何都需要这一列，再让 `add_extra_field` 补一次就是两份真相。`add_extra_field` 的 docstring 已写明「值从投影来、不要改成按卡片取详情」。②`app_state` 只挂在 `flow_type=35` 的行上（`FlowDao._app_row_to_dict`）：给工作流 / 助手加一个恒 null 的新字段，是往两个前端已在解析的响应里加没人读的东西（AC-59）。③第三支 `WHERE state != 'deleted'`，与 `AppQueryService.list_apps` 同口径。④**`flow.py` 不能 import `AppState`**（RULE-2 禁 `database/models` 导 `bisheng.*.domain.*`），故在 `database/models/app.py` 落两个纯字符串常量 `APP_STATE_ONLINE` / `APP_STATE_DELETED`，并由 T058 的 `test_app_state_literals_match_the_enum` 钉住不漂移。⑤`aget_all_apps` 的 ranking 分支索引整体后移（`_used_rank` 9→10、`_sort_time` 10→11）。⑥**4 个调用方的显式确认已落到代码注释**：`get_all_app_by_time_range_sync`（遥测中间表）与 `get_first_app`（商业版增量同步起始时间）接纳托管应用是**期望行为**——两者只读 id/name/user_id/flow_type/create_time，第三支都投了，不会按 `Flow` 语义取到不存在的字段。⚠️**但遥测侧有一个需裁定的副作用**：`worker/telemetry/mid_table.py::convert_flow_type` 没有 35 的映射，托管应用会落进 `ApplicationTypeEnum.UNKNOWN` 桶；给它加枚举成员等于改一个已经写进 ES 文档、被下游看板聚合读取的契约，超出本 Feature 范围，故**保持 UNKNOWN 并在该函数加注释说明是决定不是疏漏**。
   **覆盖 AC**: AC-51, AC-57
   **依赖**: T058
 
-- [ ] **T060**: `[MVP-核心]` 后端 6 组硬闸（`workflow.py` + 标签体系）
+- [x] **T060**: `[MVP-核心]` 后端 6 组硬闸（`workflow.py` + 标签体系）
   **文件**: `src/backend/bisheng/api/services/workflow.py`（`SUPPORTED_APP_TYPES:76` 加 35；`_FLOW_TYPE_TO_RESOURCE_TYPE:77-80` 加 `35 → "app"`；`_application_action_map:146-179` 的 `grouped:151-154` 加 `"app": []` 桶；tag 预过滤 `:203` / `:598` / `:998-999` 加 `HOSTED_APP`；新增 `app_state` 查询参数）, `src/backend/bisheng/api/services/tag.py`（`check_tag_link_permission:75-103` 认 `HOSTED_APP`）
   **逻辑**: D8「后端 6 组硬闸」。`filter_supported_apps:83-84` 是公共闸、被 6 处调用，**加 1 即全放行、无需逐处改**（这组里唯一的好消息）。`add_extra_field:87-127` 的 `user_name` / `tags` / `logo` / `write` 四项对 app 直接复用，**`version_list` 不复用**（改由 T055 的只读版本源提供，坑 13）。
   **跨 Feature**: `get_online_flows_page:514` 走同一道 `SUPPORTED_APP_TYPES` 闸 → **F056 广场直接受益，不要重复改**。
   **测试**: T058 全部通过。
+  **实际偏差记录**: ①`SUPPORTED_APP_TYPES` 按 design 加 35，但**另加 `enabled_app_types()`**（= `SUPPORTED_APP_TYPES` 减去运行时层未部署时不存在的类型）供公共闸与三处 `flow_type not in ...` 短路使用。理由是 AC-58 要求「开关关闭时构建页不出现任何托管应用卡片」，前端只挡住了类型下拉，一个「全部类型」的请求仍由后端回答——列表契约是后端的责任。②标签资源类型抽成 `_tag_resource_types()`，同一处开关口径覆盖 4 个调用点（`:203` 构建页 / `:598` cursor / `get_online_flows_page` 的按类型拼装 / `get_uncategorized_flows` 的两次 gather）。**`get_uncategorized_flows` 是 design 6 组硬闸清单里没点名但必须改的第 5 处**：它取的是「已打标资源」的补集，漏一个类型的效果是把已打标的托管应用误报成未分类。③`add_extra_field` 对 app 行的 `version_list` 保持为空列表（`FlowVersionDao` 不认识 `app_version`），docstring 写明「不要改成指向 flow 版本」——那个下拉会切换**工作流**的当前版本（坑 13）。④`check_tag_link_permission` 的托管应用分支不复用 `AppQueryService`：后者答的是详情页口径（owner ∪ 租户管理员），而打标问的是 F048 的 `edit`，复用等于对同一个请求套两把不同的尺子；新增模块级 `_aget_hosted_app`，`deleted` 视同不存在。⑤`app_state` 查询参数打通 `api/v1/workflow.py::read_flows` → `get_all_flows_envelope` → `_scan_visible_flows_cursor` → `aget_all_apps`（`get_all_flows` 同步路径一并加上），**不加 pattern 校验**：未知取值天然匹配不到任何行，加正则等于把五个态名字再抄一份到端点层。
   **覆盖 AC**: AC-51, AC-57
   **依赖**: T058, T059
 
-- [ ] **T061**: `[MVP-核心]` 工场运行时层开关组合测试（未部署回归 + 两开关正交）
+- [x] **T061**: `[MVP-核心]` 工场运行时层开关组合测试（未部署回归 + 两开关正交）
   **文件**: `src/backend/test/app_runtime/test_runtime_layer_switch.py`（新）
   **逻辑**: `test_env_exposes_app_runtime_enabled_anonymously`（`GET /api/v1/env` 匿名可读该字段，两个 SPA 据此渲染）→ AC-62 / `test_switch_off_hides_hosted_apps_from_list`（构建页列表不出现托管应用类型与卡片）→ AC-58 / `test_switch_off_no_new_menu_or_permission_point`（升级前后角色配置面的菜单项与权限点数量不变——**零新增菜单 / 权限点**；详情页走 `build/apps/:appId` 子路由 + `permission: 'build'`）→ AC-58 / `test_no_ui_create_entry_in_any_state`（本册任何形态下均不提供托管应用的界面新建入口，唯一创建路径 = CLI 首发）→ AC-58 / `test_switch_off_no_resident_process_or_beat_task`（无新增常驻进程与定时任务）→ AC-59 / `test_platform_regression_unchanged_when_off`（既有列表 / 权限 / 审计接口行为零变化）→ AC-59 / `test_two_switches_orthogonal_four_combinations_boot`（`app_runtime.enabled` × `open_platform.enabled` 四种组合下平台均可正常启动）→ AC-61 / `test_unknown_yaml_key_rejects_boot`（回归坑 23：先加 `config.yaml` 键后发代码 → `KeyError` 拒启，故升级顺序必须是先代码后键）→ AC-60。
+  **实际偏差记录**: ①`test_env_exposes_app_runtime_enabled_anonymously` **在类上 monkeypatch** `get_from_db` / `get_system_login_method` / `get_knowledge`：`ConfigService` 是开了 `validate_assignment` 的 pydantic 模型，往实例上塞非字段会直接抛 ValidationError。②「零新增菜单 / 权限点」落成 `WebMenuResource` 与 `AccessType` 的**成员全集断言**——托管应用挂在既有 `build` 菜单下、判权用既有 F048 action code，多一个成员意味着升级后每个存量角色的配置面形状都变了。③「无界面新建入口」断言 F054 router **不存在任何创建型 POST**（`/actions/*` 是对已存在应用的状态迁移、`/internal/*` 是 app-proxy 的 HMAC 通道，均排除）——无论 SPA 渲染成什么样，代码层面唯一的创建路径是 CLI 首发。④「无常驻进程 / 定时任务」断言 beat schedule 里没有 `app_runtime` / `app_publish` 任务，且 `bisheng.app_runtime` 不自带 celery app。⑤四组合启动与「未知 YAML 顶层键拒启」直接调 `ConfigService.load_settings_from_yaml` 落临时 config.yaml 断言。⑥另加 `test_hosted_rows_keep_the_legacy_keys_plus_app_state`：托管应用卡片的字段集 = 既有字段集 **+ 恰好一个** `app_state`。
   **覆盖 AC**: AC-58, AC-59, AC-60, AC-61, AC-62
   **依赖**: T005, T057, T060
 
@@ -860,6 +864,19 @@
 4. **接受 `obo_secret` 缺失 / 等于 `jwt_secret` 时不签 OBO 但仍放行**（本期 OBO 无消费方，为一个没人读的东西拒绝入口是本末倒置）。**但两处日志已改为按进程只打一次**——静态配置错误永远不会自愈，逐请求打 error 既刷屏又把唯一有用的那条埋掉。**⚠️ 附带的翻转条件已写进代码 docstring：OBO 出现第一个消费方的那一刻，必须在同一次改动里改成 fail-closed**——那时「没签出 token」不再等于「没人读」，而是「应用看到一个匿名请求」，是身份上的静默 fail-open。
 5. **接受 `AppDao.adelete_row` 的物理删**（PK 钉死，仅用于 owner 投影失败时的补偿）。理由：写墓碑会让**全局唯一的 slug 被永久占住**，同一个应用再发布永远 `16103` 且无解——补偿路径造出一个不可恢复的状态，比物理删掉一行刚建出来、且投影已失败的记录糟得多。
 
+### 2026-08-17 · UNION 第三支批次抛回的裁决
+
+**遥测桶维持 `ApplicationTypeEnum.UNKNOWN`，但登记为跨团队待办（不是只留一句函数注释）。**
+
+- **定案**：托管应用（`flow_type=35`）经 `convert_flow_type` 落进 `UNKNOWN`，本轮**不给它加枚举成员**。理由是范围：`ApplicationTypeEnum` 的值**已经写进 ES 文档、并被下游看板按值聚合**，加成员是遥测契约变更，不该由 F054 单方面做。
+- **为什么可以接受**：`mid_app_increment` 虽然只存转换后的 `app_type`，但**同时存了 `app_id`**（`mid_table.py:185`），所以这些行将来能靠 `app_id` 回查 `app` 表重新分桶——**信息不是永久丢失的**。若中间表连 `app_id` 都不存，这个裁决要反过来（那时宁可先把托管应用排除出该 feed，也不能让数据无法恢复）。
+- **⚠️ 必须登记而不能只留注释**：可观察的症状是**看板的 UNKNOWN 桶开始持续增长**。几个月后有人会把它当异常来查，而他没有任何途径找到 `mid_table.py` 里那句注释。→ 本条即为该登记；`convert_flow_type` 处的注释保留作为就地说明。
+- **交接给谁**：看板 owner。要不要给托管应用一个自己的遥测类型，由他与产品定；F054 侧的改动量是一行映射。
+
+**另两条只需知悉、无需裁定**：
+- **SQLite 上断言不了游标翻页的往返**，且该现象**与第三支无关**——cursor 里是 ISO-8601 字符串（`...T00:01:00`），SQLite 的 DATETIME 存成 `... 00:01:00`，`' ' < 'T'` 让 keyset 谓词对每行都成立、翻页永不收敛；实施方用「只有 flow + assistant 两支」复现了同一现象。MySQL / DM8 由驱动把绑定参数转成真 DATETIME。用例改为断言「三支归并后是 `(update_time, id)` 的严格单调全序」（这才是真正被第三支威胁的性质）+ keyset 谓词确实绑在三支 union 上。**真往返仍须在 114 / CI 的 MySQL 侧验**。
+- **标签硬闸实为 5 处不是 design 写的 4 处**：漏掉的是 `get_uncategorized_flows` 的两次 gather。它取「已打标」的补集，漏一个类型 = 把已打标的托管应用误报成未分类——是空结果的**镜像故障**，比空结果更难发现。
+
 ### 2026-08-17 · Platform 前端批次抛回的 5 项裁决（全部定案）
 
 1. **卡片应用态徽标缺数据源 —— 契约缺口属实，补在 T060，不许每卡片拉详情。** D8 的 UNION 第三支投影列集没有 `app_state`，而 AC-51 要求卡片显示应用态。**T060 的 `add_extra_field` 必须给 app 行补 `app_state`**——一页 14 张卡各拉一次详情是 14 个请求，不可接受。前端当前的降级（`app_state ?? (status===2 ? 'online' : undefined)`，缺字段时只对「已上线」出徽标、其余**不猜**）是正确的过渡形态，保留到 T060 落地。
@@ -908,6 +925,19 @@
 | T063 | 状态筛选保留「已删除」项，但它在当前列表口径下恒空（服务端把 `state='deleted'` 排除在外） | 待裁定 | AC-51 字面写「覆盖应用态五值」，故按字面实现；但一个永远筛不出东西的选项是产品瑕疵——留 / 砍需要一句裁定 |
 | T065 | `switchTexts` 落**状态口径**（已上线 / 已停运），非 design D13 写的动作口径（停运 / 重新启用） | 建议 design D13 那句改口径 | `Switch` 的 `texts[0]` 只在 checked 时渲染、`texts[1]` 只在 unchecked 时渲染，塞动作词会读成「当前处于停运」；且「重新启用」四字放不进 `w-12` 轨道 |
 | T068 | 时间筛选是**一个起始时间选择器**，不是 tasks 写的 DatePicker×2 | **是（design D14 / tasks T068 各改一句）** | manager 契约只有 `tail / since / keyword`，**没有 `until`**；返回的 `lines` 是无时间戳纯字符串（docker logs 未带 `-t`），端侧无从按结束时间过滤。第二个选择器只能是假的 |
+| T059 | UNION 投影列集由 9 列变 **10 列**，新增 `app_state`（第三支投 `App.state`，另两支投 `cast(null(), String(16))`） | **是（design D8 的投影列集那句）** | 卡片应用态徽标的数据源（2026-08-17 前端批裁决 1）；且 `app_state` 过滤器无论如何都要这一列，再让 `add_extra_field` 另查一次就是两份真相 |
+| T059 | `app_state` 只出现在 `flow_type=35` 的行上，工作流 / 助手的 payload 一个字节不变 | 否 | 给两个前端已在解析的响应加一个恒 null 的字段，没有读者却有回归面（AC-59） |
+| T059 | `database/models/app.py` 新增纯字符串常量 `APP_STATE_ONLINE` / `APP_STATE_DELETED` | 建议 design D8「模型落点」补一句 | RULE-2 禁 `database/models` 导 `bisheng.*.domain.*`，`flow.py` 拿不到 `AppState`；由 `test_app_state_literals_match_the_enum` 钉住不漂移 |
+| T059 | 第三支 `WHERE state != 'deleted'` | 否（与 `AppQueryService.list_apps` 同口径） | 行为审计留存，但「已删除」不是一个可浏览的态 |
+| T059 | **遥测副作用需裁定**：托管应用经 `get_all_app_by_time_range_sync` 进入 `mid_app_increment`，`convert_flow_type` 无 35 映射 → 落 `ApplicationTypeEnum.UNKNOWN` 桶 | 待裁定 | 给该枚举加成员＝改一个已写进 ES 文档、被下游看板聚合读取的契约，超出本 Feature；已在函数处加注释声明是决定不是疏漏 |
+| T060 | `SUPPORTED_APP_TYPES` 之外另加 `enabled_app_types()`（按部署开关做减法） | **是（design D8 第 1 项 + K12）** | AC-58 要求开关关闭时「不出现任何托管应用卡片」；前端只挡住类型下拉，「全部类型」的请求仍由后端回答 |
+| T060 | 标签资源类型抽成 `_tag_resource_types()`，并**多改一处** `get_uncategorized_flows` 的两次 gather | **是（design D8 第 5 项的 4 处 → 5 处）** | 它取的是「已打标资源」的补集，漏一个类型＝把已打标的托管应用误报成未分类，是空结果的镜像故障 |
+| T060 | `check_tag_link_permission` 用新的模块级 `_aget_hosted_app`，不复用 `AppQueryService` | 否 | 后者答的是详情页口径（owner ∪ 租户管理员），打标问的是 F048 `edit`；复用等于对同一请求套两把尺子 |
+| T060 | `app_state` 查询参数**不加 pattern 校验** | 否 | 未知取值天然匹配不到任何行；加正则等于把五个态名字再抄一份到端点层 |
+| T058 | 游标翻页的**往返**在 SQLite 上断言不了，改为断言「三支归并后的全序」+ keyset 谓词绑在三支 union 上 | 否（harness 事实，非产品行为） | cursor 带 ISO-8601 字符串（`...T00:01:00`）、SQLite DATETIME 存成 `... 00:01:00`，`' ' < 'T'` 让谓词对每行都成立；**已用「只有 flow + assistant 两支」复现，与第三支无关**，MySQL / DM8 由驱动转成真 DATETIME |
+| T058 | `check_tag_link_permission` 的两个用例是同步测试并 stub `_aget_hosted_app` | 否（测试基建） | `run_async_safe` 在运行中的事件循环里直接抛错；跨事件循环复用 aiosqlite 引擎本身不成立 |
+| T058 | 新增 conftest fixture `build_list_env` 用**文件型** SQLite | 否（测试基建） | 列表查询走 async、`add_extra_field` 走 sync，两个引擎必须指向同一个库；`sqlite://` 内存库做不到 |
+| T061 | 在**类**上 monkeypatch `ConfigService.get_from_db` 等三个方法 | 否（测试基建） | 该模型开了 `validate_assignment`，往实例塞非字段直接 ValidationError |
 | T063 / T070 | `apps.tsx` 默认导出组件由 `apps` 改名 `Apps` | 否（前端债务偿还） | 小写函数名让 ESLint 不认它是组件 → 16 条 frozen `react-hooks/rules-of-hooks`；本任务要加 hook，不改名即突破冻结上限。改名后该规则整条清零 |
 | T063 | `AppAvator`（共享头像组件）补上 Props 类型 | 否（类型债务） | 它此前无 Props 类型，默认值把 `id` 推成 `number`；strict 文件（新卡片 / 详情页头部）一调用就报 TS2322 |
 | T066 | 详情页同时具名导出 + 默认导出 | 否 | `React.lazy` 必须要默认导出，仓库组件规范要具名导出，两者都满足 |

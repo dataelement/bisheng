@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import importlib
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -658,3 +658,254 @@ def api_app():
         return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver")
 
     return _build
+
+
+# ---------------------------------------------------------------------------
+# Build-page list harness (T058 / T061)
+# ---------------------------------------------------------------------------
+
+#: Modules that resolve a DB session by name and take part in the build-page
+#: list pipeline. The list query is async, but the enrichment step
+#: (``add_extra_field``) is synchronous — user names, flow versions and tags all
+#: come from ``get_sync_db_session``. Both getters therefore have to point at
+#: the *same* database, which is why this harness uses a file rather than
+#: ``sqlite://`` in memory: two engines cannot share an in-memory database.
+_LIST_SESSION_MODULES = (
+    "bisheng.database.models.flow",
+    "bisheng.database.models.flow_version",
+    "bisheng.database.models.assistant",
+    "bisheng.database.models.tag",
+    "bisheng.database.models.session",
+    "bisheng.user.domain.models.user",
+)
+
+
+@pytest.fixture()
+async def build_list_env(tmp_path, monkeypatch):
+    """End-to-end harness for ``/api/v1/workflow/list`` with all three app types.
+
+    Exists because "the third leg was added" and "the third type shows up on the
+    build page" are different claims: the UNION is only the first of seven gates
+    a hosted application has to pass (design D8), and every remaining one fails
+    as an **empty list, not an error**. Only a test that runs the whole pipeline
+    — DAO → supported-type filter → permission bucketing → enrichment — can tell
+    "not implemented" apart from "permissions not granted".
+
+    Returns a namespace with ``seed_flow`` / ``seed_assistant`` / ``seed_app`` /
+    ``seed_tag_link``, a programmable ``permissions`` stub, and
+    ``enable_runtime_layer``.
+    """
+    import importlib as _importlib
+    from contextlib import contextmanager
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlmodel import Session, SQLModel
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from bisheng.api.services.workflow import WorkFlowService
+    from bisheng.common.services.config_service import settings
+    from bisheng.database.models.app import App
+    from bisheng.database.models.assistant import Assistant
+    from bisheng.database.models.flow import Flow
+    from bisheng.database.models.flow_version import FlowVersion
+    from bisheng.database.models.session import MessageSession
+    from bisheng.database.models.tag import Tag, TagLink
+    from bisheng.user.domain.models.user import USER_TYPE_HUMAN, User
+
+    db_path = tmp_path / "build_list.db"
+    sync_engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    async_engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}", connect_args={"check_same_thread": False})
+
+    tables = [model.__table__ for model in (Flow, FlowVersion, Assistant, Tag, TagLink, MessageSession, User, App)]
+    SQLModel.metadata.create_all(sync_engine, tables=tables)
+
+    @contextmanager
+    def _sync_session():
+        session = Session(bind=sync_engine)
+        try:
+            yield session
+        finally:
+            session.close()
+
+    @asynccontextmanager
+    async def _async_session():
+        session = AsyncSession(bind=async_engine, expire_on_commit=False)
+        try:
+            yield session
+        finally:
+            await session.close()
+
+    for target in _LIST_SESSION_MODULES:
+        module = _importlib.import_module(target)
+        if hasattr(module, "get_sync_db_session"):
+            monkeypatch.setattr(module, "get_sync_db_session", _sync_session)
+        if hasattr(module, "get_async_db_session"):
+            monkeypatch.setattr(module, "get_async_db_session", _async_session)
+
+    # The logo helper reaches for a Redis client *before* it checks whether the
+    # path is empty, so even rows with no logo would need Redis.
+    monkeypatch.setattr(WorkFlowService, "get_logo_share_link", classmethod(lambda cls, path: path or ""))
+
+    # Programmable F048 stand-in. ``granted`` maps resource id -> actions; the
+    # default (None) is "everything is allowed", which is what makes an empty
+    # list unambiguously a *pipeline* failure rather than a permission one.
+    asked: list[tuple[str, tuple[str, ...]]] = []
+    granted: dict[str, set[str]] = {}
+    grant_all = {"value": True}
+
+    async def _batch_check(user, *, resource_type, resource_ids, actions):
+        asked.append((resource_type, tuple(resource_ids)))
+        result: dict[str, frozenset[str]] = {}
+        for resource_id in resource_ids:
+            allowed = set(actions) if grant_all["value"] else (granted.get(str(resource_id), set()) & set(actions))
+            if allowed:
+                result[str(resource_id)] = frozenset(allowed)
+        return result
+
+    monkeypatch.setattr("bisheng.api.services.workflow.batch_check_business_actions", _batch_check)
+
+    counter = {"n": 0}
+
+    def _next_times():
+        """Distinct, strictly decreasing update_time so keyset order is deterministic."""
+        counter["n"] += 1
+        moment = datetime(2026, 1, 1, 0, 0, 0) + timedelta(minutes=counter["n"])
+        return moment
+
+    def _seed_user(user_id: int, user_name: str):
+        with _sync_session() as session:
+            if session.get(User, user_id) is None:
+                session.add(
+                    User(
+                        user_id=user_id,
+                        user_name=user_name,
+                        password=SEED_PASSWORD_PLACEHOLDER,
+                        user_type=USER_TYPE_HUMAN,
+                        delete=0,
+                    )
+                )
+                session.commit()
+
+    def seed_flow(*, name="wf", user_id=OWNER_USER_ID, tenant_id=ROOT_TENANT_ID, status=2):
+        _seed_user(user_id, f"user-{user_id}")
+        moment = _next_times()
+        row = Flow(
+            name=name,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            description="seeded flow",
+            status=status,
+            flow_type=10,
+            create_time=moment,
+            update_time=moment,
+        )
+        with _sync_session() as session:
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+        return row
+
+    def seed_assistant(*, name="assistant", user_id=OWNER_USER_ID, tenant_id=ROOT_TENANT_ID, status=2):
+        _seed_user(user_id, f"user-{user_id}")
+        moment = _next_times()
+        row = Assistant(
+            name=name,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            desc="seeded assistant",
+            status=status,
+            is_delete=0,
+            create_time=moment,
+            update_time=moment,
+        )
+        with _sync_session() as session:
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+        return row
+
+    def seed_app(*, name="hosted", state="online", owner_user_id=OWNER_USER_ID, tenant_id=ROOT_TENANT_ID, slug=None):
+        _seed_user(owner_user_id, f"user-{owner_user_id}")
+        moment = _next_times()
+        row = App(
+            slug=slug or f"slug-{counter['n']}",
+            name=name,
+            description="seeded hosted app",
+            owner_user_id=owner_user_id,
+            tenant_id=tenant_id,
+            state=state,
+            create_time=moment,
+            update_time=moment,
+        )
+        with _sync_session() as session:
+            session.add(row)
+            session.commit()
+            session.refresh(row)
+        return row
+
+    def seed_tag_link(*, tag_name: str, resource_id: str, resource_type: int, tenant_id=ROOT_TENANT_ID) -> int:
+        with _sync_session() as session:
+            tag = Tag(name=tag_name, business_type="application", business_id="application", tenant_id=tenant_id)
+            session.add(tag)
+            session.commit()
+            session.refresh(tag)
+            session.add(
+                TagLink(tag_id=tag.id, resource_id=str(resource_id), resource_type=resource_type, tenant_id=tenant_id)
+            )
+            session.commit()
+            return tag.id
+
+    def enable_runtime_layer(enabled: bool = True):
+        monkeypatch.setattr(settings.app_runtime, "enabled", enabled)
+
+    def only_allow(resource_ids, actions=("use", "edit", "share")):
+        grant_all["value"] = False
+        for resource_id in resource_ids:
+            granted[str(resource_id)] = set(actions)
+
+    yield SimpleNamespace(
+        seed_flow=seed_flow,
+        seed_assistant=seed_assistant,
+        seed_app=seed_app,
+        seed_tag_link=seed_tag_link,
+        enable_runtime_layer=enable_runtime_layer,
+        only_allow=only_allow,
+        asked=asked,
+        sync_session=_sync_session,
+        async_session=_async_session,
+    )
+
+    await async_engine.dispose()
+    sync_engine.dispose()
+
+
+@pytest.fixture()
+def tenant_scope():
+    """``tenant_scope(tenant_id)`` pins the tenant ContextVars for one test.
+
+    Teardown tolerates a failed ``reset``: an async test body runs in its own
+    copied context, so a token minted there cannot be reset from the fixture's
+    context — and does not need to be, because the copy dies with the task.
+    Only a synchronous caller produces a token this teardown can actually use.
+    """
+    from contextlib import suppress
+
+    from bisheng.core.context.tenant import (
+        current_tenant_id,
+        set_current_tenant_id,
+        set_visible_tenant_ids,
+        visible_tenant_ids,
+    )
+
+    tokens = []
+
+    def _apply(tenant_id: int):
+        tokens.append((set_current_tenant_id(tenant_id), set_visible_tenant_ids(frozenset({tenant_id}))))
+
+    yield _apply
+    for tenant_token, visible_token in reversed(tokens):
+        with suppress(ValueError):
+            current_tenant_id.reset(tenant_token)
+        with suppress(ValueError):
+            visible_tenant_ids.reset(visible_token)

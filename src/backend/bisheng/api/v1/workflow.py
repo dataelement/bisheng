@@ -71,11 +71,7 @@ async def check_app_write_auth(
         raise NotFoundError.http_exception()
     if await check_business_action(
         login_user,
-        resource_type=(
-            "assistant"
-            if flow_type == FlowType.ASSISTANT.value
-            else "workflow"
-        ),
+        resource_type=("assistant" if flow_type == FlowType.ASSISTANT.value else "workflow"),
         resource_id=flow_id,
         action="edit",
     ):
@@ -460,9 +456,15 @@ async def read_flows(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     name: str = Query(default=None, description="accordingnameFind databases with fuzzy searches for descriptions"),
     tag_id: int = Query(default=None, description="labelID"),
-    flow_type: int = Query(default=None, description="Type 5 assistant 10 workflow"),
+    flow_type: int = Query(default=None, description="Type 5 assistant 10 workflow 35 hosted app"),
     page_size: int = Query(default=10, description="Items per page"),
     status: int | None = None,
+    app_state: str | None = Query(
+        default=None,
+        description="F054 hosted-application state (draft / online / pending_capacity / stopped / deleted). "
+        "Separate from `status`, which stays the 1/2 on-off switch shared by all three types. "
+        "An unknown value simply matches nothing.",
+    ),
     managed: bool = Query(
         default=False, description="Whether to query the list of apps with administrative permissions"
     ),
@@ -492,5 +494,6 @@ async def read_flows(
         page_size=page_size,
         managed=managed,
         action=action,
+        app_state=app_state,
     )
     return resp_200(data=result)
