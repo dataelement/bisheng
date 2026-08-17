@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 23 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 25 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -239,13 +239,13 @@
 
 ## Wave 7：i18n、E2E 与总门禁
 
-- [ ] **T033 Client i18n 中英文**
+- [x] **T033 Client i18n 中英文**
   - **文件**: `src/frontend/client/src/locales/zh-Hans/translation.json`, `src/frontend/client/src/locales/en/translation.json`
   - **逻辑**: 补齐统一设置、F048 模型/来源/protected、部分成功/重试文案；保留 2.6 产品文案，不新增硬编码中文。
   - **覆盖 AC**: AC-05, AC-06, AC-09, AC-16, AC-17, AC-23, AC-24
   - **依赖**: T027, T032
 
-- [ ] **T034 Client i18n 日文与 parity**
+- [x] **T034 Client i18n 日文与 parity**
   - **文件**: `src/frontend/client/src/locales/ja/translation.json`
   - **逻辑**: 对齐 T033 全部 key；运行 `pnpm check-i18n`，不手改 api_errors 生成物。
   - **覆盖 AC**: AC-05, AC-06, AC-09, AC-16, AC-17, AC-23, AC-24
