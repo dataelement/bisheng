@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 18 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 20 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -143,13 +143,13 @@
   - **验证**: T016 对应 Channel 断言通过。
   - **依赖**: T016
 
-- [ ] **T019 F048 PermissionDraft hook 测试**
+- [x] **T019 F048 PermissionDraft hook 测试**
   - **文件**: `src/frontend/client/src/components/permission/usePermissionDraft.test.ts`
   - **逻辑**: ADD/MOVE/REMOVE touched diff；protected/inherited/read-only 不入 draft；同主体多来源不合并；取消无写入；baseline resource/catalog/assignee version。
   - **覆盖 AC**: AC-08, AC-09, AC-13, AC-18, AC-20, AC-22, AC-23, AC-24, AC-25, AC-27, AC-33
   - **依赖**: T017, T018
 
-- [ ] **T020 F048 PermissionDraft hook 实现**
+- [x] **T020 F048 PermissionDraft hook 实现**
   - **文件**: `src/frontend/client/src/components/permission/usePermissionDraft.ts`
   - **逻辑**: 保留 2.6 hook 对页面的交互 API，内部改为 F048 modelKey/assignee/source/version；只存组件内存，不新增 Recoil/localStorage。
   - **验证**: T019 全部通过。
