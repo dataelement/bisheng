@@ -74,9 +74,7 @@ class ProbeService:
         self._store = store if store is not None else get_store(config)
 
     # -- public ------------------------------------------------------------
-    def wait_ready(
-        self, container: str, port: int, health_path: str, timeout: float | None = None
-    ) -> ProbeOutcome:
+    def wait_ready(self, container: str, port: int, health_path: str, timeout: float | None = None) -> ProbeOutcome:
         budget = float(timeout if timeout is not None else self._config.probe_timeout_seconds)
         deadline = self._clock.monotonic() + budget
         path = health_path if health_path.startswith("/") else f"/{health_path}"
@@ -106,18 +104,14 @@ class ProbeService:
                 last_error = "no address on the application network yet"
 
             if self._clock.monotonic() >= deadline:
-                return ProbeOutcome(
-                    False, f"not ready within {budget:g}s; last attempt: {last_error}", elapsed=budget
-                )
+                return ProbeOutcome(False, f"not ready within {budget:g}s; last attempt: {last_error}", elapsed=budget)
             self._clock.sleep(self._config.probe_interval_seconds)
 
     def probe_app(self, app_id: str, timeout: float | None = None) -> ProbeOutcome:
         record = self._store.get(app_id)
         if record is None:
             return ProbeOutcome(False, f"no instance is declared for app {app_id}")
-        return self.wait_ready(
-            record.container_id or record.container_name, record.port, record.health_path, timeout
-        )
+        return self.wait_ready(record.container_id or record.container_name, record.port, record.health_path, timeout)
 
     def probe_image(
         self,
@@ -142,7 +136,13 @@ class ProbeService:
             "Labels": {LABEL_MANAGED: "probe"},
             "HostConfig": {
                 "ReadonlyRootfs": True,
-                "Tmpfs": {"/tmp": "rw,noexec,nosuid,size=64m", "/data": "rw,size=64m"},
+                # ``mode=1777`` is required, not cosmetic: the container runs as
+                # a non-root app user (uid 10001, builder DEFAULT_APP_UID), and a
+                # tmpfs mounts root-owned 0755 by default — so an app that opens
+                # its SQLite at /data/app.db on start-up gets "unable to open
+                # database file", exits 1, and the probe fails 16228. Sticky
+                # world-writable (like /tmp) lets the app user create its file.
+                "Tmpfs": {"/tmp": "rw,noexec,nosuid,size=64m", "/data": "rw,size=64m,mode=1777"},
                 "SecurityOpt": ["no-new-privileges:true"],
                 "PortBindings": {},
                 "PublishAllPorts": False,

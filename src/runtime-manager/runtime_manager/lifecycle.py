@@ -27,12 +27,14 @@ live on network storage (K6).
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import threading
 from typing import Any, Protocol
 
 from runtime_manager.admission import AdmissionService, Tier
 from runtime_manager.api.schemas import DeployRequest
+from runtime_manager.builder import DEFAULT_APP_GID, DEFAULT_APP_UID
 from runtime_manager.config import (
     CONTAINER_NAME_PREFIX,
     LABEL_APP_ID,
@@ -267,6 +269,16 @@ class LifecycleService:
 
         data_dir = config.app_data_dir(request.app_id)
         data_dir.mkdir(parents=True, exist_ok=True)
+        # The container runs as the non-root app user (uid/gid 10001, builder
+        # DEFAULT_APP_UID/GID). This dir is bind-mounted at /data:rw and the
+        # bind shadows the image's own ``chown app_user /data``, so without this
+        # the app user cannot create /data/app.db — it exits 1 on start-up and
+        # the deploy fails 16228, exactly as the probe did. Best-effort: a
+        # daemon on a userns-remapped host may already map ownership.
+        try:
+            os.chown(data_dir, DEFAULT_APP_UID, DEFAULT_APP_GID)
+        except (PermissionError, OSError) as exc:
+            logger.warning("could not chown %s to the app user: %s", data_dir, exc)
 
         env = build_env(
             config,
