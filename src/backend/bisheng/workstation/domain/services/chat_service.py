@@ -2095,7 +2095,7 @@ async def _agent_stream_chat_completion(
         # task has persisted a real name (slow models take >5s).
         if is_new_conv or (conversation.name in (None, "", "New Chat")):
             asyncio.create_task(
-                gen_title(data.text or "", final_msg, bisheng_llm, conversation_id, login_user, request)
+                gen_title(data.text or "", bisheng_llm, conversation_id, login_user, request)
             )
         await log_telemetry_events(str(login_user.user_id), conversation_id, start_time)
 
@@ -2242,7 +2242,6 @@ async def _task_mode_stream_completion(request: Request, data: APIChatCompletion
             await asyncio.wait_for(
                 gen_title(
                     submit_obj.question or "",
-                    "",
                     title_llm,
                     session_version.session_id,
                     login_user,

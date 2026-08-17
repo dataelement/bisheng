@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import { useMemo } from 'react';
+import { Outlined } from 'bisheng-icons';
 import { matchPath, NavLink, useLocation } from 'react-router-dom';
-import BookOpenIcon from '~/components/ui/icon/BookOpen';
 import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
@@ -90,7 +90,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
       {
         section: 'knowledge' as const,
         to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable?plugin=knowledge_space',
-        icon: BookOpenIcon,
+        icon: Outlined.Book,
         label: menuNames.knowledge,
         isActive: pathname.startsWith('/knowledge'),
         closeDrawerOnNavigate: true,

@@ -17,7 +17,6 @@ interface ChannelActionsMenuProps {
     /** Currently active channel (the one being viewed). */
     channel: Channel;
     onChannelSelect: (channel: Channel | null) => void;
-    onManageMembers?: (channel: Channel) => void;
     onChannelSettings?: (channel: Channel) => void;
     /** "default" = PC labels (频道设置/成员管理/解散频道).
      *  "mobile" = H5 labels (编辑频道/权限管理/删除频道). */
@@ -41,7 +40,6 @@ interface ChannelActionsMenuProps {
 export function ChannelActionsMenu({
     channel,
     onChannelSelect,
-    onManageMembers,
     onChannelSettings,
     variant = "default",
     onShare,
@@ -108,8 +106,7 @@ export function ChannelActionsMenu({
     const hasMenuItem = Boolean(
         (isMobile && onShare)
         || (isMobile && onOpenSourceFilter)
-        || (canEditSettings && onChannelSettings)
-        || (canManageMembers && onManageMembers)
+        || ((canEditSettings || canManageMembers) && onChannelSettings)
         || canDissolve
         || canUnsubscribe,
     );
@@ -152,18 +149,12 @@ export function ChannelActionsMenu({
                         {localize("com_subscription.source_filter")}
                     </DropdownMenuItem>
                 ) : null}
-                {canEditSettings && onChannelSettings ? (
+                {(canEditSettings || canManageMembers) && onChannelSettings ? (
                     <DropdownMenuItem className={itemCls} onClick={() => onChannelSettings(liveChannel)}>
                         <Outlined.Edit className={iconCls} />
                         {isMobile
                             ? localize("com_subscription.edit_channel")
                             : localize("com_subscription.channel_settings")}
-                    </DropdownMenuItem>
-                ) : null}
-                {canManageMembers && onManageMembers ? (
-                    <DropdownMenuItem className={itemCls} onClick={() => onManageMembers(liveChannel)}>
-                        <Outlined.PeopleSafe className={iconCls} />
-                        {localize("com_subscription.permission_management")}
                     </DropdownMenuItem>
                 ) : null}
                 {canDissolve ? (

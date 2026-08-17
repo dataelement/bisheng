@@ -35,9 +35,7 @@ REVISION_PATH = BACKEND_ROOT / "bisheng/core/database/alembic/versions/f048_perm
 MESSAGE_REVISION_PATH = (
     BACKEND_ROOT / "bisheng/core/database/alembic/versions/v3_0_0_f048_migration_item_message_longtext.py"
 )
-VISIBLE_REVISION_PATH = (
-    BACKEND_ROOT / "bisheng/core/database/alembic/versions/v3_0_0_f048_visible_source_projection.py"
-)
+VISIBLE_REVISION_PATH = BACKEND_ROOT / "bisheng/core/database/alembic/versions/v3_0_0_f048_visible_source_projection.py"
 
 F048_TABLES = {
     "authorization_model_release",
@@ -143,13 +141,23 @@ def test_f048_unique_and_foreign_key_contract() -> None:
     } <= foreign_targets
 
 
-def test_f048_revision_is_the_single_alembic_head() -> None:
+def test_f048_revision_is_on_the_single_alembic_head_chain() -> None:
+    """One head, with the F048 revision on it.
+
+    Asserts the property (no fork, F048 applied) rather than pinning the head to
+    F048 by name: every later migration legitimately becomes the new head, and a
+    name-pinned assertion would fail for each one while catching nothing extra.
+    """
     config = Config(str(BACKEND_ROOT / "alembic.ini"))
     config.set_main_option(
         "script_location",
         str(BACKEND_ROOT / "bisheng/core/database/alembic"),
     )
-    assert ScriptDirectory.from_config(config).get_heads() == ["f048_visible_source_projection"]
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    assert len(heads) == 1, f"alembic graph forked: {heads}"
+    chain = {rev.revision for rev in script.walk_revisions("base", heads[0])}
+    assert "f048_visible_source_projection" in chain
 
 
 def test_f048_visible_projection_revision_is_static_ddl_only() -> None:

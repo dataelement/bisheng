@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import case, func, or_
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -21,6 +22,36 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
 
     def __init__(self, session: AsyncSession):
         super().__init__(session, Channel)
+
+    async def find_by_creation_request(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+        creation_request_id: str,
+    ) -> Channel | None:
+        query = select(Channel).where(
+            Channel.tenant_id == tenant_id,
+            Channel.user_id == user_id,
+            Channel.creation_request_id == creation_request_id,
+        )
+        return (await self.session.exec(query)).first()
+
+    async def save_creation(self, channel: Channel) -> tuple[Channel, bool]:
+        try:
+            return await self.save(channel), True
+        except IntegrityError:
+            await self.session.rollback()
+            if channel.creation_request_id is None or channel.tenant_id is None:
+                raise
+            existing = await self.find_by_creation_request(
+                tenant_id=int(channel.tenant_id),
+                user_id=channel.user_id,
+                creation_request_id=channel.creation_request_id,
+            )
+            if existing is None:
+                raise
+            return existing, False
 
     async def find_channels_by_ids(self, channel_ids: list[str]) -> list[Channel]:
         """Find channels by a list of channel IDs."""

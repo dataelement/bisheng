@@ -10,10 +10,12 @@ from bisheng.database.models.department import (
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.permission.domain.services import grant_subject_service
 from bisheng.permission.domain.services.grant_source_service import (
     GrantSourceRecord,
     GrantSourceService,
 )
+from bisheng.permission.domain.services.grant_subject_service import GrantSubjectScope
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
@@ -25,6 +27,88 @@ class TenantPermissionSubjectDirectory:
 
     def __init__(self) -> None:
         self._sources = GrantSourceService()
+
+    @staticmethod
+    def _prospective_scope(tenant_id: int, resource_type: str) -> GrantSubjectScope:
+        if resource_type not in {"knowledge_space", "channel"}:
+            raise PermissionInvalidResourceError()
+        return GrantSubjectScope(tenant_id=tenant_id, department_path=None)
+
+    async def list_users(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        scope = self._prospective_scope(tenant_id, resource_type)
+        rows = await grant_subject_service.list_candidate_users(
+            scope,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+        total = await grant_subject_service.count_candidate_users(scope, keyword=keyword)
+        return {"data": rows, "total": total}
+
+    async def list_user_groups(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        scope = self._prospective_scope(tenant_id, resource_type)
+        rows = await grant_subject_service.list_candidate_user_groups(
+            scope,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+        total = await grant_subject_service.count_candidate_user_groups(scope, keyword=keyword)
+        return {"data": rows, "total": total}
+
+    async def list_department_children(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        parent_id: int | None,
+    ) -> list[dict[str, object]]:
+        return await grant_subject_service.list_candidate_department_layer(
+            self._prospective_scope(tenant_id, resource_type),
+            parent_id=parent_id,
+        )
+
+    async def search_departments(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        keyword: str,
+        limit: int,
+    ) -> dict[str, object]:
+        return await grant_subject_service.search_candidate_departments(
+            self._prospective_scope(tenant_id, resource_type),
+            keyword=keyword,
+            limit=limit,
+        )
+
+    async def get_department_path(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        department_id: int,
+    ) -> dict[str, object]:
+        return await grant_subject_service.get_candidate_department_path(
+            self._prospective_scope(tenant_id, resource_type),
+            dept_id=department_id,
+        )
 
     async def actor_projected_subjects(
         self,

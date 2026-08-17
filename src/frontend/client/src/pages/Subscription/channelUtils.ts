@@ -1,14 +1,30 @@
-// @ts-strict-ignore
 import {
     type CreateManagerChannelPayload,
+    type InformationSource,
     type ManagerChannelFilterRule,
     type ManagerChannelRuleNode,
     type ManagerChannelSingleRule
 } from "~/api/channels";
-import { type KnowledgeSpace, SpaceRole, VisibilityType } from "~/api/knowledge";
-import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
-import type { Channel } from "~/api/channels";
-import { validateFilterGroups } from "./CreateChannel/FilterConditionEditor";
+import {
+    validateFilterGroups,
+    type FilterGroup,
+} from "./CreateChannel/FilterConditionEditor";
+import type { KnowledgeSyncDraft } from "./CreateChannel/KnowledgeSyncSection";
+import type { SubChannelData } from "./CreateChannel/SubChannelBlock";
+
+export interface CreateChannelFormData {
+    sources: InformationSource[];
+    channelName: string;
+    channelDesc: string;
+    visibility: "private" | "review" | "public";
+    publishToSquare: "yes" | "no";
+    contentFilter: boolean;
+    filterGroups: FilterGroup[];
+    topFilterRelation: "and" | "or";
+    createSubChannel: boolean;
+    subChannels: SubChannelData[];
+    knowledgeSync: KnowledgeSyncDraft;
+}
 
 /**
  * Validate the entire form data before submission.
@@ -38,7 +54,7 @@ export function validateCreateChannelForm(
             if (!v) continue; // handled by empty-name validation below
             const key = v.toLowerCase();
             if (seen.has(key)) {
-                return localize("com_subscription.sub_channel_name_duplicate") || "子频道名称不能重复";
+                return localize("com_subscription.sub_channel_name_duplicate");
             }
             seen.add(key);
         }
@@ -141,42 +157,11 @@ export function buildCreateChannelPayload(data: CreateChannelFormData): CreateMa
     };
 }
 
-/**
- * Convert a Channel to a KnowledgeSpace for the member dialog.
- */
-export function toMemberDialogSpace(channel?: Channel | null): KnowledgeSpace {
-    if (channel) {
-        return {
-            id: channel.id,
-            name: channel.name,
-            description: channel.description || "",
-            visibility: VisibilityType.PUBLIC,
-            creator: channel.creator,
-            creatorId: channel.creatorId,
-            memberCount: channel.subscriberCount || 0,
-            fileCount: 0,
-            totalFileCount: 0,
-            role: channel.role as unknown as SpaceRole,
-            isPinned: channel.isPinned,
-            createdAt: channel.createdAt,
-            updatedAt: channel.updatedAt,
-            tags: []
-        };
-    }
-    return {
-        id: "temp-channel-space",
-        name: "频道成员",
-        description: "",
-        visibility: VisibilityType.PUBLIC,
-        creator: "创建者",
-        creatorId: "creator",
-        memberCount: 0,
-        fileCount: 0,
-        totalFileCount: 0,
-        role: SpaceRole.CREATOR,
-        isPinned: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        tags: []
-    };
+export function buildChannelSettingsUpdatePayload(
+    data: CreateChannelFormData,
+    isChannelCreator: boolean,
+): CreateManagerChannelPayload {
+    const payload = buildCreateChannelPayload(data);
+    if (!isChannelCreator) delete payload.knowledge_sync;
+    return payload;
 }

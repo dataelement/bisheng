@@ -214,6 +214,28 @@ class ConfigService(Settings):
         return []
 
     @staticmethod
+    def _section_child_indent(lines: list[str], anchor: int) -> str:
+        """Return the indentation already used by a stored section's children."""
+        for line in lines[anchor + 1 :]:
+            if not line.strip() or line.lstrip().startswith("#"):
+                continue
+            leading = line[: len(line) - len(line.lstrip())]
+            if not leading:
+                break
+            return leading
+        return "  "
+
+    @staticmethod
+    def _reindent_block(block: list[str], source_indent: str, target_indent: str) -> list[str]:
+        """Move a raw YAML block while preserving its relative indentation."""
+        if source_indent == target_indent:
+            return block
+        return [
+            f"{target_indent}{line[len(source_indent) :]}" if line.startswith(source_indent) else line
+            for line in block
+        ]
+
+    @staticmethod
     def merge_missing_config(file_config: str, db_config: str) -> tuple[str, list[str]]:
         """Add keys that exist in the shipped yaml but not in the stored config.
 
@@ -287,10 +309,11 @@ class ConfigService(Settings):
                 end -= 1
 
             insert: list[str] = []
+            target_indent = ConfigService._section_child_indent(out_lines, anchor)
             for sub in missing:
                 block = ConfigService._extract_block(section, sub, "  ")
                 if block:
-                    insert.extend(block)
+                    insert.extend(ConfigService._reindent_block(block, "  ", target_indent))
                     added.append(f"{key}.{sub}")
             if insert:
                 out_lines[end:end] = insert

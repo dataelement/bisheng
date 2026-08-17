@@ -67,6 +67,8 @@ async def create_space(
         auto_tag_enabled=req.auto_tag_enabled,
         auto_tag_library_id=req.auto_tag_library_id,
         auto_tag_custom_tags=req.auto_tag_custom_tags,
+        creation_request_id=req.creation_request_id,
+        initial_permissions=req.initial_permissions,
     )
     return resp_200(space)
 
@@ -88,6 +90,62 @@ async def get_auto_tag_visibility(
     ) = await WorkStationService.get_knowledge_space_config_with_meta()
     visible = bool(getattr(cfg, "auto_tag_visible", False)) if cfg else False
     return resp_200({"visible": visible})
+
+
+@router.get("/creation-permission-context")
+async def get_creation_permission_context(
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.get_creation_permission_context())
+
+
+@router.get("/creation-grant-subjects/users")
+async def list_creation_grant_users(
+    keyword: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(
+        await svc.list_creation_grant_users(keyword=keyword, page=page, page_size=page_size)
+    )
+
+
+@router.get("/creation-grant-subjects/user-groups")
+async def list_creation_grant_user_groups(
+    keyword: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(
+        await svc.list_creation_grant_user_groups(keyword=keyword, page=page, page_size=page_size)
+    )
+
+
+@router.get("/creation-grant-subjects/departments/children")
+async def list_creation_grant_department_children(
+    parent_id: int | None = None,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.list_creation_grant_department_children(parent_id=parent_id))
+
+
+@router.get("/creation-grant-subjects/departments/search")
+async def search_creation_grant_departments(
+    keyword: str = "",
+    limit: int = Query(50, ge=1, le=200),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.search_creation_grant_departments(keyword=keyword, limit=limit))
+
+
+@router.get("/creation-grant-subjects/departments/{department_id}/path-tree")
+async def get_creation_grant_department_path(
+    department_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    return resp_200(await svc.get_creation_grant_department_path(department_id))
 
 
 @router.get("/{space_id}/info")

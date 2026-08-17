@@ -18,6 +18,7 @@ from loguru import logger
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
     OUTPUT_DIR_NAME,
     BaseExecutor,
+    clip_middle,
     path_namespace_rules,
 )
 
@@ -440,6 +441,11 @@ class LocalExecutor(BaseExecutor):
                 return {"exitcode": exit_code, "log": self._tail(logs_all) + self.absolute_path_advisory(original_code)}
             all_file_list += file_list
 
+        # Clip BEFORE appending the advisory, same as the failure path above: the
+        # advisory is the one instruction the model must act on next turn, so the
+        # truncation must not be able to eat it. ``file_list`` is never clipped —
+        # not seeing it is exactly what makes the model conclude nothing was written.
+        logs_all = clip_middle(logs_all)
         # Deterministic safety net: if the script wrote a deliverable to an absolute
         # /output//scratch path it escaped the harvested working dir and silently
         # vanished (see base_executor). Append a corrective notice so the model

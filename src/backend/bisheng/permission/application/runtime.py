@@ -18,6 +18,7 @@ from bisheng.common.errcode.permission import (
 from bisheng.core.openfga.client import FGAClient
 from bisheng.permission.application.control_state import (
     RuntimeCatalogSnapshot,
+    RuntimeModelSnapshot,
     SqlGrantMutationState,
     SqlModeState,
     SqlOwnerProjectionState,
@@ -153,6 +154,20 @@ class F048PermissionRuntime:
 
     async def current_catalog(self) -> RuntimeCatalogSnapshot:
         return await self._runtime_catalog()
+
+    async def prospective_owner_grantable_models(
+        self,
+    ) -> tuple[RuntimeCatalogSnapshot, tuple[RuntimeModelSnapshot, ...]]:
+        """Read the owner Grant policy without constructing a resource target."""
+
+        catalog = await self._runtime_catalog()
+        owner_model = require_owner_model(catalog)
+        grantable = self._grants.grantable_models_for_capabilities(
+            models=tuple(item.snapshot for item in catalog.models),
+            capabilities=(GrantCapability(model=owner_model, source_key="prospective-owner"),),
+        )
+        keys = {model.model_key for model in grantable}
+        return catalog, tuple(item for item in catalog.models if item.snapshot.model_key in keys)
 
     async def allocate_source_ids(self, count: int) -> tuple[int, ...]:
         return await self._state.allocate_source_ids(count)

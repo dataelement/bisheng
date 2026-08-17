@@ -223,10 +223,55 @@ npm start -- --host 0.0.0.0   # 端口 3001，API 代理到 localhost:7860
 
 要点：
 
-- **为什么 2/3 自动、4 手动**：2/3 是纯 DB、幂等、轻量的 backfill，失败只影响菜单 / 模型配置且可自愈，适合放进启动 lifespan；步骤 4 要写对象存储（MinIO 上的 `SKILL.md`）、数据量可能大、需人工核对迁移摘要，副作用重，故保持手动运维脚本（详见 `src/backend/CLAUDE.md`「Migration vs. script」与 PRD 决策）。
-- **步骤 4 说明**：需要完整 app context（写 MinIO 的 `SKILL.md`）。**不调用 LLM**——技能描述取 SOP 原描述，缺失时用 SOP 名称兜底（技能描述为必填，不会留空）。产出 JSON 迁移摘要（成功/跳过/失败，**运维产物，无管理页报告界面**），失败 / 超大 SOP 项需人工处理（拆分后经管理页重建）。`linsight_sop` 原表保留归档、不删。
+- **为什么 2/3 自动、4 手动**：2/3 是纯 DB、幂等、轻量的 backfill，失败只影响菜单 / 模型配置且可自愈，适合放进启动 lifespan；步骤 4 要写技能正文、数据量可能大、需人工核对迁移摘要，副作用重，故保持手动运维脚本（详见 `src/backend/CLAUDE.md`「Migration vs. script」与 PRD 决策）。
+- **步骤 4 说明**：需要完整 app context（写技能 bundle）。**不调用 LLM**——技能描述取 SOP 原描述，缺失时用 SOP 名称兜底（技能描述为必填，不会留空）。产出 JSON 迁移摘要（成功/跳过/失败，**运维产物，无管理页报告界面**），失败 / 超大 SOP 项需人工处理（拆分后经管理页重建）。`linsight_sop` 原表保留归档、不删。
 - **幂等**：四步均可安全重跑。步骤 2/3 重复启动是 no-op；步骤 4 借 `metadata.sop-id` 识别已迁移项并覆盖自身 bundle，不会重复产生带后缀的技能。
 - 步骤 4 单租户灰度可加 `--tenant-id <id>`。
+
+### v3.0 · 灵思技能 bundle 迁至对象存储
+
+技能正文/脚本/附件此前以**节点本地文件系统**（`SKILLS_ROOT`）为权威存储，DB 只存元数据。单机
+compose 下 `backend` 与 `backend_worker` 恰好 bind-mount 同一个 `/app/data` 才让它工作；一旦两者
+不在同一台宿主机，A 机上传的技能在 B 机 worker 上读不到，而失败是**静默**的——任务照跑，只是技能
+不生效。现改为对象存储（MinIO）为唯一权威 + 节点本地按内容哈希缓存。
+
+| # | 步骤 | 触发方式 | 命令（从 `src/backend/`） | 不执行的后果 |
+|---|------|---------|--------------------------|-------------|
+| 1 | **加 `linsight_skill.content_hash` 列** | 🔧 部署流程 | `uv run alembic upgrade head` | 后端起不来（缺列） |
+| 2 | **发布本机残留的技能 bundle** | ✅ 启动自动（窄） | `python scripts/migrate_skills_to_object_storage.py` → `--apply` | 存量的**用户自建/导入**技能不生效 |
+| 3 | **内置技能重新发布** | ✅ 启动自动 | —（seeder 按内容哈希幂等） | 三个官方技能不生效 |
+
+要点：
+
+- **步骤 2 的启动自愈是刻意做窄的**：只发布本机确实持有、且字节数与 DB 记录一致的 bundle。多副本
+  同时启动时各自看到不同的本地盘，若谁都能发布自己那份，胜出者就是随机的——那正是本次要消除的
+  多节点不一致。凡不满足条件的，日志会**按技能名列出**，这就是「去持有该 bundle 的那台机器上跑一次
+  脚本」的信号。
+- **每台曾经跑过 API 的机器都要跑一次**步骤 2 的脚本。某台机器盘上没有的，它会报告出来。
+- **内置技能不需要迁移**：seeder 直接从镜像重新发布，比任何一台机器的磁盘都更权威。
+- **回滚**：新版本期间创建/编辑的技能只存在于对象存储中，旧代码只读本地盘，会**静默失效**。若确需
+  回滚，先在每台目标机器上跑 `python scripts/restore_skills_to_local.py --apply` 把 bundle 写回
+  `SKILLS_ROOT`。
+- 配置项 `linsight.skills_root` 已降级为「迁移脚本读取本地遗留 bundle 的来源」，运行期不再使用；
+  本地缓存目录由 `linsight.skills_cache_dir` 指定（留空 = 进程缓存目录下的 `linsight_skills`）。
+  **不要**把缓存目录指向共享卷。
+
+## 多节点部署
+
+官方 `docker/docker-compose.yml` 是**单机单副本**编排，但组件本身按多节点设计（`entrypoint.sh` 中
+workflow worker 明确标注「支持多节点运行」，灵思 worker 用 hostname 级 `node_id` + 心跳 + 任务
+ownership）。横向扩容时按下表核对。
+
+| 组件 | 可否多副本 | 注意事项 |
+|------|-----------|---------|
+| `backend`（FastAPI） | ✅ | 无状态。启动期 backfill/seeder 幂等，多副本同启安全 |
+| `backend_worker`（Celery + 灵思 worker + Beat） | ⚠️ | Celery worker 可多节点，队列名需按 `entrypoint.sh` 注释约定；**Beat 只能有一个实例**，否则定时任务重复触发 |
+| MySQL / Redis / MinIO / Milvus / ES / OpenFGA | — | 有状态，按各自方案做高可用 |
+
+**关键约束：不要用共享卷在节点间传递业务数据。** 权威存储只有 MySQL/DM8、Redis、MinIO 三处；节点
+本地磁盘（`/app/data`、进程缓存目录）一律视为可随时丢弃的缓存。这条已写入架构宪法
+[C8](../constitution.md#c8-no-shared-state-on-the-local-filesystem)。单机 compose 下 `backend` 与
+`backend_worker` 共享同一个 `/app/data`，会让「跨进程传文件」看起来能用——这是巧合，不是保证。
 
 ## 相关文档
 

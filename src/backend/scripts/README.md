@@ -365,7 +365,7 @@ F048 deployment.
 > the F035 upgrade checklist — see `docs/architecture/08-deployment.md` → 升级 checklist.
 
 One-shot migration of legacy `linsight_sop` rows into tenant custom skills
-(`linsight_skill` + `SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md`).
+(a `linsight_skill` row + its bundle object in storage).
 `display_name` keeps the original (Chinese) SOP name; the skill ID is a
 pypinyin slug; `metadata.sop-id` makes re-runs idempotent. The skill description
 uses the SOP's own description, falling back to the SOP name when absent (no LLM
@@ -382,6 +382,50 @@ bash scripts/migrate_sop_to_skill.sh --tenant-id 2 apply   # single tenant
 
 Options: `--apply` (persist), `--tenant-id <id>`,
 `--report-file <path>` (default `./migrate_sop_to_skill_report.json`).
+
+### `migrate_skills_to_object_storage.py`
+
+> **Upgrade-required (→ v3.0) — run on EVERY host that has served the API.**
+> Startup performs a deliberately narrow version of this automatically; the script
+> is what resolves everything the self-heal refuses to guess at. See
+> `docs/architecture/08-deployment.md` → 升级 checklist.
+
+Skill bundles used to be authoritative on the node's local disk, so an upgraded
+deployment has rows whose `content_hash` is empty and whose bytes exist only on
+whichever host wrote them — those skills silently fail to load. This publishes
+them to object storage and repoints the row.
+
+The startup self-heal only publishes a bundle whose local byte count matches what
+the row recorded, and skips `source='builtin'` rows (the seeder republishes those
+from the image). Anything else — a size mismatch, or a bundle held by a different
+host — is logged **by name** and left for this script.
+
+Idempotent: a row that already resolves is skipped; publishing the same bundle
+twice writes the same content-addressed object. Dry-run by default.
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_skills_to_object_storage.py             # dry-run
+PYTHONPATH=./ .venv/bin/python scripts/migrate_skills_to_object_storage.py --apply
+```
+
+Options: `--apply`, `--tenant-id <id>`, `--legacy-root <path>` (defaults to
+`linsight_conf.skills_root`). Prints a JSON report; a non-empty `unresolved` list
+means those bundles live on another host — run it there too.
+
+### `restore_skills_to_local.py`
+
+> **Rollback aid only.** Needed before rolling BACK to a release that reads skill
+> bundles from `SKILLS_ROOT` instead of object storage.
+
+Writes every skill bundle back to the legacy on-disk layout. Skills created or
+edited while the newer release was running exist only as objects; the older code
+looks on local disk, finds nothing, and — because that path only warns — the skill
+silently stops working. Run on every host that will serve the older release.
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/restore_skills_to_local.py             # dry-run
+PYTHONPATH=./ .venv/bin/python scripts/restore_skills_to_local.py --apply
+```
 
 ### `backfill_linsight_task_mode_web_menu.py`
 

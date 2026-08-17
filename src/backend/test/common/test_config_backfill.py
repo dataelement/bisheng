@@ -135,6 +135,42 @@ def test_result_stays_valid_yaml_with_correct_indentation():
     }
 
 
+def test_missing_child_inherits_legacy_four_space_section_indent():
+    """Old ``merge_old_config`` rows may indent section children by four spaces.
+
+    A new child copied verbatim from the two-space shipped YAML would prematurely
+    close that mapping and make the complete document invalid.
+    """
+    file_cfg = """\
+system_login_method:
+  allow_multi_login: true
+  # Commercial SSO switch
+  gateway_login: false
+
+workflow:
+  timeout: 5
+"""
+    db_cfg = """\
+system_login_method:
+    allow_multi_login: true
+    admin_username: admin
+
+workflow:
+  timeout: 1
+"""
+
+    merged, added = ConfigService.merge_missing_config(file_cfg, db_cfg)
+    cfg = yaml.safe_load(merged)
+
+    assert added == ["system_login_method.gateway_login"]
+    assert cfg["system_login_method"] == {
+        "allow_multi_login": True,
+        "admin_username": "admin",
+        "gateway_login": False,
+    }
+    assert "    # Commercial SSO switch\n    gateway_login: false" in merged
+
+
 def test_empty_or_malformed_inputs_are_left_alone():
     assert ConfigService.merge_missing_config("", DB_CONFIG) == (DB_CONFIG, [])
     # A scalar document is not a config tree — refuse rather than mangle it.

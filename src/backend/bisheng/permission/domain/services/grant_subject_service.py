@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
@@ -121,6 +121,36 @@ async def list_candidate_users(
     ]
 
 
+async def count_candidate_users(scope: GrantSubjectScope, *, keyword: str) -> int:
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            in_tenant = (
+                select(UserTenant.id)
+                .where(
+                    UserTenant.user_id == User.user_id,
+                    UserTenant.tenant_id == scope.tenant_id,
+                    UserTenant.status == "active",
+                )
+                .exists()
+            )
+            statement = select(func.count(User.user_id)).where(User.delete == 0, in_tenant)
+            if scope.department_path is not None:
+                in_subtree = (
+                    select(UserDepartment.id)
+                    .join(Department, Department.id == UserDepartment.department_id)
+                    .where(
+                        UserDepartment.user_id == User.user_id,
+                        col(Department.path).like(f"{scope.department_path}%"),
+                        Department.status == "active",
+                    )
+                    .exists()
+                )
+                statement = statement.where(in_subtree)
+            if keyword:
+                statement = statement.where(col(User.user_name).like(f"{keyword}%"))
+            return int((await session.exec(statement)).one())
+
+
 async def _primary_department_paths(user_ids: list[int]) -> dict[int, str]:
     """Each user's primary department as a readable name chain, in one round trip."""
 
@@ -170,6 +200,15 @@ async def list_candidate_user_groups(
             statement = statement.order_by(col(Group.id).desc()).offset((page - 1) * page_size).limit(page_size)
             rows = (await session.exec(statement)).all()
     return [{"id": int(row.id), "name": row.group_name} for row in rows]
+
+
+async def count_candidate_user_groups(scope: GrantSubjectScope, *, keyword: str) -> int:
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            statement = select(func.count(Group.id)).where(Group.tenant_id == scope.tenant_id)
+            if keyword:
+                statement = statement.where(col(Group.group_name).like(f"{keyword}%"))
+            return int((await session.exec(statement)).one())
 
 
 async def list_candidate_department_layer(

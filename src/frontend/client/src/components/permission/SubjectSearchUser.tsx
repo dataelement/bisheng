@@ -5,7 +5,7 @@ import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 
-interface SubjectSearchUserProps {
+export interface SubjectSearchUserProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
   resourceType?: ResourceType;
@@ -13,6 +13,7 @@ interface SubjectSearchUserProps {
   disabledIds?: number[];
   /** subjectId -> the permission model(s) that subject already holds here. */
   grantedLabels?: Record<string, string>;
+  usersApi?: typeof searchUsers;
 }
 
 type UserRow = GrantUser;
@@ -26,6 +27,7 @@ export function SubjectSearchUser({
   resourceId,
   disabledIds = [],
   grantedLabels = {},
+  usersApi,
 }: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
@@ -55,7 +57,7 @@ export function SubjectSearchUser({
       signal: AbortSignal,
     ): Promise<UserRow[]> => {
       if (!resourceType || !resourceId) return [];
-      const res = await searchUsers(
+      const res = await (usersApi ?? searchUsers)(
         resourceType,
         resourceId,
         name,
@@ -65,7 +67,7 @@ export function SubjectSearchUser({
       if (signal.aborted) return [];
       return res.data || [];
     },
-    [resourceId, resourceType],
+    [resourceId, resourceType, usersApi],
   );
 
   const resetAndLoad = useCallback(

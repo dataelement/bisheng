@@ -212,7 +212,7 @@ async def _load_current_release() -> CurrentRelease:
         async with get_async_db_session() as session:
             rows = list(
                 (
-                    await session.execute(
+                    await session.exec(
                         select(PermissionCatalogRelease, AuthorizationModelRelease)
                         .join(
                             AuthorizationModelRelease,
@@ -243,12 +243,12 @@ async def _assert_maintenance_window(*, apply: bool) -> None:
         async with get_async_db_session() as session:
             active_operations = int(
                 (
-                    await session.execute(
+                    await session.exec(
                         select(func.count(PermissionProjectionOperation.id)).where(
                             PermissionProjectionOperation.status.in_(ACTIVE_OPERATION_STATUSES)
                         )
                     )
-                ).scalar_one()
+                ).one()
             )
     _require(active_operations == 0, f"{active_operations} permission projection operations are active")
     if apply:
@@ -261,20 +261,18 @@ async def _load_canonical_grants() -> tuple[tuple[GrantSnapshot, ...], int]:
         async with get_async_db_session() as session:
             grant_rows = list(
                 (
-                    await session.execute(
+                    await session.exec(
                         select(PermissionGrant)
                         .where(PermissionGrant.state == "ACTIVE")
                         .order_by(PermissionGrant.tenant_id, PermissionGrant.id)
                     )
-                )
-                .scalars()
-                .all()
+                ).all()
             )
             grant_ids = [int(row.id) for row in grant_rows if row.id is not None]
             assignee_rows = (
                 list(
                     (
-                        await session.execute(
+                        await session.exec(
                             select(PermissionGrantAssignee)
                             .where(
                                 col(PermissionGrantAssignee.grant_id).in_(grant_ids),
@@ -282,9 +280,7 @@ async def _load_canonical_grants() -> tuple[tuple[GrantSnapshot, ...], int]:
                             )
                             .order_by(PermissionGrantAssignee.tenant_id, PermissionGrantAssignee.id)
                         )
-                    )
-                    .scalars()
-                    .all()
+                    ).all()
                 )
                 if grant_ids
                 else []
@@ -353,15 +349,13 @@ async def _load_persisted_sources() -> tuple[PermissionVisibleSourceProjection, 
         async with get_async_db_session() as session:
             return tuple(
                 (
-                    await session.execute(
+                    await session.exec(
                         select(PermissionVisibleSourceProjection).order_by(
                             PermissionVisibleSourceProjection.tenant_id,
                             PermissionVisibleSourceProjection.id,
                         )
                     )
-                )
-                .scalars()
-                .all()
+                ).all()
             )
 
 
@@ -441,20 +435,16 @@ async def _apply_source_rows(upserts: tuple[Any, ...]) -> None:
             async with session.begin():
                 for source in upserts:
                     existing = (
-                        (
-                            await session.execute(
-                                select(PermissionVisibleSourceProjection)
-                                .where(
-                                    PermissionVisibleSourceProjection.tenant_id == source.tenant_id,
-                                    PermissionVisibleSourceProjection.contribution_fingerprint
-                                    == source.contribution_fingerprint,
-                                )
-                                .with_for_update()
+                        await session.exec(
+                            select(PermissionVisibleSourceProjection)
+                            .where(
+                                PermissionVisibleSourceProjection.tenant_id == source.tenant_id,
+                                PermissionVisibleSourceProjection.contribution_fingerprint
+                                == source.contribution_fingerprint,
                             )
+                            .with_for_update()
                         )
-                        .scalars()
-                        .first()
-                    )
+                    ).first()
                     if existing is None:
                         session.add(
                             PermissionVisibleSourceProjection(
@@ -519,17 +509,13 @@ async def _authorization_release_id(store_id: str, model_id: str) -> int:
     with bypass_tenant_filter():
         async with get_async_db_session() as session:
             row = (
-                (
-                    await session.execute(
-                        select(AuthorizationModelRelease).where(
-                            AuthorizationModelRelease.store_id == store_id,
-                            AuthorizationModelRelease.model_id == model_id,
-                        )
+                await session.exec(
+                    select(AuthorizationModelRelease).where(
+                        AuthorizationModelRelease.store_id == store_id,
+                        AuthorizationModelRelease.model_id == model_id,
                     )
                 )
-                .scalars()
-                .first()
-            )
+            ).first()
     _require(row is not None and row.id is not None, "target Authorization Model release is missing")
     return int(row.id)
 
@@ -544,14 +530,14 @@ async def _is_resumable_upgrade_draft(
         async with get_async_db_session() as session:
             count = int(
                 (
-                    await session.execute(
+                    await session.exec(
                         select(func.count(PermissionCatalogRelease.id)).where(
                             PermissionCatalogRelease.predecessor_id == current_catalog_id,
                             PermissionCatalogRelease.idempotency_key == idempotency_key,
                             PermissionCatalogRelease.status.in_(("DRAFT", "PROJECTING", "COMMITTED")),
                         )
                     )
-                ).scalar_one()
+                ).one()
             )
     return count == 1
 

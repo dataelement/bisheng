@@ -7,8 +7,11 @@ const COMPONENTS = [
   "src/components/permission/PermissionDialog.tsx",
   "src/components/permission/PermissionGrantTab.tsx",
   "src/components/permission/PermissionListTab.tsx",
+  "src/components/permission/PermissionDraftEditor.tsx",
+  "src/components/permission/PermissionDraftPanel.tsx",
   "src/components/permission/SourceBadge.tsx",
-  "src/pages/Subscription/ChannelPermissionDialog.tsx",
+  "src/pages/Subscription/ChannelSettings/ChannelPermissionSettings.tsx",
+  "src/pages/knowledge/SpaceSettings/KnowledgeSpaceSettingsPage.tsx",
 ] as const;
 
 const REQUIRED_KEYS = [

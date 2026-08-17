@@ -153,10 +153,25 @@ class GrantService:
     ) -> tuple[GrantModelSnapshot, ...]:
         """Return target models authorized by at least one complete source."""
 
-        available = tuple(
-            model for model in context.models if model.active and model.derived_level is not None and model.action_codes
+        return self.grantable_models_for_capabilities(
+            models=context.models,
+            capabilities=context.capabilities,
+            system_authorized=context.system_authorized,
         )
-        if context.system_authorized:
+
+    def grantable_models_for_capabilities(
+        self,
+        *,
+        models: tuple[GrantModelSnapshot, ...],
+        capabilities: tuple[GrantCapability, ...],
+        system_authorized: bool = False,
+    ) -> tuple[GrantModelSnapshot, ...]:
+        """Apply the Grant level policy without requiring a resource target."""
+
+        available = tuple(
+            model for model in models if model.active and model.derived_level is not None and model.action_codes
+        )
+        if system_authorized:
             return tuple(
                 sorted(
                     available,
@@ -171,7 +186,7 @@ class GrantService:
                 (
                     model
                     for model in available
-                    if any(self._capability_allows(capability, model) for capability in context.capabilities)
+                    if any(self._capability_allows(capability, model) for capability in capabilities)
                 ),
                 key=lambda model: (
                     int(model.derived_level),
