@@ -232,6 +232,20 @@ class TenantMountService:
 
         await WorkStationService.acopy_root_builtin_tools_to_tenant(new_tenant.id)
 
+        # A mounted department becomes a tenant, and a tenant without the preset
+        # approval scenarios cannot approve anything — its first hosted-app
+        # publish would fail with "approval scenario not enabled" (F055 AC-20).
+        # This is the *second* tenant-creation path; seeding only the admin
+        # console one leaves a hole that surfaces days later.
+        try:
+            from bisheng.approval.domain.services.approval_seed_service import (
+                seed_approval_scenarios_for_tenant,
+            )
+
+            await seed_approval_scenarios_for_tenant(new_tenant.id)
+        except Exception:
+            logger.warning("approval scenario seeding failed for mounted tenant %s", new_tenant.id, exc_info=True)
+
         # F017 hook: fan out the Root ``shared_to`` relation + snapshot the
         # resources that are now reachable. Failures are swallowed to keep
         # mount idempotent — the FGA write is retryable via failed_tuples

@@ -233,6 +233,55 @@ class PublishPipelineService:
 
         await publish_approval_service.assert_submittable(app_id)
 
+    @classmethod
+    async def get_deployment_status(cls, deployment_id: str, *, principal) -> dict[str, Any]:
+        """What the CLI polls (design §4.2 ①). Read-only, and scoped to the caller's owner.
+
+        Two scoping layers, and both are needed. The tenant filter keeps another
+        tenant's attempt invisible on the SELECT; the explicit owner comparison
+        keeps a second service account inside the *same* tenant from watching
+        somebody else's publish. Neither is redundant — the first would let a
+        colleague poll, the second cannot see across tenants at all.
+
+        A miss answers 16205 rather than "not found": distinguishing "no such
+        deployment" from "not yours" hands a caller an id oracle for free.
+        """
+        async with get_async_db_session() as session:
+            deployment = await AppDeploymentDao.aget(session, deployment_id)
+        owner_user_id = int(getattr(principal, "resource_owner_user_id", 0) or 0)
+        if deployment is None or int(deployment.owner_user_id or 0) != owner_user_id:
+            raise AppNotOwnedBySubjectError(
+                msg="该发布记录不存在或不属于当前密钥",
+                details={"deployment_id": deployment_id, "reason": "not_owned"},
+                hints=["确认 deployment_id 来自本人名下应用的发布"],
+            )
+
+        app_state = None
+        version_no = None
+        if deployment.app_id:
+            async with get_async_db_session() as session:
+                app_row = await AppDao.aget(session, deployment.app_id)
+            app_state = app_row.state if app_row is not None else None
+        if deployment.version_id and deployment.app_id:
+            version = await VersionService.get_version(deployment.app_id, deployment.version_id)
+            version_no = version.version_no if version is not None else None
+
+        return {
+            "deployment_id": deployment.id,
+            "app_id": deployment.app_id,
+            "version_id": deployment.version_id,
+            "version_no": version_no,
+            "stage": deployment.stage,
+            "status": deployment.status,
+            # AC-11's five-tuple, or None. The CLI branches on ``code`` and
+            # prints ``message`` + ``hints``; a partially filled failure is what
+            # turns an actionable error into "something went wrong".
+            "failure": deployment.failure,
+            "approval": {"instance_id": deployment.approval_instance_id} if deployment.approval_instance_id else None,
+            "app_state": app_state,
+            "scan_result": deployment.scan_result,
+        }
+
     # ------------------------------------------------------------------
     # Asynchronous leg
     # ------------------------------------------------------------------
@@ -280,9 +329,7 @@ class PublishPipelineService:
 
     @classmethod
     async def _stage_probe(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:
-        await precheck_service.precheck_probe(
-            deployment, manifest=context["manifest"], image_ref=context["image_ref"]
-        )
+        await precheck_service.precheck_probe(deployment, manifest=context["manifest"], image_ref=context["image_ref"])
 
     @classmethod
     async def _stage_scan(cls, deployment: AppDeployment, context: dict[str, Any]) -> None:

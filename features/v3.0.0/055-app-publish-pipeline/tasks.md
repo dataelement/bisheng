@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 33 条修订，65 AC 定稿（决议-1～9） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 15 条修订（D1–D16 / 30 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；70 任务 / 7 Wave / 53 条 `[MVP-核心]`（2026-08-17 独立审查 14 条修订：Celery 登记 / 组合根接线 / 跨 Wave 执行序 / 档位依赖链 / 图标落地 / 16207 闸 / T044·T027 拆分 / 路径与 i18n 补齐 / 建桶接线 / 顺延任务测试载体 / 追溯表订正 / T051 上提） |
-| 实现 | 🚧 进行中 | 23 / 70 完成（Wave 1 + Wave 2 全部落地，2026-08-17；`uv run pytest test/app_publish -q` 147 passed）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 42 / 70 完成（Wave 1 + Wave 2 + **Wave 3.1–3.4**（T024–T041）落地，2026-08-17；`uv run pytest test/app_publish` **301 passed / 1 xfailed**，`test/app_publish test/app_runtime` 与 `test/app_runtime test/app_publish` 两种顺序各 **530 passed / 7 skipped(F054 docker) / 1 xfailed**）。剩余 Wave 3：3.5 事件触达（T042/T043）· 3.6–3.7 前端（T044–T048）· 3.8 `withdraw` 守卫（T051）· 3.9 114 验证与上游回写（T049/T050）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -247,14 +247,14 @@ T001–T007（Wave 1，可并行）
 
 #### 3.1 三项阻塞前置（**存量代码行为变更**）
 
-- [ ] **T024**: `[MVP-核心]` `tenant_admin` 来源修正 + Root 回退测试（含既有场景回归护栏）
+- [x] **T024**: `[MVP-核心]` `tenant_admin` 来源修正 + Root 回退测试（含既有场景回归护栏）
   **文件**: `src/backend/test/app_publish/test_approver_source_fix.py`（新）
   **逻辑**: 断言 `tenant_admin` 来源从"全站系统超管"改为"当前租户的真实租户管理员"，Root 租户回退平台超管；**并回归既有两个场景**——这是行为变更的护栏。
   **测试**: `test_tenant_admin_source_resolves_real_tenant_admins_not_super_admin`（今天 `approver_resolver.py:63-74` 解析的是 `UserRoleDao.aget_roles_user([AdminRole])` 全站超管、与 `req.tenant_id` 完全无关，注释自认 "pragmatic approximation"，坑 1）→ AC-21 / `test_sub_tenant_admin_only_sees_own_tenant_approvals`（多租户下不再全压超管一人）→ AC-21 / `test_root_tenant_falls_back_to_super_admin`（`TenantAdminService.list_tenant_admins` 对 Root 租户**恒返回 `[]` 是显式设计不是 bug**，`tenant_admin_service.py:95-96`；114 单租户形态**必然**命中此分支）→ AC-15 / `test_non_root_tenant_with_no_admin_does_not_fallback`（非 Root 无租户管理员且来源①亦空 → 走异常态，不叠加任何额外兜底）→ AC-15 / `test_existing_channel_scenario_still_resolves_approvers`（**行为变更护栏**）→ AC-21 / `test_existing_knowledge_space_scenario_still_resolves_approvers` → AC-21 / `test_notification_recipient_function_unchanged`（**断言 `approval_notification_service.py:122-152 _get_admin_recipient_ids` 一行未改**——它是**无条件 union**、语义与条件回退不同，合并的两种错法各自致命，坑 2）→ AC-21
   **覆盖 AC**: AC-15, AC-21
   **依赖**: T007
 
-- [ ] **T025**: `[MVP-核心]` `approver_resolver` 修正实现（**跨 Feature 行为变更**）
+- [x] **T025**: `[MVP-核心]` `approver_resolver` 修正实现（**跨 Feature 行为变更**）
   **文件**: `src/backend/bisheng/approval/domain/services/approver_resolver.py`（存量改动）
   **逻辑**: 顶部**新增函数** `resolve_tenant_admin_user_ids(tenant_id) -> list[int]`：`ids = await TenantAdminService.list_tenant_admins(tenant_id)`；`if not ids and tenant_id == ROOT_TENANT_ID: ids = AdminRole 用户`。把 `tenant_admin` 分支的 `UserRoleDao.aget_roles_user([AdminRole])` 换成它。
   **⚠️ 三条不得违反的边界**：① **绝不与 `_get_admin_recipient_ids` 合并**——那个是通知侧的**无条件 union**（任何租户都并入全站超管），拿它做审批人解析等于把 AC-21 要修的缺陷原样搬过来；反过来改它则悄悄改掉审批异常态的管理员通知收件人（坑 2）。② **不用 `TenantService._get_tenant_admin_users`**——private、分页上限 100、返回 dict 且**含 super_admin**（`tenant_service.py:771/780-790`）；`list_tenant_admins`（`tenant_admin_service.py:90-106`）是干净公共 API、返回 `list[int]`、权限后端异常 `return []`（fail-closed 成空 → 走 approver_empty 异常态，正合 AC-18）。③ **不在这里做申请人过滤**（那是场景 handler 的出口过滤，塞进公共解析器会污染频道 / 知识空间两个既有场景）。
@@ -263,14 +263,14 @@ T001–T007（Wave 1，可并行）
   **覆盖 AC**: AC-15, AC-21
   **依赖**: T024
 
-- [ ] **T026**: `[MVP-核心]` 审批场景 seed 参数化与新建租户钩子测试
+- [x] **T026**: `[MVP-核心]` 审批场景 seed 参数化与新建租户钩子测试
   **文件**: `src/backend/test/app_publish/test_approval_seed.py`（新）
   **逻辑**: 断言「应用发布」场景随部署即存在、可被人工改配后不被升级重置、且**两条**新建租户路径都会落库。
   **测试**: `test_fresh_deploy_has_app_publish_scenario_enabled`（全新部署未做任何配置直接发布即可生成审批单）→ AC-12 / `test_seed_shape_single_catchall_route_single_or_node`（`ApprovalScenario(enabled=True)` → `ApprovalFlowDefinition(is_active=True)` → `ApprovalFlowVersion(version_no=1,is_active=True)` → `ApprovalNodeDefinition(node_order=1,node_mode='or')` → `ApprovalRouteRule(route_type='flow', match_config={})`；**`match_config={}` 就是 catch-all**，`approval_gate.py:443-445` 无 field 直接返回该 route）→ AC-12 / `test_sources_are_department_admin_and_tenant_admin` → AC-12 / `test_seed_idempotent_by_tenant_and_scenario_code`（**按 `tenant_id + scenario_code` 存在即 `continue`** = AC-19「平台升级不重置人工改动」的落地）→ AC-19 / `test_manual_reconfig_survives_reseed` → AC-19 / `test_create_tenant_path_seeds_scenario`（`TenantService.acreate_tenant`，**管理后台主路径**）→ AC-20 / `test_mount_child_path_seeds_scenario`（`TenantMountService.mount_child`）→ AC-20 / `test_seed_failure_does_not_break_tenant_creation`（照 `tenant_service.py:140-149` 的 `seed_builtin_skills` 形状：`try/except` + `logger.warning`）→ AC-20 / `test_menu_access_scenario_not_touched`（**不顺手扩到 menu_access**，那是另一条产品决策）→ AC-19
   **覆盖 AC**: AC-12, AC-19, AC-20
   **依赖**: T007
 
-- [ ] **T027a**: `[MVP-核心]` seed 参数化 + 「应用发布」场景条目（**不碰 Tenant 领域**）
+- [x] **T027a**: `[MVP-核心]` seed 参数化 + 「应用发布」场景条目（**不碰 Tenant 领域**）
   **文件**: `src/backend/bisheng/approval/domain/services/approval_seed_service.py`（新，对外暴露 `seed_approval_scenarios_for_tenant(tenant_id)`）, `src/backend/bisheng/common/init_data.py`（`_init_default_approval_scenarios(session)` → `(session, tenant_id)`，**六处硬编码 `DEFAULT_TENANT_ID`**（`:365/374/384/402/414/425`）改参数）
   **逻辑**: 新增 seed 条目 `{scenario_code:'app_publish_request', scenario_name:'应用发布', sources:[{"type":"department_admin"},{"type":"tenant_admin"}]}`，落 5 行（形态见 T026）。幂等判据**不动**（按 `tenant_id + scenario_code`）。`init_data.py` 的 `init_default_data()` 仍按 `DEFAULT_TENANT_ID` 调一次（行为不变）。
   **⚠️ 签名变更需全量 grep 调用方**：`_init_default_approval_scenarios` 加参数后，**先 `grep -rn "_init_default_approval_scenarios\|seed_approval_scenarios" src/backend/`** 确认全部调用点都传了 `tenant_id`；六处 `DEFAULT_TENANT_ID` 改参数时逐处核对——漏改一处的现象是"某类 seed 行永远落在默认租户"，不报错。
@@ -278,7 +278,7 @@ T001–T007（Wave 1，可并行）
   **覆盖 AC**: AC-12, AC-19
   **依赖**: T026
 
-- [ ] **T027b**: `[MVP-核心]` **两条**租户创建路径挂 seed 钩子（**跨 Feature：改 Tenant 领域，单独 review**）
+- [x] **T027b**: `[MVP-核心]` **两条**租户创建路径挂 seed 钩子（**跨 Feature：改 Tenant 领域，单独 review**）
   **文件**: `src/backend/bisheng/tenant/domain/services/tenant_service.py`（`acreate_tenant` 挂一次）, `src/backend/bisheng/tenant/domain/services/tenant_mount_service.py`（`mount_child` 挂一次）
   **逻辑**: 各**追加**一次 `seed_approval_scenarios_for_tenant(tenant.id)`，形状照抄 `tenant_service.py:140-149` 的 `seed_builtin_skills([tenant.id])`（`try/except` 包住 + `logger.warning`，其注释已明说"startup seeding 只覆盖当时存在的租户"）。**只加这一步、不动创建流程里的任何既有步骤**。
   **⚠️ 两条路径缺一必漏**（坑 3）：`mvp-114-path.md:50` 与 PRD-1 §3.3 锚点表**都只写了 `tenant_mount_service`，口径不全**——`TenantService.acreate_tenant` 才是管理后台主路径，漏它则从管理后台建的租户永远没有发布审批场景，第一次 deploy 就 `ApprovalScenarioDisabledError`，且这类 bug 要等客户建第二个租户才暴露。**本任务之所以从 T027a 拆出来单独提交，就是为了让这两行改动被单独 review 一次。**
@@ -289,14 +289,14 @@ T001–T007（Wave 1，可并行）
 
 #### 3.2 审批场景接入（四件套）
 
-- [ ] **T028**: `[MVP-核心]` 场景 handler 测试（审批人解析矩阵 / 申请人 / 自审 / 异常态 / detail 结构）
+- [x] **T028**: `[MVP-核心]` 场景 handler 测试（审批人解析矩阵 / 申请人 / 自审 / 异常态 / detail 结构）
   **文件**: `src/backend/test/app_publish/test_publish_scenario_handler.py`（新）
   **逻辑**: 覆盖 GOV-02 的全部解析分支与 `detail_snapshot` 结构契约。
   **测试**: `test_gate_returns_pending_with_non_empty_approvers_after_seed`（**`resolve_approvers` 由 handler 自己实现**、通用来源要**显式转调** `resolve_approvers_from_sources`；忘了转调的现象与"没配审批人"完全一样、极难定位，坑 9）→ AC-12 / `test_approvers_union_dept_admin_and_tenant_admin_single_or_node` → AC-12 / `test_or_node_first_decision_closes_other_tasks`（任一人处理立即出终态并同步关闭另一方待办）→ AC-13 / `test_owner_without_primary_department_falls_to_tenant_admin`（`UserDepartmentDao.aget_user_primary_department`，**只取主部门、不向上回溯**）→ AC-14 / `test_department_without_admin_falls_to_tenant_admin` → AC-14 / `test_applicant_is_owner_natural_person_not_service_account`（`applicant_user_id = app.owner_user_id`，**不是** `principal.subject_user_id`；服务账号会被自动兜底进 guest 部门，按它解析部门会解析到完全无关的人，坑 28 / INV-29）→ AC-16 / `test_approver_note_marks_no_department_admin_source` → AC-16 / `test_applicant_filtered_out_of_approvers` → AC-17 / `test_self_approval_kept_when_applicant_is_only_candidate_and_audited`（唯一允许"自己批自己"的情形，审计必须标注）→ AC-17 / `test_self_approval_flag_carried_via_handler_instance_attr`（引擎侧**没有通道**——Gate 只取 `list[int]`，`ApprovalGateResult` 只有四字段 → 走 `self.last_self_approval` 实例属性，D7）→ AC-17 / `test_concurrent_two_releases_one_self_one_not_audit_exactly_one_self_approval`（**验证 handler 未被复用**：每次发布请求必须新建 handler 实例，绝不可提成模块级单例，D7）→ AC-17 / `test_both_sources_empty_returns_exception_not_raise`（`decision=EXCEPTION` + 通知管理员，**断言不抛异常**、不放行也不静默卡死，K2 ②）→ AC-18 / `test_detail_snapshot_structured_plus_three_flat_fallback_keys`（`app_name` / `release_kind_text` / `tier_name` 供未识别该场景的旧渲染路径；嵌套子树键须加进前端 `DETAIL_INTERNAL_KEYS`，坑 7）→ AC-24 / `test_detail_snapshot_fields_match_contract`（design §4.2 ④ 字段表逐字段）→ AC-24 / `test_gate_request_has_business_resource_type_and_id`（`ApprovalGateRequest` 的 `business_resource_type='app'` / `business_resource_id=str(app_id)` **是无默认值的必填字段**，漏填 = 构造即 `ValidationError`）→ AC-24 / `test_every_release_generates_approval_no_exemption`（首发与迭代均生成；能力声明与可见范围未变的迭代同样必审；**不存在任何免审配置项**，INV-34）→ AC-23 / `test_approver_resolver_not_modified_by_this_scenario`（申请人过滤只在本场景出口做）→ AC-17
   **覆盖 AC**: AC-12, AC-13, AC-14, AC-16, AC-17, AC-18, AC-23, AC-24
   **依赖**: T025, T027a, T027b
 
-- [ ] **T029**: `[MVP-核心]` 场景 handler 实现 + preset + runtime handler 工厂分支（**四件套之①②③**）
+- [x] **T029**: `[MVP-核心]` 场景 handler 实现 + preset + runtime handler 工厂分支（**四件套之①②③**）
   **文件**: `src/backend/bisheng/app_publish/domain/services/app_publish_scenario_handler.py`（新）, `src/backend/bisheng/approval/domain/services/approval_registry.py`（存量：`with_default_presets()` 加一条 preset）, `src/backend/bisheng/approval/domain/services/approval_runtime_handler_factory.py`（存量：`build_runtime_handler` 加 `app_publish_request` 分支）
   **逻辑**: handler 为**鸭子类型、无 ABC**，完整协议照 `knowledge_space_subscribe_scenario_handler.py:55-157`：`resolve_approvers`（显式转调 `resolve_approvers_from_sources` + AC-17 出口过滤 + `self.last_self_approval` 标志）· `build_title` → 「{应用名} · {首发|迭代} 发布审批」· `build_business_link` → platform 应用详情页发布 tab · `build_detail` → design §4.2 ④ 的**结构化** payload · `on_approved`（T033）/ `on_rejected` / `on_withdrawn` / `on_cancelled`（T035）。
   **preset**: `ApprovalScenarioPreset(scenario_code='app_publish_request', scenario_name='应用发布', handler_key='app_publish_request', approver_source_types=['department_admin','tenant_admin','direct_user'])`。⚠️ **`handler_key` 是无默认值的必填字段**（`approval_center_schema.py:38-43`），漏传会在 `with_default_presets()` 求值时 `ValidationError`、**import 期就崩**。`direct_user` 是为 AC-19「租户管理员可改配审批人」留的。场景名接受**中文单语**（与既有三场景一致，坑 24）。
@@ -305,14 +305,14 @@ T001–T007（Wave 1，可并行）
   **覆盖 AC**: AC-12, AC-13, AC-14, AC-16, AC-17, AC-18, AC-23, AC-24
   **依赖**: T028
 
-- [ ] **T030**: `[MVP-核心]` `publish_approval_service` 测试（Gate 组装 / 前置闸 / 首节点通知 / 草稿不可访问）
+- [x] **T030**: `[MVP-核心]` `publish_approval_service` 测试（Gate 组装 / 前置闸 / 首节点通知 / 草稿不可访问）
   **文件**: `src/backend/test/app_publish/test_publish_approval_service.py`（新）
   **逻辑**: 断言 Gate 的组装范式、两个"静默"语义的调用方兜底、首节点通知自发。
   **测试**: `test_gate_assembled_per_request_with_fresh_registry_and_handler`（范式逐字照 `channel_service.py:1523-1530`：`ApprovalRegistry.with_default_presets()` → `register_handler(...)` → `ApprovalGate(registry=...)`；**引擎本就没有全局单例注册表**，K1 ②）→ AC-23 / `test_active_instance_checked_before_gate_raises_16251`（Gate 命中 `find_duplicate_active_instance` 会**静默返回既有实例**，靠它兜 = CLI 显示"提交成功"但什么都没提交，坑 8）→ AC-03 / `test_pending_online_checked_before_gate_raises_16252` → AC-03 / `test_scenario_disabled_raises_maps_to_16225_not_16226`（一码一义红线）→ AC-23 / `test_first_node_notification_sent_by_us_not_gate`（`approval_gate.py:232-248` 只建 task + 写审计、**不发站内信**，三个既有场景都在自己那侧补发，坑 5）→ AC-64 / `test_business_key_is_deployment_id`（一次发布尝试 = 一个审批单）→ AC-23 / `test_draft_app_not_accessible_before_approval`（首发在审批通过前，除审批人外任何其他用户不可访问——**MVP 期的落点是 F054 `create_app` 的 `authorize_created(protected=True)` 默认仅 owner 可见**；审读视图 / 预览试用两条审批人通道随 Wave 4）→ AC-30
   **覆盖 AC**: AC-03, AC-23, AC-30, AC-64
   **依赖**: T029
 
-- [ ] **T031**: `[MVP-核心]` `publish_approval_service` 实现
+- [x] **T031**: `[MVP-核心]` `publish_approval_service` 实现
   **文件**: `src/backend/bisheng/app_publish/domain/services/publish_approval_service.py`（新）
   **逻辑**: `_build_publish_approval_gate()`（**每次调用新建 registry + handler + Gate**，绝不缓存复用，D7 自审标志的成立前提）· `assert_no_active_release(app_id)`（16251）· `assert_not_pending_online(app_id)`（16252）· `submit(deployment)`：**先 Gate 后 INSERT**（D6-C）——`request_or_pass(business_key=str(deployment_id), applicant_user_id=app.owner_user_id, applicant_department_id=owner 主部门, business_resource_type='app', business_resource_id=str(app_id))` → `PENDING` 或 `EXCEPTION` 都照落版本记录（调 T017）→ Gate **抛异常** → deployment `failed(stage='approval_created', code=16225)` 且不落版本 → 返回 PENDING 后调 `ApprovalNotificationService.notify_users(..., action_code='approval_task_pending', scenario_code='app_publish_request')`（坑 5）→ 读 `handler.last_self_approval` 写审计 `app.release.self_approval`。**补偿**：Gate 成功而 INSERT 失败 → 立即 `cancel_instance_by_business(...)`（T035）+ deployment failed + 审计 `app.release.rollback`（**显式两阶段补偿，不假装原子**）。
   **测试**: T030 全部通过。
@@ -321,28 +321,28 @@ T001–T007（Wave 1，可并行）
 
 #### 3.3 审批终态处理与上线终检
 
-- [ ] **T032**: `[MVP-核心]` `on_approved` 三分支测试（待上线不是失败）
+- [x] **T032**: `[MVP-核心]` `on_approved` 三分支测试（待上线不是失败）
   **文件**: `src/backend/test/app_publish/test_on_approved.py`（新）
   **逻辑**: 断言 outbox 语义边界——**产品定义的终态必须正常返回、系统性失败必须抛**。
   **测试**: `test_online_marks_terminal_online_and_notifies_owner` → AC-31 / `test_capacity_shortage_returns_normally_and_sets_pending_capacity`（**必须"正常返回"而不是 raise**——raise 会让 instance 变 `execute_failed` + 建异常 + 通知管理员，产品上是"审批失败了"，与 AC-31 直接矛盾，K3 / 坑 10）→ AC-31 / `test_deploy_failure_returns_normally_and_sets_pending_deploy_failed`（决议-8 的第二种成因）→ AC-31 / `test_approval_instance_stays_approved_in_both_pending_cases` → AC-31 / `test_orchestrator_unreachable_raises`（判据写死为一句：**"应用最终会不会自己好起来"——会就返回，不会就抛**）→ AC-31 / `test_version_not_found_raises_16253` → AC-31 / `test_stopped_app_only_stages_not_publishes`（审批通过仅落为待运行版本、不自动重新启用；重新启用后新版本生效）→ AC-36 / `test_deleted_app_returns_normally_as_race_defense`（删除时已取消审批单，这是竞态兜底）→ AC-35 / `test_stage_version_called_before_publish`（写 `pending_version_id`、不改应用态）→ AC-31 / `test_pending_online_notifies_owner_and_tenant_admin_root_falls_to_super_admin`（**此处是通知不是审批人解析** → 可直接复用 `_get_admin_recipient_ids` 的无条件 union，与 T025 的条件回退是两码事、别混用）→ AC-31, AC-64
   **覆盖 AC**: AC-31, AC-35, AC-36, AC-64
   **依赖**: T029, T017
 
-- [ ] **T033**: `[MVP-核心]` `on_approved` 实现（调 F054 状态动作）
+- [x] **T033**: `[MVP-核心]` `on_approved` 实现（调 F054 状态动作）
   **文件**: `src/backend/bisheng/app_publish/domain/services/app_publish_scenario_handler.py`（**增量**加 `on_approved`，不改 T029 已落方法）
   **逻辑**: 编排见 design D9：① 取 `app` 与 `app_version`（**按 `version_id` 起手必须先借道 `app` 行校验归属**，坑 19）；应用已删 → 正常返回。② F054 `AppStateService.stage_version(app_id, version_id)`。③ 分派：应用态 ∈ {草稿, 已上线, 待上线} → `publish(app_id, version_id)`；**已停运 → 只 stage 不 publish**（AC-36）；已删除 → 同①。④ `publish` 三结果：`online` → `mark_terminal_state('online')` + 审计 `app.release.online` + 通知 owner；容量不足 → 应用态「待上线（资源不足）」+ 审批单保持通过 + `terminal_state` 保持 `NULL`（派生显示「待上线」）+ 通知 owner + 租户管理员（Root → 平台超管）；拉起 / 探活非容量失败 → 「待上线（上线失败）」+ 同上、成因文案区分。**后两者正常返回**（K3 / 坑 10）。**应用态一律经 F054，F055 不直写**（决议-8）。
   **测试**: T032 全部通过。
   **覆盖 AC**: AC-31, AC-35, AC-36, AC-64
   **依赖**: T032
 
-- [ ] **T034**: `[MVP-核心]` 驳回 / 撤回 / 删除致取消测试
+- [x] **T034**: `[MVP-核心]` 驳回 / 撤回 / 删除致取消测试
   **文件**: `src/backend/test/app_publish/test_release_terminal_states.py`（新）
   **逻辑**: 三条终态分支各自的版本标注、应用态影响、通知接收方与审计。
   **测试**: `test_reject_marks_version_rejected_and_keeps_app_state`（首发保持草稿态；迭代保持已上线、当前版本继续运行——被驳回**不写** `pending_version_id`，F054 AC-05 天然成立）→ AC-33 / `test_reject_reason_full_text_available_to_owner`（来源 = `approval_task.comment`，经状态只读接口回传）→ AC-33 / `test_resubmit_after_reject_creates_new_approval` → AC-33 / `test_withdraw_marks_version_withdrawn_and_notifies_approvers`（owner-only 由既有 `withdraw_instance` 的 `applicant_user_id` 校验天然成立，`:430`；通知由既有 `withdraw_instance` 负责）→ AC-34 / `test_withdraw_then_resubmit_creates_new_approval` → AC-34 / `test_app_deleted_cancels_active_instance_and_notifies_approvers`（**不能复用 `cancel_exception_api`**——它从 exception 记录起手且通知的是**申请人**，与 AC-35 要求的"通知审批人"相反，坑 6）→ AC-35 / `test_cancel_audit_carries_app_id_and_version_no` → AC-35 / `test_hook_failure_does_not_rollback_delete_and_read_side_still_shows_cancelled`（**F054 已明示钩子失败不回滚删除** → 读侧对"应用已删除"独立判定并按已取消呈现，不把正确性全押在钩子送达上，D10 防御）→ AC-35 / `test_composition_root_registered_in_both_api_and_worker`（组合根注册必须在 API 与 Celery worker **两类进程**都执行；只挂 API lifespan 会在多进程下静默半失效，memory `feedback_multinode_default_assumption`）→ AC-35
   **覆盖 AC**: AC-33, AC-34, AC-35
   **依赖**: T029
 
-- [ ] **T035**: `[MVP-核心]` 终态回调 + `cancel_instance_by_business` + 组合根（**跨 Feature**）
+- [x] **T035**: `[MVP-核心]` 终态回调 + `cancel_instance_by_business` + 组合根（**跨 Feature**）
   **文件**: `src/backend/bisheng/app_publish/domain/services/app_publish_scenario_handler.py`（**增量**加 `on_rejected` / `on_withdrawn` / `on_cancelled`）, `src/backend/bisheng/approval/domain/services/approval_center_service.py`（**新增** `cancel_instance_by_business`）, `src/backend/bisheng/app_publish/composition.py`（新，组合根）, **`src/backend/bisheng/main.py`（存量：`lifespan`（`:82`）内调一次 `register()`）**, **`src/backend/bisheng/worker/main.py`（存量：`on_worker_init`（`@celeryd_after_setup`，`:80-87`）内调一次 `register()`）**
   **逻辑**: `on_rejected` → `mark_terminal_state('rejected')` + deployment `failed(stage='approved', code=None)`（区分于预检失败）+ 审计 `app.release.rejected`（`reason` = 驳回理由全文），**应用态不动**。`on_withdrawn` → `mark_terminal_state('withdrawn')` + deployment failed + 审计。`on_cancelled` → 保持 `terminal_state=NULL`（应用整体已删，不需要第五个取值）+ 审计 `app.release.cancelled`。
   **新增审批模块 API** `cancel_instance_by_business(*, instance_id | (scenario_code, business_key), reason, operator_user_id)`：置 instance=CANCELLED + 全部 PENDING task → CANCELLED + 写 `approval_action_log` + 审计 + **通知审批人**（新 action_code `approval_instance_cancelled`）+ 调 handler `on_cancelled`。**放审批模块**（它操作的是审批实体，放 F055 里就是跨模块直写别人的表）；形状通用，将来任何"业务对象消失需取消在途单"的场景直接复用（§6.1）。
@@ -355,28 +355,28 @@ T001–T007（Wave 1，可并行）
 
 #### 3.4 服务端权限判定、状态只读接口与端点
 
-- [ ] **T036**: `[MVP-核心]` 手动上线 + 发布状态只读服务测试
+- [x] **T036**: `[MVP-核心]` 手动上线 + 发布状态只读服务测试
   **文件**: `src/backend/test/app_publish/test_publish_status_service.py`（新）
   **逻辑**: 断言状态接口的字段完整性、**唯一实现**、owner-only 的业务规则前置拦截与"不回 403/404"红线。
   **测试**: `test_manual_publish_does_not_re_approve_and_marks_online`（成功 → `mark_terminal_state('online')` + 审计 `app.release.manual_publish`，**不产生新版本记录**，决议-6）→ AC-32 / `test_manual_publish_failure_keeps_pending_and_does_not_change_approval` → AC-32 / `test_manual_publish_owner_only_prefilter_not_permission_runtime`（**管理员在权限运行时被身份短路放行**，`permission_action_service.py:372-385` → owner-only 必须是业务规则前置拦截，C4）→ AC-32, AC-62 / `test_status_service_is_single_implementation_for_ui_and_mcp`（AC-38「两处返回一致」由"只有一处实现"**结构性保证**，不靠约定）→ AC-38 / `test_status_returns_reject_reason_full_text_and_pending_reason` → AC-38 / `test_status_shape_matches_contract`（design §4.2 ② 字段表）→ AC-38 / `test_status_no_permission_returns_business_code_not_403`（platform 拦截器对 `403/404` **整页跳转 `/403`**，`request.ts:160-166` → 无权者返回 200 + `16254` 或 `silent: true`，K11 ② / 坑 22）→ AC-38, AC-62 / `test_tenant_admin_can_view_but_cannot_withdraw_delete_manual_publish`（角色矩阵）→ AC-62 / `test_can_flags_reflect_role_and_state` → AC-62 / `test_deleted_app_status_reports_cancelled_independently`（D10 读侧防御）→ AC-38
   **覆盖 AC**: AC-32, AC-38, AC-62
   **依赖**: T033, T035
 
-- [ ] **T037**: `[MVP-核心]` `publish_status_service` + 手动上线实现
+- [x] **T037**: `[MVP-核心]` `publish_status_service` + 手动上线实现
   **文件**: `src/backend/bisheng/app_publish/domain/services/publish_status_service.py`（新）
   **逻辑**: `get_publish_status(app_id, actor)` —— **AC-38 的唯一实现**（发布面 + F052 MCP 应用状态工具共用）。返回 design §4.2 ② 的结构：`app_state` / `pending_reason` / `current_version` / `pending_version` / `deployment{stage,status,failure}` / `approval{instance_id,status,reject_reason,...}` / `tier` / `capabilities`（本轮恒空数组）/ `schema_change`（本轮恒 `null`）/ `can{withdraw,manual_publish,submit}`。**不写库**。`request_manual_publish(app_id, actor)`：owner-only 前置拦截（16254）→ 调 F054 `POST /api/v1/apps/{app_id}/actions/manual-publish` 对应的 `AppStateService.manual_publish` → 成功 `mark_terminal_state('online')` + 审计；仍失败保持待上线并回成因。能力「已失效」标记**按需计算**（`declared ∖ 当前可解析`），**不落库、不起定时任务**（本轮 `capabilities` 恒空，接口形状先定死，D13）。
   **测试**: T036 全部通过。
   **覆盖 AC**: AC-32, AC-38, AC-62
   **依赖**: T036
 
-- [ ] **T038**: `[MVP-核心]` `/api/v2/apps` 管线端点集成测试（权限矩阵 + 全链）
+- [x] **T038**: `[MVP-核心]` `/api/v2/apps` 管线端点集成测试（权限矩阵 + 全链）
   **文件**: `src/backend/test/app_publish/test_deploy_api.py`（新）
   **逻辑**: TestClient + 真实包素材（`fake_orchestrator` / `fake_minio`），覆盖四个 v2 端点与 AC-04 权限矩阵。
   **测试**: `test_deploy_requires_app_manage_scope_else_rejected`（缺位 → 明确提示缺哪位）→ AC-04 / `test_logs_requires_app_manage_scope` → AC-04 / `test_delegate_scope_rejected_with_local_dev_hint`（错误指向「委托专用、本地开发另发一把」；F049 期 `delegate` 位**根本发不出来**，本期天然成立、只需对齐文案，INV-31）→ AC-04 / `test_first_deploy_sets_owner_from_resource_owner_user_id` → AC-04 / `test_iteration_deploy_other_owner_rejected_16205_with_ownership_hint`（含租户管理员名下服务账号的密钥）→ AC-04 / `test_logs_only_for_owner_app` → AC-04 / `test_session_cookie_cannot_call_v2_endpoints`（v2 只认 `Bearer bs-sak-…`）→ AC-04 / `test_full_pipeline_happy_path_creates_version_and_approval`（断言 `app_deployment` 阶段推进、`app_version` 落行、审批单生成、`app.release.*` 审计落行且在 UI 白名单内）→ AC-01 / `test_active_release_blocks_second_deploy_16251` → AC-03 / `test_pending_online_blocks_deploy_16252` → AC-03 / `test_deployment_polling_returns_failure_tuple` → AC-11 / `test_deploy_limits_returns_settings_values` → AC-01 / `test_cross_tenant_deployment_id_not_visible` → AC-01 / `test_app_runtime_disabled_returns_16207` → AC-01
   **覆盖 AC**: AC-01, AC-03, AC-04, AC-11
   **依赖**: T021, T023, T031
 
-- [ ] **T039**: `[MVP-核心]` `/api/v2/apps` router + 四端点实现
+- [x] **T039**: `[MVP-核心]` `/api/v2/apps` router + 四端点实现
   **文件**: `src/backend/bisheng/app_publish/api/router.py`（新）, `src/backend/bisheng/app_publish/api/endpoints/deploy.py`（新）, `src/backend/bisheng/api/router.py`（挂接新 router）
   **逻辑**: **F055 自建 router `/api/v2/apps`，每个端点挂 `Depends(open_api_subject("app:manage"))`**（F049 `open_api/api/dependencies.py:103-115` 的 docstring 逐字预留了这个用法：*"For routers that F053 / F055 add outside the shared /api/v2 router"*；**不自建鉴权**，K8）。
   **⚠️ 工场运行时层未启用闸（`16207`）**：四个端点共用一个前置依赖 `require_app_runtime_enabled()` —— 读 F054 的 `settings.app_runtime.enabled`（未部署工场运行时层的存量环境该值为假）→ 假则直接 `16207`。**位置写死为「`Depends(open_api_subject("app:manage"))` 之后、归属判定之前」**：先鉴权再报"功能未启用"，避免未认证方探测部署形态；早于归属判定则是因为环境没启用时根本没有 `app` 表数据可判。漏这一闸 = T038 的 `test_app_runtime_disabled_returns_16207` 红测，且存量环境调 `deploy` 会一路走到编排器 RPC 超时。
@@ -385,14 +385,14 @@ T001–T007（Wave 1，可并行）
   **覆盖 AC**: AC-01, AC-03, AC-04, AC-11
   **依赖**: T038
 
-- [ ] **T040**: `[MVP-核心]` `/api/v1` 发布状态端点集成测试
+- [x] **T040**: `[MVP-核心]` `/api/v1` 发布状态端点集成测试
   **文件**: `src/backend/test/app_publish/test_publish_status_api.py`（新）
   **逻辑**: TestClient 覆盖登录态下的状态只读与手动上线端点。
   **测试**: `test_publish_status_endpoint_path_and_shape`（`GET /api/v1/apps/{app_id}/publish-status`，形状在此定死，供发布面与 F052 消费）→ AC-38 / `test_publish_status_non_owner_gets_business_code_not_403_404`（坑 22）→ AC-38, AC-62 / `test_manual_publish_endpoint_owner_only_16254` → AC-32, AC-62 / `test_withdraw_goes_through_existing_approval_endpoint`（直接调既有 `POST /api/v1/approval/instances/{instance_id}/withdraw`，**不新建撤回端点**——owner-only 由它已有的 `applicant_user_id` 校验天然成立，`:430`）→ AC-34 / `test_all_endpoints_return_unified_response_model` → AC-38 / `test_cross_tenant_app_id_rejected` → AC-38
   **覆盖 AC**: AC-32, AC-34, AC-38, AC-62
   **依赖**: T037
 
-- [ ] **T041**: `[MVP-核心]` `/api/v1` 发布状态端点实现
+- [x] **T041**: `[MVP-核心]` `/api/v1` 发布状态端点实现
   **文件**: `src/backend/bisheng/app_publish/api/endpoints/publish_status.py`（新）, `src/backend/bisheng/app_publish/api/router.py`（**增量**注册 v1 子路由，不改 T039 已落的 v2 部分）
   **逻辑**: `GET /api/v1/apps/{app_id}/publish-status`（登录态，`UserPayload` 注入）委托 `PublishStatusService.get_publish_status`；`POST /api/v1/apps/{app_id}/publish/manual-publish` 委托 `request_manual_publish`（**F054 已有 `actions/manual-publish` 端点做状态动作，本端点只做 owner-only 前置 + 版本终态标注的编排**，避免两处都能改应用态）。**无权者返回 200 + 业务码**（K11 ②）。`UnifiedResponseModel` 包装。
   **测试**: T040 全部通过。
@@ -703,3 +703,31 @@ T001–T007（Wave 1，可并行）
 9. **`test/app_publish/conftest.py` 的 `fake_orchestrator` 由「缺 F054 T047 就 skip」改为「缺就往 `sys.modules` 立同名占位模块」，并新增 `fake_f054_services` / `fake_publish_approval`** —— F054 的 backend 服务层（`orchestrator_client` / `AppProvisionService.create_draft` / `AppMetaService.update_meta`）与 Wave 3.2 的 `publish_approval_service` 目前都还不存在，照原 skip 语义 Wave 2 后半（T018–T023，约 40 条断言）会**全绿于缺席**。占位模块的方法一律未编程即抛 `NotImplementedError`（不是静默返回 `None`），且随 monkeypatch 退出即从 `sys.modules` 摘除；上游一落地这三个 fixture 自动改为 patch 真模块。生产代码侧对应的是「按调用点惰性 import 上游」，不是新增旁路实现。
 10. **`test/app_publish/conftest.py` 的 `_FakeMinioStorage` 补 `get_share_link` / `get_share_link_sync`** —— `POST /v1/intents/build` 必带 MinIO 预签 `code_url`（contracts-runtime-manager §2），fake 缺这两个方法则构建阶段无法自测。
 11. **`VersionService.record_version` 收 `approval` 端口参数（`submit` / `cancel` 两个协程）而不是直接 import `publish_approval_service`** —— D6 的「先 Gate 后 INSERT + 两阶段补偿」是版本记录自己的不变量，作为参数传入才能让顺序由拥有该不变量的函数强制，而不是靠调用方记得；同时让 Wave 2 在 Wave 3.2 落地前可测。Wave 3 的 `publish_approval_service` 模块对象**原样满足**该端口，无需适配层。
+
+### Wave 3.1–3.4（T024–T041）的偏差记录（2026-08-17）
+
+12. **seed 的数据与逻辑整体搬到 `approval/domain/services/approval_seed_service.py`，`init_data._init_default_approval_scenarios(session, tenant_id=None)` 变成薄委派** —— T027a 写的是「在 `init_data` 里参数化六处 `DEFAULT_TENANT_ID`」。改成搬家的判据是**这份 seed 现在有两个调用方**（启动时 + 建租户时），把清单留在 `common/` 而让 `approval/` 去 import 一个私有函数，是在两个模块之间来回穿；`common/` 也不该拥有审批领域的清单。**行为等价**：幂等判据仍是 `tenant_id + scenario_code`，`init_data` 的既有一参调用照旧、仍落默认租户。连带把 `test/approval/test_init_default_approval_scenarios.py` 的 import 改到新位置（1 行）。
+
+13. **`test/approval` 两处既有断言按「清单会增长」放宽** —— `test_registry_exposes_default_presets` 与 `test_seeds_two_scenarios_...` 都把预置清单**逐字面量钉死**，于是 F055 加第 4 个场景就红。两条都改成「⊇ 既有三条 + 每条 preset 必须有 `handler_key`」/「与 `DEFAULT_APPROVAL_SCENARIO_SEEDS` 一致」——**它们真正要守的形状（单 catch-all 分支 → 单 or 节点、`handler_key` 无默认值）一条没丢**，丢掉的只是「清单恰好是这三条」这个每次加场景都要改一次的断言。`test/approval` 的失败集在改动前后逐条一致（22 failed / 73 passed，全部是本地无 MySQL 的既有失败）。
+
+14. **`on_approved` / 终态回调的实现体拆到 `publish_online_service.py` 与 `publish_terminal_service.py`，handler 只做分派** —— T033/T035 写的是「在 handler 里**增量**加」。判据是 **`bring_online` 有第二个调用方**：T037 的手动上线跑的是同一段「起一次 → 三种结果 → 版本终态与通知」，写在 handler 里就意味着 `PublishStatusService` 要反向调审批场景 handler。拆开后 `_settle` 一份实现两处入口共用；handler 仍是九个方法俱全的鸭子类型，`test_publish_scenario_handler` 逐个断言。
+
+15. **`app_deployment.aadvance_stage` 增加可选 `failure=` 形参，允许 `status='succeeded'` 时也写五元组** —— 「待上线」是成功的管线结果，却仍欠使用者一个原因，而 `pending_reason`（AC-38）需要一个**持久**来源。备选是从 `app.release.pending_online` 审计行反推，但审计是 best-effort、不能当状态读。现在 `status` 答「管线有没有做完它该做的」、`failure` 答「有没有要解释的事」，DAO docstring 已写死这层语义。
+
+16. **`/api/v2` 端点用本地 `app_manage_subject()` 包一层 F049 的 `open_api_subject`，把 import 挪进函数体** —— 模块级 `from bisheng.open_api.api.dependencies import ...` 触发 arch-guard **RULE-5**（跨模块 API 层互导）。包装函数里补了 `is_known_scope(_SCOPE)` 的**导入期**校验，与 `open_api_subject` 构造期做的检查等价——scope 拼错仍然在启动时炸，没有退化成「这个端点不要求任何 scope」。
+
+17. **`/api/v2` router 经 `bisheng/api/router.py` 的 `router_rpc` 挂载（拿 `/api/v2` 前缀），v1 部分挂 `router`** —— D2 选项 C 的实质是「每个端点自带 `Depends`」，这一点严格照做；挂载点用既有聚合器只是为了拿前缀，不改 main.py。
+
+18. **成功上线不再额外发一条站内信** —— T032 的用例名写「notifies owner」，但 §4.2 ⑦ 只授权**三个**新 action_code，而「通过」这一类触达审批引擎已经用 `approval_instance_approved` 发给申请人、申请人就是 owner（AC-16）。再发一条等于把三个名额之一花在重复通知上。测试改断言「版本终态 + 审计」，并显式断言没有重复通知。
+
+19. **`test/app_publish/conftest.py` 清除三处 `sys.modules` 占位** —— `fake_orchestrator` / `fake_f054_services` / `fake_publish_approval` 改为 `import_module` 真模块并放行 `ImportError`。F054 服务层已落地，占位再留着就是「对着自造的桩绿」。清除当场把 26 条此前**绿于缺席**的用例变红，全部在 T031 落地后转绿——这正是占位在掩盖的东西。同批新增 `approval_notifications`（捕获站内信）与 autouse `no_celery_dispatch`（`_dispatch_outbox` 无 try/except，broker 不可达会在 `decide_task` 里炸）两个 fixture，并把审批引擎三个 repository + 通知服务补进 `_SESSION_PATCH_TARGETS`（它们在 import 期绑定 `get_async_db_session`）。
+
+20. **组合根只注册删除钩子，不注册场景 handler** —— T035 写「注册 F054 删除钩子 + 场景 handler」。场景 handler 由 `approval_runtime_handler_factory` 的分支按需构建：**一个靠组合根填充的注册表，正是 K1 ③ 警告的那种失败**（组合根没跑 → 审批通过、工厂找不到 handler、outbox 记一条失败、应用永远不上线）。分支自带 import，忘不掉。`register()` 仍在 API 与 worker 两处各调一次并由 T034 守住。
+
+21. **⚠️ 跨 Feature 阻塞（需 F054 修，已用 strict xfail 钉住）：状态机没有 `online → online` 边** —— `ALLOWED_TRANSITIONS[ONLINE] = {STOPPED}`（`app_runtime/domain/constants.py`），而 `AppStateService._start` 起手就查 `is_transition_allowed(app.state, ONLINE)`。后果：**对一个已上线应用做迭代发布，审批通过后 `publish()` 直接抛 16102**，`on_approved` 按 D9「状态机拒绝 = 系统性失败」把它抛给 outbox → 审批单变 `execute_failed`。首发（草稿 → 上线）不受影响，MVP 演示剧本走的是首发，但**迭代发布链路今天是断的**。`test_on_approved.py::test_iteration_on_an_online_app_can_publish` 以 `xfail(strict=True)` 锁住，F054 补上这条边（或让 `_start` 对 source==target==online 放行）当天会自动转红提醒。F055 侧不做任何绕行——绕过状态机就是在决议-8 上开洞。
+
+### 本批未做（属 T042–T051，留给后续批次）
+
+- **T042/T043 事件触达全表**：本批只落了 `on_approved` / 手动上线自己需要的两类（`app_publish_pending_capacity` / `app_publish_deploy_failed`，见 `publish_notification_service.py`）与首节点通知。其余四类与 `test_publish_notification.py` 未写。
+- **三个新 action_code 的三语文案**（`approval_instance_cancelled` / `app_publish_pending_capacity` / `app_publish_deploy_failed`）：本批**未加**，因为本次不动 `src/frontend/`。`pnpm check-i18n` 当前通过（本批没有新增错误码，162 段 26 条三语齐全），但前端渲染这三条通知时会落到 `com_notifications_action_{code}` 兜底文案——落前端那一批必须补。
+- **T044–T048 前端**、**T051 `withdraw` 终态守卫**、**T049/T050 114 验证与上游回写**。

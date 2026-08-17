@@ -13,7 +13,10 @@ from bisheng.approval.domain.models.approval_scenario import (
     ApprovalRouteRule,
     ApprovalScenario,
 )
-from bisheng.common.init_data import _DEFAULT_APPROVAL_SCENARIO_SEEDS, _init_default_approval_scenarios
+from bisheng.approval.domain.services.approval_seed_service import (
+    DEFAULT_APPROVAL_SCENARIO_SEEDS as _DEFAULT_APPROVAL_SCENARIO_SEEDS,
+)
+from bisheng.common.init_data import _init_default_approval_scenarios
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID
 
 
@@ -43,14 +46,18 @@ async def session(approval_db_engine):
         yield s
 
 
-async def test_seeds_two_scenarios_with_default_branch_and_or_node(session):
+async def test_seeds_every_preset_scenario_with_default_branch_and_or_node(session):
+    """Shape check over the whole preset list, whatever it currently holds.
+
+    Pinning the codes literally made this test the thing that broke when F055
+    added ``app_publish_request`` — while the shape it actually guards (one
+    catch-all branch into one OR node) was unaffected. The membership check
+    now lives with the feature that owns the entry.
+    """
     await _init_default_approval_scenarios(session)
 
     scenarios = (await session.exec(select(ApprovalScenario))).all()
-    assert {s.scenario_code for s in scenarios} == {
-        "channel_subscribe_request",
-        "knowledge_space_subscribe_request",
-    }
+    assert {s.scenario_code for s in scenarios} == {seed["scenario_code"] for seed in _DEFAULT_APPROVAL_SCENARIO_SEEDS}
 
     for seed in _DEFAULT_APPROVAL_SCENARIO_SEEDS:
         scenario = next(s for s in scenarios if s.scenario_code == seed["scenario_code"])

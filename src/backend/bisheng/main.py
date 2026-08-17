@@ -79,10 +79,27 @@ def _register_permission_runtime_contexts() -> None:
     register_department_projection_runtime_context()
 
 
+def _register_app_publish_composition() -> None:
+    """Subscribe F055 to F054's deletion event in this process.
+
+    Also installed in ``worker/main.py``: the API process serves the detail
+    page's delete button, the Celery worker runs the approval outbox. Wiring
+    only one of them looks correct in every manual test and silently fails in
+    production (F055 design D16).
+    """
+    try:
+        from bisheng.app_publish.composition import register as register_app_publish
+
+        register_app_publish()
+    except Exception:
+        logger.exception("app_publish composition root failed to register; continuing startup")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await initialize_app_context(config=settings)
     _register_permission_runtime_contexts()
+    _register_app_publish_composition()
     try:
         await init_default_data()
         # F035 task-mode compatibility data remains unrelated to F048 resource

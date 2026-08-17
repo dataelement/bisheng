@@ -753,9 +753,15 @@ def test_registry_exposes_default_presets():
 
     presets = {preset.scenario_code: preset for preset in registry.list_presets()}
 
-    assert set(presets) == {
+    # Membership of the catalogue is asserted as a superset: it is the admin
+    # page's scenario dropdown and grows whenever a feature adds a scenario
+    # (F055 added "app_publish_request"). What must never regress is that every
+    # preset carries a handler_key — it has no default, so a missing one is an
+    # ImportError at startup rather than a failure at approval time.
+    assert set(presets) >= {
         "menu_access_request",
         "channel_subscribe_request",
         "knowledge_space_subscribe_request",
     }
+    assert all(preset.handler_key for preset in presets.values())
     assert presets["menu_access_request"].handler_key == "menu_access_request"

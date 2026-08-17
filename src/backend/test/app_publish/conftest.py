@@ -7,7 +7,7 @@ F055 touches, bound into the app_publish modules by monkeypatching
 pass locally — tests that genuinely need MinIO / OpenFGA / MySQL say so
 themselves and skip when the middleware is absent.
 
-Six things this file exists to prevent:
+Seven things this file exists to prevent:
 
 * **A tenant-admin false green.** ``tenant_admin_user`` is a *real* tenant
   administrator of a **child** tenant, not a platform super admin. The Root
@@ -36,11 +36,19 @@ Six things this file exists to prevent:
 * **Proxy-induced mass ERRORs.** A stray ``ALL_PROXY=socks://`` makes every
   httpx client fail on the missing ``socksio`` extra and turns the whole
   package into ERRORs. The autouse fixture strips the six variables.
+* **A green suite over an absent module.** ``fake_orchestrator`` /
+  ``fake_f054_services`` / ``fake_publish_approval`` all ``import_module`` their
+  target and let an ``ImportError`` through. While F054's service layer was
+  landing they stood same-named placeholders into ``sys.modules`` instead, which
+  meant the pipeline suite asserted against stubs of its own making.
 
 Import discipline: nothing from ``bisheng.app_publish.domain.services`` is
-imported at module level. Fixtures import lazily inside their body and
-``pytest.skip`` while the service does not exist yet, so this package still
-collects during the Test-First phase.
+imported at module level — fixtures import lazily inside their body, which is
+what lets a test file that is written before its service still be collected.
+What they do **not** do is stand a placeholder into ``sys.modules`` when the
+module is missing: an earlier revision did that while F054's service layer was
+in flight, and a suite that goes green against a module which does not exist is
+worse than a red one. Everything now binds the real module and fails loudly.
 """
 
 from __future__ import annotations
@@ -49,12 +57,11 @@ import gzip
 import importlib
 import io
 import os
-import sys
 import tarfile
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -112,12 +119,23 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_publish.domain.services.publish_approval_service",
     "bisheng.app_publish.domain.services.publish_status_service",
     "bisheng.app_publish.domain.services.publish_notification_service",
+    "bisheng.app_publish.domain.services.publish_online_service",
+    "bisheng.app_publish.domain.services.publish_terminal_service",
     "bisheng.app_publish.domain.services.app_publish_scenario_handler",
     "bisheng.app_runtime.domain.services.app_state_service",
     "bisheng.app_runtime.domain.services.app_meta_service",
+    "bisheng.app_publish.composition",
     "bisheng.approval.domain.services.approval_gate",
     "bisheng.approval.domain.services.approver_resolver",
     "bisheng.approval.domain.services.approval_center_service",
+    "bisheng.approval.domain.services.approval_notification_service",
+    # The gate reads scenarios / routes / nodes and writes instances through
+    # these; each does ``from bisheng.core.database import get_async_db_session``
+    # at import time, so patching the source module alone would leave them
+    # pointed at the real engine.
+    "bisheng.approval.domain.repositories.approval_instance_repository",
+    "bisheng.approval.domain.repositories.approval_scenario_repository",
+    "bisheng.approval.domain.repositories.approval_query_repository",
 )
 
 _TABLES = (
@@ -583,14 +601,12 @@ async def tier_seed(publish_db):
 
     Shared by the tier suite and the manifest suite on purpose: "what ``light``
     resolves to" must have exactly one definition in the tests, the same way it
-    has exactly one in the code (T015). Skips while T015 is absent.
+    has exactly one in the code (T015).
     """
-    service_module = _optional_module("bisheng.app_publish.domain.services.resource_tier_service")
-    if service_module is None:
-        pytest.skip("ResourceTierService (T015) not implemented yet")
+    from bisheng.app_publish.domain.services.resource_tier_service import ResourceTierService
     from bisheng.database.models.resource_tier import ResourceTierDao
 
-    await service_module.ResourceTierService.seed_resource_tiers()
+    await ResourceTierService.seed_resource_tiers()
     async with publish_db() as session:
         return await ResourceTierDao.alist(session)
 
@@ -783,7 +799,9 @@ class _FakeMinioStorage:
     def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
         """Presigned download URL. The build intent carries one (``code_url``), so the
         orchestrator can fetch the snapshot without a MinIO credential of its own."""
-        self.calls.append(("get_share_link", {"bucket": bucket, "object_name": object_name, "expire_days": expire_days}))
+        self.calls.append(
+            ("get_share_link", {"bucket": bucket, "object_name": object_name, "expire_days": expire_days})
+        )
         return f"http://minio.test/{bucket or self.bucket}/{object_name}?X-Amz-Expires={expire_days * 86400}"
 
     async def get_share_link(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
@@ -868,24 +886,13 @@ def fake_orchestrator(monkeypatch):
 
     The fixture asserts its stub set equals the facade's public method set, so a
     newly added facade method fails loudly here rather than silently escaping to
-    real HTTP against runtime-manager.
+    real HTTP against runtime-manager. It binds the **real** facade — an earlier
+    revision stood a placeholder module into ``sys.modules`` while F054 was in
+    flight, which is exactly the shape that lets a suite go green against an
+    implementation that does not exist.
     """
-    module = _optional_module("bisheng.app_runtime.domain.services.orchestrator_client")
-    if module is None:
-        # F054 T047 has not landed. Rather than skipping — which would leave the
-        # whole precheck / pipeline suite green-by-absence — stand a module of
-        # the same name into ``sys.modules``. F055's services import the facade
-        # lazily inside the call, so they bind to this one; the moment the real
-        # facade exists this branch stops being taken and the assertion below
-        # starts guarding the real surface again.
-        module = _install_stub_module(
-            monkeypatch,
-            "bisheng.app_runtime.domain.services.orchestrator_client",
-            ORCHESTRATOR_METHODS,
-            container="orchestrator_client",
-        )
-
-    client = getattr(module, "orchestrator_client", None) or module
+    module = importlib.import_module("bisheng.app_runtime.domain.services.orchestrator_client")
+    client = module.orchestrator_client
     public = {
         name
         for name in dir(client)
@@ -952,39 +959,10 @@ def fake_orchestrator(monkeypatch):
     return SimpleNamespace(calls=calls, responses=responses)
 
 
-def _install_stub_module(monkeypatch, dotted: str, methods, *, container: str | None = None):
-    """Register a placeholder module under ``dotted`` carrying async no-op ``methods``.
-
-    Used only while an upstream feature has not landed. Two properties make it
-    safe rather than a way to fake a green suite:
-
-    * it is registered in ``sys.modules`` and removed again after the test, so
-      nothing leaks between tests or into production imports;
-    * every method it exposes is replaced by the caller with a programmable stub
-      immediately afterwards — the placeholder itself has no behaviour, so a
-      test that forgets to program a response fails loudly with ``KeyError``
-      rather than quietly getting ``None``.
-    """
-    module = ModuleType(dotted)
-    target = SimpleNamespace() if container else module
-
-    for name in methods:
-        async def _unprogrammed(*_args, __name=name, **_kwargs):
-            raise NotImplementedError(f"{dotted}.{__name} was called but never programmed")
-
-        setattr(target, name, _unprogrammed)
-    if container:
-        setattr(module, container, target)
-    monkeypatch.setitem(sys.modules, dotted, module)
-    parent_name, _, leaf = dotted.rpartition(".")
-    parent = _optional_module(parent_name)
-    if parent is not None:
-        monkeypatch.setattr(parent, leaf, module, raising=False)
-    return module
-
-
-#: The F054 domain services F055's pipeline calls. Stubbed the same way as the
-#: orchestrator while F054's service layer is still in flight.
+#: The F054 domain services F055's pipeline calls, and the methods stubbed on
+#: each. Programmable stand-ins for the *real* modules — F055 must never write
+#: the ``app`` table itself, so these two calls are the only way a first publish
+#: can create an application.
 F054_SERVICE_METHODS = {
     "bisheng.app_runtime.domain.services.app_provision_service": ("create_draft",),
     "bisheng.app_runtime.domain.services.app_meta_service": ("update_meta",),
@@ -1005,10 +983,8 @@ def fake_f054_services(monkeypatch):
     responses: dict[str, Any] = {"create_draft": None, "update_meta": None}
 
     def _bind(dotted: str, container: str, methods: tuple[str, ...]):
-        module = _optional_module(dotted)
-        if module is None:
-            module = _install_stub_module(monkeypatch, dotted, methods, container=container)
-        target = getattr(module, container, None) or module
+        module = importlib.import_module(dotted)
+        target = getattr(module, container)
         for name in methods:
 
             async def _stub(*_args, __name=name, **kwargs):
@@ -1027,19 +1003,17 @@ def fake_f054_services(monkeypatch):
 
 @pytest.fixture()
 def fake_publish_approval(monkeypatch):
-    """Programmable stand-in for Wave 3's ``publish_approval_service`` module.
+    """Programmable stand-in for ``publish_approval_service``'s three module-level coroutines.
 
     The pipeline needs three things from it: the two pre-submission gates
     (in-flight request → 16251, pending-online → 16252) and ``submit`` /
-    ``cancel``. They are stubbed here so Wave 2's ordering guarantees can be
-    asserted before Wave 3 exists; when it lands, the same fixture patches the
-    real module instead.
+    ``cancel``. Patching them keeps a pipeline test about *ordering* — did the
+    gates run before the gate, did the version INSERT follow the request — free
+    of the approval engine's own state. Tests that are about the approval side
+    use the real module.
     """
     methods = ("assert_submittable", "submit", "cancel")
-    dotted = "bisheng.app_publish.domain.services.publish_approval_service"
-    module = _optional_module(dotted)
-    if module is None:
-        module = _install_stub_module(monkeypatch, dotted, methods)
+    module = importlib.import_module("bisheng.app_publish.domain.services.publish_approval_service")
 
     from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateResult
 
@@ -1073,23 +1047,25 @@ async def approval_env(publish_db):
     """Seed the preset approval scenarios so ``ApprovalGate`` does not fail closed.
 
     Without the seed the gate raises ``ApprovalScenarioDisabledError`` on the
-    very first ``deploy`` (design K1 ④) — which is a real production failure
-    mode, so tests that want it assert on it explicitly instead of getting it by
-    accident from a missing fixture.
-
-    Skips while T027a has not added ``app_publish_request`` to the seed list:
-    a green suite over a seed that does not contain the scenario would be
-    testing nothing.
+    very first ``deploy`` (design K1 ④). That is a real production failure mode,
+    so the tests that want it ask for it explicitly rather than getting it by
+    accident from a missing fixture — which is why this returns the seed list
+    and never skips.
     """
-    init_data = importlib.import_module("bisheng.common.init_data")
-    seeds = getattr(init_data, "_DEFAULT_APPROVAL_SCENARIO_SEEDS", ())
-    if not any(seed.get("scenario_code") == "app_publish_request" for seed in seeds):
-        pytest.skip("app_publish_request approval scenario seed (T027a) not implemented yet")
-    seed_fn = getattr(init_data, "seed_approval_scenarios", None) or init_data._init_default_approval_scenarios
+    from bisheng.approval.domain.services.approval_seed_service import (
+        DEFAULT_APPROVAL_SCENARIO_SEEDS,
+        seed_approval_scenarios_in_session,
+    )
+
+    assert any(seed["scenario_code"] == "app_publish_request" for seed in DEFAULT_APPROVAL_SCENARIO_SEEDS), (
+        "the app_publish_request scenario is missing from the seed list; every publish test below would "
+        "be asserting against a gate that can never open"
+    )
     async with publish_db() as session:
-        await seed_fn(session)
+        await seed_approval_scenarios_in_session(session, ROOT_TENANT_ID)
+        await seed_approval_scenarios_in_session(session, SUB_TENANT_ID)
         await session.commit()
-    return seeds
+    return DEFAULT_APPROVAL_SCENARIO_SEEDS
 
 
 @pytest.fixture()
@@ -1110,6 +1086,120 @@ def audit_sink(monkeypatch):
 
     monkeypatch.setattr(AuditLogDao, "ainsert_v2", classmethod(lambda cls, *a, **kw: _capture(*a, **kw)))
     return captured
+
+
+@pytest.fixture()
+def approval_notifications(monkeypatch):
+    """Capture every station message the approval side sends.
+
+    Returns the list of keyword dicts passed to
+    ``ApprovalNotificationService.notify_users`` / ``notify_admins``, tagged
+    with which one was called. Patched rather than allowed through because the
+    real path opens a session against the message service and swallows its own
+    failures — an assertion on "the approvers were notified" would pass either
+    way (design 坑 5 is precisely a notification that silently never happens).
+    """
+    from bisheng.approval.domain.services.approval_notification_service import ApprovalNotificationService
+
+    sent: list[dict[str, Any]] = []
+
+    async def _notify_users(**kwargs: Any) -> None:
+        sent.append({"kind": "users", **kwargs})
+
+    async def _notify_user(**kwargs: Any) -> None:
+        sent.append({"kind": "users", "receiver_user_ids": [kwargs.pop("receiver_user_id")], **kwargs})
+
+    async def _notify_admins(**kwargs: Any) -> None:
+        sent.append({"kind": "admins", **kwargs})
+
+    monkeypatch.setattr(ApprovalNotificationService, "notify_users", staticmethod(_notify_users))
+    monkeypatch.setattr(ApprovalNotificationService, "notify_user", staticmethod(_notify_user))
+    monkeypatch.setattr(ApprovalNotificationService, "notify_admins", staticmethod(_notify_admins))
+    return sent
+
+
+@pytest.fixture(autouse=True)
+def no_celery_dispatch(monkeypatch):
+    """Never hand an outbox row to a broker from a unit test.
+
+    ``ApprovalCenterService._dispatch_outbox`` has **no** try/except (design
+    坑 11), so an unreachable broker would surface as a failure inside
+    ``decide_task`` rather than as the "approved but never executed" it is in
+    production. Autouse because forgetting it turns into a connection timeout
+    in whichever test happens to approve something.
+
+    Returns the list of dispatched outbox ids so a test can assert the handover
+    happened.
+    """
+    dispatched: list[int] = []
+
+    from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
+    from bisheng.approval.domain.services.approval_gate import ApprovalGate
+
+    monkeypatch.setattr(ApprovalCenterService, "_dispatch_outbox", staticmethod(dispatched.append))
+    monkeypatch.setattr(ApprovalGate, "_dispatch_outbox_task", staticmethod(dispatched.append))
+    return dispatched
+
+
+@pytest.fixture()
+def api_app(monkeypatch):
+    """``api_app(principal=..., payload=...)`` → an ``httpx.AsyncClient`` bound to F055's routers.
+
+    Two deliberate choices, both inherited from ``test/app_runtime/conftest.py``:
+
+    * **ASGITransport, not ``TestClient``.** ``TestClient`` drives the app on
+      its own event loop while the in-memory aiosqlite engine and every
+      ContextVar these tests set live on the test's loop — the first DB call
+      would fail with "attached to a different loop".
+    * **The routers alone, not ``bisheng.main.create_app``.** The full app
+      brings a middleware chain that re-resolves tenants against a database
+      these tests replaced; a failure here should point at F055.
+
+    ``principal`` replaces the ``app:manage`` credential dependency and seeds
+    the open-API principal ContextVar, which is what the ownership rule reads.
+    Passing ``None`` leaves the real dependency in place, which is how the
+    "a session cookie cannot call /api/v2" and "missing scope" cases are
+    exercised.
+    """
+    import httpx
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+
+    from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.common.errcode.base import BaseErrorCode
+
+    def _handle(_request, exc: BaseErrorCode) -> JSONResponse:
+        # Mirrors bisheng.main.handle_http_exception: business errors ride in a
+        # 200 envelope, because the platform SPA turns a real 403/404 on a GET
+        # into a full-page navigation to /403 (design 坑 22).
+        return JSONResponse(status_code=200, content=exc.to_dict())
+
+    def _build(principal=None, payload=None, app_runtime_enabled: bool = True):
+        from bisheng.app_publish.api.endpoints import deploy as deploy_endpoints
+        from bisheng.app_publish.api.router import v1_router, v2_router
+        from bisheng.common.services.config_service import settings
+        from bisheng.core.context.tenant import set_current_tenant_id
+        from bisheng.open_api.domain.context import set_current_open_api_principal
+
+        monkeypatch.setattr(settings.app_runtime, "enabled", app_runtime_enabled)
+
+        app = FastAPI(exception_handlers={BaseErrorCode: _handle})
+        app.include_router(v1_router, prefix="/api/v1")
+        app.include_router(v2_router, prefix="/api/v2")
+        if principal is not None:
+            set_current_open_api_principal(principal)
+            # The real credential dependency seeds this too. Without it the
+            # receive leg writes ``app_deployment.tenant_id = NULL`` and fails
+            # on the NOT NULL constraint — which is the same guard that stops a
+            # child tenant's row landing in Root.
+            set_current_tenant_id(ROOT_TENANT_ID)
+            resolved = _payload(principal.subject_user_id, "service-account", ROOT_TENANT_ID)
+            app.dependency_overrides[deploy_endpoints.app_manage_subject] = lambda: resolved
+        if payload is not None:
+            app.dependency_overrides[UserPayload.get_login_user] = lambda: payload
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver")
+
+    return _build
 
 
 # ---------------------------------------------------------------------------

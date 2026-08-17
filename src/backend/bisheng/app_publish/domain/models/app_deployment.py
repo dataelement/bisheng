@@ -247,6 +247,7 @@ class AppDeploymentDao:
         manifest: dict | None = None,
         tier_code: str | None = None,
         scan_result: dict | None = None,
+        failure: dict | None = None,
     ) -> bool:
         """Move one attempt to its next stage; ``True`` when the row was touched.
 
@@ -257,6 +258,14 @@ class AppDeploymentDao:
         stage that produces nothing simply omits them, and ``None`` means
         "leave this column alone" rather than "write NULL" — no stage of the
         pipeline ever needs to clear one of these columns.
+
+        ``failure`` may be written here *without* ``status`` becoming
+        ``failed``, and that is not a contradiction: ``status`` answers "did
+        the pipeline finish the job it was given", ``failure`` answers "is
+        there something to explain". An attempt parked in ``pending_online``
+        succeeded as a pipeline run — precheck, scan, version record and
+        approval all happened — and still owes the owner a reason. The CLI
+        branches on ``status`` and ``stage``; ``failure`` is what it prints.
         """
         values: dict[str, Any] = {"stage": stage, "status": status, "update_time": datetime.now()}
         for key, value in (
@@ -267,6 +276,7 @@ class AppDeploymentDao:
             ("manifest", manifest),
             ("tier_code", tier_code),
             ("scan_result", scan_result),
+            ("failure", failure),
         ):
             if value is not None:
                 values[key] = value

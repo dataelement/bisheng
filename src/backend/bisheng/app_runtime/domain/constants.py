@@ -51,7 +51,19 @@ class AppState(StrEnum):
 #: docstring.
 ALLOWED_TRANSITIONS: dict[AppState, frozenset[AppState]] = {
     AppState.DRAFT: frozenset({AppState.ONLINE, AppState.PENDING_CAPACITY, AppState.DELETED}),
-    AppState.ONLINE: frozenset({AppState.STOPPED}),
+    # ``ONLINE → ONLINE`` is a real edge, not a typo. Publishing a new version of
+    # an application that is already live — an iteration publish, which is what
+    # ``bisheng deploy`` does every time after the first — re-enters ONLINE with
+    # a different ``current_version_id``. Without this edge the whole iteration
+    # path dies at the last step: approval passes, then ``_start`` raises 16102
+    # and the approval request ends up ``execute_failed`` (F055 T033).
+    #
+    # The alternative — letting an iteration publish skip the state machine —
+    # was rejected: it creates a second path into "make this version live", and
+    # 决议-8 makes ``AppStateService`` the only writer of ``app.state`` precisely
+    # so that path stays single. Concurrency is unaffected: the compare-and-set
+    # still binds to the state that was actually read.
+    AppState.ONLINE: frozenset({AppState.ONLINE, AppState.STOPPED}),
     AppState.PENDING_CAPACITY: frozenset({AppState.ONLINE, AppState.DELETED}),
     AppState.STOPPED: frozenset({AppState.ONLINE, AppState.PENDING_CAPACITY, AppState.DELETED}),
     AppState.DELETED: frozenset(),

@@ -63,6 +63,14 @@ const NOTIFICATION_ACTION_TEXT_KEYS: Record<string, string> = {
     approval_exception_route_missing: "com_notifications_action_approval_exception_route_missing",
     approval_exception_approver_empty: "com_notifications_action_approval_exception_approver_empty",
     approval_execute_failed: "com_notifications_action_approval_execute_failed",
+    // The engine has emitted this one since the approval centre shipped, but it
+    // was never mapped — it only became reachable for users when deleting a
+    // hosted application started cancelling its pending publish request.
+    approval_instance_cancelled: "com_notifications_action_approval_instance_cancelled",
+    // hosted application publishing (F055): approval passed, the app did not go
+    // live. Statements only — the manual-publish button lives on the detail page.
+    app_publish_pending_capacity: "com_notifications_action_app_publish_pending_capacity",
+    app_publish_deploy_failed: "com_notifications_action_app_publish_deploy_failed",
     menu_grant_revoked: "com_notifications_action_menu_grant_revoked",
     revoked_channel_admin: "com_notifications_action_revoked_channel_admin",
     revoked_knowledge_space_admin: "com_notifications_action_revoked_knowledge_space_admin",

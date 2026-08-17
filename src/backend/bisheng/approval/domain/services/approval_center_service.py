@@ -492,6 +492,125 @@ class ApprovalCenterService:
         )
 
     @classmethod
+    async def cancel_instance_by_business(
+        cls,
+        *,
+        instance_id: int | None = None,
+        scenario_code: str | None = None,
+        business_resource_type: str | None = None,
+        business_resource_id: str | None = None,
+        tenant_id: int | None = None,
+        reason: str | None = None,
+        operator_user_id: int = 0,
+        operator_user_name: str | None = None,
+    ):
+        """Cancel an in-flight request because the thing it is about no longer exists.
+
+        Reachable two ways: by instance id, or by the business object it hangs
+        off — the second is what a deletion hook has, since the object being
+        deleted knows its own id and nothing about approvals.
+
+        **Why this is not** ``cancel_exception_api``: that one starts from an
+        *exception* record (so it cannot touch a healthy pending request) and it
+        notifies the **applicant**. Here the applicant is the person who just
+        pressed delete — they know. The people who need telling are the
+        approvers, who otherwise keep a task in their inbox pointing at an
+        application that is gone (F055 design 坑 6 / AC-35).
+
+        Returns the cancelled instance, or ``None`` when there was nothing open
+        — a no-op rather than an error, because "delete an app that never had a
+        release under approval" is the ordinary case.
+        """
+        instance = None
+        if instance_id is not None:
+            instance = await ApprovalInstanceRepository.get_instance(instance_id)
+        elif scenario_code and business_resource_id:
+            instance = await ApprovalInstanceRepository.find_active_instance_by_resource(
+                tenant_id=int(tenant_id or 0),
+                scenario_code=scenario_code,
+                business_resource_type=business_resource_type or "",
+                business_resource_id=str(business_resource_id),
+            )
+        if instance is None:
+            return None
+        if instance.status in (
+            ApprovalInstanceStatus.CANCELLED,
+            ApprovalInstanceStatus.REJECTED,
+            ApprovalInstanceStatus.WITHDRAWN,
+            ApprovalInstanceStatus.EXECUTED,
+        ):
+            # Already finished. Re-cancelling would fire ``on_cancelled`` a
+            # second time, and a business handler has no way to tell a repeat
+            # from the first call.
+            return instance
+
+        tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
+        for task in tasks:
+            if task.status == ApprovalTaskStatus.PENDING:
+                task.status = ApprovalTaskStatus.CANCELLED
+                task.acted_at = datetime.utcnow()
+                await ApprovalInstanceRepository.update_task(task)
+
+        instance.status = ApprovalInstanceStatus.CANCELLED
+        instance.current_node_name = None
+        await ApprovalInstanceRepository.update_instance(instance)
+        await ApprovalInstanceRepository.create_action_log(
+            ApprovalActionLog(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                action="cancelled",
+                operator_user_id=operator_user_id,
+                operator_user_name=operator_user_name,
+                detail={"reason": reason},
+            )
+        )
+        await cls._write_audit_log(
+            tenant_id=instance.tenant_id,
+            operator_user_id=operator_user_id,
+            operator_tenant_id=instance.tenant_id,
+            action="approval.request.cancel",
+            target_id=str(instance.id),
+            reason=reason,
+            metadata={
+                "instance_id": instance.id,
+                "scenario_code": instance.scenario_code,
+                "handler": instance.handler_key or instance.scenario_code,
+                "business_resource_type": instance.business_resource_type,
+                "business_resource_id": instance.business_resource_id,
+            },
+            operator_name=operator_user_name,
+            object_name=instance.business_name,
+        )
+
+        approver_ids = list({one.approver_user_id for one in tasks if one.approver_user_id != operator_user_id})
+        if approver_ids:
+            await cls._send_approval_notify(
+                sender=operator_user_id,
+                receiver_user_ids=approver_ids,
+                action_code="approval_instance_cancelled",
+                business_name=instance.business_name,
+                instance_id=instance.id,
+                scenario_code=instance.scenario_code,
+                reason=reason,
+            )
+
+        try:
+            from bisheng.approval.domain.services.approval_runtime_handler_factory import build_runtime_handler
+
+            handler = await build_runtime_handler(instance.handler_key or instance.scenario_code)
+            await handler.on_cancelled(instance.id, instance.payload_snapshot or {}, reason)
+        except Exception:
+            # Swallowed for the same reason ``withdraw_instance`` swallows its
+            # own hook: the approval side is already consistent, and a handler
+            # failure must not leave the instance half-cancelled.
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "cancel_instance_by_business: on_cancelled hook failed for instance %s", instance.id
+            )
+        return instance
+
+    @classmethod
     async def _send_menu_access_approval_messages(
         cls,
         *,
