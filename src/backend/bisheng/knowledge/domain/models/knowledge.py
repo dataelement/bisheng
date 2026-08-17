@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Integer, String
+from sqlalchemy import Boolean, Index, Integer, String
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -113,7 +113,26 @@ class KnowledgeBase(SQLModelSerializable):
 
 
 class Knowledge(KnowledgeBase, table=True):
+    __table_args__ = (
+        Index(
+            "uq_knowledge_creation_request",
+            "tenant_id",
+            "user_id",
+            "type",
+            "creation_request_id",
+            unique=True,
+        ),
+    )
+
     id: int | None = Field(default=None, primary_key=True)
+    creation_request_id: str | None = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
+    creation_payload_hash: str | None = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
 
 
 class KnowledgeRead(KnowledgeBase):

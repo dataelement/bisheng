@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 1 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 3 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -25,13 +25,13 @@
   - **验证**: 无 unmerged path；`git diff --check`；记录冲突文件与裁决结果。
   - **依赖**: 无
 
-- [ ] **T002 Knowledge/Channel 创建幂等 ORM 字段**
+- [x] **T002 Knowledge/Channel 创建幂等 ORM 字段**
   - **文件**: `src/backend/bisheng/knowledge/domain/models/knowledge.py`, `src/backend/bisheng/channel/domain/models/channel.py`
   - **逻辑**: 两表增加 nullable `creation_request_id VARCHAR(64)` 和 `creation_payload_hash VARCHAR(64)`；不回填存量，不把创建草稿存 JSON。
   - **影响**: 修改 Knowledge/Channel 已有对象，仅增加 F050 幂等事实，不改 F048 Grant 归属。
   - **依赖**: T001
 
-- [ ] **T003 双库 DDL 与唯一索引**
+- [x] **T003 双库 DDL 与唯一索引**
   - **文件**: `src/backend/bisheng/core/database/alembic/versions/v3_0_0_beta1_f050_creation_idempotency.py`
   - **逻辑**: 仅 DDL；Knowledge 唯一范围 tenant + creator + type + request ID，Channel 为 tenant + creator + request ID；MySQL/DM8 兼容的 nullable 列和索引长度。
   - **回滚**: downgrade 先删索引再删两列；不做 SELECT/UPDATE/回填/seed。
