@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 5 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 7 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -53,13 +53,13 @@
   - **验证**: T004 全部通过。
   - **依赖**: T004
 
-- [ ] **T006 Initial Grant 协议测试**
+- [x] **T006 Initial Grant 协议测试**
   - **文件**: `src/backend/test/permission/test_initial_grant_application.py`
   - **逻辑**: verified target + ADD-only；重验 Catalog/model/subject/tenant/manage；原子普通 Grant mutation；稳定 idempotency key；拒绝 MOVE/REMOVE/protected/client source。
   - **覆盖 AC**: AC-13, AC-15, AC-16, AC-17, AC-18, AC-19, AC-23, AC-25, AC-33
   - **依赖**: T005
 
-- [ ] **T007 Initial Grant 协议实现**
+- [x] **T007 Initial Grant 协议实现**
   - **文件**: `src/backend/bisheng/permission/application/initial_grant.py`, `src/backend/bisheng/permission/application/ports.py`
   - **逻辑**: 实现 `InitialGrantApplicationPort`，只调 F048 durable mutation；返回真实 version/assignee/result，不创建或删除业务资源。
   - **验证**: T006 全部通过。

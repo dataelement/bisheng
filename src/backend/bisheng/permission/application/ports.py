@@ -8,6 +8,13 @@ from bisheng.permission.application.control_state import (
     RuntimeCatalogSnapshot,
     RuntimeModelSnapshot,
 )
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.grant_service import (
+    CanonicalGrantChange,
+    GrantMutationResult,
+)
+from bisheng.permission.domain.services.grant_source_service import GrantSourceRecord
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 
 class ProspectiveGrantRuntimePort(Protocol):
@@ -71,3 +78,41 @@ class ProspectiveGrantApplicationPort(Protocol):
     """Permission operations available before a business resource exists."""
 
     async def get_context(self, **kwargs: object) -> dict[str, object]: ...
+
+
+class InitialGrantRuntimePort(Protocol):
+    """Durable F048 operations used after owner creation."""
+
+    async def allocate_source_ids(self, count: int) -> tuple[int, ...]: ...
+
+    async def mutate_grants(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        changes: tuple[CanonicalGrantChange, ...],
+        expected_resource_version: int,
+        expected_catalog_release_id: int,
+        idempotency_key: str,
+    ) -> GrantMutationResult: ...
+
+
+class InitialGrantSubjectDirectoryPort(Protocol):
+    """Canonicalize active subjects in the verified target tenant."""
+
+    async def canonical_source(
+        self,
+        *,
+        tenant_id: int,
+        source_id: int,
+        subject_type: str,
+        subject_id: str,
+        userset_relation: str | None,
+        include_children: bool,
+    ) -> GrantSourceRecord: ...
+
+
+class InitialGrantApplicationPort(Protocol):
+    """Apply ADD-only ordinary Grants to a newly authorized resource."""
+
+    async def apply(self, **kwargs: object) -> GrantMutationResult: ...
