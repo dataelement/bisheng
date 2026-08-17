@@ -70,11 +70,11 @@ export function selectApprovablePendingUploads(
     return items.filter(canDecidePendingUpload);
 }
 
-/** Applied uploads are formal files and must no longer be projected as pending rows. */
+/** Terminal uploads are not pending rows: applied files are formal, while closed uploads never succeeded. */
 export function selectVisiblePendingUploads(
     items: PendingUploadFileChange[],
 ): PendingUploadFileChange[] {
-    return items.filter((item) => item.status !== "applied");
+    return items.filter((item) => item.status !== "applied" && item.status !== "closed");
 }
 
 export function canDecidePendingUpload(item?: PendingUploadFileChange): boolean {

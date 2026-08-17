@@ -184,17 +184,16 @@ describe("F046 file change approval projection", () => {
         expect(apiSource).toContain("approvalStatus: raw.approval_status");
     });
 
-    it("stops projecting applied uploads after they become formal files", () => {
+    it("stops projecting applied and closed uploads", () => {
         const queued = pendingBusinessItem("queued", 1);
         const applying = pendingBusinessItem("applying", 2);
         const applied = pendingBusinessItem("applied", 3);
         const failed = pendingBusinessItem("failed", 4);
+        const closed = pendingBusinessItem("closed", 5);
 
-        expect(selectVisiblePendingUploads([queued, applying, applied, failed])).toEqual([
-            queued,
-            applying,
-            failed,
-        ]);
+        expect(selectVisiblePendingUploads([queued, applying, applied, failed, closed])).toEqual(
+            [queued, applying, failed],
+        );
     });
 
     it.each(BUSINESS_STATES)(
