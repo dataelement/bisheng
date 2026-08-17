@@ -2431,7 +2431,7 @@
   },
   "src/pages/ChannelSquare.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -2445,7 +2445,7 @@
   },
   "src/pages/ChannelSquareCard.tsx": {
     "no-restricted-syntax": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/DevLogin/index.tsx": {
@@ -2570,9 +2570,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
