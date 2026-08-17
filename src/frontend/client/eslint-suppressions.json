@@ -2640,11 +2640,6 @@
       "count": 1
     }
   },
-  "src/pages/Subscription/channelUtils.ts": {
-    "no-restricted-syntax": {
-      "count": 3
-    }
-  },
   "src/pages/Subscription/hooks/useArticleShare.ts": {
     "react-hooks/exhaustive-deps": {
       "count": 1
