@@ -372,6 +372,32 @@ export async function getResourcePermissionGrants(
   return unwrap(res);
 }
 
+export async function getAllResourcePermissionGrants(
+  resourceType: ResourceType,
+  resourceId: string,
+  config?: PermissionRequestConfig,
+): Promise<PermissionGrantAssignee[]> {
+  const items: PermissionGrantAssignee[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+
+  for (;;) {
+    const page = await getResourcePermissionGrants(
+      resourceType,
+      resourceId,
+      { cursor, page_size: 200 },
+      config,
+    );
+    items.push(...page.data);
+    if (!page.has_more) return items;
+    if (!page.next_cursor || seenCursors.has(page.next_cursor)) {
+      throw new Error("Permission roster pagination returned an invalid cursor");
+    }
+    seenCursors.add(page.next_cursor);
+    cursor = page.next_cursor;
+  }
+}
+
 export async function getMyResourcePermissions(
   resourceType: ResourceType,
   resourceId: string,

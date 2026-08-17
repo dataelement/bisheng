@@ -4,6 +4,7 @@ import request from "./request";
 import {
   getCreationDepartmentChildren,
   getCreationPermissionContext,
+  getAllResourcePermissionGrants,
   getResourcePermissionContext,
   mutateResourceGrants,
   searchCreationUsers,
@@ -93,6 +94,39 @@ describe("F048 unified permission settings adapter", () => {
       expected_catalog_release_id: 42,
       changes: [],
     })).resolves.toMatchObject({ resource_version: 10 });
+  });
+
+  it("loads every cursor page without merging assignee sources", async () => {
+    mockedRequest.get
+      .mockResolvedValueOnce({
+        status_code: 200,
+        data: {
+          data: [{ assignee_id: "direct-1", source: { type: "DIRECT" } }],
+          page_size: 200,
+          has_more: true,
+          next_cursor: "cursor-2",
+        },
+      })
+      .mockResolvedValueOnce({
+        status_code: 200,
+        data: {
+          data: [{ assignee_id: "department-1", source: { type: "DEPARTMENT" } }],
+          page_size: 200,
+          has_more: false,
+          next_cursor: null,
+        },
+      });
+
+    await expect(getAllResourcePermissionGrants("knowledge_space", "space-1"))
+      .resolves.toMatchObject([
+        { assignee_id: "direct-1", source: { type: "DIRECT" } },
+        { assignee_id: "department-1", source: { type: "DEPARTMENT" } },
+      ]);
+    expect(mockedRequest.get).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/permissions/resources/knowledge_space/space-1/grants",
+      expect.objectContaining({ params: { cursor: "cursor-2", page_size: 200 } }),
+    );
   });
 
   it("maps knowledge creation options and partial success", async () => {

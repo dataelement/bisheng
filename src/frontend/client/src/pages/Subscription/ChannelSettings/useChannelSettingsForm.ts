@@ -11,9 +11,9 @@ import {
 } from "~/api/channels";
 import {
   getCreationPermissionContext,
+  getAllResourcePermissionGrants,
   getGrantablePermissionModels,
   getResourcePermissionContext,
-  getResourcePermissionGrants,
   mutateResourceGrants,
   type GrantablePermissionModel,
   type CreationPermissionContext,
@@ -44,7 +44,7 @@ interface AuthorizationRecovery {
 }
 
 function toPermissionDraftRows(
-  entries: Awaited<ReturnType<typeof getResourcePermissionGrants>>["data"],
+  entries: Awaited<ReturnType<typeof getAllResourcePermissionGrants>>,
 ): PermissionDraftRow[] {
   return entries.map((entry) => ({
     subjectType: entry.subject.type,
@@ -59,6 +59,7 @@ function toPermissionDraftRows(
     sourceType: entry.source.type,
     scope: entry.scope,
     inheritedFrom: entry.inherited_from,
+    inheritedFromName: entry.inherited_from_name,
     protected: entry.protected,
     editable: entry.editable,
   }));
@@ -135,7 +136,7 @@ export function useChannelSettingsForm(channelId?: string) {
   });
   const permissionQuery = useQuery({
     queryKey: ["channel-settings", channelId, "permissions"],
-    queryFn: () => getResourcePermissionGrants("channel", channelId as string, { page_size: 200 }),
+    queryFn: () => getAllResourcePermissionGrants("channel", channelId as string),
     enabled: isEditMode && canManagePermissions,
     retry: false,
   });
@@ -162,7 +163,7 @@ export function useChannelSettingsForm(channelId?: string) {
     if (!context) return;
     setCatalogReleaseId(context.catalog_release_id);
     if (!permissionQuery.data || !("resource_version" in context)) return;
-    resetPermissionDraft(toPermissionDraftRows(permissionQuery.data.data), {
+    resetPermissionDraft(toPermissionDraftRows(permissionQuery.data), {
       resourceVersion: context.resource_version,
       catalogReleaseId: context.catalog_release_id,
     });
@@ -225,8 +226,8 @@ export function useChannelSettingsForm(channelId?: string) {
           : [];
         const result = await createManagerChannelApi({
           ...buildCreateChannelPayload(formData),
+          creationRequestId,
           ...(grants.length > 0 && catalogReleaseId != null ? {
-            creationRequestId,
             initialPermissions: {
               expected_catalog_release_id: catalogReleaseId,
               grants: grants.map((grant) => ({ model_key: grant.model_key, subject: grant.subject })),

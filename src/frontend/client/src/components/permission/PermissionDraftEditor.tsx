@@ -5,6 +5,7 @@ import {
   getPermissionDraftRowKey,
 } from "./usePermissionDraft";
 import type { PermissionDraftRow } from "./usePermissionDraft";
+import { SourceBadge } from "./SourceBadge";
 
 export interface PermissionDraftEditorCapabilities {
   canChangeRelation: boolean;
@@ -65,11 +66,36 @@ export function PermissionDraftEditor({
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-4 text-caption text-white">
                 {row.subjectName.trim().slice(0, 1).toUpperCase()}
               </span>
-              <span className="min-w-0 truncate text-body text-text-1">{row.subjectName}</span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-body text-text-1">{row.subjectName}</div>
+                {(row.sourceType || row.protected || row.scope === "INHERITED" || row.editable === false) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-text-3">
+                    {row.sourceType && (
+                      <SourceBadge
+                        source={{
+                          type: row.sourceType,
+                          include_children: Boolean(row.includeChildren),
+                        }}
+                      />
+                    )}
+                    {row.protected && (
+                      <span>{localize("f048_permission.roster.protected")}</span>
+                    )}
+                    {!row.protected && (row.scope === "INHERITED" || row.editable === false) && (
+                      <span>{localize("f048_permission.roster.read_only")}</span>
+                    )}
+                    {row.scope === "INHERITED" && row.inheritedFromName && (
+                      <span>
+                        {localize("f048_permission.roster.inherited_from")}: {row.inheritedFromName}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             {row.protected ? (
               <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-[#999999]">
-                {localize("creator")}
+                {relationLabel}
               </span>
             ) : (
               <PermissionLevelMenu

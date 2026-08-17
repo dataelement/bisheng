@@ -15,9 +15,9 @@ import type {
 } from "~/api/knowledge";
 import {
   getCreationPermissionContext,
+  getAllResourcePermissionGrants,
   getGrantablePermissionModels,
   getResourcePermissionContext,
-  getResourcePermissionGrants,
   mutateResourceGrants,
 } from "~/api/permission";
 import type { GrantablePermissionModel } from "~/api/permission";
@@ -51,7 +51,7 @@ const INITIAL_FORM: KnowledgeSpaceSettingsFormState = {
 };
 
 function permissionEntryToDraftRow(
-  entry: Awaited<ReturnType<typeof getResourcePermissionGrants>>["data"][number],
+  entry: Awaited<ReturnType<typeof getAllResourcePermissionGrants>>[number],
 ): PermissionDraftRow {
   return {
     subjectType: entry.subject.type,
@@ -66,6 +66,7 @@ function permissionEntryToDraftRow(
     sourceType: entry.source.type,
     scope: entry.scope,
     inheritedFrom: entry.inherited_from,
+    inheritedFromName: entry.inherited_from_name,
     protected: entry.protected,
     editable: entry.editable,
   };
@@ -226,13 +227,13 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         const [context, models, permissions] = await Promise.all([
           getResourcePermissionContext("knowledge_space", spaceId),
           getGrantablePermissionModels("knowledge_space", spaceId),
-          getResourcePermissionGrants("knowledge_space", spaceId, { page_size: 200 }),
+          getAllResourcePermissionGrants("knowledge_space", spaceId),
         ]);
         if (cancelled) return;
         setCatalogReleaseId(context.catalog_release_id);
         setRelationModels(models);
         setCanManagePermissions(context.can_manage_permission);
-        resetPermissionDraft(permissions.data.map(permissionEntryToDraftRow), {
+        resetPermissionDraft(permissions.map(permissionEntryToDraftRow), {
           resourceVersion: context.resource_version,
           catalogReleaseId: context.catalog_release_id,
         });
@@ -299,9 +300,9 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
                 }));
         const result = await createSpaceApi({
           ...payload,
+          creationRequestId: creationRequestIdRef.current,
           ...(grants.length > 0 && catalogReleaseId != null
             ? {
-                creationRequestId: creationRequestIdRef.current,
                 initialPermissions: {
                   expected_catalog_release_id: catalogReleaseId,
                   grants,

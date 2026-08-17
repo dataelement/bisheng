@@ -14,6 +14,7 @@ export interface PermissionDraftRow {
   sourceType?: string;
   scope?: "LOCAL" | "INHERITED";
   inheritedFrom?: string | null;
+  inheritedFromName?: string | null;
   protected?: boolean;
   editable?: boolean;
 }
