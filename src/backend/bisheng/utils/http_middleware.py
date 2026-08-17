@@ -44,6 +44,17 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # without logging in). The token itself authorizes access; downstream
     # DAOs must run under bypass since the recipient has no tenant context.
     "/api/v1/share-link",
+    # v3.0.0 F053: the CLI installer + version endpoints are anonymous by design
+    # (an administrator forwards the link; the developer installs before holding
+    # a key). No JWT means no tenant context under multi-tenancy — the fallback
+    # in ``_set_tenant_context`` only fires when multi_tenant is *off* — so the
+    # first tenant-aware SELECT anywhere in the call tree would raise
+    # NoTenantContextError. ⚠️ The flip side: everything reachable under this
+    # prefix runs with the tenant filter bypassed, so nothing tenant-scoped may
+    # ever be served here. Today it is disk-only (a wheel + its manifest, both
+    # properties of the build, not of any tenant); anything per-tenant belongs
+    # behind a credential on a different path.
+    "/api/v1/dev-toolkit",
     "/health",
     "/docs",
     "/openapi.json",

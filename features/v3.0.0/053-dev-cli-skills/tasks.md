@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 13 项就地修订，55 条有效 AC 定稿（决议 1–12） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 12 条修订（D1–D14 / 21 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；**50 任务 / 5 Wave / 35 条 `[MVP-核心]`**；55 条 AC 全覆盖（AC-39 为墓碑、AC-48 / AC-50 为跨 Feature 旅程引用，见追溯表）；**+ 同日 `/sdd-review tasks` 14 条修订**（2 high：F054 `logs` 链路事实回正〔runtime-manager 端点已落码〕· 依赖上界与 wheel 安装冒烟〔app-proxy 生产事故同型敞口〕；9 medium：161 段错误码登记 · 未登记码按 HTTP 状态兜底 · `26002` 三成因不可分 · `data.required` 是字符串 · base_url 归一化 · T022/T026 伪依赖 · T002 拆 T002a · 产物缺失时端点行为 · F055 扫描顺序偏离进依赖表；3 low：偏离计数补第三处 · CI 改 `--frozen` · T031 落点改独立 workflow 文件） |
-| 实现 | 🚧 进行中 | **30 / 50 完成**。Wave 1 全部（T001–T018 含 T002a）+ **Wave 2 的 CLI 侧全部**（T019–T026 三条命令、T030 打包脚本、T031 CI、T032 README）。`cd src/bisheng-cli && uv run pytest` **203 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿、`uv lock --check` 无漂移、wheel 构建 + 干净 venv 安装冒烟（`import bisheng_cli.main` / `bisheng --version` / 三条命令 `--help`）通过。**未完成**：T027–T029（平台侧分发端点，落 `src/backend/`，由并发的 backend 一路负责）· T033（114 手验，依赖平台侧上线）· T034（上游回写）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **33 / 50 完成**。Wave 1 全部（T001–T018 含 T002a）+ **Wave 2 的 CLI 侧全部**（T019–T026 三条命令、T030 打包脚本、T031 CI、T032 README）+ **Wave 2 的平台侧全部**（T027–T029 分发端点、集成测试、租户豁免）。CLI：`cd src/bisheng-cli && uv run pytest` **203 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿、`uv lock --check` 无漂移、wheel 构建 + 干净 venv 安装冒烟（`import bisheng_cli.main` / `bisheng --version` / 三条命令 `--help`）通过。平台侧（2026-08-18）：`cd src/backend && uv run pytest test/dev_toolkit test/open_api -q` **111 passed / 0 failed**（其中 dev_toolkit 8 条）、`ruff check` + `ruff format --check` 全绿、`arch-guard.sh` 六个文件零输出、`from bisheng.main import app` 可起（624 路由）。**未完成**：T033（114 手验，依赖平台侧上线）· T034（上游回写）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -274,14 +274,14 @@
   **依赖**: T014, T025（同 T022：**刻意不依赖 T020**，`logs` 与 `login` 之间没有代码依赖）
   **跨 Feature**: 服务端 = **F055 T039**（`GET /apps/{app_id}/logs` + owner-only 判定）；中段 = **F054 T057**（backend `GET /api/v1/apps/{app_id}/logs`，**未实现**）；终点 = **F054 T030/T031**（runtime-manager 只读接口，✅ **已实现**，commit `d693feeb3` —— 2026-08-17 审查回正，原文写的"当前未实现"已过时）→ 114 联调排在 **F054 T057 → F055 T039** 之后，本任务的验收本轮只到单测。
 
-- [ ] **T027**: `[MVP-核心]` 平台分发端点集成测试（匿名可达 / 开关关闭即 404 / 租户豁免）
+- [x] **T027**: `[MVP-核心]` 平台分发端点集成测试（匿名可达 / 开关关闭即 404 / 租户豁免）
   **文件**: `src/backend/test/dev_toolkit/test_distribution_api.py`（新）, `src/backend/test/dev_toolkit/conftest.py`（新）
   **逻辑**: **本 Feature 唯一落 `src/backend/test/` 的测试**（不放 `test/` 根，`asyncio_mode=auto`）。
   **测试**: `test_versions_reachable_without_any_credential`（**匿名**，不带 Bearer 也不带 JWT）→ AC-01 / `test_versions_payload_shape`（`cli.{version,min_compatible,filename,sha256,download_path}` + **`sdk.{version,min_compatible,download_path}` 字段位存在且本轮为 `null`**（F057 AC-01/AC-03 消费同一端点，不留就会在 F057 期出现第二个端点或破坏性改形）+ `platform.{version,open_platform_enabled,app_runtime_enabled}`）→ AC-01, AC-02 / `test_platform_version_not_taken_from_env_endpoint`（⚠️ `/api/v1/env` 的 `version` 是硬编码 `'2.6.0-fix'`（`src/backend/bisheng/__init__.py:7`，3.0-vibe 实测）→ 断言 `platform.version` 取自 `artifacts/manifest.json` 而非那里，坑 21）→ AC-02 / `test_download_returns_file_response_with_content_disposition_and_length` → AC-01 / `test_download_requires_no_login_and_no_key` → AC-01 / `test_routes_absent_when_open_platform_disabled`（⚠️ **断言是路由不存在（404）、不是某个错误码**——AC-05「呈不存在」的字面落点，且不给未认证方留"这里有个功能但没开"的探测面）→ AC-05 / `test_multi_tenant_enabled_no_jwt_does_not_raise_no_tenant_context`（多租户开启 + 无 JWT 时不抛 `NoTenantContextError`——豁免名单生效的回归护栏，见 T029）→ AC-01 / `test_missing_artifacts_degrade_readably_not_500`（**2026-08-17 审查新增**：`artifacts/` 里的 wheel 与 `manifest.json` 是**提交进 git 的构建产物**，任何"检出后没跑 `scripts/pack_cli_wheel.sh`"的开发环境里它们就是不存在的 —— 断言 `versions` 仍 **200** 且 `cli` 段为 `null` 并带一句可读说明（不抛、不 500），`download` 返 **404 + 可读 message**（"CLI 安装件未随本次部署发布，请联系平台管理员"）而**不是** `FileResponse` 对不存在路径抛出的 500 + traceback；本用例同时是"产物漏提交"这一类发版事故的唯一自动告警）→ AC-01
   **覆盖 AC**: AC-01, AC-02, AC-05
   **依赖**: 无（平台侧完全独立于 CLI 工程，可与 Wave 1 全程并行；编号排在此处只为与 T028 相邻）
 
-- [ ] **T028**: `[MVP-核心]` 平台分发端点实现（**本 Feature 唯一改 backend 业务代码的任务**）
+- [x] **T028**: `[MVP-核心]` 平台分发端点实现（**本 Feature 唯一改 backend 业务代码的任务**）
   **文件**: `src/backend/bisheng/dev_toolkit/api/endpoints/distribution.py`（新）, `src/backend/bisheng/dev_toolkit/api/router.py`（新）, `src/backend/bisheng/api/router.py`（**共享文件，纯追加**）
   **逻辑**: 两个匿名端点（D10）：`GET /api/v1/dev-toolkit/versions`（载荷照 design §4.2 ⑤，**一次留够 `sdk.*` 字段位**）与 `GET /api/v1/dev-toolkit/cli/download`（`FileResponse(wheel_path, filename=…)`）。模板 = `GET /api/v1/env`（`api/v1/endpoints.py:62-63`：普通 `@router.get`，**函数签名里没有任何 auth `Depends` 即匿名**）；`FileResponse` 写法照 `open_endpoints/api/endpoints/filelib.py:496-506`（自动 `Content-Length`、支持 Range、零内存放大）。产物用 `Path(__file__).resolve().parents[N] / "artifacts"` 定位（写法同 `linsight/builtin_skill_seeder.py`）。
   **⚠️ 产物缺失是常态分支、不是异常**（审查新增）：未跑 `pack_cli_wheel.sh` 的检出里 `artifacts/` 是空的 → `versions` **恒 200**、`cli` 段给 `null` + 一句可读说明（形状不变、字段位保留，agent 的解析不会因此崩）；`download` 给 **404 + 可读 message**。**绝不让 `FileResponse` 对着不存在的路径抛**（500 + traceback 会把"产物没提交"这个发版问题伪装成"平台坏了"）。
@@ -294,7 +294,7 @@
   **覆盖 AC**: AC-01, AC-02, AC-05
   **依赖**: T027
 
-- [ ] **T029**: `[MVP-核心]` `/api/v1/dev-toolkit` 进 `TENANT_CHECK_EXEMPT_PATHS`
+- [x] **T029**: `[MVP-核心]` `/api/v1/dev-toolkit` 进 `TENANT_CHECK_EXEMPT_PATHS`
   **文件**: `src/backend/bisheng/utils/http_middleware.py`（`TENANT_CHECK_EXEMPT_PATHS`，`:16-44`，**共享文件、增一条**）
   **逻辑**: 追加前缀 `"/api/v1/dev-toolkit"` 并写一行注释说明理由。**这不是可选优化**：多租户开启时无 JWT 的请求**不会**调 `set_current_tenant_id`（`http_middleware.py:107-112` 只在 `not multi_tenant.enabled` 时兜底），任何 DAO SELECT 都会 `NoTenantContextError`；豁免名单会把整棵调用树置于 `_bypass_tenant_filter`（`:321-323`）。本端点若严格只读磁盘可以不加，但**版本端点要回 `open_platform_enabled` / `app_runtime_enabled` 且将来极可能读表**，现在就加更省事（D10）。
   **回滚**: 删该行即回滚，无数据变更。
@@ -548,3 +548,15 @@
 18. **⚠️ `src/backend/bisheng/dev_toolkit/artifacts/` 的占位 `manifest.json` 本轮没有提交** —— 本 agent 的作业边界明确禁止改 `src/backend/` 下任何文件（同批有另一路 agent 在写 backend）。脚本会在首次运行时创建该目录与两个产物；**T028 的实现方需要确认它存在**，否则 `versions` 端点会走「产物缺失」分支（T027 已把该分支列为常态、断言 200 + `cli` 段为 `null`，所以不会 500）。T030 因此标为完成但**未端到端跑过第 4/5 步**（拷贝与 `git check-ignore` 校验）。
 19. **T031 的 CI workflow 里 `uv sync` 带 `--extra dev`** —— 测试与 ruff 是 `[project.optional-dependencies] dev` 里的，不带 extra 的 `uv sync --frozen` 装不上它们。
 
+
+### Wave 2 · 平台侧（2026-08-18 实施；T027–T029）
+
+20. **新增 `dev_toolkit/domain/services/artifact_service.py`，design §4.3 只列了 `api/{router.py,endpoints/distribution.py}` 两个文件** —— 端点里直接做文件 I/O + JSON 解析违反 C1 分层（endpoint 不承载业务逻辑）。产物读取（manifest 解析、wheel 存在性校验、缺失降级）全部收在服务里，端点只做形状映射与 HTTP 语义。**顺带得到测试杠杆**：T027 的两种产物状态（已打包 / 从未打包）靠 monkeypatch 服务的 `ARTIFACTS_DIR` 切换，不必往仓库里塞夹具 wheel。
+21. **`versions` 载荷比 design §4.2 ⑤ 多一个 `data.notice` 字段（恒存在，正常时为 `null`）** —— tasks 要求产物缺失时「`cli` 段给 `null` + 一句可读说明」，而 design 的 jsonc 里没有放这句话的位置。**没有塞进 `status_message`**：那个位置是机读的 `SUCCESS` 契约，改它会让「一切正常」和「产物没发布」在同一个字段上分叉。纯新增字段、对既有解析零影响。
+22. **`cli/download` 在产物缺失时返回真 HTTP 404（信封在 body 里，`status_code: 404`），不是 `/api/v1` 惯例的 200 + 信封** —— 这条路由的客户端是 `pip install <url>`：给 pip 一个 200 + JSON，它会试着安装那个信封。同理**没让 `FileResponse` 对着不存在的路径抛**——那会是 500 + traceback，把「产物没提交」这个发版问题伪装成「平台坏了」。零新错误码（CON-8），复用 `resp_500(code=404, ...)`。
+23. **`platform.version` 在产物缺失时为 `null`，不回落 `bisheng.__version__`** —— 回落等于把硬编码的 `'2.6.0-fix'` 重新扶成「平台版本真相」（坑 21）。`test_platform_version_not_taken_from_env_endpoint` 的后半段专门断言这一点（把 `ARTIFACTS_DIR` 指向不存在的目录后断言该字段为 `null`），比只断言「≠ `__version__`」更能挡住"顺手加个兜底"。
+24. **T027 的 `test_platform_version_not_taken_from_env_endpoint` 没有实际请求 `/api/v1/env` 做对照** —— 该端点要 DB + Redis（`get_from_db` / `get_system_login_method`），在无中间件的单测环境里 500。改为对照 `bisheng.__version__` 常量本身（那正是 `/env` 的 `version` 的唯一来源）+ 上一条的 `null` 断言。
+25. **`test_multi_tenant_enabled_no_jwt_does_not_raise_no_tenant_context` 带一组「对照实验」** —— 只断言「豁免时不炸」会在**任何**实现下变绿（端点今天根本不查库）。所以用例在探针里同时记录 `is_tenant_filter_bypassed()` 与 `_resolve_tenant_id()` 是否抛 `NoTenantContextError`，先证明**这条请求上确实没有租户上下文**（危险是真的），再把 `/api/v1/dev-toolkit` 从 `TENANT_CHECK_EXEMPT_PATHS` 里摘掉重跑同一请求、断言 bypass 变为 `False`——证明 T029 那一行是承重的，不是在复述中间件的默认行为。
+26. **T027 的 app 构建走「reload `bisheng.api.router` + monkeypatch `bisheng.main.router`」** —— 开关是**导入期**求值的（`if settings.open_platform.enabled:` 在 `bisheng/api/router.py` 模块体里），而 `bisheng.main` 在首次导入时就把 router 对象绑死了。要在同一个进程里同时验「开=有路由」与「关=404」，只能按目标开关重新导入聚合 router 再交给 `create_app`。**没有退化成自建一个 mini app**：那样测的是测试自己的接线，middleware 栈不在场，第 25 条的租户断言就无从谈起。fixture 在 teardown 里先还原开关再 reload，避免把测试值烤进模块级 router。
+27. **⚠️ 承接第 18 条：`src/backend/bisheng/dev_toolkit/artifacts/` 本轮仍然是空的（目录都不存在）** —— T028/T029 的实施方按作业边界只交付端点、测试与豁免，**没有代跑 `scripts/pack_cli_wheel.sh`**（那是 T030 的第 4/5 步，且会产出需要提交的二进制）。**当前检出与 114 的即时表现**：`GET /api/v1/dev-toolkit/versions` 返 200、`cli` 为 `null`、`notice` 为「CLI 安装件未随本次部署发布，请联系平台管理员」；`GET /api/v1/dev-toolkit/cli/download` 返 404 + 同一句。这是设计好的降级分支（T027 有专门用例），**但 T033 的 114 手验必须先跑一次打包脚本并提交产物**，否则步 1「装 CLI 两条路径」无从验证。
+28. **`ARTIFACT_MISSING_MESSAGE` 带 `# noqa: RUF001`** —— 仓库 ruff 选了 `RUF` 全家，全角逗号 `，` 命中 RUF001（与 ASCII `,` 形近）。这是面向用户的中文文案，换成半角是错别字。`http_middleware.py` 里既有的三条 RUF00x/RUF013 是本次改动之前就存在的，未动。

@@ -53,8 +53,19 @@ echo "[2/5] validating ${WHEEL_NAME}"
 [ -s "${WHEEL}" ] || fail "${WHEEL_NAME} is empty"
 # Missing `[tool.hatch.build.targets.wheel] packages` produces a wheel that
 # builds, uploads and installs cleanly while containing no code at all.
-unzip -l "${WHEEL}" | grep -q "bisheng_cli/main.py" \
-  || fail "${WHEEL_NAME} does not contain bisheng_cli/ — check [tool.hatch.build.targets.wheel] packages"
+#
+# ⚠️ The listing is captured first instead of piped into `grep -q`. Under
+# `set -o pipefail` (line 27), `grep -q` exits the moment it matches, `unzip`
+# then dies of SIGPIPE, and the pipeline reports 141 — so a wheel that DOES
+# contain the module is reported as one that does not. Measured, not theorised:
+# this exact check failed on a perfectly good wheel the first time the script
+# was ever run. A guard that lies in the failing direction is worse than no
+# guard, because the fix people reach for is deleting it.
+WHEEL_LISTING="$(unzip -l "${WHEEL}")"
+case "${WHEEL_LISTING}" in
+  *"bisheng_cli/main.py"*) ;;
+  *) fail "${WHEEL_NAME} does not contain bisheng_cli/ — check [tool.hatch.build.targets.wheel] packages" ;;
+esac
 case "${WHEEL_NAME}" in
   *"-${VERSION}-"*) ;;
   *) fail "wheel name ${WHEEL_NAME} does not carry version ${VERSION}" ;;

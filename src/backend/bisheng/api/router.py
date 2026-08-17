@@ -28,7 +28,9 @@ from bisheng.brand.api.router import router as brand_router
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
+from bisheng.common.services.config_service import settings
 from bisheng.department.api.router import router as department_router
+from bisheng.dev_toolkit.api.router import router as dev_toolkit_router
 from bisheng.evaluation.api.router import router as evaluation_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
@@ -119,6 +121,16 @@ router.include_router(service_account_router)
 router.include_router(app_runtime_router)
 # F055: publish status + manual publish for the publish face (session auth).
 router.include_router(app_publish_v1_router)
+# F053 (design D10): CLI installer download + version truth, both anonymous.
+# The include is **conditional on purpose** — do not "tidy" it into an
+# unconditional one. AC-05 asks that these endpoints appear not to exist where
+# the open-capability layer is not deployed, and not registering the router is
+# how that lands: FastAPI's own 404, no new error code (CON-8), and no way for
+# an unauthenticated caller to tell "there is a feature here, it is off" from
+# "there is nothing here". ``open_platform.enabled`` is a process-level YAML
+# key, so flipping it needs a restart — the existing semantics of that config.
+if settings.open_platform.enabled:
+    router.include_router(dev_toolkit_router)
 
 router_rpc = APIRouter(
     prefix="/api/v2",
