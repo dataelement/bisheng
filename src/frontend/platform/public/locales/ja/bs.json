@@ -1216,7 +1216,8 @@
       "knowledge_space": "ナレッジスペース",
       "tenant": "テナント管理",
       "llm": "モデル管理",
-      "approval": "承認管理"
+      "approval": "承認管理",
+      "openApi": "オープン API"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1289,7 +1290,25 @@
       "approvalFlowUpdate": "承認フロー更新",
       "approvalScenarioToggle": "承認シナリオの有効化/無効化",
       "approvalScenarioCreate": "承認シナリオを作成",
-      "approvalMenuAccessRevokeGrant": "メニュー権限付与を取り消し"
+      "approvalMenuAccessRevokeGrant": "メニュー権限付与を取り消し",
+      "openApiServiceAccountCreate": "サービスアカウント作成",
+      "openApiServiceAccountUpdate": "サービスアカウント更新",
+      "openApiServiceAccountEnable": "サービスアカウント有効化",
+      "openApiServiceAccountDisable": "サービスアカウント無効化",
+      "openApiServiceAccountDelete": "サービスアカウント削除",
+      "openApiKeyIssue": "API キー発行",
+      "openApiKeyUpdate": "API キー更新",
+      "openApiKeyRevoke": "API キー取り消し",
+      "openApiKeyRevokeAll": "API キー一括取り消し",
+      "openApiKeyExpire": "API キー期限切れ",
+      "openApiKeyInvalidateBySubject": "主体変更によるキー失効",
+      "openApiGrantAdd": "リソース権限を追加",
+      "openApiGrantUpdate": "リソース権限を変更",
+      "openApiGrantRemove": "リソース権限を取り消し",
+      "openApiGrantRemoveAll": "リソース権限を一括取り消し",
+      "openApiShareLinkRevoke": "共有リンクを取り消し",
+      "openApiShareLinkExpire": "共有リンクの期限切れ",
+      "openApiWsConnect": "オープン API の接続確立"
     },
     "objectTypeEnum": {
       "none": "なし",

@@ -11,6 +11,7 @@ import Config from "./components/Config"
 import OrganizationAndMembers from "./components/OrganizationAndMembers"
 import OrgSync from "./components/OrgSync"
 import { RolesAndPermissions } from "./components/RolesAndPermissions"
+import { ServiceAccountPanel } from "./components/ServiceAccount/ServiceAccountPanel"
 import Theme from "./theme"
 import UserGroups from "./components/UserGroup"
 import Users from "./components/Users"
@@ -33,6 +34,10 @@ export default function index() {
   const canAccessSystemConfig = isSuperAdmin
   /** 组织同步仅超级管理员可见（网关掉对接口推送后，本页只读看记录与日志） */
   const showOrgSyncTab = isSuperAdmin
+  /** F049 AC-41: service accounts are tenant-admin-and-above only — a department
+   *  admin does not qualify. The module itself is always present, whatever the
+   *  open capability layer switch says (AC-49). */
+  const showServiceAccountTab = isSuperAdmin || isChildAdmin
   /** PRD §4.5: Child Admin manages own tenant's user groups. Backend now
    *  flips can_manage_user_groups true for Child Admin too; the explicit
    *  is_child_admin term keeps the tab visible if the backend regresses. */
@@ -72,6 +77,9 @@ export default function index() {
           {showOrgSyncTab && (
             <TabsTrigger value="orgSync">{t("orgSync:title", "组织同步")}</TabsTrigger>
           )}
+          {showServiceAccountTab && (
+            <TabsTrigger value="serviceAccount">{t("serviceAccount:tabName")}</TabsTrigger>
+          )}
           {canAccessSystemConfig && (
             <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
           )}
@@ -102,6 +110,11 @@ export default function index() {
         {showOrgSyncTab && (
           <TabsContent value="orgSync" className="min-h-0 flex-1 overflow-hidden">
             <OrgSync />
+          </TabsContent>
+        )}
+        {showServiceAccountTab && (
+          <TabsContent value="serviceAccount" className="min-h-0 flex-1 overflow-hidden">
+            <ServiceAccountPanel />
           </TabsContent>
         )}
         {canAccessSystemConfig && (

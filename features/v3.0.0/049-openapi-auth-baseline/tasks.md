@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 ★ 已过（决议-6 f/g/h/i 拍板，65 AC 定稿） |
 | design.md | ✅ 已评审 | 本轮（2026-08-17 初版 + 同日 `/sdd-review design` 两轮 26 条修订）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；同日 `/sdd-review tasks` 一轮 21 条修订（1 high / 8 medium / 12 low）已就地吸收 |
-| 实现 | 🚧 进行中 | 26 / 76 完成（Wave 1 T001–T019 + Wave 2 后端 T020–T026）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 33 / 76 完成（Wave 1 T001–T019 + Wave 2 T020–T033，即 `[MVP-114]` 全部）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -210,49 +210,49 @@
 
 ### Wave 2 · `[MVP-114]` 前端 Platform（手动验证）
 
-- [ ] **T027**: `[MVP-114]` platform API 封装 + 类型
+- [x] **T027**: `[MVP-114]` platform API 封装 + 类型
   **文件**: `src/frontend/platform/src/controllers/API/serviceAccount.ts`（新）, `src/frontend/platform/src/types/api/serviceAccount.ts`（新）
   **逻辑**: 经既有 `request` 封装（C7，不 `import axios`）封 §4.2 全部管理端点：`getServiceAccountsApi / createServiceAccountApi / getServiceAccountApi / updateServiceAccountApi / enable / disable / deleteServiceAccountApi / getServiceAccountKeysApi / issueKeyApi / updateKeyApi / revokeKeyApi / revokeAllKeysApi / getOpenApiScopesApi`（grants 三个随 T066 追加同文件）。类型：`ServiceAccountItem / ServiceAccountDetail / ApiKeyItem / KeyIssuedResponse / OpenApiScope`。
   **覆盖 AC**: AC-41, AC-44
   **手动验证**: 无 UI；`pnpm typecheck` 通过。
   **依赖**: T024, T026
 
-- [ ] **T028**: `[MVP-114]` i18n 命名空间 + `appConfig.openPlatformEnabled`
+- [x] **T028**: `[MVP-114]` i18n 命名空间 + `appConfig.openPlatformEnabled`
   **文件**: `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/serviceAccount.json`（新，三语视为一组；目录名实为 `en-US` 非 `en`，`i18n.js:48 fallbackLng: 'en-US'`；`dev/` 目录不放正式文案）, `src/frontend/platform/src/i18n.js`（`:45` `ns` 数组加 `'serviceAccount'`）, `src/frontend/platform/src/contexts/locationContext.tsx`（`:75-94` `appConfig` 增 `openPlatformEnabled`，取 `GET /api/v1/env.open_platform_enabled`）
   **逻辑**: 本任务只建命名空间与 Wave 2 首批 key；**后续每个新增文案的前端任务（T029–T031 / T054 / T066 / T067）自行把 `serviceAccount.json` 三语列进文件清单、同 PR 补 key**（规则「新增 key 三语同 PR」）。首批 key 覆盖列表列 / 表单 / 三扩展位说明（`identity:read` 醒目常驻文案「勾选即本租户组织架构全量可读、无法收窄到部分部门」、`app:manage`「部署应用需勾选」、软提示「转交个人使用的 key 建议仅配本地开发工具包权限位」、`chat:invoke`「端点随后续版本开放」）/ 归属人说明句 / 开放能力层下归属人附加提示 / 一次性展示提示 / 撤销确认（含开放能力层下「MCP / 模型协议 / CLI 三面同时被拒绝」）/ 空态（零授权时一切 v2 调用失败是正确行为，坑 21）。
   **覆盖 AC**: AC-13, AC-23, AC-45, AC-46, AC-49
   **手动验证**: 切三语无缺 key 警告；`pnpm check-i18n` 通过。
   **依赖**: T004
 
-- [ ] **T029**: `[MVP-114]` 「服务账号」tab：列表 + 新建弹窗
+- [x] **T029**: `[MVP-114]` 「服务账号」tab：列表 + 新建弹窗
   **文件**: `src/frontend/platform/src/pages/SystemPage/index.tsx`（新 tab，可见性 `isSuperAdmin ∪ isChildAdmin`，不含部门管理员；不新增 web_menu）, `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ServiceAccountList.tsx`（新）, `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/CreateServiceAccountDialog.tsx`（新）, `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ServiceAccountPanel.tsx`（新：tab 内容容器，持有 `view: 'list' | 'detail'` / `detailId` / `detailInitialTab: 'overview' | 'keys' | 'grants'` / `autoOpenIssue: boolean` 四个 `useState`——**SystemPage 各 tab 是 `<TabsContent>` 内部状态、无子路由**（`SystemPage/index.tsx:54-83`），详情不走路由，列表 ↔ 详情在容器内切换；`CreateServiceAccountDialog` 成功回调 `onCreated(id)` → 容器 `setView('detail'); setDetailInitialTab('keys'); setAutoOpenIssue(true)`；`ServiceAccountDetail` 通过 props `initialTab / autoOpenIssue / onBack` 接收，T030 / T031 据此实现）, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/serviceAccount.json`（本任务新增 key 三语）
   **逻辑**: 列表用 `useTable`（不用 react-query，坑 24）：列 = 名称 / 状态 / 有效密钥数（0 高亮）/ 资源归属人（`owner_disabled` 高亮）/ 最后调用时间（空或超 `idle_days` 提示可考虑停用）/ 创建人 / 创建时间；行点击进详情（T030）。新建弹窗：名称 · 描述 · 资源归属人（`DepartmentUsersSelect multiple={false}`——其两条查询路径均已在 T016 / T071 排除服务账号）+ 一句话说明「该集成创建出的知识库等资源将归属此人、由其在平台内管理」+ `appConfig.openPlatformEnabled` 时附「首发部署应用以此人为 owner…」提示；租户不可选（取当前作用域）；创建成功 → **直接跳详情 · API 密钥 tab 并打开签发弹窗**（AC-43）。模块恒在，不受 `openPlatformEnabled` 影响（AC-49）。
   **覆盖 AC**: AC-23, AC-41, AC-42, AC-43, AC-49
   **手动验证**: 以**租户管理员**（非 admin）登录 114 platform → 系统管理 → 「服务账号」tab 可见；普通用户不可见；新建（缺归属人被拦；选人框搜不到任何服务账号）→ 成功后停在详情 · API 密钥 tab 且签发弹窗已打开；返回列表：有效密钥数 0 高亮；把 `open_platform.enabled` 关掉重启后 tab 仍在。
   **依赖**: T027, T028
 
-- [ ] **T030**: `[MVP-114]` 详情页壳 + 概览 tab
+- [x] **T030**: `[MVP-114]` 详情页壳 + 概览 tab
   **文件**: `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ServiceAccountDetail.tsx`（新：三 tab 壳——概览 / API 密钥 / 资源授权（占位，T066 填）; 接入信息区不做，归 F053）, `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/OverviewTab.tsx`（新）, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/serviceAccount.json`（本任务新增 key 三语）
   **逻辑**: 详情壳 props 契约见 T029 `ServiceAccountPanel`（`initialTab` 决定默认激活 tab、`autoOpenIssue` 透传给 `ApiKeysTab` 首帧打开签发弹窗、`onBack` 回列表并触发列表刷新）。概览：名称 / 描述 / 租户 / 创建人 / 创建时间 / 资源归属人（可编辑：`PATCH`）；停用 / 启用按钮（`bsConfirm` 二次确认，文案说明「停用后 5 秒内密钥被拒、授权与配置保留」）；删除按钮：`bsConfirm` 列出 `DELETE` 预检返回的授权清单（Wave 1 恒空，T067 升级文案）+「依赖它的集成将立即失败」，确认即删、不阻断，删后回列表。
   **覆盖 AC**: AC-41, AC-47, AC-48
   **手动验证**: 停用 → 3 秒内 `curl whoami` 401；启用 → 恢复且归属人 / 密钥配置原样；删除 → 二次确认 → 列表消失、密钥 401。
   **依赖**: T029
 
-- [ ] **T031**: `[MVP-114]` API 密钥 tab：签发 / 一次性展示 / 编辑 / 撤销 / 批量撤销
+- [x] **T031**: `[MVP-114]` API 密钥 tab：签发 / 一次性展示 / 编辑 / 撤销 / 批量撤销
   **文件**: `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/ApiKeysTab.tsx`（新：列表 + 顶部「撤销该账号全部密钥」）, `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/KeyIssueDialog.tsx`（新：签发 / 编辑共用）, `src/frontend/platform/src/pages/SystemPage/components/ServiceAccount/KeyRevealDialog.tsx`（新）, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/serviceAccount.json`（本任务新增 key 三语）
   **逻辑**: `ApiKeysTab` 接收 `autoOpenIssue` prop（T029 契约），为 true 时挂载后即打开 `KeyIssueDialog`（AC-43）。列表列 = 名称 / 掩码 / 权限位 / 最后使用 / 过期 / 状态；签发表单：名称（必填）· 过期时间（可空 = 长期）· 权限位按 `GET /scopes` 分组 `checkBox`（**默认全不勾**；悬停 `tooltip` 显示覆盖端点；`chat:invoke` 附「端点随后续版本开放」；`appConfig.openPlatformEnabled` 时出现「本地开发工具包」组三位 + `identity:read` 醒目常驻提示 + `app:manage` 说明；勾任一开放 API 端点位时显示不阻断软提示）；**无 `delegate` 位、无委托配置区**（AC-14）。`KeyRevealDialog`：明文 + `copyText` + 「关闭后不可再查看」+ 「我已保存」勾选后才可关闭。撤销单把：`bsConfirm`（开放能力层下补三面文案）；顶部批量撤销：`bsConfirm`。编辑复用签发弹窗（名称 / 权限位 / 过期）。
   **覆盖 AC**: AC-02, AC-06, AC-13, AC-14, AC-44, AC-45, AC-46
   **手动验证**: 114 步 2（design §7）：签发勾 `app:manage`（组可见）→ 复制 → 未勾「我已保存」关不掉 → 关闭后列表只见掩码；编辑权限位 → 同一明文 `whoami.scopes` 立即变化；撤销单把 / 全部 → 3 秒内 401；`open_platform.enabled=false` 时三位不出现、表单无 `delegate`。
   **依赖**: T029
 
-- [ ] **T032**: `[MVP-114]` 审计页 lockstep（前端两处）
+- [x] **T032**: `[MVP-114]` 审计页 lockstep（前端两处）
   **文件**: `src/frontend/platform/src/controllers/API/log.ts`（`actions :53-108` + `getModulesApi :35-51` 加 `open_api` 模块与 D11 全部 action）, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`（`log.systemIdEnum` / `log.eventTypeEnum` 三语）
   **逻辑**: 与 T007 后端登记一一对应（E1 §5.2 四处 lockstep）。
   **覆盖 AC**: AC-12
   **手动验证**: 系统操作日志页可筛选「开放 API」模块，能看到 T031 产生的 issue / revoke 事件，metadata 只见掩码。
   **依赖**: T007, T028
 
-- [ ] **T033**: `[MVP-114]` 114 部署步骤 + 首波手动验证清单
+- [x] **T033**: `[MVP-114]` 114 部署步骤 + 首波手动验证清单
   **文件**: `features/v3.0.0/049-openapi-auth-baseline/tasks.md`（本文「实际偏差记录」上方追加「114 部署记录」小节）
   **逻辑**: 部署顺序（坑 22）：① `bash /opt/bisheng-ops/deploy.sh`（代码 + Alembic upgrade + create_all）→ ② `config.yaml` 加 `open_platform: {enabled: true}`（可选 `open_api: {service_account_idle_days: 90}`）→ ③ 重启后端 → `curl -s /api/v1/env | jq .open_platform_enabled` == `true`。手动验证 = design §7 步 1–3 与步 5（用普通用户看用户管理 / 审批人 / 部门加成员 / 资源授权弹窗搜不到服务账号；服务账号密码登录 → 26012；F048 验证用非 admin）。
   **依赖**: T022, T024, T026, T029, T030, T031, T032
@@ -601,7 +601,53 @@
 
 > T033 执行时填写：部署时间 / commit / `open_platform` 键写入时间 / 手动验证结果。
 
-（未开始）
+### 部署顺序（坑 22：`config.yaml` 顶层未知键会让后端拒绝启动，所以先发代码、再加键、再重启）
+
+1. **发代码 + 建表**：`bash /opt/bisheng-ops/deploy.sh`
+   - 该脚本内含 `alembic upgrade head`（带上 T001 的 `user.user_type` revision）与 `create_all(checkfirst=True)`（建 `api_credential` / `service_account` 两张新表）。
+   - 校验：`SHOW COLUMNS FROM user LIKE 'user_type'` 有行；`SHOW TABLES LIKE 'api_credential'` / `'service_account'` 各有行。
+2. **前端产物**：platform 需重新 build（新增 `serviceAccount` i18n 命名空间 + 新 tab）。⚠️外网 50071 是静态 build 快照，需手动重建，否则页面上看不到「服务账号」tab。
+3. **加配置键**（**必须在第 1 步之后**）：`config.yaml` 追加
+   ```yaml
+   open_platform:
+     enabled: true
+   open_api:
+     service_account_idle_days: 90
+     credential_cache_ttl_seconds: 3
+   ```
+   `open_platform.enabled=false` 时服务账号模块照常存在（AC-49），只是「本地开发工具包」三位不出现——两种取值都要验一遍（见清单第 7 条）。
+4. **重启后端**（⚠️pgrep pattern 只能写在脚本文件里，否则会自杀）；随后
+   `curl -s http://127.0.0.1:7860/api/v1/env | jq .open_platform_enabled` → `true`。
+
+### 首波手动验证清单（design §7 步 1–3、步 5；**必须用非 admin 账号**，超管会短路 ReBAC）
+
+| # | 步骤 | 期望 |
+|---|---|---|
+| 1 | `curl -s <114>/api/v1/env \| jq .open_platform_enabled` | `true`（第 3 步做完之后） |
+| 2 | 以**租户管理员**（非 admin）登录 platform → 系统管理 | 出现「服务账号」tab；普通用户登录看不到该 tab，直接调 `GET /api/v1/service-accounts` 得信封 `status_code=403`（HTTP 仍 200，且**不是** 19801 的 LLM 只读文案）→ AC-41 / AC-59 |
+| 3 | 新建服务账号：只填名称提交 | 被拦（归属人必填）→ AC-23 |
+| 4 | 新建服务账号：归属人选人框里搜刚建的服务账号名 | 搜不到（选人路径已排除服务账号）→ AC-16 |
+| 5 | 填齐名称 + 归属人（= 开发者本人）提交 | 停在**详情 · API 密钥 tab 且签发弹窗已打开**（不是回列表）→ AC-43 |
+| 6 | 签发表单：不勾任何位直接看默认态 | 全不勾；无 `delegate` 位、无委托配置区 → AC-06 / AC-14 |
+| 7 | 观察「本地开发工具包」分组 | `open_platform.enabled=true` 时出现 `model:invoke` / `identity:read` / `app:manage` 三位，`identity:read` 旁常驻醒目提示「勾选即本租户组织架构全量可读…」，`app:manage` 附「部署应用需勾选」；改成 `false` 重启后三位消失、tab 与列表仍在 → AC-13 / AC-49 |
+| 8 | 勾任一开放 API 端点位（如 `assistant:read`） | 出现不阻断软提示「转交个人使用的 key 建议仅配本地开发工具包权限位」→ AC-13 |
+| 9 | 悬停某个权限位的问号 | 显示该位覆盖的接口清单；`chat:invoke` 显示「端点随后续版本开放」→ AC-44 |
+| 10 | 勾 `app:manage` 提交签发 | 一次性展示弹窗：明文可复制；**未勾「我已保存」时关不掉**（无右上角 ×、Esc / 点遮罩无效）→ AC-02 / AC-45 |
+| 11 | 勾「我已保存」关闭，回到密钥列表 | 只见 `bs-sak-********xxxx` 掩码，任何界面不再出现明文 → AC-02 |
+| 12 | `curl -H "Authorization: Bearer bs-sak-…" <114>/api/v2/auth/whoami` | HTTP **200**，`scopes:["app:manage"]` |
+| 13 | 去掉 Authorization 头 / 改一位字符 | HTTP **401**，`26001` / `26002`（真 HTTP 状态，不是信封） |
+| 14 | 在密钥 tab 编辑该 key 的权限位（加 `assistant:read`）后立刻重跑第 12 步 | **同一把明文**的 `whoami.scopes` 立即变化，密钥不换 → AC-08 |
+| 15 | 撤销单把密钥（二次确认；`open_platform.enabled=true` 时确认文案含「MCP / 模型协议 / CLI 三面同时被拒绝」） | 3 秒内 `whoami` → 401 `26002` → AC-46 |
+| 16 | 概览 tab 停用账号（二次确认文案说明「停用后 5 秒内密钥被拒、授权与配置保留」） | 3 秒内其名下密钥 401；重新启用后原样恢复（归属人 / 密钥配置不变）→ AC-47 |
+| 17 | 密钥 tab 顶部「撤销该账号全部密钥」 | 二次确认后名下全部密钥 3 秒内 401 → AC-09 / AC-46 |
+| 18 | 概览 tab 删除账号（二次确认列出授权清单——Wave 1 恒为空态文案 + 「依赖它的集成将立即失败」） | 确认即删、不阻断；列表中消失、密钥 401 → AC-48 |
+| 19 | 列表页观察 | 有效密钥数为 0 的行高亮；归属人被禁用的行高亮；最后调用为空 / 超 `idle_days` 的行给出「可考虑停用」提示（阈值取响应里的 `idle_days`，不是前端写死的 90）→ AC-42 |
+| 20 | 用**普通用户**看：用户管理 / 审批人选择 / 部门加成员 / 资源授权弹窗 | 都搜不到服务账号 → AC-16 |
+| 21 | 用服务账号名 + 任意密码登录 | 被拒，错误码 `26012` → AC-15 |
+| 22 | 系统管理 → 系统操作日志：模块筛选「开放 API」 | 能筛到，看到第 10 / 15 / 17 步产生的 `签发 API 密钥` / `撤销 API 密钥` / `批量撤销 API 密钥` 事件，metadata 只有掩码、无明文 → AC-12 |
+| 23 | （多租户）超管在「模型管理」页 ScopeBar 切到子租户，再回到「服务账号」tab | 列表是子租户的数据（tab 切换会重新挂载拉取）；在该视角建号落子租户 → AC-23 / 坑 23 |
+
+> 记录（部署时填）：部署时间 = ；commit = ；`open_platform` 键写入时间 = ；逐条结果 = 。
 
 ### 105 / 109 回归记录
 
@@ -622,5 +668,10 @@
 | T021 | `open_api_subject(scope)` 返回**依赖可调用对象**（用法 `Depends(open_api_subject(...))`），不是 `Depends` 实例 | design §4.3「`open_api_subject(scope=…)` `Depends` 工厂」措辞 | tasks T020 的验收写法即 `Depends(open_api_subject('app:manage'))`；返回 `Depends` 会变成 `Depends(Depends(...))` |
 | T022 | handler 函数定义在 `open_api/api/exception_handlers.py`，`main.py` 只调 `register_open_api_exception_handlers(app)` | design §4.3「main.py」行 | 让测试能在同一函数上验证 handler，且 `main.py` 不再堆 open_api 细节；注册点仍是 `main.create_app` |
 | T021 | 依赖出口不再重复调 `CredentialService.touch_last_used`（T012 已在 `validate_bearer` 内做） | 无（D2 顺序不变，只是落点在 validator） | 重复调用只会多一次同样被 60s 闸拦下的写，无额外信息 |
+| T030 | 删除二次确认展示的是**恒定空态文案**（`overview.deleteGrantsEmpty`），没有单独的 `DELETE` 预检调用 | design §4.3「详情三子 tab」行旁注 | Wave 1 没有主体侧授权反查端点，`DELETE /{id}` 本身即执行删除、其 `grants` 是删后回执；预检位置留给 T066 的 `GET /{id}/grants`，届时只换数据源不换交互 |
+| T030 | 概览 tab 的可编辑范围含名称 / 描述（不只资源归属人） | 无（AC-41 概览本就列这两项，`PATCH` 后端已支持） | 同一个 `PATCH` 端点、同一个编辑态，拆成两个入口反而多一次请求 |
+| T031 | `components/bs-ui/dialog` 的 `DialogContent` 补 `close?: boolean` 类型声明 | 无（运行期早已支持，仅类型缺失） | 一次性展示弹窗必须去掉右上角 ×（AC-45），而 strict 文件传 `close={false}` 会类型报错；补声明同时让既有 5 处调用点合法 |
+| T031 | 密钥列表「权限位」列额外拉一次 `GET /scopes` 做 code → 标签映射，未知 code 回落原始 code | 无 | 密钥行只存 code，直接显示 `app:manage` 这类标识对业务管理员不可读；回落保证「开关关掉后仍能看懂历史密钥」 |
+| T029 | 服务账号 tab 内不放 ScopeBar（超管切租户视角仍走「模型管理」页那一个入口） | 无（design §4.3 前端行未列 ScopeBar） | Radix `TabsContent` 非激活即卸载，切回本 tab 必然重新挂载拉取，切换视角后的数据天然是新的；再放一个切换器会出现两处真相 |
 
 （实现期每条偏差一行，design 同步覆盖为「今天的状态」。）

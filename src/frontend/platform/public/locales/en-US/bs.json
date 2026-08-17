@@ -1233,7 +1233,8 @@
       "knowledge_space": "Knowledge Space",
       "tenant": "Tenant Management",
       "llm": "Model Management",
-      "approval": "Approval Management"
+      "approval": "Approval Management",
+      "openApi": "Open API"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1306,7 +1307,25 @@
       "approvalFlowUpdate": "Update Approval Flow",
       "approvalScenarioToggle": "Toggle Approval Scenario",
       "approvalScenarioCreate": "Create Approval Scenario",
-      "approvalMenuAccessRevokeGrant": "Revoke Menu Access Grant"
+      "approvalMenuAccessRevokeGrant": "Revoke Menu Access Grant",
+      "openApiServiceAccountCreate": "Create service account",
+      "openApiServiceAccountUpdate": "Update service account",
+      "openApiServiceAccountEnable": "Enable service account",
+      "openApiServiceAccountDisable": "Disable service account",
+      "openApiServiceAccountDelete": "Delete service account",
+      "openApiKeyIssue": "Issue API key",
+      "openApiKeyUpdate": "Update API key",
+      "openApiKeyRevoke": "Revoke API key",
+      "openApiKeyRevokeAll": "Revoke all API keys",
+      "openApiKeyExpire": "API key expired",
+      "openApiKeyInvalidateBySubject": "Key invalidated by subject change",
+      "openApiGrantAdd": "Add resource grant",
+      "openApiGrantUpdate": "Update resource grant",
+      "openApiGrantRemove": "Remove resource grant",
+      "openApiGrantRemoveAll": "Remove all resource grants",
+      "openApiShareLinkRevoke": "Revoke share link",
+      "openApiShareLinkExpire": "Share link expired",
+      "openApiWsConnect": "Open API websocket connect"
     },
     "objectTypeEnum": {
       "none": "None",

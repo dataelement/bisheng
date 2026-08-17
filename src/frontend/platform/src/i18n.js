@@ -42,7 +42,7 @@ i18n.use(Backend)
         // already in the store will starve any newly-deployed key (the
         // historical bug that made systemConfig* keys render as raw strings).
         // 'api_errors' and 'shared' are generated from packages/locales (cross-app copy).
-        ns: ['bs', 'flow', 'permission', 'orgSync', 'model', 'api_errors', 'shared'],
+        ns: ['bs', 'flow', 'permission', 'orgSync', 'model', 'serviceAccount', 'api_errors', 'shared'],
         defaultNS: 'bs',
         lng: userLanguage,
         fallbackLng: 'en-US',

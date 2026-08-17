@@ -45,6 +45,7 @@ export async function getModulesApi(): Promise<{ data: any[] }> {
             { name: 'log.systemIdEnum.tenant', value: 'tenant' },
             { name: 'log.systemIdEnum.llm', value: 'llm' },
             { name: 'log.systemIdEnum.approval', value: 'approval' },
+            { name: 'log.systemIdEnum.openApi', value: 'open_api' },
         ],
 
     }
@@ -105,6 +106,29 @@ const actions = [
     { name: 'log.eventTypeEnum.approvalScenarioToggle', value: 'approval.scenario.toggle' },
     { name: 'log.eventTypeEnum.approvalScenarioCreate', value: 'approval.scenario.create' },
     { name: 'log.eventTypeEnum.approvalMenuAccessRevokeGrant', value: 'approval.menu_access.revoke_grant' },
+    // F049 open API auth (design D11). Lockstep with backend
+    // `_UI_VISIBLE_V2_ACTIONS` in database/models/audit_log.py and the
+    // `log.eventTypeEnum` copy in bs.json (three languages). The grant /
+    // share_link / ws families start producing events in later waves; they are
+    // registered here in one go so the filter never has to be touched twice.
+    { name: 'log.eventTypeEnum.openApiServiceAccountCreate', value: 'open_api.service_account.create' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountUpdate', value: 'open_api.service_account.update' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountEnable', value: 'open_api.service_account.enable' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountDisable', value: 'open_api.service_account.disable' },
+    { name: 'log.eventTypeEnum.openApiServiceAccountDelete', value: 'open_api.service_account.delete' },
+    { name: 'log.eventTypeEnum.openApiKeyIssue', value: 'open_api.api_key.issue' },
+    { name: 'log.eventTypeEnum.openApiKeyUpdate', value: 'open_api.api_key.update' },
+    { name: 'log.eventTypeEnum.openApiKeyRevoke', value: 'open_api.api_key.revoke' },
+    { name: 'log.eventTypeEnum.openApiKeyRevokeAll', value: 'open_api.api_key.revoke_all' },
+    { name: 'log.eventTypeEnum.openApiKeyExpire', value: 'open_api.api_key.expire' },
+    { name: 'log.eventTypeEnum.openApiKeyInvalidateBySubject', value: 'open_api.api_key.invalidate_by_subject' },
+    { name: 'log.eventTypeEnum.openApiGrantAdd', value: 'open_api.grant.add' },
+    { name: 'log.eventTypeEnum.openApiGrantUpdate', value: 'open_api.grant.update' },
+    { name: 'log.eventTypeEnum.openApiGrantRemove', value: 'open_api.grant.remove' },
+    { name: 'log.eventTypeEnum.openApiGrantRemoveAll', value: 'open_api.grant.remove_all' },
+    { name: 'log.eventTypeEnum.openApiShareLinkRevoke', value: 'open_api.share_link.revoke' },
+    { name: 'log.eventTypeEnum.openApiShareLinkExpire', value: 'open_api.share_link.expire' },
+    { name: 'log.eventTypeEnum.openApiWsConnect', value: 'open_api.ws.connect' },
 ];
 
 // 全部操作行为
@@ -125,6 +149,7 @@ export async function getActionsByModuleApi(moduleId) {
         case 'tenant': return actions.filter(a => a.value.startsWith('tenant.'))
         case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
         case 'approval': return actions.filter(a => a.value.startsWith('approval.'))
+        case 'open_api': return actions.filter(a => a.value.startsWith('open_api.'))
     }
 }
 

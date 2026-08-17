@@ -90,7 +90,11 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           uploadMediaMaxSize: res.uploaded_media_maximum_size ?? 1024,
           enableMediaUpload: !!res.enable_media_upload,
           enableEtl4lm: res.enable_etl4lm,
-          multiTenantEnabled: !!res.multi_tenant_enabled
+          multiTenantEnabled: !!res.multi_tenant_enabled,
+          // F049: gates the three `local_dev_toolkit` scopes and the
+          // owner-picker deploy notice. The service-account module itself
+          // is always on, whatever this flag says (AC-49).
+          openPlatformEnabled: !!res.open_platform_enabled
         }));
 
         // backend version

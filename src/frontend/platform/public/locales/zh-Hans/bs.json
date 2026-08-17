@@ -1216,7 +1216,8 @@
       "knowledge_space": "知识空间",
       "tenant": "租户管理",
       "llm": "模型管理",
-      "approval": "审批管理"
+      "approval": "审批管理",
+      "openApi": "开放 API"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1289,7 +1290,25 @@
       "approvalFlowUpdate": "更新审批流程",
       "approvalScenarioToggle": "审批场景启停",
       "approvalScenarioCreate": "创建审批场景",
-      "approvalMenuAccessRevokeGrant": "撤回菜单授权"
+      "approvalMenuAccessRevokeGrant": "撤回菜单授权",
+      "openApiServiceAccountCreate": "创建服务账号",
+      "openApiServiceAccountUpdate": "更新服务账号",
+      "openApiServiceAccountEnable": "启用服务账号",
+      "openApiServiceAccountDisable": "停用服务账号",
+      "openApiServiceAccountDelete": "删除服务账号",
+      "openApiKeyIssue": "签发 API 密钥",
+      "openApiKeyUpdate": "更新 API 密钥",
+      "openApiKeyRevoke": "撤销 API 密钥",
+      "openApiKeyRevokeAll": "批量撤销 API 密钥",
+      "openApiKeyExpire": "API 密钥到期失效",
+      "openApiKeyInvalidateBySubject": "主体停用致密钥失效",
+      "openApiGrantAdd": "新增资源授权",
+      "openApiGrantUpdate": "变更资源授权",
+      "openApiGrantRemove": "撤销资源授权",
+      "openApiGrantRemoveAll": "批量撤销资源授权",
+      "openApiShareLinkRevoke": "撤销分享链接",
+      "openApiShareLinkExpire": "分享链接到期",
+      "openApiWsConnect": "开放 API 建立长连接"
     },
     "objectTypeEnum": {
       "none": "无",
