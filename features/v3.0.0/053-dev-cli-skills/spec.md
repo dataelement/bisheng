@@ -67,7 +67,8 @@
 - **AC-02** — THE SYSTEM SHALL 使 CLI 安装件随平台版本发布、版本号与平台版本对齐，`bisheng --version` 可显示；WHEN 命令与平台交互, THE SYSTEM SHALL 校验 CLI 与目标平台的兼容性——IF 不兼容, THEN 拒绝执行并提示从该平台重新下载（给出下载链接）；兼容但落后时仅提示不阻断。（↔DEV-03 规则「版本对齐」；§4 决议-7）
 - **AC-03** — THE SYSTEM SHALL 提供且仅提供五个子命令 `login` / `skills sync` / `dev` / `deploy` / `logs`（各带 `--help`）；THE SYSTEM SHALL NOT 提供 `init` / 工程骨架生成、`--as` 或任何指定其他用户身份的参数。（↔DEV-04 界面表 / DEV-05 ① / §5.1）
 - **AC-04** — THE SYSTEM SHALL 使每个命令在非交互环境（无 TTY，如被本地 coding agent 调用）可完整执行：每处交互确认均有等价命令行参数、结果以确定的退出码与可读文本给出、并提供机器可读的输出模式；THE SYSTEM SHALL 在任何输出、本地日志与错误信息中不回显密钥明文（至多掩码）。（↔§3.1「本域的操作者是 agent」/ NFR-2）
-- **AC-05** — WHERE 开放能力层未部署, THE SYSTEM SHALL 使安装件下载端点、技能包分发端点与 login 校验入口均不可达（呈不存在），平台其余功能零变化；CLI 对此给出可读原因（AC-10）。（↔GOV-10 规则 / DEV-01 ⑥；F049 AC-49）
+- **AC-05** — WHERE 开放能力层未部署, THE SYSTEM SHALL 使安装件下载端点与技能包分发端点不可达（呈不存在），且使 `login` 在该环境**不可用并给出可读原因**，平台其余功能零变化（AC-10）。（↔GOV-10 规则 / DEV-01 ⑥；F049 AC-49）
+  > **2026-08-17 裁决**：原文写的是「login 校验入口**也**不可达」，与 F049 **已落码**的实现冲突——服务账号模块恒在、`whoami` 恒在注册（`api/router.py:123-126`；`core/config/open_platform.py:17-18` 的注释逐字写着 "the service-account module is always on"）。**改本册措辞，不改 F049**：把 `whoami` 也置于开关之下，等于让 F049 的显式设计为一条 CLI 的验收破例，并波及已经发出去的鉴权面。用户可感知的结果完全一样——CLI 的前置探测发现该环境没有开放能力层就以 exit 8 退出并说清原因（T008），而「端点不存在」与「端点在但整层没装」对使用者是同一件事。**判据**：AC 描述的是**用户能观察到的行为**，不是服务端的实现形状；当两者只在实现形状上冲突、行为完全等价时，改 AC。
 
 ### 2.2 `login` 与凭据
 

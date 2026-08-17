@@ -70,6 +70,7 @@ from bisheng.open_api.domain.scopes import (
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, avoids a runtime import of the user domain
     from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.open_api.domain.schemas.credential import WhoamiResourceOwner
 
 # Redis keys (design D2). ``{}`` is filled with sha256(plaintext) / credential id.
 CREDENTIAL_CACHE_KEY = "oapi:cred:{}"
@@ -150,6 +151,31 @@ class CredentialService:
         if row is None or row.subject_kind != subject_kind or row.subject_id != str(subject_id):
             raise ApiCredentialNotFoundError()
         return row
+
+    @classmethod
+    async def get_resource_owner(cls, owner_user_id: int | None) -> WhoamiResourceOwner | None:
+        """The person resources created through a credential belong to (AC-24).
+
+        Lives here rather than in the endpoint so the API layer does not reach
+        into another module's model layer (arch-guard RULE-3/RULE-5).
+
+        Returns ``None`` for a missing, deleted or otherwise unresolvable owner
+        instead of raising: the only caller is ``whoami``, whose job is to
+        describe the credential. A dangling owner reference is a fact about the
+        account worth surfacing as "unknown", not a reason to refuse to answer
+        what the key is — refusing would turn a cosmetic data problem into
+        "your key does not work".
+        """
+        if owner_user_id is None:
+            return None
+        from bisheng.open_api.domain.schemas.credential import WhoamiResourceOwner
+        from bisheng.user.domain.models.user import UserDao
+
+        owner = await UserDao.aget_user(owner_user_id)
+        if owner is None:
+            logger.warning(f"open_api.whoami resource_owner_user_id={owner_user_id} no longer resolves to a user")
+            return None
+        return WhoamiResourceOwner(user_id=owner.user_id, user_name=owner.user_name)
 
     # ------------------------------------------------------------------
     # Write

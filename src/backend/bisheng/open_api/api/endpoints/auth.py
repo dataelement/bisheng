@@ -11,7 +11,10 @@ from fastapi import APIRouter, Depends
 from bisheng.common.schemas.api import UnifiedResponseModel, resp_200
 from bisheng.open_api.api.dependencies import verify_open_api_access
 from bisheng.open_api.domain.context import PRINCIPAL_KIND_SERVICE_ACCOUNT
-from bisheng.open_api.domain.schemas.credential import WhoamiResponse, WhoamiServiceAccount
+from bisheng.open_api.domain.schemas.credential import (
+    WhoamiResponse,
+    WhoamiServiceAccount,
+)
 from bisheng.open_api.domain.scopes import open_api_scope
 from bisheng.open_api.domain.services.credential_service import CredentialService
 from bisheng.open_api.domain.services.credential_validator import ValidatedCredential
@@ -38,6 +41,13 @@ async def whoami(credential: ValidatedCredential = Depends(verify_open_api_acces
     if principal.subject_kind == PRINCIPAL_KIND_SERVICE_ACCOUNT:
         service_account = WhoamiServiceAccount(id=principal.subject_user_id, name=credential.user.user_name)
 
+    # A deleted or cross-tenant owner row resolves to None rather than failing
+    # the probe: ``whoami`` answers "what is this credential", and a dangling
+    # owner reference is a fact about the account, not a reason to refuse to
+    # describe it. Callers treat a missing owner the same as an older platform
+    # that never sent the field.
+    resource_owner = await CredentialService.get_resource_owner(principal.resource_owner_user_id)
+
     return resp_200(
         data=WhoamiResponse(
             subject_kind=principal.subject_kind,
@@ -46,5 +56,6 @@ async def whoami(credential: ValidatedCredential = Depends(verify_open_api_acces
             scopes=list(principal.scopes),
             key_mask=key.key_mask if key else "",
             expires_at=key.expires_at if key else None,
+            resource_owner=resource_owner,
         )
     )

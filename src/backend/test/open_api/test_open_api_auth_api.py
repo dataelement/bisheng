@@ -337,3 +337,61 @@ async def test_v1_envelope_unchanged(v2_client):
     # platform-wide contract still applies: HTTP 200 + envelope status_code.
     assert response.status_code == 200
     assert response.json()["status_code"] == 26020
+
+
+# ---------------------------------------------------------------------------
+# AC-24 / F053 T034 ① — whoami reports the resource owner
+# ---------------------------------------------------------------------------
+
+
+async def test_whoami_reports_resource_owner(
+    v2_client, oapi_db, redis_client, human_user, service_account_factory, credential_factory
+):
+    """Picking the wrong owner is the mistake this endpoint is placed to catch.
+
+    Everything a service account creates lands on that person, so an
+    administrator who selects the wrong one produces applications owned by a
+    stranger. Without this field the error surfaces only much later — at
+    handover, or when the wrong person is asked to approve something.
+    """
+    account = await service_account_factory(name="oapi-owned", resource_owner_user_id=human_user.user_id)
+    issued = await credential_factory(account.user_id, scopes=["workflow:invoke"])
+
+    response = v2_client.get(WHOAMI, headers=_auth(issued.plaintext))
+
+    assert response.status_code == 200
+    owner = response.json()["data"]["resource_owner"]
+    assert owner == {"user_id": human_user.user_id, "user_name": human_user.user_name}
+
+
+async def test_whoami_with_dangling_owner_returns_null_not_an_error(
+    v2_client, oapi_db, redis_client, service_account_factory, credential_factory, monkeypatch
+):
+    """An owner row that no longer resolves degrades to null instead of failing the probe.
+
+    A service account always *has* an owner — it is mandatory at issue time —
+    so the only way this field goes missing is that the row stopped resolving
+    (user deleted, or moved out of reach). ``whoami``'s job is to say what the
+    credential is; failing over a dangling reference would turn a cosmetic data
+    problem into "your key does not work" and send the developer off to reissue
+    a key that was fine all along.
+    """
+    from bisheng.user.domain.models import user as user_models
+
+    account = await service_account_factory(name="oapi-dangling")
+    issued = await credential_factory(account.user_id, scopes=[])
+
+    async def _gone(_user_id):
+        return None
+
+    monkeypatch.setattr(user_models.UserDao, "aget_user", staticmethod(_gone))
+
+    response = v2_client.get(WHOAMI, headers=_auth(issued.plaintext))
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["resource_owner"] is None
+    # The rest of the answer must still be complete: the degradation is scoped
+    # to the one field that could not be resolved.
+    assert data["subject_kind"] == "service_account"
+    assert data["key_mask"] == issued.key_mask

@@ -105,8 +105,25 @@ class WhoamiServiceAccount(BaseModel):
     name: str
 
 
+class WhoamiResourceOwner(BaseModel):
+    """The person resources created through this credential will belong to (AC-24)."""
+
+    user_id: int
+    user_name: str
+
+
 class WhoamiResponse(BaseModel):
-    """``GET /api/v2/auth/whoami`` - credential check only, no scope check (F053 login probe)."""
+    """``GET /api/v2/auth/whoami`` - credential check only, no scope check (F053 login probe).
+
+    ``resource_owner`` is here because picking the wrong one is a mistake this
+    endpoint is uniquely placed to catch. Everything a service account creates
+    lands on that person, so an administrator who selects the wrong owner at
+    issue time produces applications and knowledge bases owned by a stranger —
+    and without this field the error surfaces only much later, at handover.
+    Optional rather than required: share-link principals have no resource owner,
+    and an older platform simply omits the key (F053's CLI degrades with an
+    explicit hint rather than printing nothing).
+    """
 
     subject_kind: str
     service_account: WhoamiServiceAccount | None = None
@@ -114,6 +131,7 @@ class WhoamiResponse(BaseModel):
     scopes: list[str] = Field(default_factory=list)
     key_mask: str
     expires_at: datetime | None = None
+    resource_owner: WhoamiResourceOwner | None = None
 
 
 class OpenApiScopeEndpoint(BaseModel):

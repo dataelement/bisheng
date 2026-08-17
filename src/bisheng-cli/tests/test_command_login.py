@@ -93,7 +93,9 @@ def test_success_writes_profile_and_prints_platform_account_owner_mask_expiry(
 def test_success_without_resource_owner_field_degrades_with_explicit_hint(
     monkeypatch: pytest.MonkeyPatch, home_dir
 ) -> None:
-    # F049's WhoamiResponse has no `resource_owner` yet (design D14 / write-back 1).
+    # F049 sends `resource_owner` as of 2026-08-17, so this covers what is left:
+    # an older platform that predates the field, and an owner row that stopped
+    # resolving (the server reports null rather than failing the probe).
     # Saying so out loud beats omitting the line: the owner is the account that
     # will end up owning every app this key deploys, and a wrong one is only
     # discovered much later.

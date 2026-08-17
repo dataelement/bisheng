@@ -146,10 +146,14 @@ def _report(emitter: Emitter, base_url: str, whoami: dict[str, Any], account: di
     if isinstance(owner, dict) and owner:
         emitter.info(f"  资源归属人: {owner.get('user_name') or owner.get('user_id')}")
     else:
-        # Degraded until F049 adds `resource_owner` to WhoamiResponse (design
-        # D14). Printing the pointer beats omitting the line: this account owns
-        # every app the key will publish, and picking the wrong one is the exact
-        # mistake the issuing form warns about.
+        # F049 now sends `resource_owner` (write-back 1, landed 2026-08-17), so
+        # this branch is no longer "waiting for the platform" — it covers the
+        # two cases that remain: an older platform that predates the field, and
+        # an owner row that stopped resolving (deleted user), which the server
+        # reports as null rather than failing the probe. Printing the pointer
+        # beats omitting the line: this account owns every app the key will
+        # publish, and picking the wrong one is the exact mistake the issuing
+        # form warns about.
         emitter.info("  资源归属人: 平台当前版本未返回该字段，请在服务账号详情页确认")
     emitter.info(f"  租户: {whoami.get('tenant_id')}")
     emitter.info(f"  密钥: {whoami.get('key_mask') or '(平台未返回掩码)'}")
