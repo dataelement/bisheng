@@ -6640,6 +6640,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         discovery_scope: str,
     ) -> tuple[Knowledge, bool]:
+        """按当前 discovery_scope 取空间；不在可见集合里则拒绝展开目录。"""
         spaces = await self._get_shougang_portal_request_spaces(
             requested_space_ids=[space_id],
             space_level=None,

@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -926,3 +927,41 @@ async def test_handle_file_folder_extra_info_uses_folder_count_override():
     assert result[0]["success_file_num"] == 1
     assert result[0]["visible_success_file_num"] == 1
     assert result[0]["processing_file_num"] == 1
+
+
+@pytest.mark.asyncio
+async def test_portal_qa_children_denies_space_outside_visibility(monkeypatch):
+    """不在当前 discovery_scope 可见集合里的空间，展开目录必须拒绝。"""
+    service = object.__new__(svc_mod.KnowledgeSpaceService)
+    monkeypatch.setattr(
+        service,
+        "_get_shougang_portal_request_spaces",
+        AsyncMock(return_value=[]),
+    )
+
+    with pytest.raises(SpacePermissionDeniedError):
+        await service.list_shougang_portal_qa_children(
+            space_id=120,
+            parent_id=None,
+            cursor=None,
+            page_size=10,
+            discovery_scope="portal_configured",
+        )
+
+
+def test_portal_qa_children_endpoint_accepts_configured_discovery_scopes():
+    source = Path(svc_mod.__file__).resolve().parents[2] / "api" / "endpoints" / "shougang_portal.py"
+    text = source.read_text()
+    alias_start = text.find("PortalQaChildrenDiscoveryScope")
+    assert alias_start != -1
+    alias_src = text[alias_start : alias_start + 280]
+    assert '"portal_configured"' in alias_src
+    assert '"portal_public"' in alias_src
+    children_src = text[
+        text.find("async def list_shougang_portal_qa_children") : text.find(
+            "async def get_shougang_portal_qa_folder_stats"
+        )
+    ]
+    stats_src = text[text.find("async def get_shougang_portal_qa_folder_stats") :]
+    assert "PortalQaChildrenDiscoveryScope" in children_src
+    assert "PortalQaChildrenDiscoveryScope" in stats_src[:400]
