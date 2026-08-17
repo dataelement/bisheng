@@ -22,6 +22,8 @@ describe("F050 channel settings orchestration contract", () => {
     expect(source).toContain('detail?.actions?.includes("manage_permission")');
     expect(source).toContain('getCreationPermissionContext("channel")');
     expect(source).toContain('mutateResourceGrants("channel"');
+    expect(source).toContain('const latestContext = await getResourcePermissionContext("channel", channelId)');
+    expect(source).toContain("expected_resource_version: latestContext.resource_version");
     expect(source).toContain("changes: permissionDraft.diff.changes");
     expect(source).not.toContain("permission_ids");
     expect(source).not.toContain("authorizeChannelApi");

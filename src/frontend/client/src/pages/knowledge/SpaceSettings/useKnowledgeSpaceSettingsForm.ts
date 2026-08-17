@@ -103,7 +103,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [canManagePermissions, setCanManagePermissions] = useState(false);
   const [relationModels, setRelationModels] = useState<GrantablePermissionModel[]>([]);
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
-  const [resourceVersion, setResourceVersion] = useState<number | null>(null);
   const creationRequestIdRef = useRef(crypto.randomUUID());
   const [createdSpace, setCreatedSpace] = useState<KnowledgeSpace | null>(null);
   const [permissionRetryStatus, setPermissionRetryStatus] = useState<
@@ -231,7 +230,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         ]);
         if (cancelled) return;
         setCatalogReleaseId(context.catalog_release_id);
-        setResourceVersion(context.resource_version);
         setRelationModels(models);
         setCanManagePermissions(context.can_manage_permission);
         resetPermissionDraft(permissions.data.map(permissionEntryToDraftRow), {
@@ -324,11 +322,11 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         canManagePermissions &&
         permissionHasChanges
       ) {
-        if (resourceVersion == null || catalogReleaseId == null) return result;
+        const latestContext = await getResourcePermissionContext("knowledge_space", spaceId);
         await mutateResourceGrants("knowledge_space", spaceId, {
           idempotency_key: crypto.randomUUID(),
-          expected_resource_version: resourceVersion,
-          expected_catalog_release_id: catalogReleaseId,
+          expected_resource_version: latestContext.resource_version,
+          expected_catalog_release_id: latestContext.catalog_release_id,
           changes: permissionDiff.changes,
         });
         resetPermissionDraft(permissionRows);
@@ -352,7 +350,6 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     permissionRows,
     queryClient,
     catalogReleaseId,
-    resourceVersion,
     resetPermissionDraft,
     spaceId,
     submitting,

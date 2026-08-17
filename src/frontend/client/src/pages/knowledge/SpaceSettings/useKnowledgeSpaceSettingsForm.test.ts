@@ -27,7 +27,8 @@ describe("F050 knowledge settings orchestration contract", () => {
       source.indexOf('mutateResourceGrants("knowledge_space"'),
     );
     expect(source).toContain("changes: permissionDiff.changes");
-    expect(source).toContain("expected_resource_version: resourceVersion");
+    expect(source).toContain('const latestContext = await getResourcePermissionContext("knowledge_space", spaceId)');
+    expect(source).toContain("expected_resource_version: latestContext.resource_version");
     expect(source).not.toContain("authorizeResource");
     expect(source).not.toContain("manage_space_relation");
   });

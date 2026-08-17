@@ -95,7 +95,6 @@ export function useChannelSettingsForm(channelId?: string) {
   const [submitting, setSubmitting] = useState(false);
   const [authorizationRecovery, setAuthorizationRecovery] = useState<AuthorizationRecovery | null>(null);
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
-  const [resourceVersion, setResourceVersion] = useState<number | null>(null);
   const creationRequestId = useMemo(() => crypto.randomUUID(), []);
   const initBusinessFromChannel = business.initFromChannel;
   const setBusinessSources = business.setSources;
@@ -162,7 +161,6 @@ export function useChannelSettingsForm(channelId?: string) {
     const context = permissionContextQuery.data;
     if (!context) return;
     setCatalogReleaseId(context.catalog_release_id);
-    if ("resource_version" in context) setResourceVersion(context.resource_version);
     if (!permissionQuery.data || !("resource_version" in context)) return;
     resetPermissionDraft(toPermissionDraftRows(permissionQuery.data.data), {
       resourceVersion: context.resource_version,
@@ -261,13 +259,11 @@ export function useChannelSettingsForm(channelId?: string) {
         && formData.visibility !== "private"
         && permissionDraft.hasChanges
       ) {
-        if (resourceVersion == null || catalogReleaseId == null) {
-          throw new Error("Missing F048 permission version context");
-        }
+        const latestContext = await getResourcePermissionContext("channel", channelId);
         await mutateResourceGrants("channel", channelId, {
           idempotency_key: crypto.randomUUID(),
-          expected_resource_version: resourceVersion,
-          expected_catalog_release_id: catalogReleaseId,
+          expected_resource_version: latestContext.resource_version,
+          expected_catalog_release_id: latestContext.catalog_release_id,
           changes: permissionDraft.diff.changes,
         });
       }
@@ -286,7 +282,6 @@ export function useChannelSettingsForm(channelId?: string) {
     isChannelCreator,
     permissionDraft.diff,
     permissionDraft.hasChanges,
-    resourceVersion,
     showPermissionSection,
   ]);
 
