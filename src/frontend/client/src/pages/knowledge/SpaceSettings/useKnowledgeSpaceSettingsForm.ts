@@ -201,12 +201,14 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       if (!spaceId) return;
       setLoading(true);
       try {
-        const [space, context] = await Promise.all([
-          getSpaceInfoApi(spaceId),
-          getResourcePermissionContext("knowledge_space", spaceId),
-        ]);
+        const space = await getSpaceInfoApi(spaceId);
         if (cancelled) return;
-        setCanEdit(Boolean(space.actions?.includes("edit")));
+        const canEditSpace = Boolean(space.actions?.includes("edit"));
+        const canManageSpace = Boolean(space.actions?.includes("manage_permission"));
+        if (!canEditSpace && !canManageSpace) {
+          throw new Error("Knowledge space settings access denied");
+        }
+        setCanEdit(canEditSpace);
         setForm({
           name: space.name,
           description: space.description ?? "",
@@ -218,19 +220,20 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           autoTagCustomText: (space.autoTagCustomTags ?? []).join("\n"),
         });
 
-        setCatalogReleaseId(context.catalog_release_id);
-        setResourceVersion(context.resource_version);
-        if (!context.can_manage_permission) {
+        if (!canManageSpace) {
           setCanManagePermissions(false);
           return;
         }
-        const [models, permissions] = await Promise.all([
+        const [context, models, permissions] = await Promise.all([
+          getResourcePermissionContext("knowledge_space", spaceId),
           getGrantablePermissionModels("knowledge_space", spaceId),
           getResourcePermissionGrants("knowledge_space", spaceId, { page_size: 200 }),
         ]);
         if (cancelled) return;
+        setCatalogReleaseId(context.catalog_release_id);
+        setResourceVersion(context.resource_version);
         setRelationModels(models);
-        setCanManagePermissions(true);
+        setCanManagePermissions(context.can_manage_permission);
         resetPermissionDraft(permissions.data.map(permissionEntryToDraftRow), {
           resourceVersion: context.resource_version,
           catalogReleaseId: context.catalog_release_id,

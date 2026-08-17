@@ -125,6 +125,7 @@ export function useChannelSettingsForm(channelId?: string) {
     queryFn: () => channelId
       ? getResourcePermissionContext("channel", channelId)
       : getCreationPermissionContext("channel"),
+    enabled: !isEditMode || canManagePermissions,
     retry: false,
   });
   const relationModelsQuery = useQuery({
@@ -178,6 +179,10 @@ export function useChannelSettingsForm(channelId?: string) {
     [channelId, permissionContextQuery.data, relationModelsQuery.data],
   );
   const showPermissionSection = canManagePermissions && relationModels.length > 0;
+  const accessDenied = isEditMode
+    && detail != null
+    && !canEditBusiness
+    && !canManagePermissions;
 
   const formData = useMemo<CreateChannelFormData>(() => ({
     sources: business.sources,
@@ -309,9 +314,11 @@ export function useChannelSettingsForm(channelId?: string) {
       || permissionContextQuery.isFetching
       || relationModelsQuery.isFetching
       || permissionQuery.isFetching,
-    loadError: detailQuery.error || (
+    loadError: detailQuery.error || (accessDenied
+      ? new Error("Channel settings access denied")
+      : null) || (
       isEditMode && canManagePermissions
-        ? relationModelsQuery.error || permissionQuery.error
+        ? permissionContextQuery.error || relationModelsQuery.error || permissionQuery.error
         : null
     ),
     business,
