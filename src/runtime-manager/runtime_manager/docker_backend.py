@@ -70,6 +70,8 @@ class DockerBackend(Protocol):
 
     def remove_image(self, image: str, force: bool = False) -> None: ...
 
+    def list_networks(self, name: str | None = None) -> list[dict[str, Any]]: ...
+
     def container_logs(
         self, container: str, tail: int | str = "all", since: int | None = None
     ) -> str: ...
@@ -155,6 +157,13 @@ class _RealDockerBackend:
 
     def remove_image(self, image: str, force: bool = False) -> None:
         self._client().remove_image(image, force=force)
+
+    def list_networks(self, name: str | None = None) -> list[dict[str, Any]]:
+        # Only ever read. The application network is created by the deployment
+        # (a documented pre-flight, contracts §7), never by this process: a
+        # manager that silently creates its own network hides the one mistake
+        # that makes every publish fail on a fresh host.
+        return self._client().networks(names=[name] if name else None)
 
     def container_logs(
         self, container: str, tail: int | str = "all", since: int | None = None

@@ -243,29 +243,33 @@
   **覆盖 AC**: AC-18, AC-21, AC-25, AC-33
   **依赖**: T026
 
-- [ ] **T028**: `[MVP-核心]` reconcile 循环与期望态存储测试
+- [x] **T028**: `[MVP-核心]` reconcile 循环与期望态存储测试
   **文件**: `src/runtime-manager/tests/test_reconciler.py`（新）
   **逻辑**: `test_missing_container_recreated`（期望态有、实际无 → 拉起）/ `test_unhealthy_two_rounds_rebuilds`（`unhealthy` 连续 2 轮 → stop → rm → run，**卷不动**；坑 17：docker 单机 healthcheck 与 restart policy **无联动**，不补这一段第二类故障永不恢复）→ AC-20 / `test_orphan_container_reclaimed`（无期望态的 `bisheng-app-*` 容器被回收）/ `test_recovery_budget_within_5min`（用注入时钟断言分解预算：healthcheck 判 unhealthy ≤30s + reconcile 感知 ≤30s〔2×15s〕+ 重建拉起并探活 ≤90s = ≤2.5 分钟 < 5 分钟）→ AC-20 / `test_manager_restart_does_not_touch_running_containers`（重启期间不 stop 任何容器，容器存活依赖 dockerd 而非 manager）→ AC-22 / `test_startup_full_reconcile_from_labels`（期望态存储 = 本机状态文件 + 容器 label **双写**，状态文件丢失时从 label 恢复）→ AC-50 / `test_one_app_oom_does_not_affect_others`（模拟一个实例被 OOM kill，其它实例期望态不受影响、不被连带重建）→ AC-47。
   **测试降级**: 需 docker，CI 中间件阶段 + 114 手动验证——真 `docker kill` / 健康端点改 500 的自愈计时在 T075 步 6 与 T095 上做。
+  **实际偏差记录**: 18 个用例（含 1 个 `@pytest.mark.docker` 占位）。①除清单 7 个外补了 5 个**反向用例**——`test_foreign_and_probe_containers_are_never_touched`（114 同机的 onlyoffice / rabbitmq 与探活临时实例一律不动）、`test_other_apps_container_is_not_reclaimed`、`test_retiring_container_within_grace_is_not_reclaimed`（30s 宽限期内的旧实例不能被回收，否则 AC-21 不落 502 的理由被 reconciler 自己毁掉）、`test_unhealthy_that_recovers_is_not_rebuilt`（单轮抖动不重建）、`test_stopped_app_is_not_resurrected`（停运不被复活）。**孤儿回收的正确性一半在"不误杀"上，只测回收会写出一个删客户容器的 reconciler**。②补 `test_exited_container_is_started_not_rebuilt` 钉住与 docker 的分工：进程退出归 `unless-stopped` 退避，reconciler 只 `start` 不重建（重建会丢掉 docker 的指数退避、且让崩溃循环每 15s 换一个新容器 id 藏起来）。③`test_recovery_budget_within_5min` 用 `FakeClock` 双断言——解析式 `recovery_budget_seconds(config)` ≤ 300 + 驱动真实循环后 `clock.now` ≤ 300；探活替身**消耗时钟**（45s），否则秒回的探针会让预算测试恒真。④`test_label_recovery_keeps_newest_generation_and_reclaims_the_older` 覆盖切换中途 manager 崩溃：同 app 两容器，按 generation 取新、旧的走孤儿回收。⑤`test_loop_survives_a_backend_outage`：dockerd 抖动只让本轮 `failures` 非空，不能让 reconcile 线程死。
   **覆盖 AC**: AC-20, AC-22, AC-47, AC-50
   **依赖**: T019, T025
 
-- [ ] **T029**: `[MVP-核心]` reconciler 与期望态存储实现
-  **文件**: `src/runtime-manager/runtime_manager/reconciler.py`（新）, `src/runtime-manager/runtime_manager/desired_state.py`（新）
+- [x] **T029**: `[MVP-核心]` reconciler 与期望态存储实现
+  **文件**: `src/runtime-manager/runtime_manager/reconciler.py`（新）, `src/runtime-manager/runtime_manager/desired_state.py`（批 2 已落，本任务**只增不改**）, `src/runtime-manager/runtime_manager/main.py`（lifespan 起停 reconcile 线程）, `src/runtime-manager/runtime_manager/config.py`（`reconcile_enabled` / `RTM_RECONCILE_ENABLED`）, `src/runtime-manager/tests/conftest.py`（测试期关循环）
+  **实际偏差记录**: ①`desired_state.py` 按批 2 留言只做**加法**：新增 `InstanceRecord.from_container()`（label→记录的反向映射）、`phase_for()`，以及四个健康检查参数字段（`health_interval/timeout/retries/start_period`）——不持久化这四个值，重建会把 owner 声明的 `start_period=120s` 悄悄换回默认 20s 并让实例卡在自己的门禁上；数据结构与 `get_store(config)` 未动。②**label 恢复时"容器没在跑"判定为 `desired=stopped`**：`unless-stopped` 下 dockerd 会把非显式停运的容器拉回来，所以"存在但没跑"= 有人显式停过——不做这个推断，状态文件一丢就会把已停运应用全部复活（AC-41 被 AC-50 反噬）。③**`startup_align()` 的顺序是硬要求：先 label 恢复、后孤儿回收**——反过来则状态文件丢失 = 全站容器被当孤儿清空（代码注释与用例双钉）。④reconciler **重建时 `generation+1`**（新执行体 = 新 bridge IP，`generation` 正是 app-proxy 的缓存失效信号），已同步进契约文件。⑤`phase` 不因 docker 的 `starting` 从 `running` 回退（`start_period` 内是"尚未判定"不是"不可用"），否则详情页每次重建都闪一次"启动中"。⑥重建后探活失败**不拆容器**（与 deploy 相反）：deploy 拆是为了不让坏新版顶掉能跑的旧版，这里它已经是当前版本，拆掉等于从"不健康"变成"没有"。⑦reconcile 循环是**线程**不是 asyncio 任务：单次探活最长 90s，放事件循环里会让 `GET /v1/apps/{id}/route` 跟着卡住。⑧新增 `RTM_RECONCILE_ENABLED`（生产恒 true），单测关闭它以免后台轮次与断言抢跑。
   **逻辑**: D4：**15 秒**一轮，比对期望态 vs `docker ps`，三类动作（缺失即拉起 / `unhealthy` 连续 2 轮即重建 / 孤儿即回收）；进程退出由 docker `restart unless-stopped` 内置退避兜住，manager 不参与。期望态存储 = 本机 JSON 状态文件 + 容器 label 双写（**label 是灾备真相**），进程启动时先做一次全量对齐（AC-50）。
   **测试**: T028 全部通过。
   **覆盖 AC**: AC-20, AC-22, AC-47, AC-50
   **依赖**: T028
 
-- [ ] **T030**: `[MVP-核心]` 只读接口（status / logs / runtime-status）测试
+- [x] **T030**: `[MVP-核心]` 只读接口（status / logs / runtime-status）测试
   **文件**: `src/runtime-manager/tests/test_readonly_api.py`（新）
   **逻辑**: `test_status_shape`（`{instance_id, phase, health, current_version_id, started_at, restart_count, last_probe_at}`，`phase ∈ {pending, building, starting, running, unhealthy, stopped, failed}`——**形态无关，无 container / compose 字样**，INV-33）→ AC-23 / `test_logs_tail_since_keyword`（`GET /v1/apps/{id}/logs?tail=&since=&keyword=` 三参生效，来源 = docker json-file driver + `max-size=10m max-file=3` 轮转）→ AC-23, AC-55 / `test_logs_redact_known_injected_secrets`（对**平台注入的已知敏感值**做字面量替换为 `***`；**不做通用脱敏**——日志是应用自己打印的，通用脱敏是幻觉级承诺，密钥靠 F055 发布期扫描兜，D14）→ AC-55 / `test_runtime_status_shape`（`{backend_available, supported_runtimes[], capacity{...}, preflight[]}`）→ AC-23 / `test_backend_unavailable_reports_not_500`（dockerd 不可用 → `backend_available=false`，其余接口返 16121 语义）。
   **测试降级**: 需 docker，CI 中间件阶段 + 114 手动验证。
+  **实际偏差记录**: 16 个用例（含 1 个 `@pytest.mark.docker` 占位）。①补 `test_logs_do_not_pretend_to_redact_app_output`——**反向**钉住 D14 的边界：应用自己打印的 `api_key=...` 原样返回。只有"会脱敏"的正向用例，下一个人一定会把它"改进"成通用正则脱敏，于是 AC-55 变成一句做不到的承诺。②补 `test_logs_since_accepts_a_relative_window` / `test_logs_rejects_an_unparseable_since`：`since` 同时收 epoch 秒与 `30m/2h/7d`（人手输的是后者，daemon 只认前者）。③补 `test_runtime_status_flags_a_missing_application_network`——`bisheng-apps` 网络没建是 114 上最贵的一次踩坑（每个 deploy 都以 daemon 原始报错失败，没人读得出"跑一句 docker network create"）。④补 `test_runtime_status_survives_an_unreadable_host`（`/proc/meminfo` 读不到 → `capacity.readable=false` 而不是 500）与 `test_readonly_endpoints_require_a_signature`。⑤`test_status_reports_live_health_and_total_restarts` 钉住 `restart_count` = **daemon 重启数 + manager 重建数之和**：重建会把新容器的 `RestartCount` 清零，只报 daemon 的数字会让重建过 6 次的应用在详情页显示"从未重启"。
   **覆盖 AC**: AC-23, AC-55
   **依赖**: T019, T025
 
-- [ ] **T031**: `[MVP-核心]` 只读接口实现
-  **文件**: `src/runtime-manager/runtime_manager/api/readonly.py`（新）
+- [x] **T031**: `[MVP-核心]` 只读接口实现
+  **文件**: `src/runtime-manager/runtime_manager/api/readonly.py`（新）, `src/runtime-manager/runtime_manager/admission.py`（新增 `capacity_snapshot()`，与 `evaluate()` 共用同一快照构造）, `src/runtime-manager/runtime_manager/docker_backend.py`（协议 + 实现新增 `list_networks`）, `src/runtime-manager/tests/fakes.py`（假后端补 `networks`）, `src/runtime-manager/runtime_manager/main.py`（挂载 router）, `src/runtime-manager/tests/test_main_smoke.py`（新，入口冒烟）
+  **实际偏差记录**: ①路径以 design §4.2 为准取 **`GET /v1/runtime/status`**（契约文件 §8 原写 `/v1/runtime-status`，已随本批订正）。②`capacity` 复用 admission 的快照结构并加 `instances` / `readable` / `reason`——AC-23 的运行环境状态与 AC-65 的"待上线（资源不足）"成因必须逐字节同源，同源的办法是同一个函数。③`preflight` 落 5 项：`orchestration_backend` / `application_network` / `data_root_writable` / `runtime_templates` / `base_images`，每项 `{name, ok, detail}` 且 **detail 写"怎么修"不写"哪里错"**（如缺网络直接给出 `docker network create bisheng-apps`）；`list_networks` 只读不建——manager 自动建网络会把"新机器每次发布都失败"的唯一线索藏掉。④日志三参**分工明确**：`tail`/`since` 下发给 daemon（能真正收窄轮转窗口），`keyword` 在本层过滤（没有日志驱动能做），所以带 keyword 的 `tail=200` 可能返回不足 200 行——写进 docstring 防止被当 bug 修。⑤脱敏只对**平台注入的敏感 env 值**做字面量替换（按 env **名**匹配 `SECRET|TOKEN|PASSWORD|CREDENTIAL|SIGNATURE|API_KEY|PRIVATE_KEY`，值长 ≥6，长值优先替换），不做通用脱敏（D14）。⑥后端不可用时 `runtime/status` 恒 200 且 `backend_available=false`，`status`/`logs` 返 **503 `backend_unavailable`**（backend 映射 16121）——"实例不存在"与"编排后端宕机"必须是两个答案，否则 dockerd 一重启详情页就显示"已删除"。⑦补 `tests/test_main_smoke.py`：模块级 `from runtime_manager.main import app` + 逐个 `/v1` 路径未签名应 401（不走 `app.routes` 内部结构，FastAPI 版本间会变形），补上批 3「测试全绿但 uvicorn 起不来」的口子。
   **逻辑**: `GET /v1/apps/{id}/status`、`GET /v1/apps/{id}/logs`、`GET /v1/runtime/status`。日志走 `docker logs`（D14-B：平台侧零采集器、零存储成本、形态无关）；保留期 = docker 轮转窗口（30MB / 应用），产品口径是"最近的运行日志"、不承诺永久留存。
   **测试**: T030 全部通过。
   **覆盖 AC**: AC-23, AC-55
@@ -844,6 +848,9 @@
 | T041 | T040 里 8 条依赖真实转发的用例（`test_allow_forwards` / `test_recovering_*` / 缓存计数类）在 **T045 落地后才转绿** | 否（tasks 自身的拆分产物：T044 依赖 T041） | 「allow → 进入反代路径」这句话没有反代就无从断言 |
 | T039 | 转发前额外从 `Cookie` 头里摘掉 `access_token_cookie`（只摘这一条，应用自己的 cookie 原样透传；`strip_session_cookie` 可关） | 建议 design D6 注入头一节补一句 | 浏览器对 `/apps/*` 天然带上该 cookie（host-only + `path=/`，K7），不摘等于把「能冒充访问者调用全平台 API」的长效凭据交给被托管容器——比刻意签的 900s OBO 权限大得多，AC-34 的存在理由被架空 |
 | T017 | `OPENFGA_RELEASE_VERSION` 从 `permission/migration/f048_runtime_storage.py` 取，不在 `core/openfga/authorization_model_f048.py` | 否（design 未写过该符号位置） | 与 `_find_remote_model` 同属迁移存储层，按"模型常量都在 model 文件"的直觉去找会扑空 |
+| T029 | reconciler 重建不健康实例时 **`generation+1`**（design 只写过"版本切换后 +1"） | 建议 design D4 / D5.1 各补一句（本批只改了 `contracts-runtime-manager.md` §6） | 新执行体拿到新 bridge IP，`generation` 就是 app-proxy 的缓存失效信号；不 +1 则重建后代理继续打旧地址直到 3s 缓存自然过期 |
+| T029 | label 恢复时「容器存在但没在跑」判为 `desired=stopped` | 建议 design D4「AC-22 / AC-50」一句里点明 | `unless-stopped` 下 dockerd 会把非显式停运的容器拉回来，所以"没在跑"只可能是有人显式停过；不做这个推断，状态文件一丢就把已停运应用全部复活（AC-50 反噬 AC-41） |
+| T031 | `GET /v1/apps/{id}/status` / `logs` 在编排后端不可达时返 **503 `backend_unavailable`**（→16121），而非 404 或 200 空态 | 否（design §4.2 未定义该失败分支，已写进 `contracts-runtime-manager.md` §2） | 「实例不存在」与「dockerd 宕机」必须是两个答案，合并会让 dockerd 每次重启都把详情页显示成"已删除" |
 | T010 / T016 / T017 | 三个文件被 arch-guard 报 RULE-9（import `bisheng.core.openfga`） | 否 | **仓库根目录就叫 `bisheng`**，规则的 `/bisheng/` 路径匹配对任何绝对路径都成立；在树的 `test/permission/test_f048_action_catalog_policy.py`、`scripts/f048_migration_runtime.py`、`scripts/benchmark_f048_permission_paths.py` 报同一条，且 constitution C4 明文豁免"运维迁移工具" |
 
 **批 1 顺带修正的既有问题**：`AGENTS.md:62` 的「8 RULEs」与 `docs/constitution.md` 锚点表都已随 RULE-10 更新为 10 条（design K1 点名的过时表述）。

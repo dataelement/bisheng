@@ -71,6 +71,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = _env_str(name).lower()
+    if not raw:
+        return default
+    return raw not in {"0", "false", "no", "off"}
+
+
 def _env_float(name: str, default: float) -> float:
     raw = _env_str(name)
     if not raw:
@@ -118,6 +125,10 @@ class Config:
     # --- lifecycle / probe (D4) ------------------------------------------
     retire_grace_seconds: int = 30
     reconcile_interval_seconds: int = 15
+    #: Whether the process runs the reconcile loop. Always on in production (it
+    #: is the AC-20 self-healing mechanism); off in the unit suite, which drives
+    #: ``reconcile_once()`` by hand so nothing races the assertions.
+    reconcile_enabled: bool = True
     probe_timeout_seconds: int = 90
     probe_interval_seconds: float = 1.0
     stop_timeout_seconds: int = 10
@@ -169,6 +180,7 @@ def load_config() -> Config:
         build_timeout_seconds=_env_int("RTM_BUILD_TIMEOUT_SECONDS", 1800),
         retire_grace_seconds=_env_int("RTM_RETIRE_GRACE_SECONDS", 30),
         reconcile_interval_seconds=_env_int("RTM_RECONCILE_INTERVAL_SECONDS", 15),
+        reconcile_enabled=_env_bool("RTM_RECONCILE_ENABLED", True),
         probe_timeout_seconds=_env_int("RTM_PROBE_TIMEOUT_SECONDS", 90),
         probe_interval_seconds=_env_float("RTM_PROBE_INTERVAL_SECONDS", 1.0),
         stop_timeout_seconds=_env_int("RTM_STOP_TIMEOUT_SECONDS", 10),

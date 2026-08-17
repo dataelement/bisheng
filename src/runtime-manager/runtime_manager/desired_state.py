@@ -14,8 +14,8 @@ memory of that intent. Two consequences the rest of the package leans on:
 
 Persistence is a JSON file written atomically (tmp + ``os.replace``) under
 ``{data_root}/state``. Every managed container *also* carries the same facts as
-labels, so a lost state file is recoverable — that recovery pass (and the
-reconcile loop that uses it) is T029; this module provides the store it reads.
+labels, so a lost state file is recoverable: :meth:`InstanceRecord.from_container`
+is that reverse mapping and ``reconciler.recover_from_labels`` is its caller.
 
 The store is cached per state-file path, which is what lets each test get a
 pristine store simply by having its own ``data_root`` — no global reset hook,
@@ -31,6 +31,21 @@ import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+
+from runtime_manager.config import (
+    LABEL_APP_ID,
+    LABEL_APP_SLUG,
+    LABEL_GENERATION,
+    LABEL_HEALTH_PATH,
+    LABEL_MANAGED,
+    LABEL_PORT,
+    LABEL_TIER_CPU,
+    LABEL_TIER_MEM_MB,
+    LABEL_VERSION_ID,
+    LABEL_VERSION_NO,
+)
+
+NANO = 1_000_000_000
 
 # Phase vocabulary — deliberately form agnostic (INV-33): no "container" here.
 PHASE_PENDING = "pending"
@@ -60,6 +75,36 @@ DESIRED_RUNNING = "running"
 DESIRED_STOPPED = "stopped"
 
 
+def _as_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _nanos_to_seconds(value: Any, default: int) -> int:
+    """Docker expresses health-check durations in nanoseconds."""
+    nanos = _as_int(value, 0)
+    return nanos // NANO if nanos > 0 else default
+
+
+def phase_for(running: bool, health: str) -> str:
+    if not running:
+        return PHASE_STOPPED
+    if health == "unhealthy":
+        return PHASE_UNHEALTHY
+    if health == "starting":
+        return PHASE_STARTING
+    return PHASE_RUNNING
+
+
 @dataclass
 class InstanceRecord:
     """One app's desired instance. Single instance per app is a design fact (AC-24)."""
@@ -87,6 +132,14 @@ class InstanceRecord:
     #: Old containers still serving in-flight requests during the grace window
     #: (AC-21). Kept in state so a manager restart mid-switch still retires them.
     retiring: list[str] = field(default_factory=list)
+    #: Health-check parameters as deployed. Persisted rather than re-derived so a
+    #: reconciler rebuild reproduces the instance the owner actually deployed —
+    #: an app that asked for a 120 s ``start_period`` must not come back with the
+    #: default 20 s and fail its own gate.
+    health_interval: int = 10
+    health_timeout: int = 3
+    health_retries: int = 3
+    start_period: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -95,6 +148,70 @@ class InstanceRecord:
     def from_dict(cls, data: dict[str, Any]) -> InstanceRecord:
         known = set(cls.__dataclass_fields__)
         return cls(**{k: v for k, v in data.items() if k in known})
+
+    @classmethod
+    def from_container(cls, info: dict[str, Any]) -> InstanceRecord | None:
+        """Rebuild a record from a container's own labels + config (AC-50).
+
+        This is the disaster path: the state file is a cache, the labels the
+        manager writes on every container are the durable copy. Everything the
+        reconciler needs to *recreate* the instance is derivable here — image,
+        tier, port, health path and parameters, environment, generation — which
+        is exactly why those facts are labelled in the first place.
+
+        Returns ``None`` for anything not ours (foreign containers, probe
+        instances whose ``bisheng.managed`` is ``probe``): "not ours" must be a
+        cheap, total answer, because the caller's next step is reclaiming.
+        """
+        config_section = info.get("Config") or {}
+        labels = config_section.get("Labels") or info.get("Labels") or {}
+        if labels.get(LABEL_MANAGED) != "true":
+            return None
+        app_id = labels.get(LABEL_APP_ID)
+        if not app_id:
+            return None
+
+        state = info.get("State") or {}
+        running = bool(state.get("Running"))
+        health = ((state.get("Health") or {}).get("Status") or "").strip() or "unknown"
+
+        env: dict[str, str] = {}
+        for item in config_section.get("Env") or []:
+            key, _, value = str(item).partition("=")
+            if key:
+                env[key] = value
+
+        healthcheck = config_section.get("Healthcheck") or {}
+        name = str(info.get("Name") or "").lstrip("/")
+
+        return cls(
+            app_id=app_id,
+            slug=labels.get(LABEL_APP_SLUG, ""),
+            version_id=labels.get(LABEL_VERSION_ID, ""),
+            version_no=_as_int(labels.get(LABEL_VERSION_NO), 1),
+            image_ref=config_section.get("Image") or info.get("Image") or "",
+            tier_cpu=_as_float(labels.get(LABEL_TIER_CPU), 0.0),
+            tier_mem_mb=_as_int(labels.get(LABEL_TIER_MEM_MB), 0),
+            port=_as_int(labels.get(LABEL_PORT), 8080),
+            health_path=labels.get(LABEL_HEALTH_PATH, "/"),
+            container_name=name,
+            env=env,
+            container_id=info.get("Id"),
+            phase=phase_for(running, health),
+            health=health,
+            # A managed container that is *not* running under ``unless-stopped``
+            # was stopped on purpose: the daemon would have brought it back
+            # otherwise. Inferring "stopped" here is what keeps AC-41 (停运)
+            # surviving a state-file loss instead of silently resurrecting.
+            desired=DESIRED_RUNNING if running else DESIRED_STOPPED,
+            generation=_as_int(labels.get(LABEL_GENERATION), 1),
+            started_at=state.get("StartedAt") or None,
+            restart_count=_as_int(info.get("RestartCount"), 0),
+            health_interval=_nanos_to_seconds(healthcheck.get("Interval"), 10),
+            health_timeout=_nanos_to_seconds(healthcheck.get("Timeout"), 3),
+            health_retries=_as_int(healthcheck.get("Retries"), 3),
+            start_period=_nanos_to_seconds(healthcheck.get("StartPeriod"), 0),
+        )
 
 
 class DesiredStateStore:

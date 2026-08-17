@@ -85,6 +85,10 @@ class FakeDockerBackend:
         self.network = network
         self.containers: dict[str, FakeContainer] = {}
         self.images: list[str] = []
+        #: Networks the daemon knows about. Starts with the application network
+        #: present; emptying it reproduces the "nobody ran ``docker network
+        #: create bisheng-apps``" state a fresh host is actually in.
+        self.networks: list[str] = [network]
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.reachable = True
         #: Stream the next ``build_image`` call replays. A dict with a ``error``
@@ -230,6 +234,15 @@ class FakeDockerBackend:
         self._require_reachable()
         if image in self.images:
             self.images.remove(image)
+
+    def list_networks(self, name: str | None = None) -> list[dict[str, Any]]:
+        self.calls.append(("list_networks", {"name": name}))
+        self._require_reachable()
+        return [
+            {"Name": item, "Id": f"fakenet{index}"}
+            for index, item in enumerate(self.networks)
+            if name is None or item == name
+        ]
 
     def container_logs(
         self, container: str, tail: int | str = "all", since: int | None = None

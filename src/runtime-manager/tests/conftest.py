@@ -35,8 +35,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     if os.environ.get("RTM_RUN_DOCKER_TESTS") == "1":
         return
     skip = pytest.mark.skip(
-        reason="needs a real docker daemon — CI middleware stage + 114 manual verification "
-        "(set RTM_RUN_DOCKER_TESTS=1)"
+        reason="needs a real docker daemon — CI middleware stage + 114 manual verification (set RTM_RUN_DOCKER_TESTS=1)"
     )
     for item in items:
         if "docker" in item.keywords:
@@ -80,6 +79,11 @@ def rtm_config(tmp_data_root: Path) -> Config:
         build_reserve_mb=2048,
         build_index_url="https://pypi.example.com/simple",
         build_trusted_host="pypi.example.com",
+        # The reconcile loop is a background thread in production (D4). Tests
+        # call ``reconcile_once()`` themselves so a pass can never race an
+        # assertion; ``test_reconciler`` starts a real loop where that is the
+        # thing under test.
+        reconcile_enabled=False,
     )
     set_config(config)
     yield config

@@ -144,6 +144,38 @@ class AdmissionService:
         self._probe = host_probe or LinuxHostProbe()
         self._store = store if store is not None else get_store(config)
 
+    def capacity_snapshot(self) -> dict[str, Any]:
+        """The same numbers a verdict is made from, with no verdict attached.
+
+        AC-23's runtime-status view and AC-65's "why is my app 待上线（资源不
+        足）" have to agree to the megabyte; they agree by reading one function.
+        ``readable=False`` (rather than an exception) is the honest answer on a
+        host whose ``/proc/meminfo`` cannot be read — the super-admin needs to
+        see *that*, not a 500.
+        """
+        committed_mb, committed_cpu = self._store.committed()
+        try:
+            host = self._probe.snapshot()
+        except HostProbeUnavailable as exc:
+            logger.error("capacity snapshot could not read host state: %s", exc)
+            snapshot = self._snapshot(None, committed_mb, committed_cpu)
+            snapshot.update(readable=False, reason=str(exc))
+            return snapshot
+        snapshot = self._snapshot(host, committed_mb, committed_cpu)
+        snapshot.update(readable=True, reason="")
+        return snapshot
+
+    def _snapshot(self, host: HostSnapshot | None, committed_mb: int, committed_cpu: float) -> dict[str, Any]:
+        return {
+            "mem_available_mb": host.mem_available_mb if host else 0,
+            "committed_mb": committed_mb,
+            "total_mb": host.mem_total_mb if host else 0,
+            "cpu": host.cpu_count if host else 0,
+            "committed_cpu": committed_cpu,
+            "reserve_mb": self._config.reserve_mb,
+            "overcommit_ratio": self._config.overcommit_ratio,
+        }
+
     def evaluate(self, tier: Tier | None, purpose: str = PURPOSE_RUN) -> AdmissionResult:
         if purpose not in VALID_PURPOSES:
             raise ValueError(f"unknown admission purpose: {purpose}")
