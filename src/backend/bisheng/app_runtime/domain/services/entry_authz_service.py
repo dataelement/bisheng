@@ -47,7 +47,10 @@ from loguru import logger
 
 from bisheng.app_runtime.domain.constants import ENTRY_VISIBLE_STATES, AppState
 from bisheng.common.errcode.app_factory import AppPermissionEngineUnavailableError
-from bisheng.common.errcode.permission import PermissionServiceUnavailableError
+from bisheng.common.errcode.permission import (
+    PermissionInvalidResourceError,
+    PermissionServiceUnavailableError,
+)
 from bisheng.common.errcode.tenant_fga import PermissionBackendUnavailableError
 from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import bypass_tenant_filter, set_current_tenant_id
@@ -127,6 +130,15 @@ async def authorize_entry(
             "code": AppPermissionEngineUnavailableError.Code,
             "reason": "permission_engine_unavailable",
         }
+    except PermissionInvalidResourceError:
+        # The F048 target resolver raises this (19003) when the app is not a
+        # legitimate target for THIS actor — most commonly a cross-tenant
+        # visitor, whom AC-29 says must not even learn the app exists. Answered
+        # as NOT_FOUND, not FORBIDDEN. Critically, it must be caught here: it is
+        # a BaseErrorCode, so letting it propagate makes the internal endpoint
+        # return a body with no ``decision`` field, and app-proxy then
+        # fail-closes the visit to a 503 instead of a clean not-found page.
+        return {"decision": DECISION_NOT_FOUND}
 
     owner_name = await _owner_name(app)
     if not visible:
