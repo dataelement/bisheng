@@ -579,6 +579,13 @@ def fake_permission_projection(monkeypatch):
             calls.append(("load_permission_record", {"resource_id": resource_id}))
             return SimpleNamespace(resource_id=resource_id)
 
+        async def build_creation_record(self, resource_id: str):
+            # Creation path: version 0, no projection query (mirrors the real
+            # adapter). Recorded so tests can assert the creation path does NOT
+            # go through load_permission_record.
+            calls.append(("build_creation_record", {"resource_id": resource_id}))
+            return SimpleNamespace(resource_id=resource_id, permission_version=0)
+
         async def authorize_created(self, **kwargs):
             calls.append(("authorize_created", kwargs))
 

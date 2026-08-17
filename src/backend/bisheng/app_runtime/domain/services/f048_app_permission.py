@@ -165,6 +165,40 @@ class F048AppPermissionAdapter:
         targets = tuple(self._record_target(record, actor, action=action) for record in records)
         return await self._permission.batch_check_actions(actor, targets, action)
 
+    async def build_creation_record(self, resource_id: str) -> AppPermissionRecord | None:
+        """A record for a just-created app, pinned to ``permission_version = 0``.
+
+        The creation path must NOT go through ``load_permission_record``: that
+        asks the runtime for the app's CURRENT projected version, which does not
+        exist yet — this projection is what creates it. Querying it first raised
+        25008 ("projection is not current") after the app row was already
+        written, rolling back every first publish (a chicken-and-egg). The
+        runtime requires ``resource_version == 0`` at creation anyway, and
+        ``_target`` only validates state / tenant / owner, none of which need the
+        version. The row is still read so a vanished app is caught (returns
+        ``None``) rather than projected onto nothing.
+        """
+        from bisheng.core.database import get_async_db_session
+        from bisheng.database.models.app import AppDao
+
+        if not resource_id:
+            return None
+        async with get_async_db_session() as session:
+            row = await AppDao.aget(session, resource_id)
+        if row is None or not row.id:
+            return None
+        tenant_id = int(row.tenant_id or 0)
+        if tenant_id <= 0:
+            return None
+        return AppPermissionRecord(
+            tenant_id=tenant_id,
+            resource_id=row.id,
+            state=str(row.state),
+            owner_user_id=row.owner_user_id,
+            permission_version=0,
+            context_version="",
+        )
+
     async def authorize_created(
         self,
         *,

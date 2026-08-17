@@ -149,7 +149,11 @@ class AppProvisionService:
     @staticmethod
     async def _project_owner(*, app_id: str, owner_user_id: int, tenant_id: int) -> None:
         adapter = await get_f048_resource_adapter("app")
-        record = await adapter.load_permission_record(app_id)
+        # Creation path: build a version-0 record without asking for the CURRENT
+        # projected version. ``load_permission_record`` would query that version
+        # — which this call is about to create — and raise 25008 before it
+        # exists, rolling back every first publish (chicken-and-egg).
+        record = await adapter.build_creation_record(app_id)
         if record is None:
             raise RuntimeError(f"app {app_id} vanished before its owner grant was written")
         await adapter.authorize_created(
