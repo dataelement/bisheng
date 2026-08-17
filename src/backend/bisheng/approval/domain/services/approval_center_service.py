@@ -27,6 +27,7 @@ from bisheng.common.errcode.approval import (
     ApprovalRequestAlreadyProcessedError,
     ApprovalRequestNotFoundError,
     ApprovalRequestPermissionDeniedError,
+    ApprovalWithdrawNotAllowedError,
 )
 from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
@@ -36,6 +37,9 @@ from bisheng.department.domain.services.department_display_service import (
 )
 from bisheng.user.domain.models.user import UserDao
 from bisheng.user.domain.services.auth import LoginUser
+
+# 定向问题转公开审批：业务规则禁止发起人撤回（与 qa_expert.publish_approval_bridge 场景码一致）
+_QA_QUESTION_PUBLISH_SCENARIO = "qa_question_publish"
 
 # Comment recorded on a task auto-approved because its approver is the applicant.
 SELF_APPROVAL_COMMENT = "发起人与审批人为同一人，自动通过"
@@ -589,6 +593,8 @@ class ApprovalCenterService:
             raise ValueError(f"instance not found: {instance_id}")
         if instance.applicant_user_id != operator_user_id:
             raise PermissionError("only applicant can withdraw")
+        if instance.scenario_code == _QA_QUESTION_PUBLISH_SCENARIO:
+            raise ApprovalWithdrawNotAllowedError()
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
         for task in tasks:
             if task.status == ApprovalTaskStatus.PENDING:

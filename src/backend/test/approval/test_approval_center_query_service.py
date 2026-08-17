@@ -30,11 +30,12 @@ from bisheng.approval.domain.services.approval_scenario_admin_service import App
 from bisheng.common.errcode.approval import (
     ApprovalFlowInUseByRoutesError,
     ApprovalRequestPermissionDeniedError,
+    ApprovalWithdrawNotAllowedError,
 )
-from bisheng.user.domain.models.user import UserDao
 from bisheng.department.domain.services.department_display_service import (
     build_department_name_projection,
 )
+from bisheng.user.domain.models.user import UserDao
 
 
 @dataclass
@@ -80,19 +81,19 @@ def _build_instance(status: str = ApprovalInstanceStatus.PENDING) -> ApprovalIns
     return ApprovalInstance(
         id=1,
         tenant_id=1,
-        scenario_code='menu_access_request',
-        scenario_name='菜单权限申请',
-        handler_key='menu_access_request',
-        business_key='menu:knowledge:user:7',
-        business_resource_type='web_menu',
-        business_resource_id='knowledge',
-        business_name='知识库',
+        scenario_code="menu_access_request",
+        scenario_name="菜单权限申请",
+        handler_key="menu_access_request",
+        business_key="menu:knowledge:user:7",
+        business_resource_type="web_menu",
+        business_resource_id="knowledge",
+        business_name="知识库",
         applicant_user_id=7,
-        applicant_user_name='alice',
+        applicant_user_name="alice",
         status=status,
-        payload_snapshot={'menu_key': 'knowledge'},
-        detail_snapshot={'menu_name': '知识库'},
-        current_node_name='一级审批',
+        payload_snapshot={"menu_key": "knowledge"},
+        detail_snapshot={"menu_name": "知识库"},
+        current_node_name="一级审批",
     )
 
 
@@ -108,21 +109,19 @@ def _build_task(
         tenant_id=1,
         instance_id=1,
         flow_version_id=1,
-        node_code=f'n{node_order}',
-        node_name=f'第{node_order}级审批',
+        node_code=f"n{node_order}",
+        node_name=f"第{node_order}级审批",
         node_order=node_order,
         approver_user_id=approver_user_id,
-        approver_source_type='user',
-        node_mode='or',
+        approver_source_type="user",
+        node_mode="or",
         status=status,
     )
 
 
 def test_department_snapshot_display_uses_live_short_name_without_mutating_history() -> None:
     snapshot = {"department_id": 18, "department_name": "技术研发中心"}
-    projection = build_department_name_projection(
-        SimpleNamespace(id=18, name="技术研发中心", short_name="研发")
-    )
+    projection = build_department_name_projection(SimpleNamespace(id=18, name="技术研发中心", short_name="研发"))
 
     enriched = ApprovalCenterService._with_department_display_name(
         snapshot,
@@ -141,21 +140,21 @@ async def test_list_my_tasks_aggregates_instance_summary(monkeypatch: pytest.Mon
     instance = _build_instance()
     monkeypatch.setattr(
         ApprovalQueryRepository,
-        'list_tasks_by_approver',
+        "list_tasks_by_approver",
         AsyncMock(return_value=[task]),
     )
     monkeypatch.setattr(
         ApprovalInstanceRepository,
-        'get_instance',
+        "get_instance",
         AsyncMock(return_value=instance),
     )
 
     result = await ApprovalCenterService.list_my_tasks(tenant_id=1, approver_user_id=9)
 
-    assert result['total'] == 1
-    assert result['data'][0]['task_id'] == 11
-    assert result['data'][0]['scenario_code'] == 'menu_access_request'
-    assert result['data'][0]['business_name'] == '知识库'
+    assert result["total"] == 1
+    assert result["data"][0]["task_id"] == 11
+    assert result["data"][0]["scenario_code"] == "menu_access_request"
+    assert result["data"][0]["business_name"] == "知识库"
 
 
 @pytest.mark.asyncio
@@ -166,23 +165,23 @@ async def test_get_instance_detail_blocks_unrelated_user_and_returns_action_logs
         id=1,
         tenant_id=1,
         instance_id=1,
-        action='approved',
+        action="approved",
         operator_user_id=9,
-        operator_user_name='reviewer',
-        detail={'comment': 'ok'},
+        operator_user_name="reviewer",
+        detail={"comment": "ok"},
         create_time=datetime.utcnow(),
     )
-    monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', AsyncMock(return_value=instance))
-    monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', AsyncMock(return_value=[task]))
-    monkeypatch.setattr(ApprovalInstanceRepository, 'list_action_logs', AsyncMock(return_value=[action_log]))
+    monkeypatch.setattr(ApprovalInstanceRepository, "get_instance", AsyncMock(return_value=instance))
+    monkeypatch.setattr(ApprovalInstanceRepository, "list_tasks", AsyncMock(return_value=[task]))
+    monkeypatch.setattr(ApprovalInstanceRepository, "list_action_logs", AsyncMock(return_value=[action_log]))
 
     with pytest.raises(ApprovalRequestPermissionDeniedError):
         await ApprovalCenterService.get_instance_detail(instance_id=1, login_user=_User(user_id=88))
 
     detail = await ApprovalCenterService.get_instance_detail(instance_id=1, login_user=_User(user_id=9))
-    assert detail['instance_id'] == 1
-    assert detail['tasks'][0]['task_id'] == 11
-    assert detail['action_logs'][0]['action'] == 'approved'
+    assert detail["instance_id"] == 1
+    assert detail["tasks"][0]["task_id"] == 11
+    assert detail["action_logs"][0]["action"] == "approved"
 
 
 @pytest.mark.asyncio
@@ -197,36 +196,36 @@ async def test_flow_nodes_include_approvers_before_future_tasks_are_created(
             id=1,
             tenant_id=1,
             flow_version_id=4,
-            node_code='n1',
-            node_name='第1级审批',
+            node_code="n1",
+            node_name="第1级审批",
             node_order=1,
-            node_mode='or',
-            approver_config={'approver_user_ids': [9]},
+            node_mode="or",
+            approver_config={"approver_user_ids": [9]},
             extra_config={},
         ),
         ApprovalNodeDefinition(
             id=2,
             tenant_id=1,
             flow_version_id=4,
-            node_code='n2',
-            node_name='第2级审批',
+            node_code="n2",
+            node_name="第2级审批",
             node_order=2,
-            node_mode='or',
-            approver_config={'approver_user_ids': [10]},
+            node_mode="or",
+            approver_config={"approver_user_ids": [10]},
             extra_config={},
         ),
     ]
     monkeypatch.setattr(
         ApprovalScenarioRepository,
-        'list_node_definitions',
+        "list_node_definitions",
         AsyncMock(return_value=node_defs),
     )
     monkeypatch.setattr(
         UserDao,
-        'aget_user_by_ids',
+        "aget_user_by_ids",
         AsyncMock(
             return_value=[
-                SimpleNamespace(user_id=10, user_name='future-reviewer'),
+                SimpleNamespace(user_id=10, user_name="future-reviewer"),
             ]
         ),
     )
@@ -234,15 +233,38 @@ async def test_flow_nodes_include_approvers_before_future_tasks_are_created(
     flow_nodes = await ApprovalCenterService._build_flow_nodes_with_approvers(
         instance=instance,
         tasks=[current_task],
-        task_user_name_map={9: 'current-reviewer'},
+        task_user_name_map={9: "current-reviewer"},
     )
 
-    assert flow_nodes[0]['approvers'] == [
-        {'user_id': 9, 'user_name': 'current-reviewer'},
+    assert flow_nodes[0]["approvers"] == [
+        {"user_id": 9, "user_name": "current-reviewer"},
     ]
-    assert flow_nodes[1]['approvers'] == [
-        {'user_id': 10, 'user_name': 'future-reviewer'},
+    assert flow_nodes[1]["approvers"] == [
+        {"user_id": 10, "user_name": "future-reviewer"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_withdraw_instance_rejects_qa_question_publish(monkeypatch: pytest.MonkeyPatch):
+    repo = FakeApprovalRepo()
+    instance = _build_instance()
+    instance.scenario_code = "qa_question_publish"
+    instance.handler_key = "qa_question_publish"
+    repo.instances[1] = instance
+    repo.tasks[1] = _build_task(1, node_order=1, approver_user_id=9)
+    monkeypatch.setattr(ApprovalInstanceRepository, "get_instance", repo.get_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, "list_tasks", repo.list_tasks)
+
+    with pytest.raises(ApprovalWithdrawNotAllowedError):
+        await ApprovalCenterService.withdraw_instance(
+            instance_id=1,
+            operator_user_id=7,
+            operator_user_name="alice",
+            reason="cancel request",
+        )
+
+    assert repo.instances[1].status == ApprovalInstanceStatus.PENDING
+    assert repo.tasks[1].status == ApprovalTaskStatus.PENDING
 
 
 @pytest.mark.asyncio
@@ -252,27 +274,27 @@ async def test_withdraw_instance_cancels_pending_tasks_and_records_log(monkeypat
     repo.tasks[1] = _build_task(1, node_order=1, approver_user_id=9)
     repo.tasks[2] = _build_task(2, node_order=2, approver_user_id=10, status=ApprovalTaskStatus.APPROVED)
     audit_log = AsyncMock()
-    monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', repo.get_instance)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'update_instance', repo.update_instance)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', repo.list_tasks)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'update_task', repo.update_task)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'list_action_logs', AsyncMock(return_value=[]))
-    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', audit_log)
+    monkeypatch.setattr(ApprovalInstanceRepository, "get_instance", repo.get_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, "update_instance", repo.update_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, "list_tasks", repo.list_tasks)
+    monkeypatch.setattr(ApprovalInstanceRepository, "update_task", repo.update_task)
+    monkeypatch.setattr(ApprovalInstanceRepository, "create_action_log", repo.create_action_log)
+    monkeypatch.setattr(ApprovalInstanceRepository, "list_action_logs", AsyncMock(return_value=[]))
+    monkeypatch.setattr(ApprovalCenterService, "_write_audit_log", audit_log)
 
     result = await ApprovalCenterService.withdraw_instance(
         instance_id=1,
         operator_user_id=7,
-        operator_user_name='alice',
-        reason='cancel request',
+        operator_user_name="alice",
+        reason="cancel request",
     )
 
     assert repo.instances[1].status == ApprovalInstanceStatus.WITHDRAWN
     assert repo.tasks[1].status == ApprovalTaskStatus.CANCELLED
-    assert repo.tasks[1].comment == 'cancel request'
+    assert repo.tasks[1].comment == "cancel request"
     assert repo.tasks[2].status == ApprovalTaskStatus.APPROVED
-    assert repo.action_logs[-1].action == 'withdrawn'
-    assert result['status'] == ApprovalInstanceStatus.WITHDRAWN
+    assert repo.action_logs[-1].action == "withdrawn"
+    assert result["status"] == ApprovalInstanceStatus.WITHDRAWN
     audit_log.assert_awaited_once()
 
 
@@ -281,16 +303,16 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
     scenario = ApprovalScenario(
         id=1,
         tenant_id=1,
-        scenario_code='menu_access_request',
-        scenario_name='菜单权限申请',
+        scenario_code="menu_access_request",
+        scenario_name="菜单权限申请",
         enabled=True,
     )
     route = ApprovalRouteRule(
         id=2,
         tenant_id=1,
         scenario_id=1,
-        route_name='默认流程',
-        route_type='flow',
+        route_name="默认流程",
+        route_type="flow",
         sort_order=1,
         flow_definition_id=3,
         match_config={},
@@ -299,8 +321,8 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
         id=3,
         tenant_id=1,
         scenario_id=1,
-        flow_code='menu_default',
-        flow_name='菜单默认流程',
+        flow_code="menu_default",
+        flow_name="菜单默认流程",
         is_active=True,
     )
     version = ApprovalFlowVersion(
@@ -315,107 +337,107 @@ async def test_admin_service_lists_and_creates_scenarios(monkeypatch: pytest.Mon
         id=5,
         tenant_id=1,
         flow_version_id=4,
-        node_code='n1',
-        node_name='一级审批',
+        node_code="n1",
+        node_name="一级审批",
         node_order=1,
-        node_mode='or',
-        approver_config={'type': 'tenant_admin'},
+        node_mode="or",
+        approver_config={"type": "tenant_admin"},
         extra_config={},
     )
     exception = ApprovalException(
         id=8,
         tenant_id=1,
         instance_id=1,
-        exception_type='route_missing',
-        status='open',
+        exception_type="route_missing",
+        status="open",
         detail={},
     )
 
-    monkeypatch.setattr(ApprovalScenarioRepository, 'list_scenarios', AsyncMock(return_value=[scenario]))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'get_scenario_by_code', AsyncMock(return_value=scenario))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'get_scenario', AsyncMock(return_value=scenario))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'create_scenario', AsyncMock(return_value=scenario))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'update_scenario', AsyncMock(return_value=scenario))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'get_route_rule', AsyncMock(return_value=route))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'create_route_rule', AsyncMock(return_value=route))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'list_route_rules', AsyncMock(return_value=[route]))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'update_route_rule', AsyncMock(return_value=route))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'create_flow_definition', AsyncMock(return_value=flow))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'create_flow_version', AsyncMock(return_value=version))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'get_flow_definition', AsyncMock(return_value=flow))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'list_flow_definitions', AsyncMock(return_value=[flow]))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'update_flow_definition', AsyncMock(return_value=flow))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'get_active_flow_version', AsyncMock(return_value=version))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'get_node_definition', AsyncMock(return_value=node))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'create_node_definition', AsyncMock(return_value=node))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'list_node_definitions', AsyncMock(return_value=[node]))
-    monkeypatch.setattr(ApprovalScenarioRepository, 'update_node_definition', AsyncMock(return_value=node))
-    monkeypatch.setattr(ApprovalQueryRepository, 'list_open_exceptions', AsyncMock(return_value=[exception]))
+    monkeypatch.setattr(ApprovalScenarioRepository, "list_scenarios", AsyncMock(return_value=[scenario]))
+    monkeypatch.setattr(ApprovalScenarioRepository, "get_scenario_by_code", AsyncMock(return_value=scenario))
+    monkeypatch.setattr(ApprovalScenarioRepository, "get_scenario", AsyncMock(return_value=scenario))
+    monkeypatch.setattr(ApprovalScenarioRepository, "create_scenario", AsyncMock(return_value=scenario))
+    monkeypatch.setattr(ApprovalScenarioRepository, "update_scenario", AsyncMock(return_value=scenario))
+    monkeypatch.setattr(ApprovalScenarioRepository, "get_route_rule", AsyncMock(return_value=route))
+    monkeypatch.setattr(ApprovalScenarioRepository, "create_route_rule", AsyncMock(return_value=route))
+    monkeypatch.setattr(ApprovalScenarioRepository, "list_route_rules", AsyncMock(return_value=[route]))
+    monkeypatch.setattr(ApprovalScenarioRepository, "update_route_rule", AsyncMock(return_value=route))
+    monkeypatch.setattr(ApprovalScenarioRepository, "create_flow_definition", AsyncMock(return_value=flow))
+    monkeypatch.setattr(ApprovalScenarioRepository, "create_flow_version", AsyncMock(return_value=version))
+    monkeypatch.setattr(ApprovalScenarioRepository, "get_flow_definition", AsyncMock(return_value=flow))
+    monkeypatch.setattr(ApprovalScenarioRepository, "list_flow_definitions", AsyncMock(return_value=[flow]))
+    monkeypatch.setattr(ApprovalScenarioRepository, "update_flow_definition", AsyncMock(return_value=flow))
+    monkeypatch.setattr(ApprovalScenarioRepository, "get_active_flow_version", AsyncMock(return_value=version))
+    monkeypatch.setattr(ApprovalScenarioRepository, "get_node_definition", AsyncMock(return_value=node))
+    monkeypatch.setattr(ApprovalScenarioRepository, "create_node_definition", AsyncMock(return_value=node))
+    monkeypatch.setattr(ApprovalScenarioRepository, "list_node_definitions", AsyncMock(return_value=[node]))
+    monkeypatch.setattr(ApprovalScenarioRepository, "update_node_definition", AsyncMock(return_value=node))
+    monkeypatch.setattr(ApprovalQueryRepository, "list_open_exceptions", AsyncMock(return_value=[exception]))
     monkeypatch.setattr(
-        'bisheng.approval.domain.services.approval_scenario_admin_service.AuditLogDao.ainsert_v2',
+        "bisheng.approval.domain.services.approval_scenario_admin_service.AuditLogDao.ainsert_v2",
         AsyncMock(),
     )
 
     scenarios = await ApprovalScenarioAdminService.list_scenarios(tenant_id=1)
     created = await ApprovalScenarioAdminService.create_scenario(
         tenant_id=1,
-        payload={'scenario_code': 'menu_access_request', 'scenario_name': '菜单权限申请', 'enabled': True},
+        payload={"scenario_code": "menu_access_request", "scenario_name": "菜单权限申请", "enabled": True},
         operator_user_id=1,
-        operator_user_name='admin',
+        operator_user_name="admin",
     )
     updated = await ApprovalScenarioAdminService.update_scenario(
         tenant_id=1,
         scenario_id=1,
-        payload={'enabled': False, 'scenario_name': '菜单权限申请'},
+        payload={"enabled": False, "scenario_name": "菜单权限申请"},
     )
     created_route = await ApprovalScenarioAdminService.create_route(
         tenant_id=1,
         scenario_id=1,
-        payload={'route_name': '默认流程', 'route_type': 'flow', 'sort_order': 1, 'match_config': {}},
+        payload={"route_name": "默认流程", "route_type": "flow", "sort_order": 1, "match_config": {}},
     )
     updated_route = await ApprovalScenarioAdminService.update_route(
         tenant_id=1,
         route_rule_id=2,
-        payload={'route_name': '更新分支', 'route_type': 'pass'},
+        payload={"route_name": "更新分支", "route_type": "pass"},
     )
     routes = await ApprovalScenarioAdminService.list_routes(tenant_id=1, scenario_id=1)
     created_flow = await ApprovalScenarioAdminService.create_flow(
         tenant_id=1,
         scenario_id=1,
-        payload={'flow_code': 'menu_default', 'flow_name': '菜单默认流程'},
+        payload={"flow_code": "menu_default", "flow_name": "菜单默认流程"},
     )
     updated_flow = await ApprovalScenarioAdminService.update_flow(
         tenant_id=1,
         flow_definition_id=3,
-        payload={'flow_code': 'menu_updated', 'flow_name': '更新流程'},
+        payload={"flow_code": "menu_updated", "flow_name": "更新流程"},
     )
     flows = await ApprovalScenarioAdminService.list_flows(tenant_id=1, scenario_id=1)
     created_node = await ApprovalScenarioAdminService.create_node(
         tenant_id=1,
         flow_definition_id=3,
-        payload={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+        payload={"node_code": "n1", "node_name": "一级审批", "node_order": 1, "node_mode": "or"},
     )
     updated_node = await ApprovalScenarioAdminService.update_node(
         tenant_id=1,
         node_definition_id=5,
-        payload={'node_code': 'n1b', 'node_name': '更新节点', 'node_mode': 'and'},
+        payload={"node_code": "n1b", "node_name": "更新节点", "node_mode": "and"},
     )
     nodes = await ApprovalScenarioAdminService.list_nodes(tenant_id=1, flow_definition_id=3)
     exceptions = await ApprovalScenarioAdminService.list_open_exceptions(tenant_id=1)
 
-    assert scenarios[0]['scenario_code'] == 'menu_access_request'
-    assert created['id'] == 1
-    assert updated['id'] == 1
-    assert created_route['route_name'] == '默认流程'
-    assert updated_route['route_type'] == 'pass'
-    assert routes[0]['route_type'] == 'pass'
-    assert created_flow['flow_code'] == 'menu_default'
-    assert updated_flow['flow_code'] == 'menu_updated'
-    assert flows[0]['flow_name'] == '更新流程'
-    assert created_node['node_code'] == 'n1'
-    assert updated_node['node_mode'] == 'and'
-    assert nodes[0]['node_name'] == '更新节点'
-    assert exceptions[0]['exception_type'] == 'route_missing'
+    assert scenarios[0]["scenario_code"] == "menu_access_request"
+    assert created["id"] == 1
+    assert updated["id"] == 1
+    assert created_route["route_name"] == "默认流程"
+    assert updated_route["route_type"] == "pass"
+    assert routes[0]["route_type"] == "pass"
+    assert created_flow["flow_code"] == "menu_default"
+    assert updated_flow["flow_code"] == "menu_updated"
+    assert flows[0]["flow_name"] == "更新流程"
+    assert created_node["node_code"] == "n1"
+    assert updated_node["node_mode"] == "and"
+    assert nodes[0]["node_name"] == "更新节点"
+    assert exceptions[0]["exception_type"] == "route_missing"
 
 
 @pytest.mark.asyncio
@@ -424,28 +446,28 @@ async def test_delete_flow_rejected_when_referenced_by_routes(monkeypatch: pytes
         id=3,
         tenant_id=1,
         scenario_id=1,
-        flow_code='menu_default',
-        flow_name='菜单默认流程',
+        flow_code="menu_default",
+        flow_name="菜单默认流程",
         is_active=True,
     )
     referencing_route = ApprovalRouteRule(
         id=2,
         tenant_id=1,
         scenario_id=1,
-        route_name='默认流程',
-        route_type='flow',
+        route_name="默认流程",
+        route_type="flow",
         sort_order=1,
         flow_definition_id=3,
         match_config={},
     )
     delete_mock = AsyncMock(return_value=True)
-    monkeypatch.setattr(ApprovalScenarioRepository, 'get_flow_definition', AsyncMock(return_value=flow))
+    monkeypatch.setattr(ApprovalScenarioRepository, "get_flow_definition", AsyncMock(return_value=flow))
     monkeypatch.setattr(
         ApprovalScenarioRepository,
-        'list_route_rules_by_flow_definition',
+        "list_route_rules_by_flow_definition",
         AsyncMock(return_value=[referencing_route]),
     )
-    monkeypatch.setattr(ApprovalScenarioRepository, 'delete_flow_definition', delete_mock)
+    monkeypatch.setattr(ApprovalScenarioRepository, "delete_flow_definition", delete_mock)
 
     with pytest.raises(ApprovalFlowInUseByRoutesError):
         await ApprovalScenarioAdminService.delete_flow(tenant_id=1, flow_definition_id=3)
@@ -458,18 +480,18 @@ async def test_delete_flow_succeeds_when_no_routes_reference_it(monkeypatch: pyt
         id=3,
         tenant_id=1,
         scenario_id=1,
-        flow_code='menu_default',
-        flow_name='菜单默认流程',
+        flow_code="menu_default",
+        flow_name="菜单默认流程",
         is_active=True,
     )
     delete_mock = AsyncMock(return_value=True)
-    monkeypatch.setattr(ApprovalScenarioRepository, 'get_flow_definition', AsyncMock(return_value=flow))
+    monkeypatch.setattr(ApprovalScenarioRepository, "get_flow_definition", AsyncMock(return_value=flow))
     monkeypatch.setattr(
         ApprovalScenarioRepository,
-        'list_route_rules_by_flow_definition',
+        "list_route_rules_by_flow_definition",
         AsyncMock(return_value=[]),
     )
-    monkeypatch.setattr(ApprovalScenarioRepository, 'delete_flow_definition', delete_mock)
+    monkeypatch.setattr(ApprovalScenarioRepository, "delete_flow_definition", delete_mock)
 
     await ApprovalScenarioAdminService.delete_flow(tenant_id=1, flow_definition_id=3)
     delete_mock.assert_awaited_once_with(3)
