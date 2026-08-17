@@ -3304,7 +3304,7 @@
   },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 4
     }
   },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceShareDialog.tsx": {
