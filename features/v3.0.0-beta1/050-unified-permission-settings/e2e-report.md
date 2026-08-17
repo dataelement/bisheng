@@ -9,9 +9,11 @@
 | 范围 | 结果 | 证据 |
 |---|---|---|
 | Client F048 adapter / draft / 页面契约 / 路由 / 抓取队列 | PASS | 10 suites，35 tests |
-| Client ESLint | PASS | `pnpm --dir client lint` |
-| Client strict TypeScript | PASS | `pnpm --dir client typecheck` |
+| Frontend workspace ESLint | PASS | Platform、Client、UI、file-viewers 全部通过 `pnpm lint` |
+| Frontend workspace TypeScript | PASS | Platform、Client、file-viewers 全部通过 `pnpm typecheck` |
 | i18n parity + backend error-code coverage | PASS | `pnpm check-i18n` |
+| Backend F050 focused regression | PASS | Permission/Knowledge/Channel 共 34 tests |
+| Architecture guard | PASS | `scripts/arch-guard.sh` |
 | Knowledge live E2E 收集 | SKIP | 3 tests；需 `F050_E2E=1` |
 | Channel live E2E 收集 | SKIP | 3 tests；另需 `F050_E2E_CHANNEL_SOURCE_ID` |
 | 新增 E2E Ruff | PASS | 2 files |
