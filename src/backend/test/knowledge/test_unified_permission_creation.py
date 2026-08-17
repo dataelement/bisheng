@@ -16,8 +16,13 @@ from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 
 
 class _Adapter:
-    def __init__(self, owner_error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        owner_error: Exception | None = None,
+        resolve_error: Exception | None = None,
+    ) -> None:
         self.owner_error = owner_error
+        self.resolve_error = resolve_error
         self.authorized = 0
         self.resolved = 0
 
@@ -28,6 +33,8 @@ class _Adapter:
 
     async def resolve_permission_target(self, **kwargs):
         self.resolved += 1
+        if self.resolve_error is not None:
+            raise self.resolve_error
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=7,
             resource_type="knowledge_space",
@@ -250,6 +257,37 @@ async def test_initial_grant_failure_is_returned_as_partial_success() -> None:
     assert result.id == 101
     assert result.initial_permission_result.status == "failed"
     assert result.initial_permission_result.error_code == 500
+    assert result.initial_permission_result.message is None
+
+
+async def test_initial_target_resolution_failure_is_returned_as_partial_success() -> None:
+    adapter = _Adapter(resolve_error=RuntimeError("target failed"))
+    grants = _InitialGrants()
+    service = _service(adapter, grants)
+    patches = _creation_patches(_space(request_id="req-1"))
+    with (
+        patches[0],
+        patches[1],
+        patches[2],
+        patches[3],
+        patches[4],
+        patches[5],
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ):
+        result = await service.create_knowledge_space(
+            name="Space",
+            creation_request_id="req-1",
+            initial_permissions=_initial(),
+        )
+
+    assert result.id == 101
+    assert result.initial_permission_result.status == "failed"
+    assert result.initial_permission_result.error_code == 500
+    assert grants.requests == []
 
 
 async def test_same_key_retry_resumes_permissions_without_business_side_effects() -> None:

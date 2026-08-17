@@ -23,8 +23,13 @@ class _LoginUser:
 
 
 class _Adapter:
-    def __init__(self, owner_error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        owner_error: Exception | None = None,
+        resolve_error: Exception | None = None,
+    ) -> None:
         self.owner_error = owner_error
+        self.resolve_error = resolve_error
         self.authorized = 0
 
     async def authorize_created(self, **kwargs):
@@ -33,6 +38,8 @@ class _Adapter:
             raise self.owner_error
 
     async def resolve_permission_target(self, **kwargs):
+        if self.resolve_error is not None:
+            raise self.resolve_error
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=3,
             resource_type="channel",
@@ -224,6 +231,27 @@ async def test_initial_grant_failure_returns_partial_success() -> None:
     assert result.id == "channel-1"
     assert result.initial_permission_result.status == "failed"
     assert result.initial_permission_result.error_code == 500
+    assert result.initial_permission_result.message is None
+
+
+async def test_initial_target_resolution_failure_returns_partial_success() -> None:
+    request = _request()
+    created = _channel(request, payload_hash=ChannelService._creation_payload_hash(request))
+    repository = SimpleNamespace(
+        find_by_creation_request=AsyncMock(return_value=None),
+        save_creation=AsyncMock(return_value=(created, True)),
+    )
+    grants = _InitialGrants()
+    adapter = _Adapter(resolve_error=RuntimeError("target failed"))
+    service, _, _ = _service(repository, adapter, grants)
+
+    with patch(f"{_CS}.get_f048_resource_adapter", new=AsyncMock(return_value=adapter)):
+        result = await service.create_channel(request, _LoginUser())
+
+    assert result.id == "channel-1"
+    assert result.initial_permission_result.status == "failed"
+    assert result.initial_permission_result.error_code == 500
+    assert grants.requests == []
 
 
 async def test_same_key_with_changed_filter_or_sync_conflicts_before_owner() -> None:

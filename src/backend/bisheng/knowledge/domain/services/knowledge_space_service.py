@@ -1233,27 +1233,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if initial_permissions is not None and initial_permissions.grants:
             if self.initial_grant_application is None or creation_request_id is None:
                 raise RuntimeError("F050 Initial Grant application is not configured")
-            target = await container_adapter.resolve_permission_target(
-                resource_type="knowledge_space",
-                resource_id=str(knowledge_space.id),
-                actor=actor,
-                action="manage_permission",
-            )
-            request = InitialGrantRequest(
-                command_key=creation_request_id,
-                expected_catalog_release_id=initial_permissions.expected_catalog_release_id,
-                additions=tuple(
-                    InitialGrantAddition(
-                        model_key=grant.model_key,
-                        subject_type=grant.subject.type,
-                        subject_id=grant.subject.id,
-                        userset_relation=grant.subject.userset_relation,
-                        include_children=grant.subject.include_children,
-                    )
-                    for grant in initial_permissions.grants
-                ),
-            )
             try:
+                target = await container_adapter.resolve_permission_target(
+                    resource_type="knowledge_space",
+                    resource_id=str(knowledge_space.id),
+                    actor=actor,
+                    action="manage_permission",
+                )
+                request = InitialGrantRequest(
+                    command_key=creation_request_id,
+                    expected_catalog_release_id=initial_permissions.expected_catalog_release_id,
+                    additions=tuple(
+                        InitialGrantAddition(
+                            model_key=grant.model_key,
+                            subject_type=grant.subject.type,
+                            subject_id=grant.subject.id,
+                            userset_relation=grant.subject.userset_relation,
+                            include_children=grant.subject.include_children,
+                        )
+                        for grant in initial_permissions.grants
+                    ),
+                )
                 mutation = await self.initial_grant_application.apply(
                     actor=actor,
                     target=target,
@@ -1276,7 +1276,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 permission_result = InitialPermissionApplyResult(
                     status="failed",
                     error_code=exc.code if isinstance(exc, BaseErrorCode) else 500,
-                    message=exc.message if isinstance(exc, BaseErrorCode) else "Initial permission update failed",
                 )
         return KnowledgeSpaceCreateResp.model_validate(
             {

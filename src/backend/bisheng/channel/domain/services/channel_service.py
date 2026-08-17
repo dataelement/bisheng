@@ -620,26 +620,26 @@ class ChannelService:
         if channel_data.initial_permissions is not None and channel_data.initial_permissions.grants:
             if self.initial_grant_application is None or channel_data.creation_request_id is None:
                 raise RuntimeError("F050 Initial Grant application is not configured")
-            target = await adapter.resolve_permission_target(
-                resource_id=str(channel_model.id),
-                actor=actor,
-                action="manage_permission",
-            )
-            initial_request = InitialGrantRequest(
-                command_key=channel_data.creation_request_id,
-                expected_catalog_release_id=channel_data.initial_permissions.expected_catalog_release_id,
-                additions=tuple(
-                    InitialGrantAddition(
-                        model_key=grant.model_key,
-                        subject_type=grant.subject.type,
-                        subject_id=grant.subject.id,
-                        userset_relation=grant.subject.userset_relation,
-                        include_children=grant.subject.include_children,
-                    )
-                    for grant in channel_data.initial_permissions.grants
-                ),
-            )
             try:
+                target = await adapter.resolve_permission_target(
+                    resource_id=str(channel_model.id),
+                    actor=actor,
+                    action="manage_permission",
+                )
+                initial_request = InitialGrantRequest(
+                    command_key=channel_data.creation_request_id,
+                    expected_catalog_release_id=channel_data.initial_permissions.expected_catalog_release_id,
+                    additions=tuple(
+                        InitialGrantAddition(
+                            model_key=grant.model_key,
+                            subject_type=grant.subject.type,
+                            subject_id=grant.subject.id,
+                            userset_relation=grant.subject.userset_relation,
+                            include_children=grant.subject.include_children,
+                        )
+                        for grant in channel_data.initial_permissions.grants
+                    ),
+                )
                 mutation = await self.initial_grant_application.apply(
                     actor=actor,
                     target=target,
@@ -662,7 +662,6 @@ class ChannelService:
                 permission_result = ChannelInitialPermissionApplyResult(
                     status="failed",
                     error_code=exc.code if isinstance(exc, BaseErrorCode) else 500,
-                    message=exc.message if isinstance(exc, BaseErrorCode) else "Initial permission update failed",
                 )
 
         if channel_data.creation_request_id is None and channel_data.initial_permissions is None:
