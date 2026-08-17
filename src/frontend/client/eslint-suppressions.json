@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 19
+      "count": 16
     }
   },
   "src/api/index.ts": {
