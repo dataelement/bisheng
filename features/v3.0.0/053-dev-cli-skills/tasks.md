@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 13 项就地修订，55 条有效 AC 定稿（决议 1–12） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 12 条修订（D1–D14 / 21 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；**50 任务 / 5 Wave / 35 条 `[MVP-核心]`**；55 条 AC 全覆盖（AC-39 为墓碑、AC-48 / AC-50 为跨 Feature 旅程引用，见追溯表）；**+ 同日 `/sdd-review tasks` 14 条修订**（2 high：F054 `logs` 链路事实回正〔runtime-manager 端点已落码〕· 依赖上界与 wheel 安装冒烟〔app-proxy 生产事故同型敞口〕；9 medium：161 段错误码登记 · 未登记码按 HTTP 状态兜底 · `26002` 三成因不可分 · `data.required` 是字符串 · base_url 归一化 · T022/T026 伪依赖 · T002 拆 T002a · 产物缺失时端点行为 · F055 扫描顺序偏离进依赖表；3 low：偏离计数补第三处 · CI 改 `--frozen` · T031 落点改独立 workflow 文件） |
-| 实现 | 🔲 未开始 | 0 / 50 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **19 / 50 完成**（Wave 1 全部：T001–T018 含 T002a；落点 `src/bisheng-cli/`，`uv run pytest` **135 passed / 0 failed**、`ruff check` 全绿、wheel 构建 + 干净 venv 安装冒烟通过）。Wave 2 未开工。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -72,7 +72,7 @@
 
 ### Wave 1 · `[MVP-核心]` 包工程与测试基建（无测试配对，排最前）
 
-- [ ] **T001**: `[MVP-核心]` CLI 包工程骨架（全仓第一个可发布包工程）
+- [x] **T001**: `[MVP-核心]` CLI 包工程骨架（全仓第一个可发布包工程）
   **文件**: `src/bisheng-cli/pyproject.toml`（新）, `src/bisheng-cli/bisheng_cli/__init__.py`（新）, `src/bisheng-cli/uv.lock`（新，`uv lock` 生成后**提交进 git**，同 `src/runtime-manager/uv.lock` / `src/app-proxy/uv.lock`）
   **逻辑**: 照抄基准 = `src/runtime-manager/pyproject.toml`（仓内最新的独立包先例，D1）。`[project]` name=`bisheng-cli`、version=`3.0.0`（与平台版本同号，决议-7）、`requires-python = ">=3.11"`（与 `runtime-manager/pyproject.toml:1-16` 对齐，CON-6）；`dependencies = ["httpx>=0.27,<1.0", "PyYAML>=6.0,<7.0"]` —— **依赖预算就这两条**（D12，引第三条必须先在 design D12 补一行论证），且**两条都必须带上界**（见下方 ⚠️）；`[project.scripts] bisheng = "bisheng_cli.main:main"`（**全仓第一条 console script**）；`[build-system]` hatchling + **`[tool.hatch.build.targets.wheel] packages = ["bisheng_cli"]`**（⚠️ 目录名带连字符时 hatchling 无法自动推断包目录，**缺这一行 `uv build` 打出的是空 wheel**，D1）；`[tool.ruff]` 照抄 `runtime-manager/pyproject.toml:41-67` 但**必须 ignore `RUF001/RUF002/RUF003`**——CLI 的人读输出全是中文，不 ignore 会把全角括号"修"成 ASCII、改错产品文案；`[tool.pytest.ini_options]` 照 `:32-39`，自定义 marker 由 `docker:` 换成 **`network:`**（"needs a real platform — skipped by default, runs only in the 114 manual verification"）。`__init__.py` 只放 `__version__ = "3.0.0"`（**单一版本真相**，`--version` 与 T030 的 `manifest.json` 都读它）。
   **三个名字刻意分离**（D1，两条理由都不是洁癖）：发行名 `bisheng-cli` · import 包名 **`bisheng_cli`** · 命令名 `bisheng`。① import 包若取名 `bisheng`，开发者机器上同时装了后端依赖时与 `src/backend/bisheng/` 顶层包**同名冲突**；② `arch-guard.sh:115,126` 的 RULE-8/9 守卫条件是 `grep -q "/bisheng/"`，目录里出现 `bisheng/` 段会被扫进来产生无谓噪声。
@@ -80,7 +80,7 @@
   **⚠️ 产物目录命名禁区**（坑 11）：`.gitignore:137,148,150,152` 的 `build/` `lib/` `wheels/` `sdist/` 是**无前导斜杠的全局规则**，任何层级同名目录都被忽略；`src/bisheng-cli/dist/` 不受影响（`/dist/` 是根锚定的）。T030 的落点 `bisheng/dev_toolkit/artifacts/` 这个名字是刻意挑的，**不要改名**。
   **依赖**: 无
 
-- [ ] **T002**: `[MVP-核心]` pytest 基建之一：零网络哨兵 + 家目录隔离 + 样本项目树
+- [x] **T002**: `[MVP-核心]` pytest 基建之一：零网络哨兵 + 家目录隔离 + 样本项目树
   **文件**: `src/bisheng-cli/tests/conftest.py`（新）, `src/bisheng-cli/tests/fixtures/`（新，样本项目素材）
   **逻辑**: fixtures：
   - **`no_network`（autouse）**——把 `httpx.Client`/`httpx.AsyncClient` 的默认 transport 换成会 `raise AssertionError("unmocked network call")` 的哨兵，**漏 mock 当场失败而不是静默走网络**；同时清 `HTTP_PROXY` / `HTTPS_PROXY` / `ALL_PROXY` / `NO_PROXY` env（缺 `socksio` 会整批误报，memory `reference_local_backend_pytest_socks_proxy`；且坑 2 的代理提示逻辑要在受控 env 下测）。
@@ -89,78 +89,78 @@
   **⚠️ 测试里绝不写长密钥字面量**（坑 10）：`arch-guard.sh:96-100` 的 RULE-7 会扫到 CLI 的 `.py`（`(password|secret_key|api_key|access_token)\s*=\s*['"][^'"]{8,}['"]`）。它输出的是 **WARNING、不是 VIOLATION、不阻断**（`arch-guard.sh:99` / 脚本头注释 `:13`），但长期噪声会让真的硬编码密钥那天没人看 —— 一律用 fixture 常量 `FAKE_KEY = "bs-sak-" + "x" * 8` 这类拼接形式，让 RULE-7 在本工程保持零输出。
   **依赖**: T001
 
-- [ ] **T002a**: `[MVP-核心]` pytest 基建之二：mock 平台响应工厂（本 Feature 对 F049 / F055 契约的可执行快照）
+- [x] **T002a**: `[MVP-核心]` pytest 基建之二：mock 平台响应工厂（本 Feature 对 F049 / F055 契约的可执行快照）
   **文件**: `src/bisheng-cli/tests/helpers/platform_mock.py`（新）
   **逻辑**: 基于 `httpx.MockTransport` 的响应工厂，可编程：`versions_ok()` / `versions_404()` / `env_ok(open_platform_enabled=…)` / `env_unreachable()` / `whoami_ok(scopes=[…], resource_owner=…|None)` / `whoami_err(code, http_status=…)` / `deploy_accept(...)` / `deploy_sync_err(code, details=…)` / `deployment_seq([...])`（一串轮询响应，按调用次序返回）/ `logs(lines=[…])`。**响应体形状必须照 design §4.2 ⑦ 的 F055 契约逐字构造**（`stage` 用服务端原值、`failure` 五元组、`approval.status` 六种取值），**不得在 helper 里"顺手规整"字段名**——helper 就是本 Feature 对上游契约的可执行快照。
   **两套信封工厂**：`v1_envelope(data)`（HTTP 200 + `{status_code,status_message,data}`）与 `v2_error(http_status, code, message, data=…)`（真 HTTP 状态 + 信封 body），对应坑 12。
   **⚠️ 260 段错误体照 F049 已落码的形状构造**（`common/errcode/base.py:29-33` `return_resp_instance`）：`data = {"exception": <str>, **kwargs}`，所以 `26003` 的载荷是 **`data.required` = 单个字符串**（`OpenApiScopeMissingError(required: str)`，`common/errcode/open_api.py:63-68`）**不是数组**；HTTP 状态取各错误类的 `http_status`（`26001`/`26002`/`26027` → **401**，`26003`/`26004` → **403**，`26030` → **503**，`26031` → **500**，`test/open_api/test_open_api_auth_api.py:67-149` 逐条实测）。**工厂里不许自造更"合理"的形状**——真实的形状就是这个，改了等于把 CLI 测成对着一个不存在的服务端编程。
   **依赖**: T001
 
-- [ ] **T003**: `[MVP-核心]` 退出码表与错误翻译测试
+- [x] **T003**: `[MVP-核心]` 退出码表与错误翻译测试
   **文件**: `src/bisheng-cli/tests/test_errors.py`（新）
   **逻辑**: 断言 design §4.2 ② 退出码表**每一行**与 D9 的三条"绝不能合并"红线。
   **测试**: `test_exit_code_table_is_total`（表里每个 code 都有 (人话, 下一步) 两段文案，且下一步非空）→ AC-04 / `test_16225_and_16226_map_to_different_codes_and_different_next_step`（13 vs 14，**断言两条下一步文案不相等**，D9 红线 1）→ AC-35 / `test_16231_and_16230_next_step_is_delete_capabilities_not_ask_admin`（映射 exit 10 而**不是** exit 8，D9 红线 2）→ AC-35 / `test_16203_next_step_points_to_package_root_not_create_manifest`（D9 红线 3）→ AC-30, AC-35 / `test_26003_prints_required_scope_verbatim`（逐字打 `data.required` 的位名 → exit 5；⚠️ **`data.required` 是单个字符串不是数组**——`OpenApiScopeMissingError(required: str)`（`common/errcode/open_api.py:63-68`）+ `data = {"exception": …, **kwargs}`（`errcode/base.py:29-33`），对字符串 `", ".join(...)` 会逐字符拆成 `a, p, p, :, m…`，本用例传一个真实位名 `"app:manage"` 并断言整串原样出现）→ AC-34 / `test_26001_26002_26027_are_distinguishable`（三条文案互不相同 → exit 4；⚠️ **只有三条**——`26002` 一个码同时覆盖「不存在 / 已撤销 / 已过期」（`common/errcode/open_api.py:50-55`），服务端不给区分这三者的信号，别写"四种成因"的用例，见 T019 同名订正）→ AC-10, AC-11 / `test_26030_marked_retryable`（exit 7 且文案含"可重试"）→ AC-10 / `test_16207_maps_to_layer_not_enabled`（exit 8「本环境未启用应用工场」）→ AC-40 / `test_unknown_code_falls_back_to_exit_19_not_exit_1`（未登记 code 原样打 `code` + `message`，**不落进 exit 1「CLI 内部异常」那一格**）→ AC-04 / `test_161_segment_codes_are_registered_not_unknown`（**2026-08-17 审查新增**：CON-8 明写 `deploy`/`logs` 也消费 **F054 的 161 段**，但表里一条都没有 —— 至少 `16121`「编排器不可用」（dockerd / runtime-manager 不可达，`contracts-runtime-manager.md` §3 把 manager 的 `503 backend_unavailable` 映射到它，是 `bisheng logs` 最常撞的一条）→ **exit 7 可重试**、`16101`「应用不存在」（`--app-id` 写错或应用已删）→ **exit 6**；断言两者都不落进 exit 19）→ AC-04 / `test_unknown_code_with_5xx_degrades_to_retryable_not_19`（**未登记 code 先看 HTTP 状态类再落 19**：F049 实测里 FGA / DB 故障在 `/api/v2` 返 **HTTP 503 + `19002`**（`test/open_api/test_open_api_auth_api.py:300-302`），只按 code 查表会打成"平台返回未登记的错误码"+ exit 19，而正确处置是"平台暂不可用、稍后重试"= exit 7；断言 503/502/504→7、401→4、403→5，三类都判不了才 19）→ AC-04, AC-10 / `test_26004_and_26031_are_reported_as_platform_or_cli_defect`（不得翻成"你的密钥有问题"）→ AC-04 / `test_delegate_rejection_shape_matches_server_side_rejection`（CLI 侧 `login` 拒绝与服务端 403 原样呈现的拒绝形状一致：同退出码 5、同"委托专用、本地开发另发一把"指向）→ AC-13 / `test_no_error_text_contains_key_material`（对所有分支断言输出不含 `FAKE_KEY` 子串）→ AC-04
   **覆盖 AC**: AC-04, AC-10, AC-11, AC-13, AC-30, AC-34, AC-35, AC-40
   **依赖**: T002
 
-- [ ] **T004**: `[MVP-核心]` `errors.py` 实现（`CliError` + `ERROR_HINTS` + 退出码映射）
+- [x] **T004**: `[MVP-核心]` `errors.py` 实现（`CliError` + `ERROR_HINTS` + 退出码映射）
   **文件**: `src/bisheng-cli/bisheng_cli/errors.py`（新）
-  **逻辑**: `class CliError(Exception)` 带 `exit_code` / `code`（平台原始码，可为 `None`）/ `message` / `next_step` / `details` / `hints`；`EXIT_*` 常量按 design §4.2 ② 全表定义（0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/19/20/21/22/23/24/25）；`ERROR_HINTS: dict[int, tuple[str, str]]` = code → (人话, 下一步)，条目取自 design D9 与 §4.1 B 步 6-7 的清单（260 段：`26001`/`26002`/`26003`/`26004`/`26027`/`26030`/`26031`；162 段：`16201`/`16202`/`16203`/`16205`/`16207`/`16221`/`16222`/`16223`/`16224`/`16225`/`16226`/`16227`/`16228`/`16229`/`16230`/`16231`/`16241`/`16251`/`16252`/`16254`；**161 段（2026-08-17 审查补：CON-8 明写本 Feature 也消费 F054 的 161 段，原清单一条都没有）**：`16121`「编排器不可用」→ **exit 7**（`contracts-runtime-manager.md` §3：manager 的 `503 backend_unavailable` 映射到它；`logs` 在 dockerd 宕机时撞的就是这条，**不是 404**，"后端不可用 ≠ 实例不存在"）· `16101`「应用不存在」→ **exit 6**（`--app-id` 写错或应用已删，F054 design:518））。
+  **逻辑**: `class CliError(Exception)` 带 `exit_code` / `code`（平台原始码，可为 `None`）/ `message` / `next_step` / `details` / `hints`；`EXIT_*` 常量按 design §4.2 ② 全表定义（0/1/2/3/4/5/6/7/8/9/10/11/12/13/14/**18**/19/20/21/22/23/24/25；18 = 缺陷类，2026-08-17 裁决新增）；`ERROR_HINTS: dict[int, tuple[str, str]]` = code → (人话, 下一步)，条目取自 design D9 与 §4.1 B 步 6-7 的清单（260 段：`26001`/`26002`/`26003`/`26004`/`26027`/`26030`/`26031`；162 段：`16201`/`16202`/`16203`/`16205`/`16207`/`16221`/`16222`/`16223`/`16224`/`16225`/`16226`/`16227`/`16228`/`16229`/`16230`/`16231`/`16241`/`16251`/`16252`/`16254`；**161 段（2026-08-17 审查补：CON-8 明写本 Feature 也消费 F054 的 161 段，原清单一条都没有）**：`16121`「编排器不可用」→ **exit 7**（`contracts-runtime-manager.md` §3：manager 的 `503 backend_unavailable` 映射到它；`logs` 在 dockerd 宕机时撞的就是这条，**不是 404**，"后端不可用 ≠ 实例不存在"）· `16101`「应用不存在」→ **exit 6**（`--app-id` 写错或应用已删，F054 design:518））。
   **未登记 code 的降级是两级不是一级**（审查修订）：① 先按 **HTTP 状态类**归位——`503`/`502`/`504` → exit 7「平台暂不可用，稍后重试」（F049 的 FGA / DB 故障走 `19002` + HTTP 503，`test/open_api/test_open_api_auth_api.py:300-302`，只查 code 表会把它打成"未登记错误码"而误导用户去查密钥）· `401` → exit 4 · `403` → exit 5；② 三类都不适用才落 **exit 19**「平台返回错误 {code}：{message}」（未知 ≠ 崩溃、≠ 成功，D9）。**两级都要原样打出 `code` 与 `message`**。`16229` 本轮无写入方但**必须登记**（结构演进后置，但 `--confirm-schema-change` 本轮就实现，不登记会在结构演进上线那天变成未知码）。**绝不吞 `details` / `hints`**——那是本地 agent 自动修复的全部输入（AC-47 的成立前提，D6）。**`26003` 的 `data.required` 按单字符串处理**（不是数组，见 T003 该用例）。
   **测试**: T003 全部通过。
   **覆盖 AC**: AC-04, AC-10, AC-11, AC-13, AC-30, AC-34, AC-35, AC-40
   **依赖**: T003
 
-- [ ] **T005**: `[MVP-核心]` 输出层测试（机读 NDJSON / 人读文本 / 掩码）
+- [x] **T005**: `[MVP-核心]` 输出层测试（机读 NDJSON / 人读文本 / 掩码）
   **文件**: `src/bisheng-cli/tests/test_output.py`（新）
   **逻辑**: 断言 AC-04 的实质 = "非交互可用 + 机器可读 + 永不回显密钥"，形状照 design §4.2 ⑥。
   **测试**: `test_json_mode_machine_events_go_to_stdout_human_text_to_stderr`（`--json` 下 stdout 里**每一行都是可 `json.loads` 的对象**——混一行进度文本就会炸掉 agent 的 `jq` 管道，D2）→ AC-04 / `test_result_event_is_always_the_last_line_and_appears_exactly_once`（成功 / 失败 / 异常三条路径各一次）→ AC-04 / `test_event_shapes_are_exactly_three`（`stage` / `progress` / `result`）→ AC-04 / `test_non_tty_degrades_to_milestones`（无 TTY 时不打进度条、只在 25/50/75/100% 发 `progress`）→ AC-04 / `test_mask_never_emits_key_material`（把 `FAKE_KEY` 塞进 message / header / details 三处，断言输出只有掩码形式 `bs-sak-****`）→ AC-04 / `test_verbose_masks_authorization_header`（`--verbose` 打方法 / 路径 / 状态码 / 耗时，**Authorization 恒掩码**）→ AC-04 / `test_scan_hits_print_file_line_without_value`（`hits[]` 只打 `file:line` + 规则名，**断言不含任何值**；且 CLI **不去本地文件把那行读出来补打**——那等于把服务端刻意不给的东西自己补回来）→ AC-35 / `test_utf8_wrapper_survives_gbk_console`（模拟 `cp936` stdout，断言不抛 `UnicodeEncodeError`，坑 5）→ AC-04
   **覆盖 AC**: AC-04, AC-35
   **依赖**: T002
 
-- [ ] **T006**: `[MVP-核心]` `output.py` 实现（双形态输出 + 进度 + 掩码器）
+- [x] **T006**: `[MVP-核心]` `output.py` 实现（双形态输出 + 进度 + 掩码器）
   **文件**: `src/bisheng-cli/bisheng_cli/output.py`（新）
   **逻辑**: `Emitter` 类持 `json_mode` / `quiet` / `verbose` / `is_tty`：`stage(...)` / `progress(...)` / `result(ok, exit_code, data, failure)` 三个事件方法（`--json` 时写 stdout 一行 NDJSON，否则写 stderr 人读文本）；`result` 由 `main.py` 的收口保证**恒发且只发一次**。`mask(text)` 用正则把 `bs-sak-\w+` 与 `Authorization: Bearer \S+` 替换成掩码，**所有出口（人读 / 机读 / verbose 日志）统一过一遍**。`STAGE_LABELS` 是**纯展示用**中文短语表，**未知 stage 原样打印英文**（不认识 ≠ 报错，D6）。无彩色、无表格、不装 rich（D2）。
   **测试**: T005 全部通过。
   **覆盖 AC**: AC-04, AC-35
   **依赖**: T004, T005
 
-- [ ] **T007**: `[MVP-核心]` HTTP 客户端与前置探测测试（两套信封 / 探测三分支 / 代理坑）
+- [x] **T007**: `[MVP-核心]` HTTP 客户端与前置探测测试（两套信封 / 探测三分支 / 代理坑）
   **文件**: `src/bisheng-cli/tests/test_http.py`（新）
   **逻辑**: 断言 design §4.1 A 的前置探测三分支与坑 12 的信封解析顺序。
   **测试**: `test_envelope_parsed_body_status_code_first_then_http_status`（**先读 body `status_code`，再看 HTTP 状态**；反过来会把 `/api/v1` 的所有业务错误当成功，坑 12）→ AC-04 / `test_v1_http200_business_error_is_treated_as_error` → AC-04 / `test_v2_real_http_401_403_503_parsed_with_envelope_body` → AC-10, AC-11 / `test_probe_versions_404_and_env_open_platform_false_exits_8`（"本环境未部署开放能力层"）→ AC-05, AC-10 / `test_probe_versions_404_and_env_without_open_platform_flag_exits_9`（"平台版本过老，不支持 CLI"）→ AC-02, AC-10 / `test_probe_env_unreachable_exits_7`（"平台不可达"）→ AC-10 / `test_probe_stops_before_whoami_when_layer_absent`（⚠️ **判定后直接结束、不再打 whoami**——AC-05 的"login 在该环境不可用"由这里兑现，D10 偏离登记）→ AC-05 / `test_min_compatible_greater_than_local_warns_but_does_not_block`（本轮只提示不阻断，D11 第 3 条）→ AC-02 / `test_no_scopes_cached_between_calls`（客户端**不缓存 `scopes`**，每次命令的权限判定都以服务端为准）→ AC-52 / `test_proxy_env_detected_and_named_in_connect_error`（设 `ALL_PROXY` 后连接失败 → 错误里明说"检测到 `ALL_PROXY=…`，内网地址请加入 `NO_PROXY`"，坑 2）→ AC-10 / `test_upload_read_timeout_is_240s_below_nginx_300s`（断言常量，D5）→ AC-31 / `test_bearer_header_masked_in_verbose_log` → AC-04
   **覆盖 AC**: AC-02, AC-04, AC-05, AC-10, AC-11, AC-31, AC-52
   **依赖**: T002, T002a, T004
 
-- [ ] **T008**: `[MVP-核心]` `http.py` 实现（客户端封装 + 两套信封 + 前置探测）
+- [x] **T008**: `[MVP-核心]` `http.py` 实现（客户端封装 + 两套信封 + 前置探测）
   **文件**: `src/bisheng-cli/bisheng_cli/http.py`（新）
   **逻辑**: `PlatformClient(base_url, api_key=None, timeout=…, trust_env=True)`：统一加 `Authorization: Bearer …`；超时分档 —— 连接 10 s、普通读 60 s、**上传读 240 s**（刻意 < nginx `proxy_read_timeout 300s`，`docker/nginx/conf.d/default.conf:53`，让 CLI 自己先超时而不是拿一个被掐断的 504，D5）。`parse_envelope(resp)` 按坑 12 的固定顺序解析并抛 `CliError`。`probe(base_url)` 实现 design §4.1 A 的三分支（`versions` → 404 时再探 `GET /api/v1/env`，三支各有确定退出码 8 / 9 / 7，**判定后直接结束**）。连接失败时检测代理环境变量并把变量名与值写进错误（坑 2）；`--no-proxy` → `trust_env=False`。**不判权限位、不缓存 `scopes`**（AC-52，D3）。
   **测试**: T007 全部通过。
   **覆盖 AC**: AC-02, AC-04, AC-05, AC-10, AC-11, AC-31, AC-52
   **依赖**: T007
 
-- [ ] **T009**: `[MVP-核心]` CLI 入口与命令面测试（`--help` 命令集 / 全局参数 / 异常收口）
+- [x] **T009**: `[MVP-核心]` CLI 入口与命令面测试（`--help` 命令集 / 全局参数 / 异常收口）
   **文件**: `src/bisheng-cli/tests/test_cli.py`（新）
   **逻辑**: 断言 AC-03 的本轮形态与 AC-04 的"交互确认一律有参数等价物"。
   **测试**: `test_help_lists_exactly_login_deploy_logs`（**本轮只注册三条**；`skills sync` / `dev` 不进解析器、不做"占位报错"，D11 第 1 条）→ AC-03 / `test_help_footer_declares_deferred_commands`（尾部注明"`dev` / `skills sync` 随后续版本提供"——顺延要**明说**而不是藏起来）→ AC-03 / `test_no_as_flag_anywhere`（遍历所有子命令的 action，断言不存在 `--as` 或任何指定他人身份的参数）→ AC-03 / `test_no_init_subcommand` → AC-03 / `test_version_flag_prints_package_version`（读 `bisheng_cli.__version__`）→ AC-02 / `test_every_interactive_confirm_has_a_flag_equivalent`（`--confirm-schema-change` / `--yes` / `--api-key-stdin` 三者存在）→ AC-04, AC-36 / `test_non_interactive_missing_flag_is_refusal_not_default_yes`（无 TTY 且缺确认参数 → 明确拒绝，**绝不"默认同意"**）→ AC-04, AC-36 / `test_unexpected_exception_exits_1_with_traceback_only_in_verbose` → AC-04 / `test_result_event_emitted_even_on_exception`（异常路径也恒有 `result` 尾行）→ AC-04
   **覆盖 AC**: AC-02, AC-03, AC-04, AC-36
   **依赖**: T002, T006
 
-- [ ] **T010**: `[MVP-核心]` `main.py` + `cli.py` 实现（入口 / argparse / 退出码收口）
+- [x] **T010**: `[MVP-核心]` `main.py` + `cli.py` 实现（入口 / argparse / 退出码收口）
   **文件**: `src/bisheng-cli/bisheng_cli/main.py`（新）, `src/bisheng-cli/bisheng_cli/cli.py`（新）
   **逻辑**: `main()`：**启动第一件事**把 `sys.stdout/stderr` 用 `errors="replace"` 的 UTF-8 wrapper 包一层（Windows 控制台默认 GBK，打中文 hints 会 `UnicodeEncodeError` 直接崩、掩盖真正的错误，坑 5）；构造 `Emitter`；调 `cli.build_parser()` 解析；分发到命令 handler；`except CliError` → 打人话 + 下一步 + 发 `result` → `sys.exit(e.exit_code)`；`except Exception` → exit 1（traceback 仅 `--verbose`）。`cli.py`：`argparse` 子命令注册（本轮 `login` / `deploy` / `logs` 三条，参数面照 design §4.2 ①）+ 全局参数 `--version` / `--verbose` / `--quiet` / `--json` / `--timeout` / `--no-proxy`；`--help` 文案手写（无 typer / click，D2）；尾部注明顺延命令。**handler 以函数引用注入**，命令模块（T020 / T022 / T026）只填实现、不改本文件的注册结构。**不注册 `--platform`**（本轮恒用 `credentials.json` 的 `current`，D11 第 5 条）。
   **测试**: T009 全部通过。
   **覆盖 AC**: AC-02, AC-03, AC-04, AC-36
   **依赖**: T006, T009
 
-- [ ] **T011**: `[MVP-核心]` 凭据存储测试（权限位 / 多 profile / 不存 scopes）
+- [x] **T011**: `[MVP-核心]` 凭据存储测试（权限位 / 多 profile / 不存 scopes）
   **文件**: `src/bisheng-cli/tests/test_credentials.py`（新）
   **逻辑**: 断言 CON-3 与 D3 的落地：**密钥必然明文存，文件权限位是唯一保护**。
   **测试**: `test_file_created_0600_and_dir_0700_in_one_step`（断言用的是 `os.open(..., O_CREAT|O_EXCL|O_WRONLY, 0o600)` 语义——**"先 write 再 chmod"中间有一个 world-readable 窗口**，坑 1；POSIX 下直接断言 `stat().st_mode`）→ AC-07 / `test_never_written_into_project_dir`（在 tmp 项目里跑 login，断言项目树内无凭据文件）→ AC-07 / `test_scopes_never_persisted`（写入载荷里没有 `scopes` 键——一旦缓存权限位就会出现"管理员补勾了但 CLI 还说没权限"）→ AC-52 / `test_multi_profile_isolated_by_base_url`（两个平台各写一条、互不覆盖，`current` 指向最近一次）→ AC-12 / `test_relogin_same_platform_overwrites_profile` → AC-12 / `test_base_url_normalised_before_use_as_key`（**2026-08-17 审查新增**：`http://114:7860/` · `http://114:7860` · `HTTP://114:7860` 归一化后是**同一个 profile 键**；不归一化的后果不是"多一条记录"而是两个真实故障——① 明明 `login` 过却报 exit 3「请先 login」；② `.bisheng/app.json` 也按 base_url 分键（T014），键对不上就查不到 `app_id` → **迭代 deploy 被当成首发、平台上再建一个同名草稿应用**。规则：去尾部 `/`、scheme 与 host 小写、去默认端口不做（`:80`/`:443` 显式写与省略视为不同，避免猜错），**归一化函数只有一处、`credentials.py` 与 `project.py` 共用**，`app.json` 侧的对偶用例在 T013）→ AC-12 / `test_load_without_credentials_raises_exit_3_not_network_error`（未登录 → "请先 bisheng login" + 非零退出码，**不是网络错误**）→ AC-51 / `test_stored_snapshot_fields`（`service_account` / `resource_owner`(可为 `null`) / `key_mask` / `tenant_id` / `expires_at` / `logged_in_at`，形状照 design §4.2 ③）→ AC-06 / `test_windows_acl_failure_warns_loudly_instead_of_pretending`（模拟 `icacls` 等价 ACL 设置失败 → **明确警告而不是假装成功**，坑 1）→ AC-07
   **覆盖 AC**: AC-06, AC-07, AC-12, AC-51, AC-52
   **依赖**: T002
 
-- [ ] **T012**: `[MVP-核心]` `credentials.py` 实现
+- [x] **T012**: `[MVP-核心]` `credentials.py` 实现
   **文件**: `src/bisheng-cli/bisheng_cli/credentials.py`（新）
   **逻辑**: 路径 `~/.bisheng/credentials.json`（目录 `0700` / 文件 `0600`；Windows 用 `%USERPROFILE%\.bisheng\` + `icacls` 等价"仅当前用户"ACL，做不到就明确警告）。**顶层多 profile 结构本轮就落**（`{"version":1,"current":<base_url>,"profiles":{…}}`，D3）——结构一旦按单平台写死，加多平台就是一次带迁移的破坏性变更；**顺延的只是 `--platform` 交互层**（D11 第 5 条）。`load_current()` 无凭据时抛 `CliError(exit=3)`。**不做加密**（明文 + 权限位是既定取舍，D3）；**恒不存 `scopes`**（AC-52）。
   **`normalise_base_url(raw)` 落在本模块、全仓唯一一份**（审查新增）：去尾 `/`、scheme 与 host 小写、保留显式端口；**profile 键、`current` 值、`.bisheng/app.json` 的分键（T014）三处都用它**——分两处实现就会出现"login 过却说未登录 / 迭代 deploy 被当首发再建一个应用"。
@@ -168,35 +168,35 @@
   **覆盖 AC**: AC-06, AC-07, AC-12, AC-51, AC-52
   **依赖**: T004, T011
 
-- [ ] **T013**: `[MVP-核心]` 项目层测试（manifest 三必填快速失败 + `.bisheng/app.json`）
+- [x] **T013**: `[MVP-核心]` 项目层测试（manifest 三必填快速失败 + `.bisheng/app.json`）
   **文件**: `src/bisheng-cli/tests/test_project.py`（新）
   **逻辑**: 断言 CON-1 的推论——**CLI 只做"存在 + 可解析 + 三必填"级快速失败，权威校验在 F055 托管预检**。
   **测试**: `test_missing_manifest_refused_locally_without_upload`（不发任何请求，`no_network` 哨兵保证）→ AC-30 / `test_unparsable_yaml_refused_with_line_info` → AC-30 / `test_each_of_name_runtime_port_missing_is_named_in_the_error`（三个必填项各缺一次，错误逐字点名缺哪个）→ AC-30 / `test_safe_load_only_rejects_python_object_tag`（`!!python/object` 不得被反序列化——`full_load` / `unsafe_load` 是 RCE，F055 design D3 红线）→ AC-30 / `test_optional_fields_not_validated_locally`（`tier` / `capabilities` / `database` / `egress` 本地一律不判、**不自造字段与缺省值**，否则会出现"本地过、上传被拒"）→ AC-30 / `test_app_json_written_and_read_per_base_url`（形状照 design §4.2 ④）→ AC-33 / `test_app_json_key_uses_the_same_base_url_normaliser_as_credentials`（**2026-08-17 审查新增**：`http://114:7860/` 写入、`http://114:7860` 读取必须命中同一条；两侧各自实现归一化 = 迟早分叉 → **复用 T012 落的同一个函数**，本用例直接断言 `project.normalise_base_url is credentials.normalise_base_url` 级的同源性或跑同一组样例）→ AC-33 / `test_explicit_app_id_overrides_saved_one` → AC-33 / `test_missing_app_id_asks_for_explicit_flag`（项目被复制到另一目录 / 标识丢失时要求显式指定，不猜）→ AC-33
   **覆盖 AC**: AC-30, AC-33
   **依赖**: T002
 
-- [ ] **T014**: `[MVP-核心]` `project.py` 实现（项目根定位 / manifest 快速失败 / `app.json` 读写）
+- [x] **T014**: `[MVP-核心]` `project.py` 实现（项目根定位 / manifest 快速失败 / `app.json` 读写）
   **文件**: `src/bisheng-cli/bisheng_cli/project.py`（新）
   **逻辑**: `find_project_root(path)`；`load_manifest(root)` = `yaml.safe_load` + 三必填（`name` / `runtime` / `port`）存在性检查 → 失败抛 `CliError(exit=6)` 并列出缺失项；**不做完整 schema 校验、不写 manifest**（AppManifest 归 F055，`extra='forbid'`，CON-1 / 决议-5）。`AppRef` 读写 `<项目根>/.bisheng/app.json`（按平台 base URL 分键——**键一律经 `credentials.normalise_base_url()`，不在本模块另写一份**，审查新增；`--app-id` 可显式覆盖，D13）。**建议开发者把 `.bisheng/` 提交进 git**（团队共享同一个 `app_id`），但它**结构性排除出上传包**（T018）——"进 git"与"进包"是两件事。
   **测试**: T013 全部通过。
   **覆盖 AC**: AC-30, AC-33
   **依赖**: T004, T013
 
-- [ ] **T015**: `[MVP-核心]` 忽略规则测试（三层规则 + git/子集解析器一致性）
+- [x] **T015**: `[MVP-核心]` 忽略规则测试（三层规则 + git/子集解析器一致性）
   **文件**: `src/bisheng-cli/tests/test_ignore.py`（新）
   **逻辑**: 覆盖 D4 的三层规则与坑 9。**核心用例是"同一份样本目录，git 路径与自研子集解析器结果必须一致"**——两条路径分叉就是静默的包内容差异。
   **测试**: `test_git_path_and_subset_parser_agree_on_sample_tree`（`sample_project_git` 上跑 `git ls-files -c -o --exclude-standard -z` 与子集解析器，断言两个集合相等；无 git 则 skip）→ AC-32 / `test_double_star_matches_across_directories`（`**` 单独处理——**`fnmatch` 的 `*` 跨 `/` 匹配、且根本没有 `**`**，`linsight/domain/services/workspace_backend.py:616-619` 的注释逐字记录了这两个坑，本仓已真实咬过一次）→ AC-32 / `test_single_star_does_not_cross_slash`（每段单独匹配）→ AC-32 / `test_leading_bang_negation_takes_back` → AC-32 / `test_trailing_slash_matches_directory_only` → AC-32 / `test_bishengignore_loaded_last_and_wins` → AC-32 / `test_hard_excluded_dirs_cannot_be_taken_back_by_bang`（`.git/` `node_modules/` `.venv/` `__pycache__/` `.bisheng/` 等硬排除，`!` 取不回）→ AC-32 / `test_dist_and_build_are_soft_excluded_and_can_be_taken_back`（⚠️ **`dist/` / `build/` 刻意不进硬排除**：存量应用把前端构建产物放 `dist/` 交后端静态托管是常见形态，硬排会静默剥掉、故障要到构建 / 探活阶段才暴露）→ AC-32 / `test_non_git_project_output_says_subset_parsing_used`（非 git 仓库时**在输出里明说**"忽略规则按子集解析，复杂规则请写进 `.bishengignore`"）→ AC-32
   **覆盖 AC**: AC-32
   **依赖**: T002
 
-- [ ] **T016**: `[MVP-核心]` `ignore.py` 实现（git 优先 / 子集解析 / `.bishengignore` 收口）
+- [x] **T016**: `[MVP-核心]` `ignore.py` 实现（git 优先 / 子集解析 / `.bishengignore` 收口）
   **文件**: `src/bisheng-cli/bisheng_cli/ignore.py`（新）
   **逻辑**: 三层从内到外（D4）：① 结构性排除（硬排除不可取回 / 软排除可被 `.bishengignore` 的 `!` 取回）；② `.gitignore` 语义——是 git 仓库且 `git` 可执行 → 直接 `git ls-files -c -o --exclude-standard -z` 让 git 自己算（零依赖、100% 语义一致），否则回落自研子集解析器（`#` 注释 / 空行 / 前导 `!` / 目录后缀 `/` / `**` / 段内 `*` `?`）；③ `.bishengignore`（同语法、最后加载、优先级最高）。**手写段匹配，`**` 单独处理，绝不用 `fnmatch` 顶 gitignore 全语义**（坑 9）。**不引 `pathspec`**——一条内网安装链换一个只在"非 git 项目"才用得上的完备性，不划算（D4 备选 B）。
   **测试**: T015 全部通过。
   **覆盖 AC**: AC-32
   **依赖**: T015
 
-- [ ] **T017**: `[MVP-核心]` 打包测试（tar.gz 四条硬规矩 + 凭据不进包 + 体量自查）
+- [x] **T017**: `[MVP-核心]` 打包测试（tar.gz 四条硬规矩 + 凭据不进包 + 体量自查）
   **文件**: `src/bisheng-cli/tests/test_packaging.py`（新）
   **逻辑**: 断言 D4 的"打包四条硬规矩"，每条都是一个坑的对偶。
   **测试**: `test_credentials_file_never_in_package`（**assert 型测试**，AC-07 的直接落点）→ AC-07, AC-32 / `test_venv_node_modules_git_pycache_excluded` → AC-32 / `test_local_sqlite_and_attachment_dir_excluded` → AC-32 / `test_member_paths_are_posix_relative_no_backslash_no_abs_no_dotdot`（Windows 上 `Path` 给 `\` 分隔 → 服务端解包出 `src\main.py` 这样的**单个文件名**，目录结构全平；或触发 16202，坑 4）→ AC-31, AC-32 / `test_symlink_hardlink_device_fifo_skipped_and_listed`（服务端 tar 解包闸会拒它们，本地不跳等于必然吃一个 16202 且浪费一次上传，坑 14；**跳过要列出、不静默**）→ AC-31 / `test_owner_exec_bit_preserved_0755_others_normalized_0644`（丢可执行位 → entrypoint 上线后不可执行，故障要到构建 / 探活才暴露、排查方向指向"平台构建有问题"，坑 20）→ AC-31 / `test_reproducible_same_sha256_twice`（成员按路径排序、`mtime` 归一、`uid=gid=0`、`uname=gname=""`）→ AC-31 / `test_never_silently_truncates_on_limit`（超限**整包拒绝**并列清单，判据照 `linsight/domain/services/workbench_impl.py:1255-1257`："包被悄悄截断 = 线上跑的不是本地那份"）→ AC-32 / `test_oversize_report_lists_excluded_count_then_top10`（超限报告**先列排除了多少**再列 Top 10 最大文件 / 目录——"忽略建议"不能是空话，且开发者的第一反应"平台上限太小"多半是没排除 `.venv/`，坑 3）→ AC-32 / `test_limits_endpoint_unreachable_falls_back_to_defaults_and_proceeds`（取不到 `deploy-limits` → 用内置默认值只提示、继续上传，由服务端 16201 兜底；**绝不让一个软校验挡死发布**，坑 17 / CON-4）→ AC-32
@@ -204,7 +204,7 @@
   **依赖**: T002, T002a, T016
   **⚠️ 上限口径**: `{max_package_mb, max_unpacked_mb, max_package_entries}` 的权威值经 `GET /api/v2/apps/deploy-limits` 取（F055 T005 落的配置键、T039 的端点），内置默认 50 MB / 200 MB 解包 / 20000 条目**只作回落**（F055 T050 回写项 3 已登记同一口径，不另立一套）。
 
-- [ ] **T018**: `[MVP-核心]` `packaging.py` 实现（tar.gz + 统计 + Top10 报告）
+- [x] **T018**: `[MVP-核心]` `packaging.py` 实现（tar.gz + 统计 + Top10 报告）
   **文件**: `src/bisheng-cli/bisheng_cli/packaging.py`（新）
   **逻辑**: `build_package(root, ignore_result, out_path) -> PackageStat`：`tarfile` + `gzip` 产 **tar.gz**（**不产 zip**——F055 端点参数逐字写的是 `package`、对象键是 `apps/{app_id}/versions/{version_id}/code.tar.gz`，产 zip 等于和字面契约、对象键名、未来分片方案三处同时错位，D4）；`arcname = PurePosixPath(*rel.parts)` 且落包前逐条 assert 无 `\`、无绝对路径、无 `..`（坑 4）；模式归一 `0644`、**保留 owner 执行位为 `0755`**（坑 20）；链接 / 设备 / FIFO 跳过并收集进 `PackageStat.skipped`；成员排序 + `mtime` 归一 + `uid/gid/uname/gname` 归零（可复现）。`PackageStat` 含条目数 / 原始体量 / 压缩体量 / 排除统计 / Top 10 最大文件与目录。**不静默截断、不上传**（上传在 T022）。
   **测试**: T017 全部通过。
@@ -523,4 +523,13 @@
 > **只留一行指针**，论证在 design.md（决策 / 坑），这里不重复（见 `docs/SDD-Guide.md` §4）。
 > 推翻已 ★ 确认的决策时，先停下与用户重新确认（§3 第四个 ★），再记录。
 
-（暂无）
+### Wave 1（2026-08-17 实施）
+
+1. **`26004` / `26031` 的退出码 design 漏定，2026-08-17 裁决为新开 exit 18「缺陷类」**（既不是 exit 1、也不是 exit 19；实施方初版取 1 / 19，已改）。退出码表的唯一用途是让本地 coding agent 不读散文就能决定下一步，所以分格判据是**动作是否不同**：exit 1（CLI 崩了）值得重试一次；exit 19（未登记码）读 `message` 后可改参数重试；而这两个码**重试与改参数都保证无用**，唯一动作是停下报障——第三种动作即第三个码。把已登记的 `26031` 映到 19（其语义是「未登记的码」）还会给出假标签。已同批改 `errors.py`（新增 `EXIT_DEFECT = 18`）与 design §4.2 ② 退出码表（新增 18 行 + 裁决说明），并补两个单测：`test_defect_class_gets_its_own_exit_code_not_1_or_19`、`test_registered_code_wins_over_5xx_degradation`（后者防止 `26031` 携带的 HTTP 500 把「报障」降级成「稍后重试」，而重试永远不会成功）。
+2. **新增 `tests/test_import_smoke.py`（tasks 未列）**——依赖上界的另一半保险：模块级 import 全部 CLI 模块 + 生产入口 `bisheng_cli.main:main`。理由＝ app-proxy 的 `fastapi>=0.115` 事故里 69 个用例全绿而生产 import 即崩，只有模块级 import 能在 collection 阶段抓到。同批已落：两条依赖都带上界（`httpx>=0.27,<1.0` / `PyYAML>=6.0,<7.0`）、`uv.lock` 提交进 git、wheel 装进干净 venv 后跑 `bisheng --version` / `--help`（default 与 `--resolution highest` 两条腿都验过）。
+3. **`ignore.py` 的子集解析器有一条与 git 的已知语义差**——git 不允许用 `!` 把「已被忽略目录下的文件」取回，本解析器允许。刻意保留：`.bishengignore` 本就是「子集兜不住的复杂规则的显式出口」（D4 第 3 层），且该差异只能从 `.bishengignore` 触发、`.gitignore` 路径恒走 git 本身。已写进 `ignore.py` 模块 docstring。
+4. **硬链接改为按普通文件打包，不跳过**（2026-08-17 裁决，`packaging.py::_special_kind` 已移除 `S_ISREG and st_nlink > 1` 分支）。原实现按 D4「符号链接 / 硬链接 / 设备文件 / FIFO 本地就跳过并列出」逐字做，代价是硬链接文件的**内容不进包**。**裁决理由：那条要求的前提是假的**——服务端拒的是 tar 里的 hardlink 成员，而该成员只在 tarfile 自行挑类型时产生（`TarFile.add` / `gettarinfo` 查 `self.inodes`）；`packaging.py` 逐条手工构造 `TarInfo`（默认 `REGTYPE`）再 `addfile` 流式写内容，这条路径**产不出** hardlink 成员。为一个不会发生的成员类型丢掉普通文件的内容，且 `st_nlink > 1` 既不是作者选的、他也看不见——是纯损失。design D4 与坑 14 已同批订正；新增 `test_hardlinked_regular_file_is_packed_with_its_contents` 断言成员为 `isreg()` 且内容完整。
+5. **`mask()` 归 `output.py`、`errors.py` 反向 import 它**——design §4.3 把掩码器划给 `output.py`，而 `errors.render_human()` 必须掩码（T003 `test_no_error_text_contains_key_material`）。`output.py` 不 import `errors.py`，无环。
+6. **命令 handler 采用「注册结构在 `main.py`、实现懒加载」**——`main._HANDLER_PATHS` 存 `"模块:函数"` 字符串，`resolve_handler()` 才 import。Wave 1 里 `commands/{login,deploy,logs}.py` 尚不存在，`--help`、参数解析、异常收口与退出码全部可测可用；Wave 2 只需新增模块文件，不改 `main.py` / `cli.py` 的注册结构（T010 逐字要求）。
+7. **`arch-guard.sh` RULE-7 在本工程零输出**——但踩到一次自指的坑：conftest 的 docstring 里**引用**该规则的正则示例本身命中了规则。已改写成散文描述。后人写「本规则长什么样」的注释时同理。
+

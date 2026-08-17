@@ -123,7 +123,8 @@
   3. **`.bishengignore`**（可选，同语法、最后加载、优先级最高）——子集解析器兜不住的复杂规则的显式出口。
 - **打包的四条硬规矩**（每条都是坑的对偶）：
   - **绝不静默截断**：超限 / 遇到不可打包成员时**整包拒绝**并列清单，判据注释照抄 `linsight/domain/services/workbench_impl.py:1255-1257`——"包被悄悄截断 = 线上跑的不是本地那份"。
-  - **符号链接 / 硬链接 / 设备文件 / FIFO 本地就跳过并列出**：服务端 tar 解包闸会拒它们（F055 design D2 的四类拒绝），本地不跳等于必然吃一个 16202。
+  - **符号链接 / 设备文件 / FIFO / socket 本地就跳过并列出**：服务端 tar 解包闸会拒它们（F055 design D2 的四类拒绝），本地不跳等于必然吃一个 16202。
+  - **⚠️ 硬链接不在跳过之列（2026-08-17 订正，原文写的「硬链接一律跳过」是错的）**：服务端拒的是 tar 里的 **hardlink 成员**，而 hardlink 成员只在 tarfile 自己挑成员类型时才产生（`TarFile.add` / `gettarinfo` 查 `self.inodes`）。`packaging.py` 逐条手工构造 `TarInfo`（默认 `REGTYPE`）再 `addfile` 流式写内容，**这条写入路径产不出 hardlink 成员**。按 `st_nlink > 1` 跳过，等于为一个不会发生的成员类型丢掉一个普通文件的内容——而 `st_nlink > 1` 既不是作者选的、他也看不见。→ 硬链接文件按普通文件打包，内容照进。
   - **可复现打包**：成员按路径排序、`mtime` 归一、`uid=gid=0`、`uname=gname=""`、路径用 posix 分隔符且无前导 `./`——同样内容产出同样 sha256，便于"本地包 == 服务端收到的包"的核验。
   - **保留可执行位**：文件模式归一为 `0644`，**但原本有 owner 执行位的保留 `0755`**——否则 entrypoint 脚本上线后不可执行，而这类故障要到构建/探活阶段才暴露（坑 20）。
 - **体量自查**：打包后先 `GET /api/v2/apps/deploy-limits`（`{max_package_mb, max_unpacked_mb, max_package_entries}`），超限 → 拒绝 + 打印当前体量 + **Top 10 最大文件 / 目录**（"忽略建议"不能是一句空话，要指名道姓）；端点取不到 → **按内置默认值只提示不拦、直接上传**，由服务端 16201 兜底。
@@ -402,11 +403,14 @@ bisheng logs [--app-id] [--tail N] [--since TS] [--keyword K] [--follow] [--json
 | 12 | 发布流程冲突 / 归属与操作权限 → 撤回在途单、或换归属人正确的密钥 | `16205` · `16229` · `16251` · `16252` · `16254`（仅 owner 可执行） |
 | **13** | **平台未 seed 审批场景** → 找平台管理员，**改代码无用** | `16225`（D9 红线 1） |
 | **14** | **运行环境容量不足** → 等资源 / 稍后重试 / 让 owner 手动上线 | `16226`（D9 红线 1，**绝不与 13 合并**） |
+| **18** | **缺陷类：CLI 或平台的实现缺陷** → 停下报障，**重试与改参数都无用** | `26004`（CLI 发了它从不该发的身份传递头 = CLI 缺陷）· `26031`（平台端点缺权限位标记 = 平台缺陷） |
 | **19** | **平台返回未登记的错误码** → 原样打印 `code` + `message`，按其内容处置 | `16253` / `16255` 等 CLI 触发不到的码；F055 将来新增的码（D9 降级分支） |
 | 20 / 21 / 22 | `--wait` 终态：驳回 / 撤回 / 待上线 | `approval.status` · `pending_reason` |
 | 23 | `--wait` 超时（**非失败**） → 继续等或换跟踪方式 | 到 `--wait-timeout` 仍未落定 |
 | **24** | `--wait` 终态：**审批单已取消**（目标应用被删除）→ 这单不会有结论 | `approval.status=cancelled`（F055 D10 `cancel_instance_by_business`） |
 | **25** | `--wait` 终态：**审批异常**（审批人解析为空）→ 找管理员处理审批异常，这单不会有结论 | `approval.status=exception`（F055 K2 ② `decision=EXCEPTION` / approver_empty） |
+
+> **⚠️ exit 18 为什么不并进 1 或 19（2026-08-17 裁决，此前 D9 只说要"特别标注" `26004` / `26031` 却没给退出码）**：这张表存在的唯一理由是让本地 coding agent 不读散文就能决定下一步，所以分格的判据是**动作是否不同**，不是"错误看起来有多严重"。三者的动作各不相同：exit **1**（CLI 内部崩了）——重试一次是合理的；exit **19**（没有登记的码）——读 `message` 后可以改参数重试；exit **18**——重试与改参数**都保证无用**，唯一正确动作是停下报障。这是第三种动作，所以是第三个码。另外把 `26031` 映到 19 还会**给出假标签**：19 的语义是"未登记的码"，而这两个码 CLI 认得清清楚楚。
 
 **③ 凭据文件** `~/.bisheng/credentials.json`（目录 `0700` / 文件 `0600`；Windows 用等价 ACL）
 
@@ -511,7 +515,7 @@ bisheng logs [--app-id] [--tail N] [--since TS] [--keyword K] [--follow] [--json
 | 11 | **backend 镜像的 build context 只有 `./src/backend/`**（`ci.yml:53` + `Dockerfile:13`）→ `src/bisheng-cli/` 不在镜像里；而 `.gitignore` 的 `build/` `lib/` `sdist/` `wheels/` 是**无前导斜杠的全局规则**，任何层级同名目录都被忽略 | "本地能下载、生产 404"；或产物目录取名 `build/` 后 `git add` 静默失败，CI 打出的镜像里没有 wheel | `scripts/pack_cli_wheel.sh` 把 wheel 拷进 `bisheng/dev_toolkit/artifacts/`（**这个名字是刻意挑的**）；114 是真 git 检出 + `deploy.sh`、不走镜像，两条路径都要验 |
 | 12 | **`/api/v2` 有真 HTTP 状态码，`/api/v1` 恒 HTTP 200 + 信封**（`open_api/api/exception_handlers.py:36-61`，`:61` 是 v1 分支） | 只按 HTTP 状态判断 → `/api/v1` 的所有业务错误被当成功；只按 body 判断 → `/api/v2` 的 503 被当成有效响应 | `http.py` 统一解析：**先读 body `status_code`，再看 HTTP 状态**（D9） |
 | 13 | **`deploy` 返回 200 不代表发布成功**——F055 在"接收成功"时就已创建草稿应用并分配 `app_id`（F055 design D2 选定 B） | CLI 只在成功时保存 `app_id` → 预检失败后重跑会**再建一个应用**，构建页堆一串同名草稿；且 F055 明确依赖"CLI 保存 app_id 以复用" | `commands/deploy.py`：拿到 200 立即写 `.bisheng/app.json`（D13） |
-| 14 | **服务端 tar 解包闸会拒符号链接 / 硬链接 / 设备文件 / FIFO**（F055 design D2） | 本地不跳过 → 每次都吃 16202，且错误发生在上传之后（浪费一次上传） | `packaging.py` 本地就跳过并**列出被跳过的项**（不静默） |
+| 14 | **服务端 tar 解包闸会拒符号链接 / hardlink 成员 / 设备文件 / FIFO**（F055 design D2） | 本地不跳过 → 每次都吃 16202，且错误发生在上传之后（浪费一次上传） | `packaging.py` 本地就跳过并**列出被跳过的项**（不静默）。**但 hardlink 成员不靠「跳过硬链接文件」规避**——手工构造 `TarInfo` 的写入路径根本产不出该成员类型，跳过只会白丢内容（见 D4 订正） |
 | 15 | **`delegate` 位在 F049 期根本签不出来**（`open_api/domain/scopes.py:186-188` 的 NOTE 逐字："deliberately NOT registered … ships with F050"） | 实现者去 114 上试 AC-09，试不出来，判定"功能没生效"并去改代码 | AC-09 / AC-13 的验收方式**只能是单测**（构造 mock `whoami` 响应）；tasks 里必须写明（D14） |
 | 16 | **服务端权限位有 3 秒正向缓存上界**（`core/config/open_platform.py:31-35`，默认 3、硬顶 5） | 以为"编辑权限位立刻生效"是零延迟，测试里补勾后立刻验证会偶发失败 | AC-52 的验收留 5 秒余量；CLI 侧零缓存（D3） |
 | 17 | **`GET /api/v2/apps/deploy-limits` 取不到时不能挡死发布**（F055 design D2 逐字） | 端点还没上线 / 网络抖动时 `deploy` 直接不可用——一个软校验把主流程打死 | `commands/deploy.py`：取不到 → 用内置默认值只提示、继续上传，由 16201 兜底 |

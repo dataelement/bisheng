@@ -1,0 +1,77 @@
+[project]
+name = "bisheng-cli"
+version = "3.0.0"
+description = "BiSheng developer CLI — login / deploy / logs for hosted apps, zero coupling to the backend package"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+# Dependency budget is two entries (design D12). Adding a third one requires a
+# written justification in design D12 first — every extra dependency is one more
+# way for `pip install` to fail inside a customer's air-gapped network (CON-2).
+#
+# Both entries carry an UPPER bound on purpose. app-proxy shipped `fastapi>=0.115`
+# with no ceiling: the dev machine resolved 0.121 and the whole suite was green,
+# production resolved 0.141 where `add_websocket_route` had been removed and the
+# process died at import time. The CLI is even more exposed than app-proxy: its
+# distribution path is `pip install <wheel>` on a developer's machine, where
+# `uv.lock` does not participate in resolution at all — the only thing that can
+# constrain it is the metadata below. Widening a ceiling is a deliberate decision
+# (re-run the wheel-install smoke first), never a drive-by bump.
+dependencies = [
+    "httpx>=0.27,<1.0",
+    "PyYAML>=6.0,<7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.9.0",
+]
+
+[project.scripts]
+bisheng = "bisheng_cli.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The directory is `src/bisheng-cli/` (hyphen) while the import package is
+# `bisheng_cli` (underscore). hatchling cannot infer that mapping, and without
+# this line `uv build` happily produces an EMPTY wheel.
+[tool.hatch.build.targets.wheel]
+packages = ["bisheng_cli"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["."]
+markers = [
+    "network: needs a real platform — skipped by default, runs only in the 114 manual verification (set BISHENG_CLI_RUN_NETWORK_TESTS=1)",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+exclude = [".venv", "__pycache__", "*.egg-info"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "RUF"]
+ignore = [
+    "E501",   # line length — handled by the formatter
+    "B904",   # raise ... from None is too strict for existing style
+    "UP007",  # Optional[X] over X | None in runtime annotations
+    "RUF012", # mutable class attributes
+    # Every human-facing string this CLI prints is Chinese product copy with
+    # full-width punctuation. RUF001/002/003 would "fix" 「」（）， into ASCII and
+    # silently rewrite the copy the product team signed off on.
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["bisheng_cli"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
