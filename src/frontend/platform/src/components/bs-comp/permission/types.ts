@@ -11,6 +11,9 @@ export type ResourceType =
   | 'channel'
   | 'dashboard'
   | 'linsight_skill'
+  // F054 hosted applications. Duplicated from
+  // controllers/API/permission.ts — keep both in step.
+  | 'app'
 
 export type SubjectType = 'user' | 'department' | 'user_group'
 

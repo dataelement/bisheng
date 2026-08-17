@@ -1217,7 +1217,8 @@
       "tenant": "テナント管理",
       "llm": "モデル管理",
       "approval": "承認管理",
-      "openApi": "オープン API"
+      "openApi": "オープン API",
+      "appFactory": "アプリ工場"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1308,7 +1309,16 @@
       "openApiGrantRemoveAll": "リソース権限を一括取り消し",
       "openApiShareLinkRevoke": "共有リンクを取り消し",
       "openApiShareLinkExpire": "共有リンクの期限切れ",
-      "openApiWsConnect": "オープン API の接続確立"
+      "openApiWsConnect": "オープン API の接続確立",
+      "appPublish": "ホスト型アプリを公開",
+      "appPublishPending": "ホスト型アプリ公開待ち（容量不足）",
+      "appManualPublish": "ホスト型アプリを手動公開",
+      "appStop": "ホスト型アプリを停止",
+      "appResume": "ホスト型アプリを再開",
+      "appDelete": "ホスト型アプリを削除",
+      "appDeleteHookFailed": "ホスト型アプリ削除後処理の失敗",
+      "appMetaUpdate": "ホスト型アプリのメタ情報を更新",
+      "appDataRowEdit": "ホスト型アプリのデータを編集"
     },
     "objectTypeEnum": {
       "none": "なし",

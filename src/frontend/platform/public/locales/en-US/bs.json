@@ -1234,7 +1234,8 @@
       "tenant": "Tenant Management",
       "llm": "Model Management",
       "approval": "Approval Management",
-      "openApi": "Open API"
+      "openApi": "Open API",
+      "appFactory": "App factory"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1325,7 +1326,16 @@
       "openApiGrantRemoveAll": "Remove all resource grants",
       "openApiShareLinkRevoke": "Revoke share link",
       "openApiShareLinkExpire": "Share link expired",
-      "openApiWsConnect": "Open API websocket connect"
+      "openApiWsConnect": "Open API websocket connect",
+      "appPublish": "Hosted app published",
+      "appPublishPending": "Hosted app pending (insufficient capacity)",
+      "appManualPublish": "Hosted app published manually",
+      "appStop": "Hosted app stopped",
+      "appResume": "Hosted app resumed",
+      "appDelete": "Hosted app deleted",
+      "appDeleteHookFailed": "Hosted app post-delete hook failed",
+      "appMetaUpdate": "Hosted app metadata updated",
+      "appDataRowEdit": "Hosted app data edited"
     },
     "objectTypeEnum": {
       "none": "None",

@@ -95,6 +95,11 @@ def get_env():
     # F049: open platform switch → platform appConfig.openPlatformEnabled
     # (gates the local-dev-toolkit scopes and the connect-info panel only).
     env["open_platform_enabled"] = bisheng_settings.open_platform.enabled
+    # F054: app-factory runtime layer switch → platform appConfig.appRuntimeEnabled
+    # / client BishengConfig.app_runtime_enabled. Anonymous read on purpose: the
+    # /apps/* entry has to answer "this environment has no app factory" before
+    # anyone is logged in (AC-30 / AC-62).
+    env["app_runtime_enabled"] = bisheng_settings.app_runtime.enabled
 
     # Expose knowledge-space version management flag so the client can toggle UI affordances.
     vm = getattr(bisheng_settings.get_knowledge(), "version_management", None)

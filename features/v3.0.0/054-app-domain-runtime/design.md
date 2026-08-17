@@ -239,7 +239,7 @@
 - **动作集合（不新增 code）**：`use`(L1) = 可见范围 / 入口访问 / 广场可见；`edit`(L2) = 元信息更新；`manage_permission`(L3)；`delete`(L4)；`publish` / `unpublish`(L3) = 重新启用 / 停运。**入口访问判定用 `check_business_action(..., "use")` 而非 `runtime.check_visible`**——前者与 PermissionDialog 授的档位语义一致（viewer 档即含 `use`），后者对"授了 editor 但没 use"的自定义模型更宽、会让可见范围口径与弹窗显示不一致。
 - **后端必改 8 处**（E1 §1.2 / E4 §A3 核实；行号会漂，按符号名定位）：
   1. `core/openfga/authorization_model_f048.py:32-42 MIGRATED_RESOURCE_TYPES` 加 `"app"`（**不是** :44 的 OWNER_PROJECTION 档）；顺带 `MODEL_VERSION` 升 `f048-v2` 便于运维辨识。
-  2. 同文件 `:55-78 RESOURCE_ACTION_SCOPES` 的 `publish` / `unpublish` / `use` / `edit` 加 `"app"`（该常量**全仓无消费者、是死常量**，为可读性同步即可，别在评审里当锚点）。
+  2. 同文件 `:55-78 RESOURCE_ACTION_SCOPES` 的 `publish` / `unpublish` / `use` / `edit` 加 `"app"`（该常量**全仓无消费者、是死常量**，为可读性同步即可，别在评审里当锚点）。**只需手工加这 4 个**：`manage_permission` 与 `delete` 的取值直接写作 `frozenset(MIGRATED_RESOURCE_TYPES)`，第 1 项加完就自动带上——手工再加一次是写重复值。第 4 项（`catalog_policy.ACTION_RESOURCE_SCOPES`）同理。
   3. `permission/domain/services/catalog_policy.py:31-43 MIGRATED_RESOURCE_TYPES` 加 `"app"`（**与 1 必须同步**，见坑 1）。
   4. 同文件 `:45-68 ACTION_RESOURCE_SCOPES` 逐 action 加 `"app"`。
   5. `permission/domain/services/resource_lifecycle_policy.py:14-26` 把 `"app"` 加进 **`FIXED_CUSTOM_TYPES`**（起始 CUSTOM；`linsight_skill` 就在 :24）。

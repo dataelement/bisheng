@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 定稿（65 AC，同日独立审查 28 条已修订；决议-1～8） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日独立审查 16 条修订；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；`/sdd-review tasks` 独立审查 16 条已修订（补 7 个测试任务 T082a/T084a/T086a/T087a/T089a/T090a/T094a + 可观测任务 T097） |
-| 实现 | 🔲 未开始 | 0 / 104 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | Wave 1（T001–T017）已完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4；逐条偏差见文末「实际偏差记录」 |
 
 ---
 
@@ -55,72 +55,72 @@
 
 ### Wave 1 · `[MVP-核心]` 基础设施（无测试配对，排最前）
 
-- [ ] **T001**: `[MVP-核心]` ORM `app` / `app_version` 模型 + DAO
+- [x] **T001**: `[MVP-核心]` ORM `app` / `app_version` 模型 + DAO
   **文件**: `src/backend/bisheng/database/models/app.py`（新）, `src/backend/bisheng/database/models/app_version.py`（新）
   **逻辑**: 按 design D8 建两表（继承 `SQLModelSerializable`）。`app`：`id`(str PK) / `slug`(str，**全局 `UniqueConstraint`**，跨租户唯一) / `name` / `description` / `logo` / `owner_user_id`(int) / `tenant_id`(int) / `state`(VARCHAR16 显式列) / `current_version_id`(str null) / `pending_version_id`(str null) / `create_time` / `update_time`；**主键必须是 str**（UNION 三支列类型要与 `Flow.id` / `Assistant.id` 一致）。`app_version`：`id` / `app_id` / `version_no`(int) / `kind` / `terminal_state`(null) / `code_object_key` / `manifest`·`capabilities`·`injections`(`JsonType`) / `tier_id`·`runtime`(显式列) / `image_ref` / `submitted_at`；**无 `tenant_id`**（K5 ②，隔离经 `app_id` 借道 `app` 行）。DAO：`AppDao.{aget, aget_by_slug, acreate, aupdate_state_cas, alist_by_owner}`、`AppVersionDao.{ainsert, aget, alist_by_app, amark_terminal}`——**`AppVersionDao` 不提供通用 UPDATE**（AC-02 只增不改，`terminal_state` 是唯一单列更新口）；**每个按 `version_id` 起手的 DAO 方法签名强制带 `app_id`**（坑 31）。禁 `JSON_EXTRACT` / `JSON_CONTAINS`（K4）、禁批量 UPDATE / DELETE（K5）。
   **回滚**: 模型文件删除即回滚（表 DDL 在 T003）。
   **跨 Feature**: 落点在 `database/models/` 而非 `app_runtime/domain/models/` 是 arch-guard RULE-2 逼出来的（坑 27 / D8「模型落点」），**不要"顺手搬回模块内"**。
   **依赖**: 无
 
-- [ ] **T002**: `[MVP-核心]` ORM `app_instance` 模型 + DAO + 租户感知登记
+- [x] **T002**: `[MVP-核心]` ORM `app_instance` 模型 + DAO + 租户感知登记
   **文件**: `src/backend/bisheng/database/models/app_instance.py`（新）, `src/backend/bisheng/core/database/tenant_filter.py`（`_TENANT_AWARE_MODEL_MODULES:39` 登记 `bisheng.database.models.app` / `.app_version` / `.app_instance`）
   **逻辑**: `app_instance`：`id` / `app_id` / `tenant_id` / `version_id` / `phase` / `health` / `exec_ref`（执行体引用，compose 形态是容器名，**唯一允许出现形态特有值的字段、且只对内**）/ `started_at` / `restart_count` / `last_probe_at`；DAO `AppInstanceDao.{aget_by_app, aupsert, aset_phase}`。tenant_filter 登记只保证 metadata 被 import——**`app_version` 无 `tenant_id` 列，登记后仍不受自动过滤**（K5 ②、坑 31），在登记处写一行注释点明。⚠️ design §4.3 要求登记的是**四个**模块路径，第四个 `bisheng.database.models.app_access_log` 随该表一起由 **T089** 落（本任务只落前三个）；在登记处留一行 `# app_access_log 见 F054 T089` 提醒，避免建表任务漏登记。
   **回滚**: 同 T001；tenant_filter 登记回退 = 删元组项。
   **跨 Feature**: 改 F048/核心库共享文件 `tenant_filter.py`，只增元组项，不改过滤逻辑。
   **依赖**: T001
 
-- [ ] **T003**: `[MVP-核心]` Alembic revision：三张表 DDL
+- [x] **T003**: `[MVP-核心]` Alembic revision：三张表 DDL
   **文件**: `src/backend/bisheng/core/database/alembic/versions/v3_0_0_f054_app_runtime_tables.py`（新）
   **逻辑**: DDL-only（`core/database/alembic/AGENTS.md`）：建 `app` / `app_version` / `app_instance` 三表；`down_revision` 取 `uv run alembic heads` 的唯一头；**不传 `mysql_charset` / `mysql_collate`**（DM8 双方言，C2 / K4）；JSON 列用 `JsonType` 对应的方言类型（DM8 落 CLOB）；索引：`app.slug` 唯一、`app(tenant_id, state)`、`app_version(app_id, version_no)`、`app_instance(app_id)`。
   **回滚**: `downgrade()` 按 `app_instance → app_version → app` 顺序 drop（无外键约束，仍按此序避免残留）；**回滚前须先停运并删除全部托管应用**（否则容器与本机卷 `{data_root}/apps/*` 变成无主孤儿，只能靠 T029 的孤儿回收清理）——说明写进 revision docstring。
   **依赖**: T001, T002
 
-- [ ] **T004**: `[MVP-核心]` 错误码 161 段 + C5 登记 + 三语
+- [x] **T004**: `[MVP-核心]` 错误码 161 段 + C5 登记 + 三语
   **文件**: `src/backend/bisheng/common/errcode/app_factory.py`（新）, `docs/constitution.md`（C5 登记表：`app_factory` 由 `_待分配_` 落定为 161=F054 / 162=F055 / 163=F056 / 164=F059）, `features/v3.0.0/release-contract.md`（**「已分配模块编码」表 `:98` 的 `app_factory` 行同批把 `_待分配_` 改成 161–164 并按 F054/F055/F056/F059 逐段注明**）, `src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`（三语视为一组）
   **逻辑**: 按 design §4.2 ⑥ 定义 `AppFactoryError(BaseErrorCode)` 与本期启用码：`16101`（应用不存在）/ `16102`（状态冲突，前态不符）/ `16103`（slug 冲突）/ `16104`（已上线不可删除，请先停运）/ `16105`（仅 owner 可执行）/ `16121`（编排器不可用）/ `16122`（构建失败）/ `16123`（`runtime` 取值不支持）/ `16124`（启动探活失败）/ `16125`（运行环境容量不足）/ `16141`–`16146`（入口六态）/ `16161`（无权查看日志）/ `16181`（工场运行时层未部署）；`16162`（无权访问应用数据）留 Wave 5。三语文案落 `packages/locales`（生成物 `platform/public/locales/*/api_errors.json`、`client/src/locales/*/api_errors.gen.json` **由脚本生成、不手改**，CI `pnpm check-i18n` 校验）。**161 段确认空闲**（16x 只有 160=dataset；260 已被 F049 占用，K11）。**回写 release-contract 是硬要求**：F055 / F056 / F059 拆自己的段位时以该表为唯一权威来源，只改 constitution 不改 contract → 下游三个 Feature 无处可查（design 修订历史「需回写上游的两项」之①）。
   **跨 Feature**: `docs/constitution.md` C5 表与 `features/v3.0.0/release-contract.md:98` 编码表都是全版本共享清单，**同一次改动同批落**，只增本 Feature 段位、不动 260 行。
   **依赖**: 无
 
-- [ ] **T005**: `[MVP-核心]` 工场运行时层开关三段式（后端两段）+ `app_runtime` Settings
+- [x] **T005**: `[MVP-核心]` 工场运行时层开关三段式（后端两段）+ `app_runtime` Settings
   **文件**: `src/backend/bisheng/core/config/app_runtime.py`（新：`AppRuntimeConf`）, `src/backend/bisheng/core/config/settings.py`（`multi_tenant` / `open_platform` 旁加 `app_runtime: AppRuntimeConf`）, `src/backend/bisheng/api/v1/endpoints.py`（`get_env` 增 `app_runtime_enabled`）
   **逻辑**: `AppRuntimeConf(enabled=False, manager_base_url='http://127.0.0.1:8091', manager_hmac_secret='', proxy_hmac_secret='', obo_secret='', obo_ttl_seconds=900, entry_base_url='', data_root='/opt/bisheng/app-data', reserve_mb=2048, overcommit_ratio=0.8, build_reserve_mb=2048, build_index_url='', ws_max_lifetime_seconds=28800)`；进程级 config.yaml、**不进 DB 热配置**（K12，`initdb_config` 有 100s Redis 缓存、语义是租户偏好）。与 F049 的 `open_platform.enabled` 是**同形态兄弟键、不合并**（AC-61 两开关任意组合可启动）。三个 secret 走 `!env` 或 Fernet（C6），不落代码。⚠️ **部署顺序**（坑 23）：`load_settings_from_yaml` 对未知顶层键直接 `KeyError` 拒启 → **必须先发代码、后往 `config.yaml` 加 `app_runtime:` 键**，这条写进 T075 的 114 步骤。
   **粒度说明**（一任务 3 文件的理由）：`AppRuntimeConf` 定义、`Settings` 挂载、`/api/v1/env` 暴露 `app_runtime_enabled` 是**同一个配置项的三段接线**，任一段单独落地都得不到可运行的开关（缺挂载 → 配置读不到；缺 env 暴露 → 两个 SPA 判不了「整层未装」，AC-62 不成立），且三段共用同一个键名，拆开只会制造键名漂移窗口。
   **依赖**: 无
 
-- [ ] **T006**: `[MVP-核心]` 常量与枚举：应用态 / 审计动作 / 出厂档位
+- [x] **T006**: `[MVP-核心]` 常量与枚举：应用态 / 审计动作 / 出厂档位
   **文件**: `src/backend/bisheng/app_runtime/domain/constants.py`（新）, `src/backend/bisheng/app_runtime/__init__.py`（新，空）
   **逻辑**: `AppState` 枚举（`draft` / `online` / `pending_capacity`（待上线·资源不足）/ `stopped` / `deleted`）+ **合法跃迁表 `ALLOWED_TRANSITIONS`**（AC-03：草稿→已上线；已上线↔已停运；上线遇容量不足→待上线；待上线→已上线；草稿/待上线/已停运→已删除；**已上线→已删除禁止**）；`AppAuditAction` Enum（`app.publish` / `app.publish_pending` / `app.manual_publish` / `app.stop` / `app.resume` / `app.delete` / `app.delete_hook_failed` / `app.meta_update` / `app.data_row_edit`，先例 `tenant/domain/constants.py:14-46`）；`DEFAULT_TIERS`（轻量 0.5 vCPU / 512 MiB · 标准 1 / 1024 · 增强 2 / 2048）——**这是三档出厂规格的唯一代码来源，F055 的 `ResourceTier` seed 从本表读取落库**（design D11 对账口径，§6.1 Outgoing 契约）。
   **依赖**: 无
 
-- [ ] **T007**: `[MVP-核心]` 审计动作 lockstep 登记（后端 2 处 + 前端 3 处 + 三语）
+- [x] **T007**: `[MVP-核心]` 审计动作 lockstep 登记（后端 2 处 + 前端 3 处 + 三语）
   **文件**: `src/backend/bisheng/database/models/audit_log.py`（`_UI_VISIBLE_V2_ACTIONS:178-203` + `_V2_NAMESPACE_TO_ACTION_PREFIX:209-213` 加 `app.` 族）, `src/frontend/platform/src/controllers/API/log.ts`（模块下拉 / actions 数组 / `getActionsByModuleApi` switch 三处）
   **逻辑**: 登记 T006 的全部 `app.*` action（含 Wave 5 才产生事件的 `app.data_row_edit`，**一次登记到位避免二次改同一处**）。坑 24：不进 `_UI_VISIBLE_V2_ACTIONS` 白名单 → **写库但「系统操作」页看不到**，AC-65 验收判不通过。三语 i18n key 同 PR。
   **跨 Feature**: `audit_log.py` 白名单是全平台共享清单，只增不改；查询面归 F056。
   **跨栈说明**（清单 7/18 禁「跨前后端任务」的**刻意例外**）：后端 `_UI_VISIBLE_V2_ACTIONS` 白名单与 platform `log.ts` 的模块下拉 / actions 数组 / `getActionsByModuleApi` switch 是**同一份清单的两个副本**，是仓内既成的 lockstep 结构（坑 24）；拆成两条任务只会制造"后端已写库、前端下拉里没这一项 → 审计页筛不出来"的中间态，且两条任务必须互为依赖、同 PR 合入，实质仍是一个原子改动。故本任务刻意跨栈；**新增行为一律只加 `app.` 族，不动既有任何一族**。
   **依赖**: T006
 
-- [ ] **T008**: `[MVP-核心]` arch-guard RULE-10：backend 禁编排依赖
+- [x] **T008**: `[MVP-核心]` arch-guard RULE-10：backend 禁编排依赖
   **文件**: `bisheng/../scripts/arch-guard.sh`（仓根 `scripts/arch-guard.sh`，现有 RULE-1~9 之后新增 RULE-10）, `docs/constitution.md`（arch-guard 锚点表新增一行，并订正"8 条 RULE"的过时表述）
   **逻辑**: RULE-10 = **只扫 `src/backend/bisheng/**` 的 `.py`**（坑 18：`.drone.yml:57,89,173,224,259,316` 是 CI 用法，扫进去会假阳性并被人顺手关掉），命中即 VIOLATION：`^(from|import)\s+(docker|kubernetes|aiodocker|kubernetes_asyncio)\b`、字面量 `/var/run/docker.sock`、`DOCKER_HOST`。这是 AC-14「部署检查可核验」的强制力来源（K1：今天只是纸面承诺，全仓 `import docker` = 0）。同批把 `src/backend/pyproject.toml` 的依赖检查写进 T046 的自动化断言。
   **回滚**: 删除 RULE-10 段落 + 回退 constitution 表行。
   **跨 Feature**: 影响全仓后端写入的 PostToolUse 守卫——落地前先在本地跑 `bash scripts/arch-guard.sh` 全量确认零存量违规（design K1 已核实为 0）。
   **依赖**: 无
 
-- [ ] **T009**: `[MVP-核心]` 后端测试基础设施 `test/app_runtime/conftest.py`
+- [x] **T009**: `[MVP-核心]` 后端测试基础设施 `test/app_runtime/conftest.py`
   **文件**: `src/backend/test/app_runtime/conftest.py`（新）, `src/backend/test/app_runtime/__init__.py`（新）
   **逻辑**: fixtures：`tenant_admin_payload`（**非超管**的租户管理员，避开 admin 短路 ReBAC，坑 26）/ `normal_user`（本租户普通自然人，作被授权方）/ `chinese_name_user`（**姓名含中文**，专供注入头 percent-encoding 用例，坑 9）/ `app_factory`（直接经 DAO 落一行 `app` + 一行 `app_version`，参数化 state / owner / tenant）/ `fake_orchestrator`（monkeypatch `orchestrator_client` 的 **10 个方法**为可编程 stub——与 T047 门面逐一对齐：`build` / `build_status` / `deploy` / `stop` / `destroy` / `probe` / `admission` / `status` / `logs` / `runtime_status`，返回 §4.2 ① 的响应形状；**stub 数必须等于门面方法数**，漏一个的现象是该方法静默走真实 HTTP、测试在 CI 里连不上 8091 才暴露）/ `sub_tenant`（子租户 + 其管理员，跨租户断言用）/ `fga_down`（monkeypatch F048 判定抛 `PermissionServiceUnavailableError`，AC-12 fail-closed 用）/ `audit_sink`（捕获 `AuditLogDao.ainsert_v2` 调用）。**autouse fixture 清 `HTTP(S)_PROXY` / `ALL_PROXY` env**（缺 `socksio` 会整批误报 ERROR，memory `reference_local_backend_pytest_socks_proxy`）。fixture 体内**惰性 import** 业务 Service，避免尚未落地的模块让整包收集失败。
   **依赖**: T001, T002
 
 ### Wave 1 · `[MVP-核心]` `app` 资源类型注册（Test-First）
 
-- [ ] **T010**: `[MVP-核心]` `app` 资源类型注册测试（单元 + 集成）
+- [x] **T010**: `[MVP-核心]` `app` 资源类型注册测试（单元 + 集成）
   **文件**: `src/backend/test/app_runtime/test_app_permission_registration.py`（新）
   **逻辑**: `test_catalog_action_effective_for_app`（`is_action_effective("app", a)` 对 `use` / `edit` / `manage_permission` / `delete` / `publish` / `unpublish` 六动作为真——**不新增 action code**，D9）；`test_owner_gets_all_actions_on_create`（`authorize_created` 后 owner 的 `my-permissions` 含全动作）→ AC-09；`test_default_visible_only_to_owner`（首发落库后未授权的普通用户 `check_business_action("app", id, other, "use")` = deny）→ AC-11；`test_grant_use_to_user_department_group_then_allow`（分别授用户 / 部门 / 用户组后 allow）→ AC-09；`test_visibility_change_effective_next_request_and_audited`（撤销后下一次判定即 deny；PermissionGrant 写入记录变更人）→ AC-10；`test_tenant_admin_short_circuit_visible`（本租户管理员天然 allow，非本 Feature 新增）→ AC-09；`test_fga_unavailable_denies_not_allows`（`fga_down` fixture → 抛 `PermissionServiceUnavailableError` 被翻成 deny + `16146`，**绝不放行**）→ AC-12；`test_grant_subjects_five_endpoints_accept_app`（users / user-groups / departments-children / departments-search / **departments/{id}/path-tree** 五处对 `resource_type=app` 均不 403——坑 2，第 5 处最易漏）→ AC-09；`test_linsight_skill_style_half_registration_would_fail`（回归断言：若 registry 未注册则 `check_business_action` 抛 `InvalidCatalogActionError`，坑 32 的反面样板）→ AC-12。
   **测试降级**: 无（连 test 中间件 OpenFGA，在 CI 跑）。
   **覆盖 AC**: AC-09, AC-10, AC-11, AC-12
   **依赖**: T001, T009
 
-- [ ] **T011**: `[MVP-核心]` FGA 模型常量 + Catalog 策略两处
+- [x] **T011**: `[MVP-核心]` FGA 模型常量 + Catalog 策略两处
   **文件**: `src/backend/bisheng/core/openfga/authorization_model_f048.py`（`MIGRATED_RESOURCE_TYPES:32-42` 加 `"app"`；`RESOURCE_ACTION_SCOPES:55-78` 的 `use`/`edit`/`publish`/`unpublish` 加 `"app"`；`MODEL_VERSION` 升 `f048-v2`）, `src/backend/bisheng/permission/domain/services/catalog_policy.py`（`MIGRATED_RESOURCE_TYPES:31-43` 加 `"app"`；`ACTION_RESOURCE_SCOPES:45-68` 逐 action 加 `"app"`）
   **逻辑**: D9 的 8 处清单第 1–4 项。**两份 `MIGRATED_RESOURCE_TYPES` 必须同批改**（坑 1：漏前者 → 模型里没有 `app` type、写 tuple 400；漏后者 → `derive_action_release` 在每次 `_load_snapshot` 都跑，**Catalog 读取直接崩**）。`RESOURCE_ACTION_SCOPES` 是**死常量**（全仓无消费者），同步只为可读性，别在评审里当锚点（坑 5）。**明确不改**：`PARENT_TYPES` / `SYSTEM_SHARED_ACTION_TYPES` / `SYSTEM_OWNED_RESOURCE_ALLOWLIST` / `REGISTERED_ACTION_CODES` / `f048_source_inventory.py` / `permission_schema.VALID_RESOURCE_TYPES` / `core/openfga/authorization_model.py`（后两者是死代码）。
   **测试**: T010 相关用例通过（`is_action_effective` 一组需 T017 脚本或测试库新建 store 后才全绿，见 T016）。
@@ -128,42 +128,42 @@
   **跨 Feature**: 改 F048 领域常量，**checksum 变化 → 存量环境启动即 `migration_required=True`、全站权限 503**（K9）；这条由 T017 的升级脚本承接，**不得单独部署本任务到存量环境**。
   **依赖**: T010
 
-- [ ] **T012**: `[MVP-核心]` 资源生命周期策略 + 授权主体端点放行
+- [x] **T012**: `[MVP-核心]` 资源生命周期策略 + 授权主体端点放行
   **文件**: `src/backend/bisheng/permission/domain/services/resource_lifecycle_policy.py`（`FIXED_CUSTOM_TYPES:14-26` 加 `"app"`）, `src/backend/bisheng/permission/api/endpoints/grant_subjects.py`（`GRANT_SUBJECT_RESOURCE_TYPES:28-40` 加 `"app"`）
   **逻辑**: D9 第 5、8 项。`FIXED_CUSTOM_TYPES` 让 `app` 起始即 CUSTOM 模式（`linsight_skill` 就在 :24）。`GRANT_SUBJECT_RESOURCE_TYPES` 是 baseline「12 处」之外的**活闸门**（坑 2）：5 个端点 5 处硬闸（`:89` users · `:113` user-groups · `:135` departments/children · `:152` departments/search · **`:168` departments/{dept_id}/path-tree**），漏改的现象是"授权弹窗能打开但一个主体都搜不到"、或"能搜到部门但点开树是空的"。
   **测试**: T010 的 `test_grant_subjects_five_endpoints_accept_app` 通过。
   **覆盖 AC**: AC-09
   **依赖**: T010
 
-- [ ] **T013**: `[MVP-核心]` F048 adapter + registry 注册
+- [x] **T013**: `[MVP-核心]` F048 adapter + registry 注册
   **文件**: `src/backend/bisheng/app_runtime/domain/services/f048_app_permission.py`（新，模板 = `tool/domain/services/f048_tool_permission.py:1-80+`）, `src/backend/bisheng/api/services/f048_permission_runtime.py`（`build_f048_resource_composition:128-196` 加 `adapters["app"]` + `registry.register("app", ...)`）
   **逻辑**: D9 第 6–7 项。Loader：`load_permission_record` 读 tenant / owner / state / update_time + `runtime.get_permission_version`；Adapter：`resolve_permission_target` → `VerifiedPermissionTarget.from_business_service`（状态白名单 / 租户匹配 / `owner_user_id > 0` 三判）、`authorize_created(mode="CUSTOM", protected=True)`、`project_delete`。**只依赖 `permission.domain.schemas` 与 `permission_action_service.PermissionActor`，不 import OpenFGA 基础设施**（RULE-9）。`build_f048_resource_composition` 是 **API 与 worker 两个组合根共用的注册点**——漏了则 celery / linsight 进程判权直接 `RuntimeError("F048 resource registry is not configured")`（memory 已踩过）。
   **测试**: T010 全部通过。
   **覆盖 AC**: AC-09, AC-11, AC-12
   **依赖**: T011, T012
 
-- [ ] **T014**: `[MVP-核心]` 前端 Platform：`ResourceType` union 两处
+- [x] **T014**: `[MVP-核心]` 前端 Platform：`ResourceType` union 两处
   **文件**: `src/frontend/platform/src/controllers/API/permission.ts:6-16`, `src/frontend/platform/src/components/bs-comp/permission/types.ts:3-13`
   **逻辑**: 两处 union **重复定义**（D9），必须同时加 `'app'`。`PermissionDialog` 组件本身无 per-type 分支，union 加完即可用。
   **手动验证**: 构建 → 应用（Wave 3 落地后）卡片 ⚙️「管理权限」能打开弹窗并搜到用户 / 部门 / 用户组。
   **覆盖 AC**: AC-09
   **依赖**: T013
 
-- [ ] **T015**: `[MVP-核心]` 前端 Client：`ResourceType` union 一处
+- [x] **T015**: `[MVP-核心]` 前端 Client：`ResourceType` union 一处
   **文件**: `src/frontend/client/src/api/permission.ts:3-13`
   **逻辑**: 加 `'app'`。F056 的广场与授权弹窗消费它，本 Feature 一并加避免 F056 再改同一行。
   **手动验证**: `pnpm typecheck`（从 `src/frontend/`）通过；client 无运行时行为变化。
   **覆盖 AC**: AC-09
   **依赖**: T013
 
-- [ ] **T016**: `[MVP-核心]` 存量环境生效脚本测试（dry-run / apply / verify 三态）
+- [x] **T016**: `[MVP-核心]` 存量环境生效脚本测试（dry-run / apply / verify 三态）
   **文件**: `src/backend/test/app_runtime/test_upgrade_authorization_model.py`（新）
   **逻辑**: 在一个干净 store 上模拟 M1 → M2：`test_dry_run_reports_plan_and_writes_nothing`（默认 dry-run，DB 与 store 零变化）；`test_apply_publishes_model_idempotently`（重跑不再多写一个 M2——**按 checksum 查重**，照 `_find_remote_model`（`permission/migration/f048_runtime_storage.py:463-479`）；⚠️ 该符号**不在** `core/openfga/discovery.py`）；`test_apply_writes_release_rows_in_one_sql_txn`（`authorization_model_release` 新 ACTIVE 行 + M1 置 RETIRED + CURRENT catalog release 指针 + `permission_action_resource_scope` 补 `app` 行，**四步在同一 SQL 事务**，中途异常整体回滚）；`test_step1_not_rollbackable_documented`（步骤 1 的 store 写入回滚不掉 → 回滚手段 = 指针指回 M1 + 撤 scope 行，断言脚本 `rollback` 子命令按此语义执行）；`test_preflight_blocks_on_live_heartbeats`（`list_runtime_heartbeats()` 非空且无 `--allow-live` → 拒绝）；`test_verify_asserts_read_side`（`current_catalog()` 通过 + `is_action_effective("app", 每个动作)` 为真）；`test_noop_when_checksum_matches`。
   **测试降级**: 无（连 test 中间件 OpenFGA + MySQL，CI 跑）。
   **覆盖 AC**: AC-13
   **依赖**: T011, T012, T013, T009
 
-- [ ] **T017**: `[MVP-核心]` 存量生效脚本实现 + 升级说明
+- [x] **T017**: `[MVP-核心]` 存量生效脚本实现 + 升级说明
   **文件**: `src/backend/scripts/upgrade_f048_authorization_model.py`（新，惯例仿 `reconcile_f048_projection_operations.py` 的 `--apply` 默认 dry-run）, `docs/architecture/12-multi-tenant.md`（或新建 `docs/api/` 升级说明章节：`app` 资源类型生效步骤）
   **逻辑**: D9「114 存量生效脚本」四步：①（控制面 HTTP，**事务外**）按 canonical checksum 查重后发布含 `app` 的模型 M2；② `authorization_model_release` 新 ACTIVE 行（`model_version=f048-v2` / `predecessor_model_id=M1` / 重算 `required_relations_checksum`），M1 置 RETIRED；③ CURRENT `permission_catalog_release.required_authorization_model_release_id` 指向新行；④ 对 CURRENT release 的目标 action `INSERT permission_action_resource_scope(action_id, 'app')` 并重算 release checksum。子命令 `plan|apply|verify|rollback`。**不用 `force_write_model`**（坑 3：只写 OpenFGA 不写 SQL、不查重、生产禁用）。
   **回滚**: `rollback` 子命令 = ACTIVE 指针指回 M1 行 + 撤 scope 行 + 全进程重启；**M2 会永久留在 store**（无害孤儿：运行时只认 SQL pin 的那个）。
@@ -174,66 +174,70 @@
 
 ### Wave 2 · `[MVP-核心]` runtime-manager 独立包（`src/runtime-manager/`）
 
-- [ ] **T018**: `[MVP-核心]` runtime-manager 包工程骨架 + HMAC 服务端鉴权
+- [x] **T018**: `[MVP-核心]` runtime-manager 包工程骨架 + HMAC 服务端鉴权
   **文件**: `src/runtime-manager/pyproject.toml`（新）, `src/runtime-manager/runtime_manager/{__init__,main,config,auth}.py`（新，主入口 FastAPI 监听 `127.0.0.1:8091`）
   **逻辑**: D1：仓根独立包、**不在 `src/backend/bisheng/` 内**、不 import `bisheng`。`config.py` 读环境变量（`RTM_HMAC_SECRET` / `RTM_DATA_ROOT` / `RTM_NETWORK=bisheng-apps` / `RTM_RESERVE_MB` / `RTM_OVERCOMMIT_RATIO` / `RTM_BUILD_INDEX_URL`）；`auth.py` 照抄 `sso_sync/domain/services/hmac_auth.py:58-110` 的签名串（`METHOD\nPATH\nraw_body`、`X-Signature` 头、`hmac.compare_digest`、**空 secret fail-closed**）为 FastAPI 依赖。docker 客户端在 `runtime_manager/docker_backend.py` 单点封装（MVP 直连 `/var/run/docker.sock`，D2-A；换 socket-proxy 只改 base URL）。
   **依赖**: 无
 
-- [ ] **T019**: `[MVP-核心]` runtime-manager 测试基础设施
+- [x] **T019**: `[MVP-核心]` runtime-manager 测试基础设施
   **文件**: `src/runtime-manager/tests/conftest.py`（新）, `src/runtime-manager/tests/fakes.py`（新）
   **逻辑**: `fake_docker`（可编程假客户端：记录 `create_container` 的完整 `HostConfig` / `Config`、模拟 `inspect` 返回 `State.Health` / `NetworkSettings.Networks[bisheng-apps].IPAddress`、模拟 `build` 的分阶段输出与失败）/ `rtm_client`（`TestClient` + 预置正确 HMAC 签名的请求辅助）/ `fake_meminfo`（可注入 `MemAvailable` / `MemTotal` / `nproc`）/ `tmp_data_root`。**所有需要真 docker 的用例统一打 `@pytest.mark.docker`**，默认跳过。
   **依赖**: T018
 
-- [ ] **T020**: `[MVP-核心]` 容量准入测试
+- [x] **T020**: `[MVP-核心]` 容量准入测试
   **文件**: `src/runtime-manager/tests/test_admission.py`（新）
   **逻辑**: D11 双闸取与：`test_gate1_pass_gate2_fail_rejects`（可用内存充足但已承诺额度之和超 `total × 0.8` → 拒）/ `test_gate2_pass_gate1_fail_rejects`（额度够但 `MemAvailable - reserve_mb` 不足 → 拒；对应 114 上 available 曾 0.9G 的真实场景，K2）/ `test_both_pass_admits` / `test_purpose_build_uses_build_reserve_mb`（`purpose=build` 用 `build_reserve_mb`，失败阶段标 `build_admission`）→ AC-15 的失败阶段与 AC-19 同源 / `test_snapshot_fields_present`（返回 `mem_available_mb` / `committed_mb` / `total_mb` / `cpu`，供 AC-65 如实展示成因与 AC-23 运行环境状态复用）/ `test_cpu_gate_by_nproc_ratio` / `test_single_instance_admission_counts_running_only`。
   **覆盖 AC**: AC-19, AC-65
   **依赖**: T019
 
-- [ ] **T021**: `[MVP-核心]` 容量准入实现
+- [x] **T021**: `[MVP-核心]` 容量准入实现
   **文件**: `src/runtime-manager/runtime_manager/admission.py`（新）, `src/runtime-manager/runtime_manager/api/intents.py`（新，`POST /v1/admission` 路由）
+  **实际偏差记录**: 期望态存储 `runtime_manager/desired_state.py` 由本任务先落最小可用版（`InstanceRecord` + 按 state 文件路径缓存的 `DesiredStateStore`，含 `committed()`）——闸②要读它，T025/T027 也要读它，不能等到 T029。**T029 只需在其上补三件事**：容器 label 双写恢复、启动全量对齐、孤儿回收；数据结构与 `get_store(config)` 入口不要重写。
   **逻辑**: 闸① `MemAvailable - reserve_mb ≥ 本次所需`；闸② `已运行实例 mem limit 之和 + 本次 ≤ total × overcommit_ratio`，CPU 按 `nproc × ratio`；两闸取与；返回 `{admitted, reason, snapshot{...}}`。读 `/proc/meminfo` 与 `os.cpu_count()`，已承诺额度从 T029 的期望态存储取。
   **测试**: T020 全部通过。
   **覆盖 AC**: AC-19, AC-65
   **依赖**: T020
 
-- [ ] **T022**: `[MVP-核心]` 构建（Dockerfile 模板渲染 + build 意图）测试
+- [x] **T022**: `[MVP-核心]` 构建（Dockerfile 模板渲染 + build 意图）测试
   **文件**: `src/runtime-manager/tests/test_build.py`（新）
   **逻辑**: `test_supported_runtimes_dynamic_from_templates`（`SUPPORTED_RUNTIMES` 由本部署实际存在的模板目录给出，MVP 期恰为 `["python3.11"]`）/ `test_unsupported_runtime_rejected_lists_supported`（`runtime="go1.22"` → 拒绝且错误体列出支持取值）→ AC-15 / `test_template_render_deterministic`（同输入渲染字节一致；模板含 **非 root 用户 + read-only 友好布局 + `BISHENG_APP_BASE_PATH` wrapper**，D5.2）/ `test_build_args_inject_index_url`（`PIP_INDEX_URL` / `PIP_TRUSTED_HOST` 来自配置）/ `test_build_memory_limited_and_admission_checked`（build 前过 `purpose=build` 闸，`--memory` 生效，K2）/ `test_build_failure_returns_stage_and_tail`（四阶段 `fetch_source` / `render_dockerfile` / `docker_build` / `probe`，失败返回 `{stage, message, tail}`）→ AC-15 / `test_image_tag_never_reused`（`bisheng-app/{slug}:{version_no}-{version_id[:8]}`）/ `test_image_retention_keeps_current_and_previous`（保留当前 + 上一个版本镜像，AC-21 旧实例宽限退休要用）。
   **测试降级**: 需 docker，CI 中间件阶段 + 114 手动验证——本任务的单测用 `fake_docker` 断言 build 参数与阶段映射，真镜像构建在 CI docker 阶段与 T075 上验证。
   **覆盖 AC**: AC-15
   **依赖**: T019, T021
 
-- [ ] **T023**: `[MVP-核心]` 构建实现（模板矩阵 + builder）
-  **文件**: `src/runtime-manager/runtime_manager/builder.py`（新）, `src/runtime-manager/runtime_manager/templates/python3.11/Dockerfile.j2`（新，含入口 wrapper）
+- [x] **T023**: `[MVP-核心]` 构建实现（模板矩阵 + builder）
+  **文件**: `src/runtime-manager/runtime_manager/builder.py`（新）, `src/runtime-manager/runtime_manager/templates/python3.11/{Dockerfile.j2, entrypoint.sh.j2, healthcheck.py.j2}`（新）
+  **实际偏差记录**: ①模板由单文件变成**同目录 `*.j2` 全渲染**——入口 wrapper 与 HEALTHCHECK 探针脚本各自成文件（Dockerfile 里写 heredoc 在经典构建器上不可用，且 wrapper 需要可读可测）；`discover_runtimes()` 仍以 `Dockerfile.j2` 是否存在判定，T092 加 `node20`/`static` 照加目录即可。②Dockerfile **只用经典构建器兼容语法**（无 `COPY --chmod`、无 heredoc）——docker-py 的 `build` 走的就是经典构建器，BuildKit-only 语法在 114/信创基线上会以"语法错误"形态失败。③四阶段中 `probe` **不在 build 管线内执行**：探活需要已拉起的实例＝`POST /v1/intents/probe`（T027），F055 预检在 backend 侧组合 build→probe（保持两个意图正交，预览实例才能只用 probe 不带构建）。④构建源码由 backend 传**预签 URL `code_url`**（`code_object_key` 仅作日志/溯源）——manager 不持平台凭据，见返回消息「需 backend 配合」清单。
   **逻辑**: D3：平台持有 Dockerfile 模板，开发者与 AI 不写 Dockerfile（PRD-1 DEV-04 明禁）。`POST /v1/intents/build` → 从 MinIO 拉 `code_object_key`（由 backend 传预签 URL，manager 不认平台凭据）→ 渲染模板 → `docker build`（限 `--memory`）→ 分阶段收集日志 → `GET /v1/builds/{build_id}` 查状态。安全基线（非 root、`no-new-privileges` 友好、无 shell 入口）**由模板统一落，开发者改不了**。`node20` / `static` 模板见 T092。
   **测试**: T022 全部通过。
   **覆盖 AC**: AC-15
   **依赖**: T022
 
-- [ ] **T024**: `[MVP-核心]` 实例生命周期与容器规格测试
+- [x] **T024**: `[MVP-核心]` 实例生命周期与容器规格测试
   **文件**: `src/runtime-manager/tests/test_lifecycle.py`（新）
   **逻辑**: 断言 `create_container` 下发参数：`test_tier_limits_applied`（`NanoCpus` / `Memory` 与档位一致，**限额在创建时固化、不做在线 update**，AC-64 的前提）→ AC-63 / `test_readonly_rootfs_and_tmpfs`（`ReadonlyRootfs=true`、`/tmp` tmpfs、`/data` 是唯一可写持久路径）→ AC-17 / `test_no_new_privileges`（`SecurityOpt` 含 `no-new-privileges`）→ AC-17 / `test_no_published_ports`（`PortBindings` 为空——绕过入口直连不可行）→ AC-33 / `test_env_injection_names`（`BISHENG_APP_DB_URL=sqlite:////data/app.db` / `BISHENG_APP_DB_PATH` / `BISHENG_APP_ID` / `BISHENG_APP_SLUG` / `BISHENG_APP_VERSION` / `BISHENG_PLATFORM_API_BASE` / **`PORT` 与 `BISHENG_APP_PORT`（design §4.2 ⑤ 两者并列，值均须等于 manifest `port`——断言两个名字都在、且取值一致；只断言 `PORT` 会让缺失的别名拖到 F053 `bisheng dev` 本地开发侧才暴露）** / `BISHENG_APP_BASE_PATH=/apps/{slug}`——**F053 `dev` 同名注入**，§4.2 ⑤）→ AC-17, AC-45 / `test_restart_policy_unless_stopped`（**不用 `always`**：停运是显式 `docker stop`，`unless-stopped` 语义正好是"显式停了就别自愈"）→ AC-20 / `test_healthcheck_params`（`interval=10s` / `timeout=3s` / `retries=3` / `start_period` 按档位 20–60s）/ `test_single_instance_per_app`（同一 app 重复 deploy 不产生第二个长驻实例；无实例数 / 并发入参）→ AC-24 / `test_volume_survives_stop_and_recreate`（stop / rm / run 后 `/data` 卷不动，数据完整）→ AC-39, AC-45 / `test_destroy_purge_volume_flag`（`purge_volume=false` 保卷、`true` 才删）→ AC-40。
   **测试降级**: 需 docker，CI 中间件阶段 + 114 手动验证——单测用 `fake_docker` 断言下发参数，`docker inspect` 的真实核验在 CI docker 阶段与 T075 步 1 上做。
   **覆盖 AC**: AC-17, AC-20, AC-24, AC-33, AC-39, AC-40, AC-45, AC-63
   **依赖**: T019, T021
 
-- [ ] **T025**: `[MVP-核心]` 实例生命周期实现（deploy / stop / destroy）
+- [x] **T025**: `[MVP-核心]` 实例生命周期实现（deploy / stop / destroy）
   **文件**: `src/runtime-manager/runtime_manager/lifecycle.py`（新）
+  **实际偏差记录**: ①探活以 `prober` 依赖注入接入（默认在 `_get_prober()` 里惰性 import T027 的 `ProbeService`）——T024 的用例注入替身，故本任务落地时不依赖 T027 已存在。②`§4.2 ⑤` 的 `BISHENG_APP_VERSION` 取**版本号**（`str(version_no)`，与 `bisheng dev` 无 version_id 的本地形态对齐），另加 `BISHENG_APP_VERSION_ID` 给平台侧版本主键；F053 注入同名两个变量。③平台保留变量名（`BISHENG_APP_*` / `BISHENG_PLATFORM_*` / `PORT`）**覆盖**调用方传入的同名 env——应用不能改写自己的笼子接线。④新增 `BISHENG_APP_HEALTH_PATH`（模板 HEALTHCHECK 脚本读它，探活路径只定义一处）。
   **逻辑**: `POST /v1/intents/{deploy,stop,destroy}`。deploy = 过容量准入 → 以新版本镜像起**新容器**（容器名带 version 后缀，与旧容器并存）→ 交 T027 探活 → 更新路由条目 → 旧容器**宽限 30 秒**后 stop + rm（D4；30s ≫ app-proxy 的 3s 路由缓存，是 AC-21 不落 502 的真正理由，D5.1）。卷 = 宿主 `{data_root}/apps/{app_id}/db/` 挂容器 `/data`（K6：SQLite WAL 绑定单实例 + 本机卷，**绝不上网络存储**）。网络 = `bisheng-apps` bridge、**不 publish 端口**。
   **测试**: T024 全部通过。
   **覆盖 AC**: AC-17, AC-20, AC-24, AC-33, AC-39, AC-40, AC-45, AC-63
   **依赖**: T024, T023
 
-- [ ] **T026**: `[MVP-核心]` 启动探活 + 路由表测试
+- [x] **T026**: `[MVP-核心]` 启动探活 + 路由表测试
   **文件**: `src/runtime-manager/tests/test_probe_and_route.py`（新）
   **逻辑**: `test_probe_ready_within_timeout` / `test_probe_timeout_returns_readable_reason`（未就绪 → `{ready:false, reason}`，供 F055 预检输出）→ AC-18 / `test_probe_standalone_image`（临时形态入参 `{image_ref, env, port, health}`，供 F055 预检与预览实例复用）→ AC-18 / `test_route_returns_bridge_ip_port`（`GET /v1/apps/{id}/route` → `{upstream: "http://<bridge IP>:<port>", version_id, generation}`——**宿主可达、外部不可达**，两形态同一机制；坑 30：114 上 app-proxy 是宿主 systemd 单元、解析不了容器名）→ AC-25, AC-33 / `test_route_generation_bumps_only_after_probe_pass`（新容器**探活通过后**才原子换路由并 `generation+1`）→ AC-21 / `test_route_404_when_no_instance`。
   **测试降级**: 需 docker，CI 中间件阶段 + 114 手动验证。
   **覆盖 AC**: AC-18, AC-21, AC-25, AC-33
   **依赖**: T019, T024
 
-- [ ] **T027**: `[MVP-核心]` 探活与路由表实现
-  **文件**: `src/runtime-manager/runtime_manager/probe.py`（新）, `src/runtime-manager/runtime_manager/routing.py`（新）
+- [x] **T027**: `[MVP-核心]` 探活与路由表实现
+  **文件**: `src/runtime-manager/runtime_manager/probe.py`（新）, `src/runtime-manager/runtime_manager/routing.py`（新）, `src/runtime-manager/runtime_manager/api/routes.py`（新，`GET /v1/apps/{app_id}/route`）
+  **实际偏差记录**: ①探活多一条**早退**语义：容器已退出立即判失败并带 exit code，不空等满超时（最常见失败就是启动命令秒崩，等满 90s 对使用者无价值）。②`probe_image` 的临时实例 `/data` 挂 **tmpfs 而非 bind**、`RestartPolicy=no`——预检绝不能碰到任何真实应用的数据，且会自愈的探针等于永不失败。③`deploy` 端点的端到端用例落在 `tests/test_probe_and_route.py`（该处才是整条链 admission→create→probe→route 首次齐备）。
   **逻辑**: `POST /v1/intents/probe`（按 manifest `port` + `health.path` 轮询至就绪或超时）；`GET /v1/apps/{app_id}/route`（从 `docker inspect` 取 `NetworkSettings.Networks[bisheng-apps].IPAddress` + 端口，配合期望态存储的 `generation`）。**`app_instance.exec_ref` 是平台侧审计 / 排障引用、不是路由依据**——路由的唯一真相在 manager 的期望态存储（D5.1）。
   **测试**: T026 全部通过。
   **覆盖 AC**: AC-18, AC-21, AC-25, AC-33
@@ -297,12 +301,12 @@
 
 ### Wave 2 · `[MVP-核心]` app-proxy 独立包（`src/app-proxy/`）
 
-- [ ] **T036**: `[MVP-核心]` app-proxy 包工程骨架
+- [x] **T036**: `[MVP-核心]` app-proxy 包工程骨架
   **文件**: `src/app-proxy/pyproject.toml`（新）, `src/app-proxy/app_proxy/{__init__,main,config,clients}.py`（新，FastAPI 监听 `127.0.0.1:8090`）
   **逻辑**: D5-C：自研 Python 反代（**不套 oauth2-proxy**——CVE-2025-64484 正是头剥离不彻底，我们托管的是不可控的 Python 应用框架，这是设计前提级红线）。**不 import `bisheng` 包**（D6-B 的双份真相被否）。`clients.py` = 两个 HMAC 客户端（backend 授权端点 / manager 路由端点）+ 两把**独立**的 3 秒缓存。配置读环境变量（`APP_PROXY_BACKEND_BASE` / `APP_PROXY_MANAGER_BASE` / 两个 HMAC secret）。
   **依赖**: 无
 
-- [ ] **T037**: `[MVP-核心]` app-proxy 测试基础设施
+- [x] **T037**: `[MVP-核心]` app-proxy 测试基础设施
   **文件**: `src/app-proxy/tests/conftest.py`（新）, `src/app-proxy/tests/fakes.py`（新）
   **逻辑**: `fake_backend`（可编程 authorize 响应：六种 decision + 头材料 + OBO）/ `fake_manager`（可编程 route 响应，支持"先失败后成功"以测缓存作废重取）/ `echo_upstream`（一个把收到的 **全部请求头 + 路径 + query** 原样回显的 ASGI 应用，用于断言剥离 / 注入 / 前缀）/ `proxy_client`（`TestClient`，可设 `Sec-Fetch-Mode` / `Accept` / cookie）/ `frozen_clock`（缓存 TTL 用例）。
   **依赖**: T036
@@ -830,6 +834,11 @@
 
 | 任务 | 偏差 | 回写到 design | 原因（一句话） |
 |---|---|---|---|
-| — | — | — | — |
+| T006 | `AppState` / `AppAuditAction` 用 `StrEnum` 而非仓内惯例 `(str, Enum)` | 否（纯实现细节） | ruff `UP042` 对新代码报错，行为等价（`AppState.DRAFT == "draft"` 仍为真） |
+| T009 | `chinese_name_user` fixture 显式给 `UserDepartment.id` | 否 | `user_department.id` 是 BIGINT，SQLite 只对 `INTEGER PRIMARY KEY` 自增，不给就 NOT NULL 失败 |
+| T011 | `RESOURCE_ACTION_SCOPES` / `ACTION_RESOURCE_SCOPES` 只手工加 4 个 action，`manage_permission` / `delete` 由 `MIGRATED_RESOURCE_TYPES` 自动带上 | 是（design D9 第 2/4 项加一句） | 那两个 action 的 scope 直接引用 `MIGRATED_RESOURCE_TYPES`，手工再加会写重复值 |
+| T016 | 测试注册 `@compiles(BigInteger, "sqlite")` → `INTEGER` | 否 | 同 T009 的根因，四张 F048 控制面表主键全是 BIGINT；SQLite 的 INTEGER 本就是 64 位，无语义损失 |
+| T017 | `OPENFGA_RELEASE_VERSION` 从 `permission/migration/f048_runtime_storage.py` 取，不在 `core/openfga/authorization_model_f048.py` | 否（design 未写过该符号位置） | 与 `_find_remote_model` 同属迁移存储层，按"模型常量都在 model 文件"的直觉去找会扑空 |
+| T010 / T016 / T017 | 三个文件被 arch-guard 报 RULE-9（import `bisheng.core.openfga`） | 否 | **仓库根目录就叫 `bisheng`**，规则的 `/bisheng/` 路径匹配对任何绝对路径都成立；在树的 `test/permission/test_f048_action_catalog_policy.py`、`scripts/f048_migration_runtime.py`、`scripts/benchmark_f048_permission_paths.py` 报同一条，且 constitution C4 明文豁免"运维迁移工具" |
 
-（尚无偏差；实现期每条偏差一行，design 同步覆盖为「今天的状态」。）
+**批 1 顺带修正的既有问题**：`AGENTS.md:62` 的「8 RULEs」与 `docs/constitution.md` 锚点表都已随 RULE-10 更新为 10 条（design K1 点名的过时表述）。

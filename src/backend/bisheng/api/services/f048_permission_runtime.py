@@ -14,6 +14,10 @@ from bisheng.api.services.f048_application_permission import (
     ApplicationDaoPermissionLoader,
     F048ApplicationPermissionAdapter,
 )
+from bisheng.app_runtime.domain.services.f048_app_permission import (
+    AppDaoPermissionLoader,
+    F048AppPermissionAdapter,
+)
 from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelDaoPermissionLoader,
     F048ChannelPermissionAdapter,
@@ -163,6 +167,10 @@ def build_f048_resource_composition(
         loader=DashboardDaoPermissionLoader(runtime),
         permission=runtime,
     )
+    hosted_app = F048AppPermissionAdapter(
+        loader=AppDaoPermissionLoader(runtime),
+        permission=runtime,
+    )
     adapters: dict[str, object] = {
         "workflow": application,
         "assistant": application,
@@ -173,6 +181,12 @@ def build_f048_resource_composition(
         "knowledge_file": knowledge_file,
         "tool": tool,
         "dashboard": dashboard,
+        # F054 hosted applications. Registering here rather than in the API
+        # composition alone is the point: Celery and Linsight processes build
+        # the same map, and a type missing from it fails at the first
+        # check_business_action with RuntimeError("F048 resource registry is
+        # not configured") — far from this file.
+        "app": hosted_app,
     }
     registry = ResourceAuthorizationRegistry()
     for resource_type in (
@@ -193,6 +207,7 @@ def build_f048_resource_composition(
     registry.register("channel", channel)
     registry.register("tool", tool)
     registry.register("dashboard", dashboard)
+    registry.register("app", hosted_app)
     return adapters, registry
 
 

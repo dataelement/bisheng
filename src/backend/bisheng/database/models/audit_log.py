@@ -236,6 +236,23 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "open_api.share_link.revoke",
     "open_api.share_link.expire",
     "open_api.ws.connect",
+    # F054 app factory (design D14 / pit 24). The hosted-application state
+    # machine, meta updates and the deferred data-tab row edit are registered
+    # in one go so this whitelist is touched exactly once for the feature —
+    # `app.data_row_edit` starts being written in a later wave.
+    # Lockstep: bisheng/app_runtime/domain/constants.py AppAuditAction +
+    # platform controllers/API/log.ts (`actions` array, module dropdown,
+    # getActionsByModuleApi switch) + bs.json log.systemIdEnum /
+    # log.eventTypeEnum in all three languages.
+    "app.publish",
+    "app.publish_pending",
+    "app.manual_publish",
+    "app.stop",
+    "app.resume",
+    "app.delete",
+    "app.delete_hook_failed",
+    "app.meta_update",
+    "app.data_row_edit",
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
@@ -246,6 +263,7 @@ _V2_NAMESPACE_TO_ACTION_PREFIX: dict[str, str] = {
     "llm": "llm.server.",
     "approval": "approval.",
     "open_api": "open_api.",
+    "app": "app.",
 }
 
 

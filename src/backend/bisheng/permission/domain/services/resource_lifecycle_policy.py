@@ -22,6 +22,10 @@ FIXED_CUSTOM_TYPES = frozenset(
         "channel",
         "dashboard",
         "linsight_skill",
+        # F054 hosted applications: CUSTOM from the first moment, so a new app
+        # is visible to its owner alone (AC-11). INHERIT is not an option — an
+        # app has no canonical parent resource to inherit an audience from.
+        "app",
     }
 )
 

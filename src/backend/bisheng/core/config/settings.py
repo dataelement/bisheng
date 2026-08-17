@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from bisheng.core.config.app_runtime import AppRuntimeConf
 from bisheng.core.config.llm import LLMConf
 from bisheng.core.config.multi_tenant import MultiTenantConf
 from bisheng.core.config.open_platform import OpenApiConf, OpenPlatformConf
@@ -785,6 +786,10 @@ class Settings(BaseModel):
     # open API auth tuning. Process-level, not DB hot config (design K8).
     open_platform: OpenPlatformConf = OpenPlatformConf()
     open_api: OpenApiConf = OpenApiConf()
+    # F054: app-factory runtime layer switch + runtime-manager / app-proxy
+    # wiring. Sibling key of open_platform, never merged with it — any
+    # combination of the two must boot (AC-61).
+    app_runtime: AppRuntimeConf = AppRuntimeConf()
     openfga: OpenFGAConf = OpenFGAConf()
     user_tenant_sync: UserTenantSyncConf = UserTenantSyncConf()
     sso_sync: SSOSyncConf = SSOSyncConf()

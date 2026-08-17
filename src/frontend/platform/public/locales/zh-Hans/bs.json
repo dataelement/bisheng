@@ -1217,7 +1217,8 @@
       "tenant": "租户管理",
       "llm": "模型管理",
       "approval": "审批管理",
-      "openApi": "开放 API"
+      "openApi": "开放 API",
+      "appFactory": "应用工场"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1308,7 +1309,16 @@
       "openApiGrantRemoveAll": "批量撤销资源授权",
       "openApiShareLinkRevoke": "撤销分享链接",
       "openApiShareLinkExpire": "分享链接到期",
-      "openApiWsConnect": "开放 API 建立长连接"
+      "openApiWsConnect": "开放 API 建立长连接",
+      "appPublish": "托管应用上线",
+      "appPublishPending": "托管应用待上线（资源不足）",
+      "appManualPublish": "托管应用手动上线",
+      "appStop": "托管应用停运",
+      "appResume": "托管应用重新启用",
+      "appDelete": "托管应用删除",
+      "appDeleteHookFailed": "托管应用删除后置处理失败",
+      "appMetaUpdate": "托管应用元信息更新",
+      "appDataRowEdit": "托管应用数据编辑"
     },
     "objectTypeEnum": {
       "none": "无",

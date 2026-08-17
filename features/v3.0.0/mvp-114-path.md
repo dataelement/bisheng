@@ -48,6 +48,11 @@
 - **入口路由**：114 的 nginx 静态 conf 增 `/apps/` → app-proxy 一条 location；client 广场卡片跳转 `/apps/{slug}`；平台 cookie path=/ host-only → 同源免二次登录零后端改造（discovery §2.9）。
 - **权限**：`app` 资源类型注册进 F048 权限体系（catalog + OpenFGA 模型 + 前端 `ResourceType` union）；**存量环境「只写一次」缺口**——Catalog 范围表变更需新写运维脚本或扩展变更类型（discovery §5 风险 1），114 是存量环境、必须前置演练；授权走既有 `PermissionDialog`。
 - **审批**：`approver_resolver` `tenant_admin` 分支须改用 `TenantAdminService.list_tenant_admins`；Root 租户恒空 → 回退平台超管；`_init_default_approval_scenarios` 参数化 `tenant_id` 并挂到 `tenant_mount_service`（PRD-1 §3.3 锚点表 ⚠️ 阻塞前置）。114 若为单租户形态则命中「回退超管」分支——演示前先确认 114 的多租户开关状态。
+- **114 实测环境事实（2026-08-17 只读预检，实现与部署直接按此）**：
+  - **docker 28.3.3**（Server），6 个容器在跑。⚠️ 关键：28.x 仍是 **iptables 后端，`DOCKER-USER` 链可用**——《调研》§2.8 说的「Docker 29.0.0 nftables 后端无 DOCKER-USER 链」在 114 上**不命中**，出站白名单的 L2 兜底可直接按 iptables 方案做。
+  - **8 核 / 31G 内存，已用 18G、available ≈ 12G**——容量准入阈值必须按**实际 available** 配（不是总量）；轻量档 1C/2G 可同时跑 2–3 个演示应用，性能档 4C/8G 只够一个且会挤压平台本体（RT-08「平台必须正常」在这台机器上是真约束）。
+  - **nginx**：`/etc/nginx/conf.d/bisheng-lilu.conf` 是本环境入口 conf，`/apps/` location 加这里（另有 `bisheng-external-13000.conf` 外网快照入口，外网演示需同步改）。
+  - **运维脚本**：`/opt/bisheng-ops/` 下有 `deploy.sh`、`smoke.sh`、`stop-legacy.sh`、`systemd/`——runtime-manager 与 app-proxy 的新 systemd 单元放 `systemd/`，部署增量改 `deploy.sh`。
 - **UI 参考**：`000-prd1-discovery/ui-demo/`（Claude Design 交互稿 `应用工场 v2.dc.html` / `服务账号管理.dc.html` 及结构化摘要 README）；以 PRD 为准、demo 为参考。
 
 ---

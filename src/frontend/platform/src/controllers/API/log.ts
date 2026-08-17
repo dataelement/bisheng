@@ -46,6 +46,7 @@ export async function getModulesApi(): Promise<{ data: any[] }> {
             { name: 'log.systemIdEnum.llm', value: 'llm' },
             { name: 'log.systemIdEnum.approval', value: 'approval' },
             { name: 'log.systemIdEnum.openApi', value: 'open_api' },
+            { name: 'log.systemIdEnum.appFactory', value: 'app' },
         ],
 
     }
@@ -129,6 +130,18 @@ const actions = [
     { name: 'log.eventTypeEnum.openApiShareLinkRevoke', value: 'open_api.share_link.revoke' },
     { name: 'log.eventTypeEnum.openApiShareLinkExpire', value: 'open_api.share_link.expire' },
     { name: 'log.eventTypeEnum.openApiWsConnect', value: 'open_api.ws.connect' },
+    // F054 hosted applications. Lockstep with backend `_UI_VISIBLE_V2_ACTIONS`
+    // (audit_log.py) and `AppAuditAction` — an action registered on one side
+    // only is written to the DB and never appears in this filter.
+    { name: 'log.eventTypeEnum.appPublish', value: 'app.publish' },
+    { name: 'log.eventTypeEnum.appPublishPending', value: 'app.publish_pending' },
+    { name: 'log.eventTypeEnum.appManualPublish', value: 'app.manual_publish' },
+    { name: 'log.eventTypeEnum.appStop', value: 'app.stop' },
+    { name: 'log.eventTypeEnum.appResume', value: 'app.resume' },
+    { name: 'log.eventTypeEnum.appDelete', value: 'app.delete' },
+    { name: 'log.eventTypeEnum.appDeleteHookFailed', value: 'app.delete_hook_failed' },
+    { name: 'log.eventTypeEnum.appMetaUpdate', value: 'app.meta_update' },
+    { name: 'log.eventTypeEnum.appDataRowEdit', value: 'app.data_row_edit' },
 ];
 
 // 全部操作行为
@@ -150,6 +163,7 @@ export async function getActionsByModuleApi(moduleId) {
         case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
         case 'approval': return actions.filter(a => a.value.startsWith('approval.'))
         case 'open_api': return actions.filter(a => a.value.startsWith('open_api.'))
+        case 'app': return actions.filter(a => a.value.startsWith('app.'))
     }
 }
 

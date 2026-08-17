@@ -102,6 +102,20 @@ _TENANT_AWARE_MODEL_MODULES = (
     # F049 open API auth: api_credential / service_account both carry tenant_id.
     "bisheng.open_api.domain.models.api_credential",
     "bisheng.open_api.domain.models.service_account",
+    # F054 hosted apps. `app` / `app_instance` carry tenant_id and are filtered.
+    # `app_version` deliberately does NOT: a version belongs to its app, so its
+    # isolation is derived — load the `app` row by `app_id` (that one IS
+    # filtered) and read the version through it. Listing the module here only
+    # guarantees SQLModel.metadata sees the table;
+    # _discover_tenant_aware_tables() skips it for lack of the column, so a
+    # read that starts from a bare `version_id` still leaks across tenants
+    # (design K5 ② / pit 31) — the DAO forces `app_id` into every such
+    # signature for exactly this reason.
+    "bisheng.database.models.app",
+    "bisheng.database.models.app_version",
+    "bisheng.database.models.app_instance",
+    # app_access_log (AC-38) lands with its table in F054 T089 — register it
+    # here in the same change, or the access-log rows bypass tenant filtering.
 )
 
 

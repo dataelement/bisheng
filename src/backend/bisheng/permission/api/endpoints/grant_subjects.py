@@ -25,6 +25,10 @@ from bisheng.permission.domain.services.grant_subject_service import GrantSubjec
 
 router = APIRouter(tags=["Permission"])
 
+# Every type whose permission dialog must be able to pick subjects. Five
+# endpoints below each gate on this set independently, and the failure mode of
+# a missing entry is not an error but an empty picker: the dialog opens and
+# finds no users, no groups, and an empty department tree.
 GRANT_SUBJECT_RESOURCE_TYPES = frozenset(
     {
         "knowledge_space",
@@ -36,6 +40,8 @@ GRANT_SUBJECT_RESOURCE_TYPES = frozenset(
         "tool",
         "channel",
         "dashboard",
+        # F054 hosted applications.
+        "app",
     }
 )
 

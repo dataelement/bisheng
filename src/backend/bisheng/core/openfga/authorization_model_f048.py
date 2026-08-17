@@ -12,7 +12,11 @@ import json
 from hashlib import sha256
 from typing import Any
 
-MODEL_VERSION = "f048-v1"
+# Bumped to v2 by F054, which adds the `app` resource type. The version
+# string is operator-facing only — correctness is carried by the canonical
+# checksum — but a distinguishable name is what makes the upgrade script's
+# plan/verify output readable on a live host.
+MODEL_VERSION = "f048-v2"
 
 DEFAULT_ACTION_CODES: tuple[str, ...] = (
     "manage_permission",
@@ -39,6 +43,11 @@ MIGRATED_RESOURCE_TYPES: tuple[str, ...] = (
     "tool",
     "channel",
     "dashboard",
+    # F054 hosted applications. Must be added together with the twin list in
+    # permission/domain/services/catalog_policy.py: this one shapes the OpenFGA
+    # model (miss it and every tuple write 400s), that one validates Catalog
+    # rows on every snapshot load (miss it and Catalog reads raise outright).
+    "app",
 )
 
 OWNER_PROJECTION_RESOURCE_TYPES: tuple[str, ...] = ("linsight_skill",)
@@ -64,6 +73,7 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
             "tool",
             "channel",
             "dashboard",
+            "app",
         }
     ),
     "create_folder": frozenset({"knowledge_space", "folder"}),
@@ -72,9 +82,9 @@ RESOURCE_ACTION_SCOPES: dict[str, frozenset[str]] = {
     "download": frozenset({"folder", "knowledge_file"}),
     "delete": frozenset(MIGRATED_RESOURCE_TYPES),
     "share": frozenset({"knowledge_space", "knowledge_file", "workflow", "assistant"}),
-    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool"}),
-    "publish": frozenset({"workflow", "assistant"}),
-    "unpublish": frozenset({"workflow", "assistant"}),
+    "use": frozenset({"knowledge_library", "workflow", "assistant", "tool", "app"}),
+    "publish": frozenset({"workflow", "assistant", "app"}),
+    "unpublish": frozenset({"workflow", "assistant", "app"}),
 }
 
 PARENT_TYPES: dict[str, tuple[str, ...]] = {

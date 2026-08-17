@@ -10,7 +10,10 @@ export type ResourceType =
   | "tool"
   | "channel"
   | "dashboard"
-  | "linsight_skill";
+  | "linsight_skill"
+  // F054 hosted applications. Added here together with the platform unions so
+  // F056 (app square + grant dialog) does not have to reopen this line.
+  | "app";
 
 export type SubjectType = "user" | "department" | "user_group";
 export type PermissionActionLevel = 1 | 2 | 3 | 4;

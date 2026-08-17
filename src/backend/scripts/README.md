@@ -207,6 +207,54 @@ Exit codes:
 - `3`: a migration or verification safety gate blocked progress
 - `4`: unexpected runtime/infrastructure failure; traceback is printed
 
+### `upgrade_f048_authorization_model.py` / `.sh`
+
+Makes the F054 **`app`** resource type effective on an environment that has
+**already** run the F048 migration. A fresh install needs nothing — the model is
+built from the constants at first boot — but an existing one needs this, for two
+independent reasons:
+
+- adding `app` changes the authorization-model checksum, so every process boots
+  into `migration_required` and answers 503 for **all** permission checks until
+  the SQL pin is moved deliberately;
+- `permission_action_resource_scope` is written only by the first migration and
+  by a Catalog draft publish, and no `CatalogChangeType` can change an action's
+  `resource_types` — so without a backfill `is_action_effective("app", …)` is
+  false forever and every check raises `InvalidCatalogActionError`.
+
+Four steps: publish (or adopt) the model in the store, insert the new ACTIVE
+`authorization_model_release` and retire the old one, re-point the CURRENT
+`permission_catalog_release`, backfill the `app` scope rows. Steps 2-4 share one
+transaction; step 1 is an HTTP write and cannot join it.
+
+```bash
+cd src/backend/
+export config=config.yaml            # same value the live service runs with
+
+bash scripts/upgrade_f048_authorization_model.sh              # plan — writes nothing
+bash scripts/upgrade_f048_authorization_model.sh apply
+bash scripts/upgrade_f048_authorization_model.sh verify
+bash scripts/upgrade_f048_authorization_model.sh rollback     # re-point SQL back
+```
+
+Operational notes:
+
+- **Restart every process after `apply` or `rollback`** — API, celery x3, beat,
+  linsight worker. Heartbeats are re-checked every 15 s (TTL 45 s): a process
+  left running fails closed rather than continuing to serve.
+- **Ship the code before adding a new `config.yaml` key.** `load_settings_from_yaml`
+  raises `KeyError` on an unknown top-level key, so adding `app_runtime:` ahead
+  of the code stops the backend from starting.
+- `apply` is idempotent — it locates an existing model by canonical checksum, so
+  a re-run reports `noop` instead of publishing a duplicate. It refuses to run
+  while permission runtime heartbeats are live unless `--allow-live` is given.
+- `rollback` re-points SQL and removes the `app` scope rows. The published model
+  **stays in the store** (OpenFGA models are immutable); it becomes an orphan
+  nobody pins, which is harmless exactly because `apply` matches by checksum.
+
+Exit codes: `0` success, `3` a safety gate blocked progress, `4` unexpected
+runtime failure.
+
 ### `benchmark_f048_permission_paths.py`
 
 Reproducible BENCH-01 harness for the single F048 OpenFGA model. It prepares a

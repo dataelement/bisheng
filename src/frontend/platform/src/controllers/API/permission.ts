@@ -14,6 +14,10 @@ export type PermissionResourceType =
   | "channel"
   | "dashboard"
   | "linsight_skill"
+  // F054 hosted applications. This union is duplicated in
+  // components/bs-comp/permission/types.ts — add to both or the dialog and
+  // its API layer disagree on what is grantable.
+  | "app"
 
 export type PermissionActionLevel = 1 | 2 | 3 | 4
 export type PermissionModelKind = "STANDARD" | "CUSTOM"

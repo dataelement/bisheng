@@ -13,6 +13,7 @@
 | Clause | Law | arch-guard RULE | Severity |
 |---|---|---|---|
 | **C1** | DDD layered call chain | RULE-1 / 2 / 3 / 4 / 5 | VIOLATION (RULE-3 is WARNING during migration) |
+| **C1** | Backend holds no orchestration privilege (F054 K1): no docker / kubernetes SDK import, no `/var/run/docker.sock`, no `DOCKER_HOST` anywhere under `src/backend/bisheng/**`. Container lifecycle is driven by desired-state intents sent to the standalone `src/runtime-manager/` process, which is the sole holder of that access surface. | RULE-10 | VIOLATION |
 | **C2** | Dual-DB compatibility (MySQL + DM8) | — (review + CI) | — |
 | **C3** | Multi-tenancy auto-injection | — (review) | — |
 | **C4** | Permission unified entry point | RULE-8 / 9 | VIOLATION |
@@ -32,6 +33,7 @@ Call chain — **never skip layers**: `Router → Endpoint → Service → Repos
 - `database/models/` must not import `domain/` (RULE-2).
 - `domain/models/` must not import `domain/services/` (RULE-4).
 - The API layer must not cross-import between modules (RULE-5).
+- `src/backend/bisheng/**` must not import a container/orchestration SDK (`docker`, `aiodocker`, `kubernetes`, `kubernetes_asyncio`), reference `/var/run/docker.sock`, or read `DOCKER_HOST` (RULE-10). The backend describes *desired state* over HTTP to the standalone `src/runtime-manager/` package; only that process holds the orchestration access surface. Rationale: a backend that can talk to dockerd is root-equivalent on the host, which defeats the isolation the whole hosted-app design rests on.
 
 ## C2. Dual-DB Compatibility (MySQL + DM8) ⚠️
 
@@ -116,13 +118,14 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 |---|---|
 | 10x | 100 server · 101 finetune · 102 model_deploy · 103 component · 104 assistant · 105 flow · 106 user · 107 tag · 108 llm · 109 knowledge |
 | 11x | 110 linsight · 111 linsight (second block) |
-| 12x–18x | 120 workstation · 140 message · 150 tool · 160 dataset · 170 telemetry · 180 knowledge_space · 181 approval |
+| 12x–18x | 120 workstation · 140 message · 150 tool · 160 dataset · **161 app_factory (F054)** · 170 telemetry · 180 knowledge_space · 181 approval |
 | 19x (tenant / permission) | 190 channel **and** permission ⚠️ · 191 tenant_resolver · 192 tenant_fga · 193 sso_sync · 194 tenant_quota · 195 tenant_sharing · 196 resource_owner_transfer · 197 admin_scope · 198 llm_tenant |
 | 20x–26x (org / open API) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission · 260 open_api |
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
 - **260 = open_api** (F049, `common/errcode/open_api.py`): open face `/api/v2` uses 26001–26019 (26001 / 26002 / 26003 / 26004 / 26012 implemented; 26005–26007 / 26010 / 26016 reserved for F050 delegation; 26013 / 26014 retired, never reuse), management face `/api/v1/service-accounts/**` uses 26020+ (26020–26031 implemented). Every 260xx carries a real `http_status` for the `/api/v2` handler; copy for each code must land in `packages/locales/src/api_errors/*.json` (all three languages) in the same change.
+- **161–164 = app_factory** (v3.0.0 应用工场). One band, four owners — split so each feature can claim codes without touching another's file: **161 = F054** (hosted-app domain + runtime, `common/errcode/app_factory.py`) · **162 = F055** (publish pipeline) · **163 = F056** (app square / governance) · **164 = F059** (k8s runtime backend). 161 sub-ranges: `16100-16119` domain/state machine · `16120-16139` runtime/orchestration · `16140-16159` entry & identity injection · `16160-16179` data plane/logs · `16180-16199` deployment switch/ops. The same assignment is mirrored in `features/v3.0.0/release-contract.md` ("已分配模块编码"), which is where F055 / F056 / F059 look it up — update both together.
 - When you claim a number, add it here in the same change.
 
 ## C6. No Hardcoded Secrets (RULE-7)
