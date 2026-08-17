@@ -99,10 +99,17 @@ export function FileListToolbar({
         : STATUS_FILTER_OPTIONS.filter((option) => option.value !== PENDING_REVIEW_FILTER);
 
     return (
-        <div className="flex h-11 shrink-0 items-center gap-2 bg-[#fafafa] px-4">
+        <div
+            className={cn(
+                "flex h-11 shrink-0 items-center gap-2 px-4",
+                // The grey band reads as the list's header row, so it only applies
+                // in list mode; over the card grid the toolbar sits on the page.
+                viewMode === "list" && "bg-[#fafafa]",
+            )}
+        >
             <Checkbox
                 aria-label={localize("com_knowledge.select_all")}
-                className="border-border-deep data-[state=checked]:border-primary"
+                className="border-border-deep data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                 checked={isIndeterminate ? "indeterminate" : isAllSelected}
                 disabled={!hasSelectableFiles}
                 onCheckedChange={onSelectAll}
@@ -178,14 +185,16 @@ export function FileListToolbar({
                             className={TOOLBAR_BUTTON_CLASS}
                             onClick={() => setViewMode(viewMode === "list" ? "card" : "list")}
                         >
+                            {/* Reads as a state label, not an action: it names the view
+                                you are in, while clicking switches to the other one. */}
                             {viewMode === "list" ? (
-                                <Outlined.ViewGridCard className="size-4 shrink-0" />
-                            ) : (
                                 <Outlined.List className="size-4 shrink-0" />
+                            ) : (
+                                <Outlined.ViewGridCard className="size-4 shrink-0" />
                             )}
                             {viewMode === "list"
-                                ? localize("com_knowledge.card_view")
-                                : localize("com_knowledge.list_view")}
+                                ? localize("com_knowledge.list_view")
+                                : localize("com_knowledge.card_view")}
                         </button>
                     </>
                 )}

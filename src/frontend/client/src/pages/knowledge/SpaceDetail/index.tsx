@@ -1258,7 +1258,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden max-[767px]:px-0"
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg max-[767px]:overflow-hidden"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -1589,10 +1589,12 @@ export function KnowledgeSpaceContent({
                                 className={cn(
                                     // pb-[112px] reserves room for the bottom AI dock (40px gap + 56px input + 16px safe-area)
                                     // so the last card row clears the dock with a 40px visual gap above the input top.
-                                    "w-full min-w-0 pt-4 pb-[112px]",
+                                    "w-full min-w-0 pb-[112px]",
                                     effectiveViewMode === "list"
-                                        ? "grid grid-cols-1 gap-0"
-                                        : "grid gap-4"
+                                        // H5 list stays full-bleed — its rows carry their own px-4 so a
+                                        // selected row's background spans the full width.
+                                        ? "grid grid-cols-1 gap-0 pt-4"
+                                        : "grid gap-4 px-4 pt-1"
                                 )}
                                 style={
                                     effectiveViewMode === "card"
@@ -1694,7 +1696,7 @@ export function KnowledgeSpaceContent({
             {/* Footer：仅在搜索且有选中时展示所选文件的路径面包屑（无分页器） */}
             {!isH5 && isSearching && selectedFiles.size > 0 && (
                 <div className="mt-auto w-full min-w-0 shrink-0">
-                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white py-3">
+                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3">
                         <SelectionPathBreadcrumb
                             spaceId={space.id}
                             spaceName={space.name}

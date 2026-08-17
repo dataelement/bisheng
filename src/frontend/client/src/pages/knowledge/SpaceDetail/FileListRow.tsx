@@ -483,7 +483,7 @@ export function FileListRow({
 
                         {/* Meta line: time | tags | encoding (Figma 13198:75880). */}
                         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden">
-                            <span className="shrink-0 text-xs leading-[18px] text-text-3 tabular-nums">
+                            <span className="shrink-0 text-[10px] leading-[18px] text-text-3 tabular-nums">
                                 {formatTimeCard(file.updatedAt)}
                             </span>
                             {!isFolder && file.tags && file.tags.length > 0 && (
@@ -491,7 +491,7 @@ export function FileListRow({
                                     <span className="h-2.5 w-px shrink-0 bg-border-base" aria-hidden />
                                     <TagGroup
                                         tags={file.tags}
-                                        variant="text-h5"
+                                        variant="text-list"
                                         highlightedTagIds={highlightedTagIds}
                                         actionButton={
                                             isAdmin ? (
@@ -512,11 +512,11 @@ export function FileListRow({
                                 <>
                                     <span className="h-2.5 w-px shrink-0 bg-border-base" aria-hidden />
                                     {file.fileEncoding ? (
-                                        <span className="truncate text-xs leading-[18px] text-text-3" title={file.fileEncoding}>
+                                        <span className="truncate text-[10px] leading-[18px] text-text-3" title={file.fileEncoding}>
                                             {file.fileEncoding}
                                         </span>
                                     ) : (
-                                        <span className="shrink-0 text-xs italic leading-[18px] text-text-3">
+                                        <span className="shrink-0 text-[10px] italic leading-[18px] text-text-3">
                                             {localize("com_knowledge.file_encoding_generating")}
                                         </span>
                                     )}

@@ -314,14 +314,14 @@ export function KnowledgeSpaceHeader({
                 Hidden at the space root: with a single level the page content shifts up (design 2075:8134). */}
             {currentPath.length > 0 && (
                 <KnowledgeBreadcrumb
-                    className="pt-3"
+                    className="px-4 pt-3"
                     spaceName={space.name}
                     currentPath={currentPath}
                     onNavigateFolder={onNavigateFolder}
                 />
             )}
         <div className={cn(
-            "flex min-h-8 items-center justify-between gap-3 pb-4 max-[767px]:gap-2 max-[767px]:pb-3",
+            "flex min-h-8 items-center justify-between gap-3 px-4 pb-4 max-[767px]:gap-2 max-[767px]:pb-3",
             currentPath.length > 0 ? "pt-1" : "pt-4",
         )}>
 
@@ -373,23 +373,24 @@ export function KnowledgeSpaceHeader({
                                         </div>
                                     </TooltipContent>
                                 </Tooltip>
-                                {showShare && (
-                                    <CopyShareLinkButton
-                                        iconOnly
-                                        sharePath={`/knowledge/share/${space.id}`}
-                                        successMessage={localize("com_knowledge.share_link_copied")}
-                                        errorMessage={localize("com_knowledge.copy_failed_retry")}
-                                        className="ml-1 size-7 border-0"
-                                        icon={<Outlined.Share className="size-4 text-[#4e5969]" />}
-                                        aria-label={localize("com_knowledge.share")}
-                                    />
-                                )}
                             </div>
                         )}
                     </div>
 
-                    {/* 右侧：批量操作 + 新增。搜索/筛选/排序/视图切换已移入 FileListToolbar */}
+                    {/* 右侧：分享 + 批量操作 + 新增。搜索/筛选/排序/视图切换已移入 FileListToolbar */}
                     <div className="flex shrink-0 items-center gap-3">
+                        {showShare && (
+                            <CopyShareLinkButton
+                                iconOnly
+                                variant="outline"
+                                sharePath={`/knowledge/share/${space.id}`}
+                                successMessage={localize("com_knowledge.share_link_copied")}
+                                errorMessage={localize("com_knowledge.copy_failed_retry")}
+                                className="size-8 shrink-0 rounded-md border border-[#ebebeb] bg-white p-0 transition-colors hover:bg-[#f7f8fa]"
+                                icon={<Outlined.Share className="size-4 text-[#4e5969]" />}
+                                aria-label={localize("com_knowledge.share")}
+                            />
+                        )}
                         {batchAndAddActions}
                     </div>
         </div>
