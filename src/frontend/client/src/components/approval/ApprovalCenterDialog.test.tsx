@@ -29,6 +29,9 @@ jest.mock("~/hooks/useLocalize", () => ({
       com_approval_field_target_document_title: "目标文档",
       com_approval_field_target_folder_name: "目标文件夹",
       com_approval_field_allow_download: "允许下载",
+      com_approval_field_question_title: "问题标题",
+      com_approval_field_expire_at: "公开截止时间",
+      com_approval_field_duration_days: "有效期（天）",
       com_approval_field_file_name: "文件",
       com_approval_field_space_name: "知识库",
       com_approval_field_department_name: "文件所属部门",
@@ -75,6 +78,39 @@ jest.mock("~/components/ui/Dialog", () => ({
 describe("ApprovalCenterDialog", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it("does not render withdraw for pending qa_question_publish requests", async () => {
+    jest.mocked(listMyApprovalRequestsApi).mockResolvedValue({
+      data: [
+        {
+          instance_id: 22,
+          business_name: "专家问答转公开",
+          status: "pending",
+          scenario_code: "qa_question_publish",
+        },
+      ],
+      total: 1,
+    });
+    jest.mocked(getApprovalInstanceDetailApi).mockResolvedValue({
+      instance_id: 22,
+      business_name: "专家问答转公开",
+      status: "pending",
+      scenario_code: "qa_question_publish",
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_requests", instanceId: 22 }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getApprovalInstanceDetailApi).toHaveBeenCalled();
+    });
+    expect(screen.queryByText("com_approval_action_withdraw")).toBeNull();
   });
 
   it("does not render a resubmit action for rejected requests", async () => {
@@ -293,6 +329,51 @@ describe("ApprovalCenterDialog", () => {
     expect(screen.queryByText("source_file_id")).not.toBeInTheDocument();
     expect(screen.queryByText("target_space_id")).not.toBeInTheDocument();
     expect(screen.queryByText("target_document_id")).not.toBeInTheDocument();
+  });
+
+  it("renders qa question publish business content with localized labels and datetime", async () => {
+    jest.mocked(listMyApprovalTasksApi).mockResolvedValue({
+      data: [
+        {
+          task_id: 41,
+          instance_id: 141,
+          business_name: "uitest-f083-转公开",
+          status: "pending",
+          scenario_code: "qa_question_publish",
+        },
+      ],
+      total: 1,
+    });
+    jest.mocked(getMyApprovalTaskDetailApi).mockResolvedValue({
+      task_id: 41,
+      instance_id: 141,
+      business_name: "uitest-f083-转公开",
+      status: "pending",
+      scenario_code: "qa_question_publish",
+      detail_snapshot: {
+        question_title: "uitest-f083-1786811470203-转公开",
+        expire_at: "2026-08-18T14:10:59",
+        duration_days: 1,
+      },
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_tasks", taskId: 41 }}
+      />,
+    );
+
+    expect(await screen.findByText("问题标题")).toBeInTheDocument();
+    expect(screen.getByText("uitest-f083-1786811470203-转公开")).toBeInTheDocument();
+    expect(screen.getByText("公开截止时间")).toBeInTheDocument();
+    expect(screen.getByText("2026-08-18 14:10:59")).toBeInTheDocument();
+    expect(screen.getByText("有效期（天）")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.queryByText("expire_at")).toBeNull();
+    expect(screen.queryByText("question_title")).toBeNull();
+    expect(screen.queryByText("duration_days")).toBeNull();
   });
 
   it("keeps fallback labels for non-Shougang business content", async () => {
