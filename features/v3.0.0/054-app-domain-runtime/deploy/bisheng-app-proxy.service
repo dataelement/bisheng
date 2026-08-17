@@ -20,7 +20,16 @@ Environment=PYTHONPATH=/opt/bisheng/src/app-proxy
 # 同样只监听回环：它前面永远有 nginx 的 location /apps/。
 Environment=APP_PROXY_HOST=127.0.0.1
 Environment=APP_PROXY_PORT=8090
-# 与 backend 的 app_runtime.proxy_hmac_secret 必须一致。
+# ⚠️ 变量名以 app_proxy/config.py 顶部的契约表为准，**不要照猜**。实测踩过：
+# 写成 APP_PROXY_HMAC_SECRET 时进程照常启动、systemd 显示 active，直到第一个
+# 请求才 fail-closed 503「HMAC secret is not configured」——这是它设计好的行为
+# （空密钥宁可在离开进程前就抛，也不发一个对端反正会拒的未签名请求），但排查时
+# 看起来像后端没配。对照表：
+#   APP_PROXY_BACKEND_BASE    平台 API base（127.0.0.1:7860）
+#   APP_PROXY_MANAGER_BASE    app_runtime.manager_base_url
+#   APP_PROXY_BACKEND_SECRET  app_runtime.proxy_hmac_secret
+#   APP_PROXY_MANAGER_SECRET  app_runtime.manager_hmac_secret
+#   APP_PROXY_ENTRY_BASE_URL  app_runtime.entry_base_url
 EnvironmentFile=/etc/bisheng/app-proxy.env
 Restart=on-failure
 RestartSec=5
