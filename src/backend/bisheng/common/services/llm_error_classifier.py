@@ -85,6 +85,19 @@ _QUOTA_SIGNATURES: tuple[str, ...] = (
     "insufficient balance",
     "余额不足",
     "欠费",
+    # one-api / new-api style relay gateways (what kimi-k3 sits behind here). The
+    # gateway PRE-DEDUCTS an estimated cost before forwarding, so the body is
+    # "token quota is not enough, token remain quota: $0.073168, need quota:
+    # $0.173140" with HTTP 403 — money wording, but none of the strings above, and
+    # a 403 rather than the 429 this bucket was written around. It therefore fell
+    # through to the auth branch and told the user to "检查模型配置" when the only
+    # remedy was topping up (114, 2026-08-14). Both signals are specific to the
+    # pre-deduction path, so they cannot collide with TPM/TPS throttling wording.
+    #
+    # Note the amount is per-REQUEST: the same balance serves a fresh session fine
+    # and 403s a long-context one, because the estimate scales with input size.
+    "pre_consume_token_quota_failed",
+    "token quota is not enough",
 )
 
 # Transient throttling — RPM (requests/min), TPM (tokens/min) and burst-rate

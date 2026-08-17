@@ -1490,6 +1490,29 @@ class LinsightWorkbenchImpl:
 
             return {"task_title": title, "chat_id": chat_id, "error_message": None}
 
+        except (GeneratorExit, asyncio.CancelledError):
+            # This runs INSIDE the submit SSE generator, so the client closing that
+            # stream (or any cancellation) lands here. Both are BaseException, NOT
+            # Exception, so the branch below never caught them: the fallback never
+            # ran and nothing was logged, leaving the session silently stuck on
+            # "New Chat" (114, 2026-08-14 — a session whose title-model call was
+            # cut off 9s in and never recovered).
+            #
+            # The write MUST be synchronous. Awaiting anything in a coroutine that
+            # is already being cancelled re-raises CancelledError at the first
+            # suspension point, so an async write would be dropped exactly as
+            # before. ``update_session_name_sync`` is a single UPDATE and does not
+            # touch the event loop.
+            logger.warning("Task title generation cancelled (client likely disconnected); writing fallback title")
+            try:
+                MessageSessionDao.update_session_name_sync(chat_id, cls._fallback_title(question))
+            except Exception:
+                logger.exception("Failed to write fallback task title after cancellation")
+            # Cancellation must keep propagating: swallowing GeneratorExit makes
+            # Python raise "generator ignored GeneratorExit", and swallowing
+            # CancelledError breaks task cancellation semantics.
+            raise
+
         except Exception as e:
             logger.exception("Failed to generate task title")
             # Even on hard failure, seed a question-based title so the session
