@@ -41,6 +41,91 @@ async def create_channel(
     return resp_200(data=channel)
 
 
+@router.get("/creation-permission-context")
+async def get_creation_permission_context(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    return resp_200(data=await channel_service.get_creation_permission_context(login_user))
+
+
+@router.get("/creation-grant-subjects/users")
+async def list_creation_grant_users(
+    keyword: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    return resp_200(
+        data=await channel_service.list_creation_grant_users(
+            login_user,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get("/creation-grant-subjects/user-groups")
+async def list_creation_grant_user_groups(
+    keyword: str = "",
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    return resp_200(
+        data=await channel_service.list_creation_grant_user_groups(
+            login_user,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.get("/creation-grant-subjects/departments/children")
+async def list_creation_grant_department_children(
+    parent_id: int | None = None,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    return resp_200(
+        data=await channel_service.list_creation_grant_department_children(
+            login_user,
+            parent_id=parent_id,
+        )
+    )
+
+
+@router.get("/creation-grant-subjects/departments/search")
+async def search_creation_grant_departments(
+    keyword: str = "",
+    limit: int = Query(50, ge=1, le=200),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    return resp_200(
+        data=await channel_service.search_creation_grant_departments(
+            login_user,
+            keyword=keyword,
+            limit=limit,
+        )
+    )
+
+
+@router.get("/creation-grant-subjects/departments/{department_id}/path-tree")
+async def get_creation_grant_department_path(
+    department_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    channel_service: "ChannelService" = Depends(get_channel_service),
+):
+    return resp_200(
+        data=await channel_service.get_creation_grant_department_path(login_user, department_id)
+    )
+
+
 @router.get("/list_sources")
 async def list_channel_information_sources(
     business_type: BusinessType = Query(..., description="Information source type: website / wechat"),

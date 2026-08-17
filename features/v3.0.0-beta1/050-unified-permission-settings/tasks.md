@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 11 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 13 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -93,13 +93,13 @@
   - **验证**: T010 全部通过。
   - **依赖**: T010
 
-- [ ] **T012 创建 context/candidates API 测试**
+- [x] **T012 创建 context/candidates API 测试**
   - **文件**: `src/backend/test/knowledge/test_creation_permission_context_api.py`, `src/backend/test/channel/test_creation_permission_context_api.py`
   - **逻辑**: 两域创建资格、同形 context、users/groups 分页、department children/search/path-tree、tenant 隔离、失权/fail-closed。
   - **覆盖 AC**: AC-01, AC-02, AC-07, AC-10, AC-11, AC-12, AC-13, AC-19, AC-27
   - **依赖**: T009, T011
 
-- [ ] **T013 创建 context/candidates API 实现**
+- [x] **T013 创建 context/candidates API 实现**
   - **文件**: `src/backend/bisheng/knowledge/api/endpoints/knowledge_space.py`, `src/backend/bisheng/channel/api/endpoints/channel_manager.py`
   - **逻辑**: 实现 Design §4.6.1 路由；Endpoint 只注入 actor 并委托业务 Service/Prospective port，不查组织 ORM，不接受 tenant_id。
   - **验证**: T012 全部通过。

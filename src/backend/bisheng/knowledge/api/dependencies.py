@@ -117,15 +117,22 @@ async def get_knowledge_space_service(
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService as _SvcClass
     from bisheng.permission.application.access import get_f048_runtime
     from bisheng.permission.application.initial_grant import InitialGrantApplication
+    from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
     from bisheng.tenant.domain.services.f048_permission_subject import TenantPermissionSubjectDirectory
 
     message_service = await _get_message_service(session)
+    runtime = await get_f048_runtime()
+    subject_directory = TenantPermissionSubjectDirectory()
     service = _SvcClass(
         request=request,
         login_user=login_user,
         initial_grant_application=InitialGrantApplication(
-            runtime=await get_f048_runtime(),
-            subjects=TenantPermissionSubjectDirectory(),
+            runtime=runtime,
+            subjects=subject_directory,
+        ),
+        prospective_grant_application=ProspectiveGrantApplication(
+            runtime=runtime,
+            subjects=subject_directory,
         ),
     )
     service.message_service = message_service

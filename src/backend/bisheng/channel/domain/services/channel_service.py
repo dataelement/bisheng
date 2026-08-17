@@ -97,6 +97,7 @@ from bisheng.permission.application.initial_grant import (
     InitialGrantApplication,
     InitialGrantRequest,
 )
+from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
@@ -211,6 +212,7 @@ class ChannelService:
         message_service: MessageService | None = None,
         approval_gate: ApprovalGate | None = None,
         initial_grant_application: InitialGrantApplication | None = None,
+        prospective_grant_application: ProspectiveGrantApplication | None = None,
     ):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
@@ -220,6 +222,7 @@ class ChannelService:
         self.message_service = message_service
         self.approval_gate = approval_gate
         self.initial_grant_application = initial_grant_application
+        self.prospective_grant_application = prospective_grant_application
 
     async def _get_channel_actions(
         self,
@@ -697,6 +700,116 @@ class ChannelService:
             )
         canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return sha256(canonical.encode()).hexdigest()
+
+    async def get_creation_permission_context(self, login_user: UserPayload) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access(login_user)
+        return await prospective.get_context(actor=actor, tenant_id=tenant_id, resource_type="channel")
+
+    async def list_creation_grant_users(
+        self,
+        login_user: UserPayload,
+        *,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access(login_user)
+        return await prospective.list_users(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="channel",
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def list_creation_grant_user_groups(
+        self,
+        login_user: UserPayload,
+        *,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access(login_user)
+        return await prospective.list_user_groups(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="channel",
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def list_creation_grant_department_children(
+        self,
+        login_user: UserPayload,
+        *,
+        parent_id: int | None,
+    ) -> list[dict[str, object]]:
+        prospective, actor, tenant_id = await self._prospective_creation_access(login_user)
+        return await prospective.list_department_children(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="channel",
+            parent_id=parent_id,
+        )
+
+    async def search_creation_grant_departments(
+        self,
+        login_user: UserPayload,
+        *,
+        keyword: str,
+        limit: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access(login_user)
+        return await prospective.search_departments(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="channel",
+            keyword=keyword,
+            limit=limit,
+        )
+
+    async def get_creation_grant_department_path(
+        self,
+        login_user: UserPayload,
+        department_id: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access(login_user)
+        return await prospective.get_department_path(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="channel",
+            department_id=department_id,
+        )
+
+    async def _prospective_creation_access(self, login_user: UserPayload):
+        if self.prospective_grant_application is None:
+            raise RuntimeError("F050 Prospective Grant application is not configured")
+        effective = await QuotaService.get_effective_quota(
+            login_user.user_id,
+            QuotaResourceType.CHANNEL,
+            login_user.tenant_id,
+            login_user=login_user,
+        )
+        if effective != -1:
+            memberships = await self.space_channel_member_repository.find_channel_memberships(
+                user_id=login_user.user_id,
+                roles=[UserRoleEnum.CREATOR],
+                statuses=[MembershipStatusEnum.ACTIVE],
+            )
+            channel_ids = [membership.business_id for membership in memberships]
+            existing_channels = (
+                await self.channel_repository.find_channels_by_ids(channel_ids) if channel_ids else []
+            )
+            if len(existing_channels) >= effective:
+                raise ChannelCreateLimitExceededError(quota=effective)
+        return (
+            self.prospective_grant_application,
+            await resolve_permission_actor(login_user),
+            self._current_tenant_id(login_user),
+        )
 
     async def get_my_channels(
         self, query_data: MyChannelQueryRequest, login_user: UserPayload

@@ -132,6 +132,7 @@ from bisheng.permission.application.initial_grant import (
     InitialGrantApplication,
     InitialGrantRequest,
 )
+from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
@@ -220,6 +221,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         f048_permission_adapter=None,
         f048_file_delivery=None,
         initial_grant_application: InitialGrantApplication | None = None,
+        prospective_grant_application: ProspectiveGrantApplication | None = None,
     ):
         self.request = request
         self.login_user = login_user
@@ -228,6 +230,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.f048_permission_adapter = f048_permission_adapter
         self.f048_file_delivery = f048_file_delivery
         self.initial_grant_application = initial_grant_application
+        self.prospective_grant_application = prospective_grant_application
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -1351,6 +1354,103 @@ class KnowledgeSpaceService(KnowledgeUtils):
             }
         canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return sha256(canonical.encode()).hexdigest()
+
+    async def get_creation_permission_context(self) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.get_context(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+        )
+
+    async def list_creation_grant_users(
+        self,
+        *,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.list_users(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def list_creation_grant_user_groups(
+        self,
+        *,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.list_user_groups(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def list_creation_grant_department_children(
+        self,
+        *,
+        parent_id: int | None,
+    ) -> list[dict[str, object]]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.list_department_children(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            parent_id=parent_id,
+        )
+
+    async def search_creation_grant_departments(
+        self,
+        *,
+        keyword: str,
+        limit: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.search_departments(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            keyword=keyword,
+            limit=limit,
+        )
+
+    async def get_creation_grant_department_path(self, department_id: int) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.get_department_path(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            department_id=department_id,
+        )
+
+    async def _prospective_creation_access(self):
+        if self.prospective_grant_application is None:
+            raise RuntimeError("F050 Prospective Grant application is not configured")
+        count = await KnowledgeDao.async_count_spaces_by_user(
+            self.login_user.user_id,
+            exclude_department_spaces=True,
+        )
+        if count >= _MAX_SPACE_PER_USER:
+            raise SpaceLimitError()
+        workbench_llm = await LLMService.get_workbench_llm()
+        if not workbench_llm or not workbench_llm.embedding_model:
+            raise WorkbenchEmbeddingError()
+        return (
+            self.prospective_grant_application,
+            await self._permission_actor(),
+            int(self.login_user.tenant_id),
+        )
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
         from bisheng.worker import rebuild_knowledge_celery
