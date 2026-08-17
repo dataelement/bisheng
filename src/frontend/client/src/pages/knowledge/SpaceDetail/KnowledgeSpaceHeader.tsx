@@ -349,9 +349,8 @@ export function KnowledgeSpaceHeader({
                                                 </span>
                                             </TooltipTrigger>
                                             <TooltipContent
-                                                noArrow
-                                                side="left"
-                                                className="z-[999] max-w-md bg-white px-3 py-2 text-sm text-[#4e5969] shadow-md"
+                                                side="top"
+                                                className="z-[999] max-w-md"
                                             >
                                                 {localize(
                                                     knowledgeUploadCapabilities.media
