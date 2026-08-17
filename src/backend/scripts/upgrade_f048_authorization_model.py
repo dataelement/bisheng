@@ -622,11 +622,21 @@ async def _build_context() -> UpgradeContext:
     from bisheng.core.context.manager import app_context
     from bisheng.core.database import get_async_db_session
     from bisheng.core.openfga.runtime_heartbeat import list_runtime_heartbeats
+    from scripts.reconcile_f048_visible_projection import _environment_name
 
     client = await app_context.async_get_instance("openfga")
     return UpgradeContext(
         client=client,
-        environment=str(settings.openfga.environment)[:64],
+        # The environment name is the FILTER KEY that selects which
+        # authorization_model_release row this script reads and writes. It must
+        # match how the reconcile script and the runtime derive it, or the
+        # upgrade lands on a row nobody else looks at. `settings.openfga` never
+        # had this field (the read was `settings.openfga.environment`, which
+        # AttributeErrors post-merge); the value lives on the top-level
+        # `settings.environment` and can be a str or a dict, exactly what the
+        # reconcile script's `_environment_name` already normalises. Reuse it
+        # rather than re-deriving, so the two scripts cannot drift.
+        environment=_environment_name(settings.environment),
         session_factory=get_async_db_session,
         heartbeat_reader=list_runtime_heartbeats,
     )
