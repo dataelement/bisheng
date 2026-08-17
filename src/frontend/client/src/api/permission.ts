@@ -23,6 +23,38 @@ export interface GrantablePermissionModel {
   active: boolean;
 }
 
+export interface CreationPermissionContext {
+  catalog_release_id: number;
+  can_configure_initial_permissions: boolean;
+  grantable_models: GrantablePermissionModel[];
+}
+
+export interface InitialPermissionGrant {
+  model_key: string;
+  subject: PermissionGrantSubjectInput;
+}
+
+export interface InitialPermissionsPayload {
+  expected_catalog_release_id: number;
+  grants: InitialPermissionGrant[];
+}
+
+export interface RawInitialPermissionResult {
+  status: "succeeded" | "failed";
+  resource_version?: number | null;
+  assignee_ids?: string[];
+  error_code?: number | null;
+  message?: string | null;
+}
+
+export interface InitialPermissionResult {
+  status: "succeeded" | "failed";
+  resourceVersion?: number;
+  assigneeIds: string[];
+  errorCode: number | null;
+  message?: string;
+}
+
 export interface ResourcePermissionContext {
   mode: ResourcePermissionMode;
   parent_type: ResourceType | null;
@@ -178,6 +210,112 @@ function withPermissionRequestOptions(config?: PermissionRequestConfig) {
     skip403Redirect: true,
     ...config,
   };
+}
+
+export function mapInitialPermissionResult(
+  result?: RawInitialPermissionResult | null,
+): InitialPermissionResult | undefined {
+  if (!result) return undefined;
+  return {
+    status: result.status,
+    ...(result.resource_version == null
+      ? {}
+      : { resourceVersion: result.resource_version }),
+    assigneeIds: result.assignee_ids ?? [],
+    errorCode: result.error_code ?? null,
+    ...(result.message ? { message: result.message } : {}),
+  };
+}
+
+type CreationResourceType = "knowledge_space" | "channel";
+
+function creationPermissionPath(resourceType: CreationResourceType): string {
+  return resourceType === "knowledge_space"
+    ? "/api/v1/knowledge/space"
+    : "/api/v1/channel/manager";
+}
+
+export async function getCreationPermissionContext(
+  resourceType: CreationResourceType,
+  config?: PermissionRequestConfig,
+): Promise<CreationPermissionContext> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-permission-context`,
+    withPermissionRequestOptions(config),
+  );
+  return unwrap(res);
+}
+
+export async function searchCreationUsers(
+  resourceType: CreationResourceType,
+  name: string,
+  params?: { page?: number; pageSize?: number },
+  config?: PermissionRequestConfig,
+): Promise<{ data: GrantUser[]; total: number }> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/users`,
+    {
+      params: {
+        keyword: name,
+        page: params?.page ?? 1,
+        page_size: params?.pageSize ?? 50,
+      },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  const data = unwrap<any>(res);
+  const rows = data?.data ?? data;
+  const list = Array.isArray(rows) ? rows : [];
+  return { data: list, total: Number(data?.total ?? list.length) };
+}
+
+export async function getCreationDepartmentChildren(
+  resourceType: CreationResourceType,
+  parentId: number | null,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentNode[]> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/departments/children`,
+    {
+      params: { parent_id: parentId ?? undefined },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  return unwrapArray<GrantDepartmentNode>(res);
+}
+
+export async function searchCreationDepartments(
+  resourceType: CreationResourceType,
+  keyword: string,
+  limit = 50,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/departments/search`,
+    {
+      params: { keyword, limit },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  return unwrap(res);
+}
+
+export async function getCreationUserGroups(
+  resourceType: CreationResourceType,
+  config?: PermissionRequestConfig,
+): Promise<{ id: number; group_name: string }[]> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/user-groups`,
+    {
+      params: { page: 1, page_size: 200 },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  const data = unwrap<any>(res);
+  const rows = data?.data ?? data;
+  return Array.isArray(rows)
+    ? rows.map((row: any) => ({ id: row.id, group_name: row.name ?? row.group_name }))
+    : [];
 }
 
 // ── Permission APIs ──────────────────────────────────

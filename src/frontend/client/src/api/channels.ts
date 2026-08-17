@@ -1,4 +1,18 @@
 import request from "./request";
+import { mapInitialPermissionResult } from "./permission";
+import type {
+    InitialPermissionResult,
+    InitialPermissionsPayload,
+    RawInitialPermissionResult,
+} from "./permission";
+
+function unwrapChannelPermissionPayload<T>(response: any): T {
+    const statusCode = response?.status_code ?? response?.code ?? 200;
+    if (statusCode !== 200) {
+        throw new Error(response?.status_message || response?.message || `Channel request failed: ${statusCode}`);
+    }
+    return (response?.data ?? response) as T;
+}
 
 // 排序方式
 export enum SortType {
@@ -444,6 +458,7 @@ export interface CreateManagerChannelPayload {
     /** v2.5 Module D — saved atomically with the channel. */
     knowledge_sync?: KnowledgeSyncConfig;
     initialPermissions?: InitialPermissionsPayload;
+    creationRequestId?: string;
 }
 
 export interface CreateManagerChannelResult {
@@ -459,9 +474,10 @@ export interface CreateManagerChannelResult {
 export async function createManagerChannelApi(
     data: CreateManagerChannelPayload
 ): Promise<CreateManagerChannelResult> {
-    const { initialPermissions, ...channelData } = data;
+    const { initialPermissions, creationRequestId, ...channelData } = data;
     const body = {
         ...channelData,
+        ...(creationRequestId ? { creation_request_id: creationRequestId } : {}),
         ...(initialPermissions ? { initial_permissions: initialPermissions } : {}),
     };
     const response = await request.post(

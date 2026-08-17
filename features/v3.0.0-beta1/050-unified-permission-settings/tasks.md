@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 15 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 18 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -125,19 +125,19 @@
 
 ## Wave 4：Client API 与权限草稿
 
-- [ ] **T016 Client F048 adapter 契约测试**
+- [x] **T016 Client F048 adapter 契约测试**
   - **文件**: `src/frontend/client/src/api/unifiedPermissionSettings.test.ts`
   - **逻辑**: 创建 context/candidates 两域同形映射；创建可选字段/响应兼容；F048 context/grants/models/mutate 的 version 不丢失；AbortSignal 透传。
   - **覆盖 AC**: AC-01, AC-02, AC-07, AC-08, AC-09, AC-11, AC-12, AC-13, AC-16, AC-19, AC-20, AC-23, AC-30, AC-33
   - **依赖**: T013
 
-- [ ] **T017 Knowledge/Permission Client adapter 实现**
+- [x] **T017 Knowledge/Permission Client adapter 实现**
   - **文件**: `src/frontend/client/src/api/knowledge.ts`, `src/frontend/client/src/api/permission.ts`
   - **逻辑**: 使用 wrapped request；增加 Knowledge creation context/candidates 和创建可选契约；编辑复用 F048 adapter；不写 403 业务分支。
   - **验证**: T016 对应 Knowledge/F048 断言通过。
   - **依赖**: T016
 
-- [ ] **T018 Channel Client adapter 实现**
+- [x] **T018 Channel Client adapter 实现**
   - **文件**: `src/frontend/client/src/api/channels.ts`
   - **逻辑**: 增加 Channel creation context/candidates 和创建可选契约；保留 source/filter/subchannel/`knowledge_sync`；映射部分失败 result。
   - **验证**: T016 对应 Channel 断言通过。

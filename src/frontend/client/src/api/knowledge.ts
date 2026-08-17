@@ -982,12 +982,14 @@ export interface CreateSpacePayload {
     auto_tag_library_id?: number | null;
     auto_tag_custom_tags?: string[] | null;
     initialPermissions?: InitialPermissionsPayload;
+    creationRequestId?: string;
 }
 
 export async function createSpaceApi(data: CreateSpacePayload): Promise<KnowledgeSpace> {
-    const { initialPermissions, ...spaceData } = data;
+    const { initialPermissions, creationRequestId, ...spaceData } = data;
     const body = {
         ...spaceData,
+        ...(creationRequestId ? { creation_request_id: creationRequestId } : {}),
         ...(initialPermissions ? { initial_permissions: initialPermissions } : {}),
     };
     const res = await request.post(`/api/v1/knowledge/space`, body);
