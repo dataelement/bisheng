@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 7 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 9 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -69,13 +69,13 @@
 
 ## Wave 2：Knowledge/Channel 创建编排（后端 Test-First）
 
-- [ ] **T008 Knowledge 创建幂等与初始授权测试**
+- [x] **T008 Knowledge 创建幂等与初始授权测试**
   - **文件**: `src/backend/test/knowledge/test_unified_permission_creation.py`
   - **逻辑**: 旧 payload；新 payload；资源/owner 失败；Grant 部分失败；同 key 同 hash 前向重试；同 key 异 hash 冲突；唯一键竞争；自动标签字段不丢。
   - **覆盖 AC**: AC-01, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-19, AC-30, AC-31, AC-33
   - **依赖**: T007
 
-- [ ] **T009 Knowledge 创建编排实现**
+- [x] **T009 Knowledge 创建编排实现**
   - **文件**: `src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`, `src/backend/bisheng/knowledge/domain/schemas/knowledge_space_schema.py`
   - **逻辑**: 业务资源与 protected owner 先成功，再调 Initial Grant port；持久 request/hash；返回原资源形状 + 可选 result；保留自动标签及既有副作用。
   - **验证**: T008 全部通过。

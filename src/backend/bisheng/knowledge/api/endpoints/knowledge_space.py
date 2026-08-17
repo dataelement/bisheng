@@ -67,6 +67,8 @@ async def create_space(
         auto_tag_enabled=req.auto_tag_enabled,
         auto_tag_library_id=req.auto_tag_library_id,
         auto_tag_custom_tags=req.auto_tag_custom_tags,
+        creation_request_id=req.creation_request_id,
+        initial_permissions=req.initial_permissions,
     )
     return resp_200(space)
 

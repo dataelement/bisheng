@@ -5,6 +5,7 @@ import re
 import tempfile
 from dataclasses import replace
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING
@@ -12,6 +13,7 @@ from urllib.parse import urlparse
 
 from fastapi import Request
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileOne
@@ -22,8 +24,10 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
     KnowledgeSpaceSubscribeScenarioHandler,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    SpaceCreationRequestConflictError,
     SpaceFileDuplicateError,
     SpaceFileExtensionError,
     SpaceFileNameDuplicateError,
@@ -87,6 +91,9 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
+    InitialPermissionApplyResult,
+    InitialPermissionsRequest,
+    KnowledgeSpaceCreateResp,
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
     KnowledgeSpaceListItemResp,
@@ -120,6 +127,11 @@ from bisheng.permission.application.business_authorization import (
     check_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.application.initial_grant import (
+    InitialGrantAddition,
+    InitialGrantApplication,
+    InitialGrantRequest,
+)
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
@@ -207,6 +219,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         login_user: UserPayload,
         f048_permission_adapter=None,
         f048_file_delivery=None,
+        initial_grant_application: InitialGrantApplication | None = None,
     ):
         self.request = request
         self.login_user = login_user
@@ -214,6 +227,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.approval_gate: ApprovalGate | None = None
         self.f048_permission_adapter = f048_permission_adapter
         self.f048_file_delivery = f048_file_delivery
+        self.initial_grant_application = initial_grant_application
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -1058,28 +1072,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_enabled: bool = False,
         auto_tag_library_id: int | None = None,
         auto_tag_custom_tags: list[str] | None = None,
+        creation_request_id: str | None = None,
+        initial_permissions: InitialPermissionsRequest | None = None,
         skip_user_limit: bool = False,
-    ) -> Knowledge:
+    ) -> KnowledgeSpaceCreateResp:
         """Create a new knowledge space (max 30 per user)."""
 
-        if not skip_user_limit:
-            count = await KnowledgeDao.async_count_spaces_by_user(
-                self.login_user.user_id,
-                exclude_department_spaces=True,
-            )
-            if count >= _MAX_SPACE_PER_USER:
-                raise SpaceLimitError()
+        existing = await self._existing_creation(creation_request_id, None)
+        workbench_llm = None
+        if existing is None:
+            if not skip_user_limit:
+                count = await KnowledgeDao.async_count_spaces_by_user(
+                    self.login_user.user_id,
+                    exclude_department_spaces=True,
+                )
+                if count >= _MAX_SPACE_PER_USER:
+                    raise SpaceLimitError()
 
-        workbench_llm = await LLMService.get_workbench_llm()
-        if not workbench_llm or not workbench_llm.embedding_model:
-            raise WorkbenchEmbeddingError()
+            workbench_llm = await LLMService.get_workbench_llm()
+            if not workbench_llm or not workbench_llm.embedding_model:
+                raise WorkbenchEmbeddingError()
 
         # Defence-in-depth: a tenant with the feature flag off must not be able to
-        # configure auto-tag by hand-crafting requests.
+        # configure auto-tag by hand-crafting requests. Normalize before hashing
+        # so retries compare the effective business command.
         if not await self._is_auto_tag_feature_visible():
             auto_tag_enabled = False
             auto_tag_library_id = None
             auto_tag_custom_tags = None
+        elif auto_tag_custom_tags is not None:
+            auto_tag_custom_tags = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
+        payload_hash = self._creation_payload_hash(
+            name=name,
+            description=description,
+            icon=icon,
+            auth_type=auth_type,
+            is_released=is_released,
+            auto_tag_enabled=auto_tag_enabled,
+            auto_tag_library_id=auto_tag_library_id,
+            auto_tag_custom_tags=auto_tag_custom_tags,
+            initial_permissions=initial_permissions,
+        )
+        if existing is not None:
+            if existing.creation_payload_hash != payload_hash:
+                raise SpaceCreationRequestConflictError()
+            return await self._complete_knowledge_creation(
+                existing,
+                creation_request_id=creation_request_id,
+                initial_permissions=initial_permissions,
+            )
+        if workbench_llm is None or workbench_llm.embedding_model is None:
+            raise WorkbenchEmbeddingError()
+
         # Library-id needs the freshly minted knowledge.id when we are upserting
         # a private library, so defer the auto-tag fields until after insert.
         db_knowledge = Knowledge(
@@ -1092,13 +1136,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_released=is_released,
             auto_tag_enabled=False,
             auto_tag_library_id=None,
+            creation_request_id=creation_request_id,
+            creation_payload_hash=payload_hash if creation_request_id is not None else None,
         )
 
-        knowledge_space = KnowledgeService.create_knowledge_base(
-            self.request, self.login_user, db_knowledge, skip_hook=True
-        )
+        created = True
+        try:
+            knowledge_space = KnowledgeService.create_knowledge_base(
+                self.request, self.login_user, db_knowledge, skip_hook=True
+            )
+        except IntegrityError:
+            # A concurrent request with the same durable key won the insert.
+            # Only that exact command may be resumed; a different hash conflicts.
+            knowledge_space = await self._existing_creation(creation_request_id, payload_hash)
+            if knowledge_space is None:
+                raise
+            created = False
 
-        if auto_tag_enabled or auto_tag_library_id is not None or auto_tag_custom_tags is not None:
+        if created and (auto_tag_enabled or auto_tag_library_id is not None or auto_tag_custom_tags is not None):
             resolved_enabled, resolved_library_id = await self._apply_auto_tag_binding(
                 knowledge=knowledge_space,
                 auto_tag_enabled=auto_tag_enabled,
@@ -1112,6 +1167,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
 
+        result = await self._complete_knowledge_creation(
+            knowledge_space,
+            creation_request_id=creation_request_id,
+            initial_permissions=initial_permissions,
+        )
+
+        if not created:
+            return result
+
+        member = SpaceChannelMember(
+            business_id=str(knowledge_space.id),
+            business_type=BusinessTypeEnum.SPACE,
+            user_id=self.login_user.user_id,
+            user_role=UserRoleEnum.CREATOR,
+            status=MembershipStatusEnum.ACTIVE,
+        )
+        await SpaceChannelMemberDao.async_insert_member(member)
+
+        # Audit log for knowledge space creation
+        await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
+            self.login_user, self.request, knowledge_space
+        )
+
+        return result
+
+    async def _complete_knowledge_creation(
+        self,
+        knowledge_space: Knowledge,
+        *,
+        creation_request_id: str | None,
+        initial_permissions: InitialPermissionsRequest | None,
+    ) -> KnowledgeSpaceCreateResp:
         container_adapter = await self._resource_adapter("knowledge_space")
         actor = await self._permission_actor()
         await container_adapter.authorize_created(
@@ -1139,22 +1226,131 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 enabled=True,
             )
-
-        member = SpaceChannelMember(
-            business_id=str(knowledge_space.id),
-            business_type=BusinessTypeEnum.SPACE,
-            user_id=self.login_user.user_id,
-            user_role=UserRoleEnum.CREATOR,
-            status=MembershipStatusEnum.ACTIVE,
+        permission_result = None
+        if initial_permissions is not None and initial_permissions.grants:
+            if self.initial_grant_application is None or creation_request_id is None:
+                raise RuntimeError("F050 Initial Grant application is not configured")
+            target = await container_adapter.resolve_permission_target(
+                resource_type="knowledge_space",
+                resource_id=str(knowledge_space.id),
+                actor=actor,
+                action="manage_permission",
+            )
+            request = InitialGrantRequest(
+                command_key=creation_request_id,
+                expected_catalog_release_id=initial_permissions.expected_catalog_release_id,
+                additions=tuple(
+                    InitialGrantAddition(
+                        model_key=grant.model_key,
+                        subject_type=grant.subject.type,
+                        subject_id=grant.subject.id,
+                        userset_relation=grant.subject.userset_relation,
+                        include_children=grant.subject.include_children,
+                    )
+                    for grant in initial_permissions.grants
+                ),
+            )
+            try:
+                mutation = await self.initial_grant_application.apply(
+                    actor=actor,
+                    target=target,
+                    request=request,
+                )
+                permission_result = InitialPermissionApplyResult(
+                    status="succeeded",
+                    resource_version=mutation.resource_version,
+                    assignee_ids=[
+                        str(source.source_id)
+                        for grant in mutation.grants
+                        for source in grant.sources
+                        if source.active and not source.protected
+                    ],
+                )
+            except Exception as exc:
+                # Ordinary Grants are explicitly the partial-success phase: the
+                # business resource and protected owner are already durable.
+                logger.exception("Initial Knowledge Space Grant mutation failed")
+                permission_result = InitialPermissionApplyResult(
+                    status="failed",
+                    error_code=exc.code if isinstance(exc, BaseErrorCode) else 500,
+                    message=exc.message if isinstance(exc, BaseErrorCode) else "Initial permission update failed",
+                )
+        return KnowledgeSpaceCreateResp.model_validate(
+            {
+                **knowledge_space.model_dump(),
+                "initial_permission_result": permission_result,
+            }
         )
-        await SpaceChannelMemberDao.async_insert_member(member)
 
-        # Audit log for knowledge space creation
-        await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
-            self.login_user, self.request, knowledge_space
+    async def _existing_creation(
+        self,
+        creation_request_id: str | None,
+        payload_hash: str | None,
+    ) -> Knowledge | None:
+        if creation_request_id is None:
+            return None
+        existing = await KnowledgeDao.aget_by_creation_request(
+            tenant_id=int(self.login_user.tenant_id),
+            user_id=int(self.login_user.user_id),
+            knowledge_type=KnowledgeTypeEnum.SPACE.value,
+            creation_request_id=creation_request_id,
         )
+        if existing is not None and payload_hash is not None and existing.creation_payload_hash != payload_hash:
+            raise SpaceCreationRequestConflictError()
+        return existing
 
-        return knowledge_space
+    @staticmethod
+    def _creation_payload_hash(
+        *,
+        name: str,
+        description: str | None,
+        icon: str | None,
+        auth_type: AuthTypeEnum,
+        is_released: bool,
+        auto_tag_enabled: bool,
+        auto_tag_library_id: int | None,
+        auto_tag_custom_tags: list[str] | None,
+        initial_permissions: InitialPermissionsRequest | None,
+    ) -> str:
+        payload = {
+            "name": name,
+            "description": description,
+            "icon": icon,
+            "auth_type": auth_type.value,
+            "is_released": is_released,
+            "auto_tag_enabled": auto_tag_enabled,
+            "auto_tag_library_id": auto_tag_library_id,
+            "auto_tag_custom_tags": auto_tag_custom_tags,
+            "initial_permissions": None,
+        }
+        if initial_permissions is not None:
+            grants = sorted(
+                (
+                    {
+                        "model_key": grant.model_key.strip(),
+                        "subject": {
+                            "type": grant.subject.type.strip().lower(),
+                            "id": grant.subject.id.strip(),
+                            "userset_relation": grant.subject.userset_relation,
+                            "include_children": grant.subject.include_children,
+                        },
+                    }
+                    for grant in initial_permissions.grants
+                ),
+                key=lambda row: (
+                    row["model_key"],
+                    row["subject"]["type"],
+                    row["subject"]["id"],
+                    row["subject"]["userset_relation"] or "",
+                    row["subject"]["include_children"],
+                ),
+            )
+            payload["initial_permissions"] = {
+                "expected_catalog_release_id": initial_permissions.expected_catalog_release_id,
+                "grants": grants,
+            }
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return sha256(canonical.encode()).hexdigest()
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
         from bisheng.worker import rebuild_knowledge_celery

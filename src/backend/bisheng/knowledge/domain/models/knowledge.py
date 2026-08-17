@@ -184,6 +184,24 @@ class KnowledgeCreate(BaseModel):
 
 class KnowledgeDao(KnowledgeBase):
     @classmethod
+    async def aget_by_creation_request(
+        cls,
+        *,
+        tenant_id: int,
+        user_id: int,
+        knowledge_type: int,
+        creation_request_id: str,
+    ) -> Knowledge | None:
+        async with get_async_db_session() as session:
+            statement = select(Knowledge).where(
+                Knowledge.tenant_id == tenant_id,
+                Knowledge.user_id == user_id,
+                Knowledge.type == knowledge_type,
+                Knowledge.creation_request_id == creation_request_id,
+            )
+            return (await session.exec(statement)).first()
+
+    @classmethod
     def insert_one(cls, data: Knowledge) -> Knowledge:
         with get_sync_db_session() as session:
             session.add(data)

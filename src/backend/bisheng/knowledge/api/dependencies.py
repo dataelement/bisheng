@@ -11,8 +11,9 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_document_re
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
     KnowledgeDocumentVersionRepositoryImpl,
 )
-from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import \
-    KnowledgeFileRepositoryImpl
+from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+    KnowledgeFileRepositoryImpl,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_repository_impl import KnowledgeRepositoryImpl
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_repository import (
     KnowledgeDocumentRepository,
@@ -31,8 +32,8 @@ from bisheng.message.api.dependencies import get_message_service as _get_message
 if TYPE_CHECKING:
     from bisheng.knowledge.domain.services.knowledge_file_service import KnowledgeFileService
     from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
-    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
+    from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
     from bisheng.knowledge.domain.services.knowledge_version_service import KnowledgeVersionService
 
 
@@ -114,8 +115,19 @@ async def get_knowledge_space_service(
 ) -> 'KnowledgeSpaceService':
     """Get KnowledgeSpaceService instance, bound to the current request and login user"""
     from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService as _SvcClass
+    from bisheng.permission.application.access import get_f048_runtime
+    from bisheng.permission.application.initial_grant import InitialGrantApplication
+    from bisheng.tenant.domain.services.f048_permission_subject import TenantPermissionSubjectDirectory
+
     message_service = await _get_message_service(session)
-    service = _SvcClass(request=request, login_user=login_user)
+    service = _SvcClass(
+        request=request,
+        login_user=login_user,
+        initial_grant_application=InitialGrantApplication(
+            runtime=await get_f048_runtime(),
+            subjects=TenantPermissionSubjectDirectory(),
+        ),
+    )
     service.message_service = message_service
     service.version_repo = version_repo
     service.doc_repo = doc_repo
