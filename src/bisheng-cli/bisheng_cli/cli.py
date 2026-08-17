@@ -30,6 +30,45 @@ _EPILOG = (
 )
 
 
+def _add_global_flags(parser: argparse.ArgumentParser, *, mirror: bool) -> None:
+    """Global flags, defined on the root parser and mirrored onto each subcommand.
+
+    argparse only accepts a root-level option *before* the subcommand, so a bare
+    definition would make `bisheng deploy --json` fail with "unrecognized
+    arguments" — and that is the order everyone writes, including this feature's
+    own verification script. Mirroring the flags onto every subparser makes both
+    orders work.
+
+    The mirrors must use `default=SUPPRESS`. argparse parses a subcommand into a
+    fresh namespace and then copies every key of it onto the outer one, so a
+    mirror carrying an ordinary default would overwrite the value already parsed
+    from `bisheng --json deploy` with `False`. SUPPRESS leaves the key out of the
+    sub-namespace entirely when the flag was not given, so whatever the root
+    parser decided survives.
+    """
+
+    def default(value: object) -> object:
+        return argparse.SUPPRESS if mirror else value
+
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        default=default(False),
+        help="打印请求方法 / 路径 / 状态码 / 耗时（Authorization 头恒掩码）",
+    )
+    parser.add_argument("--quiet", action="store_true", default=default(False), help="只输出错误")
+    parser.add_argument(
+        "--json", action="store_true", dest="json_mode", default=default(False), help="机器可读 NDJSON 输出（stdout）"
+    )
+    parser.add_argument("--timeout", type=float, default=default(None), help="普通请求读超时秒数（默认 60）")
+    parser.add_argument(
+        "--no-proxy",
+        action="store_true",
+        default=default(False),
+        help="忽略 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY 环境变量",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bisheng",
@@ -38,13 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"bisheng {__version__}")
-    parser.add_argument(
-        "--verbose", action="store_true", help="打印请求方法 / 路径 / 状态码 / 耗时（Authorization 头恒掩码）"
-    )
-    parser.add_argument("--quiet", action="store_true", help="只输出错误")
-    parser.add_argument("--json", action="store_true", dest="json_mode", help="机器可读 NDJSON 输出（stdout）")
-    parser.add_argument("--timeout", type=float, default=None, help="普通请求读超时秒数（默认 60）")
-    parser.add_argument("--no-proxy", action="store_true", help="忽略 HTTP_PROXY / HTTPS_PROXY / ALL_PROXY 环境变量")
+    _add_global_flags(parser, mirror=False)
 
     subparsers = parser.add_subparsers(dest="command", metavar="{login,deploy,logs}")
 
@@ -71,6 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
     logs.add_argument("--since", default=None, help="起始时间：epoch 秒，或 30m / 2h / 7d 相对窗口")
     logs.add_argument("--keyword", default=None, help="只返回含该关键字的行（服务端过滤，行数可能少于 --tail）")
     logs.add_argument("--follow", action="store_true", help="持续拉取（短轮询 3 秒）")
+
+    for subparser in (login, deploy, logs):
+        _add_global_flags(subparser, mirror=True)
 
     return parser
 

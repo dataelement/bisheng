@@ -1,0 +1,128 @@
+name: CLI Quality
+
+# Quality gate for src/bisheng-cli/ (the standalone `bisheng` developer CLI).
+#
+# Why this exists as its own workflow: the repo's CI currently runs no tests at
+# all for runtime-manager or app-proxy. Anything not wired into a gate here ends
+# up in the same place — a suite nobody runs and nobody trusts. A separate file
+# (rather than a job inside ci.yml) also keeps the merge-conflict surface at
+# zero while several features are landing in parallel.
+
+on:
+  pull_request:
+    paths:
+      - "src/bisheng-cli/**"
+      - "scripts/pack_cli_wheel.sh"
+      - ".github/workflows/cli-quality.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  locked:
+    name: Lint & Test (locked resolution)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/bisheng-cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen, not a plain sync: uv.lock is committed, and CI must use it
+      # rather than re-resolving. Same rule as src/backend/Dockerfile.
+      - name: Sync (frozen)
+        run: uv sync --frozen --extra dev
+
+      - name: Ruff
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      # `network`-marked cases need a real platform and are skipped by default;
+      # they only run during the 114 manual verification.
+      - name: Tests
+        run: uv run pytest -m "not network"
+
+  wheel:
+    name: Wheel install smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      # The only leg that exercises the shape a user actually receives: a wheel
+      # installed into an empty environment, where uv.lock plays no part and the
+      # dependency ceilings in the wheel metadata are the only constraint.
+      - name: Build wheel and run the packaging smoke test
+        run: bash scripts/pack_cli_wheel.sh
+
+      - name: Version drift guard
+        # Catches "changed the CLI, forgot to re-run pack_cli_wheel.sh": the
+        # platform would keep serving the previous wheel with no signal at all.
+        run: |
+          set -euo pipefail
+          PKG_VERSION="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/bisheng-cli/bisheng_cli/__init__.py)"
+          MANIFEST_VERSION="$(python3 -c "import json;print(json.load(open('src/backend/bisheng/dev_toolkit/artifacts/manifest.json'))['cli']['version'])")"
+          if [ "${PKG_VERSION}" != "${MANIFEST_VERSION}" ]; then
+            echo "::error::bisheng_cli.__version__=${PKG_VERSION} but artifacts/manifest.json says ${MANIFEST_VERSION}"
+            exit 1
+          fi
+          # The artifacts must be committable. `.gitignore` carries build/, lib/,
+          # wheels/ and sdist/ without a leading slash, so a future rename of the
+          # directory would make `git add` fail silently.
+          WHEEL="$(ls src/backend/bisheng/dev_toolkit/artifacts/*.whl | head -n 1)"
+          if git check-ignore -q "${WHEEL}"; then
+            echo "::error::${WHEEL} is matched by a .gitignore rule and would never reach the backend image"
+            exit 1
+          fi
+
+      - name: Artifacts are committed, not just built
+        # The wheel travels inside the backend package because the image's build
+        # context is only ./src/backend/. If rebuilding it produces a diff, the
+        # committed copy is stale.
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- src/backend/bisheng/dev_toolkit/artifacts/manifest.json; then
+            echo "::error::artifacts/manifest.json is out of date — run bash scripts/pack_cli_wheel.sh and commit the result"
+            git --no-pager diff -- src/backend/bisheng/dev_toolkit/artifacts/manifest.json
+            exit 1
+          fi
+
+  highest:
+    name: Upper-bound sentinel (advisory)
+    runs-on: ubuntu-latest
+    # Advisory on purpose: this leg answers "is it time to raise a ceiling?",
+    # which is a decision, not a defect. When it goes red the fix is to raise
+    # the bound after checking the new version, or to pin — never to delete the
+    # bound, which is how app-proxy got a green suite and a dead production
+    # process.
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: src/bisheng-cli
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Resolve to the newest allowed dependencies
+        run: uv sync --upgrade --extra dev
+
+      - name: Import smoke only
+        run: |
+          uv run python -c "import bisheng_cli.main"
+          uv run bisheng --version
+          uv run bisheng deploy --help > /dev/null

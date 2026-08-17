@@ -159,3 +159,25 @@ def test_main_is_the_console_script_entry_point() -> None:
     with pytest.raises(SystemExit) as excinfo:
         main([])
     assert excinfo.value.code == EXIT_USAGE
+
+
+def test_global_flags_accepted_before_and_after_the_subcommand() -> None:
+    """`bisheng deploy --json` must work, not only `bisheng --json deploy`.
+
+    Plain argparse only accepts a root-level option before the subcommand, and
+    the after-form is what people and agents actually type — this feature's own
+    114 verification script writes `bisheng deploy --wait --json`. The mirrored
+    flags on each subparser use `default=SUPPRESS`, so the before-form must keep
+    working too: without SUPPRESS the sub-namespace copy would silently reset
+    `--json` back to False.
+    """
+    parser = build_parser()
+    for argv in (["--json", "deploy", "--wait"], ["deploy", "--wait", "--json"]):
+        args = parser.parse_args(argv)
+        assert args.json_mode is True and args.wait is True
+    for argv in (["--verbose", "logs"], ["logs", "--verbose"]):
+        assert parser.parse_args(argv).verbose is True
+    # The defaults still arrive when nothing is passed anywhere.
+    bare = parser.parse_args(["logs"])
+    assert bare.json_mode is False and bare.verbose is False
+    assert bare.quiet is False and bare.timeout is None and bare.no_proxy is False

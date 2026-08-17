@@ -260,3 +260,21 @@ class PlatformMock:
 
     def paths_called(self) -> list[str]:
         return [r.url.path for r in self.calls]
+
+
+def use_mock_transport(monkeypatch: Any, module: Any, mock: PlatformMock) -> None:
+    """Point a command module's `PlatformClient` at `mock`.
+
+    Command modules construct their own client, which is the right shape for
+    production and the wrong shape for a test. Patching the name inside the
+    module (rather than injecting a client through the signature) keeps the
+    production code free of a test-only seam while still letting the sentinel in
+    `conftest.no_network` catch anything the mock does not cover.
+    """
+    real = module.PlatformClient
+
+    def factory(*args: Any, **kwargs: Any) -> Any:
+        kwargs.setdefault("transport", mock.transport)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(module, "PlatformClient", factory)
