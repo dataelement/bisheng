@@ -242,9 +242,19 @@ async def precheck_probe(deployment: AppDeployment, *, manifest: AppManifest, im
 
 
 async def _presign(object_key: str | None) -> str:
-    """A presigned download URL for the snapshot — the manager holds no MinIO credentials."""
+    """A presigned download URL for the snapshot — the manager holds no MinIO credentials.
+
+    ``clear_host=False`` is essential: ``get_share_link`` defaults to stripping
+    the scheme+host so a browser fetches through the frontend nginx proxy, but
+    this URL is consumed by runtime-manager **server-to-server**. A host-less,
+    scheme-less path makes its HTTP client reject the fetch ("Request URL is
+    missing an 'http://' or 'https://' protocol") and the build fails at
+    ``fetch_source`` with 16227.
+    """
     storage = await get_minio_storage()
-    return await storage.get_share_link(object_key, bucket=APPS_BUCKET, expire_days=CODE_URL_EXPIRE_DAYS)
+    return await storage.get_share_link(
+        object_key, bucket=APPS_BUCKET, clear_host=False, expire_days=CODE_URL_EXPIRE_DAYS
+    )
 
 
 async def _build_identity(deployment: AppDeployment, manifest: AppManifest) -> tuple[str, int]:
