@@ -30,14 +30,113 @@ from bisheng.workstation.domain.services.review_tag_notification_service import 
 )
 
 
+def _parse_fga_user_ref(user_ref: str) -> tuple[str, int] | None:
+    """解析 OpenFGA user 字段：user:1 / department:10#member / user_group:5#admin。"""
+    raw = str(user_ref or "").strip()
+    if not raw:
+        return None
+    relation_sep = raw.find("#")
+    object_part = raw[:relation_sep] if relation_sep >= 0 else raw
+    if ":" not in object_part:
+        return None
+    kind, _, ident = object_part.partition(":")
+    if not ident.isdigit():
+        return None
+    return kind, int(ident)
+
+
+async def _user_has_independent_manager_grant(user_id: int, space_id: int) -> bool:
+    """用户是否对该空间持有独立于 owner 的 manager 授权（口径 2：含部门/用户组）。"""
+    from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+    from bisheng.database.models.user_group import UserGroupDao
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    try:
+        fga = await PermissionService._aget_fga()
+    except Exception:
+        logger.exception("openfga client failed while excluding owner-only review spaces space_id=%s", space_id)
+        return False
+    if fga is None:
+        return False
+    try:
+        manager_tuples = await fga.read_tuples(relation="manager", object=f"knowledge_space:{int(space_id)}")
+    except Exception:
+        logger.exception("openfga read manager failed space_id=%s", space_id)
+        return False
+
+    memberships = await UserDepartmentDao.aget_user_departments(int(user_id))
+    user_dept_ids = {int(row.department_id) for row in (memberships or []) if getattr(row, "department_id", None)}
+    group_rows = await UserGroupDao.aget_user_group(int(user_id))
+    user_group_ids = {int(row.group_id) for row in (group_rows or []) if getattr(row, "group_id", None)}
+
+    for item in manager_tuples or []:
+        parsed = _parse_fga_user_ref(str(item.get("user") or ""))
+        if parsed is None:
+            continue
+        kind, ident = parsed
+        if kind == "user" and ident == int(user_id):
+            return True
+        if kind == "department":
+            dept = await DepartmentDao.aget_by_id(ident)
+            path = getattr(dept, "path", None) if dept is not None else None
+            if path:
+                subtree = await DepartmentDao.aget_subtree_ids(path)
+                if user_dept_ids.intersection(int(i) for i in (subtree or [])):
+                    return True
+            elif ident in user_dept_ids:
+                return True
+        if kind == "user_group" and ident in user_group_ids:
+            return True
+    return False
+
+
+async def _exclude_owner_only_space_ids(user_id: int, space_ids: set[int], login_user: UserPayload) -> set[int]:
+    """从 can_manage 集合中去掉仅凭所有者进入的空间。"""
+    if not space_ids:
+        return set()
+    from bisheng.permission.domain.services.permission_service import PermissionService
+
+    raw_owner_ids = await PermissionService.list_accessible_ids(
+        user_id=user_id,
+        relation="owner",
+        object_type="knowledge_space",
+        login_user=login_user,
+    )
+    owner_ids = {int(i) for i in (raw_owner_ids or []) if str(i).isdigit()}
+    for space_id in space_ids:
+        sid = int(space_id)
+        if sid in owner_ids:
+            continue
+        try:
+            creator_id = await PermissionService._get_resource_creator("knowledge_space", str(sid))
+        except Exception:
+            logger.exception("creator fallback failed while excluding owner-only review space_id=%s", sid)
+            continue
+        if creator_id is not None and int(creator_id) == int(user_id):
+            owner_ids.add(sid)
+    kept = {int(space_id) for space_id in space_ids if int(space_id) not in owner_ids}
+    for space_id in space_ids:
+        sid = int(space_id)
+        if sid not in owner_ids or sid in kept:
+            continue
+        if await _user_has_independent_manager_grant(user_id, sid):
+            kept.add(sid)
+    return kept
+
+
 async def _resolve_fga_role_managed_space_ids(login_user: UserPayload) -> frozenset[int]:
-    """解析 public/department/team_ks 下具备 can_manage 的空间（OpenFGA + 成员表 fallback）。"""
-    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao
+    """解析 public/department/team_ks 下具备独立管理员授权的空间。
+
+    OpenFGA can_manage 含所有者；按身份排除后只保留独立 manager（含部门/用户组继承）。
+    FGA 无结果时回退成员表 admin，不含 creator。
+    """
+    from bisheng.common.models.space_channel_member import SpaceChannelMemberDao, UserRoleEnum
     from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao
     from bisheng.permission.domain.services.permission_service import PermissionService
 
     user_id = int(login_user.user_id)
     candidate_ids: list[int] = []
+    used_member_fallback = False
 
     raw_ids = await PermissionService.list_accessible_ids(
         user_id=user_id,
@@ -49,11 +148,20 @@ async def _resolve_fga_role_managed_space_ids(login_user: UserPayload) -> frozen
         candidate_ids = [int(i) for i in raw_ids if str(i).isdigit()]
 
     if not candidate_ids:
+        used_member_fallback = True
         managed_members = await SpaceChannelMemberDao.async_get_user_managed_members(user_id)
         for member in managed_members or []:
+            if getattr(member, "user_role", None) != UserRoleEnum.ADMIN:
+                continue
             business_id = str(getattr(member, "business_id", "") or "").strip()
             if business_id.isdigit():
                 candidate_ids.append(int(business_id))
+
+    if not candidate_ids:
+        return frozenset()
+
+    if not used_member_fallback:
+        candidate_ids = sorted(await _exclude_owner_only_space_ids(user_id, set(candidate_ids), login_user))
 
     if not candidate_ids:
         return frozenset()
@@ -66,6 +174,25 @@ async def _resolve_fga_role_managed_space_ids(login_user: UserPayload) -> frozen
         if level in ROLE_MANAGED_REVIEW_LEVELS:
             role_space_ids.add(int(space_id))
     return frozenset(role_space_ids)
+
+
+async def _clinic_admin_department_ids(role_space_ids: frozenset[int]) -> frozenset[int]:
+    """当前人管理的科室库绑定到的科室部门 ID（多库并集）。"""
+    from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpaceDao
+    from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao
+
+    if not role_space_ids:
+        return frozenset()
+    scope_map = await KnowledgeSpaceScopeDao.aget_map_by_space_ids(list(role_space_ids))
+    team_ks_ids = [
+        int(space_id)
+        for space_id in role_space_ids
+        if str(getattr(scope_map.get(space_id), "level", "") or "") == "team_ks"
+    ]
+    if not team_ks_ids:
+        return frozenset()
+    bindings = await DepartmentKnowledgeSpaceDao.aget_by_space_ids(team_ks_ids)
+    return frozenset(int(row.department_id) for row in (bindings or []) if getattr(row, "department_id", None))
 
 
 async def resolve_review_tag_scope_for_user(login_user: UserPayload) -> ReviewTagScope:
@@ -91,22 +218,11 @@ async def resolve_review_tag_scope_for_user(login_user: UserPayload) -> ReviewTa
             return ReviewTagScope(full_tenant=True)
 
     role_space_ids = await _resolve_fga_role_managed_space_ids(login_user)
-
-    from bisheng.database.models.department import DepartmentDao
-    from bisheng.knowledge.domain.services.department_admin_member_access import (
-        aget_dept_admin_scoped_user_ids,
-    )
-
-    admin_depts = await DepartmentDao.aget_user_admin_departments(int(login_user.user_id))
-    org_uploader_ids: frozenset[int] | None = None
-    if admin_depts:
-        scoped = await aget_dept_admin_scoped_user_ids(int(login_user.user_id))
-        org_uploader_ids = frozenset(int(uid) for uid in (scoped or set()))
-
+    clinic_dept_ids = await _clinic_admin_department_ids(role_space_ids)
     scope = ReviewTagScope(
         full_tenant=False,
         role_managed_space_ids=role_space_ids,
-        org_uploader_ids=org_uploader_ids,
+        clinic_admin_department_ids=clinic_dept_ids,
     )
     if not scope.has_review_capacity():
         raise ReviewTagPermissionDeniedError()
@@ -161,7 +277,7 @@ class WorkStationTagsService(BaseService):
         kid = int(knowledge_id)
         if kid in scope.role_managed_space_ids:
             return
-        if scope.org_uploader_ids is None:
+        if not scope.clinic_admin_department_ids:
             raise ReviewTagSpaceOutOfScopeError()
         from bisheng.knowledge.domain.models.knowledge_space_scope import (
             KnowledgeSpaceLevelEnum,
@@ -172,7 +288,7 @@ class WorkStationTagsService(BaseService):
         level = str(getattr(scope_row, "level", "") or "") if scope_row else ""
         if level not in (KnowledgeSpaceLevelEnum.TEAM.value, KnowledgeSpaceLevelEnum.PERSONAL.value):
             raise ReviewTagSpaceOutOfScopeError()
-        # 组织管理员可将通过结果落到团队/个人库；空间本身须为这两类。
+        # 科室库管理员可将团队/个人待审写回来源团队/个人库。
         return
 
     async def delete_review_tag(
