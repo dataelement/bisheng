@@ -542,13 +542,19 @@ async def search_shougang_portal_qa_files(
     return resp_200(ShougangPortalQaFileSearchResp(**result).model_dump(mode="json"))
 
 
+# 与 /spaces 列表对齐。门户登录选库会传 portal_configured；只接受 public 时会 422，门户再翻成 502。
+PortalQaChildrenDiscoveryScope = Literal[
+    "public",
+    "public_and_department",
+    "portal_public",
+    "portal_configured",
+]
+
+
 @router.get("/qa/spaces/{space_id}/children")
 async def list_shougang_portal_qa_children(
     space_id: int,
-    discovery_scope: Literal[
-        "public",
-        "public_and_department",
-    ] = "public_and_department",
+    discovery_scope: PortalQaChildrenDiscoveryScope = "public_and_department",
     parent_id: int | None = None,
     cursor: str | None = None,
     page_size: int = Query(default=10, ge=1, le=100),
@@ -568,10 +574,7 @@ async def list_shougang_portal_qa_children(
 async def get_shougang_portal_qa_folder_stats(
     space_id: int,
     req: KnowledgeSpaceFolderStatsReq,
-    discovery_scope: Literal[
-        "public",
-        "public_and_department",
-    ] = "public_and_department",
+    discovery_scope: PortalQaChildrenDiscoveryScope = "public_and_department",
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_shougang_portal_qa_folder_stats(
