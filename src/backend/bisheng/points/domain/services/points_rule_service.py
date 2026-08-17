@@ -8,6 +8,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.points import PointsRuleConflictError, PointsRuleNotFoundError
 from bisheng.points.domain.constants.beneficiary import allowed_beneficiaries
 from bisheng.points.domain.constants.optional_fixed_score_rules import validate_deferred_config_rule_can_enable
+from bisheng.points.domain.constants.tier_rule_score_expr import validate_g3_tier_score_expr
 from bisheng.points.domain.models import PointRule
 from bisheng.points.domain.schemas.points_schema import (
     PointCopiesUpdateRequest,
@@ -67,6 +68,16 @@ class PointsRuleService:
         rows = await self.repository.list_rules(tenant_id, rule_type=rule_type, status=status)
         return [self._to_dto(r) for r in rows]
 
+    @staticmethod
+    def validate_score_expr(rule_code: str, score_expr: dict | None) -> None:
+        """校验规则 score_expr 结构（当前仅 G3 阶梯）。"""
+        code = (rule_code or "").strip().upper()
+        if code != "G3":
+            return
+        err = validate_g3_tier_score_expr(score_expr)
+        if err:
+            raise PointsRuleConflictError(msg=err)
+
     async def create_rule(self, tenant_id: int, user: UserPayload, body: PointRuleRequest) -> PointRuleResponse:
         """创建规则；rule_code 租户内唯一。"""
         require_platform_admin(user)
@@ -76,6 +87,7 @@ class PointsRuleService:
         if await self.repository.get_rule(tenant_id, code):
             raise PointsRuleConflictError(msg=f"规则编码 {code} 已存在")
         self.validate_beneficiary(code, body.rule_type, body.beneficiary)
+        self.validate_score_expr(code, body.score_expr)
         rule = PointRule(
             tenant_id=tenant_id,
             rule_code=code,
@@ -108,6 +120,7 @@ class PointsRuleService:
         if "name" in fields and body.name is not None:
             rule.name = body.name
         if "score_expr" in fields and body.score_expr is not None:
+            self.validate_score_expr(rule.rule_code, body.score_expr)
             rule.score_expr = body.score_expr
             flag_modified(rule, "score_expr")
         if "daily_cap" in fields:
