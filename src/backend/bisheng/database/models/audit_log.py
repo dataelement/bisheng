@@ -111,9 +111,7 @@ class AuditLogBase(SQLModelSerializable):
     object_id: str | None = Field(index=True, description="Operation ObjectID")
     object_name: str | None = Field(sa_column=Column(Text), description="Action object name")
     note: str | None = Field(sa_column=Column(Text), description="Action notes")
-    ip_address: str | None = Field(
-        index=True, description="Client's at time of operationIP<g id='Bold'>Address:</g>"
-    )
+    ip_address: str | None = Field(index=True, description="Client's at time of operationIP<g id='Bold'>Address:</g>")
     # v2.5.1 F011: structured audit fields.
     # Coexist with legacy system_id/event_type/object_* columns — old callers
     # keep writing legacy fields (new columns NULL); new callers use the
@@ -253,6 +251,34 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "app.delete_hook_failed",
     "app.meta_update",
     "app.data_row_edit",
+    # F055 publish pipeline (design §4.2 ⑥ / pit 21). Own action family
+    # `app.release.*`, deliberately NOT nested under F054's `app.publish` —
+    # that name is already the *state action* "the app went online", and
+    # reusing the prefix would make both the audit filter and the namespace
+    # mapping ambiguous (design D12). The namespace entry `"app": "app."`
+    # below already covers this family; do not add a second namespace.
+    # Registered in one go — `capability_declared` / `rollback` get their first
+    # writers in a later wave, and touching this whitelist twice for one
+    # feature is how a written event ends up invisible on the audit page.
+    # Lockstep: platform controllers/API/log.ts (`actions` array, module
+    # dropdown, getActionsByModuleApi switch) + bs.json log.systemIdEnum /
+    # log.eventTypeEnum in all three languages (T045).
+    "app.release.submit",
+    "app.release.precheck_failed",
+    "app.release.scan_blocked",
+    "app.release.version_created",
+    "app.release.approval_created",
+    "app.release.approval_exception",
+    "app.release.self_approval",
+    "app.release.approved",
+    "app.release.rejected",
+    "app.release.withdrawn",
+    "app.release.cancelled",
+    "app.release.online",
+    "app.release.pending_online",
+    "app.release.manual_publish",
+    "app.release.capability_declared",
+    "app.release.rollback",
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`

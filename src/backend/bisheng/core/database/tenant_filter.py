@@ -116,6 +116,13 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.database.models.app_instance",
     # app_access_log (AC-38) lands with its table in F054 T089 — register it
     # here in the same change, or the access-log rows bypass tenant filtering.
+    # F055 publish pipeline. `app_deployment` carries tenant_id and is filtered.
+    "bisheng.app_publish.domain.models",
+    # `resource_tier` has NO tenant_id column: resource tiers are platform-level
+    # and shared across tenants (AC-44). Listing it here only guarantees
+    # SQLModel.metadata sees the table; _discover_tenant_aware_tables() skips it
+    # for lack of the column, so it is never auto-filtered.
+    "bisheng.database.models.resource_tier",
 )
 
 

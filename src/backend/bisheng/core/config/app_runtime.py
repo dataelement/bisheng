@@ -95,3 +95,41 @@ class AppRuntimeConf(BaseModel):
         default="",
         description="Package index injected as a build arg (PIP_INDEX_URL); empty = image default",
     )
+
+    # --- publish pipeline (F055 design D2 / D11) -------------------------
+    # These three are the package gates. They are deployment configuration
+    # rather than backend constants for one concrete reason: F053 AC-32 makes
+    # the CLI refuse an oversized package *before* uploading, "according to the
+    # limits of this deployment" — it reads them from
+    # ``GET /api/v2/apps/deploy-limits``. Leave them as constants and the CLI
+    # can only hardcode 50 MiB, i.e. exactly the two-sources-of-one-contract
+    # drift this switch exists to avoid.
+    max_package_mb: int = Field(
+        default=50,
+        ge=1,
+        description="Upload size ceiling of an application package in MB (16201)",
+    )
+    max_unpacked_mb: int = Field(
+        default=200,
+        ge=1,
+        description="Total unpacked size ceiling in MB — the tar-bomb gate (16201)",
+    )
+    max_package_entries: int = Field(
+        default=20000,
+        ge=1,
+        description="Entry-count ceiling of an application package — the many-tiny-files gate (16201)",
+    )
+    default_tiers: dict | None = Field(
+        default=None,
+        description=(
+            "Factory resource-tier specs, overriding app_runtime/domain/constants.py DEFAULT_TIERS at seed time "
+            "(AC-44). Shape: {code: {name, cpu_millicores, memory_mb, description?, sort_order?}}. "
+            "Seeding is idempotent by code, so this only affects a deployment that has not been seeded yet — "
+            "a machine short on memory (114) must set it before the first boot that seeds tiers"
+        ),
+    )
+    preview_ttl_days: int = Field(
+        default=7,
+        ge=1,
+        description="Lifetime of a reviewer's temporary preview instance in days (deferred wave)",
+    )

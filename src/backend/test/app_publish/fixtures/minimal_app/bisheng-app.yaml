@@ -1,0 +1,4 @@
+name: minimal-app
+description: The smallest package that passes precheck, used as the baseline in F055 tests.
+runtime: python3.11
+port: 8080

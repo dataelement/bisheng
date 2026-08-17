@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 33 条修订，65 AC 定稿（决议-1～9） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 15 条修订（D1–D16 / 30 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；70 任务 / 7 Wave / 53 条 `[MVP-核心]`（2026-08-17 独立审查 14 条修订：Celery 登记 / 组合根接线 / 跨 Wave 执行序 / 档位依赖链 / 图标落地 / 16207 闸 / T044·T027 拆分 / 路径与 i18n 补齐 / 建桶接线 / 顺延任务测试载体 / 追溯表订正 / T051 上提） |
-| 实现 | 🔲 未开始 | 0 / 70 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 7 / 70 完成（Wave 1 全部落地，2026-08-17）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -75,43 +75,43 @@ T001–T007（Wave 1，可并行）
 
 ### Wave 1 · `[MVP-核心]` 基础设施（无测试配对，排最前）
 
-- [ ] **T001**: `[MVP-核心]` ORM `app_deployment` 模型 + DAO + 租户感知登记
+- [x] **T001**: `[MVP-核心]` ORM `app_deployment` 模型 + DAO + 租户感知登记
   **文件**: `src/backend/bisheng/app_publish/domain/models/app_deployment.py`（新）, `src/backend/bisheng/core/database/tenant_filter.py`（`_TENANT_AWARE_MODEL_MODULES:39` 登记 `bisheng.app_publish.domain.models`）
   **逻辑**: 按 design §4.2 ⑤ 建表（继承 `SQLModelSerializable`，含 `tenant_id` / `create_time` / `update_time`）：`id`(str PK) · `tenant_id` · `app_id`(str，首发时在 `create_app` 后回填) · `owner_user_id`(int，自然人) · `submitted_by_user_id`(int，服务账号) · `version_id`(str null) · `approval_instance_id`(int null) · **`stage` VARCHAR(32) 显式列** · **`status` VARCHAR(16) 显式列** · `code_object_key` · `manifest`(`JsonType`) · `tier_code` · `failure`(`JsonType`) · `scan_result`(`JsonType`)。**凡需 SQL 筛选的一律拆显式列**、JSON 列禁 `JSON_EXTRACT` / `JSON_CONTAINS`（C2 / K6）。DAO `AppDeploymentDao.{acreate, aget, aget_active_by_app, aadvance_stage, aset_failed}`——`aadvance_stage` 是**单行 UPDATE**；**禁批量 UPDATE / DELETE**（租户监听器只拦 SELECT，坑见 memory `reference_tenant_filter_in_list_trap`）。`stage` 取值集合 `{received, secret_scan, precheck_manifest, precheck_build, precheck_probe, version_recorded, approval_created, approved, publishing, online, pending_online}`、`status` 取值 `{running, waiting_approval, succeeded, failed}`（D1）。
   **回滚**: 建表 DDL 在 T003；本任务纯模型，回滚 = 删文件 + 撤销 tenant_filter 登记。
   **依赖**: 无
 
-- [ ] **T002**: `[MVP-核心]` ORM `resource_tier` 模型（**落共享层**）+ DAO
+- [x] **T002**: `[MVP-核心]` ORM `resource_tier` 模型（**落共享层**）+ DAO
   **文件**: `src/backend/bisheng/database/models/resource_tier.py`（新）, `src/backend/bisheng/core/database/tenant_filter.py`（登记 `bisheng.database.models.resource_tier`，并在登记处写一行注释「无 `tenant_id` 列，登记只为 metadata import、不受自动过滤」）
   **逻辑**: 列：`id`(PK) · `code`(unique，`light` / `standard` / `performance`) · `name` · `cpu_millicores`(int) · `memory_mb`(int) · `description` · `enabled`(bool) · `sort_order` · `create_time` / `update_time`。**用整数毫核与 MB，不用浮点 vCPU**（DM8 与 JSON 往返会给出 `0.30000000000000004`，D11）。**平台级、无 `tenant_id` 列**（AC-44 跨租户共享，K6 ②）。DAO `ResourceTierDao.{alist, aget_by_code, acreate, aupdate_row}`——**不提供 delete**（AC-47 的前提：`app_version.tier_id` 是历史快照引用，删档会让老版本重新启用时解析不出规格，D11）。
   **⚠️ 为什么不落 `app_publish/domain/models/`**：`ResourceTier` 归 F055、**F054 只读**（release-contract 表 1 / F054 design D11），放进 `app_publish` 会逼 `app_runtime` 反向 import，双向依赖当场成立且**没有任何 arch-guard 规则会拦**（design C1 / D16 的订正）。业务逻辑仍全在 T015 的 `ResourceTierService`。
   **回滚**: 同 T001（DDL 在 T003）。
   **依赖**: 无
 
-- [ ] **T003**: `[MVP-核心]` Alembic revision：`app_deployment` + `resource_tier` 两表
+- [x] **T003**: `[MVP-核心]` Alembic revision：`app_deployment` + `resource_tier` 两表
   **文件**: `src/backend/bisheng/core/database/alembic/versions/v3_0_0_f055_app_publish_tables.py`（新）
   **逻辑**: **DDL-only**（`core/database/alembic/AGENTS.md`）；`down_revision` 取 `uv run alembic heads` 的**唯一头**（F054 的建表 revision 落地后头会变，落码时现取）；**不传 `mysql_charset` / `mysql_collate`**（DM8 双方言，C2）；JSON 列用 `JsonType` 对应方言类型（DM8 落 CLOB）；索引：`resource_tier.code` 唯一、`app_deployment(app_id, status)`、`app_deployment(tenant_id, create_time)`。**seed 不写在 revision 里**（档位 seed 归 T015 的 `init_default_data`，幂等按 `code`）。
   **回滚**: `downgrade()` 按 `app_deployment → resource_tier` 顺序 drop（无外键，仍按此序）；**回滚前提**：`app_version.tier_id` 会变成悬空引用 → downgrade 前须确认无托管应用在运行，说明写进 revision docstring。
   **依赖**: T001, T002
 
-- [ ] **T004**: `[MVP-核心]` 错误码 162 段 + 三语 `api_errors`
+- [x] **T004**: `[MVP-核心]` 错误码 162 段 + 三语 `api_errors`
   **文件**: `src/backend/bisheng/common/errcode/app_publish.py`（新，**勿写进 F054 的 `app_factory.py`**）, `src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`（三语视为一组）
   **逻辑**: 按 design §4.2 ⑧ 定义 `AppPublishError(BaseErrorCode)` 家族：`16201` 包超上限 · `16202` 包解析失败 / 非法路径条目 · `16203` 缺 `bisheng-app.yaml` · `16205` 该应用归属他人 · `16207` 工场运行时层未启用 · `16221` manifest 校验失败 · `16222` `runtime` 不支持 · `16223` 档位不存在或已停用 · `16224` 能力声明引用不可解析 · **`16225` 审批场景未启用** · **`16226` 运行环境容量不足** · `16227` 依赖构建失败 · `16228` 启动探活失败 · `16229` 结构变更未确认 · `16230` 能力声明含密钥引用（本版不支持）· `16231` 本环境未启用能力总线 · `16241` 密钥扫描命中 · `16251` 已存在在途审批单 · `16252` 待上线态不接受新提交 · `16253` 版本记录不存在 · `16254` 仅 owner 可执行 · `16255` 当前应用态不允许该动作 · `16273` 该能力已被收回（Wave 5 才有写入方，一次登记到位）· `16274` 未在能力声明中的能力 · `16291` 运行期凭据主体不可用。三语文案落 `packages/locales`（生成物 `platform/public/locales/*/api_errors.json` / `client/src/locales/*/api_errors.gen.json` **由脚本生成、不手改**，CI `pnpm check-i18n`）。**不改 `release-contract.md` 与 `constitution.md` 的分配表**（K9：已是对的，改动只制造 diff 噪声）。
   **依赖**: 无
 
-- [ ] **T005**: `[MVP-核心]` `settings.app_runtime` 新增五个键
+- [x] **T005**: `[MVP-核心]` `settings.app_runtime` 新增五个键
   **文件**: `src/backend/bisheng/core/config/app_runtime.py`（F054 已建的配置块，**增量加字段**）
   **逻辑**: 加 `max_package_mb: int = 50` · `max_unpacked_mb: int = 200` · `max_package_entries: int = 20000`（D2 三闸，**本期就做**——F053 AC-32 要求 CLI 按"部署配置的上限"自查，上限若只是后端常量 CLI 只能硬编码）· `default_tiers: dict | None = None`（档位出厂规格覆盖，AC-44「规格初始默认值为部署配置项」）· `preview_ttl_days: int = 7`（决议-5，Wave 4 才消费，一次加到位避免二次改同一文件）。**一律挂进 F054 已开的 `app_runtime` 块、不开顶层键**（K10）。
   **⚠️ 部署顺序**（`common/services/config_service.py:91-107` 对未知顶层键直接 `raise KeyError`）：**先发代码 → 再改 `config.yaml` → 再重启**，顺序反了直接拒启。写进 T049 的部署清单。
   **依赖**: 无
 
-- [ ] **T006**: `[MVP-核心]` 审计事件族 `app.release.*` 后端 lockstep 登记
+- [x] **T006**: `[MVP-核心]` 审计事件族 `app.release.*` 后端 lockstep 登记
   **文件**: `src/backend/bisheng/database/models/audit_log.py`（`_UI_VISIBLE_V2_ACTIONS`，元组 `:193`–`:259`）
   **逻辑**: 追加 design §4.2 ⑥ 的全部 action：`app.release.{submit, precheck_failed, scan_blocked, version_created, approval_created, approval_exception, self_approval, approved, rejected, withdrawn, cancelled, online, pending_online, manual_publish, capability_declared, rollback}`（后两者本轮写入方少但**一次登记到位**，避免二次改同一处）。**`_V2_NAMESPACE_TO_ACTION_PREFIX` 的 `"app": "app."` 已由 F054 落码建好（`:266`），不要重复建命名空间**。**不在 `app.publish.*` 前缀下追加**——F054 已把 `app.publish` 用作"上线动作"的 action 名，同前缀混用会让审计筛选与命名空间映射两头别扭（D12）。
   **⚠️ 四处 lockstep 缺一即"写库了但审计页看不到"**（坑 21）：本任务是第 1 处；第 2–4 处（platform `controllers/API/log.ts` 的 `actions` / `getModulesApi` + `bs.json` 三语的 `log.systemIdEnum` / `log.eventTypeEnum`）在 **T045**，**必须与本任务同 PR**。
   **依赖**: 无
 
-- [ ] **T007**: `[MVP-核心]` pytest 基础设施 `test/app_publish/conftest.py`
+- [x] **T007**: `[MVP-核心]` pytest 基础设施 `test/app_publish/conftest.py`
   **文件**: `src/backend/test/app_publish/conftest.py`（新）, `src/backend/test/app_publish/fixtures/minimal_app/`（新，最小可用应用包素材：`bisheng-app.yaml` + `main.py` + `requirements.txt`）
   **逻辑**: fixtures：`service_account_principal`（构造 `OpenApiPrincipal`，可参数化 `scopes` 与 `resource_owner_user_id`，F049 T005 的形状）· `owner_user` / `dept_admin_user` / `tenant_admin_user` / `super_admin_user`（**审批人解析矩阵四类身份；`tenant_admin_user` 必须是非超管的真租户管理员**，否则 AC-21 的护栏测不出来）· `app_factory`（复用 F054 conftest 的同名 fixture，直接经 DAO 落 `app` + `app_version`）· `deployment_factory` · **`tier_seed`**（跑一次 T015 的 `seed_resource_tiers()` 落三档；**T008/T009 的 `tier` 解析测试与 T014 共用同一份 seed**，避免两处各造一份档位数据）· `fake_orchestrator`（monkeypatch F054 `orchestrator_client` 的 `build` / `build_status` / `probe` / `admission` / `deploy`，返回 design §4.2 ① 的响应形状，可编程成功 / 容量不足 / 失败三态）· `fake_minio`（monkeypatch `MinioStorage.put_object` / `get_object` 到临时目录，避免单测连真 MinIO）· `tarball_factory`（按参数生成 tar.gz：正常包 / 缺 manifest / 含符号链接 / 含 `..` 穿越 / 含硬链接 / 含设备文件 / 含 FIFO / 超条目数 / 解包超大 / 含密钥样本）· `audit_sink`（捕获 `AuditLogDao.ainsert_v2` 调用）· `approval_env`（跑一次 T027a 的 seed，让 Gate 不抛 `ApprovalScenarioDisabledError`）。**autouse fixture 清 `HTTP(S)_PROXY` / `ALL_PROXY` env**（缺 `socksio` 会整批误报 ERROR，memory `reference_local_backend_pytest_socks_proxy`）。fixture 体内**惰性 import** 业务 Service，避免尚未落地的模块让整包收集失败。
   **依赖**: T001, T002
@@ -691,4 +691,8 @@ T001–T007（Wave 1，可并行）
 > 推翻已 ★ 确认的决策时，**先停下与用户重新确认**（§3 第四个 ★），再记录。
 > **本轮已知的一项待确认偏离不在此表**：密钥扫描提前到构建之前（design D5 / §8），确认前一律按 spec 字面顺序实现。
 
-（暂无）
+1. **T006 增建 `src/backend/bisheng/app_publish/domain/constants.py`**（`AppReleaseAuditAction` StrEnum + `RELEASE_AUDIT_TARGET_TYPE`）—— 任务只点名 `audit_log.py`，但那样 16 个 action 字面量会散落进 Wave 2–3 的十来个 service。照 F054 `app_runtime/domain/constants.py AppAuditAction` 的同形先例补上，lockstep 由 `test_wave1_infra.py::test_release_actions_are_registered_in_the_ui_whitelist` 守住。
+2. **T004 顺带补 `16100` / `16200` 两个家族基类码的三语文案** —— `pnpm check-i18n` 把「后端声明了码、前端无文案」判红，而 F054 落码时漏了 `16100`；不补则本批的 i18n 门禁必红（判据不是"顺手清债"，是"本批的验证项过不了"）。
+3. **`ResourceTierDao.aupdate_row` 的行键参数名取 `tier_code` 而非 `code`** —— 叫 `code` 时 `aupdate_row(session, "light", code="tiny")` 是 `TypeError`，"禁止改 code"这条守卫永远走不到；改名后 `code=` 落进 `**values` 被显式拒绝。
+4. **`test/app_publish/conftest.py` 加 `_sqlite_ddl_quirks`** —— `userrole` 是复合主键 + 代理键 autoincrement，SQLite 直接拒绝建表（"does not support autoincrement for composite primary keys"）。只在 `create_all` 期间清 `autoincrement` 再还原，生产 DDL 归 Alembic、不受影响；代价是 fixture 写 `userrole` / `department_admin_grant` / `user_department` 需显式 `id`。
+5. **Wave 1 增加一个 `test/app_publish/test_wave1_infra.py`** —— 本节标注「无测试配对」，但 F049 Wave 1 有同名先例（`test/open_api/test_wave1_infra.py`）。只断言基础设施（错误码唯一性与一码一义、审计 lockstep、settings 五键、两个 DAO、conftest fixture 自身），**不认领任何 AC**；AC 覆盖仍归 T008–T017。
