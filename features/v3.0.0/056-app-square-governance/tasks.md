@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查修订（45 AC、11 决议，跨 Feature 归属规则全文改写） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日 `/sdd-review design` 14 条修订（D1–D11 / K1–K11 / 坑 21 条）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文（33 任务 / 4 Wave / 21 条 `[MVP-核心]`）；2026-08-17 初稿 + 同日 `/sdd-review tasks` 15 条修订（审计租户字段口径、client i18n、`objectTypeEnum.app` 新增认领、T009/T011 实现手段写死、夹具与追溯口径） |
-| 实现 | 🔲 未开始 | 0 / 33 完成（`[MVP-核心]` 21 条 = Wave 1–2）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🟡 进行中（2026-08-18） | **19 / 33 完成**；`[MVP-核心]` 21 条中完成 19（T001–T015 / T017–T020），未完成 2：**T016**（集成测试需 MySQL / Redis / OpenFGA，本地无中间件，CI 跑）、**T021**（114 部署与人工验收）。Wave 3–4 顺延 12 条未启。偏差见文末「实际偏差记录」 |
 
 ---
 
@@ -76,7 +76,7 @@
 
 ### Wave 1 · `[MVP-核心]` 基础设施（无测试配对，排最前）
 
-- [ ] **T001**: `[MVP-核心]` 审计 action 后端两处 lockstep 登记
+- [x] **T001**: `[MVP-核心]` 审计 action 后端两处 lockstep 登记
   **文件**: `src/backend/bisheng/app_runtime/domain/constants.py`（`AppAuditAction` 枚举加成员）, `src/backend/bisheng/database/models/audit_log.py`（`_UI_VISIBLE_V2_ACTIONS:193` 加同一字符串）
   **逻辑**: 加 `VISIBILITY_CHANGE = "app.visibility_change"`（本 Feature 唯一自写的事件类型，design D6）。`_UI_VISIBLE_V2_ACTIONS` 是 `_ui_visible_predicate:272-282` 的 `OR(system_id IS NOT NULL, action IN (...))` 白名单，被 `get_audit_logs:329` 与 `get_all_operators:408` 应用——**不在白名单 = 写库但审计页查不到，且无任何报错**（design K3，AC-27 的实现锚点）。命名空间前缀 `_V2_NAMESPACE_TO_ACTION_PREFIX:261` 的 `"app": "app."` 与模块下拉 **F054 已落，本任务不动**。
   **⚠️ 并发**: `constants.py` 正被 F054 实现 agent 编辑（design 坑 19）——改前先 `git pull` / 与 owner 对一次；若不便共改，可在 `app_runtime` 自己的常量位置定义该 action，但 `_UI_VISIBLE_V2_ACTIONS` 白名单**仍必须加**。
@@ -84,7 +84,7 @@
   **覆盖 AC**: AC-22, AC-27
   **依赖**: 无
 
-- [ ] **T002**: `[MVP-核心]` Platform · 审计 action 前端两处 lockstep 登记
+- [x] **T002**: `[MVP-核心]` Platform · 审计 action 前端两处 lockstep 登记
   **文件**: `src/frontend/platform/src/controllers/API/log.ts`（`actions` 数组 app 段 `:136-144`）, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`（三语视为一组，**两处各加一条**：`log.eventTypeEnum` + `log.objectTypeEnum`）
   **逻辑**: 事件类型下拉里加 `app.visibility_change`。**i18n key 由代码推导、不能自己起名**（design 坑 20）：`actionToI18nKey`（`platform/src/pages/LogPage/systemLog/index.tsx:43-47`）按 `action.split(/[._]/)` 首段小写 + 其余首字母大写 → key **只能是 `appVisibilityChange`**（起成 `appVisibility` / `app_visibility_change` 则事件类型列显示英文原串，有 defaultValue 兜底不炸、三语文件那三条永远用不上）。
   **⚠️ `log.objectTypeEnum.app` 是本任务要「新增」的，不是「确认存在」**（2026-08-17 实测三语 `bs.json` 的 `log.objectTypeEnum` 键集 = `approval_exception / approval_flow / approval_instance / approval_scenario / approval_task / assistant / channel / dashboard / file / flow / knowledge / knowledge_space / llm_server / none / role_conf / tenant / tool / user_conf / user_group_conf / work_flow / workstation`，**没有 `app`**）。缺这条时 `renderObjectType`（`systemLog/index.tsx:68-72`）回落显示原始串 `app`，与 AC-27「三语文案」正面冲突且**不报错**。文案初值：zh-Hans「应用」/ en-US `Application` / ja「アプリ」，以产品词表为准。机器化护栏见 T015 断言 ④。
@@ -93,7 +93,7 @@
   **覆盖 AC**: AC-22, AC-27
   **依赖**: T001
 
-- [ ] **T003**: `[MVP-核心]` 上游勘误提交与同文件并发协调（无代码产出）
+- [x] **T003**: `[MVP-核心]` 上游勘误提交与同文件并发协调（无代码产出）
   **文件**: 无（勘误内容以书面 / SendMessage 形式交 F054 owner，**本 Feature 不代改 F054 任何文档**）
   **逻辑**: 三条勘误逐条落地确认：① F054 design `:339` 的访问记录合并窗口 TTL **300s → 1800s**（值由 F056 D7 / spec 决议-2 定义，不回写 = F054 按 300s 落地且无任何报错）；② F054 T060 的文件清单补 tag 预过滤**第 4 处** `api/services/workflow.py:517-528`（F054 `tasks.md:47` 批次边界注已认账 4 处，仅清单行漏写；不补 = 有标签 tab 下托管应用整类消失且不报错）；③ `database/models/flow.py` 的 `status_exempt_flow_types` / `app_state_in` 两个内部参数命名与 F054 T059 对齐——若 T059/T060 已加等价参数则 T007 复用其命名并回写 design D9，否则由 T007 新增。**任一条未获回复即视为未决，T007 落地前必须完成 ③**。
   **回滚**: 不适用（纯协调）。
@@ -101,7 +101,7 @@
 
 ### Wave 1 · `[MVP-核心]` 后端 · 广场动作集裁剪（Test-First 配对）
 
-- [ ] **T004**: `[MVP-核心]` `_application_action_map` 第一层（合法性过滤）单元测试
+- [x] **T004**: `[MVP-核心]` `_application_action_map` 第一层（合法性过滤）单元测试
   **文件**: `src/backend/test/workflow/test_workflow_action_map.py`（新）
   **逻辑**: 对 `WorkFlowService._application_action_map`（`api/services/workflow.py:146-178`）断言按资源类型的请求集裁剪，判据 = `permission/domain/services/catalog_policy.py:60-75` 的 `ACTION_RESOURCE_SCOPES`（与真正抛错的 `_prepare_action_target` 读同一张表）。用例：
   - `test_app_bucket_drops_share` → 含 `flow_type=35` 的 data + 请求 `("use","edit","share")` → app 桶实际请求集**不含 `share`**（`catalog_policy.py:71` 的 `share` 范围集不含 `app`）；
@@ -112,7 +112,7 @@
   **覆盖 AC**: AC-04, AC-07
   **依赖**: 无（跨 Feature 前置：F054 T059 / T060）
 
-- [ ] **T005**: `[MVP-核心]` `_application_action_map` 第一层实现 + 按桶覆盖扩展点
+- [x] **T005**: `[MVP-核心]` `_application_action_map` 第一层实现 + 按桶覆盖扩展点
   **文件**: `src/backend/bisheng/api/services/workflow.py`（只改 `_application_action_map:146-178` 一个函数）
   **逻辑**: 分桶（`grouped:152-155`，F054 T060 已加第三桶 `35: "app"`）之后、发 `batch_check_business_actions` 之前，**每个桶只请求对该 `resource_type` 合法的 action**（判据 `catalog_policy.ACTION_RESOURCE_SCOPES`），并**显式豁免 `visible`**。同时加可选参数 `actions_by_type: dict[str, tuple[str, ...]] | None = None` 做按桶覆盖，缺省 `None` = 全桶用 `actions` —— **另 6 个调用方一行不改**（design D3 爆炸半径表）。请求集为空的桶不发起 check（→ `can_share` 落回 `False`，`_apply_page_can_share:485` 与 `aenrich_apps_can_share:139` 都是「命中才 true」，AC-07 后半句零改组件达成）。
   **⚠️ 不要顺手给 `app` 加 `share`**：托管应用没有 share-token 免登录通道（spec 决议-6），加 `share` 就是造一个不存在的能力（design K6）。
@@ -123,7 +123,7 @@
 
 ### Wave 1 · `[MVP-核心]` 后端 · 广场状态收窄与载荷（Test-First 配对）
 
-- [ ] **T006**: `[MVP-核心]` `FlowDao` 广场两参数单元测试
+- [x] **T006**: `[MVP-核心]` `FlowDao` 广场两参数单元测试
   **文件**: `src/backend/test/workflow/test_flow_dao_square_params.py`（新）
   **逻辑**: 对 `FlowDao.aget_all_apps`（`database/models/flow.py:508`）新增的两个**内部**参数断言：
   - `test_status_exempt_flow_types` → 传 `status=2` + `status_exempt_flow_types={35}` 时，外层 status 条件（`flow.py:582 sub_query.c.status == status`）对第三支**不生效**、对另两支照旧（可对拼出的 SQL 文本断言或用 DAO 层构造断言）；
@@ -132,7 +132,7 @@
   **覆盖 AC**: AC-02, AC-03
   **依赖**: 无（跨 Feature 前置：F054 T059 第三支）
 
-- [ ] **T007**: `[MVP-核心]` `FlowDao.aget_all_apps` / `_build_apps_subquery` 两个内部参数实现
+- [x] **T007**: `[MVP-核心]` `FlowDao.aget_all_apps` / `_build_apps_subquery` 两个内部参数实现
   **文件**: `src/backend/bisheng/database/models/flow.py`（`aget_all_apps:508` + `_build_apps_subquery:660-702`）
   **逻辑**: 加 `status_exempt_flow_types: set[int] | None = None`（外层 status 条件由 `sub_query.c.status == status` 改为「`status == :status` **或** `flow_type ∈ 豁免集合`」）与 `app_state_in: set[str] | None = None`（第三支子查询侧的 `App.state` 收窄）。**两个参数缺省 `None` = 行为逐字节不变**，构建页与另 3 个调用方不传（design D9）。
   **⚠️ 为什么不改 F054 的 status 投影**：把「已停运」也投成 2 会**打坏构建页**（`platform/controllers/API/flow.ts:204` 按 `status ∈ {1,2}` 筛「已上线 / 已下线」），且是修改 F054 已定稿的契约（design D9 备选 A 已否）。
@@ -142,7 +142,7 @@
   **覆盖 AC**: AC-02, AC-03
   **依赖**: T003, T006
 
-- [ ] **T008**: `[MVP-核心]` 广场扫描页口径切换 + 载荷补字段单元测试（两个入口各断言一次）
+- [x] **T008**: `[MVP-核心]` 广场扫描页口径切换 + 载荷补字段单元测试（两个入口各断言一次）
   **文件**: `src/backend/test/workflow/test_square_scan_page.py`（新）
   **逻辑**: 对 `WorkFlowService._scan_visible_apps_page`（`workflow.py:401-478`）与其两个入口断言：
   - `test_app_bucket_requests_use_edit` → app 桶请求 `("use","edit")`、另两类保持 `(action,"edit","share")`（`share` 由第一层裁，**此处不重复裁**）；
@@ -154,7 +154,7 @@
   **覆盖 AC**: AC-01, AC-03, AC-06, AC-07
   **依赖**: T005, T007
 
-- [ ] **T009**: `[MVP-核心]` `_scan_visible_apps_page` 与广场两入口实现
+- [x] **T009**: `[MVP-核心]` `_scan_visible_apps_page` 与广场两入口实现
   **文件**: `src/backend/bisheng/api/services/workflow.py`（`_scan_visible_apps_page:401-478` + 两个入口函数 `get_online_flows_page:500` / `get_uncategorized_flows:977` 的调用处）
   **逻辑**: 三件事一次改完（同一函数 + 其两个调用处，避免与 T005 重复修改同一段）：
   1. **口径切换**：`requested_actions:425` 由「一个全局元组」改为「按桶取值」，经 T005 的 `actions_by_type` 传 `{"app": ("use","edit")}`；`kept:450-455` 按行 `flow_type` 取该桶的可见性 action。
@@ -165,13 +165,13 @@
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-06, AC-07
   **依赖**: T008
 
-- [ ] **T010**: `[MVP-核心]` 应用中心 / 最近使用排除托管应用 单元测试
+- [x] **T010**: `[MVP-核心]` 应用中心 / 最近使用排除托管应用 单元测试
   **文件**: `src/backend/test/workflow/test_app_center_excludes_hosted.py`（新）
   **逻辑**: 断言 `WorkFlowService.get_frequently_used_flows`（`workflow.py:924-965`，内部走 `filter_apps_by_action:663` + `action="visible"`）与工作台推荐位 / 常用列表（`workstation/api/endpoints/apps.py:41` / `:119`）的返回集中**不含 `flow_type=35`**。理由（坑 10）：这两条路径的点击落 `/app/{chatId}/{id}/{flow_type}` 对话页（`client/pages/apps/hooks/useAppCenter.ts:74`），托管应用没有会话语义，用户点它会白屏或报错——**而这条路径不在任何 AC 里，没人会去测**。用例含「另两类数量与顺序不变」的回归断言。
   **覆盖 AC**: AC-01, AC-07
   **依赖**: T005
 
-- [ ] **T011**: `[MVP-核心]` 应用中心 / 最近使用路径显式排除 `flow_type=35`
+- [x] **T011**: `[MVP-核心]` 应用中心 / 最近使用路径显式排除 `flow_type=35`
   **文件**: `src/backend/bisheng/api/services/workflow.py`（`get_frequently_used_flows:924-965` 一处过滤）, `src/backend/bisheng/workstation/api/endpoints/apps.py`（推荐位 `:41` / 常用 `:119` 两处调用的类型入参）
   **逻辑**: 在这两条「进对话页」的路径上显式排除托管应用（**不要依赖 T005 第一层的静默滤除副作用**——`use` 对 app 合法，托管应用照样会流进去）。排除位置取「类型闸」而非前端，保证工作台 / 应用中心两个消费者一次到位。
   **测试**: T010 全部通过。
@@ -180,7 +180,7 @@
 
 ### Wave 1 · `[MVP-核心]` 后端 · 可见范围变更审计（Test-First 配对）
 
-- [ ] **T012**: `[MVP-核心]` 可见范围变更审计回调 单元 / 集成测试
+- [x] **T012**: `[MVP-核心]` 可见范围变更审计回调 单元 / 集成测试
   **文件**: `src/backend/test/app_runtime/test_visibility_change_audit.py`（新，`test/app_runtime/` 已存在）
   **逻辑**: 对 `ResourcePermissionApi.mutate_grants`（`permission/application/resource_api.py:290`）新增的回调链断言：
   - `test_callback_registered_for_app` → 起最小 app 上下文后注册表里有 `app` 项（**未注册是静默失败、无任何报错**，design D6）；
@@ -194,7 +194,7 @@
   **覆盖 AC**: AC-13, AC-14, AC-15, AC-22
   **依赖**: T001
 
-- [ ] **T013**: `[MVP-核心]` 授权变更回调注册表 + 名册预读（permission 侧扩展点）
+- [x] **T013**: `[MVP-核心]` 授权变更回调注册表 + 名册预读（permission 侧扩展点）
   **文件**: `src/backend/bisheng/permission/application/resource_api.py`（`ResourcePermissionApi.mutate_grants:290-372`）
   **逻辑**: 加模块级注册表 `{resource_type: async callback}`，`mutate_grants` 成功返回前按 `resource_type` 查表并调用（有则调、无则跳过），回调入参 `actor / target / changes / result`。**前置的名册预读**（坑 11）：仅当 ① 该 `resource_type` 注册了回调、且 ② 本次 `changes` 里存在 `REMOVE` / `MOVE` 时，在 `self._runtime.mutate_grants(...):337` **之前**用既有读法 `list_permission_sources_page(actor, target, after_id=0, limit=…)`（`:190` 同款）取一页名册，建 `source_id → (subject_type, subject_id)` 索引供回调反查；名册 `has_more` 为真时对超出部分只写 `{assignee_id}` 并在 `metadata` 打 `roster_truncated: true`，**宁可标注不完整也不做多页扫描**。
   **⚠️ 为什么必须预读**：`remove_source` 把被撤销的 source **整行丢弃**（`permission/domain/services/grant_source_service.py:279` / `:305-311` 的 `remaining` + `replace(...)`），不是标 `active=False` 保留 → `GrantMutationResult.grants`（`grant_service.py:232`）里**查无此人**；而请求体侧 `REMOVE` / `MOVE` 只带 `assignee_id` + 版本（`domain/schemas/f048.py:242-262 validate_operation_shape`）。两头都拿不到主体身份，「从结果快照反解」已被证伪（design D6 审查修订）。
@@ -204,7 +204,7 @@
   **覆盖 AC**: AC-13, AC-15, AC-22
   **依赖**: T012
 
-- [ ] **T014**: `[MVP-核心]` `app_runtime` 审计写入器 + 组合根显式注册
+- [x] **T014**: `[MVP-核心]` `app_runtime` 审计写入器 + 组合根显式注册
   **文件**: `src/backend/bisheng/app_runtime/domain/services/visibility_audit.py`（新）, `src/backend/bisheng/main.py`（`lifespan:82-84` 加一次显式注册调用，照 `_register_permission_runtime_contexts:55-77` 先例）
   **逻辑**: 写入器组装并调 `AuditLogDao.ainsert_v2`（`database/models/audit_log.py:428`）写 `action='app.visibility_change'`，字段口径见 T012。三条硬规：① `if outcome.idempotent: return`（坑 12）；② **不要再包事务**——`ainsert_v2` 自带 `bypass_tenant_filter()` + 独立 async session + commit（`:494-500`）；③ 整个写入用 try/except 包住、失败只打 **warning**（照 `approval/domain/services/approval_outbox_service.py:105-121` 的「审计失败不影响主流程」包法），日志字段 `resource_type / resource_id / operator_id / reason`——**这条 warning 是「审计静默丢失」的唯一信号**。
   **⚠️ 注册落点 = 组合根显式注册，不得依赖模块 import 副作用**（否则注册与否取决于 router 加载顺序，一次 import 图重排就静默失效）。注册成功打一条 info（`registered visibility-change audit hook for resource_type=app`）——114 查不到事件时**先 grep 这条启动日志**，再怀疑写入逻辑。
@@ -215,7 +215,7 @@
 
 ### Wave 1 · `[MVP-核心]` 后端 · 跨 Feature 兜底与端到端
 
-- [ ] **T015**: `[MVP-核心]` 审计事件登记断言测试（AC-27 的跨 Feature 兜底）
+- [x] **T015**: `[MVP-核心]` 审计事件登记断言测试（AC-27 的跨 Feature 兜底）
   **文件**: `src/backend/test/app_runtime/test_audit_action_registry_lockstep.py`（新）
   **逻辑**: 参数化读取**全部已注册**的 `app.*` / `app.release.*` action 常量（`app_runtime/domain/constants.py` 的 `AppAuditAction` + F055 的 release action 枚举），逐条断言四处 lockstep 齐备：① 在 `_UI_VISIBLE_V2_ACTIONS`（`database/models/audit_log.py:193`）里；② 在 `platform/src/controllers/API/log.ts` 的 `actions` 数组里（读文件做文本匹配）；③④ 三语 `platform/public/locales/{zh-Hans,en-US,ja}/bs.json` 的 `log.eventTypeEnum` 里都有对应 `actionToI18nKey(action)`（`split(/[._]/)` + 驼峰化）的 key。
   **为什么这条价值最高**：它一存在，F054 / F055 / F049 将来漏登记会在 **CI 上立即失败**，而不是等到有人在审计页里找不到事件——AC-27「不存在已写入但页面查不到的事件类型」的判定归本 Feature，故必须机器化。本轮它同时把 F054 已写的 `app.publish` / `app.stop` / `app.resume` 等九条与 F055 的 `app.release.*` 一并纳入断言（= MVP-核心承诺的「发布 / 上线 / 可见范围变更三类事件可查」）。
@@ -236,7 +236,7 @@
 
 ### Wave 2 · `[MVP-核心]` 前端 Client（手动验证）
 
-- [ ] **T017**: `[MVP-核心]` Client · 托管应用图标与列表项类型
+- [x] **T017**: `[MVP-核心]` Client · 托管应用图标与列表项类型
   **文件**: `src/frontend/client/src/components/Avator/index.tsx`（`flowConfig:30-43` 加第三支）, `src/frontend/client/src/@types/app.ts`（列表项类型加 `slug?: string` / `app_state?: 'online' | 'stopped'`，`flow_type` 注释补 35）
   **逻辑**: `flowConfig` 今天只有 `1 / 5 / 10` 且 `flowConfig[flowType] || flowConfig[5]` **默认回落助手图标**（`:45`）——不加 35 则广场里托管应用**显示成助手图标，且没有任何报错**（坑 6）。
   **⚠️ 这是 client 侧那份图标 map**，与 F054 T063 改的 `platform/src/components/bs-comp/cardComponent/avatar.tsx` **不是同一文件**——「F054 说图标已经加了」是误判来源。
@@ -244,7 +244,7 @@
   **覆盖 AC**: AC-01
   **依赖**: 无（跨 Feature 前置：F054 T059 的 `FlowType.HOSTED_APP=35`）
 
-- [ ] **T018**: `[MVP-核心]` Client · 广场卡片跳转分流 + 「已停用」角标 + 未部署形态文案闸
+- [x] **T018**: `[MVP-核心]` Client · 广场卡片跳转分流 + 「已停用」角标 + 未部署形态文案闸
   **文件**: `src/frontend/client/src/pages/apps/explore.tsx`（`handleCardClick:132-146` 分流 + 未部署 guard）, `src/frontend/client/src/pages/apps/components/AgentCard.tsx`（`app_state==='stopped'` 时渲染「已停用」标识）
   **逻辑**:
   1. **跳转分流**：`flow_type===35` 时走 `window.location.assign('/apps/' + agent.slug)`（整页跳、**当前窗口**、**不带 base**），且**不写** `sessionStorage` 的 `appFlowOriginKey` / `appLastOriginKey`（那是对话页返回用的，托管应用离开 SPA 后不回来）；其余类型走原有 `navigate('/app/...')` 一行不改。
@@ -261,7 +261,7 @@
 
 ### Wave 2 · `[MVP-核心]` 前端 Platform（手动验证 + 纯逻辑单测）
 
-- [ ] **T019**: `[MVP-核心]` Platform · 「仅 owner 可见」判据纯函数 + 单测
+- [x] **T019**: `[MVP-核心]` Platform · 「仅 owner 可见」判据纯函数 + 单测
   **文件**: `src/frontend/platform/src/pages/BuildPage/hostedApp/publish/visibilityScope.ts`（新，纯函数 `isOwnerOnly(appState, grants)` / `summarizeGrants(grants, hasMore)`）, `src/frontend/platform/src/pages/BuildPage/hostedApp/publish/visibilityScope.test.ts`（新）
   **逻辑**: 判据 = `appState === 'online' && grants.filter(a => !a.protected).length === 0`。
   **⚠️ 不能用 `grants.length === 0`**：F048 在应用创建时给 owner 投一条 **protected** 授权（`app_runtime/domain/services/f048_app_permission.py:168-186`，`mode="CUSTOM", protected=True`），刚上线的应用 grants **恰好有一条** → 提示条**永远不出现且无任何报错**，owner 于是漏掉「设可见范围」这一步、同事在广场什么也看不到——正是 PRD 要用这条提示解决的问题（坑 13）。
@@ -271,7 +271,7 @@
   **覆盖 AC**: AC-12
   **依赖**: 无（跨 Feature 前置：F054 T067 的发布 tab slot）
 
-- [ ] **T020**: `[MVP-核心]` Platform · 可见范围区组件（授权弹窗第二触发点）
+- [x] **T020**: `[MVP-核心]` Platform · 可见范围区组件（授权弹窗第二触发点）
   **文件**: `src/frontend/platform/src/pages/BuildPage/hostedApp/publish/VisibilityScopeSection.tsx`（新，填 F054 T067 交付的发布 tab slot）, `src/frontend/platform/public/locales/{zh-Hans,en-US,ja}/bs.json`（三语视为一组：可见范围区标题 / 提示条 / 摘要 / 设置按钮文案）
   **逻辑**: 区块只做四件事：① 读状态 `getResourcePermissionGrantsApi('app', app.id)`（`platform/src/controllers/API/permission.ts:313-327`）；② 用 T019 的纯函数渲染**「仅 owner 可见」常驻提示条**（文案必须含「仅 owner 可见」与「同事无法在广场看到」两个要素，**不是一次性 toast**）或已授主体摘要——可见范围区本身**常驻**，未上线时只是不出提示条；③ 提示条内与区块内各有一个设置按钮，点击 `setOpen(true)` 拉起 `<PermissionDialog resourceType="app" resourceId={app.id} resourceName={app.name} />`（`platform/src/components/bs-comp/permission/PermissionDialog.tsx:26-32`，**组件零改动、无 per-type 分支**）；④ 弹窗关闭后**重新拉一次 grants** 刷新摘要（不做乐观更新——授权是低频动作，一次往返换准确性）。
   **⚠️ 不碰 `PublishTab.tsx` 本体**：F054 T067 / F055 已三方约定发布 tab 用 slot / children 留位，直接改本体等于毁约且并发期必冲突（design D4 备选 A 已否）。
@@ -431,5 +431,22 @@
 
 | 任务 | 偏差 | 回写到 design | 原因（一句话） |
 |---|---|---|---|
+| T008 | 测试落 `test/app_runtime/test_square_scan_page.py`，不是 tasks 写的 `test/workflow/` | §7 单测目录 | 三表 + 同库 sync/async 双 session 的 `build_list_env` 夹具是 `test/app_runtime/conftest.py` 的，pytest 夹具不跨包；为凑路径复制 200 行夹具更糟 |
+| T009 | `app_state` 无需回查——F054 第三支已投第 10 列并由 `_app_row_to_dict` 只给托管行落键；本 Feature 只补 `slug` | D2 / §4.2「广场列表项 `app_state`」标注为 F056 新增 | F054 已交付，重复补入会造第二处真相 |
+| T007 | `status` 豁免抽成 `FlowDao._build_status_clause`；`app_state_in` 下推进 `_build_apps_subquery`（新增可选参数） | D9「具体形状」 | 下推让草稿在行集层就不存在（AC-03「不因 owner 或管理员而例外」无需二次判权），且外层条件可单测 |
+| T014 | 注册落 `api/services/f048_permission_runtime.py` 的 `initialize_f048_api_runtime`，**不动 `main.py`** | D6「注册落点」 | 与 tasks 跨 Feature 副作用表 T014 行一致；该处正是 `mutate_grants` 的构造处，二者同生共死，且避开并发编辑 `main.py` |
+| T014 | `metadata` 增 `moved`（MOVE 的主体身份 + 目标 model_key） | §4.2 审计 metadata 形状 | MOVE 的主体身份与 REMOVE 一样事后不可还原；只记 added/removed 会让「某人从 viewer 升为 editor」在审计里彻底消失 |
+| T015 | 拆成两个参数化用例：`AppAuditAction` 硬断言 + `app.release.*` 走 `xfail(strict=True)` | §7 登记断言测试 | F055 尚未补 `log.ts` / 三语 `bs.json`，直接断言会让本 Feature 的新测试为别的 Feature 挂红；`strict=True` 保证 F055 落地当天该用例 XPASS 报错、强制删除待办项 |
+| T011 | 连带修 `test/workstation/test_workstation_apps_rebac.py`（2 处断言）与 `test_f040_workbench_cursor.py`（1 处 mock 签名） | 无（tasks 跨 Feature 副作用表已认账该文件） | `filter_apps_by_action` 增参数是有意的签名变更，桩与断言须同步 |
+| T018 | 第 3 件「未部署形态文案闸」未实现 | D8 / §6.2 F054 T071 行 | 上游 `client/src/hooks/useAppRuntimeEnabled.ts`（F054 T071）尚未落地；且广场今天**没有**任何托管应用专属文案可隐藏（唯一的托管 UI 是按行数据驱动的「已停用」角标），开关关时后端天然无 `app` 行 → AC-10 由数据侧独立成立 |
+| T003 | 勘误 ② 已由 F054 落实（`get_online_flows_page` 的 tag 预过滤第 4 处已含 `ResourceTypeEnum.HOSTED_APP`）；③ 经核查 F054 未加等价参数，故由 T007 新增并沿用本文命名；① TTL 300s→1800s **仍未回写**（F054 访问记录尚未实现，`app_access` 全仓仅一处 TODO 注释） | 无 | 三条勘误逐条落地确认，①待上游 |
+| 测试基建 | `test/app_runtime/conftest.py` 增两个 session patch 目标（`bisheng.api.services.workflow`、`bisheng.app_runtime.domain.services.visibility_audit`） | 无 | 二者各自按名字绑定 `get_async_db_session`；不加则测试打到真 MySQL |
 
-（尚无偏差；实现期每条一行，design 同步覆盖为「今天的状态」。）
+## 2026-08-18 · 主 agent 裁决与顺带修复
+
+1. **`metadata.moved` 保留**（实施方问是否要删）。§4.2 只列了 `added / removed / model_keys`，但 **MOVE 恰恰是最该留痕的那种变更**——「某人从 viewer 升为 editor」只记 added/removed 会在审计里彻底消失，而它的权限影响不比新增小。主体身份事后不可还原这一点与 REMOVE 同理。代价是三行。design §4.2 应随之补记该键。
+2. **`app.release.*` 的前端半边已补齐（16 条 × log.ts × 三语），T015 的 `xfail(strict=True)` 哨兵已摘除、转为正常断言（30 passed）。** 实施方测出的这个缺口是真的：后端白名单 17 条、前端 0 条——**发布事件写进了库却在审计页一条都筛不出来**，正是 F054 坑 24 记载的同一种失效，AC-27 判的就是筛得出来而不是写得进去。哨兵的设计在这里完全奏效：补齐当天 16 条全部 XPASS(strict) 报错，强制把待办项删掉而不是让它静静地活过它所描述的缺口。
+3. **越出「只改」清单的四个文件属正当**：`api/services/workflow.py` / `permission/application/resource_api.py` / `api/services/f048_permission_runtime.py` / `database/models/app.py` 都是 tasks.md 的 T005/T009/T011/T013/T014 直接点名的，不改则 F056 什么也做不成；我给的清单是并发边界（避开另两路的战场），不是任务范围，实施方按 tasks.md 执行且严格避开了四个「不碰」目录，判断正确。
+4. **T003 勘误①（访问记录合并窗口 300s → 1800s）登记为待办**：`app_access` 全仓只有 `tenant_filter.py:117` 一句 TODO，功能未实现，无处可回写——等该功能落地时随它一起定，不在本轮制造一个指向空处的引用。
+5. **T016 / T021 未做属正确取舍**：前者要真 FGA + MySQL 才有意义（AC-05 授权→撤销、AC-06 与入口判定同真同假、AC-15 被授予者调 grants 得 403），本地无中间件；**没写一个跑不起来的空壳是对的**——空壳会让人以为覆盖到了。后者要 114 环境与非管理员账号实操。两条都随 114 联调一起做。
+

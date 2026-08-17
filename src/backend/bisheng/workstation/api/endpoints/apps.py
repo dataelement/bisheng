@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Body
 
-from bisheng.api.services.workflow import WorkFlowService
+from bisheng.api.services.workflow import CHAT_ENTRY_EXCLUDED_FLOW_TYPES, WorkFlowService
 from bisheng.api.v1.schemas import ChatList, FrequentlyUsedChat, UnifiedResponseModel, UsedAppPin, resp_200
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.workstation import AgentAlreadyExistsError, UsedAppNotFoundError, UsedAppNotOnlineError
@@ -38,10 +38,14 @@ async def get_recommended_apps(login_user=LoginUserDep):
     if not login_user.is_admin():
         kwargs["status"] = FlowStatus.ONLINE.value
     data, _ = FlowDao.get_all_apps(**kwargs)
+    # An administrator may configure any application id here, hosted ones
+    # included; a recommendation card opens the conversation page, which a
+    # hosted application does not have.
     data = await WorkFlowService.filter_apps_by_action(
         login_user,
         data,
         "visible",
+        exclude_flow_types=CHAT_ENTRY_EXCLUDED_FLOW_TYPES,
     )
 
     # Restore admin-configured order; unmatched items sort to the end.
@@ -120,6 +124,7 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
         login_user,
         apps,
         "visible",
+        exclude_flow_types=CHAT_ENTRY_EXCLUDED_FLOW_TYPES,
     )
 
     def sort_key(app):

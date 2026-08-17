@@ -1319,9 +1319,27 @@
       "appDelete": "ホスト型アプリを削除",
       "appDeleteHookFailed": "ホスト型アプリ削除後処理の失敗",
       "appMetaUpdate": "ホスト型アプリのメタ情報を更新",
-      "appDataRowEdit": "ホスト型アプリのデータを編集"
+      "appDataRowEdit": "ホスト型アプリのデータを編集",
+      "appVisibilityChange": "公開範囲の変更",
+      "appReleaseSubmit": "公開申請を提出",
+      "appReleasePrecheckFailed": "ホスティング事前チェック失敗",
+      "appReleaseScanBlocked": "シークレットスキャンによりブロック",
+      "appReleaseVersionCreated": "バージョン記録を作成",
+      "appReleaseApprovalCreated": "公開審査申請を作成",
+      "appReleaseApprovalException": "審査異常（承認者なし）",
+      "appReleaseSelfApproval": "自己承認",
+      "appReleaseApproved": "公開審査が承認",
+      "appReleaseRejected": "公開審査が却下",
+      "appReleaseWithdrawn": "公開申請を撤回",
+      "appReleaseCancelled": "公開申請をキャンセル",
+      "appReleaseOnline": "公開開始",
+      "appReleasePendingOnline": "公開保留（起動できず）",
+      "appReleaseManualPublish": "手動で公開",
+      "appReleaseCapabilityDeclared": "能力依存を宣言",
+      "appReleaseRollback": "公開をロールバック"
     },
     "objectTypeEnum": {
+      "app": "アプリ",
       "none": "なし",
       "work_flow": "ワークフロー",
       "flow": "スキル",
@@ -2205,6 +2223,14 @@
       "descEnabled": "「アプリ工場」ランタイム層が未デプロイ、または現在利用できないため、ホスティングアプリのアクセス入口は利用できません。",
       "contact": "プラットフォームのスーパー管理者にデプロイと有効化を依頼してから、再度アクセスしてください。",
       "backHome": "ホームへ戻る"
+    },
+    "visibility": {
+      "title": "公開範囲",
+      "ownerOnlyBanner": "現在はあなただけが閲覧できます。同僚はアプリ広場で見つけられません。",
+      "configure": "公開範囲を設定",
+      "summary": "{{total}} 件の対象に付与済み",
+      "loading": "読み込み中…",
+      "noManagePermission": "このアプリの公開範囲を管理する権限がありません。"
     }
   }
 }

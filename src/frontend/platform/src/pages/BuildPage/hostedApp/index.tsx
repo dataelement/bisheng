@@ -26,6 +26,7 @@ import { HostedAppHeader } from "./Header"
 import { useHostedApp } from "./hooks/useHostedApp"
 import { DataTab } from "./tabs/DataTab"
 import { LogsTab } from "./tabs/LogsTab"
+import { VisibilityScopeSection } from "./publish/VisibilityScopeSection"
 import { PublishTab } from "./tabs/PublishTab"
 import { VersionsTab } from "./tabs/VersionsTab"
 
@@ -106,6 +107,7 @@ export function HostedAppDetail() {
               reload()
               reloadInstance()
             }}
+            visibilitySlot={<VisibilityScopeSection app={app} />}
           />
         </TabsContent>
         <TabsContent value="data" className="min-h-0 flex-1 overflow-y-auto">

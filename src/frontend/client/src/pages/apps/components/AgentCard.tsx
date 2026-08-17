@@ -82,6 +82,14 @@ export function AgentCard({
           <p className="font-['PingFang_SC'] font-normal leading-[22px] text-[#212121] text-[14px] truncate">
             {agent.name}
           </p>
+          {/* Hosted applications only. A stopped application keeps its card on
+              purpose: removing it is indistinguishable, to the user, from having
+              lost access to it. */}
+          {agent.app_state === 'stopped' ? (
+            <span className="shrink-0 rounded-sm bg-[#F2F3F5] px-1.5 py-0.5 text-[12px] leading-[16px] text-[#86909C]">
+              {localize('com_app_state_stopped')}
+            </span>
+          ) : null}
         </div>
 
         {isMobileCard ? (

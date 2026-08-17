@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
@@ -19,6 +20,7 @@ from bisheng.permission.domain.schemas import (
     GrantMutationRequest,
     PermissionModeApplyRequest,
     PermissionModeDraftRequest,
+    VerifiedPermissionTarget,
 )
 from bisheng.permission.domain.services.grant_service import (
     CanonicalGrantChange,
@@ -96,6 +98,62 @@ def _decode_cursor(value: str) -> dict[str, object]:
     return payload
 
 
+class GrantChangeListenerPort(Protocol):
+    """Business-owned subscriber to a successful grant mutation.
+
+    Implementations live in the module that owns the resource type, so this
+    layer never learns a business audit namespace (``app.*`` and friends). A
+    listener **must not raise**: it runs after the mutation has already been
+    committed and projected, so an exception here would report a failure for
+    work that succeeded.
+    """
+
+    async def on_grants_changed(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        request: GrantMutationRequest,
+        result,
+        roster_before: Mapping[int, tuple[str, str]],
+        roster_complete: bool,
+    ) -> None: ...
+
+
+class GrantChangeListenerRegistry:
+    """Explicit resource_type → listener registry, wired at the composition root.
+
+    An instance rather than a module-level dict, and populated by the
+    composition root rather than by an import side effect: otherwise whether the
+    hook is installed depends on module import order, and the failure mode is a
+    silently missing audit trail with no error anywhere.
+    """
+
+    def __init__(self) -> None:
+        self._listeners: dict[str, GrantChangeListenerPort] = {}
+
+    def register(self, resource_type: str, listener: GrantChangeListenerPort) -> None:
+        normalized = resource_type.strip().lower()
+        if not normalized:
+            raise ValueError("resource_type must not be empty")
+        if normalized in self._listeners:
+            raise ValueError(f"grant change listener already registered: {normalized}")
+        self._listeners[normalized] = listener
+
+    def get(self, resource_type: str) -> GrantChangeListenerPort | None:
+        return self._listeners.get(resource_type.strip().lower())
+
+    def registered_types(self) -> frozenset[str]:
+        return frozenset(self._listeners)
+
+
+#: One page is enough to name the subjects a REMOVE addresses: protected rows
+#: aside, a roster long enough to overflow this is already past what the dialog
+#: renders. Beyond it the record says so (``roster_truncated``) rather than
+#: paying for a full scan on every revocation.
+_ROSTER_SNAPSHOT_PAGE_SIZE = 50
+
+
 class F048ResourcePermissionApi:
     """Coordinate verified resources without loading business rows itself."""
 
@@ -105,10 +163,12 @@ class F048ResourcePermissionApi:
         resources: ResourceAuthorizationRegistry,
         runtime: F048PermissionRuntime,
         subjects: PermissionSubjectDirectoryPort,
+        grant_listeners: GrantChangeListenerRegistry | None = None,
     ) -> None:
         self._resources = resources
         self._runtime = runtime
         self._subjects = subjects
+        self._grant_listeners = grant_listeners or GrantChangeListenerRegistry()
 
     async def get_grantable_models(
         self,
@@ -309,6 +369,13 @@ class F048ResourcePermissionApi:
             actor,
             "manage_permission",
         )
+        listener = self._grant_listeners.get(resource_type)
+        roster_before, roster_complete = await self._roster_snapshot(
+            actor=actor,
+            target=target,
+            request=request,
+            listener=listener,
+        )
         add_count = sum(change.op.value == "ADD" for change in request.changes)
         source_ids = iter(await self._runtime.allocate_source_ids(add_count))
         canonical: list[CanonicalGrantChange] = []
@@ -371,10 +438,53 @@ class F048ResourcePermissionApi:
             for source in grant.sources
             if source.active
         ]
+        if listener is not None:
+            await listener.on_grants_changed(
+                actor=actor,
+                target=target,
+                request=request,
+                result=result,
+                roster_before=roster_before,
+                roster_complete=roster_complete,
+            )
         return {
             "resource_version": result.resource_version,
             "items": items,
         }
+
+    async def _roster_snapshot(
+        self,
+        *,
+        actor: PermissionActor,
+        target: VerifiedPermissionTarget,
+        request: GrantMutationRequest,
+        listener: GrantChangeListenerPort | None,
+    ) -> tuple[dict[int, tuple[str, str]], bool]:
+        """``{source_id: (subject_type, subject_id)}`` read **before** the mutation.
+
+        There is no way to recover it afterwards. A REMOVE/MOVE request carries
+        only ``assignee_id`` plus a version — never the subject — and the result
+        cannot fill the gap either: ``remove_source`` drops the revoked source
+        row outright instead of marking it inactive, so the returned grants
+        contain no trace of who lost access. Without this snapshot the audit
+        record would read ``removed: [{assignee_id: 8143}]``, which no
+        investigator can use.
+
+        Paid for only when something actually needs it: no listener, or a
+        request that only adds, and this returns immediately. ADD carries its
+        own subject.
+        """
+        if listener is None:
+            return {}, True
+        if not any(change.op.value in ("REMOVE", "MOVE") for change in request.changes):
+            return {}, True
+        selected, has_more = await self._runtime.list_permission_sources_page(
+            actor=actor,
+            target=target,
+            after_id=0,
+            limit=_ROSTER_SNAPSHOT_PAGE_SIZE,
+        )
+        return {row.source_id: (row.subject_type, row.subject_id) for row in selected}, not has_more
 
     async def create_mode_draft(
         self,

@@ -81,6 +81,7 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.app_runtime.domain.services.app_query_service",
     "bisheng.app_runtime.domain.services.entry_authz_service",
     "bisheng.app_runtime.domain.services.f048_app_permission",
+    "bisheng.app_runtime.domain.services.visibility_audit",
     "bisheng.app_runtime.api.endpoints.internal_app_proxy",
     "bisheng.app_runtime.api.endpoints.apps",
 )
@@ -677,6 +678,10 @@ _LIST_SESSION_MODULES = (
     "bisheng.database.models.tag",
     "bisheng.database.models.session",
     "bisheng.user.domain.models.user",
+    # F056: the square's per-page ``slug`` lookup opens its own session from
+    # ``WorkFlowService`` rather than from a DAO module, so the service itself
+    # has to be pointed at this database too.
+    "bisheng.api.services.workflow",
 )
 
 

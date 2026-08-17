@@ -28,6 +28,7 @@ Facts that are easy to get wrong:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -149,6 +150,26 @@ class AppDao:
         )
         result = await session.exec(statement)
         return list(result.all())
+
+    @classmethod
+    async def alist_slug_state_by_ids(cls, session: AsyncSession, app_ids: Sequence[str]) -> dict[str, tuple[str, str]]:
+        """``{app_id: (slug, state)}`` for a bounded id batch — read only.
+
+        The square's list is a UNION across three tables whose column set is
+        shared by four callers; ``slug`` is needed by exactly one of them, so it
+        is fetched here for the rows of one page instead of widening that
+        projection. One statement per page, never one per card: the card links
+        to ``/apps/{slug}`` and a per-card lookup would be 20 round-trips for a
+        list that already paid for its permission checks.
+
+        Tenant scoping comes from the automatic filter — this is a SELECT, the
+        one statement shape the listener does rewrite.
+        """
+        if not app_ids:
+            return {}
+        statement = select(App.id, App.slug, App.state).where(col(App.id).in_(list(app_ids)))
+        result = await session.exec(statement)
+        return {row[0]: (row[1], row[2]) for row in result.all()}
 
     @classmethod
     async def alist_by_tenant(cls, session: AsyncSession, tenant_id: int) -> list[App]:

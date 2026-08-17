@@ -1336,9 +1336,27 @@
       "appDelete": "Hosted app deleted",
       "appDeleteHookFailed": "Hosted app post-delete hook failed",
       "appMetaUpdate": "Hosted app metadata updated",
-      "appDataRowEdit": "Hosted app data edited"
+      "appDataRowEdit": "Hosted app data edited",
+      "appVisibilityChange": "Visibility scope changed",
+      "appReleaseSubmit": "Publish submitted",
+      "appReleasePrecheckFailed": "Hosting precheck failed",
+      "appReleaseScanBlocked": "Blocked by secret scan",
+      "appReleaseVersionCreated": "Version recorded",
+      "appReleaseApprovalCreated": "Publish approval requested",
+      "appReleaseApprovalException": "Approval exception (no approver)",
+      "appReleaseSelfApproval": "Self-approved",
+      "appReleaseApproved": "Publish approved",
+      "appReleaseRejected": "Publish rejected",
+      "appReleaseWithdrawn": "Publish request withdrawn",
+      "appReleaseCancelled": "Publish request cancelled",
+      "appReleaseOnline": "Published live",
+      "appReleasePendingOnline": "Pending publish (could not start)",
+      "appReleaseManualPublish": "Manually published",
+      "appReleaseCapabilityDeclared": "Capabilities declared",
+      "appReleaseRollback": "Publish rolled back"
     },
     "objectTypeEnum": {
+      "app": "Application",
       "none": "None",
       "work_flow": "Workflow",
       "flow": "Skill",
@@ -2260,6 +2278,14 @@
       "descEnabled": "The app-factory runtime layer is not deployed or is currently unreachable, so hosted-application entries are unavailable.",
       "contact": "Please ask a platform super administrator to deploy and enable it, then try again.",
       "backHome": "Back to home"
+    },
+    "visibility": {
+      "title": "Visibility scope",
+      "ownerOnlyBanner": "Only you can see this application; colleagues will not find it in the app square.",
+      "configure": "Configure visibility",
+      "summary": "{{total}} subject(s) granted",
+      "loading": "Loading…",
+      "noManagePermission": "You do not have permission to manage this application's visibility."
     }
   }
 }

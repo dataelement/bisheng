@@ -44,7 +44,7 @@ async def _used_page(*, page, limit, n=5, tag_spy=None):
         patch.object(
             apps_mod.WorkFlowService,
             "filter_apps_by_action",
-            new=AsyncMock(side_effect=lambda _user, data, _action: data),
+            new=AsyncMock(side_effect=lambda _user, data, _action, **_kwargs: data),
         ),
         patch.object(apps_mod.WorkFlowService, "get_logo_share_link", side_effect=lambda logo: logo, create=True),
         patch.object(apps_mod.TagDao, "get_tags_by_resource", new=tag_mock),

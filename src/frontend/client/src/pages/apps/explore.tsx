@@ -17,6 +17,8 @@ import { AppSearchBar } from './components/AppSearchBar'
 
 const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = 'app-last-origin';
+/** F054 hosted application — the one card type that leaves this SPA. */
+const HOSTED_APP_FLOW_TYPE = 35;
 
 export default function ExplorePlaza() {
     // Null until the navigation has its tags and can say which tab is the
@@ -132,6 +134,21 @@ export default function ExplorePlaza() {
     const handleCardClick = (agent: any) => {
         const flowId = agent.id
         const flowType = agent.flow_type || agent.type
+        if (flowType === HOSTED_APP_FLOW_TYPE) {
+            // Leaves the SPA entirely: `/apps/{slug}` is served by the app
+            // proxy, not by any route in here.
+            //
+            // Three ways to get this wrong, all of which 404: `navigate()`
+            // prefixes the router basename, and both `__APP_ENV__.BASE_URL` and
+            // the neighbouring `getAppShareUrl` helper prepend `/workspace`
+            // explicitly. A hosted application entry must carry none of them.
+            //
+            // The origin keys below are not written either — they exist so the
+            // conversation page can find its way back, and this navigation does
+            // not come back.
+            window.location.assign(`/apps/${agent.slug}`);
+            return;
+        }
         try {
             sessionStorage.setItem(appFlowOriginKey(String(flowId)), 'explore');
             sessionStorage.setItem(appLastOriginKey, 'explore');

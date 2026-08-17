@@ -546,6 +546,8 @@ class FlowDao(FlowBase):
         cursor: Sequence | None = None,
         ranking_user_id: int | None = None,
         app_state: str | None = None,
+        status_exempt_flow_types: set[int] | None = None,
+        app_state_in: set[str] | None = None,
     ) -> tuple[list[dict], bool]:
         """List flow-based apps, assistants and hosted applications (F027 cursor-paginated).
 
@@ -561,12 +563,21 @@ class FlowDao(FlowBase):
                 latest session create time; unused apps follow by update time.
             app_state: F054 hosted-application state. Narrows to hosted apps on
                 its own (the other legs project NULL for that column).
+            status_exempt_flow_types: F056 square. Flow types the outer
+                ``status`` equality does not apply to, so a stopped hosted
+                application (projected ``status`` 1) still reaches the square.
+                ``None`` — every other caller — leaves the SQL untouched.
+            app_state_in: F056 square. Hosted-application states allowed into
+                the result, pushed onto the third leg. The square pins it to
+                ``{online, stopped}`` server-side; it is deliberately not an
+                HTTP parameter, because both directions (stopped must appear,
+                drafts must not) are product rules rather than user choices.
 
         Returns:
             ``(data, has_more)`` — the list of app dicts and whether a
             further page exists. The legacy ``(data, total)`` shape is gone.
         """
-        sub_query = cls._build_apps_subquery()
+        sub_query = cls._build_apps_subquery(app_state_in=app_state_in)
 
         statement = select(
             sub_query.c.id,
@@ -608,7 +619,13 @@ class FlowDao(FlowBase):
             statement = statement.where(keyword_filter)
 
         if status is not None:
-            statement = statement.where(sub_query.c.status == status)
+            statement = statement.where(
+                cls._build_status_clause(
+                    sub_query,
+                    status=status,
+                    status_exempt_flow_types=status_exempt_flow_types,
+                )
+            )
         if app_state:
             # See ``get_all_apps``: hosted-application state, self-narrowing.
             statement = statement.where(sub_query.c.app_state == app_state)
@@ -681,7 +698,23 @@ class FlowDao(FlowBase):
         return data, has_more
 
     @classmethod
-    def _build_apps_subquery(cls):
+    def _build_status_clause(cls, sub_query, *, status: int, status_exempt_flow_types: set[int] | None = None):
+        """The outer ``status`` predicate, with an optional per-type exemption (F056 design D9).
+
+        The square must keep listing stopped hosted applications: hiding them
+        reads as "you lost access" rather than "this app is paused" (决议-5).
+        Their ``status`` projection is 1 (offline), so the square exempts
+        ``flow_type = 35`` from the equality instead of changing the
+        projection — folding "stopped" into 2 would silently break the build
+        page's online/offline filter, which reads the same column.
+        """
+        clause = sub_query.c.status == status
+        if status_exempt_flow_types:
+            clause = or_(clause, sub_query.c.flow_type.in_(sorted(status_exempt_flow_types)))
+        return clause
+
+    @classmethod
+    def _build_apps_subquery(cls, *, app_state_in: set[str] | None = None):
         """Build the workflow+assistant+hosted-app ``UNION ALL`` subquery with tenant isolation.
 
         The ``do_orm_execute`` auto-filter (see ``core/database/tenant_filter.py``)
@@ -742,6 +775,13 @@ class FlowDao(FlowBase):
             App.update_time,
             col(App.state).label("app_state"),
         ).where(App.state != APP_STATE_DELETED)
+        if app_state_in:
+            # Pushed onto the leg rather than applied outside: the other two legs
+            # project a typed NULL for this column, so an outer predicate would
+            # have to spell out "or the row is not a hosted application". Down
+            # here it also keeps drafts out of the row set entirely, which is
+            # why "not visible even to the owner" needs no permission code.
+            app_select = app_select.where(col(App.state).in_(sorted(app_state_in)))
 
         flow_clause = build_tenant_filter_clause(Flow.tenant_id)
         if flow_clause is not None:

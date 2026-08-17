@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from loguru import logger
+
 from bisheng.api.services.f048_application_permission import (
     ApplicationDaoPermissionLoader,
     F048ApplicationPermissionAdapter,
@@ -17,6 +19,9 @@ from bisheng.api.services.f048_application_permission import (
 from bisheng.app_runtime.domain.services.f048_app_permission import (
     AppDaoPermissionLoader,
     F048AppPermissionAdapter,
+)
+from bisheng.app_runtime.domain.services.visibility_audit import (
+    HostedAppVisibilityAuditListener,
 )
 from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelDaoPermissionLoader,
@@ -49,6 +54,7 @@ from bisheng.permission.application.process_runtime import (
 )
 from bisheng.permission.application.resource_api import (
     F048ResourcePermissionApi,
+    GrantChangeListenerRegistry,
 )
 from bisheng.permission.application.resource_authorization import (
     BoundResourceAuthorizationPort,
@@ -233,10 +239,18 @@ async def initialize_f048_api_runtime(
         resources=registry,
         permission=runtime,
     )
+    grant_listeners = GrantChangeListenerRegistry()
+    # F056: registered here rather than through a module import side effect, so
+    # that whether the audit hook exists does not depend on router import order.
+    # This composition root is also where ``mutate_grants`` itself is built, so
+    # the two cannot drift apart: no API runtime, no mutation to observe.
+    grant_listeners.register("app", HostedAppVisibilityAuditListener())
+    logger.info("registered visibility-change audit hook for resource_type=app")
     resource_api = F048ResourcePermissionApi(
         resources=registry,
         runtime=runtime,
         subjects=TenantPermissionSubjectDirectory(),
+        grant_listeners=grant_listeners,
     )
     catalog_state = SqlCatalogState()
     catalog_api = F048CatalogApi(

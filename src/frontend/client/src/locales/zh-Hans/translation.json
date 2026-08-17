@@ -65,6 +65,7 @@
   "com_app_search_by_name": "搜索应用名称",
   "com_app_search_placeholder": "搜索应用...",
   "com_app_share_app": "分享应用",
+  "com_app_state_stopped": "已停用",
   "com_app_pin_tooltip": "将应用置顶",
   "com_app_unpin_tooltip": "取消置顶",
   "com_app_switcher_no_apps_tooltip": "暂无可切换应用",

@@ -114,6 +114,11 @@ class AppAuditAction(StrEnum):
     #: Data-tab row edit (AC-56) — deferred wave, registered now so the audit
     #: whitelist is touched exactly once.
     DATA_ROW_EDIT = "app.data_row_edit"
+    #: F056: who may see this application changed. Lives here rather than in a
+    #: private F056 constant because this enum is what the lockstep test walks —
+    #: an action defined elsewhere would never be checked against the whitelist
+    #: and the frontend filter, which is the exact failure this enum prevents.
+    VISIBILITY_CHANGE = "app.visibility_change"
 
 
 #: Factory resource tiers (GOV-03). ``cpu`` is in vCPU, ``memory_mb`` in MiB.

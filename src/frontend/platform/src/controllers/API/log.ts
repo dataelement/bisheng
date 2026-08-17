@@ -142,6 +142,30 @@ const actions = [
     { name: 'log.eventTypeEnum.appDeleteHookFailed', value: 'app.delete_hook_failed' },
     { name: 'log.eventTypeEnum.appMetaUpdate', value: 'app.meta_update' },
     { name: 'log.eventTypeEnum.appDataRowEdit', value: 'app.data_row_edit' },
+    // F056 governance. Key is derived by `actionToI18nKey` (systemLog/index.tsx),
+    // never chosen by hand: `app.visibility_change` folds to `appVisibilityChange`.
+    { name: 'log.eventTypeEnum.appVisibilityChange', value: 'app.visibility_change' },
+    // F055 publish pipeline. Registered here because the backend whitelist and
+    // this array are one list kept in two places: an action missing from this
+    // side is written to the database and then cannot be found on the audit
+    // page at all — the exact failure F054 recorded as pit 24, and the reason
+    // AC-27 is judged on the filter rather than on the write.
+    { name: 'log.eventTypeEnum.appReleaseSubmit', value: 'app.release.submit' },
+    { name: 'log.eventTypeEnum.appReleasePrecheckFailed', value: 'app.release.precheck_failed' },
+    { name: 'log.eventTypeEnum.appReleaseScanBlocked', value: 'app.release.scan_blocked' },
+    { name: 'log.eventTypeEnum.appReleaseVersionCreated', value: 'app.release.version_created' },
+    { name: 'log.eventTypeEnum.appReleaseApprovalCreated', value: 'app.release.approval_created' },
+    { name: 'log.eventTypeEnum.appReleaseApprovalException', value: 'app.release.approval_exception' },
+    { name: 'log.eventTypeEnum.appReleaseSelfApproval', value: 'app.release.self_approval' },
+    { name: 'log.eventTypeEnum.appReleaseApproved', value: 'app.release.approved' },
+    { name: 'log.eventTypeEnum.appReleaseRejected', value: 'app.release.rejected' },
+    { name: 'log.eventTypeEnum.appReleaseWithdrawn', value: 'app.release.withdrawn' },
+    { name: 'log.eventTypeEnum.appReleaseCancelled', value: 'app.release.cancelled' },
+    { name: 'log.eventTypeEnum.appReleaseOnline', value: 'app.release.online' },
+    { name: 'log.eventTypeEnum.appReleasePendingOnline', value: 'app.release.pending_online' },
+    { name: 'log.eventTypeEnum.appReleaseManualPublish', value: 'app.release.manual_publish' },
+    { name: 'log.eventTypeEnum.appReleaseCapabilityDeclared', value: 'app.release.capability_declared' },
+    { name: 'log.eventTypeEnum.appReleaseRollback', value: 'app.release.rollback' },
 ];
 
 // 全部操作行为

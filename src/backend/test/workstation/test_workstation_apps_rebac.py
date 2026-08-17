@@ -6,6 +6,7 @@ from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from bisheng.api.services.workflow import CHAT_ENTRY_EXCLUDED_FLOW_TYPES
 from bisheng.database.models.flow import FlowStatus, FlowType
 from bisheng.workstation.api.endpoints import apps as apps_mod
 
@@ -25,19 +26,13 @@ async def test_recommended_apps_filter_with_visible_action():
         {"id": "wf-1", "flow_type": FlowType.WORKFLOW.value},
         {"id": "asst-1", "flow_type": FlowType.ASSISTANT.value},
     ]
-    filter_by_action = AsyncMock(
-        return_value=[
-            {"id": "asst-1", "flow_type": FlowType.ASSISTANT.value}
-        ]
-    )
+    filter_by_action = AsyncMock(return_value=[{"id": "asst-1", "flow_type": FlowType.ASSISTANT.value}])
 
     with (
         patch.object(
             apps_mod.WorkStationService,
             "aget_config",
-            new=AsyncMock(
-                return_value=SimpleNamespace(recommendedApps=configured)
-            ),
+            new=AsyncMock(return_value=SimpleNamespace(recommendedApps=configured)),
         ),
         patch.object(
             apps_mod.FlowDao,
@@ -65,9 +60,7 @@ async def test_recommended_apps_filter_with_visible_action():
             new=AsyncMock(side_effect=lambda _user, data: data),
         ),
     ):
-        result = await apps_mod.get_recommended_apps(
-            login_user=login_user
-        )
+        result = await apps_mod.get_recommended_apps(login_user=login_user)
 
     assert get_all_apps.call_args.kwargs == {
         "id_list": configured,
@@ -79,10 +72,11 @@ async def test_recommended_apps_filter_with_visible_action():
         login_user,
         candidates,
         "visible",
+        # F056: this list's cards open the conversation page, which hosted
+        # applications do not have.
+        exclude_flow_types=CHAT_ENTRY_EXCLUDED_FLOW_TYPES,
     )
-    assert result.data == [
-        {"id": "asst-1", "flow_type": FlowType.ASSISTANT.value}
-    ]
+    assert result.data == [{"id": "asst-1", "flow_type": FlowType.ASSISTANT.value}]
 
 
 async def test_used_apps_filter_with_visible_before_pagination():
@@ -155,6 +149,9 @@ async def test_used_apps_filter_with_visible_before_pagination():
         login_user,
         candidates,
         "visible",
+        # F056: this list's cards open the conversation page, which hosted
+        # applications do not have.
+        exclude_flow_types=CHAT_ENTRY_EXCLUDED_FLOW_TYPES,
     )
     assert result.data["total"] == 1
     assert [item["id"] for item in result.data["list"]] == ["wf-1"]

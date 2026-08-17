@@ -1319,9 +1319,27 @@
       "appDelete": "托管应用删除",
       "appDeleteHookFailed": "托管应用删除后置处理失败",
       "appMetaUpdate": "托管应用元信息更新",
-      "appDataRowEdit": "托管应用数据编辑"
+      "appDataRowEdit": "托管应用数据编辑",
+      "appVisibilityChange": "可见范围变更",
+      "appReleaseSubmit": "提交发布",
+      "appReleasePrecheckFailed": "托管预检失败",
+      "appReleaseScanBlocked": "密钥扫描阻断",
+      "appReleaseVersionCreated": "生成版本记录",
+      "appReleaseApprovalCreated": "生成发布审批单",
+      "appReleaseApprovalException": "审批异常（审批人为空）",
+      "appReleaseSelfApproval": "自审通过",
+      "appReleaseApproved": "发布审批通过",
+      "appReleaseRejected": "发布审批驳回",
+      "appReleaseWithdrawn": "撤回发布申请",
+      "appReleaseCancelled": "发布申请取消",
+      "appReleaseOnline": "发布上线",
+      "appReleasePendingOnline": "待上线（未能启动）",
+      "appReleaseManualPublish": "手动上线",
+      "appReleaseCapabilityDeclared": "声明能力依赖",
+      "appReleaseRollback": "发布回滚"
     },
     "objectTypeEnum": {
+      "app": "应用",
       "none": "无",
       "work_flow": "工作流",
       "flow": "技能",
@@ -2205,6 +2223,14 @@
       "descEnabled": "「应用工场」运行时层尚未部署或暂不可用，托管应用的访问入口不可用。",
       "contact": "请联系平台超级管理员完成部署与启用后再访问。",
       "backHome": "返回首页"
+    },
+    "visibility": {
+      "title": "可见范围",
+      "ownerOnlyBanner": "当前仅你可见，同事无法在应用广场看到它。",
+      "configure": "设置可见范围",
+      "summary": "已授予 {{total}} 个主体",
+      "loading": "加载中…",
+      "noManagePermission": "你没有权限管理该应用的可见范围。"
     }
   }
 }

@@ -24,6 +24,7 @@ from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
+from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
@@ -34,6 +35,7 @@ from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     require_business_action,
 )
+from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -50,6 +52,32 @@ if TYPE_CHECKING:
 # wasted permission lookups when most rows are filtered out.
 _FLOW_PERMISSION_SCAN_BATCH_SIZE = 50
 _APP_COMPAT_PAGE_SCAN_BATCH_SIZE = 50
+
+#: F056: hosted applications are asked for ``use`` in the square, matching the
+#: public entry's own decision (``check_business_action("app", id, actor,
+#: "use")``). ``share`` is absent because there is no share-token bypass for a
+#: hosted application — requesting it would fabricate a capability.
+_SQUARE_ACTIONS_BY_TYPE: dict[str, tuple[str, ...]] = {"app": ("use", "edit")}
+_SQUARE_VISIBILITY_ACTION_BY_TYPE: dict[str, str] = {"app": "use"}
+
+#: F056: hosted-application states the square lists. "stopped" stays visible on
+#: purpose (决议-5); drafts / pending-capacity / deleted are excluded in SQL, so
+#: the rule holds for owners and administrators too without a second check.
+SQUARE_APP_STATES: frozenset[str] = frozenset({"online", "stopped"})
+
+#: F056: types excluded from the lists whose cards open a **conversation** page
+#: (``/app/{chatId}/{id}/{flow_type}``): application centre / frequently used and
+#: the workbench recommendation strip. A hosted application has no conversation,
+#: so such a card opens a blank screen — and no acceptance criterion covers that
+#: path, so nothing else would catch it. Not a side effect of the legality
+#: filter: these lists ask for ``visible``, which is legal for ``app``.
+CHAT_ENTRY_EXCLUDED_FLOW_TYPES: frozenset[int] = frozenset({FlowType.HOSTED_APP.value})
+
+#: Actions that bypass the per-resource-type legality filter (F056 design D3).
+#: ``visible`` is answered by ``batch_check_visible``, a different FGA relation
+#: that is deliberately absent from ``REGISTERED_ACTION_CODES`` and therefore
+#: from ``ACTION_RESOURCE_SCOPES``.
+_ACTION_SCOPE_EXEMPT = frozenset({"visible"})
 
 
 class WorkflowResourceAuthorizationPort:
@@ -189,12 +217,44 @@ class WorkFlowService(BaseService):
         return data
 
     @classmethod
+    def _legal_actions_for(cls, resource_type: str, actions: tuple[str, ...]) -> tuple[str, ...]:
+        """Keep only the actions F048 recognises for ``resource_type`` (F056 design D3).
+
+        Asking for an action outside a resource type's scope is not a harmless
+        no-op: ``_prepare_action_target`` raises ``InvalidCatalogActionError``,
+        which is a ``BaseErrorCode`` and therefore comes back as **HTTP 200 with
+        business code 25001**, not a 500. The SPA rejects, the list blanks, and
+        the server log shows nothing to grep for. Both administrator
+        short-circuits run *before* that check, so the failure only ever reaches
+        ordinary users.
+
+        ``visible`` is exempt on purpose: it is not a registered action code
+        (``_normalize_action`` rejects it and ``batch_check_visible`` answers it
+        instead), so ``ACTION_RESOURCE_SCOPES`` has no row for it. Filtering it
+        out would drop the square's only visibility question and return an empty
+        page for every type.
+        """
+        return tuple(
+            action
+            for action in actions
+            if action in _ACTION_SCOPE_EXEMPT or resource_type in ACTION_RESOURCE_SCOPES.get(action, frozenset())
+        )
+
+    @classmethod
     async def _application_action_map(
         cls,
         user: UserPayload,
         data: list[dict],
         actions: tuple[str, ...],
+        actions_by_type: dict[str, tuple[str, ...]] | None = None,
     ) -> dict[str, frozenset[str]]:
+        """Ask F048 for the exact actions each resource type can answer.
+
+        ``actions_by_type`` overrides ``actions`` for the named buckets only;
+        omitting it leaves every caller's request exactly as it was. The square
+        uses it to ask hosted applications for ``use`` while workflows and
+        assistants keep their historical ``visible`` (F056 design D3, layer 2).
+        """
         # One bucket per F048 resource type. A row whose type has no bucket is
         # dropped silently and comes back with no actions at all — the symptom
         # is "the cards render but nothing on them can be clicked", never an
@@ -209,16 +269,28 @@ class WorkFlowService(BaseService):
             if resource_type is not None:
                 grouped[resource_type].append(str(item.get("id")))
 
+        overrides = actions_by_type or {}
+        # A bucket left with no legal action is skipped rather than asked with an
+        # empty tuple: its rows then carry no action at all, which is what makes
+        # `can_share` fall back to False for hosted applications without any
+        # per-type branch in the card component.
+        planned = [
+            (resource_type, resource_ids, requested)
+            for resource_type, resource_ids in grouped.items()
+            if resource_ids
+            for requested in (cls._legal_actions_for(resource_type, overrides.get(resource_type, actions)),)
+            if requested
+        ]
+
         results = await asyncio.gather(
             *(
                 batch_check_business_actions(
                     user,
                     resource_type=resource_type,
                     resource_ids=resource_ids,
-                    actions=actions,
+                    actions=requested,
                 )
-                for resource_type, resource_ids in grouped.items()
-                if resource_ids
+                for resource_type, resource_ids, requested in planned
             )
         )
         merged: dict[str, frozenset[str]] = {}
@@ -433,6 +505,40 @@ class WorkFlowService(BaseService):
             batch_cursor = [last_db["update_time"], last_db["id"]]
 
     @classmethod
+    def _square_visibility_action(cls, item: dict, default_action: str) -> str:
+        """Which action decides whether this row is visible in the square."""
+        resource_type = cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(int(item.get("flow_type") or 0))
+        return _SQUARE_VISIBILITY_ACTION_BY_TYPE.get(resource_type, default_action)
+
+    @classmethod
+    async def _attach_hosted_app_entry_fields(cls, data: list[dict]) -> None:
+        """Fill ``slug`` on the hosted-application rows of one page.
+
+        Deliberately **not** in ``add_extra_field``: the "uncategorised" tab
+        (``get_uncategorized_flows``) never calls that function, so a card there
+        would link to ``/apps/undefined`` and carry no state badge — silently,
+        and on the very tab the acceptance script uses. The two square entries
+        only share this function, so it is the one place that reaches both.
+
+        ``app_state`` normally arrives already projected by the UNION's third
+        leg; it is filled here only when missing, so this function stays correct
+        if that projection ever changes.
+        """
+        hosted = [item for item in data if int(item.get("flow_type") or 0) == FlowType.HOSTED_APP.value]
+        if not hosted:
+            return
+
+        from bisheng.database.models.app import AppDao
+
+        async with get_async_db_session() as session:
+            rows = await AppDao.alist_slug_state_by_ids(session, [str(item.get("id")) for item in hosted])
+        for item in hosted:
+            slug, state = rows.get(str(item.get("id")), (None, None))
+            item["slug"] = slug
+            if state is not None and not item.get("app_state"):
+                item["app_state"] = state
+
+    @classmethod
     async def _scan_visible_apps_page(
         cls,
         *,
@@ -447,8 +553,15 @@ class WorkFlowService(BaseService):
         search_description: bool = False,
         action: str = "visible",
         ranking_user_id: int | None = None,
+        status_exempt_flow_types: set[int] | None = None,
+        app_state_in: set[str] | None = None,
     ) -> tuple[list[dict], dict[str, frozenset[str]]]:
-        """Fill a legacy offset page using bounded keyset scans."""
+        """Fill a legacy offset page using bounded keyset scans.
+
+        ``status_exempt_flow_types`` / ``app_state_in`` are forwarded verbatim to
+        the DAO; both square entries pin them, everyone else leaves them unset
+        and gets the previous SQL (F056 design D9).
+        """
         normalized_page = max(int(page or 1), 1)
         normalized_page_size = max(int(page_size or 1), 1)
         page_start = (normalized_page - 1) * normalized_page_size
@@ -471,6 +584,8 @@ class WorkFlowService(BaseService):
                 search_description=search_description,
                 cursor=batch_cursor,
                 ranking_user_id=ranking_user_id,
+                status_exempt_flow_types=status_exempt_flow_types,
+                app_state_in=app_state_in,
             )
             if not batch:
                 break
@@ -481,8 +596,18 @@ class WorkFlowService(BaseService):
                 user,
                 batch,
                 requested_actions,
+                actions_by_type=_SQUARE_ACTIONS_BY_TYPE,
             )
-            kept = [item for item in batch if action in action_map.get(str(item.get("id")), frozenset())]
+            # Per row, not one action for the whole page: the hosted-application
+            # entry decides with ``use`` (F054), and asking the square with
+            # ``visible`` would produce the one state AC-06 forbids — a card the
+            # user can see and cannot open. ``visible`` and ``can_use`` are
+            # separate FGA relations, so "授了 editor 没授 use" makes them differ.
+            kept = [
+                item
+                for item in batch
+                if cls._square_visibility_action(item, action) in action_map.get(str(item.get("id")), frozenset())
+            ]
             for item in kept:
                 item_id = str(item.get("id"))
                 visible_actions[item_id] = action_map.get(
@@ -502,6 +627,7 @@ class WorkFlowService(BaseService):
         for item in page_items:
             item.pop("_used_rank", None)
             item.pop("_sort_time", None)
+        await cls._attach_hosted_app_entry_fields(page_items)
         page_actions = {
             str(item.get("id")): visible_actions.get(
                 str(item.get("id")),
@@ -573,6 +699,12 @@ class WorkFlowService(BaseService):
             search_description=search_description,
             action=action,
             ranking_user_id=user.user_id,
+            # Pinned here rather than accepted from HTTP: both halves of AC-03
+            # ("stopped must still appear", "drafts must never appear") are
+            # product rules, and a query parameter would hand that gate to the
+            # caller.
+            status_exempt_flow_types={FlowType.HOSTED_APP.value},
+            app_state_in=set(SQUARE_APP_STATES),
         )
         writeable_ids = {app_id for app_id, action_codes in action_map.items() if "edit" in action_codes}
         data = cls.add_extra_field(user, data, writeable_ids=writeable_ids)
@@ -694,9 +826,20 @@ class WorkFlowService(BaseService):
         user: UserPayload,
         data: list[dict],
         action: str = "use",
+        exclude_flow_types: frozenset[int] = frozenset(),
     ) -> list[dict]:
+        """Keep the rows the caller may act on, minus any excluded type.
+
+        ``exclude_flow_types`` defaults to empty, so callers that do not opt in
+        behave exactly as before (see ``CHAT_ENTRY_EXCLUDED_FLOW_TYPES`` for the
+        one thing it is used for today).
+        """
         if not data:
             return data
+        if exclude_flow_types:
+            data = [one for one in data if int(one.get("flow_type") or 0) not in exclude_flow_types]
+            if not data:
+                return data
         action_map = await cls._application_action_map(
             user,
             data,
@@ -963,7 +1106,12 @@ class WorkFlowService(BaseService):
         else:
             data, _ = FlowDao.get_all_apps(status=FlowStatus.ONLINE.value, id_list=flow_ids, page=0, limit=0)
         data = cls.filter_supported_apps(data)
-        data = await cls.filter_apps_by_action(user, data, "visible")
+        data = await cls.filter_apps_by_action(
+            user,
+            data,
+            "visible",
+            exclude_flow_types=CHAT_ENTRY_EXCLUDED_FLOW_TYPES,
+        )
 
         # Reorder users in the order they are added to the stock
         data.sort(key=lambda x: user_link_order.get(x["id"], float("inf")))
@@ -1027,6 +1175,10 @@ class WorkFlowService(BaseService):
             status=FlowStatus.ONLINE.value,
             id_list_not_in=flow_ids_not_in,
             action="visible",
+            # Same pinning as the tagged-tab entry — miss it here and hosted
+            # applications appear under a tag but not in "uncategorised".
+            status_exempt_flow_types={FlowType.HOSTED_APP.value},
+            app_state_in=set(SQUARE_APP_STATES),
         )
 
         for one in data:

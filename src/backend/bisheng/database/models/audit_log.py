@@ -251,6 +251,10 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "app.delete_hook_failed",
     "app.meta_update",
     "app.data_row_edit",
+    # F056 governance (design D6 / K3). Written by the visibility-change audit
+    # hook that `app_runtime` registers on the F048 grant mutation path — the
+    # permission module itself never learns the `app.` namespace.
+    "app.visibility_change",
     # F055 publish pipeline (design §4.2 ⑥ / pit 21). Own action family
     # `app.release.*`, deliberately NOT nested under F054's `app.publish` —
     # that name is already the *state action* "the app went online", and
