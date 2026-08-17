@@ -14,7 +14,7 @@ SEED_RULES = [
     {
         "rule_code": "G1",
         "rule_type": "earn",
-        "name": "上传公共库文档",
+        "name": "发布/上传到公共库",
         "score_expr": {"mode": "fixed", "score": 3},
         "daily_cap": 15,
         "beneficiary": "uploader",
@@ -24,7 +24,7 @@ SEED_RULES = [
     {
         "rule_code": "G2",
         "rule_type": "earn",
-        "name": "上传部门库文档",
+        "name": "发布/上传到部门库",
         "score_expr": {"mode": "fixed", "score": 2},
         "daily_cap": 10,
         "beneficiary": "uploader",
@@ -53,7 +53,7 @@ SEED_RULES = [
     {
         "rule_code": "G4",
         "rule_type": "earn",
-        "name": "回答被采纳",
+        "name": "问答被采纳",
         "score_expr": {"mode": "fixed", "score": 3},
         "daily_cap": 15,
         "beneficiary": "answerer",
@@ -83,7 +83,7 @@ SEED_RULES = [
     {
         "rule_code": "G7",
         "rule_type": "earn",
-        "name": "文档库间分享",
+        "name": "知识分享",
         "score_expr": {"mode": "fixed", "score": 2},
         "daily_cap": 10,
         "beneficiary": "uploader",
@@ -91,19 +91,36 @@ SEED_RULES = [
         "sort_order": 7,
     },
     # --- 扣减 R*（系统默认）---
-    *[
-        {
-            "rule_code": f"R{i}",
-            "rule_type": "deduct",
-            "name": f"违规扣减 R{i}",
-            "score_expr": {"mode": "fixed", "score": 100},
-            "daily_cap": None,
-            "beneficiary": None,
-            "status": "enabled",
-            "sort_order": 20 + i,
-        }
-        for i in range(1, 4)
-    ],
+    {
+        "rule_code": "R1",
+        "rule_type": "deduct",
+        "name": "色情低俗/暴力违法",
+        "score_expr": {"mode": "fixed", "score": 100},
+        "daily_cap": None,
+        "beneficiary": None,
+        "status": "enabled",
+        "sort_order": 21,
+    },
+    {
+        "rule_code": "R2",
+        "rule_type": "deduct",
+        "name": "不当言论",
+        "score_expr": {"mode": "fixed", "score": 100},
+        "daily_cap": None,
+        "beneficiary": None,
+        "status": "enabled",
+        "sort_order": 22,
+    },
+    {
+        "rule_code": "R3",
+        "rule_type": "deduct",
+        "name": "其他违反规范",
+        "score_expr": {"mode": "fixed", "score": 100},
+        "daily_cap": None,
+        "beneficiary": None,
+        "status": "enabled",
+        "sort_order": 23,
+    },
     # --- 月奖 M*：仅 M1/M4/M6 默认启用 ---
     {
         "rule_code": "M1",

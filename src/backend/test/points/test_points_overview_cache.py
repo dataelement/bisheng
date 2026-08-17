@@ -21,6 +21,7 @@ def _repo() -> SimpleNamespace:
         sum_total_issued=AsyncMock(return_value=100),
         sum_total_balance=AsyncMock(return_value=70),
         sum_violation_deducted=AsyncMock(return_value=-30),
+        sum_tenant_earn=AsyncMock(return_value=42),
     )
 
 
@@ -47,12 +48,15 @@ async def test_overview_caches_and_serves_second_call_from_cache():
     assert first.total_issued == 100
     assert first.total_balance == 70
     assert first.total_violation_deducted == -30
+    assert first.total_issued_mom == 42
     assert second == first
-    # 第二次必须来自缓存：三个聚合各自只被调用一次。
+    # 第二次必须来自缓存：四个聚合各自只被调用一次。
     assert repo.sum_total_issued.await_count == 1
     assert repo.sum_total_balance.await_count == 1
     assert repo.sum_violation_deducted.await_count == 1
+    assert repo.sum_tenant_earn.await_count == 1
     assert store[f"{mod.OVERVIEW_CACHE_PREFIX}1"]["total_issued"] == 100
+    assert store[f"{mod.OVERVIEW_CACHE_PREFIX}1"]["total_issued_mom"] == 42
 
 
 @pytest.mark.asyncio
@@ -77,6 +81,7 @@ async def test_overview_cache_is_scoped_per_tenant():
 
     assert set(store) == {f"{mod.OVERVIEW_CACHE_PREFIX}1", f"{mod.OVERVIEW_CACHE_PREFIX}2"}
     assert repo.sum_total_issued.await_count == 2
+    assert repo.sum_tenant_earn.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -91,7 +96,9 @@ async def test_overview_falls_back_to_db_when_redis_unavailable(caplog):
             out = await service.overview(1, ADMIN)
 
     assert out.total_issued == 100
+    assert out.total_issued_mom == 42
     assert repo.sum_total_issued.await_count == 1
+    assert repo.sum_tenant_earn.await_count == 1
     # 读、写各降级一次，确认真的进了异常分支而非碰巧命中。
     assert client.await_count == 2
     assert sum("cache" in r.message for r in caplog.records) == 2

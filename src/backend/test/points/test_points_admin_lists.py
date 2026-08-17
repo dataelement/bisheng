@@ -165,10 +165,9 @@ async def test_admin_user_detail_returns_summary_and_filtered_logs():
             "_leaderboard_display_maps",
             AsyncMock(return_value=({7: "张三"}, {7: "技术研发部"})),
         ),
-        patch.object(
-            PointsQueryService,
-            "_resolve_user_role_label",
-            AsyncMock(return_value="普通用户"),
+        patch(
+            "bisheng.points.domain.constants.admin_user_type.resolve_user_types_for_admin_list",
+            AsyncMock(return_value={7: "普通用户"}),
         ),
     ):
         out = await service.admin_user_detail(

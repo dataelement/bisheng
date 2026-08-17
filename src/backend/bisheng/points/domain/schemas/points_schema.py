@@ -83,6 +83,7 @@ class PointOverviewResponse(BaseModel):
     total_issued: int
     total_balance: int
     total_violation_deducted: int
+    total_issued_mom: int = 0
 
 
 class PointAdminUserItem(BaseModel):
