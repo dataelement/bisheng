@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001, RUF002, RUF003
 """
 Expert QA Services - 业务逻辑层
 核心流程：
@@ -7,15 +8,37 @@ Expert QA Services - 业务逻辑层
 - 互动流程：评论、投票、通知
 """
 
+import asyncio
+import inspect
 from datetime import datetime
+from types import SimpleNamespace
 
 from loguru import logger
 
 from bisheng.common.errcode.base import BaseErrorCode
+from bisheng.common.errcode.qa_expert import (
+    QaExpertAdminRequiredError,
+    QaExpertAdoptLimitError,
+    QaExpertAnswerNotAllowedError,
+    QaExpertCommentNotAllowedError,
+    QaExpertContentLockedError,
+    QaExpertDisabledError,
+    QaExpertQuestionAccessDeniedError,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import DepartmentDao
-from bisheng.database.models.qa_expert import Answer, Comment, Expert, QANotification, Question
+from bisheng.database.models.qa_expert import (
+    EXPERT_STATUS_ACTIVE,
+    EXPERT_STATUS_DISABLED,
+    Answer,
+    AnswerEligibility,
+    Comment,
+    Expert,
+    QANotification,
+    Question,
+    QuestionInvite,
+)
 from bisheng.department.domain.services.department_display_service import (
     build_department_name_projection,
 )
@@ -23,12 +46,43 @@ from bisheng.dictionary.domain.repositories.implementations.system_dictionary_re
     SystemDictionaryRepositoryImpl,
 )
 from bisheng.qa_expert.domain.asset_service import QaAssetService, new_owner_stable_id
+from bisheng.qa_expert.domain.capability import (
+    CapabilityResolver,
+    CapabilitySnapshot,
+    is_expert_library_admin,
+)
+from bisheng.qa_expert.domain.identity import (
+    IdentityService,
+    copy_stored_anonymous_flags,
+    persist_anonymous_choice,
+)
+from bisheng.qa_expert.domain.question_query import (
+    MAX_INVITES,
+    QUESTION_TYPE_DIRECTED,
+    QUESTION_TYPE_PUBLIC,
+    invite_display_names_need_hydrate,
+    matches_display_status,
+    normalize_list_filter,
+    normalize_question_type,
+    parse_invite_expert_ids,
+    parse_related_doc_ref,
+    parse_related_doc_tokens,
+    question_display_status,
+    serialize_expert_names,
+    serialize_invite_ids,
+    serialize_related_doc_ids,
+)
 from bisheng.qa_expert.domain.repositories import (
+    AnswerAdoptRepository,
+    AnswerEligibilityRepository,
     AnswerRepository,
     CommentRepository,
     ExpertRepository,
     NotificationRepository,
+    PublishApproverRepository,
+    PublishRequestRepository,
     QAExpertStatsRepository,
+    QuestionInviteRepository,
     QuestionRepository,
     VoteRepository,
 )
@@ -83,15 +137,14 @@ class PermissionDeniedError(BaseErrorCode):
     Msg = "Permission denied"
 
 
-class AdoptLimitExceededError(BaseErrorCode):
-    """每个问题最多采纳 3 个最佳答案"""
-
-    Code = 10906
-    Msg = "每个问题最多采纳 3 个最佳答案"
+class AdoptLimitExceededError(QaExpertAdoptLimitError):
+    """兼容旧类名；错误码 18304。"""
 
 
 # 同题未删除回答中，adopted=true 的上限
 MAX_ADOPTED_ANSWERS_PER_QUESTION = 3
+ELIGIBILITY_SOURCE_INVITED = "invited"
+ELIGIBILITY_SOURCE_PRE_ADOPT_ANSWER = "pre_adopt_answer"
 
 
 class QAExpertStatsService:
@@ -111,6 +164,20 @@ class ExpertService:
 
     def __init__(self):
         self.repository = ExpertRepository()
+        self.publish_service = None
+
+    def _publish(self):
+        if self.publish_service is None:
+            from bisheng.qa_expert.domain.publish_service import PublishService
+
+            self.publish_service = PublishService()
+        return self.publish_service
+
+    @staticmethod
+    def _require_admin(user) -> None:
+        """写专家库仅专家库管理员（Portal isPortalAdmin），不是平台超管。"""
+        if not is_expert_library_admin(user):
+            raise QaExpertAdminRequiredError()
 
     @staticmethod
     def _with_department_projection(expert: Expert, department) -> dict:
@@ -143,8 +210,9 @@ class ExpertService:
         user.update_time = datetime.now()
         await UserDao.aupdate_user(user)
 
-    async def create_expert(self, request: ExpertCreateRequest) -> dict:
-        """创建专家（后台管理员操作）"""
+    async def create_expert(self, request: ExpertCreateRequest, user=None) -> dict:
+        """创建专家（专家库管理员操作）"""
+        self._require_admin(user)
         # 检查是否已是专家
         existing = await self.repository.get_by_user_name(request.expert_name, request.user_id)
         if existing:
@@ -165,8 +233,9 @@ class ExpertService:
         depart = await DepartmentDao.aget_by_id(temp_expert.depart_ment)
         return self._with_department_projection(temp_expert, depart)
 
-    async def update_expert(self, expert_id: int, request: ExpertUpdateRequest) -> dict:
+    async def update_expert(self, expert_id: int, request: ExpertUpdateRequest, user=None) -> dict:
         """更新专家信息"""
+        self._require_admin(user)
         expert = await self.repository.get_by_id(expert_id)
         if not expert:
             raise ExpertNotFoundError()
@@ -213,16 +282,8 @@ class ExpertService:
         )
         experts_all = await self._build_expert_rows(experts)
         if sort_by_department:
-            populated = [
-                item
-                for item in experts_all
-                if str(item.get("department_display_name") or "").strip()
-            ]
-            empty = [
-                item
-                for item in experts_all
-                if not str(item.get("department_display_name") or "").strip()
-            ]
+            populated = [item for item in experts_all if str(item.get("department_display_name") or "").strip()]
+            empty = [item for item in experts_all if not str(item.get("department_display_name") or "").strip()]
             populated.sort(
                 key=lambda item: (
                     str(item.get("department_display_name") or "").casefold(),
@@ -340,9 +401,7 @@ class ExpertService:
                 major_keys.add(expert.major)
 
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
-        department_map = {
-            int(department.id): department for department in departments if department.id is not None
-        }
+        department_map = {int(department.id): department for department in departments if department.id is not None}
 
         users = await UserDao.aget_user_by_ids(list(set(user_ids))) or []
         wechat_user_ids = {user.user_id: user.wechat_user_id for user in users if user.user_id is not None}
@@ -377,9 +436,29 @@ class ExpertService:
             experts_all.append(expert_dict)
         return experts_all
 
-    async def delete_expert(self, expert_id: int) -> bool:
-        """删除专家"""
-        return await self.repository.delete(expert_id)
+    async def disable_expert(self, expert_id: int, user) -> Expert:
+        """停用专家：status=0；回调转公开默认同意。"""
+        self._require_admin(user)
+        expert = await self.repository.get_by_id(expert_id)
+        if not expert:
+            raise ExpertNotFoundError()
+        updated = await self.repository.update(expert_id, status=EXPERT_STATUS_DISABLED)
+        await self._publish().on_expert_disabled(int(expert.user_id))
+        return updated or expert
+
+    async def enable_expert(self, expert_id: int, user) -> Expert:
+        """恢复专家：不加入历史已结束转公开申请。"""
+        self._require_admin(user)
+        expert = await self.repository.get_by_id(expert_id)
+        if not expert:
+            raise ExpertNotFoundError()
+        updated = await self.repository.update(expert_id, status=EXPERT_STATUS_ACTIVE)
+        return updated or expert
+
+    async def delete_expert(self, expert_id: int, user=None) -> bool:
+        """兼容 DELETE：映射为停用，不硬删。"""
+        await self.disable_expert(expert_id, user)
+        return True
 
     async def get_expertinfo(self, expert_name: str) -> dict | None:
         """获取专家信息"""
@@ -401,9 +480,23 @@ class QuestionService:
     def __init__(self, asset_service: QaAssetService | None = None):
         self.repository = QuestionRepository()
         self.expert_repo = ExpertRepository()
+        self.invite_repo = QuestionInviteRepository()
         self.answer_repo = AnswerRepository()
         self.notification_repo = NotificationRepository()
+        self.adopt_repo = AnswerAdoptRepository()
+        self.eligibility_repo = AnswerEligibilityRepository()
+        self.publish_request_repo = PublishRequestRepository()
+        self.publish_approver_repo = PublishApproverRepository()
         self.asset_service = asset_service
+        self.capability_resolver = CapabilityResolver()
+        self.related_docs_access_checker = None
+        self.identity_service = None
+
+    async def _identity(self) -> IdentityService:
+        """懒加载身份脱敏；单测可注入 identity_service 避免打库。"""
+        if self.identity_service is None:
+            self.identity_service = IdentityService()
+        return self.identity_service
 
     async def _assets(self) -> QaAssetService:
         if self.asset_service is None:
@@ -430,7 +523,24 @@ class QuestionService:
         user_name: str,
         tenant_id: int | None = None,
     ) -> Question:
-        """创建问题"""
+        """创建问题：写 qa_question + qa_question_invite；存量默认 public。"""
+        if not user_id:
+            raise QaExpertQuestionAccessDeniedError()
+        question_type = normalize_question_type(getattr(request, "question_type", None))
+        invite_ids = parse_invite_expert_ids(
+            invited_expert_ids=getattr(request, "invited_expert_ids", None),
+            invited_experts=request.invited_experts,
+        )
+        experts = await self._validate_invites(user_id, question_type, invite_ids, request)
+        related_docs = serialize_related_doc_ids(
+            getattr(request, "related_doc_ids", None),
+            request.related_docs,
+        )
+        asker_anonymous = 1 if bool(getattr(request, "asker_anonymous", False)) else 0
+        reveal = getattr(request, "asker_reveal_on_public", None)
+        # 未匿名时转公开姓名选项无意义，不落库，避免旧客户端误带 true/false。
+        asker_reveal_on_public = None if (not asker_anonymous or reveal is None) else (1 if reveal else 0)
+
         asset_values = {
             "image_url": request.image_url,
             "file_url": request.file_url,
@@ -451,13 +561,17 @@ class QuestionService:
             description=request.description,
             business_domain=request.business_domain,
             attachments=asset_values["attachments"],
-            related_docs=request.related_docs,
-            invited_experts=request.invited_experts,
-            experts_names=request.experts_names,
+            related_docs=related_docs,
+            invited_experts=serialize_invite_ids(invite_ids),
+            experts_names=serialize_expert_names(experts),
             image_url=asset_values["image_url"],
             file_url=asset_values["file_url"],
             file_name=request.file_name,
             created_by=user_name,
+            tenant_id=tenant_id or 1,
+            question_type=question_type,
+            asker_anonymous=asker_anonymous,
+            asker_reveal_on_public=asker_reveal_on_public,
         )
 
         try:
@@ -466,6 +580,18 @@ class QuestionService:
             if promotion is not None:
                 await (await self._assets()).compensate(promotion)
             raise
+        if invite_ids:
+            await self.invite_repo.create_many(
+                [
+                    QuestionInvite(
+                        tenant_id=tenant_id or 1,
+                        question_id=question.id,
+                        expert_id=expert.id,
+                        user_id=expert.user_id,
+                    )
+                    for expert in experts
+                ]
+            )
         if promotion is not None:
             await (await self._assets()).cleanup_sources(promotion)
         # 发送邀请通知
@@ -492,6 +618,227 @@ class QuestionService:
         logger.info(f"Question created: {question.id} by user {user_id}")
         return await self._resolve_question(question)
 
+    async def _validate_invites(
+        self,
+        user_id: int,
+        question_type: str,
+        invite_ids: list[int],
+        request: QuestionCreateRequest,
+    ) -> list:
+        """校验邀请人数与专家有效性；定向且匿名时须预选转公开后是否公开姓名。"""
+        if question_type == QUESTION_TYPE_DIRECTED:
+            if (
+                bool(getattr(request, "asker_anonymous", False))
+                and getattr(request, "asker_reveal_on_public", None) is None
+            ):
+                raise InvalidInvitationError(msg="定向匿名题须选择转公开后是否公开姓名")
+            if not (1 <= len(invite_ids) <= MAX_INVITES):
+                raise InvalidInvitationError(msg="定向题须邀请 1–3 位有效专家")
+        elif len(invite_ids) > MAX_INVITES:
+            raise InvalidInvitationError(msg="公开题最多邀请 3 位专家")
+        experts = []
+        for expert_id in invite_ids:
+            expert = await self.expert_repo.get_by_id(expert_id)
+            if expert is None:
+                raise InvalidInvitationError(msg="邀请的专家不存在")
+            if int(getattr(expert, "status", 1) or 0) != 1:
+                raise QaExpertDisabledError()
+            if int(expert.user_id) == int(user_id):
+                raise InvalidInvitationError(msg="不能邀请自己")
+            experts.append(expert)
+        return experts
+
+    def _require_user(self, user, user_id: int | None):
+        if user is not None:
+            return user
+        if user_id:
+            return SimpleNamespace(user_id=user_id, is_admin=lambda: False, role=None, user_name="")
+        raise QaExpertQuestionAccessDeniedError()
+
+    async def _invite_map(self, questions: list) -> dict[int, set[int]]:
+        ids = [int(q.id) for q in questions if getattr(q, "id", None) is not None]
+        return await self.invite_repo.list_user_ids_by_question_ids(ids)
+
+    async def _hydrate_invite_names(self, questions: list) -> None:
+        """列表/详情把 invited_experts 的档案姓名填进 experts_names，避免页面展示专家 ID。"""
+        need: list = []
+        expert_ids: list[int] = []
+        seen: set[int] = set()
+        for question in questions:
+            invited = getattr(question, "invited_experts", None)
+            names = getattr(question, "experts_names", None)
+            if not invite_display_names_need_hydrate(names, invited):
+                continue
+            need.append(question)
+            for expert_id in parse_invite_expert_ids(invited_expert_ids=None, invited_experts=invited):
+                if expert_id not in seen:
+                    seen.add(expert_id)
+                    expert_ids.append(expert_id)
+        if not need or not expert_ids:
+            return
+        experts = await self.expert_repo.get_by_ids(expert_ids)
+        name_by_id = {
+            int(expert.id): str(getattr(expert, "expert_name", "") or "").strip()
+            for expert in experts
+            if getattr(expert, "id", None) is not None
+        }
+        for question in need:
+            invited = getattr(question, "invited_experts", None)
+            labels = [
+                name_by_id.get(expert_id) or str(expert_id)
+                for expert_id in parse_invite_expert_ids(invited_expert_ids=None, invited_experts=invited)
+            ]
+            filled = ";".join(label for label in labels if label)
+            if filled:
+                self._annotate(question, experts_names=filled)
+
+    def _is_question_visible(self, user, question, invited_user_ids: set[int]) -> bool:
+        snapshot = CapabilitySnapshot(invited_user_ids=frozenset(invited_user_ids))
+        result = self.capability_resolver.resolve(user, question, snapshot)
+        return bool(result.capabilities.visible)
+
+    @staticmethod
+    def _annotate(row, **fields):
+        """给 ORM 行挂响应态字段（非表列）；Pydantic 禁止直接 setattr。"""
+        for name, value in fields.items():
+            object.__setattr__(row, name, value)
+        return row
+
+    def _attach_display_status(self, question):
+        return self._annotate(question, display_status=question_display_status(question))
+
+    async def _attach_asker(self, viewer, question, *, can_view_real_identity: bool) -> None:
+        """列表/详情挂脱敏后的 asker；不改表列 created_by，避免别名被写回库。"""
+        asker_view = await (await self._identity()).mask_identity(
+            viewer,
+            question_id=int(question.id),
+            user_id=int(question.user_id),
+            real_name=str(getattr(question, "created_by", "") or ""),
+            anonymous=bool(int(getattr(question, "asker_anonymous", 0) or 0)),
+            question_type=str(getattr(question, "question_type", "") or QUESTION_TYPE_PUBLIC),
+            reveal_on_public=getattr(question, "asker_reveal_on_public", None),
+            tenant_id=int(getattr(question, "tenant_id", 1) or 1),
+        )
+        self._annotate(
+            question,
+            asker=asker_view.to_dict(can_view_real_identity=can_view_real_identity),
+        )
+
+    async def _attach_latest_answers(self, viewer, questions: list, *, can_view_real_identity: bool) -> None:
+        """列表卡片挂每题最新一条未删回答；一批查出，不按卡打回答接口。"""
+        ids = [int(question.id) for question in questions if getattr(question, "id", None) is not None]
+        if not ids:
+            return
+        latest_map = await self.answer_repo.list_latest_by_question_ids(ids)
+        if not latest_map:
+            return
+        identity = await self._identity()
+        for question in questions:
+            answer = latest_map.get(int(question.id))
+            if answer is None:
+                continue
+            real_name = str(getattr(answer, "expert_name", "") or "")
+            anonymous = bool(int(getattr(answer, "anonymous", 0) or 0))
+            user_id = int(getattr(answer, "user_id", 0) or 0)
+            display_name = real_name or "专家"
+            shown_anonymous = False
+            if anonymous and user_id:
+                view = await identity.mask_identity(
+                    viewer,
+                    question_id=int(question.id),
+                    user_id=user_id,
+                    real_name=real_name,
+                    anonymous=True,
+                    question_type=str(getattr(question, "question_type", "") or QUESTION_TYPE_PUBLIC),
+                    reveal_on_public=getattr(answer, "reveal_on_public", None),
+                    tenant_id=int(getattr(question, "tenant_id", 1) or 1),
+                )
+                payload = view.to_dict(can_view_real_identity=can_view_real_identity)
+                display_name = str(payload.get("display_name") or "匿名同事")
+                shown_anonymous = bool(payload.get("anonymous"))
+            excerpt = question_description_to_plain_text(str(getattr(answer, "content", "") or ""))
+            if len(excerpt) > 120:
+                excerpt = f"{excerpt[:120]}..."
+            self._annotate(
+                question,
+                latest_answer={
+                    "id": int(answer.id),
+                    "excerpt": excerpt,
+                    "adopted": bool(getattr(answer, "adopted", False)),
+                    "expert_name": display_name,
+                    "anonymous": shown_anonymous,
+                },
+            )
+
+    async def hydrate_related_docs(
+        self, related_docs: str | None, user=None, owner_user_id: int | None = None
+    ) -> list[dict]:
+        """解析关联文档串；无权用 forbidden，禁止用 not_found 表示无权限。
+
+        不调 OpenFGA：提问者视为有权，其他浏览者一律 forbidden。避免 LoginUser
+        缺 get_visible_tenants 时 list_accessible_ids 卡住整道详情。
+        """
+        views: list[dict] = []
+        checker = getattr(self, "related_docs_access_checker", None)
+        if checker is None:
+            from bisheng.qa_expert.domain.related_docs_access import check_related_doc_access
+
+            checker = check_related_doc_access
+        viewer_id = getattr(user, "user_id", None) if user is not None else None
+        is_owner = owner_user_id is not None and viewer_id is not None and int(viewer_id) == int(owner_user_id)
+        for token in parse_related_doc_tokens(related_docs):
+            parsed = parse_related_doc_ref(token)
+            if parsed is None:
+                views.append(
+                    {
+                        "id": token,
+                        "space_id": None,
+                        "file_id": None,
+                        "title": None,
+                        "accessible": False,
+                        "unavailable_reason": "not_found",
+                    }
+                )
+                continue
+            space_id, file_id = parsed
+            doc_id = f"{space_id}-{file_id}"
+            accessible = True
+            reason = None
+            if callable(checker):
+                access = checker(user, space_id, file_id)
+                if inspect.isawaitable(access):
+                    try:
+                        from bisheng.qa_expert.domain.related_docs_access import (
+                            RELATED_DOC_ACCESS_TIMEOUT_SEC,
+                        )
+
+                        access = await asyncio.wait_for(access, timeout=RELATED_DOC_ACCESS_TIMEOUT_SEC)
+                    except Exception:
+                        access = False
+                if access is None:
+                    accessible = False
+                    reason = "not_found"
+                elif access is False:
+                    accessible = False
+                    reason = "forbidden"
+                elif is_owner or owner_user_id is None:
+                    accessible = True
+                    reason = None
+                else:
+                    accessible = False
+                    reason = "forbidden"
+            views.append(
+                {
+                    "id": doc_id,
+                    "space_id": space_id,
+                    "file_id": file_id,
+                    "title": None,
+                    "accessible": accessible,
+                    "unavailable_reason": reason,
+                }
+            )
+        return views
+
     async def list_questions(
         self,
         business_domain: str | None = None,
@@ -500,49 +847,205 @@ class QuestionService:
         user_id: int | None = None,
         skip: int = 0,
         limit: int = 20,
+        user=None,
+        list_filter: str | None = None,
+        display_status: str | None = None,
+        keyword: str | None = None,
     ) -> tuple[list[Question], int]:
-        """列表查询问题"""
+        """列表：filter=mine|invited_me 与 display_status；status=3/4 不当待采纳。"""
+        viewer = self._require_user(user, user_id)
+        viewer_id = int(viewer.user_id)
+        normalized_filter = normalize_list_filter(status=status, list_filter=list_filter)
         expert_id = None
-        if status == 4:
-            # 状态为 4 (邀请我的) 时，按被邀请的专家 ID 过滤
+        if status == 4 and normalized_filter != "invited_me":
             if user_id is not None:
                 expert = await self.expert_repo.get_by_user_id(user_id)
                 if not expert:
                     return [], 0
                 expert_id = expert.id
-        questions, total = await self.repository.list_all(
+        questions, repo_total = await self.repository.list_all(
             business_domain=business_domain,
             status=status,
             sort_by=sort_by,
-            user_id=user_id,
+            user_id=viewer_id if normalized_filter == "mine" else user_id,
             skip=skip,
             limit=limit,
             expert_id=expert_id,
+            list_filter=normalized_filter,
+            display_status=display_status,
+            keyword=keyword,
+            viewer_user_id=viewer_id,
+            viewer_is_admin=is_expert_library_admin(viewer),
         )
-        if questions and len(questions) > 0:
-            for question in questions:
-                vote_count = await self.answer_repo.get_answer_vote_count(question.id)
-                question.vote_count = vote_count
-        return [await self._resolve_question(question) for question in questions], total
+        await self._hydrate_invite_names(list(questions))
+        invite_map = await self._invite_map(list(questions))
+        can_view_real = is_expert_library_admin(viewer)
+        identity = await self._identity()
+        await identity.preload_for_questions(
+            [int(question.id) for question in questions if getattr(question, "id", None) is not None]
+        )
+        visible: list[Question] = []
+        for question in questions:
+            invited = invite_map.get(int(question.id), set())
+            if not self._is_question_visible(viewer, question, invited):
+                continue
+            if not matches_display_status(question, display_status):
+                continue
+            # 列表卡片用 qa_question.vote_count（问题点赞），不再逐条 SUM 回答赞。
+            # 列表不展示图片/附件，跳过 MinIO 预签名，避免每条一次远端往返。
+            self._attach_display_status(question)
+            await self._attach_asker(viewer, question, can_view_real_identity=can_view_real)
+            visible.append(question)
+        await self._attach_latest_answers(viewer, visible, can_view_real_identity=can_view_real)
+        # 分页总数用仓储计数；页内可见性再滤只影响本页条目，不能把 total 收成当前页长度。
+        return visible, int(repo_total or 0)
 
-    async def get_question_detail(self, question_id: int, user_id: int | None = None) -> Question:
-        """获取问题详情"""
+    async def get_question_detail(
+        self,
+        question_id: int,
+        user_id: int | None = None,
+        user=None,
+    ) -> Question:
+        """详情：定向不可见返回 18301，不泄露标题，不增加浏览数。"""
+        viewer = self._require_user(user, user_id)
         question = await self.repository.get_by_id(question_id)
         if not question:
             raise QuestionNotFoundError()
-
-        # 增加浏览数
-        question.view_count += 1
+        await self._hydrate_invite_names([question])
+        invite_map = await self._invite_map([question])
+        invited = invite_map.get(int(question.id), set())
+        if not self._is_question_visible(viewer, question, invited):
+            raise QaExpertQuestionAccessDeniedError()
+        question.view_count = int(getattr(question, "view_count", 0) or 0) + 1
         await self.repository.update(question_id, view_count=question.view_count)
-        return await self._resolve_question(question)
+        resolved = await self._resolve_question(question)
+        self._attach_display_status(resolved)
+        self._annotate(
+            resolved,
+            related_doc_views=await self.hydrate_related_docs(
+                getattr(resolved, "related_docs", None),
+                user=viewer,
+                owner_user_id=int(getattr(resolved, "user_id", 0) or 0),
+            ),
+        )
+        from bisheng.qa_expert.domain.publish_service import PublishService, serialize_publish_request
+
+        latest_publish = await PublishService().refresh_latest_for_question(int(resolved.id))
+        snapshot = await self._capability_snapshot(resolved, viewer, latest_publish=latest_publish)
+        result = self.capability_resolver.resolve(viewer, resolved, snapshot)
+        self._annotate(resolved, capabilities=result.capabilities.__dict__)
+        if latest_publish is not None:
+            payload = serialize_publish_request(
+                latest_publish,
+                viewer_decision=snapshot.viewer_publish_decision,
+            )
+            self._annotate(resolved, latest_publish_request=payload)
+            if str(latest_publish.status) == "pending":
+                self._annotate(resolved, active_publish_request=payload)
+        await self._attach_asker(
+            viewer,
+            resolved,
+            can_view_real_identity=bool(result.capabilities.can_view_real_identity),
+        )
+        return resolved
+
+    async def _capability_snapshot(self, question, user, *, latest_publish=None):
+        """详情/写路径共用快照，避免列表与详情资格不一致。"""
+        invite_map = await self._invite_map([question])
+        invited = invite_map.get(int(question.id), set())
+        uid = getattr(user, "user_id", None)
+        expert = await self.expert_repo.get_by_user_id(int(uid)) if uid else None
+        eligibility: set[int] = set()
+        if int(getattr(question, "adopt_count", 0) or 0) > 0:
+            eligibility = set(await self.eligibility_repo.list_user_ids(int(question.id)))
+        has_answer = False
+        if uid:
+            has_answer = await self.answer_repo.has_effective_answer(int(question.id), int(uid))
+        if latest_publish is None:
+            latest_publish = await self.publish_request_repo.get_latest_by_question(int(question.id))
+        pending = latest_publish if latest_publish is not None and str(latest_publish.status) == "pending" else None
+        approver_ids: set[int] = set()
+        viewer_decision: str | None = None
+        uid_int = int(uid) if uid else None
+        # 终态也要带回本人决策，右上角才能在拒绝后显示「已拒绝」。
+        source = pending if pending is not None else latest_publish
+        if source is not None:
+            for row in await self.publish_approver_repo.list_by_request(int(source.id)):
+                if uid_int is not None and int(row.user_id) == uid_int:
+                    viewer_decision = str(row.decision)
+                if pending is not None and str(row.decision) == "pending":
+                    approver_ids.add(int(row.user_id))
+        return CapabilitySnapshot(
+            expert=expert,
+            invited_user_ids=frozenset(invited),
+            eligibility_user_ids=frozenset(eligibility),
+            effective_answer_count=int(getattr(question, "answer_count", 0) or 0),
+            user_has_effective_answer=has_answer,
+            has_pending_publish=pending is not None,
+            latest_publish_status=str(latest_publish.status) if latest_publish is not None else None,
+            approver_user_ids=frozenset(approver_ids),
+            viewer_publish_decision=viewer_decision,
+        )
+
+    async def find_similar_questions(self, user, text: str, limit: int = 5) -> list[Question]:
+        """类似问题仅返回当前用户可见的题；不合并、不阻断发布。"""
+        viewer = self._require_user(user, getattr(user, "user_id", None) if user is not None else None)
+        rows = await self.repository.search_by_title_like(text, limit=max(limit, 5))
+        invite_map = await self._invite_map(rows)
+        can_view_real = is_expert_library_admin(viewer)
+        visible: list[Question] = []
+        for question in rows:
+            invited = invite_map.get(int(question.id), set())
+            if not self._is_question_visible(viewer, question, invited):
+                continue
+            resolved = await self._resolve_question(question)
+            self._attach_display_status(resolved)
+            await self._attach_asker(viewer, resolved, can_view_real_identity=can_view_real)
+            visible.append(resolved)
+            if len(visible) >= limit:
+                break
+        return visible
+
+    async def _answerer_user_id(self, answer) -> int | None:
+        """解析回答者平台用户 ID：优先 qa_answer.user_id，否则走专家档案。"""
+        if getattr(answer, "user_id", None):
+            return int(answer.user_id)
+        if getattr(answer, "expert_id", None):
+            expert = await self.expert_repo.get_by_id(answer.expert_id)
+            if expert is not None and getattr(expert, "user_id", None) is not None:
+                return int(expert.user_id)
+        return None
+
+    async def _write_public_eligibility(self, question, *, tenant_id: int) -> None:
+        """公开题首次采纳：受邀 ∪ 采纳前回答者（含已删未采纳）。"""
+        invite_map = await self.invite_repo.list_user_ids_by_question_ids([int(question.id)])
+        invited = set(invite_map.get(int(question.id), set()))
+        answers = await self.answer_repo.list_all_by_question_id(int(question.id))
+        answerers: set[int] = set()
+        for row in answers:
+            user_id = await self._answerer_user_id(row)
+            if user_id:
+                answerers.add(user_id)
+        rows: list[AnswerEligibility] = []
+        for user_id in sorted(invited | answerers):
+            source = ELIGIBILITY_SOURCE_PRE_ADOPT_ANSWER if user_id in answerers else ELIGIBILITY_SOURCE_INVITED
+            rows.append(
+                AnswerEligibility(
+                    tenant_id=tenant_id,
+                    question_id=int(question.id),
+                    user_id=user_id,
+                    source=source,
+                )
+            )
+        if rows:
+            await self.eligibility_repo.create_many(rows)
 
     async def adopt_answer(self, question_id: int, answer_id: int, operator_id: int) -> Question:
-        """采纳最佳回答：同题最多 3 条；已采纳幂等；G4 按同题同回答者只发一次。"""
-        question = await self.repository.get_by_id(question_id)
+        """采纳：锁问题行、写 qa_answer_adopt、首次置已解决；公开题写资格快照；只调 F070 挂钩。"""
+        question = await self.repository.get_by_id_for_update(question_id)
         if not question:
             raise QuestionNotFoundError()
 
-        # 只有提问者可以采纳
         if question.user_id != operator_id:
             raise PermissionDeniedError(msg="Only question author can adopt answer")
 
@@ -553,7 +1056,6 @@ class QuestionService:
         if answer.question_id != question_id:
             raise InvalidInvitationError(msg="Answer does not belong to this question")
 
-        # 已采纳：幂等返回，不重复加采纳数 / 通知 / G4 旁路
         if bool(getattr(answer, "adopted", False)):
             logger.info(
                 "Answer %s already adopted for question %s; idempotent return",
@@ -562,46 +1064,63 @@ class QuestionService:
             )
             return question
 
-        adopted_count = await self.answer_repo.count_adopted_by_question_id(question_id)
+        adopted_count = int(getattr(question, "adopt_count", 0) or 0)
         if adopted_count >= MAX_ADOPTED_ANSWERS_PER_QUESTION:
             raise AdoptLimitExceededError()
 
-        # 更新问题状态（adopted_answer_id = 最近一次采纳）
-        question.adopted_answer_id = answer_id
-        question.status = 1  # 已解决
-        await self.repository.update(question_id, adopted_answer_id=answer_id, status=1)
+        expert_user_id = await self._answerer_user_id(answer)
+        if expert_user_id is None:
+            raise AnswerNotFoundError()
 
-        # 采纳标记以 adopted 为准；status 保持与现网写路径一致（列表过滤看 status!=3）
-        await self.answer_repo.update(answer_id, status=1, adopted=True)
+        locked = await self.repository.apply_adopt_count_locked(
+            question_id,
+            answer_id=answer_id,
+            expert_user_id=expert_user_id,
+            adopted_by=operator_id,
+            tenant_id=int(getattr(question, "tenant_id", 1) or 1),
+            max_adopt=MAX_ADOPTED_ANSWERS_PER_QUESTION,
+        )
+        if locked.status == "limit":
+            raise AdoptLimitExceededError()
+        if locked.status == "already":
+            return locked.question or question
+        if locked.status == "mismatch":
+            raise InvalidInvitationError(msg="Answer does not belong to this question")
+        if locked.status != "ok" or locked.question is None:
+            raise AnswerNotFoundError()
+        question = locked.question
+        is_first = bool(locked.is_first)
         if getattr(answer, "expert_id", None):
             await self.expert_repo.increment_adoption_count(answer.expert_id, count=1)
 
-        # 发送采纳通知
+        if is_first and str(getattr(question, "question_type", QUESTION_TYPE_PUBLIC)) == QUESTION_TYPE_PUBLIC:
+            try:
+                await self._write_public_eligibility(
+                    question,
+                    tenant_id=int(getattr(question, "tenant_id", 1) or 1),
+                )
+            except Exception:
+                logger.exception("qa_answer_eligibility snapshot failed question_id={}", question_id)
+
         await self._send_adoption_notification(question, answer)
 
-        # 积分旁路：给回答者发 G4；expert.user_id 才是平台用户 ID。
         try:
             from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
             from bisheng.points.domain.services.points_award_hooks import notify_answer_adopted
 
-            answerer_id = None
-            if getattr(answer, "expert_id", None):
-                expert = await self.expert_repo.get_by_id(answer.expert_id)
-                if expert is not None and getattr(expert, "user_id", None) is not None:
-                    answerer_id = int(expert.user_id)
-            if answerer_id:
-                await notify_answer_adopted(
-                    tenant_id=int(get_current_tenant_id() or DEFAULT_TENANT_ID),
-                    question_id=int(question_id),
-                    answer_id=int(answer_id),
-                    answerer_id=answerer_id,
-                )
+            await notify_answer_adopted(
+                tenant_id=int(get_current_tenant_id() or getattr(question, "tenant_id", None) or DEFAULT_TENANT_ID),
+                question_id=int(question_id),
+                answer_id=int(answer_id),
+                answerer_id=expert_user_id,
+            )
         except Exception:
             logger.exception(
                 "points.award.hooks adopt notify failed answer_id=%s",
                 answer_id,
             )
 
+        self._attach_display_status(question)
         logger.info(f"Answer {answer_id} adopted for question {question_id}")
         return question
 
@@ -637,57 +1156,32 @@ class QuestionService:
         question: Question,
         answer: Answer,
     ):
-        """发送采纳通知到 inbox_message"""
+        """采纳结果通知回答作者；匿名提问者用同题别名。"""
         if not question or not answer:
             return
+        from bisheng.qa_expert.domain.inbox_notice import display_name_for_trigger, send_qa_inbox
 
-        from bisheng.core.database import get_async_db_session
-        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
-            InboxMessageReadRepositoryImpl,
+        receiver = int(getattr(answer, "user_id", 0) or 0)
+        if receiver <= 0:
+            return
+        display, masked = await display_name_for_trigger(
+            question,
+            user_id=int(question.user_id),
+            real_name=str(getattr(question, "created_by", "") or ""),
+            anonymous=bool(int(getattr(question, "asker_anonymous", 0) or 0)),
+            reveal_on_public=getattr(question, "asker_reveal_on_public", None),
         )
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
-            InboxMessageRepositoryImpl,
+        await send_qa_inbox(
+            action_code="qa_answer_accepted",
+            system_text="qa_answer_accepted",
+            question=question,
+            receivers=[receiver],
+            sender_user_id=int(question.user_id),
+            sender_display=display,
+            sender_anonymous=masked,
+            answer_id=int(answer.id),
+            tooltip=(answer.content or "")[:50],
         )
-        from bisheng.message.domain.services.message_service import MessageService
-
-        content = [
-            {
-                "type": "user",
-                "content": f"@{question.created_by}",
-                "metadata": {"user_id": question.user_id},
-            },
-            {
-                "type": "system_text",
-                "content": "qa_answer_accepted",
-            },
-            {
-                "type": "business_url",
-                "content": f"--{question.title}",
-                "metadata": {
-                    "business_type": "qa_question",
-                    "data": {"question_id": str(question.id), "answer_id": str(answer.id)},
-                },
-            },
-            {
-                "type": "tooltip_text",
-                "content": (answer.content or "")[:50],
-            },
-        ]
-
-        async with get_async_db_session() as session:
-            service = MessageService(
-                message_repository=InboxMessageRepositoryImpl(session),
-                message_read_repository=InboxMessageReadRepositoryImpl(session),
-            )
-            await service.send_message(
-                content=content,
-                sender=question.user_id,
-                message_type=MessageTypeEnum.NOTIFY,
-                receiver=[answer.expert_id],
-                status=MessageStatusEnum.APPROVED,
-                action_code="qa_answer_accepted",
-            )
 
     async def get_answer_count_by_domain(self) -> list[dict]:
         """获取每个业务域的回答数"""
@@ -698,7 +1192,12 @@ class QuestionService:
         question_id: int,
         tenant_id: int | None = None,
     ) -> bool:
-        """删除问题"""
+        """删除问题；首答锁定后提问者不可删。"""
+        question = await self.repository.get_by_id(question_id)
+        if not question:
+            return False
+        if int(getattr(question, "content_locked", 0) or 0):
+            raise QaExpertContentLockedError()
         deleted = await self.repository.delete(question_id)
         if deleted:
             try:
@@ -720,12 +1219,16 @@ class QuestionService:
         request: QuestionUpdateRequest,
         tenant_id: int | None = None,
     ) -> Question:
-        """更新问题信息"""
+        """更新问题信息；首答后正文/类型/邀请已锁定。"""
         question = await self.repository.get_by_id(question_id)
         if not question:
             raise QuestionNotFoundError()
+        if int(getattr(question, "content_locked", 0) or 0):
+            raise QaExpertContentLockedError()
 
         update_data = request.model_dump(exclude_unset=True)
+        if update_data.get("status") == 2:
+            update_data.pop("status", None)
         asset_fields = {"image_url", "file_url", "attachments"}
         requested_assets = {name: update_data[name] for name in asset_fields if name in update_data}
         promotion = None
@@ -771,53 +1274,25 @@ class QuestionService:
         if not receiver_user_ids:
             return
 
-        from bisheng.core.database import get_async_db_session
-        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
-            InboxMessageReadRepositoryImpl,
-        )
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
-            InboxMessageRepositoryImpl,
-        )
-        from bisheng.message.domain.services.message_service import MessageService
+        from bisheng.qa_expert.domain.inbox_notice import display_name_for_trigger, send_qa_inbox
 
-        content = [
-            {
-                "type": "user",
-                "content": f"@{sender_name}",
-                "metadata": {"user_id": sender_id},
-            },
-            {
-                "type": "system_text",
-                "content": "qa_expert_invited",
-            },
-            {
-                "type": "business_url",
-                "content": f"--{question.title}",
-                "metadata": {
-                    "business_type": "qa_question",
-                    "data": {"question_id": str(question.id)},
-                },
-            },
-            {
-                "type": "tooltip_text",
-                "content": question_description_to_plain_text(question.description)[:50],
-            },
-        ]
-
-        async with get_async_db_session() as session:
-            service = MessageService(
-                message_repository=InboxMessageRepositoryImpl(session),
-                message_read_repository=InboxMessageReadRepositoryImpl(session),
-            )
-            await service.send_message(
-                content=content,
-                sender=sender_id,
-                message_type=MessageTypeEnum.NOTIFY,
-                receiver=receiver_user_ids,
-                status=MessageStatusEnum.APPROVED,
-                action_code="qa_expert_invited",
-            )
+        display, masked = await display_name_for_trigger(
+            question,
+            user_id=int(sender_id),
+            real_name=sender_name or "",
+            anonymous=bool(int(getattr(question, "asker_anonymous", 0) or 0)),
+            reveal_on_public=getattr(question, "asker_reveal_on_public", None),
+        )
+        await send_qa_inbox(
+            action_code="qa_expert_invited",
+            system_text="qa_expert_invited",
+            question=question,
+            receivers=receiver_user_ids,
+            sender_user_id=int(sender_id),
+            sender_display=display,
+            sender_anonymous=masked,
+            tooltip=question_description_to_plain_text(question.description)[:50],
+        )
 
 
 # ==================== 回答服务 ====================
@@ -828,13 +1303,64 @@ class AnswerService:
         self.repository = AnswerRepository()
         self.question_repo = QuestionRepository()
         self.expert_repo = ExpertRepository()
+        self.invite_repo = QuestionInviteRepository()
+        self.eligibility_repo = AnswerEligibilityRepository()
         self.notification_repo = NotificationRepository()
         self.asset_service = asset_service
+        self.capability_resolver = CapabilityResolver()
+        self.identity_service = None
+
+    async def _identity(self) -> IdentityService:
+        """懒加载身份脱敏；单测可注入 identity_service 避免打库。"""
+        if self.identity_service is None:
+            self.identity_service = IdentityService()
+        return self.identity_service
 
     async def _assets(self) -> QaAssetService:
         if self.asset_service is None:
             self.asset_service = QaAssetService(await get_minio_storage())
         return self.asset_service
+
+    @staticmethod
+    def _annotate(row, **fields):
+        """给 ORM 行挂响应态字段（非表列）；Pydantic 禁止直接 setattr。"""
+        for name, value in fields.items():
+            object.__setattr__(row, name, value)
+        return row
+
+    async def _attach_answer_author(self, viewer, answer: Answer, question: Question) -> Answer:
+        """列表/详情挂脱敏后的回答者身份；不改表列 expert_name，避免别名被写回库。"""
+        identity = await self._identity()
+        real_name = str(getattr(answer, "expert_name", "") or "")
+        anonymous = bool(int(getattr(answer, "anonymous", 0) or 0))
+        user_id = int(getattr(answer, "user_id", 0) or 0)
+        can_view_real = is_expert_library_admin(viewer)
+        if anonymous and user_id:
+            view = await identity.mask_identity(
+                viewer,
+                question_id=int(question.id),
+                user_id=user_id,
+                real_name=real_name,
+                anonymous=True,
+                question_type=str(getattr(question, "question_type", "") or QUESTION_TYPE_PUBLIC),
+                reveal_on_public=getattr(answer, "reveal_on_public", None),
+                tenant_id=int(getattr(question, "tenant_id", 1) or 1),
+            )
+            payload = view.to_dict(can_view_real_identity=can_view_real)
+        else:
+            payload = {
+                "display_name": real_name or "专家",
+                "avatar_url": None,
+                "anonymous": False,
+            }
+        return self._annotate(answer, author=payload)
+
+    async def attach_author(self, answer: Answer, viewer) -> Answer:
+        """写接口返回前挂 author；缺题则原样返回。"""
+        question = await self.question_repo.get_by_id(int(answer.question_id))
+        if question is None:
+            return answer
+        return await self._attach_answer_author(viewer, answer, question)
 
     async def _resolve_answer(self, answer: Answer) -> Answer:
         values = {"images_url": answer.images_url, "attachments": answer.attachments}
@@ -850,16 +1376,52 @@ class AnswerService:
         user_id: int,
         request: AnswerCreateRequest,
         tenant_id: int | None = None,
+        user=None,
     ) -> Answer:
-        """发布回答"""
+        """提交有效回答：资格校验后写 qa_answer，CAS 置 content_locked。"""
+        return await self.submit_answer(user_id, request, tenant_id=tenant_id, user=user)
+
+    async def submit_answer(
+        self,
+        user_id: int,
+        request: AnswerCreateRequest,
+        tenant_id: int | None = None,
+        user=None,
+    ) -> Answer:
+        """发布回答：资格校验 → 插入回答 → 条件更新锁 → inbox 通知。"""
+        if not user_id:
+            raise QaExpertQuestionAccessDeniedError()
         question = await self.question_repo.get_by_id(request.question_id)
         if not question:
             raise QuestionNotFoundError()
 
-        # 检查是否为专家
         expert = await self.expert_repo.get_by_user_id(user_id)
         if not expert:
             raise ExpertNotFoundError(message="Only verified experts can answer questions")
+        if int(getattr(expert, "status", 1) or 0) != 1:
+            raise QaExpertDisabledError()
+
+        invite_map = await self.invite_repo.list_user_ids_by_question_ids([int(question.id)])
+        invited = invite_map.get(int(question.id), set())
+        eligibility: set[int] = set()
+        if int(getattr(question, "adopt_count", 0) or 0) > 0:
+            eligibility = set(await self.eligibility_repo.list_user_ids(int(question.id)))
+        viewer = user or SimpleNamespace(user_id=user_id, is_admin=lambda: False, role=None, user_name="")
+        snapshot = CapabilitySnapshot(
+            expert=expert,
+            invited_user_ids=frozenset(invited),
+            eligibility_user_ids=frozenset(eligibility),
+            effective_answer_count=int(getattr(question, "answer_count", 0) or 0),
+        )
+        caps = self.capability_resolver.resolve(viewer, question, snapshot).capabilities
+        if not caps.can_answer:
+            raise QaExpertAnswerNotAllowedError()
+
+        anonymous, reveal_on_public = persist_anonymous_choice(
+            anonymous=bool(getattr(request, "anonymous", False)),
+            reveal_on_public=getattr(request, "reveal_on_public", None),
+            question_type=str(getattr(question, "question_type", "") or QUESTION_TYPE_PUBLIC),
+        )
 
         asset_values = {"attachments": request.attachments, "images_url": request.images_url}
         promotion = None
@@ -875,11 +1437,15 @@ class AnswerService:
         answer = Answer(
             question_id=request.question_id,
             expert_id=expert.id,
+            user_id=user_id,
             content=request.content,
             attachments=asset_values["attachments"],
             related_docs=request.related_docs,
             images_url=asset_values["images_url"],
             expert_name=expert.expert_name,
+            tenant_id=tenant_id or getattr(question, "tenant_id", 1) or 1,
+            anonymous=anonymous,
+            reveal_on_public=reveal_on_public,
         )
 
         try:
@@ -891,35 +1457,55 @@ class AnswerService:
         if promotion is not None:
             await (await self._assets()).cleanup_sources(promotion)
 
-        # 更新问题的回答计数
-        question.answer_count += 1
-        await self.question_repo.update(request.question_id, answer_count=question.answer_count)
-
+        await self.question_repo.try_lock_content(int(question.id))
+        await self.question_repo.increment_answer_count(request.question_id)
         await self.expert_repo.increment_answer_count(expert.id, count=1)
-
-        # 发送回答通知给提问者
         await self._send_answer_notification(question, answer)
+        try:
+            from bisheng.qa_expert.domain.publish_service import PublishService
 
+            await PublishService().add_late_answerer(question, int(user_id))
+        except Exception:
+            logger.exception("qa.answer.join_publish_failed question_id={}", question.id)
         logger.info(f"Answer created: {answer.id} for question {request.question_id}")
         return await self._resolve_answer(answer)
 
     async def get_answers(
-        self, question_id: int, skip: int = 0, limit: int = 100, sort_by: str | None = None
+        self,
+        question_id: int,
+        skip: int = 0,
+        limit: int = 100,
+        sort_by: str | None = None,
+        user=None,
     ) -> tuple[list[Answer], int]:
-        """获取问题的回答列表"""
-        answers, total = await self.repository.get_by_question_id(
-            question_id, skip=skip, limit=limit, sort_by=sort_by
-        )
-        return [await self._resolve_answer(answer) for answer in answers], total
+        """获取问题的回答列表；匿名回答者 expert_name 在 JSON 层改成别名。"""
+        question = await self.question_repo.get_by_id(question_id)
+        answers, total = await self.repository.get_by_question_id(question_id, skip=skip, limit=limit, sort_by=sort_by)
+        viewer = user or SimpleNamespace(user_id=0, is_admin=lambda: False, role=None)
+        resolved: list[Answer] = []
+        for answer in answers:
+            item = await self._resolve_answer(answer)
+            if question is not None:
+                item = await self._attach_answer_author(viewer, item, question)
+            resolved.append(item)
+        return resolved, total
 
     async def get_by_expertname(
         self,
         expert_name: str,
         question_id: int,
+        user=None,
     ) -> Answer | None:
-        """获取问题的回答列表"""
+        """按专家名取回答；同样挂脱敏 author。"""
         answer = await self.repository.get_by_expertname(expert_name, question_id)
-        return await self._resolve_answer(answer) if answer else None
+        if answer is None:
+            return None
+        resolved = await self._resolve_answer(answer)
+        question = await self.question_repo.get_by_id(question_id)
+        if question is None:
+            return resolved
+        viewer = user or SimpleNamespace(user_id=0, is_admin=lambda: False, role=None)
+        return await self._attach_answer_author(viewer, resolved, question)
 
     async def update_answer(
         self,
@@ -977,69 +1563,53 @@ class AnswerService:
         return await self._resolve_answer(updated)
 
     async def delete_answer(self, answer_id: int, operator_id: int) -> bool:
-        """删除回答"""
+        """删除回答：有效回答数可回 0，content_locked 不解除。"""
         answer = await self.repository.get_by_id(answer_id)
         if not answer:
             raise AnswerNotFoundError()
 
-        # 只有回答者可以删除
-        if answer.user_id != operator_id:
+        author_id = getattr(answer, "user_id", None)
+        if author_id is None and getattr(answer, "expert_id", None) is not None:
+            expert = await self.expert_repo.get_by_id(answer.expert_id)
+            author_id = getattr(expert, "user_id", None) if expert is not None else None
+        if author_id != operator_id:
             raise PermissionDeniedError(message="Only answer author can delete")
 
-        return await self.repository.delete(answer_id)
+        deleted = await self.repository.delete(answer_id)
+        if deleted:
+            question = await self.question_repo.get_by_id(answer.question_id)
+            if question is not None:
+                new_count = max(int(getattr(question, "answer_count", 0) or 0) - 1, 0)
+                await self.question_repo.update(answer.question_id, answer_count=new_count)
+        return deleted
 
     async def _send_answer_notification(self, question: Question, answer: Answer):
-        """发送回答通知到 inbox_message"""
-        if not question:
+        """每次提交回答通知提问者；匿名专家用同题别名。"""
+        if not question or not answer:
             return
+        sender_id = int(getattr(answer, "user_id", 0) or 0)
+        if sender_id <= 0:
+            return
+        from bisheng.qa_expert.domain.inbox_notice import display_name_for_trigger, send_qa_inbox
 
-        from bisheng.core.database import get_async_db_session
-        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
-            InboxMessageReadRepositoryImpl,
+        display, masked = await display_name_for_trigger(
+            question,
+            user_id=sender_id,
+            real_name=str(getattr(answer, "expert_name", "") or ""),
+            anonymous=bool(int(getattr(answer, "anonymous", 0) or 0)),
+            reveal_on_public=getattr(answer, "reveal_on_public", None),
         )
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
-            InboxMessageRepositoryImpl,
+        await send_qa_inbox(
+            action_code="qa_expert_answered",
+            system_text="qa_expert_answered",
+            question=question,
+            receivers=[int(question.user_id)],
+            sender_user_id=sender_id,
+            sender_display=display,
+            sender_anonymous=masked,
+            answer_id=int(answer.id),
+            tooltip=(answer.content or "")[:50],
         )
-        from bisheng.message.domain.services.message_service import MessageService
-
-        content = [
-            {
-                "type": "user",
-                "content": f"@{answer.expert_name}",
-                "metadata": {"user_id": answer.expert_id},
-            },
-            {
-                "type": "system_text",
-                "content": "qa_expert_answered",
-            },
-            {
-                "type": "business_url",
-                "content": f"--{question.title}",
-                "metadata": {
-                    "business_type": "qa_question",
-                    "data": {"question_id": str(question.id), "answer_id": str(answer.id)},
-                },
-            },
-            {
-                "type": "tooltip_text",
-                "content": (answer.content or "")[:50],
-            },
-        ]
-
-        async with get_async_db_session() as session:
-            service = MessageService(
-                message_repository=InboxMessageRepositoryImpl(session),
-                message_read_repository=InboxMessageReadRepositoryImpl(session),
-            )
-            await service.send_message(
-                content=content,
-                sender=answer.expert_id,
-                message_type=MessageTypeEnum.NOTIFY,
-                receiver=[question.user_id],
-                status=MessageStatusEnum.APPROVED,
-                action_code="qa_expert_answered",
-            )
 
 
 # ==================== 评论服务 ====================
@@ -1051,14 +1621,125 @@ class CommentService:
         self.answer_repo = AnswerRepository()
         self.notification_repo = NotificationRepository()
         self.question_repo = QuestionRepository()
+        self.expert_repo = ExpertRepository()
+        self.invite_repo = QuestionInviteRepository()
+        self.capability_resolver = CapabilityResolver()
+        self.identity_service = None
+
+    async def _identity(self) -> IdentityService:
+        """懒加载身份脱敏；单测可注入 identity_service 避免打库。"""
+        if self.identity_service is None:
+            self.identity_service = IdentityService()
+        return self.identity_service
+
+    @staticmethod
+    def _annotate(row, **fields):
+        """给 ORM 行挂响应态字段（非表列）；Pydantic 禁止直接 setattr。"""
+        for name, value in fields.items():
+            object.__setattr__(row, name, value)
+        return row
+
+    @staticmethod
+    def _is_answer_author(user_id: int, answer) -> bool:
+        """评论者是否该回答作者；只认 qa_answer.user_id，避免误伤未填 user_id 的 mock。"""
+        owner = int(getattr(answer, "user_id", 0) or 0)
+        return bool(owner) and owner == int(user_id)
+
+    def _resolve_comment_identity(
+        self,
+        user_id: int,
+        request: CommentCreateRequest,
+        question,
+        answer,
+    ) -> tuple[int, int | None]:
+        """追问继承问题匿名；自评继承回答匿名；评他人时用请求体并校验定向 reveal。"""
+        is_follow_up = bool(getattr(request, "is_follow_up", False)) or answer is None
+        if is_follow_up and int(user_id) == int(getattr(question, "user_id", 0) or 0):
+            return copy_stored_anonymous_flags(
+                getattr(question, "asker_anonymous", 0),
+                getattr(question, "asker_reveal_on_public", None),
+            )
+        if answer is not None and self._is_answer_author(user_id, answer):
+            return copy_stored_anonymous_flags(
+                getattr(answer, "anonymous", 0),
+                getattr(answer, "reveal_on_public", None),
+            )
+        return persist_anonymous_choice(
+            anonymous=bool(getattr(request, "anonymous", False)),
+            reveal_on_public=getattr(request, "reveal_on_public", None),
+            question_type=str(getattr(question, "question_type", "") or QUESTION_TYPE_PUBLIC),
+        )
+
+    async def _attach_comment_author(self, viewer, comment: Comment, question) -> Comment:
+        """列表/创建响应挂脱敏作者；不改表列 user_name。"""
+        identity = await self._identity()
+        real_name = str(getattr(comment, "user_name", "") or "")
+        anonymous = bool(int(getattr(comment, "anonymous", 0) or 0))
+        user_id = int(getattr(comment, "user_id", 0) or 0)
+        can_view_real = is_expert_library_admin(viewer)
+        if anonymous and user_id:
+            view = await identity.mask_identity(
+                viewer,
+                question_id=int(question.id),
+                user_id=user_id,
+                real_name=real_name,
+                anonymous=True,
+                question_type=str(getattr(question, "question_type", "") or QUESTION_TYPE_PUBLIC),
+                reveal_on_public=getattr(comment, "reveal_on_public", None),
+                tenant_id=int(getattr(question, "tenant_id", 1) or 1),
+            )
+            payload = view.to_dict(can_view_real_identity=can_view_real)
+        else:
+            payload = {
+                "display_name": real_name or "用户",
+                "avatar_url": None,
+                "anonymous": False,
+            }
+        return self._annotate(comment, author=payload)
+
+    async def attach_author(self, comment: Comment, viewer) -> Comment:
+        """写接口返回前挂 author。"""
+        question_id = int(getattr(comment, "question_id", 0) or 0)
+        question = await self.question_repo.get_by_id(question_id) if question_id else None
+        if question is None:
+            return comment
+        return await self._attach_comment_author(viewer, comment, question)
+
+    async def _assert_can_comment(self, user_id: int, user_name: str, question, *, is_follow_up: bool) -> None:
+        """定向题普通评论须先有有效回答；追问不受该门槛。"""
+        if not user_id:
+            raise QaExpertQuestionAccessDeniedError()
+        invite_map = await self.invite_repo.list_user_ids_by_question_ids([int(question.id)])
+        invited = invite_map.get(int(question.id), set())
+        expert = await self.expert_repo.get_by_user_id(user_id)
+        has_answer = await self.answer_repo.has_effective_answer(int(question.id), user_id)
+        snapshot = CapabilitySnapshot(
+            expert=expert,
+            invited_user_ids=frozenset(invited),
+            user_has_effective_answer=has_answer,
+            effective_answer_count=int(getattr(question, "answer_count", 0) or 0),
+        )
+        viewer = SimpleNamespace(user_id=user_id, is_admin=lambda: False, role=None, user_name=user_name)
+        caps = self.capability_resolver.resolve(viewer, question, snapshot).capabilities
+        if not caps.visible:
+            raise QaExpertQuestionAccessDeniedError()
+        if is_follow_up:
+            return
+        if not caps.can_comment:
+            raise QaExpertCommentNotAllowedError()
 
     async def create_comment(self, user_id: int, user_name: str, request: CommentCreateRequest) -> Comment:
-        """发布评论"""
+        """发布评论或追问；追问/自评继承匿名，评他人才用请求体。"""
         comment = None
         if request.answer_id and request.answer_id != 0:
             answer = await self.answer_repo.get_by_id(request.answer_id)
             if not answer:
                 raise AnswerNotFoundError()
+            question = await self.question_repo.get_by_id(answer.question_id)
+            if not question:
+                raise QuestionNotFoundError()
+            await self._assert_can_comment(user_id, user_name, question, is_follow_up=bool(request.is_follow_up))
+            anonymous, reveal_on_public = self._resolve_comment_identity(user_id, request, question, answer)
             comment = Comment(
                 answer_id=request.answer_id,
                 question_id=answer.question_id,
@@ -1066,13 +1747,13 @@ class CommentService:
                 user_name=user_name,
                 content=request.content,
                 is_follow_up=request.is_follow_up,
+                anonymous=anonymous,
+                reveal_on_public=reveal_on_public,
             )
 
             answer.comment_count += 1
             await self.answer_repo.update(request.answer_id, comment_count=answer.comment_count)
-            # 2. 统一执行创建操作
             comment = await self.repository.create(comment)
-            # 3. 发送评论通知 (按需开启)
             await self._send_comment_notification(
                 answer,
                 comment,
@@ -1083,7 +1764,8 @@ class CommentService:
             question = await self.question_repo.get_by_id(request.question_id)
             if not question:
                 raise QuestionNotFoundError()
-
+            await self._assert_can_comment(user_id, user_name, question, is_follow_up=True)
+            anonymous, reveal_on_public = self._resolve_comment_identity(user_id, request, question, None)
             comment = Comment(
                 answer_id=0,
                 question_id=request.question_id,
@@ -1091,83 +1773,79 @@ class CommentService:
                 content=request.content,
                 is_follow_up=True,
                 user_name=user_name,
+                anonymous=anonymous,
+                reveal_on_public=reveal_on_public,
             )
             question.comment_count += 1
             await self.question_repo.update(request.question_id, comment_count=question.comment_count)
-            # 2. 统一执行创建操作
             comment = await self.repository.create(comment)
 
         return comment
 
     async def get_comments(
-        self, answer_id: int | None = None, question_id: int | None = None, skip: int = 0, limit: int = 100
+        self,
+        answer_id: int | None = None,
+        question_id: int | None = None,
+        skip: int = 0,
+        limit: int = 100,
+        user=None,
     ) -> tuple[list[Comment], int]:
-        """获取回答的评论"""
-        return await self.repository.get_by_answer_id(answer_id, question_id=question_id, skip=skip, limit=limit)
+        """获取回答的评论；匿名评论 user_name 在 JSON 层改成别名。"""
+        comments, total = await self.repository.get_by_answer_id(
+            answer_id, question_id=question_id, skip=skip, limit=limit
+        )
+        if not comments:
+            return comments, total
+        question_ids = {
+            int(comment.question_id) for comment in comments if getattr(comment, "question_id", None) is not None
+        }
+        questions: dict[int, Question] = {}
+        for qid in question_ids:
+            row = await self.question_repo.get_by_id(qid)
+            if row is not None:
+                questions[qid] = row
+        viewer = user or SimpleNamespace(user_id=0, is_admin=lambda: False, role=None)
+        for comment in comments:
+            question = questions.get(int(getattr(comment, "question_id", 0) or 0))
+            if question is not None:
+                await self._attach_comment_author(viewer, comment, question)
+        return comments, total
 
     async def _send_comment_notification(
         self,
         answer: Answer,
         comment: Comment,
     ):
-        """发送评论通知到 inbox_message"""
+        """评论通知回答作者；匿名评论用同题别名。"""
         if not answer or not comment:
             return
         question = await self.question_repo.get_by_id(answer.question_id)
         if not question:
             return
+        receiver = int(getattr(answer, "user_id", 0) or 0)
+        if receiver <= 0:
+            return
+        from bisheng.qa_expert.domain.inbox_notice import display_name_for_trigger, send_qa_inbox
 
-        from bisheng.core.database import get_async_db_session
-        from bisheng.message.domain.models.inbox_message import MessageStatusEnum, MessageTypeEnum
-        from bisheng.message.domain.repositories.implementations.inbox_message_read_repository_impl import (
-            InboxMessageReadRepositoryImpl,
+        display, masked = await display_name_for_trigger(
+            question,
+            user_id=int(comment.user_id),
+            real_name=str(getattr(comment, "user_name", "") or ""),
+            anonymous=bool(int(getattr(comment, "anonymous", 0) or 0)),
+            reveal_on_public=getattr(comment, "reveal_on_public", None),
         )
-        from bisheng.message.domain.repositories.implementations.inbox_message_repository_impl import (
-            InboxMessageRepositoryImpl,
+        await send_qa_inbox(
+            action_code="qa_answer_commented",
+            system_text="qa_answer_commented",
+            question=question,
+            receivers=[receiver],
+            sender_user_id=int(comment.user_id),
+            sender_display=display,
+            sender_anonymous=masked,
+            answer_id=int(answer.id),
+            comment_id=int(comment.id) if comment.id else None,
+            tooltip=(comment.content or "")[:50],
         )
-        from bisheng.message.domain.services.message_service import MessageService
-
-        content = [
-            {
-                "type": "user",
-                "content": f"@{comment.user_name}",
-                "metadata": {"user_id": comment.user_id},
-            },
-            {
-                "type": "system_text",
-                "content": "qa_answer_commented",
-            },
-            {
-                "type": "business_url",
-                "content": f"--{question.title}",
-                "metadata": {
-                    "business_type": "qa_question",
-                    "data": {
-                        "question_id": str(question.id),
-                        "answer_id": str(answer.id),
-                        "comment_id": str(comment.id),
-                    },
-                },
-            },
-            {
-                "type": "tooltip_text",
-                "content": (comment.content or "")[:50],
-            },
-        ]
-
-        async with get_async_db_session() as session:
-            service = MessageService(
-                message_repository=InboxMessageRepositoryImpl(session),
-                message_read_repository=InboxMessageReadRepositoryImpl(session),
-            )
-            await service.send_message(
-                content=content,
-                sender=comment.user_id,
-                message_type=MessageTypeEnum.NOTIFY,
-                receiver=[answer.expert_id],
-                status=MessageStatusEnum.APPROVED,
-                action_code="qa_answer_commented",
-            )
 
 
 # ==================== 投票服务 ====================

@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from bisheng.approval.domain.services.channel_subscribe_scenario_handler import ChannelSubscribeScenarioHandler
-from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import KnowledgeSpaceSubscribeScenarioHandler
+from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler import (
+    KnowledgeSpaceSubscribeScenarioHandler,
+)
 from bisheng.approval.domain.services.menu_access_handler import MenuAccessApprovalHandler
 from bisheng.approval.domain.services.shougang_approval_handler import (
     FILE_PUBLISH_SCENARIO,
@@ -14,22 +16,24 @@ from bisheng.approval.domain.services.shougang_approval_handler import (
     KnowledgeSpaceFileShareApprovalHandler,
 )
 from bisheng.common.models.space_channel_member import BusinessTypeEnum, SpaceChannelMemberDao
-from bisheng.common.repositories.implementations.space_channel_member_repository_impl import SpaceChannelMemberRepositoryImpl
+from bisheng.common.repositories.implementations.space_channel_member_repository_impl import (
+    SpaceChannelMemberRepositoryImpl,
+)
 from bisheng.core.database import get_async_db_session
 
 
 async def build_runtime_handler(scenario_code: str) -> Any:
-    if scenario_code == 'department_file_view_request':
+    if scenario_code == "department_file_view_request":
         from bisheng.approval.domain.services.department_file_view_handler import (
             DepartmentFileViewApprovalHandler,
         )
 
         return DepartmentFileViewApprovalHandler()
-    if scenario_code == 'menu_access_request':
+    if scenario_code == "menu_access_request":
         return MenuAccessApprovalHandler()
-    if scenario_code == 'channel_subscribe_request':
+    if scenario_code == "channel_subscribe_request":
         return ChannelSubscribeScenarioHandler(_AsyncSpaceChannelMembershipAdapter())
-    if scenario_code == 'knowledge_space_subscribe_request':
+    if scenario_code == "knowledge_space_subscribe_request":
         from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
         return KnowledgeSpaceSubscribeScenarioHandler(
@@ -43,7 +47,11 @@ async def build_runtime_handler(scenario_code: str) -> Any:
         return KnowledgeSpaceFilePublishApprovalHandler()
     if scenario_code == FILE_SHARE_SCENARIO:
         return KnowledgeSpaceFileShareApprovalHandler()
-    raise KeyError(f'handler not registered for scenario_code={scenario_code}')
+    if scenario_code == "qa_question_publish":
+        from bisheng.qa_expert.domain.publish_handler import QaQuestionPublishHandler
+
+        return QaQuestionPublishHandler()
+    raise KeyError(f"handler not registered for scenario_code={scenario_code}")
 
 
 class _AsyncSpaceChannelMembershipAdapter:

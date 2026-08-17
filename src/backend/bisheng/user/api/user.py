@@ -187,6 +187,20 @@ async def get_admins(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         raise HTTPException(status_code=500, detail="User information failed")
 
 
+_PORTAL_ADMIN_ROLE_NAMES = frozenset({"管理员", "系统管理员", "admin"})
+
+
+def _user_info_role_label(role, role_names: list[str] | None):
+    """AdminRole 仍返回 admin；若持有门户管理员角色名则下发该名。"""
+    if role == "admin":
+        return "admin"
+    for name in role_names or []:
+        text = str(name).strip()
+        if text in _PORTAL_ADMIN_ROLE_NAMES or text.lower() == "admin":
+            return text
+    return role
+
+
 @router.get("/user/info")
 async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
     user_id = login_user.user_id
@@ -205,6 +219,8 @@ async def get_info(login_user: LoginUser = Depends(LoginUser.get_login_user)):
         db_user,
         is_department_admin=is_department_admin,
     )
+    # AdminRole 仍下发 admin；持有「管理员」等门户角色名时下发该名，供 Portal isPortalAdmin。
+    role = _user_info_role_label(role, getattr(login_user, "role_names", None))
     menu_approval_mode = await login_user.compute_menu_approval_mode(db_user)
     department_projection = await UserService.get_primary_department_name_projection(user_id)
 
@@ -855,6 +871,7 @@ async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = 
         session.refresh(db_user)
     if disabled_just_now:
         await UserService.ainvalidate_jwt_after_account_disabled(db_user.user_id)
+        await UserService.on_account_disabled(db_user.user_id)
     update_user_delete_hook(request, login_user, db_user)
     return resp_200()
 

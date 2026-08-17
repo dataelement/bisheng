@@ -454,6 +454,8 @@ async def test_answer_create_compensates_when_database_insert_fails() -> None:
     )
     service.expert_repo = AsyncMock()
     service.expert_repo.get_by_user_id.return_value = Expert(id=3, user_id=8, expert_name="expert")
+    service.invite_repo = AsyncMock()
+    service.invite_repo.list_user_ids_by_question_ids.return_value = {}
     service.repository = AsyncMock()
     service.repository.create.side_effect = RuntimeError("db failed")
 
