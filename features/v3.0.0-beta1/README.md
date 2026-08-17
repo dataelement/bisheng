@@ -17,6 +17,8 @@
 | F046 | [channel-source-link-failure-ux](./046-channel-source-link-failure-ux/) | P1 | Spec 已存在 | 无 |
 | F047 | [linsight-citation-traceability](./047-linsight-citation-traceability/) | P2 | Spec、Design 已存在 | F035, F029 |
 | F048 | [rebac-permission-model-grants](./048-rebac-permission-model-grants/) | P0 | ✅ 功能与迁移脚本开发完成；本地 E2E 经用户确认不执行 | F004, F006, F007, F008, F018, F027, F036, F040 |
+| F049 | [knowledge-space-children-read-optimization](./049-knowledge-space-children-read-optimization/) | P1 | Spec 已存在 | F027, F040, F048 |
+| F050 | [unified-permission-settings](./050-unified-permission-settings/) | P0 | Spec、Design 已确认，Tasks 已拆解，实现中 | v2.6.0 F044, F048 |
 
 ---
 
@@ -58,3 +60,5 @@
 | 2026-07-29 | 用户明确确认 Design ★，进入 tasks.md 编写与评审阶段；编码尚未开始。 |
 | 2026-07-29 | F048 tasks.md 完成 140 项原子拆解并通过 `/sdd-review tasks` 21 项评审；等待用户明确确认 Tasks。 |
 | 2026-07-30 | 用户明确确认 Tasks ★；完成 T001～T139 的实现、逐波回归和代码审查；随后明确本地不执行真实环境 E2E，T140 以范围决策和未执行证据报告收口，功能与迁移脚本开发完成。 |
+| 2026-08-14 | 登记 F049 知识空间目录与搜索读取优化，以及 F050 统一权限设置入口的 F048 适配。 |
+| 2026-08-17 | F050 Design 经用户确认；以 feat/2.6.0 实际 UI 为基线、F048 为唯一权限运行时，进入 Tasks 拆解。 |
