@@ -1904,82 +1904,12 @@ class ChannelService:
             channel.is_released = req.is_released
         if req.filter_rules is not None:
             channel.filter_rules = [f.model_dump() for f in req.filter_rules]
+        visibility_transition: tuple[ChannelVisibilityEnum, ChannelVisibilityEnum] | None = None
         if req.visibility is not None:
             new_visibility = ChannelVisibilityEnum(req.visibility)
             old_visibility = channel.visibility
             if old_visibility != new_visibility:
-                # When changing to PRIVATE (from PUBLIC or REVIEW), revoke every
-                # non-owner permission relation so the channel is only reachable
-                # by its owner(s): square subscribers, directly authorized users,
-                # and department/user_group grants alike.
-                if new_visibility == ChannelVisibilityEnum.PRIVATE:
-                    adapter = await get_f048_resource_adapter("channel")
-                    record = await adapter.load_permission_record(channel_id)
-                    if record is None:
-                        raise ChannelNotFoundError()
-                    await adapter.remove_ordinary_sources(
-                        record=record,
-                        actor=await resolve_permission_actor(login_user),
-                    )
-                    owners = await self.space_channel_member_repository.find_members_by_role(
-                        channel_id,
-                        UserRoleEnum.CREATOR,
-                    )
-                    owner_user_ids = {owner.user_id for owner in owners}
-                    # Capture active non-owner members before removal so we can
-                    # notify everyone who loses access.
-                    removed_user_ids = []
-                    if self.message_service:
-                        existing_members = await self.space_channel_member_repository.find_all(
-                            business_id=channel_id,
-                            business_type=BusinessTypeEnum.CHANNEL,
-                        )
-                        removed_user_ids = [
-                            member.user_id
-                            for member in existing_members
-                            if member.status == MembershipStatusEnum.ACTIVE and member.user_id not in owner_user_ids
-                        ]
-                    # Projection has committed, so business membership cleanup can
-                    # proceed without leaving stale ALLOW tuples.
-                    await self.space_channel_member_repository.remove_non_creator_members(channel_id)
-                    if removed_user_ids and self.message_service:
-                        final_removed_user_ids = []
-                        for user_id in removed_user_ids:
-                            if not await self._user_can_read_channel(user_id, channel_id):
-                                final_removed_user_ids.append(user_id)
-                        await self._send_channel_event_notification(
-                            action_code=CHANNEL_MADE_PRIVATE_MESSAGE,
-                            operator_user_id=login_user.user_id,
-                            operator_user_name=getattr(login_user, "user_name", None),
-                            receiver_user_ids=final_removed_user_ids,
-                            channel_id=channel_id,
-                            channel_name=channel.name,
-                            navigable=False,
-                        )
-                # When changing from REVIEW to PUBLIC, activate pending members and approve their messages
-                elif old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
-                    activated_members = await self.space_channel_member_repository.activate_pending_members(channel_id)
-                    if activated_members:
-                        logger.info(
-                            "Activated %d pending members for channel_id=%s after visibility change from REVIEW to PUBLIC",
-                            len(activated_members),
-                            channel_id,
-                        )
-                        # Mirror the newly-activated members into explicit ReBAC grants.
-                        for member in activated_members:
-                            await self.__class__.sync_direct_channel_user_permissions(
-                                channel_id,
-                                member.user_id,
-                                member.user_role,
-                                is_active=True,
-                                operator_user_id=login_user.user_id,
-                            )
-                    await self.space_channel_member_repository.remove_rejected_members(channel_id)
-                    if self.message_service:
-                        await self.message_service.batch_approve_channel_subscription_messages(
-                            channel_id=channel_id,
-                            operator_user_id=login_user.user_id,
-                        )
+                visibility_transition = (old_visibility, new_visibility)
             channel.visibility = new_visibility
 
         # Track if source_list changed for updating latest_article_update_time
@@ -2011,6 +1941,14 @@ class ChannelService:
 
         channel = await self.channel_repository.update(channel)
 
+        if visibility_transition is not None:
+            await self._apply_channel_visibility_transition(
+                channel,
+                old_visibility=visibility_transition[0],
+                new_visibility=visibility_transition[1],
+                login_user=login_user,
+            )
+
         # Update latest_article_update_time if source_list changed
         if source_list_changed:
             await self.update_channels_latest_article_time([channel])
@@ -2041,6 +1979,82 @@ class ChannelService:
             )
 
         return channel
+
+    async def _apply_channel_visibility_transition(
+        self,
+        channel: Channel,
+        *,
+        old_visibility: ChannelVisibilityEnum,
+        new_visibility: ChannelVisibilityEnum,
+        login_user: UserPayload,
+    ) -> None:
+        channel_id = str(channel.id)
+        if new_visibility == ChannelVisibilityEnum.PRIVATE:
+            adapter = await get_f048_resource_adapter("channel")
+            record = await adapter.load_permission_record(channel_id)
+            if record is None:
+                raise ChannelNotFoundError()
+            await adapter.remove_ordinary_sources(
+                record=record,
+                actor=await resolve_permission_actor(login_user),
+            )
+            owners = await self.space_channel_member_repository.find_members_by_role(
+                channel_id,
+                UserRoleEnum.CREATOR,
+            )
+            owner_user_ids = {owner.user_id for owner in owners}
+            removed_user_ids = []
+            if self.message_service:
+                existing_members = await self.space_channel_member_repository.find_all(
+                    business_id=channel_id,
+                    business_type=BusinessTypeEnum.CHANNEL,
+                )
+                removed_user_ids = [
+                    member.user_id
+                    for member in existing_members
+                    if member.status == MembershipStatusEnum.ACTIVE and member.user_id not in owner_user_ids
+                ]
+            # Projection has committed, so membership cleanup cannot leave stale
+            # ALLOW tuples if OpenFGA or SQL permission state rejects the change.
+            await self.space_channel_member_repository.remove_non_creator_members(channel_id)
+            if removed_user_ids and self.message_service:
+                final_removed_user_ids = []
+                for user_id in removed_user_ids:
+                    if not await self._user_can_read_channel(user_id, channel_id):
+                        final_removed_user_ids.append(user_id)
+                await self._send_channel_event_notification(
+                    action_code=CHANNEL_MADE_PRIVATE_MESSAGE,
+                    operator_user_id=login_user.user_id,
+                    operator_user_name=getattr(login_user, "user_name", None),
+                    receiver_user_ids=final_removed_user_ids,
+                    channel_id=channel_id,
+                    channel_name=channel.name,
+                    navigable=False,
+                )
+            return
+
+        if old_visibility == ChannelVisibilityEnum.REVIEW and new_visibility == ChannelVisibilityEnum.PUBLIC:
+            activated_members = await self.space_channel_member_repository.activate_pending_members(channel_id)
+            if activated_members:
+                logger.info(
+                    "Activated %d pending members for channel_id=%s after visibility change from REVIEW to PUBLIC",
+                    len(activated_members),
+                    channel_id,
+                )
+                for member in activated_members:
+                    await self.__class__.sync_direct_channel_user_permissions(
+                        channel_id,
+                        member.user_id,
+                        member.user_role,
+                        is_active=True,
+                        operator_user_id=login_user.user_id,
+                    )
+            await self.space_channel_member_repository.remove_rejected_members(channel_id)
+            if self.message_service:
+                await self.message_service.batch_approve_channel_subscription_messages(
+                    channel_id=channel_id,
+                    operator_user_id=login_user.user_id,
+                )
 
     async def get_channel_detail(self, channel_id: str, login_user: UserPayload) -> ChannelDetailResponse:
         """

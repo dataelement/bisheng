@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 13 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 15 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -109,13 +109,13 @@
 
 ## Wave 3：编辑与 private 语义（后端 Test-First）
 
-- [ ] **T014 Knowledge/Channel 编辑顺序与 private 测试**
+- [x] **T014 Knowledge/Channel 编辑顺序与 private 测试**
   - **文件**: `src/backend/test/knowledge/test_unified_permission_update.py`, `src/backend/test/channel/test_unified_permission_update.py`
   - **逻辑**: 业务失败不写 Grant；private 只清 ordinary sources 且保留 protected/其他独立来源；编辑权与 manage 分离；失权、过期 version、多来源。
   - **覆盖 AC**: AC-03, AC-04, AC-07, AC-08, AC-09, AC-10, AC-11, AC-20, AC-21, AC-22, AC-23, AC-24, AC-25, AC-26, AC-27, AC-28, AC-29, AC-31, AC-32, AC-33
   - **依赖**: T013
 
-- [ ] **T015 Knowledge/Channel 编辑顺序与 private 实现**
+- [x] **T015 Knowledge/Channel 编辑顺序与 private 实现**
   - **文件**: `src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`, `src/backend/bisheng/channel/domain/services/channel_service.py`
   - **逻辑**: 保持业务可见性的 source ownership；private 复用 `remove_ordinary_sources`；投影成功后才清 membership/通知；不恢复旧 relation fallback。
   - **验证**: T014 全部通过。
