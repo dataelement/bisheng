@@ -118,6 +118,30 @@ class PublishStatusService:
     # ------------------------------------------------------------------
 
     @classmethod
+    async def runtime_hint(cls, app_id: str) -> dict[str, Any]:
+        """Why an application might have no output right now (F053 T034 write-back 2).
+
+        Returned alongside ``bisheng logs`` so the CLI can distinguish the two
+        causes of an empty ``lines``: the app is running and quiet, or it has no
+        running instance at all (draft, parked, stopped). Printing only "no
+        logs" for both reads as a broken log query and sends the owner off to
+        check the wrong thing.
+
+        Deliberately **not** access-checked: the caller has already passed the
+        log-access check for this very application, and re-checking here with a
+        different actor shape is how the two checks drift apart. It is also
+        deliberately silent on failure — a hint that cannot be produced must
+        never take down the log response it decorates.
+        """
+        try:
+            app = await cls._load(app_id)
+            deployment = await cls._latest_deployment(app.id)
+            return {"app_state": app.state, "pending_reason": cls._pending_reason(app, deployment)}
+        except Exception:  # a decoration must not break the payload it decorates
+            logger.exception(f"app_publish.runtime_hint app_id={app_id} could not be resolved")
+            return {"app_state": None, "pending_reason": None}
+
+    @classmethod
     async def request_manual_publish(cls, app_id: str, *, actor) -> dict[str, Any]:
         """Retry a parked release (AC-32). Owner-only, no second approval round.
 

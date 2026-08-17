@@ -402,3 +402,39 @@ async def test_manual_publish_acts_before_asking_the_client(
     source = inspect.getsource(PublishStatusService.request_manual_publish)
 
     assert "_is_owner" in source
+
+
+# ---------------------------------------------------------------------------
+# F053 T034 write-back 2 — runtime_hint decorates the log payload
+# ---------------------------------------------------------------------------
+
+
+async def test_runtime_hint_reports_state_so_empty_logs_are_explainable(publish_db, app_factory):
+    """An empty ``lines`` has two causes and the log text cannot tell them apart.
+
+    Either the app is running and quiet, or it has no running instance at all.
+    Printing "no logs" for both reads as a broken log query and sends the owner
+    off to check the wrong thing.
+    """
+    from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
+
+    app_row, _ = await app_factory()
+
+    hint = await PublishStatusService.runtime_hint(app_row.id)
+
+    assert hint["app_state"] == app_row.state
+    assert set(hint) == {"app_state", "pending_reason"}
+
+
+async def test_runtime_hint_never_breaks_the_payload_it_decorates(publish_db):
+    """A hint that cannot be produced must not take down the log response.
+
+    The logs themselves are the answer; the hint is decoration. Raising here
+    would turn "your app printed nothing yet" into "the log endpoint is
+    broken" — strictly worse than the missing hint.
+    """
+    from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
+
+    hint = await PublishStatusService.runtime_hint("no-such-app-id")
+
+    assert hint == {"app_state": None, "pending_reason": None}

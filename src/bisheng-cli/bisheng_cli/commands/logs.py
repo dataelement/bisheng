@@ -77,6 +77,9 @@ def run(args: Any, emitter: Emitter) -> int:
     since: Any = args.since
     interrupted = False
 
+    # Initialised before the loop: a `--follow` run interrupted on its first
+    # request must still be able to explain itself.
+    runtime_state: dict[str, Any] = {"app_state": None, "pending_reason": None}
     try:
         with client:
             while True:
@@ -91,6 +94,13 @@ def run(args: Any, emitter: Emitter) -> int:
                     params["keyword"] = args.keyword
 
                 data = client.get_json(path, params=params) or {}
+                # Kept for the empty-output explanation below: the two fields
+                # ride along with every response so the reason survives a
+                # `--follow` loop that ended without printing anything.
+                runtime_state = {
+                    "app_state": data.get("app_state"),
+                    "pending_reason": data.get("pending_reason"),
+                }
                 lines = [str(line) for line in (data.get("lines") or [])]
                 fresh = [line for line in lines if _digest(line) not in seen]
                 for line in fresh:
@@ -108,7 +118,7 @@ def run(args: Any, emitter: Emitter) -> int:
         emitter.info("已停止跟踪。")
 
     if not last_lines and not interrupted:
-        _explain_empty(emitter, args)
+        _explain_empty(emitter, args, runtime_state)
 
     data_out: dict[str, Any] = {"app_id": app_id, "line_count": printed}
     if not args.follow:
@@ -117,11 +127,36 @@ def run(args: Any, emitter: Emitter) -> int:
     return EXIT_OK
 
 
-def _explain_empty(emitter: Emitter, args: Any) -> None:
+#: Application states that explain an empty log by themselves — there is no
+#: running container to have printed anything.
+_NOT_RUNNING_STATES: dict[str, str] = {
+    "draft": "应用还是草稿，尚未上线，因此没有运行日志。",
+    "pending_capacity": "应用处于待上线（资源不足），没有在运行的实例，因此没有运行日志。",
+    "stopped": "应用已停运，没有在运行的实例，因此没有运行日志。",
+    "deleted": "应用已被删除。",
+}
+
+
+def _explain_empty(emitter: Emitter, args: Any, runtime_state: dict[str, Any]) -> None:
     if args.since:
         emitter.info("该时间段没有日志，或日志已被轮转（平台对保留期不做承诺）——这不代表这段时间什么都没发生。")
         return
-    # Degraded until F055 adds `app_state` / `pending_reason` to the logs payload
-    # (write-back 2): the CLI cannot name the state, but naming the candidates
-    # still beats printing nothing at all.
+
+    # The server now names the state (F055 write-back 2), which is the whole
+    # difference between "your app printed nothing yet" and "your app is not
+    # running". Those two need opposite next steps, and the log text alone can
+    # never tell them apart.
+    state = str(runtime_state.get("app_state") or "")
+    explanation = _NOT_RUNNING_STATES.get(state)
+    if explanation:
+        reason = runtime_state.get("pending_reason")
+        if state == "pending_capacity" and reason:
+            explanation = f"{explanation}（成因：{reason}）"
+        emitter.info(explanation)
+        return
+    if state == "online":
+        emitter.info("应用正在运行，但还没有输出任何日志。")
+        return
+    # An older platform that does not send the field, or a state we do not know:
+    # naming the candidates still beats printing nothing.
     emitter.info("未取到日志：应用可能没有运行实例（草稿 / 待上线 / 已停运），请在应用详情页确认应用态。")

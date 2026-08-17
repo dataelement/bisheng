@@ -258,6 +258,7 @@ class PublishPipelineService:
 
         app_state = None
         version_no = None
+        app_row = None
         if deployment.app_id:
             async with get_async_db_session() as session:
                 app_row = await AppDao.aget(session, deployment.app_id)
@@ -265,6 +266,16 @@ class PublishPipelineService:
         if deployment.version_id and deployment.app_id:
             version = await VersionService.get_version(deployment.app_id, deployment.version_id)
             version_no = version.version_no if version is not None else None
+
+        # The address exists as soon as the application row does — it is a
+        # function of the slug, not of the deployment's outcome. Reporting it
+        # while the attempt is still in flight is deliberate: the CLI can print
+        # "this is where it will live" instead of making the developer wait.
+        entry_url = None
+        if app_row is not None and app_row.slug:
+            from bisheng.app_runtime.domain.services.app_query_service import AppQueryService
+
+            entry_url = AppQueryService.entry_url(app_row.slug)
 
         return {
             "deployment_id": deployment.id,
@@ -279,6 +290,14 @@ class PublishPipelineService:
             "failure": deployment.failure,
             "approval": {"instance_id": deployment.approval_instance_id} if deployment.approval_instance_id else None,
             "app_state": app_state,
+            # F053 T034 write-back 3. Without it the CLI's ``deploy --wait``
+            # could not print the entry address on success: ``entry_url`` was
+            # only ever in the ``POST /deploy`` response, and at that moment a
+            # first publish is still a draft, so the field was almost always
+            # null exactly when it mattered. Derived from the slug by F054's
+            # single implementation — never composed here, and never in the
+            # browser (AC-25).
+            "entry_url": entry_url,
             "scan_result": deployment.scan_result,
         }
 

@@ -188,6 +188,7 @@ async def get_logs(
     tenant administrator's key must not read every application's logs in the
     tenant: that would widen the open API past what the key holder was granted.
     """
+    from bisheng.app_publish.domain.services.publish_status_service import PublishStatusService
     from bisheng.app_runtime.domain.services.app_query_service import LOG_ENTRY_CLI, AppQueryService
 
     principal = _principal()
@@ -197,8 +198,15 @@ async def get_logs(
         user_role=[],
         tenant_id=_subject.tenant_id,
     )
-    return resp_200(
-        data=await AppQueryService.get_logs(
-            app_id, actor=actor, tail=tail, since=since, keyword=keyword, entry=LOG_ENTRY_CLI
-        )
+    payload = await AppQueryService.get_logs(
+        app_id, actor=actor, tail=tail, since=since, keyword=keyword, entry=LOG_ENTRY_CLI
     )
+    # F053 T034 write-back 2. An empty ``lines`` has two completely different
+    # causes and the log text alone cannot tell them apart: the application is
+    # running and simply quiet, or it has no running instance at all (draft,
+    # parked, stopped). Without these two fields the CLI can only print "no
+    # logs", which reads as "the log query is broken" and sends the owner off
+    # to check the wrong thing. Both are read from the same single sources the
+    # publish face uses — no second derivation.
+    payload.update(await PublishStatusService.runtime_hint(app_id))
+    return resp_200(data=payload)

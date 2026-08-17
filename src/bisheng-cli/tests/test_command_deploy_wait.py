@@ -253,9 +253,32 @@ def test_wait_online_exits_0_with_entry_url_or_pointer(
     mock = _mock([deployment(stage="publishing", status="running"), online])
     code, _, err = _run(["deploy", str(sample_project), "--wait"], monkeypatch=monkeypatch, mock=mock)
     assert code == EXIT_OK
-    # The polling payload has no `entry_url` (write-back 3), so the pointer is
-    # the honest answer rather than a printed `None`.
+    # An older platform omits `entry_url` from the poll; the pointer is then the
+    # honest answer rather than a printed `None`.
     assert "应用详情页" in err and "None" not in err
+
+
+def test_wait_online_prints_the_entry_url_when_the_poll_carries_it(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    """The address is the one thing the developer actually wants at this moment.
+
+    It used to be unreachable here: `entry_url` lived only on the POST response,
+    where a first deploy is still a draft and the value was null. F055's
+    write-back puts it on every poll, so `--wait` can end with a real link
+    instead of sending the developer to a page to look it up.
+    """
+    online = deployment(
+        stage="online",
+        status="succeeded",
+        approval={"instance_id": "ap-1", "status": "executed"},
+        app_state="已上线",
+        entry_url="https://bisheng.example.com/apps/form-survey",
+    )
+    mock = _mock([deployment(stage="publishing", status="running"), online])
+    code, _, err = _run(["deploy", str(sample_project), "--wait"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK
+    assert "https://bisheng.example.com/apps/form-survey" in err
 
 
 def test_wait_rejected_exits_20_with_full_reason(

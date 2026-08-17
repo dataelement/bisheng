@@ -171,6 +171,7 @@ def deployment(
     approval: dict[str, Any] | None = None,
     app_state: str | None = None,
     pending_reason: str | None = None,
+    entry_url: str | None = None,
 ) -> httpx.Response:
     return v2_ok(
         {
@@ -182,7 +183,11 @@ def deployment(
             "approval": approval,
             "app_state": app_state,
             "pending_reason": pending_reason,
-            # NOTE: no entry_url — it exists only on the POST response (design D7).
+            # ``entry_url`` used to live only on the POST response, where a first
+            # deploy is still a draft and it was null exactly when it mattered.
+            # F055's write-back put it on every poll; defaults to None so tests
+            # that do not care keep exercising the older shape.
+            "entry_url": entry_url,
         }
     )
 
@@ -203,8 +208,19 @@ def failure_tuple(stage: str, code: int, message: str, **details: Any) -> dict[s
     }
 
 
-def logs(lines: list[str] | None = None) -> httpx.Response:
-    return v2_ok({"lines": lines if lines is not None else []})
+def logs(
+    lines: list[str] | None = None,
+    *,
+    app_state: str | None = None,
+    pending_reason: str | None = None,
+) -> httpx.Response:
+    """The logs payload. ``app_state`` / ``pending_reason`` ride along with it.
+
+    They default to ``None`` so existing tests keep exercising the older-platform
+    shape — a platform that predates the write-back simply omits them, and the
+    CLI must still say something useful.
+    """
+    return v2_ok({"lines": lines if lines is not None else [], "app_state": app_state, "pending_reason": pending_reason})
 
 
 # ---- transport ----------------------------------------------------------

@@ -300,10 +300,9 @@ def _accept(emitter: Emitter, root: Path, base_url: str, accepted: dict[str, Any
     if state["entry_url"]:
         emitter.info(f"入口地址：{state['entry_url']}")
     else:
-        # `entry_url` exists only on this response and is usually null on a first
-        # deploy (the app is still a draft). Printing "None" would read as a
-        # broken URL; pointing at the page is the honest answer until F055 adds
-        # the field to the polling payload (write-back 3).
+        # A first deploy has no application row yet at this instant, so there is
+        # genuinely no address to print. Printing "None" would read as a broken
+        # URL; the polling payload carries the address as soon as it exists.
         emitter.info(f"入口地址暂不可得，请在 {DETAIL_PAGE} 获取。")
 
 
@@ -364,7 +363,11 @@ def _follow(client: PlatformClient, emitter: Emitter, args: Any, state: dict[str
 
 
 def _absorb(payload: dict[str, Any], state: dict[str, Any]) -> None:
-    for key in ("stage", "app_state", "pending_reason", "approval"):
+    # ``entry_url`` is absorbed here as of the F055 write-back: it used to exist
+    # only on the POST response, where a first deploy is still a draft and the
+    # value was almost always null exactly when it mattered. Now every poll
+    # carries it, so `--wait` can print a real address on success.
+    for key in ("stage", "app_state", "pending_reason", "approval", "entry_url"):
         if payload.get(key) is not None:
             state[key] = payload[key]
     if payload.get("app_id"):

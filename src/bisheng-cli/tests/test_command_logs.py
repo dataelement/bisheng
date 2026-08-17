@@ -156,6 +156,36 @@ def test_empty_lines_prints_app_state_hint_not_blank(
     assert "没有运行实例" in err and "应用详情页" in err
 
 
+def test_empty_lines_names_the_state_when_the_server_sends_it(
+    monkeypatch: pytest.MonkeyPatch, logged_in, project_dir: Path
+) -> None:
+    """"Not running" and "running but quiet" need opposite next steps.
+
+    The log text can never tell them apart, so the server names the state
+    (F055 write-back 2). Listing all three candidates when the answer is known
+    would be a worse answer than the one we have.
+    """
+    for state, expected, unexpected in (
+        ("draft", "还是草稿", "已停运"),
+        ("stopped", "已停运", "还是草稿"),
+        ("online", "还没有输出任何日志", "没有运行实例"),
+    ):
+        mock = PlatformMock().get(LOGS, logs_response([], app_state=state))
+        code, _, err = _run(["logs"], monkeypatch=monkeypatch, mock=mock)
+        assert code == EXIT_OK
+        assert expected in err, (state, err)
+        assert unexpected not in err, (state, err)
+
+
+def test_empty_lines_pending_capacity_includes_the_reason(
+    monkeypatch: pytest.MonkeyPatch, logged_in, project_dir: Path
+) -> None:
+    mock = PlatformMock().get(LOGS, logs_response([], app_state="pending_capacity", pending_reason="capacity"))
+    code, _, err = _run(["logs"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK
+    assert "待上线" in err and "capacity" in err
+
+
 def test_follow_polls_with_since_every_3s(monkeypatch: pytest.MonkeyPatch, logged_in, project_dir: Path) -> None:
     mock = PlatformMock().get(LOGS, [logs_response(["a"]), logs_response(["b"])])
     sleeps: list[float] = []

@@ -320,7 +320,11 @@ async def test_logs_endpoint_is_owner_scoped(publish_db, api_app, service_accoun
     async with api_app(principal=service_account_principal()) as client:
         payload = _body(await client.get(f"/api/v2/apps/{app.id}/logs", params={"tail": 50}))
 
-    assert payload["data"] == {"lines": ["hello"]}
+    # The payload carries the log lines plus the two fields that explain an
+    # empty ``lines`` (F053 T034 write-back 2): without them "no output" and
+    # "no running instance" are indistinguishable to the CLI.
+    assert payload["data"]["lines"] == ["hello"]
+    assert set(payload["data"]) == {"lines", "app_state", "pending_reason"}
     assert seen == {"app_id": app.id, "user_id": OWNER_USER_ID, "entry": "cli", "tail": 50}
 
 
