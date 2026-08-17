@@ -102,7 +102,9 @@ class VersionService:
     # -- the D6 unit ------------------------------------------------------
 
     @classmethod
-    async def record_version(cls, deployment: AppDeployment, *, approval: ApprovalPort, **submit_kwargs: Any) -> AppVersion:
+    async def record_version(
+        cls, deployment: AppDeployment, *, approval: ApprovalPort, image_ref: str | None = None, **submit_kwargs: Any
+    ) -> AppVersion:
         """Create the approval request, then the version record. See the module docstring.
 
         Raises whatever the gate raised (after latching the deployment as
@@ -133,7 +135,7 @@ class VersionService:
 
         # Phase 2 — the version record. Compensate phase 1 if this fails.
         try:
-            version = await cls._insert_version(deployment)
+            version = await cls._insert_version(deployment, image_ref=image_ref)
         except Exception:
             logger.exception(f"app_publish.version_insert_failed deployment_id={deployment.id}")
             if instance_id:
@@ -191,7 +193,7 @@ class VersionService:
         return version
 
     @classmethod
-    async def _insert_version(cls, deployment: AppDeployment) -> AppVersion:
+    async def _insert_version(cls, deployment: AppDeployment, *, image_ref: str | None = None) -> AppVersion:
         """The INSERT itself: number, kind, and the one snapshot the record freezes.
 
         Code snapshot, capability declaration, injection config and tier are one
@@ -213,6 +215,11 @@ class VersionService:
                 injections={},
                 tier_id=deployment.tier_code or manifest.get("tier") or "light",
                 runtime=str(manifest.get("runtime") or ""),
+                # The image the build produced. Without it the version row keeps
+                # image_ref NULL, and the deploy after approval sends an empty
+                # image to the orchestrator — Docker then rejects the create with
+                # "no command specified" and the app never comes online.
+                image_ref=image_ref,
                 submitted_at=deployment.create_time or datetime.now(),
             )
             await AppVersionDao.ainsert(session, row)

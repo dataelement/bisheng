@@ -447,7 +447,9 @@ class PublishPipelineService:
         """Approval request first, version record second — design D6, owned by ``VersionService``."""
         from bisheng.app_publish.domain.services import publish_approval_service
 
-        await VersionService.record_version(deployment, approval=publish_approval_service)
+        await VersionService.record_version(
+            deployment, approval=publish_approval_service, image_ref=context.get("image_ref")
+        )
 
     # -- plumbing --------------------------------------------------------
 
