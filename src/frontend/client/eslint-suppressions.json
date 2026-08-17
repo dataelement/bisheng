@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 20
+      "count": 16
     }
   },
   "src/api/index.ts": {
@@ -75,7 +75,7 @@
   },
   "src/api/knowledge.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 66
+      "count": 64
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -3127,9 +3127,6 @@
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
     },
-    "no-case-declarations": {
-      "count": 9
-    },
     "no-console": {
       "count": 4
     },
@@ -3227,9 +3224,6 @@
     }
   },
   "src/pages/knowledge/FilePreview/index.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 2
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -3400,9 +3394,6 @@
     }
   },
   "src/pages/knowledge/hooks/useFileUpload.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 10
-    },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
