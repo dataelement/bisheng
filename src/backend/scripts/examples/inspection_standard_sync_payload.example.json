@@ -1,0 +1,40 @@
+{
+  "start_time": "2026-08-01T00:00:00",
+  "end_time": "2026-08-14T23:59:59",
+  "data": {
+    "check_standards": [
+      {
+        "CREATE_DEPT_ID": "DEPT-A",
+        "CHECK_STANDARD_ID": "270101J01D01",
+        "DEVICE_NAME": "调度大厅",
+        "STANDARD_TYPE": "01-常规点检",
+        "CHECK_ITEM_NAME": "调度操作台综合检查",
+        "DEVICE_STATUS": "1-运转",
+        "ENFORCE_CODE": "1-点检",
+        "SAFETY_BOARD": "N-否",
+        "CHECK_PERIOD": 1,
+        "PERIOD_UNIT": "W-周",
+        "INTERFACE_SYSTEM": "1-智能点检系统",
+        "NEXT_SCHE_DATE": "2026-05-06",
+        "MAINTAIN_REASON": "初始建立",
+        "DEVICE_MAINTAIN_JOB_ID": "JOB001",
+        "REC_CREATOR": "E001",
+        "REC_CREATOR_NAME": "张三"
+      }
+    ],
+    "check_standard_items": [
+      {
+        "CHECK_STANDARD_ID": "270101J01D01",
+        "CHECK_STANDARD_SEQ_NO": "001",
+        "CONTENT": "操作按钮、手柄灵活性及定位",
+        "CHECK_WAY": "1-五感",
+        "LUBRIC_WAY": "0-无",
+        "MANAGE_CONTROL_MODE": "0-无",
+        "MANAGE_TYPE": "0-无",
+        "DATA_TYPE": "10-定性",
+        "CRITERI": "灵活方便，定位可靠（GB 20905）",
+        "STATUTORY_REQ": "0-无"
+      }
+    ]
+  }
+}

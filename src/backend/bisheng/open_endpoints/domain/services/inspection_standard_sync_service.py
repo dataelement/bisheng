@@ -41,7 +41,6 @@ from bisheng.open_endpoints.domain.services.inspection_standard_excel_builder im
 )
 
 _PATH_SEPARATOR_PATTERN = re.compile(r"[\\/]")
-_TIME_FILENAME_SANITIZE_PATTERN = re.compile(r"[:/\\ ]+")
 
 
 @dataclass(frozen=True)
@@ -58,9 +57,9 @@ class InspectionStandardSyncService:
     async def sync(self, request: InspectionStandardSyncRequest) -> InspectionStandardSyncResponseData:
         self._validate_token_rule(self.filelib_sync_service.file_sync_rule)
         start_dt, end_dt = self._parse_time_window(request.start_time, request.end_time)
-        _ = (start_dt, end_dt)
+        year_dir = str(start_dt.year)
         groups = self._build_groups(request)
-        generated_file_name = self._build_generated_file_name(request.start_time, request.end_time)
+        generated_file_name = self._build_generated_file_name(start_dt, end_dt)
         base_folder_path = self._resolve_base_folder_path(self.filelib_sync_service.file_sync_rule)
         knowledge_id = int(self.filelib_sync_service.file_sync_rule.target_space.knowledge_id)
 
@@ -72,6 +71,7 @@ class InspectionStandardSyncService:
                     knowledge_id=knowledge_id,
                     create_dept_id=group.create_dept_id,
                     base_folder_path=base_folder_path,
+                    year=year_dir,
                 )
                 xlsx_bytes = build_inspection_standard_xlsx_bytes(
                     check_standards=group.check_standards,
@@ -252,27 +252,37 @@ class InspectionStandardSyncService:
         knowledge_id: int,
         create_dept_id: str,
         base_folder_path: str | None,
+        year: str,
     ) -> tuple[int, str]:
         rule = self.filelib_sync_service.file_sync_rule.target_space
         knowledge_space_service = self.filelib_sync_service.knowledge_space_service
         child = normalize_file_sync_folder_path(create_dept_id)
         if child is None:
             raise InspectionStandardSyncCreateDeptIdError(msg="CREATE_DEPT_ID is invalid")
+        year_segment = normalize_file_sync_folder_path(year)
+        if year_segment is None:
+            raise InspectionStandardSyncInvalidTimeError(msg="start_time year is invalid")
+        relative_path = f"{child}/{year_segment}"
 
         try:
             if base_folder_path:
-                folder_path = f"{base_folder_path}/{child}"
+                folder_path = f"{base_folder_path}/{relative_path}"
                 folder = await knowledge_space_service.find_or_create_folder_path_for_file_sync(
                     knowledge_id,
                     folder_path,
                 )
             elif rule.folder_id is not None:
-                folder = await knowledge_space_service.find_or_create_folder_for_file_sync(
+                dept_folder = await knowledge_space_service.find_or_create_folder_for_file_sync(
                     knowledge_id,
                     child,
                     int(rule.folder_id),
                 )
-                folder_path = child
+                folder = await knowledge_space_service.find_or_create_folder_for_file_sync(
+                    knowledge_id,
+                    year_segment,
+                    int(dept_folder.id),
+                )
+                folder_path = relative_path
             else:
                 raise InspectionStandardSyncTokenRuleError(
                     msg="token file_sync_rule requires fixed folder_path or folder_id",
@@ -287,10 +297,10 @@ class InspectionStandardSyncService:
         return int(folder.id), folder_path
 
     @staticmethod
-    def _build_generated_file_name(start_time: str, end_time: str) -> str:
-        safe_start = _TIME_FILENAME_SANITIZE_PATTERN.sub("-", start_time.strip())
-        safe_end = _TIME_FILENAME_SANITIZE_PATTERN.sub("-", end_time.strip())
-        return f"{safe_start}-{safe_end}.xlsx"
+    def _build_generated_file_name(start_dt: datetime, end_dt: datetime) -> str:
+        start_date = start_dt.date().isoformat()
+        end_date = end_dt.date().isoformat()
+        return f"{start_date}至{end_date}.xlsx"
 
     @staticmethod
     def _build_external_file_id(

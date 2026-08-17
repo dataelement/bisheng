@@ -9,8 +9,6 @@ from bisheng.open_endpoints.domain.schemas.inspection_standard_sync import (
     InspectionStandardRecord,
 )
 from bisheng.open_endpoints.domain.services.inspection_standard_excel_builder import (
-    CHECK_STANDARD_EN_COLUMNS,
-    CHECK_STANDARD_ITEM_EN_COLUMNS,
     SHEET_ITEM_NAME,
     SHEET_STANDARD_NAME,
     build_inspection_standard_xlsx_bytes,
@@ -67,12 +65,11 @@ def test_build_inspection_standard_xlsx_bytes_writes_template_headers_and_data()
     assert workbook.sheetnames[1] == SHEET_ITEM_NAME
 
     standard_sheet = workbook[SHEET_STANDARD_NAME]
-    assert standard_sheet.cell(row=1, column=1).value == "点检标准"
-    assert standard_sheet.cell(row=3, column=1).value == CHECK_STANDARD_EN_COLUMNS[0]
-    assert standard_sheet.cell(row=4, column=2).value == "270101J01D01"
-    assert standard_sheet.cell(row=4, column=13).value == "2026-05-06"
+    assert standard_sheet.cell(row=1, column=1).value == "设备所属单位"
+    assert standard_sheet.cell(row=2, column=1).value == "DEPT-A"
+    assert standard_sheet.cell(row=2, column=2).value == "270101J01D01"
+    assert standard_sheet.cell(row=2, column=13).value == "2026-05-06"
 
     item_sheet = workbook[SHEET_ITEM_NAME]
-    assert item_sheet.cell(row=1, column=1).value == "点检标准项次"
-    assert item_sheet.cell(row=3, column=1).value == CHECK_STANDARD_ITEM_EN_COLUMNS[0]
-    assert item_sheet.cell(row=4, column=2).value == "001"
+    assert item_sheet.cell(row=1, column=1).value == "点检标准编号（12）*"
+    assert item_sheet.cell(row=2, column=2).value == "001"
