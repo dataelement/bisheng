@@ -238,6 +238,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationItemResp,
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
+    BatchAliasActionResult,
+    BatchAliasFailure,
 )
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessDecision,
@@ -16287,13 +16289,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         return updated_file
 
-    async def accept_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
-        """Accept the AI-generated alias: promote it to file_name and clear alias_name."""
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import (
-            rebuild_knowledge_file_chunk,
-        )
-
-        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+    async def _ensure_alias_rename_permission(self, file_record: KnowledgeFile, file_id: int):
+        """Ensure the caller may rename the file for alias accept/reject."""
         resolved = await self._require_document_content_manager(file_record)
         if resolved is None:
             await self._require_permission_id(
@@ -16302,30 +16299,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "rename_file",
                 space_id=file_record.knowledge_id,
             )
+        return resolved
 
-        alias_name = file_record.alias_name
-        if not alias_name:
-            return file_record
-
-        space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
-        if not space:
-            raise SpaceNotFoundError()
-        self._ensure_space_async_task_tenant_consistency(space, "accept_alias_rename")
-
+    def _normalize_alias_target_name(self, file_record: KnowledgeFile, alias_name: str) -> str:
         if file_record.file_source == FileSource.WEB_LINK.value:
-            alias_name = self._normalize_web_link_file_name(alias_name)
+            return self._normalize_web_link_file_name(alias_name)
+        return alias_name
 
-        self._check_filename_sensitive_words(alias_name)
-        if (
-            resolved is None
-            and await SpaceFileDao.count_file_by_name(
-                file_record.knowledge_id,
-                alias_name,
-                exclude_id=file_id,
-            )
-            > 0
-        ):
-            raise SpaceFileNameDuplicateError()
+    async def _apply_accept_alias_rename(
+        self,
+        file_record: KnowledgeFile,
+        alias_name: str,
+        *,
+        resolved,
+        file_id: int,
+    ) -> KnowledgeFile:
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import (
+            rebuild_knowledge_file_chunk,
+        )
 
         old_name = file_record.file_name
         file_record.file_name = alias_name
@@ -16361,7 +16352,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
         await self.update_folder_update_time(file_record.file_level_path)
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
 
         if (old_name or "") != (updated_file.file_name or ""):
             await self._notify_favorite_source_changed(
@@ -16374,18 +16364,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         return updated_file
 
-    async def reject_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
-        """Reject the AI-generated alias: record it in remark and clear alias_name."""
-        file_record = await self._get_file_for_action(file_id, space_id=space_id)
-        resolved = await self._require_document_content_manager(file_record)
-        if resolved is None:
-            await self._require_permission_id(
-                "knowledge_file",
-                file_id,
-                "rename_file",
-                space_id=file_record.knowledge_id,
-            )
-
+    async def _apply_reject_alias_rename(
+        self,
+        file_record: KnowledgeFile,
+        *,
+        resolved,
+    ) -> KnowledgeFile:
         alias_name = file_record.alias_name
         if not alias_name:
             return file_record
@@ -16398,6 +16382,233 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if resolved is not None:
             await self._mark_document_content_changed(updated_file)
         return updated_file
+
+    async def accept_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
+        """Accept the AI-generated alias: promote it to file_name and clear alias_name."""
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        resolved = await self._ensure_alias_rename_permission(file_record, file_id)
+
+        alias_name = file_record.alias_name
+        if not alias_name:
+            return file_record
+
+        space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+        if not space:
+            raise SpaceNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(space, "accept_alias_rename")
+
+        alias_name = self._normalize_alias_target_name(file_record, alias_name)
+
+        self._check_filename_sensitive_words(alias_name)
+        if (
+            resolved is None
+            and await SpaceFileDao.count_file_by_name(
+                file_record.knowledge_id,
+                alias_name,
+                exclude_id=file_id,
+            )
+            > 0
+        ):
+            raise SpaceFileNameDuplicateError()
+
+        updated_file = await self._apply_accept_alias_rename(
+            file_record,
+            alias_name,
+            resolved=resolved,
+            file_id=file_id,
+        )
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
+        return updated_file
+
+    async def reject_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
+        """Reject the AI-generated alias: record it in remark and clear alias_name."""
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        resolved = await self._ensure_alias_rename_permission(file_record, file_id)
+
+        alias_name = file_record.alias_name
+        if not alias_name:
+            return file_record
+
+        updated_file = await self._apply_reject_alias_rename(file_record, resolved=resolved)
+        return updated_file
+
+    async def batch_accept_alias_rename(
+        self,
+        space_id: int,
+        file_ids: list[int],
+    ) -> BatchAliasActionResult:
+        """Accept AI-generated aliases for multiple files with partial-success semantics."""
+        unique_file_ids = self._dedupe_ids(file_ids)
+        if not unique_file_ids:
+            return BatchAliasActionResult()
+
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space:
+            raise SpaceNotFoundError()
+        await self._require_read_permission(space_id)
+        self._ensure_space_async_task_tenant_consistency(space, "batch_accept_alias_rename")
+
+        file_records = await KnowledgeFileDao.aget_file_by_ids(unique_file_ids)
+        file_by_id = {int(file_record.id): file_record for file_record in file_records}
+
+        succeeded_ids: list[int] = []
+        skipped_ids: list[int] = []
+        failed: list[BatchAliasFailure] = []
+        pending_names: set[str] = set()
+        folder_paths: set[str] = set()
+
+        for file_id in unique_file_ids:
+            file_record = file_by_id.get(file_id)
+            if (
+                not file_record
+                or file_record.knowledge_id != space_id
+                or file_record.file_type == FileType.DIR.value
+            ):
+                skipped_ids.append(file_id)
+                continue
+            if not file_record.alias_name:
+                skipped_ids.append(file_id)
+                continue
+
+            try:
+                resolved = await self._ensure_alias_rename_permission(file_record, file_id)
+                alias_name = self._normalize_alias_target_name(file_record, file_record.alias_name)
+                self._check_filename_sensitive_words(alias_name)
+
+                if resolved is None and await SpaceFileDao.count_file_by_name(
+                    file_record.knowledge_id,
+                    alias_name,
+                    exclude_id=file_id,
+                ) > 0:
+                    raise SpaceFileNameDuplicateError()
+
+                if alias_name in pending_names:
+                    raise SpaceFileNameDuplicateError()
+
+                await self._apply_accept_alias_rename(
+                    file_record,
+                    alias_name,
+                    resolved=resolved,
+                    file_id=file_id,
+                )
+                pending_names.add(alias_name)
+                succeeded_ids.append(file_id)
+                if file_record.file_level_path:
+                    folder_paths.add(file_record.file_level_path)
+            except SpacePermissionDeniedError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="permission_denied",
+                        message=exc.Msg,
+                    )
+                )
+            except SpaceFileNameDuplicateError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="duplicate_name",
+                        message=exc.Msg,
+                    )
+                )
+            except SpaceFileNameSensitiveWordError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="sensitive_word",
+                        message=exc.Msg,
+                    )
+                )
+            except KnowledgeDocumentStateConflictError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="document_state_conflict",
+                        message=getattr(exc, "msg", None) or exc.Msg,
+                    )
+                )
+            except Exception as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="internal_error",
+                        message=str(exc),
+                    )
+                )
+
+        if succeeded_ids:
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+            for folder_path in folder_paths:
+                await self.update_folder_update_time(folder_path)
+
+        return BatchAliasActionResult(
+            succeeded_ids=succeeded_ids,
+            skipped_ids=skipped_ids,
+            failed=failed,
+        )
+
+    async def batch_reject_alias_rename(
+        self,
+        space_id: int,
+        file_ids: list[int],
+    ) -> BatchAliasActionResult:
+        """Reject AI-generated aliases for multiple files with partial-success semantics."""
+        unique_file_ids = self._dedupe_ids(file_ids)
+        if not unique_file_ids:
+            return BatchAliasActionResult()
+
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space:
+            raise SpaceNotFoundError()
+        await self._require_read_permission(space_id)
+        self._ensure_space_async_task_tenant_consistency(space, "batch_reject_alias_rename")
+
+        file_records = await KnowledgeFileDao.aget_file_by_ids(unique_file_ids)
+        file_by_id = {int(file_record.id): file_record for file_record in file_records}
+
+        succeeded_ids: list[int] = []
+        skipped_ids: list[int] = []
+        failed: list[BatchAliasFailure] = []
+
+        for file_id in unique_file_ids:
+            file_record = file_by_id.get(file_id)
+            if (
+                not file_record
+                or file_record.knowledge_id != space_id
+                or file_record.file_type == FileType.DIR.value
+            ):
+                skipped_ids.append(file_id)
+                continue
+            if not file_record.alias_name:
+                skipped_ids.append(file_id)
+                continue
+
+            try:
+                resolved = await self._ensure_alias_rename_permission(file_record, file_id)
+                await self._apply_reject_alias_rename(file_record, resolved=resolved)
+                succeeded_ids.append(file_id)
+            except SpacePermissionDeniedError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="permission_denied",
+                        message=exc.Msg,
+                    )
+                )
+            except Exception as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="internal_error",
+                        message=str(exc),
+                    )
+                )
+
+        return BatchAliasActionResult(
+            succeeded_ids=succeeded_ids,
+            skipped_ids=skipped_ids,
+            failed=failed,
+        )
 
     async def update_file_encoding(
         self,

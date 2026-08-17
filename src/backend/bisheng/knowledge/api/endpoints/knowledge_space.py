@@ -22,6 +22,7 @@ from bisheng.knowledge.api.dependencies import (
 from bisheng.knowledge.api.portal_pdf_download_response import prepare_portal_pdf_download_response
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    BatchAliasActionReq,
     BatchDeleteReq,
     BatchDownloadReq,
     BatchMoveReq,
@@ -1010,6 +1011,28 @@ async def batch_retry_failed_files(
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ):
     result = await svc.batch_retry_failed_files(space_id, file_ids)
+    return resp_200(result)
+
+
+@router.post("/{space_id}/files/batch-accept-alias")
+async def batch_accept_file_alias(
+    space_id: int,
+    req: BatchAliasActionReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Accept AI-generated aliases for multiple files."""
+    result = await svc.batch_accept_alias_rename(space_id, req.file_ids)
+    return resp_200(result)
+
+
+@router.post("/{space_id}/files/batch-reject-alias")
+async def batch_reject_file_alias(
+    space_id: int,
+    req: BatchAliasActionReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """Reject AI-generated aliases for multiple files."""
+    result = await svc.batch_reject_alias_rename(space_id, req.file_ids)
     return resp_200(result)
 
 

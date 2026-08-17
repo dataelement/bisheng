@@ -7,6 +7,8 @@ import {
     KnowledgeSpace,
     acceptFileAliasApi,
     rejectFileAliasApi,
+    batchAcceptFileAliasApi,
+    batchRejectFileAliasApi,
     createFolderApi,
     renameFolderApi,
     deleteFolderApi,
@@ -758,6 +760,143 @@ export function useFileUpload({
         [activeSpace, files, setFiles, showToast, localize]
     );
 
+    const applyBatchAliasResultToFiles = useCallback(
+        (result: { succeeded_ids: number[] }, mode: "accept" | "reject") => {
+            const succeededIdSet = new Set(result.succeeded_ids.map(String));
+            if (succeededIdSet.size === 0) return;
+            setFiles((prev) =>
+                prev.map((file) => {
+                    if (!succeededIdSet.has(file.id)) return file;
+                    if (mode === "accept" && file.aliasName) {
+                        return {
+                            ...file,
+                            name: file.aliasName,
+                            aliasName: undefined,
+                        };
+                    }
+                    return { ...file, aliasName: undefined };
+                }),
+            );
+        },
+        [setFiles],
+    );
+
+    const showBatchAliasResultToast = useCallback(
+        (
+            result: { succeeded_ids: number[]; failed: Array<{ file_id: number }> },
+            successKey: string,
+            partialKey: string,
+            emptyKey: string,
+        ) => {
+            const successCount = result.succeeded_ids.length;
+            const failedCount = result.failed.length;
+            if (successCount === 0 && failedCount === 0) {
+                showToast({
+                    message: localize(emptyKey),
+                    severity: NotificationSeverity.INFO,
+                } as any);
+                return;
+            }
+            if (failedCount === 0) {
+                showToast({
+                    message: localize(successKey, { count: successCount }),
+                    severity: NotificationSeverity.SUCCESS,
+                } as any);
+                return;
+            }
+            showToast({
+                message: localize(partialKey, {
+                    success: successCount,
+                    failed: failedCount,
+                }),
+                severity: successCount > 0 ? NotificationSeverity.SUCCESS : NotificationSeverity.ERROR,
+            } as any);
+        },
+        [showToast, localize],
+    );
+
+    const handleBatchAcceptAlias = useCallback(
+        async (fileIds: string[]) => {
+            if (!activeSpace || fileIds.length === 0) return;
+            const eligible = files.filter((f) => fileIds.includes(f.id) && f.aliasName);
+            if (eligible.length === 0) {
+                showToast({
+                    message: localize("com_knowledge.batch_alias_no_eligible"),
+                    severity: NotificationSeverity.INFO,
+                } as any);
+                return;
+            }
+
+            try {
+                const result = await batchAcceptFileAliasApi(
+                    String(activeSpace.id),
+                    eligible.map((f) => Number(f.id)),
+                );
+                applyBatchAliasResultToFiles(result, "accept");
+                showBatchAliasResultToast(
+                    result,
+                    "com_knowledge.batch_accept_alias_success",
+                    "com_knowledge.batch_accept_alias_partial",
+                    "com_knowledge.batch_alias_no_eligible",
+                );
+            } catch {
+                showToast({
+                    message: localize("com_knowledge.rename_failed"),
+                    severity: NotificationSeverity.ERROR,
+                });
+            }
+        },
+        [
+            activeSpace,
+            files,
+            applyBatchAliasResultToFiles,
+            showBatchAliasResultToast,
+            showToast,
+            localize,
+        ],
+    );
+
+    const handleBatchRejectAlias = useCallback(
+        async (fileIds: string[]) => {
+            if (!activeSpace || fileIds.length === 0) return;
+            const eligible = files.filter((f) => fileIds.includes(f.id) && f.aliasName);
+            if (eligible.length === 0) {
+                showToast({
+                    message: localize("com_knowledge.batch_alias_no_eligible"),
+                    severity: NotificationSeverity.INFO,
+                } as any);
+                return;
+            }
+
+            try {
+                const result = await batchRejectFileAliasApi(
+                    String(activeSpace.id),
+                    eligible.map((f) => Number(f.id)),
+                );
+                applyBatchAliasResultToFiles(result, "reject");
+                showBatchAliasResultToast(
+                    result,
+                    "com_knowledge.batch_reject_alias_success",
+                    "com_knowledge.batch_reject_alias_partial",
+                    "com_knowledge.batch_alias_no_eligible",
+                );
+            } catch {
+                showToast({
+                    message: localize("com_knowledge.operation_failed"),
+                    severity: NotificationSeverity.ERROR,
+                });
+            }
+        },
+        [
+            activeSpace,
+            files,
+            applyBatchAliasResultToFiles,
+            showBatchAliasResultToast,
+            showToast,
+            localize,
+        ],
+    );
+
     return {
         uploadingFiles,
         creatingFolder,
@@ -774,5 +913,7 @@ export function useFileUpload({
         handleDuplicateSkip,
         handleAcceptAlias,
         handleRejectAlias,
+        handleBatchAcceptAlias,
+        handleBatchRejectAlias,
     };
 }

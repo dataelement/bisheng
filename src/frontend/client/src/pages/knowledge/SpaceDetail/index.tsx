@@ -101,6 +101,8 @@ interface KnowledgeSpaceContentProps {
     onRetryFile: (fileId: string) => void;
     onAcceptAlias?: (fileId: string) => void;
     onRejectAlias?: (fileId: string) => void;
+    onBatchAcceptAlias?: (fileIds: string[]) => void | Promise<void>;
+    onBatchRejectAlias?: (fileIds: string[]) => void | Promise<void>;
     onMoveFile?: (fileId: string, targetFolderId: number | null) => void;
     /** Called after batch move completes so the host can refresh folder stats. */
     onAfterBatchMove?: () => void | Promise<void>;
@@ -170,6 +172,8 @@ export function KnowledgeSpaceContent({
     onRetryFile,
     onAcceptAlias,
     onRejectAlias,
+    onBatchAcceptAlias,
+    onBatchRejectAlias,
     onMoveFile,
     onAfterBatchMove,
     onMoveDialogFolderCreated,
@@ -1490,6 +1494,41 @@ export function KnowledgeSpaceContent({
     const canBatchDownload = !hideBatchDownload
         && selectedList.length > 0
         && selectedList.every((file) => effectiveDownloadEntryIds.has(file.id));
+    const aliasEligibleSelected = selectedList.filter((file) =>
+        file.type !== FileType.FOLDER
+        && file.aliasName
+        && effectiveRenameEntryIds.has(file.id),
+    );
+    const canBatchAcceptAlias = aliasEligibleSelected.length > 0 && Boolean(onBatchAcceptAlias);
+    const canBatchRejectAlias = aliasEligibleSelected.length > 0 && Boolean(onBatchRejectAlias);
+
+    const handleBatchAcceptAlias = async () => {
+        if (!canBatchAcceptAlias || !onBatchAcceptAlias) return;
+        const confirmed = await confirm({
+            title: localize("com_knowledge.batch_accept_alias"),
+            description: localize("com_knowledge.batch_accept_alias_confirm", {
+                count: aliasEligibleSelected.length,
+            }),
+            confirmText: localize("com_knowledge.batch_accept_alias"),
+        });
+        if (!confirmed) return;
+        await onBatchAcceptAlias(aliasEligibleSelected.map((file) => file.id));
+        setSelectedFiles(new Set());
+    };
+
+    const handleBatchRejectAlias = async () => {
+        if (!canBatchRejectAlias || !onBatchRejectAlias) return;
+        const confirmed = await confirm({
+            title: localize("com_knowledge.batch_reject_alias"),
+            description: localize("com_knowledge.batch_reject_alias_confirm", {
+                count: aliasEligibleSelected.length,
+            }),
+            confirmText: localize("com_knowledge.confirm"),
+        });
+        if (!confirmed) return;
+        await onBatchRejectAlias(aliasEligibleSelected.map((file) => file.id));
+        setSelectedFiles(new Set());
+    };
 
     return (
         <div
@@ -1563,6 +1602,10 @@ export function KnowledgeSpaceContent({
                 canBatchDelete={canBatchDelete}
                 onBatchMove={handleBatchMove}
                 canBatchMove={canBatchMove}
+                onBatchAcceptAlias={handleBatchAcceptAlias}
+                canBatchAcceptAlias={canBatchAcceptAlias}
+                onBatchRejectAlias={handleBatchRejectAlias}
+                canBatchRejectAlias={canBatchRejectAlias}
                 onGoKnowledgeSquare={onGoKnowledgeSquare}
                 onToggleAiAssistant={onToggleAiAssistant}
                 isAiAssistantOpen={isAiAssistantOpen}

@@ -2820,6 +2820,8 @@ export default function PortalKnowledgeWorkbench() {
                                                     onRetryFile={() => void reloadFiles()}
                                                     onAcceptAlias={(fileId) => void fileUpload.handleAcceptAlias(fileId)}
                                                     onRejectAlias={(fileId) => void fileUpload.handleRejectAlias(fileId)}
+                                                    onBatchAcceptAlias={(fileIds) => void fileUpload.handleBatchAcceptAlias(fileIds)}
+                                                    onBatchRejectAlias={(fileIds) => void fileUpload.handleBatchRejectAlias(fileIds)}
                                                     canRetryFile={canRetryPortalFailedFile}
                                                     retryActionLabel="重新解析"
                                                     currentPath={currentPath}
