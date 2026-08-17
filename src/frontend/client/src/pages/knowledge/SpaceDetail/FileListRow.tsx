@@ -17,6 +17,8 @@ import {
     isKnowledgeItemPreviewable,
     isKnowledgeItemUploading,
 } from "../knowledgeUtils";
+import { FileChangeActionIcon } from "./FileChangeActionIcon";
+import { FileChangePendingTooltip } from "./FileChangePendingTooltip";
 import FileIconRenderer from "./FileIcon";
 import { PendingUploadApprovalActions } from "./PendingUploadApprovalActions";
 import TagGroup from "./TagGroup";
@@ -74,37 +76,66 @@ const StatusBadge = ({ file, onOpenApprovalDetail }: {
 
     if (pendingUpload) {
         const failed = pendingUpload.status === "failed";
-        return (
+        // While the approval instance is still open the row reads as pending in
+        // neutral grey — the business execution status ("queued" …) only becomes
+        // meaningful once a decision has been made. An approver reads "待审核"
+        // (it is on their desk), everyone else "审核中".
+        const awaitingDecision = pendingUpload.approvalStatus === "pending";
+        const pendingLabel = localize(
+            pendingUpload.canApprove
+                ? "com_knowledge.file_change_pending_approver"
+                : "com_knowledge.file_change_pending_applicant",
+        );
+        const pill = (
             <button
                 type="button"
                 className={cn(
                     "inline-flex shrink-0 items-center gap-1 rounded px-2 text-caption leading-5",
-                    failed ? "bg-danger/10 text-danger" : "bg-success/10 text-success",
+                    awaitingDecision
+                        ? "bg-fill-2 text-text-3"
+                        : failed ? "bg-danger/10 text-danger" : "bg-success/10 text-success",
                 )}
                 onClick={(event) => {
                     event.stopPropagation();
                     onOpenApprovalDetail?.(pendingUpload.requestId);
                 }}
             >
-                <span className={cn("size-1 rounded-full", failed ? "bg-danger" : "bg-success")} />
-                {localize(`com_knowledge.file_change_status_${pendingUpload.status}`)}
+                {awaitingDecision ? (
+                    <FileChangeActionIcon action="upload" />
+                ) : (
+                    <span className={cn("size-1 rounded-full", failed ? "bg-danger" : "bg-success")} />
+                )}
+                {awaitingDecision
+                    ? pendingLabel
+                    : localize(`com_knowledge.file_change_status_${pendingUpload.status}`)}
             </button>
         );
+        return awaitingDecision
+            ? <FileChangePendingTooltip file={file} side="left">{pill}</FileChangePendingTooltip>
+            : pill;
     }
 
     if (fileChangeLock.showBadge && file.fileChangeApproval) {
+        // rename / move / delete awaiting approval — same neutral pill as a
+        // pending upload, so all four change actions read alike.
         return (
-            <button
-                type="button"
-                className="inline-flex shrink-0 items-center gap-1 rounded bg-blue-500/[0.07] px-2 text-caption leading-5 text-blue-500"
-                onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenApprovalDetail?.(file.fileChangeApproval!.requestId);
-                }}
-            >
-                <span className="size-1 rounded-full bg-blue-500" />
-                {localize("com_approval_status_pending")}
-            </button>
+            <FileChangePendingTooltip file={file} side="left">
+                <button
+                    type="button"
+                    className="inline-flex shrink-0 items-center gap-1 rounded bg-fill-2 px-2 text-caption leading-5 text-text-3"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenApprovalDetail?.(file.fileChangeApproval!.requestId);
+                    }}
+                >
+                    <FileChangeActionIcon action={file.fileChangeApproval.action} />
+                    {localize(
+                        file.fileChangeApproval.canApprove
+                            ? "com_knowledge.file_change_pending_approver"
+                            : "com_knowledge.file_change_pending_applicant",
+                    )}
+                </button>
+            </FileChangePendingTooltip>
         );
     }
 
@@ -265,6 +296,9 @@ export function FileListRow({
     // A folder still uploading its batch: faded, not clickable, checkbox greyed out.
     const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
     const namePreviewable = Boolean(pendingUpload) || isKnowledgeItemPreviewable(file);
+    // A pending upload is only selectable while this user may still decide it;
+    // everything else is selectable unless it is an upload placeholder.
+    const isSelectable = pendingUpload ? canDecidePending : !isUploadingFolderPlaceholder;
 
     // F040: resolve this file's action permissions lazily, only when the menu opens.
     const handleMoreMenuOpenChange = (open: boolean) => {
@@ -407,25 +441,24 @@ export function FileListRow({
                 // Zebra base (Figma 13198:75866) — selection / drag-over / hover paint over it.
                 "group relative flex h-14 items-center gap-2 px-4 transition-colors",
                 index % 2 === 1 ? "bg-[#fbfbfb]" : "bg-white",
-                pendingUpload && "bg-success/5",
                 isFolderDragOver && "bg-blue-100",
                 !isSelected && !isFolderDragOver && "hover:bg-fill-1",
             )}
             style={isSelected ? { backgroundColor: "rgb(var(--brand-500)/0.07)" } : undefined}
         >
-            {(!pendingUpload || canDecidePending) && (
-                <Checkbox
-                    checked={isSelected}
-                    onCheckedChange={onSelect}
-                    disabled={isUploadingFolderPlaceholder}
-                    className={cn(
-                        "size-4 shrink-0 border-border-deep",
-                        isSelected && "border-primary",
-                        isUploadingFolderPlaceholder && "cursor-not-allowed opacity-50",
-                    )}
-                />
-            )}
-            {pendingUpload && !canDecidePending && <span aria-hidden className="size-4 shrink-0" />}
+            {/* Always rendered — an unselectable row shows a disabled checkbox rather
+                than an empty slot, so the column never breaks alignment. Mirrors
+                `isSelectableFile` in the page container. */}
+            <Checkbox
+                checked={isSelected}
+                onCheckedChange={onSelect}
+                disabled={!isSelectable}
+                className={cn(
+                    "size-4 shrink-0 border-border-deep",
+                    isSelected && "border-primary",
+                    !isSelectable && "cursor-not-allowed opacity-50",
+                )}
+            />
 
             <div
                 className={cn(
@@ -539,7 +572,10 @@ export function FileListRow({
 
             <StatusBadge file={file} onOpenApprovalDetail={onOpenApprovalDetail} />
 
-            <div className="flex shrink-0 items-center">
+            {/* The action slot keeps its width even when a row has one button or
+                none, so status pills line up down the column. 73px = two 32px
+                action buttons + the 9px divider between them. */}
+            <div className="flex min-w-[73px] shrink-0 items-center justify-end">
                 {pendingUpload && canDecidePending && (
                     <PendingUploadApprovalActions
                         requestId={pendingUpload.requestId}

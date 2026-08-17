@@ -11,6 +11,8 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { cn } from "~/utils";
+import { FileChangeActionIcon } from "./FileChangeActionIcon";
+import { FileChangePendingTooltip } from "./FileChangePendingTooltip";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
@@ -170,6 +172,10 @@ export function FileCard({
     // Inline-create placeholders (isCreating) are excluded — a freshly created
     // folder is a normal folder with a highlighted rename input, no scrim/tag.
     const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
+    // A pending upload is only selectable while this user may still decide it;
+    // everything else is selectable unless it is an upload placeholder. Unselectable
+    // rows keep a disabled checkbox instead of dropping it, so the column stays put.
+    const isSelectable = pendingUpload ? canDecidePending : !isUploadingFolderPlaceholder;
     /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
     const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
     /** Subset of isNotParsed that should show the "In progress" overlay tag. */
@@ -210,39 +216,74 @@ export function FileCard({
     const renderStatusOverlayTag = (inline = false) => {
         if (pendingUpload) {
             const failed = pendingUpload.status === "failed";
+            // Still awaiting a decision → neutral pill; the business execution
+            // status only carries meaning once the request has been approved.
+            // An approver reads "待审核" (it is on their desk), everyone else "审核中".
+            const awaitingDecision = pendingUpload.approvalStatus === "pending";
+            const pendingLabel = localize(
+                pendingUpload.canApprove
+                    ? "com_knowledge.file_change_pending_approver"
+                    : "com_knowledge.file_change_pending_applicant",
+            );
             const pill = (
                 <button
                     type="button"
                     className={cn(
                         "inline-flex items-center justify-center gap-1 rounded px-2 text-caption",
-                        failed ? "bg-danger/10 text-danger" : "bg-success/10 text-success",
+                        awaitingDecision
+                            ? "bg-fill-2 text-text-3"
+                            : failed ? "bg-danger/10 text-danger" : "bg-success/10 text-success",
                     )}
                     onClick={(event) => {
                         event.stopPropagation();
                         onOpenApprovalDetail?.(pendingUpload.requestId);
                     }}
                 >
-                    <span className={cn("size-1 rounded-full", failed ? "bg-danger" : "bg-success")} />
-                    {localize(`com_knowledge.file_change_status_${pendingUpload.status}`)}
+                    {awaitingDecision ? (
+                        <FileChangeActionIcon action="upload" />
+                    ) : (
+                        <span className={cn("size-1 rounded-full", failed ? "bg-danger" : "bg-success")} />
+                    )}
+                    {awaitingDecision
+                        ? pendingLabel
+                        : localize(`com_knowledge.file_change_status_${pendingUpload.status}`)}
                 </button>
             );
-            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+            const tipped = awaitingDecision
+                ? (
+                    <FileChangePendingTooltip file={file} side={inline ? "left" : "top"}>
+                        {pill}
+                    </FileChangePendingTooltip>
+                )
+                : pill;
+            return inline ? tipped : <div className="absolute bottom-1 left-1 z-20">{tipped}</div>;
         }
         if (fileChangeLock.showBadge && file.fileChangeApproval) {
+            // rename / move / delete awaiting approval — same neutral pill as a
+            // pending upload, so all four change actions read alike.
             const pill = (
                 <button
                     type="button"
-                    className="inline-flex items-center justify-center gap-1 rounded bg-blue-500/[0.07] px-2 text-caption text-blue-500"
+                    className="inline-flex items-center justify-center gap-1 rounded bg-fill-2 px-2 text-caption text-text-3"
                     onClick={(event) => {
                         event.stopPropagation();
                         onOpenApprovalDetail?.(file.fileChangeApproval!.requestId);
                     }}
                 >
-                    <span className="size-1 rounded-full bg-blue-500" />
-                    {localize("com_approval_status_pending")}
+                    <FileChangeActionIcon action={file.fileChangeApproval.action} />
+                    {localize(
+                        file.fileChangeApproval.canApprove
+                            ? "com_knowledge.file_change_pending_approver"
+                            : "com_knowledge.file_change_pending_applicant",
+                    )}
                 </button>
             );
-            return inline ? pill : <div className="absolute bottom-1 left-1 z-20">{pill}</div>;
+            const tipped = (
+                <FileChangePendingTooltip file={file} side={inline ? "left" : "top"}>
+                    {pill}
+                </FileChangePendingTooltip>
+            );
+            return inline ? tipped : <div className="absolute bottom-1 left-1 z-20">{tipped}</div>;
         }
         // Uploading folder placeholder: a neutral "uploading" pill in the same
         // bottom-left slot as the file status tags — no spinner over the icon.
@@ -518,7 +559,6 @@ export function FileCard({
                     // background spans the full width.
                     "flex items-center gap-2 px-4 py-3",
                     cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
-                    pendingUpload && "bg-success/5",
                 )}
                 style={
                     isSelected
@@ -590,10 +630,11 @@ export function FileCard({
                 )}
 
                 {/* Circular selection checkbox on the far right */}
-                {(!pendingUpload || canDecidePending) && !hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                {!hideSelectionCheckbox && (
                     <RoundCheckbox
                         className="shrink-0"
                         checked={isSelected}
+                        disabled={!isSelectable}
                         onCheckedChange={(checked) => onSelect(checked)}
                     />
                 )}
@@ -614,11 +655,9 @@ export function FileCard({
                 cardOpensPreviewOrFolder ? "cursor-pointer" : "cursor-default",
                 isSelected
                     ? "bg-blue-50"
-                    : pendingUpload
-                      ? "bg-success/5"
-                      : isNotParsed
-                        ? "bg-[#fbfbfb]"
-                        : "bg-white",
+                    : isNotParsed
+                      ? "bg-[#fbfbfb]"
+                      : "bg-white",
                 isSelected
                     ? "border-[#ECECEC] shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
                     : "border-[#ECECEC] hover:border-[#c9cdd4]",
@@ -668,10 +707,14 @@ export function FileCard({
                 {isUploadingFolderPlaceholder && (
                     <div className="pointer-events-none absolute inset-0 z-10 bg-white/50" />
                 )}
-                {(!pendingUpload || canDecidePending) && !hideSelectionCheckbox && mobileListMode && (
+                {!hideSelectionCheckbox && mobileListMode && (
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
-                            className={isSelected ? "border-primary" : "border-gray-400"}
+                            className={cn(
+                                isSelected ? "border-primary" : "border-gray-400",
+                                !isSelectable && "cursor-not-allowed opacity-50",
+                            )}
+                            disabled={!isSelectable}
                             checked={isSelected}
                             onCheckedChange={(checked) => onSelect(!!checked)}
                             onPointerDown={(e) => e.stopPropagation()}
@@ -700,7 +743,7 @@ export function FileCard({
                         {renderSimilarTag(true)}
                     </div>
 
-                    {(!pendingUpload || canDecidePending) && !hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                    {!hideSelectionCheckbox && (
                         <div
                             className={cn(
                                 "absolute left-2 top-2 z-10 transition-opacity",
@@ -713,7 +756,11 @@ export function FileCard({
                             )}
                         >
                             <Checkbox
-                                className={isSelected ? "border-primary" : "border-gray-400"}
+                                className={cn(
+                                    isSelected ? "border-primary" : "border-gray-400",
+                                    !isSelectable && "cursor-not-allowed opacity-50",
+                                )}
+                                disabled={!isSelectable}
                                 checked={isSelected}
                                 onCheckedChange={(checked) => onSelect(!!checked)}
                                 onPointerDown={(e) => e.stopPropagation()}
