@@ -118,3 +118,8 @@ class ChannelAuthorizationSyncError(BaseErrorCode):
 class ChannelOrganizationGrantUnsubscribeDeniedError(BaseErrorCode):
     Code: int = 19055
     Msg: str = "本频道通过部门/用户组授权给你，暂无法取消订阅"
+
+
+class ChannelCreationRequestConflictError(BaseErrorCode):
+    Code: int = 19056
+    Msg: str = "Channel creation request conflicts with an earlier payload"

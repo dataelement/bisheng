@@ -1,7 +1,7 @@
 """F048 Catalog publisher crash-matrix contracts.
 
 覆盖 AC: AC-03, AC-06, AC-13, AC-14, AC-16, AC-17, AC-18,
-AC-66, AC-67, AC-68, AC-69, AC-143, AC-156
+AC-27, AC-66, AC-67, AC-68, AC-69, AC-143, AC-156, AC-164, AC-165, AC-167
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import pytest
 from bisheng.common.errcode.permission import (
     AuthorizationModelMismatchError,
     PermissionImpactExpiredError,
+    PermissionModelStateConflictError,
     PermissionProjectionFailedError,
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
@@ -33,6 +34,7 @@ from bisheng.permission.domain.services.catalog_service import (
 )
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
+    ModelReferenceSummary,
     derive_permission_models,
 )
 
@@ -340,6 +342,88 @@ async def test_build_draft_recomputes_complete_release_and_cross_tenant_impact()
     assert {"viewer", "editor", "manager", "owner"} <= set(action_impact.affected_model_keys)
     assert model_impact.affected_grant_refs == ("g-1", "g-2")
     assert state.log == ["save_draft"]
+
+
+@pytest.mark.asyncio
+async def test_delete_model_accepts_active_zero_reference_and_preserves_history() -> None:
+    actions = derive_action_release(_assigned_actions())
+    custom = CustomModelSelection(
+        model_key="delete-directly",
+        name="直接删除",
+        action_codes=("edit", "manage_permission"),
+        active=True,
+    )
+    before_models = derive_permission_models(actions, custom_models=(custom,))
+    analysis = CatalogImpactSummary(
+        checksum="8" * 64,
+        resource_count=0,
+        grant_count=0,
+        assignee_count=0,
+        expansion_count=0,
+        revocation_count=0,
+    )
+    service, state, _projector, _events = _service(
+        _draft(),
+        impact=FakeImpact(analysis=analysis),
+    )
+
+    draft = await service.build_draft(
+        CatalogDraftBuildInput(
+            release_id=2,
+            release_key="catalog-v2",
+            predecessor_release_id=1,
+            predecessor_release_key="catalog-v1",
+            before_actions=actions,
+            before_models=before_models,
+            actions=_assigned_actions(),
+            custom_models=(),
+            model_reference_summaries={
+                "delete-directly": ModelReferenceSummary(),
+            },
+        )
+    )
+
+    assert draft.model_release is not None
+    assert "delete-directly" not in {model.model_key for model in draft.model_release.models}
+    assert "delete-directly" in {model.model_key for model in before_models.models}
+    assert state.log == ["save_draft"]
+
+
+@pytest.mark.asyncio
+async def test_delete_model_fails_closed_for_unknown_or_nonzero_references() -> None:
+    actions = derive_action_release(_assigned_actions())
+    custom = CustomModelSelection(
+        model_key="blocked-delete",
+        name="阻断删除",
+        action_codes=("edit",),
+    )
+    before_models = derive_permission_models(actions, custom_models=(custom,))
+
+    for summaries in (
+        {},
+        {
+            "blocked-delete": ModelReferenceSummary(
+                failed_source_count=1,
+                residual_checksum="a" * 64,
+            )
+        },
+    ):
+        service, state, _projector, _events = _service(_draft())
+        with pytest.raises(PermissionModelStateConflictError):
+            await service.build_draft(
+                CatalogDraftBuildInput(
+                    release_id=2,
+                    release_key="catalog-v2",
+                    predecessor_release_id=1,
+                    predecessor_release_key="catalog-v1",
+                    before_actions=actions,
+                    before_models=before_models,
+                    actions=_assigned_actions(),
+                    custom_models=(),
+                    model_reference_summaries=summaries,
+                )
+            )
+        assert state.log == []
 
 
 @pytest.mark.asyncio

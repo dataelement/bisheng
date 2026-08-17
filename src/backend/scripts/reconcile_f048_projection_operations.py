@@ -109,6 +109,9 @@ class OperationInspection:
     status: str
     tuple_count: int
     tuple_summary: dict[str, int]
+    visible_source_count: int
+    visible_source_summary: dict[str, int]
+    visible_source_checksum: str | None
     resource_mode: dict[str, Any] | None
 
 
@@ -218,6 +221,12 @@ async def inspect_operation(
     with bypass_tenant_filter():
         operation = await runtime.repository.aget_operation(operation_id)
         tuple_rows = await runtime.repository.aget_operation_tuples(operation_id)
+        visible_source_rows = await runtime.repository.aget_visible_operation_sources(
+            operation_id,
+        )
+        visible_source_checksum = await runtime.repository.aget_visible_operation_checksum(
+            operation_id,
+        )
 
     _require(operation is not None, f"operation {operation_id} does not exist")
     _require(
@@ -237,6 +246,26 @@ async def inspect_operation(
         f"operation {operation_id} cannot be reconciled from status {operation.status}",
     )
     _require(tuple_rows, f"operation {operation_id} has no durable tuple ledger")
+    if operation.operation_type == "GRANT_MUTATION":
+        _require(
+            bool(visible_source_rows),
+            f"operation {operation_id} has no frozen visible source after-state",
+        )
+    visible_source_summary = Counter(row.state for row in visible_source_rows)
+    _require(
+        not visible_source_summary.get("FAILED_CLOSED"),
+        f"operation {operation_id} has FAILED_CLOSED visible sources",
+    )
+    if operation.status == "FINALIZED":
+        _require(
+            not visible_source_summary.get("PENDING"),
+            f"operation {operation_id} is FINALIZED with pending visible sources",
+        )
+    elif visible_source_rows:
+        _require(
+            set(visible_source_summary) == {"PENDING"},
+            f"operation {operation_id} active visible source after-state is mixed",
+        )
     try:
         restore_projection_plan(operation, tuple_rows)
     except (
@@ -283,6 +312,9 @@ async def inspect_operation(
         status=operation.status,
         tuple_count=len(tuple_rows),
         tuple_summary=dict(sorted(tuple_summary.items())),
+        visible_source_count=len(visible_source_rows),
+        visible_source_summary=dict(sorted(visible_source_summary.items())),
+        visible_source_checksum=visible_source_checksum,
         resource_mode=resource_mode,
     )
 

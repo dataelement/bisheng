@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Integer, String
+from sqlalchemy import Boolean, Index, Integer, String
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -113,7 +113,26 @@ class KnowledgeBase(SQLModelSerializable):
 
 
 class Knowledge(KnowledgeBase, table=True):
+    __table_args__ = (
+        Index(
+            "uq_knowledge_creation_request",
+            "tenant_id",
+            "user_id",
+            "type",
+            "creation_request_id",
+            unique=True,
+        ),
+    )
+
     id: int | None = Field(default=None, primary_key=True)
+    creation_request_id: str | None = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
+    creation_payload_hash: str | None = Field(
+        default=None,
+        sa_column=Column(String(64), nullable=True),
+    )
 
 
 class KnowledgeRead(KnowledgeBase):
@@ -164,6 +183,24 @@ class KnowledgeCreate(BaseModel):
 
 
 class KnowledgeDao(KnowledgeBase):
+    @classmethod
+    async def aget_by_creation_request(
+        cls,
+        *,
+        tenant_id: int,
+        user_id: int,
+        knowledge_type: int,
+        creation_request_id: str,
+    ) -> Knowledge | None:
+        async with get_async_db_session() as session:
+            statement = select(Knowledge).where(
+                Knowledge.tenant_id == tenant_id,
+                Knowledge.user_id == user_id,
+                Knowledge.type == knowledge_type,
+                Knowledge.creation_request_id == creation_request_id,
+            )
+            return (await session.exec(statement)).first()
+
     @classmethod
     def insert_one(cls, data: Knowledge) -> Knowledge:
         with get_sync_db_session() as session:
@@ -707,6 +744,31 @@ class KnowledgeDao(KnowledgeBase):
             return result.all()
 
     @classmethod
+    async def async_get_joined_spaces_by_visible_ids(
+        cls,
+        space_ids: list[int],
+        *,
+        tenant_id: int,
+        exclude_creator_id: int,
+        order_by: str = "update_time",
+    ) -> list[Knowledge]:
+        """Load one bounded joined-space ID chunk under canonical DB filters."""
+
+        if not space_ids:
+            return []
+        statement = select(Knowledge).where(
+            Knowledge.id.in_(space_ids),
+            Knowledge.tenant_id == tenant_id,
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            Knowledge.state == KnowledgeState.PUBLISHED.value,
+            Knowledge.user_id != exclude_creator_id,
+        )
+        statement = cls._apply_space_order(statement, order_by)
+        async with get_async_db_session() as session:
+            result = await session.exec(statement)
+            return result.all()
+
+    @classmethod
     def get_public_spaces(cls, order_by: str = "update_time") -> list[Knowledge]:
         """Get all PUBLIC and APPROVAL Knowledge Spaces (Knowledge Square)"""
         statement = select(Knowledge).where(
@@ -884,8 +946,8 @@ class KnowledgeDao(KnowledgeBase):
     @staticmethod
     def _apply_space_order(statement, order_by: str):
         if order_by == "create_time":
-            return statement.order_by(Knowledge.create_time.desc())
+            return statement.order_by(Knowledge.create_time.desc(), Knowledge.id.desc())
         elif order_by == "name":
-            return statement.order_by(Knowledge.name.asc())
+            return statement.order_by(Knowledge.name.asc(), Knowledge.id.asc())
         else:
-            return statement.order_by(Knowledge.update_time.desc())
+            return statement.order_by(Knowledge.update_time.desc(), Knowledge.id.desc())

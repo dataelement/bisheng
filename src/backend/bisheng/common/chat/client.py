@@ -405,7 +405,7 @@ class ChatClient:
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} question:{input_msg}')
             logger.info(f'gptsAgentOver assistant_id:{self.client_id} chat_id:{self.chat_id} answer:{answer}')
 
-            asyncio.create_task(self.generate_session_title(input_msg, answer))
+            asyncio.create_task(self.generate_session_title(input_msg))
 
         except BaseErrorCode as e:
             logger.exception('handle gpts message error: ')
@@ -419,7 +419,7 @@ class ChatClient:
         finally:
             await self.send_response('processing', 'close', '')
 
-    async def generate_session_title(self, question: str, answer: str = None):
+    async def generate_session_title(self, question: str):
         if not self.new_session:
             return
         if self.new_session.name:
@@ -436,6 +436,6 @@ class ChatClient:
             app_type=ApplicationTypeEnum.DAILY_CHAT,
             user_id=self.user_id
         )
-        title = await generate_conversation_title_async(question=question, llm=llm, answer=answer)
+        title = await generate_conversation_title_async(question=question, llm=llm)
         await MessageSessionDao.update_session_name(self.new_session.chat_id, title)
         self.new_session.name = title

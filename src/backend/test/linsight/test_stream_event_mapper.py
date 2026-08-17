@@ -203,13 +203,17 @@ class TestCallIdMerge:
         start_events = [e for e in mapper.normalize("messages", (start_msg, {})) if isinstance(e, ExecStep)]
         assert len(start_events) == 1
         assert start_events[0].status == "start"
-        assert start_events[0].call_id == "call_x"
+        # The emitted id is MINTED from the provider's one (StreamContext.tool_seq),
+        # because a provider id is only unique within a single response. Assert the
+        # relationship, not a literal — the raw id stays as the prefix.
+        assert start_events[0].call_id.startswith("call_x#")
 
         end_msg = ToolMessage(content="结果数据", tool_call_id="call_x", name="search")
         end_events = [e for e in mapper.normalize("messages", (end_msg, {})) if isinstance(e, ExecStep)]
         assert len(end_events) == 1
         assert end_events[0].status == "end"
-        assert end_events[0].call_id == "call_x"
+        # Start and end MUST keep the same id — that is what folds them into one row.
+        assert end_events[0].call_id == start_events[0].call_id
         assert end_events[0].output == "结果数据"
         # merged: name/params carried from the start frame
         assert end_events[0].name == "search"
@@ -653,11 +657,15 @@ class TestStreamedDelegationArgs:
             tool_call_chunks=[{"name": name, "args": args, "id": cid, "index": index, "type": "tool_call_chunk"}],
         )
 
+    @staticmethod
+    def _steps(mapper: StreamEventMapper, chunk: AIMessageChunk) -> list[ExecStep]:
+        return [e for e in mapper.normalize("messages", (chunk, {})) if isinstance(e, ExecStep)]
+
     def test_streamed_task_args_recover_goal(self, mapper: StreamEventMapper):
         # chunk 1: name+id, args still empty -> argless start frame (goal '')
         c1 = self._arg_delta("task", "", "call_s1")
         s1 = [e for e in mapper.normalize("messages", (c1, {})) if isinstance(e, ExecStep)]
-        assert s1 and s1[0].step_type == "subagent" and s1[0].call_id == "call_s1"
+        assert s1 and s1[0].step_type == "subagent" and s1[0].call_id.startswith("call_s1#")
         assert s1[0].extra_info.get("delegate_goal") == ""  # goal not known yet
 
         # chunk 2: partial args JSON — buffer still incomplete, nothing emitted
@@ -670,7 +678,7 @@ class TestStreamedDelegationArgs:
         assert len(s3) == 1
         ev = s3[0]
         # same call_id -> persistence upserts it over the argless start frame
-        assert ev.call_id == "call_s1"
+        assert ev.call_id == s1[0].call_id
         assert ev.step_type == "subagent"
         assert ev.status == "start"
         assert ev.name == "general-purpose"  # subagent_type recovered from args
@@ -702,8 +710,31 @@ class TestStreamedDelegationArgs:
             if isinstance(e, ExecStep)
         ]
         assert len(ev_b) == 1
-        assert ev_b[0].call_id == "call_b"
+        assert ev_b[0].call_id.startswith("call_b#")
         assert ev_b[0].extra_info.get("delegate_goal") == "任务B"
+
+    def test_abandoned_call_does_not_leak_its_goal_into_an_id_reuse(self, mapper: StreamEventMapper):
+        """A call that never gets an end frame must not poison the next call that
+        reuses its provider id.
+
+        ``tool_arg_buffers`` is keyed by the provider's id and is normally cleared
+        by the end frame. When a call is abandoned (HITL park / recursion cut /
+        budget refusal) its partial JSON stays behind, and a provider that recycles
+        ids — ``<tool_name>:<index>``, restarting at 0 every response — hands that
+        id straight to the next call. Here the leftover is one character short of
+        closing, so the newcomer's first fragment completes it and the delegation
+        would report the ABANDONED call's goal as its own.
+        """
+        # Call 1: args start streaming, then the call is abandoned (no end frame).
+        self._steps(mapper, self._arg_delta("task", '{"description": "stal', "task:0"))
+
+        # Call 2 reuses the id; its own args stream in from scratch.
+        self._steps(mapper, self._arg_delta("task", "", "task:0"))
+        events = self._steps(mapper, self._arg_delta("", 'e"}', ""))
+
+        assert not any(e.extra_info.get("delegate_goal") == "stale" for e in events), (
+            "the abandoned call's args must not close against the new call's fragment"
+        )
 
     def test_complete_args_in_one_chunk_still_works(self, mapper: StreamEventMapper):
         # Backward-compat: a provider that ships full args in one AIMessage (no

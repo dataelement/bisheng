@@ -63,6 +63,13 @@ async def get_channel_service(
     article_es_service = get_article_es_service()
     article_read_repository = await get_article_read_repository(session)
     message_service = await _get_message_service(session)
+    from bisheng.permission.application.access import get_f048_runtime
+    from bisheng.permission.application.initial_grant import InitialGrantApplication
+    from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
+    from bisheng.tenant.domain.services.f048_permission_subject import TenantPermissionSubjectDirectory
+
+    runtime = await get_f048_runtime()
+    subject_directory = TenantPermissionSubjectDirectory()
 
     return ChannelService(
         channel_repository=channel_repository,
@@ -71,4 +78,12 @@ async def get_channel_service(
         article_es_service=article_es_service,
         article_read_repository=article_read_repository,
         message_service=message_service,
+        initial_grant_application=InitialGrantApplication(
+            runtime=runtime,
+            subjects=subject_directory,
+        ),
+        prospective_grant_application=ProspectiveGrantApplication(
+            runtime=runtime,
+            subjects=subject_directory,
+        ),
     )

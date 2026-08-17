@@ -31,6 +31,52 @@ Options:
 
 ## Permission Scripts
 
+### `reconcile_f048_visible_projection.py`
+
+Audit and repair environments that already completed an older F048 data
+migration before the final flattened-visible design. The command is available
+in production as well as development/test; safety comes from the same
+maintenance and consistency gates, not from an environment-name allowlist.
+
+Run dry-run first from `src/backend/` with the live `config`:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
+```
+
+The JSON report includes canonical Grant/assignee source counts, persisted
+source differences, and the deduplicated expected tuple count/checksum. The
+script never scans or deletes existing visible tuples because system/public/
+shared visibility is not owned by the Grant source projection.
+
+For apply, stop ingress traffic and all API/Worker/Linsight processes, wait for
+their F048 heartbeat TTL to expire, and copy the dry-run `store_id` into the
+explicit confirmation:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --apply \
+  --confirm-store-id <store-id> \
+  --operator-id <operator-user-id> \
+  --allow-model-upgrade
+```
+
+`--allow-model-upgrade` is required only when dry-run reports that CURRENT
+still points at an older F048 model. Apply exits with code `3` before writing
+when Store confirmation differs, a runtime heartbeat or projection operation
+is active, the CURRENT Catalog has an unrelated/non-resumable fence, canonical
+SQL data is incomplete, or stale source projections would require a classified
+revocation. It publishes/reuses the final immutable model in the same Store,
+ensures every Grant-derived direct `visible` tuple in batches of at most 90
+with OpenFGA duplicate-ignore semantics, verifies them with higher consistency,
+then activates the rebuilt Grant source rows and publishes a no-op Catalog
+release bound to the new Authorization Model release. It does not create or modify a formal
+`permission_migration_run`. Re-running after an interruption is forward-only
+and idempotent. Restart all permission-using processes after success; they
+discover the latest model through the stable Store name and validate the new
+SQL CURRENT Catalog pin.
+
 ### `reconcile_f048_projection_operations.py`
 
 Inspect and recover explicitly selected F048 permission projection ledger
@@ -123,9 +169,11 @@ that needs an OpenFGA projection.
    PYTHONPATH=./ .venv/bin/alembic heads
    ```
 
-   Both commands must identify `f048_migration_item_message_longtext` as the
-   head. This follow-up DDL widens the frozen source payload column before the
-   data script records large legacy Config values.
+   Both commands must identify `f048_visible_source_projection` as the head.
+   Its predecessor `f048_migration_item_message_longtext` widens the frozen
+   source payload column before the data script records large legacy Config
+   values; the head then creates the single-slot visible source projection
+   table required by migration and D4 verification.
 4. Do not proceed if Redis is unavailable, a ready F048 runtime heartbeat
    remains, dashboard tenant attribution is ambiguous, an unresolved failed
    tuple exists, or the source watermark changes between scans.
@@ -171,21 +219,23 @@ completed batch is idempotent.
 
 After migrate reports `VERIFYING`, leave the automatic migration gate in place
 and do not restart the processes yet. Do not query Store/model/Catalog tables
-for values to copy into configuration. Ensure
-`force_write_model=false`, `dual_model_mode=false`, and leave
-`legacy_model_id` empty, then run:
+for values to copy into configuration. The migration always reuses the durable
+Store, source model and target model pinned by the original run; operators
+cannot replace them with command-line parameters. Then run:
 
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/migrate_f048_permission_data.py \
   verify --run-id <run-id>
 ```
 
-Verification independently rebuilds source and target checksums, requires exact
-target tuple counts, checks high-risk dashboard/download semantics, preserves
-allowed Store facts, requires the run target release to be the one referenced
-by the SQL CURRENT Catalog, and requires legacy tuple and blocker counts to be
-zero. The report still records the retained legacy Config count for audit, but
-that count does not block verification. Success moves the run to
+Verification independently rebuilds source and target checksums, requires one
+traceable visible contribution for every legal assignee, validates the
+deduplicated direct `visible` aggregate and complete streamed enumeration,
+checks high-risk dashboard/download semantics, preserves allowed Store facts,
+requires the run target release to be the one referenced by the SQL CURRENT
+Catalog, and requires unattributed visible tuples, legacy tuples and blockers
+to be zero. The report still records the retained legacy Config count for
+audit, but that count does not block verification. Success moves the run to
 `READY_TO_START`; restart API and Worker processes so they discover the new
 F048 model and automatically remove the migration gate.
 
@@ -197,8 +247,9 @@ Store name or missing Store/model still fails startup. A predecessor checksum
 keeps the process alive but not ready for the explicit migration; after the
 post-migration restart, any model/Catalog mismatch fails readiness.
 
-There is no preview, dry-run, cleanup, rollback, Store switch, dual-model
-window, or automatic startup migration. A failure keeps maintenance active and
+There is no preview, dry-run, cleanup, rollback, Store replacement,
+intermediate permission model, relation-slot switch, second migration, or
+automatic API/Celery startup migration. A failure keeps maintenance active and
 is repaired only by a forward fix against the same run and target model.
 
 Exit codes:
@@ -362,7 +413,7 @@ F048 deployment.
 > the F035 upgrade checklist — see `docs/architecture/08-deployment.md` → 升级 checklist.
 
 One-shot migration of legacy `linsight_sop` rows into tenant custom skills
-(`linsight_skill` + `SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md`).
+(a `linsight_skill` row + its bundle object in storage).
 `display_name` keeps the original (Chinese) SOP name; the skill ID is a
 pypinyin slug; `metadata.sop-id` makes re-runs idempotent. The skill description
 uses the SOP's own description, falling back to the SOP name when absent (no LLM
@@ -379,6 +430,50 @@ bash scripts/migrate_sop_to_skill.sh --tenant-id 2 apply   # single tenant
 
 Options: `--apply` (persist), `--tenant-id <id>`,
 `--report-file <path>` (default `./migrate_sop_to_skill_report.json`).
+
+### `migrate_skills_to_object_storage.py`
+
+> **Upgrade-required (→ v3.0) — run on EVERY host that has served the API.**
+> Startup performs a deliberately narrow version of this automatically; the script
+> is what resolves everything the self-heal refuses to guess at. See
+> `docs/architecture/08-deployment.md` → 升级 checklist.
+
+Skill bundles used to be authoritative on the node's local disk, so an upgraded
+deployment has rows whose `content_hash` is empty and whose bytes exist only on
+whichever host wrote them — those skills silently fail to load. This publishes
+them to object storage and repoints the row.
+
+The startup self-heal only publishes a bundle whose local byte count matches what
+the row recorded, and skips `source='builtin'` rows (the seeder republishes those
+from the image). Anything else — a size mismatch, or a bundle held by a different
+host — is logged **by name** and left for this script.
+
+Idempotent: a row that already resolves is skipped; publishing the same bundle
+twice writes the same content-addressed object. Dry-run by default.
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_skills_to_object_storage.py             # dry-run
+PYTHONPATH=./ .venv/bin/python scripts/migrate_skills_to_object_storage.py --apply
+```
+
+Options: `--apply`, `--tenant-id <id>`, `--legacy-root <path>` (defaults to
+`linsight_conf.skills_root`). Prints a JSON report; a non-empty `unresolved` list
+means those bundles live on another host — run it there too.
+
+### `restore_skills_to_local.py`
+
+> **Rollback aid only.** Needed before rolling BACK to a release that reads skill
+> bundles from `SKILLS_ROOT` instead of object storage.
+
+Writes every skill bundle back to the legacy on-disk layout. Skills created or
+edited while the newer release was running exist only as objects; the older code
+looks on local disk, finds nothing, and — because that path only warns — the skill
+silently stops working. Run on every host that will serve the older release.
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/restore_skills_to_local.py             # dry-run
+PYTHONPATH=./ .venv/bin/python scripts/restore_skills_to_local.py --apply
+```
 
 ### `backfill_linsight_task_mode_web_menu.py`
 

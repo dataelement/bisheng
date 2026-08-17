@@ -5,12 +5,15 @@ import re
 import tempfile
 from dataclasses import replace
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from fastapi import Request
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from bisheng.api.v1.schemas import ExcelRule, FileProcessBase, KnowledgeFileOne
@@ -21,8 +24,10 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
     KnowledgeSpaceSubscribeScenarioHandler,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    SpaceCreationRequestConflictError,
     SpaceFileDuplicateError,
     SpaceFileExtensionError,
     SpaceFileNameDuplicateError,
@@ -41,6 +46,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceTenantMismatchError,
 )
 from bisheng.common.errcode.llm import WorkbenchEmbeddingError
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -48,6 +54,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMemberDao,
     UserRoleEnum,
 )
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
@@ -84,8 +91,12 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
 from bisheng.knowledge.domain.models.knowledge_space_user_pin import KnowledgeSpaceUserPinDao
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FolderUploadItem,
+    InitialPermissionApplyResult,
+    InitialPermissionsRequest,
+    KnowledgeSpaceCreateResp,
     KnowledgeSpaceFileResponse,
     KnowledgeSpaceInfoResp,
+    KnowledgeSpaceListItemResp,
     SpaceSubscriptionStatusEnum,
 )
 from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
@@ -112,9 +123,16 @@ from bisheng.permission.application.access import (
 )
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
+    batch_check_business_visible,
     check_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.application.initial_grant import (
+    InitialGrantAddition,
+    InitialGrantApplication,
+    InitialGrantRequest,
+)
+from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
@@ -178,6 +196,8 @@ _RESOURCE_ACTIONS = {
 _logger = logging.getLogger(__name__)
 
 _CHILD_PERMISSION_SCAN_BATCH_SIZE = 100
+_JOINED_VISIBLE_MAX_RESULTS = 5_000
+_JOINED_DB_ID_BATCH_SIZE = 500
 # F040: keyword-search batch-scan window. A batch shrunk by ReBAC visibility
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
@@ -200,6 +220,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         login_user: UserPayload,
         f048_permission_adapter=None,
         f048_file_delivery=None,
+        initial_grant_application: InitialGrantApplication | None = None,
+        prospective_grant_application: ProspectiveGrantApplication | None = None,
     ):
         self.request = request
         self.login_user = login_user
@@ -207,6 +229,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.approval_gate: ApprovalGate | None = None
         self.f048_permission_adapter = f048_permission_adapter
         self.f048_file_delivery = f048_file_delivery
+        self.initial_grant_application = initial_grant_application
+        self.prospective_grant_application = prospective_grant_application
         # Injected by DI factory after construction (same pattern as message_service).
         # When set, list_space_children will exclude non-primary version files and
         # return version enrichment fields.
@@ -1051,28 +1075,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
         auto_tag_enabled: bool = False,
         auto_tag_library_id: int | None = None,
         auto_tag_custom_tags: list[str] | None = None,
+        creation_request_id: str | None = None,
+        initial_permissions: InitialPermissionsRequest | None = None,
         skip_user_limit: bool = False,
-    ) -> Knowledge:
+    ) -> KnowledgeSpaceCreateResp:
         """Create a new knowledge space (max 30 per user)."""
 
-        if not skip_user_limit:
-            count = await KnowledgeDao.async_count_spaces_by_user(
-                self.login_user.user_id,
-                exclude_department_spaces=True,
-            )
-            if count >= _MAX_SPACE_PER_USER:
-                raise SpaceLimitError()
+        existing = await self._existing_creation(creation_request_id, None)
+        workbench_llm = None
+        if existing is None:
+            if not skip_user_limit:
+                count = await KnowledgeDao.async_count_spaces_by_user(
+                    self.login_user.user_id,
+                    exclude_department_spaces=True,
+                )
+                if count >= _MAX_SPACE_PER_USER:
+                    raise SpaceLimitError()
 
-        workbench_llm = await LLMService.get_workbench_llm()
-        if not workbench_llm or not workbench_llm.embedding_model:
-            raise WorkbenchEmbeddingError()
+            workbench_llm = await LLMService.get_workbench_llm()
+            if not workbench_llm or not workbench_llm.embedding_model:
+                raise WorkbenchEmbeddingError()
 
         # Defence-in-depth: a tenant with the feature flag off must not be able to
-        # configure auto-tag by hand-crafting requests.
+        # configure auto-tag by hand-crafting requests. Normalize before hashing
+        # so retries compare the effective business command.
         if not await self._is_auto_tag_feature_visible():
             auto_tag_enabled = False
             auto_tag_library_id = None
             auto_tag_custom_tags = None
+        elif auto_tag_custom_tags is not None:
+            auto_tag_custom_tags = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
+        payload_hash = self._creation_payload_hash(
+            name=name,
+            description=description,
+            icon=icon,
+            auth_type=auth_type,
+            is_released=is_released,
+            auto_tag_enabled=auto_tag_enabled,
+            auto_tag_library_id=auto_tag_library_id,
+            auto_tag_custom_tags=auto_tag_custom_tags,
+            initial_permissions=initial_permissions,
+        )
+        if existing is not None:
+            if existing.creation_payload_hash != payload_hash:
+                raise SpaceCreationRequestConflictError()
+            return await self._complete_knowledge_creation(
+                existing,
+                creation_request_id=creation_request_id,
+                initial_permissions=initial_permissions,
+            )
+        if workbench_llm is None or workbench_llm.embedding_model is None:
+            raise WorkbenchEmbeddingError()
+
         # Library-id needs the freshly minted knowledge.id when we are upserting
         # a private library, so defer the auto-tag fields until after insert.
         db_knowledge = Knowledge(
@@ -1085,13 +1139,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             is_released=is_released,
             auto_tag_enabled=False,
             auto_tag_library_id=None,
+            creation_request_id=creation_request_id,
+            creation_payload_hash=payload_hash if creation_request_id is not None else None,
         )
 
-        knowledge_space = KnowledgeService.create_knowledge_base(
-            self.request, self.login_user, db_knowledge, skip_hook=True
-        )
+        created = True
+        try:
+            knowledge_space = KnowledgeService.create_knowledge_base(
+                self.request, self.login_user, db_knowledge, skip_hook=True
+            )
+        except IntegrityError:
+            # A concurrent request with the same durable key won the insert.
+            # Only that exact command may be resumed; a different hash conflicts.
+            knowledge_space = await self._existing_creation(creation_request_id, payload_hash)
+            if knowledge_space is None:
+                raise
+            created = False
 
-        if auto_tag_enabled or auto_tag_library_id is not None or auto_tag_custom_tags is not None:
+        if created and (auto_tag_enabled or auto_tag_library_id is not None or auto_tag_custom_tags is not None):
             resolved_enabled, resolved_library_id = await self._apply_auto_tag_binding(
                 knowledge=knowledge_space,
                 auto_tag_enabled=auto_tag_enabled,
@@ -1105,6 +1170,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
 
+        result = await self._complete_knowledge_creation(
+            knowledge_space,
+            creation_request_id=creation_request_id,
+            initial_permissions=initial_permissions,
+        )
+
+        if not created:
+            return result
+
+        member = SpaceChannelMember(
+            business_id=str(knowledge_space.id),
+            business_type=BusinessTypeEnum.SPACE,
+            user_id=self.login_user.user_id,
+            user_role=UserRoleEnum.CREATOR,
+            status=MembershipStatusEnum.ACTIVE,
+        )
+        await SpaceChannelMemberDao.async_insert_member(member)
+
+        # Audit log for knowledge space creation
+        await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
+            self.login_user, self.request, knowledge_space
+        )
+
+        return result
+
+    async def _complete_knowledge_creation(
+        self,
+        knowledge_space: Knowledge,
+        *,
+        creation_request_id: str | None,
+        initial_permissions: InitialPermissionsRequest | None,
+    ) -> KnowledgeSpaceCreateResp:
         container_adapter = await self._resource_adapter("knowledge_space")
         actor = await self._permission_actor()
         await container_adapter.authorize_created(
@@ -1132,22 +1229,227 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 actor=actor,
                 enabled=True,
             )
-
-        member = SpaceChannelMember(
-            business_id=str(knowledge_space.id),
-            business_type=BusinessTypeEnum.SPACE,
-            user_id=self.login_user.user_id,
-            user_role=UserRoleEnum.CREATOR,
-            status=MembershipStatusEnum.ACTIVE,
+        permission_result = None
+        if initial_permissions is not None and initial_permissions.grants:
+            if self.initial_grant_application is None or creation_request_id is None:
+                raise RuntimeError("F050 Initial Grant application is not configured")
+            try:
+                target = await container_adapter.resolve_permission_target(
+                    resource_type="knowledge_space",
+                    resource_id=str(knowledge_space.id),
+                    actor=actor,
+                    action="manage_permission",
+                )
+                request = InitialGrantRequest(
+                    command_key=creation_request_id,
+                    expected_catalog_release_id=initial_permissions.expected_catalog_release_id,
+                    additions=tuple(
+                        InitialGrantAddition(
+                            model_key=grant.model_key,
+                            subject_type=grant.subject.type,
+                            subject_id=grant.subject.id,
+                            userset_relation=grant.subject.userset_relation,
+                            include_children=grant.subject.include_children,
+                        )
+                        for grant in initial_permissions.grants
+                    ),
+                )
+                mutation = await self.initial_grant_application.apply(
+                    actor=actor,
+                    target=target,
+                    request=request,
+                )
+                permission_result = InitialPermissionApplyResult(
+                    status="succeeded",
+                    resource_version=mutation.resource_version,
+                    assignee_ids=[
+                        str(source.source_id)
+                        for grant in mutation.grants
+                        for source in grant.sources
+                        if source.active and not source.protected
+                    ],
+                )
+            except Exception as exc:
+                # Ordinary Grants are explicitly the partial-success phase: the
+                # business resource and protected owner are already durable.
+                logger.exception("Initial Knowledge Space Grant mutation failed")
+                permission_result = InitialPermissionApplyResult(
+                    status="failed",
+                    error_code=exc.code if isinstance(exc, BaseErrorCode) else 500,
+                )
+        return KnowledgeSpaceCreateResp.model_validate(
+            {
+                **knowledge_space.model_dump(),
+                "initial_permission_result": permission_result,
+            }
         )
-        await SpaceChannelMemberDao.async_insert_member(member)
 
-        # Audit log for knowledge space creation
-        await KnowledgeAuditTelemetryService.audit_create_knowledge_space(
-            self.login_user, self.request, knowledge_space
+    async def _existing_creation(
+        self,
+        creation_request_id: str | None,
+        payload_hash: str | None,
+    ) -> Knowledge | None:
+        if creation_request_id is None:
+            return None
+        existing = await KnowledgeDao.aget_by_creation_request(
+            tenant_id=int(self.login_user.tenant_id),
+            user_id=int(self.login_user.user_id),
+            knowledge_type=KnowledgeTypeEnum.SPACE.value,
+            creation_request_id=creation_request_id,
+        )
+        if existing is not None and payload_hash is not None and existing.creation_payload_hash != payload_hash:
+            raise SpaceCreationRequestConflictError()
+        return existing
+
+    @staticmethod
+    def _creation_payload_hash(
+        *,
+        name: str,
+        description: str | None,
+        icon: str | None,
+        auth_type: AuthTypeEnum,
+        is_released: bool,
+        auto_tag_enabled: bool,
+        auto_tag_library_id: int | None,
+        auto_tag_custom_tags: list[str] | None,
+        initial_permissions: InitialPermissionsRequest | None,
+    ) -> str:
+        payload = {
+            "name": name,
+            "description": description,
+            "icon": icon,
+            "auth_type": auth_type.value,
+            "is_released": is_released,
+            "auto_tag_enabled": auto_tag_enabled,
+            "auto_tag_library_id": auto_tag_library_id,
+            "auto_tag_custom_tags": auto_tag_custom_tags,
+            "initial_permissions": None,
+        }
+        if initial_permissions is not None:
+            grants = sorted(
+                (
+                    {
+                        "model_key": grant.model_key.strip(),
+                        "subject": {
+                            "type": grant.subject.type.strip().lower(),
+                            "id": grant.subject.id.strip(),
+                            "userset_relation": grant.subject.userset_relation,
+                            "include_children": grant.subject.include_children,
+                        },
+                    }
+                    for grant in initial_permissions.grants
+                ),
+                key=lambda row: (
+                    row["model_key"],
+                    row["subject"]["type"],
+                    row["subject"]["id"],
+                    row["subject"]["userset_relation"] or "",
+                    row["subject"]["include_children"],
+                ),
+            )
+            payload["initial_permissions"] = {
+                "expected_catalog_release_id": initial_permissions.expected_catalog_release_id,
+                "grants": grants,
+            }
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return sha256(canonical.encode()).hexdigest()
+
+    async def get_creation_permission_context(self) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.get_context(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
         )
 
-        return knowledge_space
+    async def list_creation_grant_users(
+        self,
+        *,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.list_users(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def list_creation_grant_user_groups(
+        self,
+        *,
+        keyword: str,
+        page: int,
+        page_size: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.list_user_groups(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+
+    async def list_creation_grant_department_children(
+        self,
+        *,
+        parent_id: int | None,
+    ) -> list[dict[str, object]]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.list_department_children(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            parent_id=parent_id,
+        )
+
+    async def search_creation_grant_departments(
+        self,
+        *,
+        keyword: str,
+        limit: int,
+    ) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.search_departments(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            keyword=keyword,
+            limit=limit,
+        )
+
+    async def get_creation_grant_department_path(self, department_id: int) -> dict[str, object]:
+        prospective, actor, tenant_id = await self._prospective_creation_access()
+        return await prospective.get_department_path(
+            actor=actor,
+            tenant_id=tenant_id,
+            resource_type="knowledge_space",
+            department_id=department_id,
+        )
+
+    async def _prospective_creation_access(self):
+        if self.prospective_grant_application is None:
+            raise RuntimeError("F050 Prospective Grant application is not configured")
+        count = await KnowledgeDao.async_count_spaces_by_user(
+            self.login_user.user_id,
+            exclude_department_spaces=True,
+        )
+        if count >= _MAX_SPACE_PER_USER:
+            raise SpaceLimitError()
+        workbench_llm = await LLMService.get_workbench_llm()
+        if not workbench_llm or not workbench_llm.embedding_model:
+            raise WorkbenchEmbeddingError()
+        return (
+            self.prospective_grant_application,
+            await self._permission_actor(),
+            int(self.login_user.tenant_id),
+        )
 
     async def get_space_info(self, space_id: int) -> KnowledgeSpaceInfoResp:
         from bisheng.worker import rebuild_knowledge_celery
@@ -1435,7 +1737,52 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     # ──────────────────────────── Listings ────────────────────────────────────
 
-    async def _format_member_spaces(self, members: list[SpaceChannelMember], order_by: str) -> list[KnowledgeRead]:
+    async def _format_basic_spaces(self, space_ids: list[int], order_by: str) -> list[KnowledgeRead]:
+        """Format an already-authorized space list with only per-user pin state."""
+        if not space_ids:
+            return []
+
+        spaces = await KnowledgeDao.async_get_spaces_by_ids(space_ids, order_by)
+        return await self._format_basic_space_rows(spaces)
+
+    async def _format_basic_space_rows(self, spaces: list[Knowledge]) -> list[KnowledgeRead]:
+        """Format already-loaded rows without permission, count, or metadata reads."""
+
+        if not spaces:
+            return []
+        pinned_ids = await KnowledgeSpaceUserPinDao.list_pinned_space_ids(self.login_user.user_id)
+        results = [
+            KnowledgeRead(
+                **space.model_dump(),
+                is_pinned=space.id in pinned_ids,
+            )
+            for space in spaces
+        ]
+        return [item for item in results if item.is_pinned] + [item for item in results if not item.is_pinned]
+
+    @staticmethod
+    def _sort_joined_space_rows(spaces: list[Knowledge], order_by: str) -> list[Knowledge]:
+        """Restore one deterministic business order after chunked ID queries."""
+
+        if order_by == "name":
+            return sorted(spaces, key=lambda row: (row.name.casefold(), int(row.id or 0)))
+        if order_by == "create_time":
+            return sorted(
+                spaces,
+                key=lambda row: (row.create_time or datetime.min, int(row.id or 0)),
+                reverse=True,
+            )
+        return sorted(
+            spaces,
+            key=lambda row: (row.update_time or datetime.min, int(row.id or 0)),
+            reverse=True,
+        )
+
+    async def _format_member_spaces(
+        self,
+        members: list[SpaceChannelMember],
+        order_by: str,
+    ) -> list[KnowledgeSpaceListItemResp]:
         if not members:
             return []
 
@@ -1452,7 +1799,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             if one.id in pinned_ids:
                 pinned_spaces.append(
-                    KnowledgeSpaceInfoResp(
+                    KnowledgeSpaceListItemResp(
                         **one.model_dump(),
                         is_pinned=True,
                         user_role=member_conf.user_role,
@@ -1462,7 +1809,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             else:
                 normal_spaces.append(
-                    KnowledgeSpaceInfoResp(
+                    KnowledgeSpaceListItemResp(
                         **one.model_dump(),
                         is_pinned=False,
                         user_role=member_conf.user_role,
@@ -1470,11 +1817,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         is_followed=True,
                     )
                 )
-        ordered = pinned_spaces + normal_spaces
-        await self._populate_root_file_counts(ordered)
-        return await self._decorate_department_metadata(ordered)
+        return pinned_spaces + normal_spaces
 
-    async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
+    async def get_my_created_spaces(self, order_by: str = "update_time") -> list[KnowledgeSpaceListItemResp]:
         members = await SpaceChannelMemberDao.async_get_user_created_members(self.login_user.user_id)
         if members:
             department_space_ids = set(
@@ -1526,23 +1871,60 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
     async def get_my_followed_spaces(self, order_by: str = "update_time") -> list[KnowledgeRead]:
-        """
-        Return the spaces the current user follows (non-creator).
-        Pinned spaces always appear first; within each pinned/non-pinned group
-        the caller-specified order_by is applied.
-        """
-        # Fetch members ordered by is_pinned DESC so we know which are pinned
-        members = await SpaceChannelMemberDao.async_get_user_followed_members(self.login_user.user_id)
-        space_ids = {int(member.business_id) for member in members}
-        if not self.login_user.is_admin():
-            space_ids.update(await self._scan_space_action_ids("visible"))
-        return await self._format_accessible_spaces(
-            list(space_ids),
-            order_by,
-            memberships=members,
-            exclude_created=True,
-            required_action="visible",
+        """Return complete personally visible spaces created by another user."""
+
+        started = perf_counter()
+        runtime = await get_f048_runtime()
+        actor = await self._permission_actor()
+        fga_started = perf_counter()
+        visible = await runtime.list_visible_objects(
+            actor,
+            resource_type="knowledge_space",
+            max_results=_JOINED_VISIBLE_MAX_RESULTS,
         )
+        fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+        try:
+            visible_ids = [int(resource_id) for resource_id in visible.object_ids]
+        except (TypeError, ValueError) as exc:
+            raise PermissionEnumerationIncompleteError(
+                msg="Knowledge-space visible enumeration returned an invalid resource ID",
+                exception=exc,
+            ) from exc
+
+        spaces: list[Knowledge] = []
+        db_started = perf_counter()
+        for offset in range(0, len(visible_ids), _JOINED_DB_ID_BATCH_SIZE):
+            spaces.extend(
+                await KnowledgeDao.async_get_joined_spaces_by_visible_ids(
+                    visible_ids[offset : offset + _JOINED_DB_ID_BATCH_SIZE],
+                    tenant_id=actor.current_tenant_id,
+                    exclude_creator_id=actor.user_id,
+                    order_by=order_by,
+                )
+            )
+        result = await self._format_basic_space_rows(self._sort_joined_space_rows(spaces, order_by))
+        emit_metric(
+            "permission_visible_list",
+            tenant=actor.current_tenant_id,
+            resource_type="knowledge_space",
+            strategy="visible_ids_first_joined",
+            candidate_count=len(visible_ids),
+            visible_count=len(visible_ids),
+            scanned_count=len(visible_ids),
+            scan_amplification=1 if visible_ids else 0,
+            stream_completed=True,
+            capacity=_JOINED_VISIBLE_MAX_RESULTS,
+            db_elapsed_ms=(perf_counter() - db_started) * 1000,
+            fga_elapsed_ms=fga_elapsed_ms,
+            total_elapsed_ms=(perf_counter() - started) * 1000,
+            returned_count=len(result),
+            alert=(
+                "capacity_80_percent"
+                if len(visible_ids) >= _JOINED_VISIBLE_MAX_RESULTS * 0.8
+                else None
+            ),
+        )
+        return result
 
     async def alist_mine_and_joined_cursor(
         self,
@@ -2030,14 +2412,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for resource_type, resource_ids in by_type.items():
             if not resource_ids:
                 continue
-            action_map = await self._batch_actions(
-                resource_type,
-                resource_ids,
-                ("visible",),
+            visible_map = await batch_check_business_visible(
+                self.login_user,
+                resource_type=resource_type,
+                resource_ids=resource_ids,
             )
             for resource_id in resource_ids:
                 permissions[(resource_type, str(resource_id))] = (
-                    {"visible"} if "visible" in action_map.get(str(resource_id), frozenset()) else set()
+                    {"visible"} if visible_map.get(str(resource_id), False) else set()
                 )
         return [
             item
@@ -2062,19 +2444,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_size: int,
         cursor: list | None = None,
         exclude_file_ids: list[int] | None = None,
-    ) -> tuple[list[KnowledgeFile], bool]:
+    ) -> tuple[list[KnowledgeFile], bool, list | None]:
         """F027 cursor-paginated scan: keep fetching batches via keyset, fold
         through ReBAC filtering, stop once we've accumulated ``page_size + 1``
         visible items (the +1 probes ``has_more``) or the DB is exhausted.
 
-        Returns ``(visible_page_items, has_more)`` — the visible items are
-        already truncated to ``page_size`` if ``has_more`` is True.
+        Returns visible items, ``has_more``, and the last consumed candidate
+        key. The response cursor must resume after that candidate, not after the
+        last visible row, so denied rows are not rescanned on the next page.
         """
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         visible_page_items: list[KnowledgeFile] = []
         permission_context = await self._build_child_permission_context(space_id)
         batch_cursor: list | None = list(cursor) if cursor else None
+        resume_cursor: list | None = None
+        scanned_candidates = 0
+
+        def candidate_cursor(item: KnowledgeFile) -> list:
+            return [
+                item.file_type,
+                _compute_ext_rank_python(item.file_name),
+                item.update_time,
+                item.id,
+            ]
 
         while True:
             batch_items = await SpaceFileDao.async_list_children(
@@ -2098,28 +2491,56 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_id=space_id,
                 context=permission_context,
             )
-            for item in visible_batch:
-                visible_page_items.append(item)
-                if len(visible_page_items) > page_size:
-                    # Got the +1 probe — done scanning.
-                    return visible_page_items[:page_size], True
+            visible_ids = {item.id for item in visible_batch}
+            for item in batch_items:
+                if item.id in visible_ids:
+                    if len(visible_page_items) == page_size:
+                        amplification = scanned_candidates / max(len(visible_page_items), 1)
+                        emit_metric(
+                            "permission_visible_list",
+                            resource_type="space_child",
+                            strategy="candidate_first_batch_check",
+                            candidate_count=scanned_candidates,
+                            visible_count=len(visible_page_items),
+                            scanned_candidates=scanned_candidates,
+                            returned_items=len(visible_page_items),
+                            scanned_count=scanned_candidates,
+                            scan_amplification=amplification,
+                            stream_completed=True,
+                            has_more=True,
+                            alert="scan_amplification" if amplification > 10 else None,
+                        )
+                        return visible_page_items, True, resume_cursor
+                    visible_page_items.append(item)
+                scanned_candidates += 1
+                resume_cursor = candidate_cursor(item)
 
             # Advance batch_cursor to the LAST DB row of this batch (not last
             # visible) so the next batch picks up strictly after; if we used
             # the last visible, items filtered out between them would be
             # re-emitted on the next batch.
             last_db = batch_items[-1]
-            batch_cursor = [
-                last_db.file_type,
-                _compute_ext_rank_python(last_db.file_name),
-                last_db.update_time,
-                last_db.id,
-            ]
+            batch_cursor = candidate_cursor(last_db)
 
             if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
                 break
 
-        return visible_page_items, False
+        amplification = scanned_candidates / max(len(visible_page_items), 1)
+        emit_metric(
+            "permission_visible_list",
+            resource_type="space_child",
+            strategy="candidate_first_batch_check",
+            candidate_count=scanned_candidates,
+            visible_count=len(visible_page_items),
+            scanned_candidates=scanned_candidates,
+            returned_items=len(visible_page_items),
+            scanned_count=scanned_candidates,
+            scan_amplification=amplification,
+            stream_completed=True,
+            has_more=False,
+            alert="scan_amplification" if amplification > 10 else None,
+        )
+        return visible_page_items, False, None
 
     async def _scan_visible_search_items(
         self,
@@ -2202,7 +2623,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
-        from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         await self._require_read_permission(space_id)
         if parent_id:
@@ -2229,7 +2649,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if self.version_repo is not None:
             exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
 
-        visible_page_items, has_more = await self._scan_visible_child_items(
+        visible_page_items, has_more, scan_cursor = await self._scan_visible_child_items(
             space_id=space_id,
             parent_id=parent_id,
             file_ids=file_ids,
@@ -2248,17 +2668,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         data = await self._handle_file_folder_extra_info(visible_page_items)
 
         next_cursor: str | None = None
-        if has_more and visible_page_items:
-            last = visible_page_items[-1]
-            next_cursor = encode_cursor(
-                (
-                    last.file_type,
-                    _compute_ext_rank_python(last.file_name),
-                    last.update_time,
-                    last.id,
-                ),
-                context=context,
-            )
+        if has_more and scan_cursor:
+            next_cursor = encode_cursor(scan_cursor, context=context)
 
         return PageInfiniteCursorData(
             data=data,

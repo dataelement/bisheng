@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
+from bisheng.common.errcode.permission import PermissionMigrationBlockedError
+from bisheng.core.openfga.authorization_model_f048 import (
+    authorization_model_checksum,
+    get_authorization_model_f048,
+)
+from bisheng.core.openfga.discovery import OpenFGARuntimePin
 from scripts import migrate_f048_permission_data as cli
+from scripts.f048_migration_runtime import _require_predecessor_source
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_migrate_requires_apply_before_runtime_initialization():
@@ -22,6 +32,47 @@ def test_unsupported_preview_or_rollback_commands_are_rejected(command):
         cli.parse_args([command])
 
     assert exc_info.value.code == 2
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["migrate", "--apply", "--store-id", "replacement"],
+        ["migrate", "--apply", "--model-id", "intermediate-model"],
+        ["migrate", "--apply", "--visible-slot", "b"],
+        ["migrate", "--apply", "--dual-model-mode"],
+        ["verify", "--run-id", "7", "--legacy-model-id", "legacy"],
+    ],
+)
+def test_store_model_and_ab_override_parameters_are_rejected(arguments):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.parse_args(arguments)
+
+    assert exc_info.value.code == 2
+
+
+def test_new_migration_is_rejected_when_store_already_uses_final_f048_model():
+    pin = OpenFGARuntimePin(
+        store_id="durable-store",
+        model_id="final-model",
+        model_checksum=authorization_model_checksum(get_authorization_model_f048()),
+    )
+
+    with pytest.raises(PermissionMigrationBlockedError, match="F048_MIGRATION_ALREADY_COMPLETED"):
+        _require_predecessor_source(pin=pin, run_id=None)
+
+    _require_predecessor_source(pin=pin, run_id=7)
+
+
+def test_formal_migration_is_not_called_from_api_or_celery_startup():
+    entrypoint = "migrate_f048_permission_data"
+    startup_files = (
+        BACKEND_ROOT / "bisheng/main.py",
+        BACKEND_ROOT / "bisheng/run_celery.py",
+        BACKEND_ROOT / "bisheng/worker/main.py",
+    )
+
+    assert all(entrypoint not in path.read_text(encoding="utf-8") for path in startup_files)
 
 
 @dataclass
@@ -144,6 +195,7 @@ async def test_migrate_initializes_and_closes_full_app_context():
 
 async def test_verify_only_reads_existing_formal_run_and_always_closes():
     events = []
+    runtime_run_ids = []
     coordinator = FakeCoordinator()
     verifier = FakeVerifier()
     runtime = FakeRuntime(
@@ -161,7 +213,7 @@ async def test_verify_only_reads_existing_formal_run_and_always_closes():
     args = cli.parse_args(["verify", "--run-id", "7"])
     exit_code = await cli.execute(
         args,
-        runtime_factory=lambda **_: runtime,
+        runtime_factory=lambda **kwargs: (runtime_run_ids.append(kwargs["run_id"]) or runtime),
         initialize_context=initialize_context,
         close_context=close_context,
         live_settings="live-settings",
@@ -170,6 +222,7 @@ async def test_verify_only_reads_existing_formal_run_and_always_closes():
     assert exit_code == cli.EXIT_OK
     assert verifier.calls == [{"run_id": 7}]
     assert coordinator.calls == []
+    assert runtime_run_ids == [7]
     assert events == ["initialize", "close"]
     assert runtime.closed is True
 
@@ -205,3 +258,10 @@ async def test_migrate_resume_passes_the_existing_run_id():
     )
 
     assert coordinator.calls[0]["run_id"] == 9
+
+
+def test_runtime_resume_pins_durable_store_and_source_model():
+    source = (BACKEND_ROOT / "scripts/f048_migration_runtime.py").read_text(encoding="utf-8")
+
+    assert "required_store_id=run.store_id if run else None" in source
+    assert "required_model_id=run.source_model_id if run else None" in source

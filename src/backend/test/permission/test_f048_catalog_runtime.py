@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import sqlalchemy as sa
@@ -82,6 +83,9 @@ TABLE_NAMES = (
     "permission_catalog_projection_tuple",
     "permission_projection_operation",
     "permission_projection_tuple",
+    "permission_migration_run",
+    "permission_migration_item",
+    "permission_visible_source_projection",
     "permission_grant",
     "permission_grant_assignee",
     "resource_permission_mode",
@@ -304,6 +308,50 @@ def _api(
             projector=projector,
         ),
     )
+
+
+async def test_catalog_draft_can_bind_one_same_store_authorization_release(
+    session_factory: SessionFactory,
+) -> None:
+    fga = InMemoryCatalogFGA()
+    current = await _seed_current(session_factory, fga)
+    async with session_factory() as session:
+        async with session.begin():
+            target = AuthorizationModelRelease(
+                environment="test",
+                store_id=fga.store_id,
+                model_version="f048-v2",
+                model_id="model-v2",
+                predecessor_model_id=fga.model_id,
+                model_checksum="a" * 64,
+                required_relations_checksum="b" * 64,
+                openfga_version="1.15.1",
+                status="STAGED",
+            )
+            session.add(target)
+            await session.flush()
+            target_id = int(target.id)
+
+    state = SqlCatalogState(session_factory=session_factory)
+    reservation = await state.reserve_draft(
+        base_release_id=int(current.id),
+        operator_id=7,
+        idempotency_key="authorization-model-upgrade",
+        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10),
+    )
+    await state.bind_draft_authorization_release(
+        draft_id=reservation.release_id,
+        authorization_release_id=target_id,
+    )
+    await state.bind_draft_authorization_release(
+        draft_id=reservation.release_id,
+        authorization_release_id=target_id,
+    )
+
+    async with session_factory() as session:
+        draft = await session.get(PermissionCatalogRelease, reservation.release_id)
+    assert draft is not None
+    assert draft.required_authorization_model_release_id == target_id
 
 
 async def test_decision_runtime_rejects_catalog_model_pin_drift(
@@ -980,29 +1028,35 @@ async def test_deactivate_and_delete_in_one_batch(
     assert "collaborator" not in {row.model_key for row in rows}
 
 
-async def test_an_active_model_alone_is_still_refused(
+async def test_active_model_can_be_deleted_when_reference_audit_is_zero(
     session_factory: SessionFactory,
 ) -> None:
-    """The guard itself stays: deleting a live model needs the deactivation."""
-
-    from bisheng.common.errcode.permission import PermissionModelStateConflictError
+    """Active controls future assignment, not whether a zero-ref model can delete."""
 
     fga = InMemoryCatalogFGA()
     marker = FakeCatalogMarker()
     current = await _seed_current(session_factory, fga)
     api = _api(session_factory, fga, marker)
 
-    with pytest.raises(PermissionModelStateConflictError):
-        await api.create_draft(
-            request=CatalogDraftRequest(
-                idempotency_key="delete-while-active",
-                base_release_id=int(current.id),
-                changes=(
-                    CatalogChangeRequest(
-                        type=CatalogChangeType.DELETE_MODEL,
-                        model_key="collaborator",
-                    ),
+    draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="delete-while-active",
+            base_release_id=int(current.id),
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.DELETE_MODEL,
+                    model_key="collaborator",
                 ),
             ),
-            operator_id=7,
+        ),
+        operator_id=7,
+    )
+    async with session_factory() as session:
+        rows = list(
+            (
+                await session.execute(
+                    select(PermissionModel).where(PermissionModel.catalog_release_id == draft["draft_id"])
+                )
+            ).scalars()
         )
+    assert "collaborator" not in {row.model_key for row in rows}

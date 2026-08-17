@@ -306,6 +306,7 @@
   "18064": "Source file no longer exists or has been deleted.",
   "18070": "The page cursor has expired. Please refresh the list and try again.",
   "18071": "This space is granted to you through a department or user group and cannot be left for now.",
+  "18072": "This creation request ID was already used with different knowledge space settings. Refresh and try again.",
   "18100": "Approval request not found",
   "18101": "No permission to view or process this approval",
   "18102": "Approval task already processed",
@@ -346,6 +347,7 @@
   "19053": "Knowledge space LLM is not configured. Please configure it in workbench settings first",
   "19054": "Channel authorization sync failed. Please try again later.",
   "19055": "This channel is granted to you through a department or user group and cannot be unsubscribed for now.",
+  "19056": "This creation request ID was already used with different channel settings. Refresh and try again.",
   "19101": "Primary department change blocked: user still owns resources under the old tenant; transfer resources first or disable user_tenant_sync.enforce_transfer_before_relocate",
   "19102": "Failed to resolve leaf tenant: no primary department and no default tenant available",
   "19103": "JWT token_version does not match the current user state; please re-login",
@@ -457,6 +459,7 @@
   "25011": "The permission engine model does not match the current configuration. Contact an administrator",
   "25012": "The impact analysis expired. Start the publish again",
   "25013": "Too many permission changes at once. Split them into smaller batches",
+  "25014": "The visible resource list was incomplete. Try again later",
   "26001": "Missing or malformed API credential. Send it as Authorization: Bearer bs-sak-….",
   "26002": "The API credential is invalid, revoked or expired.",
   "26003": "The API credential lacks the scope required by this endpoint.",
@@ -476,6 +479,6 @@
   "26031": "This endpoint has no registered API scope; please contact the administrator.",
   "90001": "You do not have permission to access the admin backend. Please contact the administrator to request access if needed.",
   "90002": "Your current role does not have permission to access the workbench. Please contact the administrator if needed.",
-  "personIdAlreadyExists": "Person ID already exists",
-  "fallback": "The operation failed. Please try again later."
+  "fallback": "The operation failed. Please try again later.",
+  "personIdAlreadyExists": "Person ID already exists"
 }

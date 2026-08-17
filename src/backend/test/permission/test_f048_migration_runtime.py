@@ -30,6 +30,7 @@ from bisheng.permission.domain.models import (
     PermissionMigrationRun,
     PermissionModel,
     PermissionModelAction,
+    PermissionVisibleSourceProjection,
     ResourcePermissionMode,
 )
 from bisheng.permission.domain.repositories.migration_repository import (
@@ -598,8 +599,11 @@ _CONTROL_TABLES = (
     "permission_model",
     "permission_model_action",
     "permission_projection_operation",
+    "permission_migration_run",
+    "permission_migration_item",
     "permission_grant",
     "permission_grant_assignee",
+    "permission_visible_source_projection",
     "resource_permission_mode",
 )
 
@@ -725,6 +729,23 @@ async def _control_checksum(
                         resource_id="wf-1",
                         mode="CUSTOM",
                         projection_state="CURRENT",
+                    ),
+                    PermissionVisibleSourceProjection(
+                        id=id_offset + 10,
+                        tenant_id=7,
+                        resource_type="workflow",
+                        resource_id="wf-1",
+                        visibility_class="ordinary",
+                        projected_subject="user:11",
+                        source_kind="GRANT_ASSIGNEE",
+                        source_owner_key=f"grant_assignee:{id_offset + 8}",
+                        source_locator="migration:DIRECT:legacy",
+                        source_fingerprint="d" * 64,
+                        contribution_fingerprint="e" * 64,
+                        model_key="viewer",
+                        source_version=1,
+                        tuple_fingerprint="f" * 64,
+                        state="ACTIVE",
                     ),
                 )
             )

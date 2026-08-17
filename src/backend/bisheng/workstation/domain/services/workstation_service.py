@@ -243,16 +243,49 @@ class WorkStationService(BaseService):
         await TenantWorkstationConfigDao.aupsert(cls._current_tenant_id(), key.value, payload)
 
     @classmethod
+    def _read_tool_rows(cls, tool_type_ids: list) -> tuple[dict, dict]:
+        """Read the parent types + their children for ``tool_type_ids``."""
+        tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
+        exists_tool_type = {tool.id: tool for tool in tool_type_info}
+        tool_info = GptsToolsDao.get_list_by_type(list(exists_tool_type.keys()))
+        return exists_tool_type, {tool.id: tool for tool in tool_info}
+
+    @classmethod
     def sync_tool_info(cls, tools: list[dict]) -> list[dict]:
-        """Synchronize tool metadata from persistent storage."""
+        """Synchronize tool metadata from persistent storage.
+
+        Tools the lookup cannot find are dropped — that is how an admin's
+        deletion propagates into saved configs. But "not found" is also what a
+        narrowed visible-tenant IN-list produces for the config owner's own
+        rows, and the caller cannot tell the two apart: the config page
+        round-trips what it is shown, so a filtered read would persist as a
+        cleared tool pool. When anything fails to resolve, re-read pinned to the
+        tenant that owns the config (``strict_tenant_filter`` narrows to
+        ``tenant_id = current`` — it never widens) before believing the drop.
+        """
         if not tools:
             return []
         normalized_tools = [cls._to_plain_dict(tool) for tool in tools]
         tool_type_ids = [tool.get("id") for tool in normalized_tools if tool]
-        tool_type_info = GptsToolsDao.get_all_tool_type(tool_type_ids)
-        exists_tool_type = {tool.id: tool for tool in tool_type_info}
-        tool_info = GptsToolsDao.get_list_by_type(list(exists_tool_type.keys()))
-        exists_tool_info = {tool.id: tool for tool in tool_info}
+        exists_tool_type, exists_tool_info = cls._read_tool_rows(tool_type_ids)
+
+        missing = [tid for tid in tool_type_ids if tid not in exists_tool_type]
+        if missing:
+            with strict_tenant_filter():
+                strict_type, strict_info = cls._read_tool_rows(tool_type_ids)
+            # Keep whichever read resolved more; a genuine deletion resolves
+            # neither way and still drops out below.
+            if len(strict_type) > len(exists_tool_type):
+                logger.warning(
+                    "workstation config tool sync: {} of {} tool group(s) unresolved under the request's "
+                    "tenant filter, recovered {} with a strict re-read (tenant={})",
+                    len(missing),
+                    len(tool_type_ids),
+                    len(strict_type) - len(exists_tool_type),
+                    cls._current_tenant_id(),
+                )
+                exists_tool_type, exists_tool_info = strict_type, strict_info
+
         new_tools = []
         for tool in normalized_tools:
             if not tool:

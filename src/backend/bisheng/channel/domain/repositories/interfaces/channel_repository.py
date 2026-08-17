@@ -14,6 +14,22 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
         pass
 
     @abstractmethod
+    async def find_by_creation_request(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+        creation_request_id: str,
+    ) -> Channel | None:
+        """Find the durable result of one creator-scoped creation command."""
+        pass
+
+    @abstractmethod
+    async def save_creation(self, channel: Channel) -> tuple[Channel, bool]:
+        """Insert a creation command or recover its concurrent winner."""
+        pass
+
+    @abstractmethod
     async def find_permission_candidates(
         self,
         *,

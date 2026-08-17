@@ -112,3 +112,8 @@ class PermissionImpactExpiredError(BaseErrorCode):
 class PermissionMutationTooLargeError(BaseErrorCode):
     Code: int = 25013
     Msg: str = "Permission mutation exceeds the atomic tuple limit"
+
+
+class PermissionEnumerationIncompleteError(BaseErrorCode):
+    Code: int = 25014
+    Msg: str = "Permission object enumeration did not complete"

@@ -86,6 +86,29 @@ def _clear_proxy_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_tenant_context():
+    """Start every test with no tenant context, and leave none behind.
+
+    The tenant id lives in a **process-wide** ``ContextVar`` that the SQLAlchemy
+    filter hooks read on every SELECT. Suites that legitimately set it (F054 /
+    F055 fixtures do, exactly as the request middleware would) leave it set for
+    whatever runs next in the same process — so these tests passed on their own
+    and failed only when another suite ran first. Measured: `app_runtime` +
+    `app_publish` before `open_api` turned three tenant-isolation tests red.
+
+    Isolation is this suite's own job. Depending on the previous suite to clean
+    up is what makes a green run a matter of collection order.
+    """
+    from bisheng.core.context.tenant import current_tenant_id
+
+    token = current_tenant_id.set(None)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(token)
+
+
 # ---------------------------------------------------------------------------
 # Database (aiosqlite) + session binding
 # ---------------------------------------------------------------------------

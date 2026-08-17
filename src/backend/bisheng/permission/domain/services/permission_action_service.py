@@ -10,11 +10,18 @@ from loguru import logger
 
 from bisheng.common.errcode.permission import (
     InvalidCatalogActionError,
+    PermissionEnumerationIncompleteError,
     PermissionFGAUnavailableError,
     PermissionProjectionFailedError,
     PermissionPublishNotReadyError,
 )
-from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.common.services.metric_log import emit_metric
+from bisheng.permission.domain.schemas import (
+    VerifiedPermissionTarget,
+    VisibilityEnumerationStatus,
+    VisibleObjectEnumerationRequest,
+    VisibleObjectEnumerationResult,
+)
 from bisheng.permission.domain.services.catalog_policy import (
     REGISTERED_ACTION_CODES,
 )
@@ -82,6 +89,15 @@ class PermissionFGADecisionPort(Protocol):
         type: str,
         consistency: str | None = None,
     ) -> list[str]: ...
+
+    async def stream_list_objects(
+        self,
+        *,
+        user: str,
+        relation: str,
+        type: str,
+        consistency: str | None = None,
+    ) -> tuple[str, ...]: ...
 
 
 class PermissionListPolicyPort(Protocol):
@@ -173,23 +189,17 @@ class F048PermissionService:
         target: VerifiedPermissionTarget,
     ) -> bool:
         started = perf_counter()
-        shortcut = await self._identity_shortcut(
-            actor,
-            target,
-            action="visible",
-        )
-        if shortcut is not None:
-            allowed, reason = shortcut
+        if target.tenant_id != actor.current_tenant_id:
             await self._emit_decision(
                 actor,
                 target,
                 "visible",
-                allowed,
-                reason,
+                False,
+                "TENANT_MISMATCH",
                 None,
                 started,
             )
-            return allowed
+            return False
         await self._catalog.ensure_runtime_ready()
         await self._scope_fence.ensure_readable(target)
         consistency = await self._consistency(target)
@@ -280,13 +290,8 @@ class F048PermissionService:
         unresolved: list[tuple[int, VerifiedPermissionTarget]] = []
         consistency = None
         for index, target in enumerate(targets):
-            shortcut = await self._identity_shortcut(
-                actor,
-                target,
-                action="visible",
-            )
-            if shortcut is not None:
-                results[index] = shortcut[0]
+            if target.tenant_id != actor.current_tenant_id:
+                results[index] = False
                 continue
             await self._catalog.ensure_runtime_ready()
             await self._scope_fence.ensure_readable(target)
@@ -320,6 +325,115 @@ class F048PermissionService:
             ):
                 results[index] = bool(allowed)
         return tuple(bool(value) for value in results)
+
+    async def list_visible_objects(
+        self,
+        actor: PermissionActor,
+        *,
+        resource_type: str,
+        max_results: int,
+    ) -> VisibleObjectEnumerationResult:
+        """Return a complete immutable visible ID set after normal stream EOF."""
+
+        if actor.current_tenant_id <= 0:
+            raise PermissionEnumerationIncompleteError(msg="Visible enumeration has no valid tenant fence")
+        request = VisibleObjectEnumerationRequest(
+            tenant_id=actor.current_tenant_id,
+            resource_type=resource_type,
+            fga_user=f"user:{actor.user_id}",
+            max_results=max_results,
+        )
+        started = perf_counter()
+        await self._catalog.ensure_runtime_ready()
+        consistency = await self._scope_consistency(
+            request.tenant_id,
+            request.resource_type,
+            None,
+        )
+        try:
+            fga_started = perf_counter()
+            objects = await self._fga.stream_list_objects(
+                user=request.fga_user,
+                relation="visible",
+                type=request.resource_type,
+                consistency=consistency,
+            )
+        except Exception as exc:
+            emit_metric(
+                "permission_visible_list",
+                tenant=request.tenant_id,
+                resource_type=request.resource_type,
+                strategy="visible_ids_first",
+                candidate_count=0,
+                visible_count=0,
+                scanned_count=0,
+                scan_amplification=0,
+                stream_completed=False,
+                capacity=request.max_results,
+                db_elapsed_ms=0,
+                fga_elapsed_ms=(perf_counter() - fga_started) * 1000,
+                total_elapsed_ms=(perf_counter() - started) * 1000,
+                alert="stream_incomplete",
+            )
+            raise PermissionEnumerationIncompleteError(exception=exc) from exc
+
+        prefix = f"{request.resource_type}:"
+        if any(not value.startswith(prefix) for value in objects):
+            raise PermissionEnumerationIncompleteError(
+                msg="OpenFGA visible enumeration returned an unexpected object type",
+            )
+        object_ids = tuple(sorted({value[len(prefix) :] for value in objects}))
+        if len(object_ids) > request.max_results:
+            self._emit_visible_list_metric(
+                request=request,
+                visible_count=len(object_ids),
+                fga_started=fga_started,
+                started=started,
+                alert="capacity_exceeded",
+            )
+            raise PermissionEnumerationIncompleteError(
+                msg="Visible enumeration exceeded its reviewed capacity",
+            )
+        capacity_ratio = len(object_ids) / request.max_results
+        self._emit_visible_list_metric(
+            request=request,
+            visible_count=len(object_ids),
+            fga_started=fga_started,
+            started=started,
+            alert="capacity_80_percent" if capacity_ratio >= 0.8 else None,
+        )
+        return VisibleObjectEnumerationResult(
+            resource_type=request.resource_type,
+            object_ids=object_ids,
+            max_results=request.max_results,
+            status=VisibilityEnumerationStatus.NORMAL,
+        )
+
+    @staticmethod
+    def _emit_visible_list_metric(
+        *,
+        request: VisibleObjectEnumerationRequest,
+        visible_count: int,
+        fga_started: float,
+        started: float,
+        alert: str | None,
+    ) -> None:
+        emit_metric(
+            "permission_visible_list",
+            tenant=request.tenant_id,
+            resource_type=request.resource_type,
+            strategy="visible_ids_first",
+            candidate_count=0,
+            visible_count=visible_count,
+            scanned_count=visible_count,
+            scan_amplification=1 if visible_count else 0,
+            stream_completed=True,
+            capacity=request.max_results,
+            db_elapsed_ms=0,
+            fga_elapsed_ms=(perf_counter() - fga_started) * 1000,
+            total_elapsed_ms=(perf_counter() - started) * 1000,
+            alert=alert,
+        )
 
     async def list_action_objects(
         self,

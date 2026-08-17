@@ -40,7 +40,10 @@ import { ACCENT, ACTIVITY_I18N, BODY, INK } from './execTokens';
 // the single Accent (blue) highlight; the chevron is muted and darkens on hover;
 // the title + narration sit lighter as quiet meta.
 const NODE_TEXT = '#999999';
+import { readIngestProgress, readSkillLoadFailure } from './execTypes';
 import { GroupHeaderLabel } from './GroupHeaderLabel';
+import { IngestPhaseRow } from './IngestPhaseRow';
+import { SkillLoadFailureRow } from './SkillLoadFailureRow';
 import { KnowledgeRow } from './KnowledgeRow';
 import { NarrationTicker } from './NarrationTicker';
 import ToolRowLite from './ToolRowLite';
@@ -163,10 +166,8 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
         return () => io.disconnect();
     }, [open]);
 
-    // Timestamps on MergedStep are second-level ints (BaseEvent.timestamp); the
-    // ticker math is in milliseconds, so scale up here.
-    const startMs = group.startedAt != null ? group.startedAt * 1000 : null;
-    const endMs = group.endedAt != null ? group.endedAt * 1000 : null;
+    // (`group.startedAt` / `endedAt` are still built and still order the timeline;
+    // they simply no longer surface as a header duration — see GroupHeaderLabel.)
 
     // R1 (段流重构 2026-06): the segment header is the ACTIVITY SUMMARY of what
     // this episode did ("检索知识库 3 次 · 读 2 文件") — built from summarizeActivity,
@@ -208,10 +209,17 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
                 </p>
             );
         }
-        // Knowledge steps keep their richer hit-list row; everything else is a
-        // lite tool row. Both preserve original timeline order.
+        // Knowledge steps keep their richer hit-list row; the attachment ingest is
+        // preparation, not an agent action, and gets its own counted phase row;
+        // everything else is a lite tool row. All preserve original timeline order.
         if (seg.step.stepType === 'knowledge') {
             return <KnowledgeRow key={seg.key} step={seg.step} />;
+        }
+        if (readIngestProgress(seg.step)) {
+            return <IngestPhaseRow key={seg.key} step={seg.step} />;
+        }
+        if (readSkillLoadFailure(seg.step)) {
+            return <SkillLoadFailureRow key={seg.key} step={seg.step} />;
         }
         return <ToolRowLite key={seg.key} step={seg.step} />;
     });
@@ -271,14 +279,7 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
                         running && 'animate-pulse group-hover:animate-none',
                     )}
                 >
-                    <GroupHeaderLabel
-                        activityText={activityText}
-                        subagent={subagent}
-                        compact={compact}
-                        startMs={startMs}
-                        endMs={endMs}
-                        running={running}
-                    />
+                    <GroupHeaderLabel activityText={activityText} subagent={subagent} running={running} />
                 </span>
                 {/* Single chevron rotates right→down (collapsed → expanded), matching
                     the StepRow / daily "深度思考" toggle; muted, darkening on hover. */}

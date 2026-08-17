@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from bisheng.linsight.domain.models.linsight_sop import LinsightSOP
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
+
 from bisheng.linsight.domain.services.skill_store import SkillStore, parse_skill_md
 from test.linsight.test_skill_service import FakeSkillDao
 
@@ -38,7 +40,7 @@ def _report() -> dict:
 def env(tmp_path, monkeypatch):
     FakeSkillDao.reset()
     monkeypatch.setattr(script, "LinsightSkillDao", FakeSkillDao)
-    return SkillStore(root=tmp_path)
+    return SkillStore(root=tmp_path, minio=FakeMinioStorage())
 
 
 async def _run_tenant(store, sops, apply=True):
@@ -71,7 +73,7 @@ class TestMigrateTenant:
         assert entry["display_name"] == "标书撰写流程"
         row = FakeSkillDao.rows["biao-shu-zhuan-xie-liu-cheng"]
         assert row.source == "sop_migrated" and row.enabled
-        meta, body = parse_skill_md(env.read_text(TENANT, row.name))
+        meta, body = parse_skill_md(env.read_text(TENANT, row.name, row.content_hash))
         assert meta["metadata"]["sop-id"] == "17"
         assert meta["metadata"]["display-name"] == "标书撰写流程"
         assert body.strip() == "# SOP 正文"
@@ -123,4 +125,4 @@ class TestMigrateTenant:
         report = await _run_tenant(env, [_sop(17, "标书撰写流程")], apply=False)
         assert len(report["success"]) == 1
         assert not FakeSkillDao.rows
-        assert not env.exists(TENANT, "biao-shu-zhuan-xie-liu-cheng")
+        assert env.minio.keys("linsight/skills/") == []  # dry-run wrote nothing

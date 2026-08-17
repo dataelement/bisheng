@@ -24,6 +24,7 @@ from bisheng.permission.domain.models import (
     PermissionGrant,
     PermissionGrantAssignee,
     PermissionMigrationItem,
+    PermissionVisibleSourceProjection,
 )
 from bisheng.permission.domain.repositories.migration_repository import (
     MigrationRepository,
@@ -124,6 +125,27 @@ class LiveMigrationEvidenceProvider:
             expected_tuples=target_tuples,
             consistency=consistency,
         )
+        source_integrity = await self._visible_source_integrity()
+        expected_visible = {
+            _identity(row) for row in target_tuples if row["relation"] == "visible"
+        }
+        actual_visible = {
+            _identity(row)
+            for row in actual_rows
+            if row.get("relation") == "visible"
+            and str(row.get("object", "")).partition(":")[0]
+            in {
+                "knowledge_space",
+                "knowledge_library",
+                "folder",
+                "knowledge_file",
+                "workflow",
+                "assistant",
+                "tool",
+                "channel",
+                "dashboard",
+            }
+        }
         difference_types = [row.difference_type for row in items if row.difference_type]
         catalog, model_release = await self._release_rows(
             run.store_id,
@@ -188,6 +210,13 @@ class LiveMigrationEvidenceProvider:
                     catalog=catalog,
                     model_release=model_release,
                 ),
+            ),
+            visible_source_checksum_matches=source_integrity,
+            visible_aggregate_checksum_matches=(expected_visible == actual_visible),
+            unattributed_visible_count=len(actual_visible - expected_visible),
+            visible_stream_complete=semantic_results.get(
+                "visible_stream_oracle",
+                False,
             ),
         )
 
@@ -294,9 +323,128 @@ class LiveMigrationEvidenceProvider:
                     object=f"knowledge_file:{file_row['resource_id']}",
                     consistency=consistency,
                 )
+            results.update(
+                await self._visible_oracle_semantics(
+                    client,
+                    expected_tuples,
+                    consistency,
+                )
+            )
             return results
         finally:
             await client.close()
+
+    @staticmethod
+    async def _visible_oracle_semantics(
+        client: FGAClient,
+        tuples: tuple[dict[str, str], ...],
+        consistency: str,
+    ) -> dict[str, bool]:
+        users = sorted(
+            {
+                row["user"]
+                for row in tuples
+                if row["user"].startswith("user:") and "#" not in row["user"]
+            }
+        )
+        objects_by_type: dict[str, list[str]] = {}
+        for row in tuples:
+            if row["relation"] != "visible":
+                continue
+            resource_type = row["object"].partition(":")[0]
+            objects_by_type.setdefault(resource_type, []).append(row["object"])
+        if not users or not objects_by_type:
+            return {
+                "visible_single_batch_oracle": True,
+                "visible_stream_oracle": True,
+            }
+
+        single_batch_matches = True
+        stream_matches = True
+        for user in users:
+            for resource_type, objects in sorted(objects_by_type.items()):
+                checks = [
+                    {
+                        "user": user,
+                        "relation": "visible",
+                        "object": object_key,
+                    }
+                    for object_key in sorted(set(objects))
+                ]
+                batch_results: list[bool] = []
+                for offset in range(0, len(checks), 50):
+                    batch_results.extend(
+                        await client.batch_check(
+                            checks[offset : offset + 50],
+                            consistency=consistency,
+                        )
+                    )
+                single_results = [
+                    await client.check(
+                        user=user,
+                        relation="visible",
+                        object=check["object"],
+                        consistency=consistency,
+                    )
+                    for check in checks
+                ]
+                single_batch_matches &= single_results == batch_results
+                expected = {
+                    check["object"]
+                    for check, allowed in zip(checks, batch_results, strict=True)
+                    if allowed
+                }
+                try:
+                    streamed = set(
+                        await client.stream_list_objects(
+                            user=user,
+                            relation="visible",
+                            type=resource_type,
+                            consistency=consistency,
+                        )
+                    )
+                except Exception:
+                    stream_matches = False
+                else:
+                    stream_matches &= (streamed & set(objects)) == expected
+        return {
+            "visible_single_batch_oracle": single_batch_matches,
+            "visible_stream_oracle": stream_matches,
+        }
+
+    @staticmethod
+    async def _visible_source_integrity() -> bool:
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                assignees = list(
+                    (
+                        await session.execute(
+                            select(PermissionGrantAssignee)
+                            .join(PermissionGrant, PermissionGrant.id == PermissionGrantAssignee.grant_id)
+                            .where(
+                                PermissionGrant.state == "ACTIVE",
+                                PermissionGrantAssignee.state == "ACTIVE",
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                sources = list(
+                    (
+                        await session.execute(
+                            select(PermissionVisibleSourceProjection).where(
+                                PermissionVisibleSourceProjection.state == "ACTIVE",
+                                PermissionVisibleSourceProjection.source_kind == "GRANT_ASSIGNEE",
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+        expected = {f"grant_assignee:{row.id}" for row in assignees if row.id is not None}
+        actual = [row.source_owner_key for row in sources]
+        return len(actual) == len(set(actual)) and set(actual) == expected
 
     @staticmethod
     async def _raw_tuple_checks(
@@ -477,6 +625,4 @@ class LiveMigrationEvidenceProvider:
             store_id=str(model_release.store_id if model_release else ""),
             model_id=str(model_release.model_id if model_release else ""),
             catalog_release_id=(int(catalog.id) if catalog and catalog.id else None),
-            dual_model_mode=False,
-            legacy_model_id=None,
         )

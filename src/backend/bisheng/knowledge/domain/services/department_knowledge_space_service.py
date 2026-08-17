@@ -20,7 +20,7 @@ from bisheng.department.domain.services.department_service import DepartmentServ
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao, KnowledgeRead
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     DepartmentKnowledgeSpaceBatchCreateReq,
     DepartmentKnowledgeSpaceVisibilityReq,
@@ -468,8 +468,7 @@ class DepartmentKnowledgeSpaceService:
         request: Request,
         login_user: UserPayload,
         order_by: str = "update_time",
-    ) -> list[KnowledgeSpaceInfoResp]:
-        members = await SpaceChannelMemberDao.async_get_user_space_members(login_user.user_id)
+    ) -> list[KnowledgeRead]:
         all_bindings = await DepartmentKnowledgeSpaceDao.aget_all()
         candidate_ids = [int(binding.space_id) for binding in all_bindings]
         action_map = await batch_check_business_actions(
@@ -478,18 +477,12 @@ class DepartmentKnowledgeSpaceService:
             resource_ids=candidate_ids,
             actions=("visible",),
         )
-        space_ids = {space_id for space_id in candidate_ids if "visible" in action_map.get(str(space_id), frozenset())}
+        space_ids = [space_id for space_id in candidate_ids if "visible" in action_map.get(str(space_id), frozenset())]
 
         if not space_ids:
             return []
-        filtered_members = [member for member in members if int(member.business_id) in space_ids]
         svc = KnowledgeSpaceService(request=request, login_user=login_user)
-        return await svc._format_accessible_spaces(
-            list(space_ids),
-            order_by,
-            memberships=filtered_members,
-            required_action="visible",
-        )
+        return await svc._format_basic_spaces(space_ids, order_by)
 
     @classmethod
     async def get_all_department_spaces(

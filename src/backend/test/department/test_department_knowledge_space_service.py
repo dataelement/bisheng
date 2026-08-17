@@ -509,7 +509,7 @@ async def test_get_user_department_spaces_uses_department_binding_without_member
     DepartmentKnowledgeSpaceService = _load_service_class()
     login_user = _make_login_user(is_admin=False)
     binding = SimpleNamespace(space_id=101, department_id=10)
-    expected = [SimpleNamespace(id=101, space_kind="department")]
+    expected = [SimpleNamespace(id=101)]
 
     with (
         patch(
@@ -518,17 +518,12 @@ async def test_get_user_department_spaces_uses_department_binding_without_member
             return_value=[binding],
         ),
         patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.async_get_user_space_members",
-            new_callable=AsyncMock,
-            return_value=[],
-        ),
-        patch(
             "bisheng.knowledge.domain.services.department_knowledge_space_service.batch_check_business_actions",
             new_callable=AsyncMock,
             return_value={"101": frozenset({"visible"})},
         ),
         patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.KnowledgeSpaceService._format_accessible_spaces",
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.KnowledgeSpaceService._format_basic_spaces",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_format,
@@ -543,8 +538,6 @@ async def test_get_user_department_spaces_uses_department_binding_without_member
     mock_format.assert_awaited_once()
     assert mock_format.await_args.args[0] == [101]
     assert mock_format.await_args.args[1] == "name"
-    assert mock_format.await_args.kwargs["memberships"] == []
-    assert mock_format.await_args.kwargs["required_action"] == "visible"
 
 
 @pytest.mark.asyncio
@@ -560,21 +553,13 @@ async def test_get_user_department_spaces_super_admin_sees_all_departments():
         SimpleNamespace(space_id=101, department_id=10),
         SimpleNamespace(space_id=202, department_id=20),
     ]
-    expected = [
-        SimpleNamespace(id=101, space_kind="department"),
-        SimpleNamespace(id=202, space_kind="department"),
-    ]
+    expected = [SimpleNamespace(id=101), SimpleNamespace(id=202)]
 
     with (
         patch(
             "bisheng.knowledge.domain.services.department_knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_all",
             new_callable=AsyncMock,
             return_value=all_bindings,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.SpaceChannelMemberDao.async_get_user_space_members",
-            new_callable=AsyncMock,
-            return_value=[],
         ),
         patch(
             "bisheng.knowledge.domain.services.department_knowledge_space_service.batch_check_business_actions",
@@ -585,7 +570,7 @@ async def test_get_user_department_spaces_super_admin_sees_all_departments():
             },
         ) as mock_batch_check,
         patch(
-            "bisheng.knowledge.domain.services.department_knowledge_space_service.KnowledgeSpaceService._format_accessible_spaces",
+            "bisheng.knowledge.domain.services.department_knowledge_space_service.KnowledgeSpaceService._format_basic_spaces",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_format,
@@ -606,7 +591,6 @@ async def test_get_user_department_spaces_super_admin_sees_all_departments():
     mock_format.assert_awaited_once()
     assert sorted(mock_format.await_args.args[0]) == [101, 202]
     assert mock_format.await_args.args[1] == "name"
-    assert mock_format.await_args.kwargs["required_action"] == "visible"
 
 
 def _make_binding(space_id, department_id, *, is_hidden=False):

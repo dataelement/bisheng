@@ -126,14 +126,14 @@ async def _run(apply: bool, remove: bool, tenant_id: int) -> int:
             print("[dry-run] 未写入 · 加 --apply 正式创建")
             return 0
 
-        size = store.write_bundle(tenant_id, name, files)
-        object_path = store.object_path(tenant_id, name)
+        ref = store.write_bundle(tenant_id, name, files)
         if existing:
             existing.display_name = display_name
             existing.description = description
             existing.enabled = True
-            existing.object_path = object_path
-            existing.size = size
+            existing.object_path = ref.object_key
+            existing.content_hash = ref.content_hash
+            existing.size = ref.size
             await LinsightSkillDao.update(existing)
             print(f"[apply] updated existing skill row id={existing.id}")
         else:
@@ -145,12 +145,13 @@ async def _run(apply: bool, remove: bool, tenant_id: int) -> int:
                     description=description,
                     enabled=True,
                     source=SKILL_SOURCE_MANUAL,
-                    object_path=object_path,
-                    size=size,
+                    object_path=ref.object_key,
+                    content_hash=ref.content_hash,
+                    size=ref.size,
                     created_by=1,
                 )
             )
-            print(f"[apply] created skill row id={created.id} object_path={object_path} size={size}")
+            print(f"[apply] created skill row id={created.id} object_path={ref.object_key} size={ref.size}")
         print("[done] 打开 构建-首页-技能管理，点开该技能即可体验详情抽屉超长内容排版")
         return 0
     finally:

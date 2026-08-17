@@ -12,9 +12,10 @@ from scripts import reconcile_f048_projection_operations as cli
 
 
 class FakeRepository:
-    def __init__(self, operation, tuples) -> None:
+    def __init__(self, operation, tuples, visible_sources=()) -> None:
         self.operation = operation
         self.tuples = tuples
+        self.visible_sources = tuple(visible_sources)
 
     async def aget_operation(self, operation_id: int):
         if self.operation is None or self.operation.id != operation_id:
@@ -25,6 +26,16 @@ class FakeRepository:
         if self.operation is None or self.operation.id != operation_id:
             return []
         return self.tuples
+
+    async def aget_visible_operation_sources(self, operation_id: int):
+        if self.operation is None or self.operation.id != operation_id:
+            return []
+        return list(self.visible_sources)
+
+    async def aget_visible_operation_checksum(self, operation_id: int):
+        if self.operation is None or self.operation.id != operation_id or not self.visible_sources:
+            return None
+        return "v" * 64
 
 
 class FakeProjection:
@@ -59,6 +70,10 @@ def _tuple(phase: str, action: str):
     return SimpleNamespace(phase=phase, action=action)
 
 
+def _visible_source(state: str = "PENDING"):
+    return SimpleNamespace(state=state)
+
+
 def _inspection(operation_id: int, status: str) -> cli.OperationInspection:
     return cli.OperationInspection(
         operation_id=operation_id,
@@ -73,6 +88,9 @@ def _inspection(operation_id: int, status: str) -> cli.OperationInspection:
         status=status,
         tuple_count=4,
         tuple_summary={"COMMIT:WRITE": 1, "STAGE:WRITE": 3},
+        visible_source_count=1,
+        visible_source_summary={"PENDING" if status != "FINALIZED" else "ACTIVE": 1},
+        visible_source_checksum="v" * 64,
         resource_mode={
             "mode": "INHERIT" if status != "FINALIZED" else "CUSTOM",
             "version": 4 if status != "FINALIZED" else 5,
@@ -106,6 +124,7 @@ async def test_inspect_operation_validates_pin_ledger_and_resource_fence(monkeyp
                 _tuple("COMMIT", "DELETE"),
                 _tuple("COMMIT", "WRITE"),
             ],
+            visible_sources=(),
         ),
         projection=None,
     )
@@ -135,6 +154,7 @@ async def test_inspect_operation_validates_pin_ledger_and_resource_fence(monkeyp
         "COMMIT:WRITE": 1,
         "STAGE:WRITE": 2,
     }
+    assert inspected.visible_source_count == 0
     assert inspected.resource_mode == {
         "mode": "INHERIT",
         "version": 4,
@@ -172,6 +192,37 @@ async def test_inspect_operation_blocks_live_pin_mismatch() -> None:
     )
 
     with pytest.raises(cli.ProjectionReconcileBlockedError, match="OpenFGA pin"):
+        await cli.inspect_operation(
+            runtime,
+            operation_id=11,
+            tenant_id=1,
+        )
+
+
+async def test_inspect_grant_operation_requires_complete_visible_source_after_state() -> None:
+    operation = _operation(operation_type="GRANT_MUTATION")
+    runtime = cli.ProjectionReconcileRuntime(
+        client=SimpleNamespace(store_id="store-live", model_id="model-live"),
+        repository=FakeRepository(operation, [_tuple("COMMIT", "WRITE")]),
+        projection=None,
+    )
+
+    with pytest.raises(cli.ProjectionReconcileBlockedError, match="visible source"):
+        await cli.inspect_operation(
+            runtime,
+            operation_id=11,
+            tenant_id=1,
+        )
+
+    runtime = replace(
+        runtime,
+        repository=FakeRepository(
+            operation,
+            [_tuple("COMMIT", "WRITE")],
+            visible_sources=(_visible_source("FAILED_CLOSED"),),
+        ),
+    )
+    with pytest.raises(cli.ProjectionReconcileBlockedError, match="FAILED_CLOSED"):
         await cli.inspect_operation(
             runtime,
             operation_id=11,

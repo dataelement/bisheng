@@ -20,8 +20,12 @@ from bisheng.channel.domain.services.permission_migration_source import (
 )
 from bisheng.common.errcode.permission import PermissionMigrationBlockedError
 from bisheng.common.services.config_service import settings
+from bisheng.core.openfga.authorization_model_f048 import (
+    authorization_model_checksum,
+    get_authorization_model_f048,
+)
 from bisheng.core.openfga.client import FGAClient
-from bisheng.core.openfga.discovery import discover_openfga_runtime
+from bisheng.core.openfga.discovery import OpenFGARuntimePin, discover_openfga_runtime
 from bisheng.knowledge.domain.services.permission_migration_source import (
     KnowledgePermissionMigrationSource,
     SqlKnowledgeMigrationRepository,
@@ -75,6 +79,15 @@ class F048MigrationRuntime:
         await self.source_client.close()
 
 
+def _require_predecessor_source(*, pin: OpenFGARuntimePin, run_id: int | None) -> None:
+    """Reject starting a second formal migration from the final F048 model."""
+
+    if run_id is None and pin.model_checksum == authorization_model_checksum(
+        get_authorization_model_f048()
+    ):
+        raise PermissionMigrationBlockedError(msg="F048_MIGRATION_ALREADY_COMPLETED")
+
+
 async def build_f048_migration_runtime(
     live_settings: Any = settings,
     *,
@@ -96,6 +109,7 @@ async def build_f048_migration_runtime(
         required_store_id=run.store_id if run else None,
         required_model_id=run.source_model_id if run else None,
     )
+    _require_predecessor_source(pin=pin, run_id=run_id)
 
     source_client = FGAClient(
         api_url=config.api_url,

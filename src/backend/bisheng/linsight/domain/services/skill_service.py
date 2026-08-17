@@ -145,24 +145,25 @@ class SkillService:
     async def get_detail(self, tenant_id: int, name: str) -> SkillDetail:
         skill = await self._get_or_404(name)
         try:
-            source_text = self.store.read_text(tenant_id, name)
+            source_text = self.store.read_text(tenant_id, name, skill.content_hash)
             _, body = parse_skill_md(source_text)
         except (FileNotFoundError, ValueError) as exc:
-            # Disk drifted from DB (shared-volume misconfig etc.) — surface, don't hide.
-            logger.warning("skill disk read failed for {}: {}", name, exc)
+            # Row exists but its bundle object doesn't (never migrated, or deleted
+            # out-of-band) — surface, don't hide.
+            logger.warning("skill bundle read failed for {}: {}", name, exc)
             source_text, body = "", ""
         detail = SkillDetail(
             **SkillBrief.from_model(skill).model_dump(),
             preview=body.strip(),
             source_text=source_text,
-            files=[SkillFileEntry(**e) for e in self.store.list_files(tenant_id, name)],
+            files=[SkillFileEntry(**e) for e in self.store.list_files(tenant_id, name, skill.content_hash)],
         )
         return detail
 
     async def read_bundle_file(self, tenant_id: int, name: str, path: str) -> SkillFileContent:
-        await self._get_or_404(name)
+        skill = await self._get_or_404(name)
         try:
-            content = self.store.read_text(tenant_id, name, path)
+            content = self.store.read_text(tenant_id, name, skill.content_hash, path)
         except ValueError:
             raise SkillValidationError(msg=f"illegal file path: {path}")
         except FileNotFoundError:
@@ -222,10 +223,11 @@ class SkillService:
         new_md = compose_skill_md(
             name=form.name, description=form.description, body=form.content, display_name=form.display_name
         ).encode("utf-8")
-        files = self._load_existing_bundle(tenant_id, name)
+        files = self._load_existing_bundle(tenant_id, name, skill.content_hash)
         files[SKILL_MD] = new_md
-        size = self.store.write_bundle(tenant_id, name, files)
-        skill.display_name, skill.description, skill.size = form.display_name, form.description, size
+        ref = self.store.write_bundle(tenant_id, name, files)
+        skill.display_name, skill.description = form.display_name, form.description
+        skill.size, skill.content_hash, skill.object_path = ref.size, ref.content_hash, ref.object_key
         self._mark_forked(skill)
         await LinsightSkillDao.update(skill)
         return await self.get_detail(tenant_id, name)
@@ -237,8 +239,9 @@ class SkillService:
         if meta.name != name:
             raise SkillValidationError(msg=f"frontmatter name '{meta.name}' must equal skill ID '{name}'")
         await self._check_duplicate(name, meta.display_name, exclude_id=skill.id)
-        size = self.store.write_bundle(tenant_id, name, files)
-        skill.display_name, skill.description, skill.size = meta.display_name, meta.description, size
+        ref = self.store.write_bundle(tenant_id, name, files)
+        skill.display_name, skill.description = meta.display_name, meta.description
+        skill.size, skill.content_hash, skill.object_path = ref.size, ref.content_hash, ref.object_key
         self._mark_forked(skill)
         await LinsightSkillDao.update(skill)
         detail = await self.get_detail(tenant_id, name)
@@ -253,7 +256,7 @@ class SkillService:
         skill = await self._get_or_404(name)
         await LinsightSkillDao.delete_by_name(name)
         if not self.store.delete(tenant_id, name):
-            logger.warning("skill dir missing on delete: tenant={} name={}", tenant_id, skill.name)
+            logger.warning("skill bundle already absent on delete: tenant={} name={}", tenant_id, skill.name)
 
     # ----------------------------------------------------------- internals --
     async def _get_or_404(self, name: str) -> LinsightSkill:
@@ -332,12 +335,17 @@ class SkillService:
         if existing and existing.id != exclude_id:
             raise SkillNameDuplicateError()
 
-    def _load_existing_bundle(self, tenant_id: int, name: str) -> dict[str, bytes]:
-        base = self.store.skill_dir(tenant_id, name)
-        files: dict[str, bytes] = {}
-        for entry in self.store.list_files(tenant_id, name):
-            files[entry["path"]] = (base / entry["path"]).read_bytes()
-        return files
+    def _load_existing_bundle(self, tenant_id: int, name: str, content_hash: str) -> dict[str, bytes]:
+        """Read a stored bundle back as a file mapping (edit = read-modify-write).
+
+        Goes through the store's reader rather than joining paths itself; the
+        bundle's authoritative copy is an object, and only the store knows how a
+        version is materialized locally.
+        """
+        return {
+            entry["path"]: self.store.read_bytes(tenant_id, name, content_hash, entry["path"])
+            for entry in self.store.list_files(tenant_id, name, content_hash)
+        }
 
     async def _create(
         self,
@@ -350,7 +358,7 @@ class SkillService:
     ) -> SkillDetail:
         self._validate_fields(name, display_name, description)
         await self._check_duplicate(name, display_name)
-        size = self.store.write_bundle(tenant_id, name, files)
+        ref = self.store.write_bundle(tenant_id, name, files)
         skill = LinsightSkill(
             tenant_id=tenant_id,
             name=name,
@@ -358,8 +366,9 @@ class SkillService:
             description=description,
             enabled=True,
             source=SKILL_SOURCE_MANUAL,
-            object_path=self.store.object_path(tenant_id, name),
-            size=size,
+            object_path=ref.object_key,
+            content_hash=ref.content_hash,
+            size=ref.size,
             created_by=user_id,
         )
         skill = await LinsightSkillDao.create(skill)

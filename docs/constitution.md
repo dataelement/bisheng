@@ -6,7 +6,7 @@
 > - `scripts/arch-guard.sh` is the **machine-enforcement arm** of this document: each RULE maps to a clause below (see the anchor table).
 > - Violations are reported as **BLOCKER** during `/sdd-review design`.
 > - **Change governance**: editing this file requires PR review (a law change affects every feature). If a RULE is involved, sync the "→ Cx" note in `arch-guard.sh`.
-> - Last revised: 2026-08-06 (F048: lazy permission runtime and operational migration traffic control).
+> - Last revised: 2026-08-14 (C8: no shared state on the local filesystem).
 
 ## Anchor Table (clause ↔ arch-guard RULE)
 
@@ -20,6 +20,7 @@
 | **C5** | Error-code convention | — (review) | — |
 | **C6** | No hardcoded secrets | RULE-7 | WARNING |
 | **C7** | Frontend store must not call HTTP directly | RULE-6 | WARNING |
+| **C8** | No shared state on the local filesystem | — (review) | — |
 
 ---
 
@@ -136,3 +137,30 @@ No `password` / `secret_key` / `api_key` / `access_token` literals in code. Use 
 
 A frontend store must not call HTTP directly — go through `controllers/API/` (platform) or `api/` (client).
 All other frontend conventions (state library, UI library, path aliases, i18n, Toast, etc.) live in `.claude/rules/platform-frontend.md` and `.claude/rules/client-frontend.md` (see also `AGENTS.md §4`).
+
+## C8. No Shared State on the Local Filesystem ⚠️
+
+**Multi-node is the default assumption, not an edge case.** The backend already runs as several
+processes that need not share a machine: API replicas (`uvicorn --workers`), Celery workers, the
+Linsight worker (`bisheng/linsight/worker.py`, hostname-derived `node_id` + heartbeats), and Beat.
+Two processes agreeing today only because a single-host `docker compose` happens to bind-mount the
+same `/app/data` is an accident, not a design.
+
+The authoritative store for anything read by more than one process is **MySQL/DM8, Redis, or MinIO**.
+The local filesystem is a cache: disposable, rebuildable, never the source of truth.
+
+| ✅ Use | ❌ Never |
+|--------|---------|
+| Object storage for bytes + DB row for the pointer | A DB row whose payload only exists on the writer's disk |
+| Content-addressed keys, local cache keyed by that hash | A mutable local path treated as the live copy |
+| Startup work registered in **every** process role that needs it | Initialization only in `main.py`'s FastAPI lifespan |
+| Fail loudly, or report the gap to the user | Log a warning and continue silently degraded |
+
+Reference implementations: `WorkspaceBackend` (MinIO truth + write-through cache) and `SkillStore`
+(content-addressed objects + local materialization) in `bisheng/linsight/domain/services/`.
+
+Precedents that make this a law rather than advice: skill bundles shipped as node-local files and
+were unreadable from any other host (fixed by moving them to object storage); the F048 resource
+registry was installed only in the API process and had to be retrofitted into the background
+workers (`02cbb921a`). Both failed **silently** — which is the real cost, and why the last row of
+the table matters as much as the first.

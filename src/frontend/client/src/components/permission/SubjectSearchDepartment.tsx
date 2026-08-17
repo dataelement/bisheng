@@ -21,7 +21,7 @@ import { useGrantDepartmentTree } from "./useGrantDepartmentTree";
  * (decision 10). No client-side subtree materialization.
  */
 
-interface SubjectSearchDepartmentProps {
+export interface SubjectSearchDepartmentProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
   resourceType: ResourceType;

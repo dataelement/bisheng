@@ -446,7 +446,7 @@ async def test_system_owned_requires_code_allowlist_and_business_predicate() -> 
 
     result = await service.project_created(valid)
     assert result.grant is None
-    assert any(delta.relation == "system_visible_marker" for delta in projection.plans[0].deltas)
+    assert any(delta.relation == "visible" for delta in projection.plans[0].deltas)
     assert any(delta.relation == "system_use_marker" for delta in projection.plans[0].deltas)
 
     for invalid in (

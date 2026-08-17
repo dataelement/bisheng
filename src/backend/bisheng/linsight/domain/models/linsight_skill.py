@@ -25,8 +25,11 @@ SKILL_SOURCE_BUILTIN = "builtin"
 class LinsightSkillBase(SQLModelSerializable):
     """Tenant-scoped custom skill metadata (F035).
 
-    The skill body lives on disk under ``SKILLS_ROOT/data/skills/{tenant_id}/<name>/SKILL.md``
-    (see design §7.1); this table only owns the metadata. Kernel built-in skills
+    The skill body lives in object storage, keyed by ``object_path`` (which embeds
+    ``content_hash``); this table only owns the metadata and the pointer. Nodes
+    materialize the bundle into a local cache on demand, so every API replica and
+    every Linsight worker resolves the same bytes regardless of which host wrote
+    them. Kernel built-in skills
     are seeded into this same table (``source='builtin'``) so they share one
     runtime path with uploaded ones — the picker, the enable/disable toggle and
     ``materialize_session_skills`` need no special case for them.
@@ -65,12 +68,17 @@ class LinsightSkillBase(SQLModelSerializable):
     )
     object_path: str = Field(
         ...,
-        description="Relative disk path under SKILLS_ROOT",
-        sa_column=Column(String(512), nullable=False, comment="SKILL.md relative path"),
+        description="Object-storage key of the bundle archive",
+        sa_column=Column(String(512), nullable=False, comment="Bundle object key"),
+    )
+    content_hash: str = Field(
+        default="",
+        description="sha256 of the bundle's file mapping; '' means not yet on object storage",
+        sa_column=Column(String(64), nullable=False, server_default=text("''"), comment="Bundle content hash"),
     )
     size: int | None = Field(
         default=0,
-        description="SKILL.md file size in bytes",
+        description="Total bundle size in bytes",
         sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="File size in bytes"),
     )
     created_by: int | None = Field(

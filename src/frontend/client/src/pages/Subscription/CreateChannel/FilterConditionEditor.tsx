@@ -143,7 +143,7 @@ function KeywordTagInput({ keywords, onChange }: KeywordTagInputProps) {
                 onKeyDown={handleKeyDown}
                 onBlur={() => commit(draft)}
                 placeholder={keywords.length === 0 ? localize("com_subscription.input_keyword_press_enter") : ""}
-                className="flex-1 min-w-[80px] bg-transparent text-[14px] text-[#212121] placeholder:text-[#999999] outline-none border-0"
+                className="min-w-[80px] flex-1 border-0 bg-white text-[14px] text-[#212121] outline-none placeholder:text-[#999999]"
             />
         </div>
     );
@@ -230,11 +230,11 @@ export function FilterConditionEditor({
     // 没有任何条件 / 没有 group：仅展示「添加条件」按钮（与开关刚开启时一致）
     if (groups.length === 0 || conditions.length === 0) {
         return (
-            <div className="flex">
+            <div className="flex bg-white">
                 <button
                     type="button"
                     onClick={addCondition}
-                    className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white/50 px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
+                    className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
                     title={localize("com_subscription.add_condition")}
                 >
                     <SquarePlus className="size-4 shrink-0 text-[#212121]" strokeWidth={1.5} />
@@ -247,7 +247,7 @@ export function FilterConditionEditor({
     const showRelationLine = conditions.length >= 2;
 
     return (
-        <div className={cn("relative", showRelationLine && "pl-[34px]")}>
+        <div className={cn("relative bg-white", showRelationLine && "pl-[34px]")}>
             {/* 关系连线 + 文字（仅 ≥ 2 个条件时显示） */}
             {showRelationLine && (
                 <>
@@ -341,7 +341,7 @@ export function FilterConditionEditor({
                     <button
                         type="button"
                         onClick={addCondition}
-                        className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white/50 px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
+                        className="inline-flex items-center gap-[4px] rounded-md border border-[#EBECF0] bg-white px-[12px] py-[3px] text-[14px] leading-[22px] text-[#212121] hover:bg-[#F8F8F8]"
                         title={localize("com_subscription.add_condition")}
                     >
                         <SquarePlus className="size-4 shrink-0 text-[#212121]" strokeWidth={1.5} />

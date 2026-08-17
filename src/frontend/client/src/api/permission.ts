@@ -26,6 +26,38 @@ export interface GrantablePermissionModel {
   active: boolean;
 }
 
+export interface CreationPermissionContext {
+  catalog_release_id: number;
+  can_configure_initial_permissions: boolean;
+  grantable_models: GrantablePermissionModel[];
+}
+
+export interface InitialPermissionGrant {
+  model_key: string;
+  subject: PermissionGrantSubjectInput;
+}
+
+export interface InitialPermissionsPayload {
+  expected_catalog_release_id: number;
+  grants: InitialPermissionGrant[];
+}
+
+export interface RawInitialPermissionResult {
+  status: "succeeded" | "failed";
+  resource_version?: number | null;
+  assignee_ids?: string[];
+  error_code?: number | null;
+  message?: string | null;
+}
+
+export interface InitialPermissionResult {
+  status: "succeeded" | "failed";
+  resourceVersion?: number;
+  assigneeIds: string[];
+  errorCode: number | null;
+  message?: string;
+}
+
 export interface ResourcePermissionContext {
   mode: ResourcePermissionMode;
   parent_type: ResourceType | null;
@@ -159,20 +191,29 @@ interface PermissionRequestConfig {
 // Client request layer returns the full backend envelope {status_code, status_message, data}.
 // All functions below unwrap .data so callers get the payload directly.
 
-function assertSuccess(res: any) {
-  if (res && typeof res === "object" && "status_code" in res && res.status_code !== 200) {
-    throw new Error(res.status_message || `Permission request failed: ${res.status_code}`);
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value !== null && typeof value === "object" ? value as JsonRecord : null;
+}
+
+function assertSuccess(res: unknown) {
+  const record = asRecord(res);
+  if (record && "status_code" in record && record.status_code !== 200) {
+    throw new Error(String(record.status_message || `Permission request failed: ${record.status_code}`));
   }
 }
 
-function unwrap<T>(res: any): T {
+function unwrap<T>(res: unknown): T {
   assertSuccess(res);
-  return res?.data ?? res;
+  const record = asRecord(res);
+  return (record && "data" in record ? record.data : res) as T;
 }
 
-function unwrapArray<T = any>(res: any): T[] {
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data?.list ?? data?.records ?? data;
+function unwrapArray<T>(res: unknown): T[] {
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? record?.list ?? record?.records ?? data;
   return Array.isArray(rows) ? rows : [];
 }
 
@@ -181,6 +222,117 @@ function withPermissionRequestOptions(config?: PermissionRequestConfig) {
     skip403Redirect: true,
     ...config,
   };
+}
+
+export function mapInitialPermissionResult(
+  result?: RawInitialPermissionResult | null,
+): InitialPermissionResult | undefined {
+  if (!result) return undefined;
+  return {
+    status: result.status,
+    ...(result.resource_version == null
+      ? {}
+      : { resourceVersion: result.resource_version }),
+    assigneeIds: result.assignee_ids ?? [],
+    errorCode: result.error_code ?? null,
+    ...(result.message ? { message: result.message } : {}),
+  };
+}
+
+type CreationResourceType = "knowledge_space" | "channel";
+
+function creationPermissionPath(resourceType: CreationResourceType): string {
+  return resourceType === "knowledge_space"
+    ? "/api/v1/knowledge/space"
+    : "/api/v1/channel/manager";
+}
+
+export async function getCreationPermissionContext(
+  resourceType: CreationResourceType,
+  config?: PermissionRequestConfig,
+): Promise<CreationPermissionContext> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-permission-context`,
+    withPermissionRequestOptions(config),
+  );
+  return unwrap(res);
+}
+
+export async function searchCreationUsers(
+  resourceType: CreationResourceType,
+  name: string,
+  params?: { page?: number; pageSize?: number },
+  config?: PermissionRequestConfig,
+): Promise<{ data: GrantUser[]; total: number }> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/users`,
+    {
+      params: {
+        keyword: name,
+        page: params?.page ?? 1,
+        page_size: params?.pageSize ?? 50,
+      },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
+  const list = Array.isArray(rows) ? rows : [];
+  return { data: list as GrantUser[], total: Number(record?.total ?? list.length) };
+}
+
+export async function getCreationDepartmentChildren(
+  resourceType: CreationResourceType,
+  parentId: number | null,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentNode[]> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/departments/children`,
+    {
+      params: { parent_id: parentId ?? undefined },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  return unwrapArray<GrantDepartmentNode>(res);
+}
+
+export async function searchCreationDepartments(
+  resourceType: CreationResourceType,
+  keyword: string,
+  limit = 50,
+  config?: PermissionRequestConfig,
+): Promise<GrantDepartmentSearchResult> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/departments/search`,
+    {
+      params: { keyword, limit },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  return unwrap(res);
+}
+
+export async function getCreationUserGroups(
+  resourceType: CreationResourceType,
+  config?: PermissionRequestConfig,
+): Promise<{ id: number; group_name: string }[]> {
+  const res = await request.get(
+    `${creationPermissionPath(resourceType)}/creation-grant-subjects/user-groups`,
+    {
+      params: { page: 1, page_size: 200 },
+      ...withPermissionRequestOptions(config),
+    },
+  );
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
+  return Array.isArray(rows)
+    ? rows.map((row) => {
+        const item = asRecord(row) ?? {};
+        return { id: Number(item.id), group_name: String(item.name ?? item.group_name ?? "") };
+      })
+    : [];
 }
 
 // ── Permission APIs ──────────────────────────────────
@@ -221,6 +373,32 @@ export async function getResourcePermissionGrants(
     }
   );
   return unwrap(res);
+}
+
+export async function getAllResourcePermissionGrants(
+  resourceType: ResourceType,
+  resourceId: string,
+  config?: PermissionRequestConfig,
+): Promise<PermissionGrantAssignee[]> {
+  const items: PermissionGrantAssignee[] = [];
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+
+  for (;;) {
+    const page = await getResourcePermissionGrants(
+      resourceType,
+      resourceId,
+      { cursor, page_size: 200 },
+      config,
+    );
+    items.push(...page.data);
+    if (!page.has_more) return items;
+    if (!page.next_cursor || seenCursors.has(page.next_cursor)) {
+      throw new Error("Permission roster pagination returned an invalid cursor");
+    }
+    seenCursors.add(page.next_cursor);
+    cursor = page.next_cursor;
+  }
 }
 
 export async function getMyResourcePermissions(
@@ -338,10 +516,11 @@ export async function searchUsers(
       ...withPermissionRequestOptions(config),
     }
   );
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data;
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
   const list = Array.isArray(rows) ? rows : [];
-  return { data: list, total: Number(data?.total ?? list.length) };
+  return { data: list as GrantUser[], total: Number(record?.total ?? list.length) };
 }
 
 // ── Lazy organization-department tree ────────────────
@@ -427,9 +606,13 @@ export async function getUserGroups(
       ...withPermissionRequestOptions(config),
     }
   );
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data;
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
   return Array.isArray(rows)
-    ? rows.map((row: any) => ({ id: row.id, group_name: row.name ?? row.group_name }))
+    ? rows.map((row) => {
+        const item = asRecord(row) ?? {};
+        return { id: Number(item.id), group_name: String(item.name ?? item.group_name ?? "") };
+      })
     : [];
 }

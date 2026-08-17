@@ -25,6 +25,8 @@ from bisheng.linsight.domain.services.github_skill_fetcher import (
     fetch_skill_files,
     parse_github_url,
 )
+from test.linsight.fixtures.fake_minio import FakeMinioStorage
+
 from bisheng.linsight.domain.services.skill_store import MAX_UNPACKED_SIZE, SKILL_MD, SkillStore
 
 TENANT = 1
@@ -249,7 +251,7 @@ def service(tmp_path, monkeypatch):
     monkeypatch.setattr(service_module, "LinsightSkillDao", _FakeSkillDao)
     owner_projection = SimpleNamespace(authorize_created=AsyncMock())
     return service_module.SkillService(
-        store=SkillStore(root=tmp_path),
+        store=SkillStore(root=tmp_path, minio=FakeMinioStorage()),
         owner_projection=owner_projection,
     )
 

@@ -16,8 +16,6 @@ interface ChannelLayoutProps {
     onFullScreen?: (article: Article, aiAssistant?: boolean) => void;
     /** PC：顶部标题下拉切换频道 */
     onChannelSelect?: (channel: Channel | null) => void;
-    /** PC：下拉内频道项管理操作 */
-    onManageMembers?: (channel: Channel) => void;
     onChannelSettings?: (channel: Channel) => void;
     /** H5：打开左侧「我的频道」抽屉（由订阅页挂载） */
     onOpenChannelNav?: () => void;
@@ -54,7 +52,6 @@ export function ChannelLayout({
     channel,
     onFullScreen,
     onChannelSelect,
-    onManageMembers,
     onChannelSettings,
     onOpenChannelNav,
     onGoChannelSquare,
@@ -183,7 +180,6 @@ export function ChannelLayout({
                     onArticleSelect={handleArticleSelect}
                     selectedArticleId={selectedArticle?.id}
                     onChannelSelect={onChannelSelect}
-                    onManageMembers={onManageMembers}
                     onChannelSettings={onChannelSettings}
                     onOpenChannelNav={onOpenChannelNav}
                     onGoChannelSquare={onGoChannelSquare}

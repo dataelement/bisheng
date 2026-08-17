@@ -1,7 +1,7 @@
 """Pure standard/custom permission-model contracts.
 
 覆盖 AC: AC-07, AC-08, AC-09, AC-10, AC-11, AC-12, AC-13, AC-14,
-AC-15, AC-16, AC-17, AC-18, AC-39, AC-156
+AC-15, AC-16, AC-17, AC-18, AC-27, AC-39, AC-156, AC-164, AC-165, AC-167
 """
 
 from __future__ import annotations
@@ -19,9 +19,11 @@ from bisheng.permission.domain.services.catalog_policy import (
 from bisheng.permission.domain.services.model_policy import (
     CustomModelSelection,
     ModelPreset,
+    ModelReferenceSummary,
     calculate_model_impact,
     derive_permission_models,
     effective_model_action_codes,
+    ensure_model_assignable,
     ensure_model_deletable,
     initialize_from_preset,
     validate_standard_model_update,
@@ -200,6 +202,29 @@ def test_inactive_model_keeps_selection_but_never_grants_actions() -> None:
     )
 
 
+def test_inactive_model_is_not_assignable_but_keeps_existing_actions() -> None:
+    model = _by_key(
+        derive_permission_models(
+            _action_release(),
+            custom_models=(
+                CustomModelSelection(
+                    model_key="inactive-editor",
+                    name="已停用编辑者",
+                    action_codes=("edit", "manage_permission"),
+                    active=False,
+                ),
+            ),
+        )
+    )["inactive-editor"]
+
+    with pytest.raises(ValueError, match="inactive"):
+        ensure_model_assignable(model)
+    assert set(effective_model_action_codes(model, _action_release(), "workflow")) == {
+        "edit",
+        "manage_permission",
+    }
+
+
 def test_shared_model_change_reports_all_grant_references_once() -> None:
     before = derive_permission_models(
         _action_release(),
@@ -230,7 +255,23 @@ def test_shared_model_change_reports_all_grant_references_once() -> None:
     assert impact.affected_grant_refs == ("grant-1", "grant-2", "grant-3")
 
 
-def test_model_delete_requires_inactive_unreferenced_custom() -> None:
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("active_grant_count", 1),
+        ("pending_grant_count", 1),
+        ("failed_grant_count", 1),
+        ("active_source_count", 1),
+        ("pending_source_count", 1),
+        ("failed_source_count", 1),
+        ("live_tuple_count", 1),
+        ("residual_checksum", "a" * 64),
+    ),
+)
+def test_model_delete_requires_zero_references_and_residuals(
+    field: str,
+    value: int | str,
+) -> None:
     model = _by_key(
         derive_permission_models(
             _action_release(),
@@ -244,14 +285,22 @@ def test_model_delete_requires_inactive_unreferenced_custom() -> None:
             ),
         )
     )["retired"]
-    ensure_model_deletable(model, reference_count=0)
+    ensure_model_deletable(model, references=ModelReferenceSummary())
+    ensure_model_deletable(
+        replace(model, active=True),
+        references=ModelReferenceSummary(),
+    )
     with pytest.raises(ValueError, match="referenced"):
-        ensure_model_deletable(model, reference_count=1)
-    with pytest.raises(ValueError, match="inactive"):
-        ensure_model_deletable(replace(model, active=True), reference_count=0)
+        ensure_model_deletable(
+            model,
+            references=replace(ModelReferenceSummary(), **{field: value}),
+        )
     standard = _by_key(derive_permission_models(_action_release()))["viewer"]
     with pytest.raises(ValueError, match="standard"):
-        ensure_model_deletable(standard, reference_count=0)
+        ensure_model_deletable(
+            standard,
+            references=ModelReferenceSummary(),
+        )
 
 
 def test_preset_only_initializes_an_independent_selection() -> None:

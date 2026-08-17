@@ -219,6 +219,53 @@ def test_duplicate_tuple_is_idempotently_deduplicated():
     assert result.deduplicated_count == 1
 
 
+def test_direct_and_membership_sources_share_grant_but_keep_provenance():
+    tuples = (
+        _tuple(user="user:11", relation="viewer"),
+        _tuple(user="user:11", relation="editor"),
+    )
+    bindings = (
+        LegacyGrantBinding(
+            binding_key="direct-binding",
+            tenant_id=7,
+            resource_type="workflow",
+            resource_id="wf-1",
+            relation="viewer",
+            model_source_key="custom-combined",
+            subject_type="user",
+            subject_id="11",
+            source_type="DIRECT",
+            source_ref="direct:11",
+        ),
+        LegacyGrantBinding(
+            binding_key="membership-binding",
+            tenant_id=7,
+            resource_type="workflow",
+            resource_id="wf-1",
+            relation="editor",
+            model_source_key="custom-combined",
+            subject_type="user",
+            subject_id="11",
+            source_type="SPACE_MEMBERSHIP",
+            source_ref="membership:99",
+        ),
+    )
+
+    result = map_legacy_tuples(
+        tuples,
+        bindings,
+        model_key_by_source={"custom-combined": "custom-combined"},
+    )
+
+    assert len(result.grants) == 1
+    assert len(result.grants[0].assignees) == 2
+    assert {row.source_type for row in result.grants[0].assignees} == {
+        "DIRECT",
+        "SPACE_MEMBERSHIP",
+    }
+    assert len({row.source_checksum for row in result.grants[0].assignees}) == 2
+
+
 def test_system_shared_and_parent_facts_are_preserved_not_converted_to_grants():
     tuples = (
         _tuple(user="system:public", relation="shared_with"),

@@ -23,7 +23,6 @@ export interface ErrorPageLabels {
   copyBefore: string;
   copyLink: string;
   copyAfter: string;
-  copied: string;
   refresh: string;
   download: string;
   /** Sits on the card's top edge — the card is the part worth screenshotting. */
@@ -43,6 +42,12 @@ export interface ErrorPageProps {
   illustration?: React.ReactNode;
   /** Defaults to a full reload, which is what the button promises. */
   onRefresh?: () => void;
+  /**
+   * Fired once the diagnostics text is on the clipboard. The link's own label
+   * never changes — the app confirms through whatever it already uses for
+   * transient feedback (a toast), which the package cannot reach itself.
+   */
+  onCopied?: () => void;
   className?: string;
 }
 
@@ -66,9 +71,14 @@ function DiagnosticRow({ label, value }: { label: string; value: string }) {
  * and describe anything. Everything the QR could not fit is in the downloadable
  * log.
  */
-export function ErrorPage({ diagnostics, labels, illustration, onRefresh, className }: ErrorPageProps) {
-  const [copied, setCopied] = React.useState(false);
-
+export function ErrorPage({
+  diagnostics,
+  labels,
+  illustration,
+  onRefresh,
+  onCopied,
+  className,
+}: ErrorPageProps) {
   const rows = [
     { label: labels.traceId, value: diagnostics.traceId },
     { label: labels.errorCode, value: diagnostics.errorCode },
@@ -100,8 +110,7 @@ export function ErrorPage({ diagnostics, labels, illustration, onRefresh, classN
       document.execCommand('copy');
       area.remove();
     }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    onCopied?.();
   };
 
   const handleDownload = () => {
@@ -128,12 +137,11 @@ export function ErrorPage({ diagnostics, labels, illustration, onRefresh, classN
           <p>{labels.description}</p>
           <p>
             {labels.copyBefore}
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="text-blue-500 underline-offset-2 fine-pointer:hover:underline"
-            >
-              {copied ? labels.copied : labels.copyLink}
+            {/* No underline, in either state: the line is one sentence of
+                instructions, and a rule under part of it reads as emphasis the
+                sentence does not want. The brand colour already marks it. */}
+            <button type="button" onClick={handleCopy} className="text-blue-500 no-underline">
+              {labels.copyLink}
             </button>
             {labels.copyAfter}
           </p>

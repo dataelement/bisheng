@@ -1490,6 +1490,29 @@ class LinsightWorkbenchImpl:
 
             return {"task_title": title, "chat_id": chat_id, "error_message": None}
 
+        except (GeneratorExit, asyncio.CancelledError):
+            # This runs INSIDE the submit SSE generator, so the client closing that
+            # stream (or any cancellation) lands here. Both are BaseException, NOT
+            # Exception, so the branch below never caught them: the fallback never
+            # ran and nothing was logged, leaving the session silently stuck on
+            # "New Chat" (114, 2026-08-14 — a session whose title-model call was
+            # cut off 9s in and never recovered).
+            #
+            # The write MUST be synchronous. Awaiting anything in a coroutine that
+            # is already being cancelled re-raises CancelledError at the first
+            # suspension point, so an async write would be dropped exactly as
+            # before. ``update_session_name_sync`` is a single UPDATE and does not
+            # touch the event loop.
+            logger.warning("Task title generation cancelled (client likely disconnected); writing fallback title")
+            try:
+                MessageSessionDao.update_session_name_sync(chat_id, cls._fallback_title(question))
+            except Exception:
+                logger.exception("Failed to write fallback task title after cancellation")
+            # Cancellation must keep propagating: swallowing GeneratorExit makes
+            # Python raise "generator ignored GeneratorExit", and swallowing
+            # CancelledError breaks task cancellation semantics.
+            raise
+
         except Exception as e:
             logger.exception("Failed to generate task title")
             # Even on hard failure, seed a question-based title so the session
@@ -1809,6 +1832,16 @@ class LinsightWorkbenchImpl:
             """
             Sort task list by task chain
             previous_task_idYes Noneis the first task,next_task_idYes Noneis the last task.
+
+            Every row is emitted AT MOST ONCE. The rows come from ``_save_task_info``,
+            which only ever inserts new ids and never rewrites an existing row's
+            previous/next pointers — so when the model reshapes its plan, the freshly
+            inserted rows form a second chain that runs straight into the first one,
+            and BOTH have ``previous_task_id is None``. Walking each head and blindly
+            extending replayed the shared tail once per head: session 8a570723 on 114
+            held 11 rows and this returned 20, which the panel counted as 18 todos.
+            ``visited`` also makes the walk safe against a cycle, which would
+            otherwise spin here forever.
             """
             if not tasks:
                 return []
@@ -1820,23 +1853,21 @@ class LinsightWorkbenchImpl:
             start_tasks = [task for task in tasks if task.previous_task_id is None]
 
             sorted_tasks = []
+            visited: set[str] = set()
 
             for start_task in start_tasks:
                 # Build task chains from each start node
                 current_task = start_task
-                chain = []
 
-                while current_task is not None:
-                    chain.append(current_task)
+                while current_task is not None and current_task.id not in visited:
+                    visited.add(current_task.id)
+                    sorted_tasks.append(current_task)
                     # Setujunext_task_idFind next task
                     next_task_id = current_task.next_task_id
                     current_task = task_dict.get(next_task_id) if next_task_id else None
 
-                sorted_tasks.extend(chain)
-
             # Dealing with possible orphaned tasks (neitherpreviousNothing, either!nextpointing to them)
-            processed_ids = {task.id for task in sorted_tasks}
-            orphan_tasks = [task for task in tasks if task.id not in processed_ids]
+            orphan_tasks = [task for task in tasks if task.id not in visited]
             sorted_tasks.extend(orphan_tasks)
 
             return sorted_tasks

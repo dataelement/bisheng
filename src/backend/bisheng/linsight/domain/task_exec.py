@@ -98,12 +98,22 @@ _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP = (
     "抱歉，在生成报告文件时遇到问题，模型未能正确调用写入工具。以下是已完成的分析内容："
 )
 _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT = "抱歉，任务执行步骤数已达上限，未能完全收尾。以下是已完成的内容："
+# Third cause, same lesson as above: a repeat loop is NOT a failed tool call. The
+# tool succeeded every time — the model kept re-sending identical arguments and
+# ignoring the result. Saying "未能正确调用工具" here would be plainly false.
+_PARTIAL_RESULT_PREAMBLE_REPEAT_LOOP = (
+    "抱歉，模型在同一个步骤上重复提交了完全相同的调用且没有推进，任务已提前收尾。以下是已完成的分析内容："
+)
 
 # Friendly failure copy when the abort left nothing salvageable (no analysis text
 # and no captured answer) — still a classified friendly card, never a raw dump.
 # Same two-cause split as the preambles above.
 _PARTIAL_NO_SALVAGE_TOOL_LOOP = (
     "任务未能完成：模型多次未能正确调用工具，且没有可供返回的中间结果。建议简化任务范围，或更换能力更强的模型后重试。"
+)
+_PARTIAL_NO_SALVAGE_REPEAT_LOOP = (
+    "任务未能完成：模型在同一个步骤上反复提交完全相同的调用，没有取得进展，且没有可供返回的中间结果。"
+    "建议简化任务范围，或更换能力更强的模型后重试。"
 )
 # Appended to a NORMAL (successful) result when the turn budget made the agent
 # wrap up ahead of schedule. Not an apology — the deliverables are real; the user
@@ -133,6 +143,9 @@ _RECURSION_LIMIT_MARGIN = 20
 _INGEST_STEP_NAME = "ingest_uploads"
 # Phases that close the row (status="end"); anything else keeps it spinning.
 _INGEST_TERMINAL_PHASES = frozenset({"done", "failed", "aborted"})
+# Same contract, for the row saying a selected skill could not be loaded. Mirrored
+# in the client's execTypes.ts alongside the ingest row.
+_SKILL_LOAD_FAILED_STEP_NAME = "skill_load_failed"
 
 
 def _resolve_recursion_limit(linsight_conf) -> int:
@@ -1013,9 +1026,11 @@ class LinsightWorkflowTask:
         # /skills/ subtree (governance-enabled ∩ user-selected — the copy IS the
         # whitelist gate). Re-runs harmlessly on resume/continue since this builds a
         # fresh agent each time. skills_present gates attaching the skills middleware.
-        copied_skills = await materialize_session_skills(
+        skills = await materialize_session_skills(
             backend, session_model.tenant_id, getattr(session_model, "skills", None)
         )
+        if skills.failed:
+            await self._push_skill_load_failure(session_model.id, skills.failed)
         return await create_linsight_agent(
             session_model=session_model,
             tools=tools,
@@ -1024,9 +1039,39 @@ class LinsightWorkflowTask:
             svid=session_model.id,
             checkpointer=checkpointer,
             backend=backend,
-            skills_present=bool(copied_skills),
+            skills_present=bool(skills.copied),
             turn_budget_sink=self._turn_budget,
         )
+
+    async def _push_skill_load_failure(self, svid: str, names: list[str]) -> None:
+        """Tell the user a skill they picked is not available for this run.
+
+        Silence here is what made the local-disk era so hard to diagnose: the
+        model just behaved as if the skill had never been selected. The task
+        still runs — one unavailable skill is not worth discarding the work — but
+        the gap is now on the timeline instead of only in a worker log.
+
+        Carries only DATA (the skill names); wording lives in the client's locale
+        files, because this row is persisted and a backend-formatted string would
+        stay in the wrong language after a language switch.
+        """
+        try:
+            step = ExecStep(
+                task_id=svid,
+                call_id=f"{svid}-skill-load-failed",
+                call_reason="",
+                name=_SKILL_LOAD_FAILED_STEP_NAME,
+                step_type="tool",
+                status="end",
+                output="",
+                extra_info={"skill_load_failed": {"names": names}},
+            )
+            await self._state_manager.add_execution_task_step(svid, step=step)
+            await self._state_manager.push_message(
+                MessageData(event_type=MessageEventType.TASK_EXECUTE_STEP, data=step.model_dump())
+            )
+        except Exception as e:
+            logger.warning(f"Failed to push skill-load-failure step for {svid}: {e}")
 
     async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:
         """Cross-turn continuity: copy the previous turn's deliverables/sources
@@ -1975,17 +2020,30 @@ class LinsightWorkflowTask:
         ``_handle_direct_answer_completion``. If nothing is salvageable, degrade to
         a friendly classified failure (never a raw dump).
         """
-        # Copy follows the REAL cause: only the tool-loop breaker means "the model
-        # kept calling a tool wrong"; a recursion ceiling means the step budget ran
-        # out, which has nothing to do with the write tools.
+        # Copy follows the REAL cause, three ways: a failure loop means "the model
+        # kept calling a tool wrong"; a REPEAT loop means the tool kept succeeding
+        # and the model kept ignoring the result (blaming the tool there is simply
+        # false); a recursion ceiling means the step budget ran out, which has
+        # nothing to do with the write tools.
         is_tool_loop = isinstance(self._partial_error, LinsightToolLoopError)
+        is_repeat_loop = is_tool_loop and getattr(self._partial_error, "reason", "failure") == "repeat"
         body = (self._partial_salvage or "").strip() or (self._last_assistant_text or "").strip()
         if not body:
-            no_salvage = _PARTIAL_NO_SALVAGE_TOOL_LOOP if is_tool_loop else _PARTIAL_NO_SALVAGE_STEP_LIMIT
+            if is_repeat_loop:
+                no_salvage = _PARTIAL_NO_SALVAGE_REPEAT_LOOP
+            elif is_tool_loop:
+                no_salvage = _PARTIAL_NO_SALVAGE_TOOL_LOOP
+            else:
+                no_salvage = _PARTIAL_NO_SALVAGE_STEP_LIMIT
             await self._handle_task_failure(session_model, no_salvage, exc=self._partial_error)
             return
 
-        preamble = _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP if is_tool_loop else _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT
+        if is_repeat_loop:
+            preamble = _PARTIAL_RESULT_PREAMBLE_REPEAT_LOOP
+        elif is_tool_loop:
+            preamble = _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP
+        else:
+            preamble = _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT
         answer = f"{preamble}\n\n{body}"
         session_model.status = SessionVersionStatusEnum.COMPLETED
         # Collect any output/ deliverable the model managed to write before looping;

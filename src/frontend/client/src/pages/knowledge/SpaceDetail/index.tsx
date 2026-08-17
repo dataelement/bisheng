@@ -368,7 +368,7 @@ export function KnowledgeSpaceContent({
     const [permTarget, setPermTarget] = useState<{
         id: string;
         name: string;
-        type: "folder" | "knowledge_file" | "knowledge_space";
+            type: "folder" | "knowledge_file";
     } | null>(null);
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
@@ -1179,7 +1179,7 @@ export function KnowledgeSpaceContent({
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.new_folder")}</span>
                                         </DropdownMenuItem>
                                     )}
-                                    {canEditSpace && onEditSpace && (
+                                    {(canEditSpace || canManageMembers) && onEditSpace && (
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onEditSpace()}>
                                             <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.space_settings")}</span>
@@ -1189,15 +1189,6 @@ export function KnowledgeSpaceContent({
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={handleCopyShareLink}>
                                             <Outlined.Share className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.share")}</span>
-                                        </DropdownMenuItem>
-                                    )}
-                                    {canManageMembers && (
-                                        <DropdownMenuItem
-                                            className={sidebarListMoreMenuItemClassName}
-                                            onClick={() => setPermTarget({ id: space.id, name: space.name, type: "knowledge_space" })}
-                                        >
-                                            <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
-                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.member_management")}</span>
                                         </DropdownMenuItem>
                                     )}
                                     {canDeleteSpace && (
@@ -1585,7 +1576,6 @@ export function KnowledgeSpaceContent({
                     resourceType={permTarget.type}
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
-                    isDepartmentSpace={permTarget.type === "knowledge_space" && space?.spaceKind === "department"}
                 />
             )}
 

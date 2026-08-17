@@ -24,6 +24,9 @@ from bisheng.core.database.alembic.versions import f048_permission_model_grants 
 from bisheng.core.database.alembic.versions import (
     v3_0_0_f048_migration_item_message_longtext as message_revision,
 )
+from bisheng.core.database.alembic.versions import (
+    v3_0_0_f048_visible_source_projection as visible_revision,
+)
 from bisheng.core.database.dialect_helpers import LargeText
 from bisheng.permission.domain import models as permission_models
 
@@ -32,6 +35,7 @@ REVISION_PATH = BACKEND_ROOT / "bisheng/core/database/alembic/versions/f048_perm
 MESSAGE_REVISION_PATH = (
     BACKEND_ROOT / "bisheng/core/database/alembic/versions/v3_0_0_f048_migration_item_message_longtext.py"
 )
+VISIBLE_REVISION_PATH = BACKEND_ROOT / "bisheng/core/database/alembic/versions/v3_0_0_f048_visible_source_projection.py"
 
 F048_TABLES = {
     "authorization_model_release",
@@ -46,9 +50,11 @@ F048_TABLES = {
     "resource_permission_mode",
     "permission_projection_operation",
     "permission_projection_tuple",
+    "permission_visible_source_projection",
     "permission_migration_run",
     "permission_migration_item",
 }
+BASE_REVISION_TABLES = F048_TABLES - {"permission_visible_source_projection"}
 
 TENANT_TABLES = {
     "permission_grant",
@@ -56,6 +62,7 @@ TENANT_TABLES = {
     "resource_permission_mode",
     "permission_projection_operation",
     "permission_projection_tuple",
+    "permission_visible_source_projection",
 }
 
 
@@ -117,6 +124,7 @@ def test_f048_unique_and_foreign_key_contract() -> None:
         "uq_resource_permission_mode",
         "uq_perm_projection_idempotency",
         "uq_perm_projection_tuple",
+        "uq_perm_visible_source_contribution",
         "uq_perm_migration_environment",
         "uq_perm_migration_item_source",
     } <= unique_names
@@ -133,13 +141,14 @@ def test_f048_unique_and_foreign_key_contract() -> None:
     } <= foreign_targets
 
 
-def test_f048_revision_is_on_the_single_alembic_head_line() -> None:
-    """One head, and the F048 revisions are on its ancestry — no parallel branch.
+def test_f048_revision_is_on_the_single_alembic_head_chain() -> None:
+    """One head, and every F048 revision is on its ancestry — no parallel branch.
 
-    The assertion used to pin the head to ``f048_migration_item_message_longtext``,
-    which turned every later release into a false failure (F049's
-    ``f049_user_user_type`` was the first). What F048 actually needs guarded is
-    that its revisions stay on a single, linear head line.
+    Asserts the property rather than pinning the head to F048 by name: every
+    later migration legitimately becomes the new head, so a name-pinned
+    assertion fails for each one while catching nothing extra. (It used to pin
+    ``f048_migration_item_message_longtext``; F049's ``f049_user_user_type`` was
+    the first release it falsely failed.)
     """
     config = Config(str(BACKEND_ROOT / "alembic.ini"))
     config.set_main_option(
@@ -148,9 +157,41 @@ def test_f048_revision_is_on_the_single_alembic_head_line() -> None:
     )
     script = ScriptDirectory.from_config(config)
     heads = script.get_heads()
-    assert len(heads) == 1, f"multiple alembic heads: {heads}"
-    ancestry = {revision.revision for revision in script.walk_revisions("base", heads[0])}
-    assert {"f048_permission_grants", "f048_migration_item_message_longtext"} <= ancestry
+    assert len(heads) == 1, f"alembic graph forked: {heads}"
+    chain = {rev.revision for rev in script.walk_revisions("base", heads[0])}
+    # Both lines' F048 revisions: the grants/message pair from 3.0-vibe and the
+    # visibility projection from beta1. The merge is the first time all three
+    # have to be on one chain.
+    assert {
+        "f048_permission_grants",
+        "f048_migration_item_message_longtext",
+        "f048_visible_source_projection",
+    } <= chain
+
+
+def test_f048_visible_projection_revision_is_static_ddl_only() -> None:
+    source = VISIBLE_REVISION_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    called_names = {
+        node.func.attr for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+
+    assert visible_revision.down_revision == "linsight_pending_files"
+    assert visible_revision.revision == "f048_visible_source_projection"
+    assert {"create_table", "create_index", "drop_table"} <= called_names
+    assert not {"execute", "bulk_insert"} & called_names
+
+
+def test_f048_visible_projection_revision_is_idempotent_and_downgrades() -> None:
+    engine = sa.create_engine("sqlite://")
+    with engine.connect() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            visible_revision.upgrade()
+            assert "permission_visible_source_projection" in inspect(connection).get_table_names()
+            visible_revision.upgrade()
+            visible_revision.downgrade()
+            assert "permission_visible_source_projection" not in inspect(connection).get_table_names()
 
 
 def test_f048_message_revision_is_static_ddl_only() -> None:
@@ -200,10 +241,10 @@ def test_f048_revision_upgrade_is_idempotent_and_downgrades() -> None:
         context = MigrationContext.configure(connection)
         with Operations.context(context):
             revision.upgrade()
-            assert F048_TABLES <= set(inspect(connection).get_table_names())
+            assert BASE_REVISION_TABLES <= set(inspect(connection).get_table_names())
             revision.upgrade()
             revision.downgrade()
-            assert not (F048_TABLES & set(inspect(connection).get_table_names()))
+            assert not (BASE_REVISION_TABLES & set(inspect(connection).get_table_names()))
 
 
 def test_f048_tables_compile_for_mysql_without_native_enum_or_json() -> None:
