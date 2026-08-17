@@ -47,6 +47,47 @@ describe("F048 permission draft", () => {
     }]);
   });
 
+  it("keeps the server baseline when the editor replaces visible rows", () => {
+    const baseline = createPermissionDraft([localViewer]);
+    const moved = permissionDraftReducer(baseline, {
+      type: "replace_rows",
+      rows: [{ ...localViewer, modelKey: "editor" }],
+    });
+    expect(getPermissionDraftDiff(moved).changes).toEqual([{
+      op: "MOVE",
+      assignee_id: "assignee-1",
+      expected_assignee_version: 3,
+      target_model_key: "editor",
+    }]);
+
+    const removed = permissionDraftReducer(baseline, {
+      type: "replace_rows",
+      rows: [],
+    });
+    expect(getPermissionDraftDiff(removed).changes).toEqual([{
+      op: "REMOVE",
+      assignee_id: "assignee-1",
+      expected_assignee_version: 3,
+    }]);
+  });
+
+  it("keeps protected rows when the editor replaces a subject tab", () => {
+    const protectedOwner: PermissionDraftRow = {
+      ...localViewer,
+      assigneeId: "owner-1",
+      modelKey: "owner",
+      protected: true,
+      editable: false,
+    };
+    const baseline = createPermissionDraft([protectedOwner, localViewer]);
+    const next = permissionDraftReducer(baseline, {
+      type: "replace_rows",
+      rows: [{ ...localViewer, modelKey: "editor" }],
+    });
+    expect(next.rows).toContainEqual(protectedOwner);
+    expect(getPermissionDraftDiff(next).changes).toHaveLength(1);
+  });
+
   it.each([
     { ...localViewer, protected: true },
     { ...localViewer, scope: "INHERITED" as const },

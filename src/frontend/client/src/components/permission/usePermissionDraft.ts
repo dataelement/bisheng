@@ -97,7 +97,36 @@ export function permissionDraftReducer(
     );
   }
   if (action.type === "replace_rows") {
-    return createPermissionDraft(action.rows, action.baselineVersion);
+    const immutableBaseline = state.baseline.filter(isReadOnly);
+    const immutableKeys = new Set(immutableBaseline.map(getPermissionDraftRowKey));
+    const rows = uniqueRows([
+      ...immutableBaseline,
+      ...cloneRows(action.rows).filter(
+        (row) => !immutableKeys.has(getPermissionDraftRowKey(row)),
+      ),
+    ]);
+    const currentByKey = new Map(state.rows.map((row) => [getPermissionDraftRowKey(row), row]));
+    const nextByKey = new Map(rows.map((row) => [getPermissionDraftRowKey(row), row]));
+    const touched = [...state.touchedAssigneeIds];
+    for (const baseline of state.baseline) {
+      if (isReadOnly(baseline)) continue;
+      const key = getPermissionDraftRowKey(baseline);
+      const previous = currentByKey.get(key);
+      const next = nextByKey.get(key);
+      if (
+        previous?.modelKey !== next?.modelKey
+        || (previous !== undefined && next === undefined)
+        || (previous === undefined && next !== undefined)
+      ) {
+        if (!touched.includes(key)) touched.push(key);
+      }
+    }
+    return {
+      ...state,
+      rows,
+      touchedAssigneeIds: touched,
+      baselineVersion: action.baselineVersion ?? state.baselineVersion,
+    };
   }
   if (action.type === "add") {
     if (isReadOnly(action.row)) return state;
@@ -127,29 +156,33 @@ export function permissionDraftReducer(
 }
 
 export function getPermissionDraftDiff(draft: PermissionDraft): PermissionDraftDiff {
-  if (draft.touchedAssigneeIds.length === 0) return EMPTY_DIFF;
   const baselineByKey = new Map(draft.baseline.map((row) => [getPermissionDraftRowKey(row), row]));
   const rowsByKey = new Map(draft.rows.map((row) => [getPermissionDraftRowKey(row), row]));
   const changes: PermissionGrantMutationChange[] = [];
+  for (const current of draft.rows) {
+    if (current.assigneeId || isReadOnly(current)) continue;
+    changes.push({
+      op: "ADD",
+      model_key: current.modelKey,
+      subject: {
+        type: current.subjectType,
+        id: String(current.subjectId),
+        ...(current.subjectType === "department"
+          ? {
+              userset_relation: current.includeChildren ? "subtree_member" : null,
+              include_children: Boolean(current.includeChildren),
+            }
+          : {}),
+      },
+    });
+  }
+  if (draft.touchedAssigneeIds.length === 0) {
+    return changes.length === 0 ? EMPTY_DIFF : { changes };
+  }
   for (const key of draft.touchedAssigneeIds) {
     const baseline = baselineByKey.get(key);
     const current = rowsByKey.get(key);
-    if (!baseline && current) {
-      changes.push({
-        op: "ADD",
-        model_key: current.modelKey,
-        subject: {
-          type: current.subjectType,
-          id: String(current.subjectId),
-          ...(current.subjectType === "department"
-            ? {
-                userset_relation: current.includeChildren ? "subtree_member" : null,
-                include_children: Boolean(current.includeChildren),
-              }
-            : {}),
-        },
-      });
-    } else if (baseline && !current && baseline.assigneeId != null && baseline.assigneeVersion != null) {
+    if (baseline && !current && baseline.assigneeId != null && baseline.assigneeVersion != null) {
       changes.push({
         op: "REMOVE",
         assignee_id: baseline.assigneeId,

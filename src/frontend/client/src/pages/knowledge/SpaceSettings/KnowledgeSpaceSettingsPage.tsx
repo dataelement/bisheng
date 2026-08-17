@@ -555,7 +555,9 @@ export function KnowledgeSpaceSettingsPage() {
                         value={displayedPermissionRows}
                         onChange={(rows) =>
                           settings.replacePermissionRows(
-                            rows.filter((row) => !row.protected),
+                            settings.mode === "create"
+                              ? rows.filter((row) => !row.protected)
+                              : rows,
                           )
                         }
                         capabilities={permissionCapabilities}
