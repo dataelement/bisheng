@@ -12,6 +12,7 @@ import { UserIcon } from "../../bs-icons/user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../../bs-ui/card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../bs-ui/dropdownMenu";
 import { Switch } from "../../bs-ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../bs-ui/tooltip";
 import i18next from "i18next";
 
 interface IProps<T> {
@@ -44,6 +45,20 @@ interface IProps<T> {
   /** 与「编辑应用」解耦：由角色「创建应用」(create_app) 等控制，见构建页 apps */
   showCopy?: boolean,
   onCopy?: (data: T) => void,
+  /**
+   * When set and the card is switched on, the delete entry is rendered
+   * **disabled with this hint** instead of being hidden. Default (undefined)
+   * keeps the historical behaviour — the item simply is not rendered — so
+   * workflow and assistant cards are untouched. F054 AC-42 needs the greyed
+   * form ("stop it first"), and "not there" would fail that acceptance.
+   */
+  deleteDisabledHint?: string,
+  /**
+   * Overrides the on/off switch labels. Index semantics follow the Switch
+   * itself: `on` shows while checked, `off` while unchecked. Default keeps
+   * `t('skills.online') / t('skills.offline')`.
+   */
+  switchTexts?: { on: string; off: string },
 }
 
 export const gradients = [
@@ -102,6 +117,8 @@ export default function CardComponent<T>({
   canSwitch = edit,
   showCopy = false,
   onCopy,
+  deleteDisabledHint,
+  switchTexts,
 }: IProps<T>) {
 
   const [_checked, setChecked] = useState(checked)
@@ -115,11 +132,14 @@ export default function CardComponent<T>({
     if (res === false) return
     setChecked(bln)
   }
+  const showDeleteItem = Boolean(onDelete && !checked)
+  const showDisabledDeleteItem = Boolean(onDelete && checked && deleteDisabledHint)
   const showActionBar = Boolean(
     onPermission ||
     (edit && isAdmin && type !== 'assistant' && onAddTemp) ||
     (showCopy && onCopy) ||
-    (!checked && onDelete)
+    showDeleteItem ||
+    showDisabledDeleteItem
   )
 
   // 新建小卡片（sheet）
@@ -186,7 +206,7 @@ export default function CardComponent<T>({
             checked={_checked}
             className={i18next.language === 'ja' ? 'w-20' : 'w-12'}
             // @ts-ignore
-            texts={[t('skills.online'), t('skills.offline')]}
+            texts={switchTexts ? [switchTexts.on, switchTexts.off] : [t('skills.online'), t('skills.offline')]}
             onCheckedChange={handleCheckedChange}
             onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
           ></Switch>}
@@ -236,11 +256,30 @@ export default function CardComponent<T>({
                     {i18n.t('copy', { ns: 'flow' })}
                   </DropdownMenuItem>
                 )}
-                {!checked && onDelete && (
+                {showDeleteItem && (
                   <DropdownMenuItem variant="destructive" onClick={(e) => { e.stopPropagation(); onDelete(data); }}>
                     <Trash2 className="w-4 h-4 text-destructive" />
                     {i18n.t('delete', { ns: 'flow' })}
                   </DropdownMenuItem>
+                )}
+                {showDisabledDeleteItem && (
+                  // Radix sets `pointer-events: none` on a disabled item, so the
+                  // tooltip has to hang off a wrapper or it would never open.
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <DropdownMenuItem disabled variant="destructive">
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                            {i18n.t('delete', { ns: 'flow' })}
+                          </DropdownMenuItem>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-[white]">{deleteDisabledHint}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>

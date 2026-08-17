@@ -471,11 +471,12 @@ runtime-manager reconcile 循环（15s）
 | `POST /api/v1/apps/{app_id}/actions/resume` | 重新启用（叠加容量准入） | 卡片开关 / 详情页 |
 | `DELETE /api/v1/apps/{app_id}` | 显式删除（前置状态闸 + 仅 owner；末尾触发 `on_app_deleted` 钩子 → F055 取消在途审批单，AC-43） | 卡片 ⚙️ / 详情页危险操作区 |
 | `PATCH /api/v1/apps/{app_id}` | **元信息更新**（名称 / 描述 / 图标）：**不改应用态、不产生版本记录、计审计 `app.meta_update`**（AC-06） | platform 详情页 · **F055**（release-contract「元信息随 deploy 更新」= 管线调同一方法，不另写一份） |
+| Python：`AppProvisionService.create_draft(name, slug, description, owner_user_id, tenant_id) -> app_id` | **建应用**（落 `app` 行 `state=draft` + F048 owner 投影）——首发的唯一入口 | F055 首发（决议-8：F055 不直写 `app` 表）|
 | Python：`AppStateService.{publish,manual_publish,stop,resume,delete}` | 五个状态动作 | F055 **只调不直写**（决议-8） |
 | Python：`AppStateService.stage_version(app_id, version_id)` | 落**已审批待运行版本**（写 `app.pending_version_id`，**不改应用态**）——AC-04 的落点 | F055 审批通过节点 |
-| Python：`AppMetaService.update_meta(app_id, patch, actor)` | AC-06 的**唯一实现**（HTTP 与 F055 管线共用） | 详情页 · F055 |
+| Python：`AppMetaService.update_meta(*, app_id, name, description, logo, actor=None)` | AC-06 的**唯一实现**（HTTP 与 F055 管线共用）；`logo` 存 **object_name** 不是预签 URL；`actor` 可空＝管线调用（归属已在 F055 侧校验） | 详情页 · F055 |
 
-其余读接口：`GET /api/v1/apps/{app_id}`（详情，含 `entry_url`）· `GET /api/v1/apps/{app_id}/instance`（状态 / 健康 / 当前版本）· `GET /api/v1/apps/{app_id}/logs` · `GET /api/v1/apps/runtime-status`（超管）· `GET /api/v1/apps/_unavailable`（nginx error_page 回落的引导页 HTML）· 内部 `POST /api/v1/internal/app-proxy/authorize`（HMAC，加入 `TENANT_CHECK_EXEMPT_PATHS`，handler 内 `bypass_tenant_filter`）。**该端点只回判定与身份材料，刻意不含目标实例地址**——上游解析是 app-proxy ↔ runtime-manager 的独立通道（D5.1），两者缓存节奏不同（鉴权跟权限走、路由跟发布走），合并会让"改权限"和"切版本"互相踩。
+其余读接口：`GET /api/v1/apps/{app_id}`（详情，含 `entry_url`）· `GET /api/v1/apps/{app_id}/instance`（状态 / 健康 / 当前版本）· **`GET /api/v1/apps/{app_id}/versions`**（只读版本列表，`[{version_id, version_no, kind, terminal_state, submitted_at, is_current, is_pending}]` 按 `version_no` 倒序，**无切换 / 无回滚写口**——卡片下拉、版本 tab、CLI 三处共用这一个路径与形状）· **`GET /api/v1/apps`**（AC-57：owner 看自己 owner 的、租户管理员看本租户全部；与构建页 UNION 列表是两条路，后者走 `/api/v1/flows` 的既有分页管线）· `GET /api/v1/apps/{app_id}/logs` · `GET /api/v1/apps/runtime-status`（超管）· `GET /api/v1/apps/_unavailable`（nginx error_page 回落的引导页 HTML）· 内部 `POST /api/v1/internal/app-proxy/authorize`（HMAC，加入 `TENANT_CHECK_EXEMPT_PATHS`，handler 内 `bypass_tenant_filter`）。**该端点只回判定与身份材料，刻意不含目标实例地址**——上游解析是 app-proxy ↔ runtime-manager 的独立通道（D5.1），两者缓存节奏不同（鉴权跟权限走、路由跟发布走），合并会让"改权限"和"切版本"互相踩。
 
 **③ app-proxy 注入头**（INV-32；**F053 `bisheng dev` 迷你代理注入同一套**）
 
@@ -515,7 +516,7 @@ runtime-manager reconcile 循环（15s）
 
 | 段 | 用途 | 示例 |
 |---|---|---|
-| 16100–16119 | 领域 / 状态机 | `16101` 应用不存在 · `16102` 状态冲突（前态不符）· `16103` slug 冲突 · `16104` 已上线不可删除（请先停运）· `16105` 仅 owner 可执行 |
+| 16100–16119 | 领域 / 状态机 | `16101` 应用不存在 · `16102` 状态冲突（前态不符）· `16103` slug 冲突 · `16104` 已上线不可删除（请先停运）· `16105` **仅** owner 可执行（删除 / 数据 tab，租户管理员也拒）· `16106` owner ∪ 租户管理员 ∪ 超管之外（停运 / 重新启用 / 改元信息 / 运行环境状态）——两者不可合并，否则会告诉一个**有权限**的租户管理员「只有负责人能做」 |
 | 16120–16139 | 运行时 / 编排 | `16121` 编排器不可用 · `16122` 构建失败 · `16123` `runtime` 取值不支持 · `16124` 启动探活失败 · `16125` 运行环境容量不足 |
 | 16140–16159 | 入口 / 注入 | `16141` 未登录 · `16142` 无访问权限 · `16143` 应用已停用 · `16144` 应用不存在或未上线 · `16145` 工场未启用 · `16146` 权限引擎不可用（fail-closed） |
 | 16160–16179 | 数据面 / 日志 | `16161` 无权查看日志 · `16162` 无权访问应用数据（后置） |
@@ -530,6 +531,7 @@ runtime-manager reconcile 循环（15s）
 | 模块 / 文件 | 职责 | 不做什么 |
 |---|---|---|
 | `bisheng/database/models/{app,app_version,app_instance,app_access_log}.py` | 三张表 + 访问记录表的 SQLModel 定义与 DAO | **不放 `app_runtime/domain/models/`**——UNION 第三支要在 `database/models/flow.py` 里 import 它，放 domain 即触 arch-guard **RULE-2**（论证与被否方案见 D8「模型落点」）；不含业务逻辑；**四个模块路径必须登记进 `core/database/tenant_filter.py:39`**（`app_version` 无 `tenant_id`、登记后仍不受自动过滤，K5 ②） |
+| `bisheng/app_runtime/domain/services/app_provision_service.py` | **建应用**：slug 解析（声明冲突拒 16103 / 生成的加后缀）+ 落 `app` 行 + F048 owner 投影（AC-11） | 不碰应用态（创建不是迁移，故不在 `AppStateService` 内）；不写版本记录 |
 | `bisheng/app_runtime/domain/services/app_state_service.py` | **五个状态动作的唯一实现**（上线 / 手动上线 / 停运 / 重新启用 / 删除）+ `stage_version`（待运行版本，AC-04）+ 前态断言 + 审计 | 不直连 docker；不做审批（F055）；不做可见范围授权（F056 交互，本模块只经 F048 runtime） |
 | `bisheng/app_runtime/domain/services/app_meta_service.py` | **AC-06 元信息更新的唯一实现**（名称 / 描述 / 图标 → 不改态、不产版本、计审计 `app.meta_update`） | 不碰应用态；不产生 `app_version` 行；F055 的「元信息随 deploy 更新」调它而非自己写库 |
 | `bisheng/app_runtime/domain/services/app_data_service.py` | AC-56 数据面的 backend 侧唯一服务方（owner 收窄 + 审计 + 转发给 manager 数据面 RPC）——**后置 Wave** | 不直接打开宿主库文件（K1 / 多节点，D10） |

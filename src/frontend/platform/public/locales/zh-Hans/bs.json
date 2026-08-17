@@ -1079,7 +1079,8 @@
     "unsavedChangesLeave": "您有未保存的更改,确定要离开吗?",
     "leaveAndSave": "离开并保存",
     "leaveWithoutSave": "不保存,直接退出",
-    "selectModel": "选择一个模型"
+    "selectModel": "选择一个模型",
+    "noEditPermission": "无编辑权限"
   },
   "bench": {
     "daily": "日常",
@@ -2085,5 +2086,125 @@
     "webPreview": "网页预览",
     "openSourcePage": "打开原网页",
     "noWebSnapshot": "暂无网页快照，请查看入库文本或打开原网页。"
+  },
+  "hostedApp": {
+    "typeName": "托管应用",
+    "state": {
+      "draft": "草稿",
+      "online": "已上线",
+      "pendingCapacity": "待上线（资源不足）",
+      "stopped": "已停运",
+      "deleted": "已删除"
+    },
+    "phase": {
+      "pending": "等待中",
+      "building": "构建中",
+      "starting": "启动中",
+      "running": "运行中",
+      "unhealthy": "不健康",
+      "stopped": "已停止",
+      "failed": "已失败"
+    },
+    "switch": {
+      "on": "已上线",
+      "off": "已停运"
+    },
+    "version": {
+      "placeholder": "版本",
+      "loading": "加载中…",
+      "empty": "暂无版本",
+      "loadFailed": "版本加载失败",
+      "current": "运行中",
+      "pending": "待生效",
+      "readonlyTip": "版本仅供查看，托管应用不支持在此切换版本"
+    },
+    "actions": {
+      "stopTitle": "确认停运应用",
+      "stopDesc": "停运「{{name}}」后，应用入口与应用广场都将呈现「已停用」，正在使用的人会被中断。",
+      "stopOk": "停运",
+      "resumeTitle": "确认重新启用应用",
+      "resumeDesc": "重新启用「{{name}}」会先做运行环境容量准入，通过后拉起当前版本并恢复访问。",
+      "resumeOk": "重新启用",
+      "manualPublishTitle": "确认手动上线",
+      "manualPublishDesc": "将再次尝试为「{{name}}」分配运行资源并上线，无需重新审批。",
+      "manualPublishOk": "手动上线",
+      "deleteTitle": "确认删除应用",
+      "deleteDesc": "删除「{{name}}」将一并删除应用代码、对话历史与应用生产数据，且无法恢复。",
+      "deleteOk": "删除",
+      "deleteBlockedHint": "请先停运",
+      "capacityShortage": "运行环境容量不足，应用已置为「待上线（资源不足）」",
+      "failed": "操作失败",
+      "done": {
+        "stop": "已停运",
+        "resume": "已重新启用",
+        "manualPublish": "已上线",
+        "delete": "已删除"
+      }
+    },
+    "detail": {
+      "back": "返回应用列表",
+      "tabs": {
+        "publish": "发布",
+        "data": "数据",
+        "logs": "运行日志",
+        "versions": "版本"
+      },
+      "noPermission": "你没有权限查看该应用",
+      "notFound": "应用不存在或已删除",
+      "loadFailed": "应用信息加载失败"
+    },
+    "publish": {
+      "stateLabel": "应用态",
+      "entryLabel": "访问入口",
+      "copy": "复制链接",
+      "copied": "链接已复制",
+      "open": "打开",
+      "entryInactive": "应用当前未在运行，访问入口会呈现对应的提示页。",
+      "stop": "停运",
+      "resume": "重新启用",
+      "manualPublish": "手动上线",
+      "instanceTitle": "运行实例",
+      "instancePhase": "实例状态",
+      "instanceHealth": "健康",
+      "instanceRestart": "重启次数",
+      "instanceStartedAt": "启动时间",
+      "instanceUnavailable": "暂时读取不到运行实例状态"
+    },
+    "logs": {
+      "sincePlaceholder": "起始时间",
+      "keywordPlaceholder": "按关键字筛选",
+      "tail": "行数",
+      "tailLines": "最近 {{lines}} 行",
+      "refresh": "刷新",
+      "clear": "重置筛选",
+      "autoRefresh": "自动刷新",
+      "hint": "仅呈现应用自身的运行输出与错误信息，保留最近一段时间的日志。",
+      "empty": "暂无运行日志",
+      "forbidden": "你没有权限查看该应用的运行日志",
+      "loadFailed": "运行日志读取失败"
+    },
+    "versions": {
+      "no": "版本",
+      "kind": "类型",
+      "kindInitial": "首发",
+      "kindIteration": "迭代",
+      "terminalState": "审批终态",
+      "submittedAt": "提交时间",
+      "marker": "标记",
+      "current": "运行中",
+      "pending": "待生效",
+      "empty": "暂无版本记录",
+      "loadFailed": "版本记录加载失败"
+    },
+    "data": {
+      "placeholder": "应用自有数据的查看、编辑与导出将在后续版本提供。"
+    },
+    "guide": {
+      "title": "本环境未启用应用工场",
+      "descDisabled": "当前环境尚未启用「应用工场」运行时层，托管应用的访问入口不可用。",
+      "descEnabled": "「应用工场」运行时层尚未部署或暂不可用，托管应用的访问入口不可用。",
+      "contact": "请联系平台超级管理员完成部署与启用后再访问。",
+      "backHome": "返回首页"
+    }
   }
 }

@@ -1480,16 +1480,10 @@
   },
   "src/pages/BuildPage/apps.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    },
-    "no-restricted-syntax": {
-      "count": 1
-    },
-    "react-hooks/rules-of-hooks": {
-      "count": 16
+      "count": 3
     }
   },
   "src/pages/BuildPage/assistant/CreateAssistant.tsx": {

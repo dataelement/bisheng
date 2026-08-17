@@ -231,6 +231,7 @@
   "16103": "That application identifier is already taken",
   "16104": "An online application cannot be deleted. Stop it first",
   "16105": "Only the application owner can perform this action",
+  "16106": "Only the application owner or an administrator may perform this action",
   "16121": "The application runtime is unavailable. Try again later or contact an administrator",
   "16122": "Application build failed",
   "16123": "Unsupported runtime",

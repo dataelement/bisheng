@@ -170,9 +170,15 @@ export async function readFlowsFromDatabase(page: number = 1, pageSize: number =
 }
 
 /* app list — F027 cursor-based pagination.
- *   request:  { cursor?, pageSize, keyword, tag_id, type, managed, status, action }
+ *   request:  { cursor?, pageSize, keyword, tag_id, type, managed, status, app_state, action }
  *   response: { data, page_size, has_more, next_cursor }
  *   The legacy `page_num` / `total` fields are gone (spec AC-02).
+ *
+ * F054: `type: 'app'` selects hosted applications (flow_type 35, the UNION's
+ * third branch). Their five application states do NOT ride on `status` — that
+ * column is projected to 2 (online) / 1 (everything else) so the existing
+ * on/off switch keeps working, and the backend only honours `status ∈ {1,2}`.
+ * The state filter is the separate `app_state` parameter.
  */
 export async function getAppsApi(
     {
@@ -183,28 +189,32 @@ export async function getAppsApi(
         type,
         managed,
         status,
+        app_state,
         action = 'use',
     }: {
         cursor?: string | null;
         pageSize?: number;
         keyword?: string;
         tag_id?: number;
-        type?: 'assistant' | 'skill' | 'flow';
+        type?: 'assistant' | 'skill' | 'flow' | 'app';
         managed?: any;
         status?: number;
+        /** F054 hosted-application state; ignored by the other two types. */
+        app_state?: string;
         action?: 'visible' | 'use';
     },
 ): Promise<{ data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }> {
     const tagIdStr = tag_id === -1 ? '' : `&tag_id=${tag_id}`
-    const map = { assistant: 5, skill: 1, flow: 10 }
+    const map = { assistant: 5, skill: 1, flow: 10, app: 35 }
     const flowType = map[type] ? `&flow_type=${map[type]}` : ''
     const managedStr = (managed !== undefined && managed !== null && managed !== '')
         ? `&managed=${managed}`
         : '';
     const statusStr = (status === 1 || status === 2) ? `&status=${status}` : ''
+    const appStateStr = app_state ? `&app_state=${encodeURIComponent(app_state)}` : ''
     const cursorStr = cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
     const res = await axios.get(
-        `/api/v1/workflow/list?page_size=${pageSize}&name=${keyword ?? ''}${tagIdStr}${flowType}${managedStr}${statusStr}&action=${action}${cursorStr}`,
+        `/api/v1/workflow/list?page_size=${pageSize}&name=${keyword ?? ''}${tagIdStr}${flowType}${managedStr}${statusStr}${appStateStr}&action=${action}${cursorStr}`,
     )
     const envelope = res as any as { data: any[]; page_size: number; has_more: boolean; next_cursor: string | null }
     const newData = envelope.data.map((item: any) => {

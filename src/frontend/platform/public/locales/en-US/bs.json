@@ -1090,7 +1090,8 @@
     "unsavedChangesLeave": "You have unsaved changes, are you sure you want to leave?",
     "leaveAndSave": "Leave and save",
     "leaveWithoutSave": "Leave without saving",
-    "selectModel": "Select a model"
+    "selectModel": "Select a model",
+    "noEditPermission": "No edit permission"
   },
   "bench": {
     "daily": "Daily",
@@ -2140,5 +2141,125 @@
     "webPreview": "Web preview",
     "openSourcePage": "Open source page",
     "noWebSnapshot": "No web snapshot yet — check the stored text or open the source page."
+  },
+  "hostedApp": {
+    "typeName": "Hosted App",
+    "state": {
+      "draft": "Draft",
+      "online": "Online",
+      "pendingCapacity": "Pending (insufficient resources)",
+      "stopped": "Stopped",
+      "deleted": "Deleted"
+    },
+    "phase": {
+      "pending": "Pending",
+      "building": "Building",
+      "starting": "Starting",
+      "running": "Running",
+      "unhealthy": "Unhealthy",
+      "stopped": "Stopped",
+      "failed": "Failed"
+    },
+    "switch": {
+      "on": "Online",
+      "off": "Stopped"
+    },
+    "version": {
+      "placeholder": "Version",
+      "loading": "Loading…",
+      "empty": "No versions yet",
+      "loadFailed": "Failed to load versions",
+      "current": "Running",
+      "pending": "Pending",
+      "readonlyTip": "Versions are read-only; a hosted app cannot be switched here"
+    },
+    "actions": {
+      "stopTitle": "Stop this application?",
+      "stopDesc": "After stopping \"{{name}}\", both its entry and the app square will show \"stopped\", and anyone using it right now will be cut off.",
+      "stopOk": "Stop",
+      "resumeTitle": "Re-enable this application?",
+      "resumeDesc": "Re-enabling \"{{name}}\" first runs capacity admission; once it passes, the current version is started and access is restored.",
+      "resumeOk": "Re-enable",
+      "manualPublishTitle": "Bring online manually?",
+      "manualPublishDesc": "This retries allocating runtime resources for \"{{name}}\" and brings it online. No second approval is required.",
+      "manualPublishOk": "Bring online",
+      "deleteTitle": "Delete this application?",
+      "deleteDesc": "Deleting \"{{name}}\" also deletes its code, conversation history and production data. This cannot be undone.",
+      "deleteOk": "Delete",
+      "deleteBlockedHint": "Stop it first",
+      "capacityShortage": "Not enough runtime capacity; the application is now \"Pending (insufficient resources)\".",
+      "failed": "Action failed",
+      "done": {
+        "stop": "Stopped",
+        "resume": "Re-enabled",
+        "manualPublish": "Brought online",
+        "delete": "Deleted"
+      }
+    },
+    "detail": {
+      "back": "Back to applications",
+      "tabs": {
+        "publish": "Publish",
+        "data": "Data",
+        "logs": "Run logs",
+        "versions": "Versions"
+      },
+      "noPermission": "You do not have permission to view this application",
+      "notFound": "This application does not exist or has been deleted",
+      "loadFailed": "Failed to load the application"
+    },
+    "publish": {
+      "stateLabel": "Application state",
+      "entryLabel": "Entry",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "open": "Open",
+      "entryInactive": "The application is not running, so the entry shows the matching notice page.",
+      "stop": "Stop",
+      "resume": "Re-enable",
+      "manualPublish": "Bring online",
+      "instanceTitle": "Runtime instance",
+      "instancePhase": "Phase",
+      "instanceHealth": "Health",
+      "instanceRestart": "Restarts",
+      "instanceStartedAt": "Started at",
+      "instanceUnavailable": "Instance state is temporarily unavailable"
+    },
+    "logs": {
+      "sincePlaceholder": "From",
+      "keywordPlaceholder": "Filter by keyword",
+      "tail": "Lines",
+      "tailLines": "Last {{lines}} lines",
+      "refresh": "Refresh",
+      "clear": "Reset filters",
+      "autoRefresh": "Auto refresh",
+      "hint": "Shows only the application's own output and errors, kept for a recent window.",
+      "empty": "No run logs yet",
+      "forbidden": "You do not have permission to view this application's run logs",
+      "loadFailed": "Failed to load run logs"
+    },
+    "versions": {
+      "no": "Version",
+      "kind": "Kind",
+      "kindInitial": "Initial",
+      "kindIteration": "Iteration",
+      "terminalState": "Approval outcome",
+      "submittedAt": "Submitted at",
+      "marker": "Marker",
+      "current": "Running",
+      "pending": "Pending",
+      "empty": "No version records yet",
+      "loadFailed": "Failed to load version records"
+    },
+    "data": {
+      "placeholder": "Viewing, editing and exporting the application's own data arrives in a later release."
+    },
+    "guide": {
+      "title": "The app factory is not enabled in this environment",
+      "descDisabled": "This environment has not enabled the app-factory runtime layer, so hosted-application entries are unavailable.",
+      "descEnabled": "The app-factory runtime layer is not deployed or is currently unreachable, so hosted-application entries are unavailable.",
+      "contact": "Please ask a platform super administrator to deploy and enable it, then try again.",
+      "backHome": "Back to home"
+    }
   }
 }

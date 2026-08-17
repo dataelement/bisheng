@@ -15,6 +15,8 @@ import SharePage from "@/pages/Dashboard/share";
 // 异步加载页面组件
 const Templates = lazy(() => import("@/pages/BuildPage/appTemps"));
 const Apps = lazy(() => import("@/pages/BuildPage/apps"));
+const HostedAppDetail = lazy(() => import("@/pages/BuildPage/hostedApp"));
+const AppRuntimeGuide = lazy(() => import("@/pages/AppRuntimeGuide"));
 const EditAssistantPage = lazy(() => import("@/pages/BuildPage/assistant/editAssistant"));
 const WorkBenchPage = lazy(() => import("@/pages/BuildPage/bench/DialogueWork"));
 const FlowPage = lazy(() => import("@/pages/BuildPage/flow"));
@@ -82,6 +84,9 @@ const privateRouter = [
       { path: "filelib/adjust/:fileId", element: <AdjustFilesUpload />, permission: 'knowledge', },
       { path: "filelib/qalib/:id", element: <QasPage />, permission: 'knowledge', },
       { path: "build/apps", element: <Apps />, permission: 'build', },
+      // F054 hosted-application detail. Rides the existing `build`
+      // permission on purpose: AC-58 forbids a new menu or permission point.
+      { path: "build/apps/:appId", element: <HostedAppDetail />, permission: 'build', },
       // @ts-ignore
       { path: "build/tools", element: <SkillToolsPage />, permission: 'build', },
       { path: "build/client", element: <WorkBenchPage />, permission: 'workstation' },
@@ -141,6 +146,11 @@ const privateRouter = [
   { path: "/admin-login", element: <LoginPage forceLocal />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },
   { path: "/404", element: <Page404 /> },
+  // F054 AC-30: only reachable when nginx has no `location /apps/` — i.e. the
+  // app-factory runtime layer is not deployed. With it deployed, the longer
+  // prefix takes the request and this never matches. Must be declared before
+  // the catch-all, which would otherwise send it to /404.
+  { path: "/apps/*", element: <AppRuntimeGuide />, errorElement: <RouteErrorBoundary /> },
   { path: "*", element: <Navigate to="/404" replace /> }
 ]
 
@@ -247,6 +257,9 @@ export const publicRouter = createBrowserRouter([
   { path: "/resouce/:cid/:mid", element: <ResoucePage />, errorElement: <RouteErrorBoundary /> },
   { path: "/tenant-select", element: <TenantSelect />, errorElement: <RouteErrorBoundary /> },
   { path: "/403", element: <Page403 /> },
+  // F054 AC-30 — the logged-out half: without this the guide URL would show a
+  // login page, which tells the visitor nothing about why the app is missing.
+  { path: "/apps/*", element: <AppRuntimeGuide />, errorElement: <RouteErrorBoundary /> },
   { path: "*", element: <LoginPage /> }
 ],
   baseConfig)

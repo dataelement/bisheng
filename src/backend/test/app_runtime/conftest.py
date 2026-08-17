@@ -75,12 +75,14 @@ _SESSION_PATCH_TARGETS = (
     "bisheng.database.models.department",
     "bisheng.database.models.tenant",
     "bisheng.user.domain.models.user",
+    "bisheng.app_runtime.domain.services.app_provision_service",
     "bisheng.app_runtime.domain.services.app_state_service",
     "bisheng.app_runtime.domain.services.app_meta_service",
     "bisheng.app_runtime.domain.services.app_query_service",
     "bisheng.app_runtime.domain.services.entry_authz_service",
     "bisheng.app_runtime.domain.services.f048_app_permission",
     "bisheng.app_runtime.api.endpoints.internal_app_proxy",
+    "bisheng.app_runtime.api.endpoints.apps",
 )
 
 _TABLES = (
@@ -93,6 +95,10 @@ _TABLES = (
     "app",
     "app_version",
     "app_instance",
+    # F055's table. Present but empty on purpose: that is the MVP reality (the
+    # seed runs on first boot) and it exercises F054's DEFAULT_TIERS fallback
+    # through its intended branch instead of through a missing-table error.
+    "resource_tier",
 )
 
 #: Every method ``orchestrator_client`` exposes (design §4.2 ①). The
@@ -126,6 +132,29 @@ def _clear_proxy_env(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _no_super_admin_probe(monkeypatch):
+    """``_check_is_global_super`` answers False without touching the real stack.
+
+    Left alone it resolves through Redis and the *real* database manager, whose
+    initialisation registers the tenant-filter ORM listeners **process-wide**.
+    Those listeners then rewrite SELECTs in every test package that runs after
+    this one — which showed up as an unrelated F055 pipeline test failing only
+    when F054 ran first. A test that needs a super admin sets
+    ``is_global_super=True`` on its payload instead; nothing here is verified
+    through this probe.
+    """
+    from bisheng.utils.http_middleware import _check_is_global_super  # noqa: F401 - import-time guard
+
+    async def _never_super(*args: Any, **kwargs: Any) -> bool:
+        return False
+
+    for target in ("bisheng.utils.http_middleware", "bisheng.app_runtime.domain.services.entry_authz_service"):
+        module = _optional_module(target)
+        if module is not None and hasattr(module, "_check_is_global_super"):
+            monkeypatch.setattr(module, "_check_is_global_super", _never_super)
+
+
 # ---------------------------------------------------------------------------
 # Database (aiosqlite) + session binding
 # ---------------------------------------------------------------------------
@@ -146,6 +175,7 @@ async def app_engine():
         "bisheng.database.models.app",
         "bisheng.database.models.app_version",
         "bisheng.database.models.app_instance",
+        "bisheng.database.models.resource_tier",
     ):
         importlib.import_module(module)
 
@@ -263,9 +293,7 @@ async def chinese_name_user(app_db):
         await session.flush()
         # Explicit id: ``user_department.id`` is BIGINT, and SQLite only
         # autoincrements a column declared exactly ``INTEGER PRIMARY KEY``.
-        session.add(
-            UserDepartment(id=1, user_id=user.user_id, department_id=department.id, is_primary=1)
-        )
+        session.add(UserDepartment(id=1, user_id=user.user_id, department_id=department.id, is_primary=1))
         await session.commit()
         department_id = department.id
     return SimpleNamespace(
@@ -511,3 +539,122 @@ def audit_sink(monkeypatch):
 
     monkeypatch.setattr(AuditLogDao, "ainsert_v2", classmethod(lambda cls, *a, **kw: _capture(*a, **kw)))
     return captured
+
+
+# ---------------------------------------------------------------------------
+# F048 projection + tenant-admin stand-ins (wave 3)
+# ---------------------------------------------------------------------------
+
+#: Modules that reach the F048 composition root by name. Patching every one of
+#: them is what keeps a service honest: a module that grew its own import path
+#: and is missing here fails loudly against a real (absent) registry instead of
+#: quietly using the stub.
+_PERMISSION_ADAPTER_TARGETS = (
+    "bisheng.app_runtime.domain.services.app_provision_service",
+    "bisheng.app_runtime.domain.services.app_state_service",
+    "bisheng.app_runtime.domain.services.entry_authz_service",
+)
+
+_TENANT_ADMIN_TARGETS = (
+    "bisheng.app_runtime.domain.services.app_state_service",
+    "bisheng.app_runtime.domain.services.app_meta_service",
+    "bisheng.app_runtime.domain.services.app_query_service",
+)
+
+
+@pytest.fixture()
+def fake_permission_projection(monkeypatch):
+    """Stand in for ``get_f048_resource_adapter("app")``.
+
+    OpenFGA is not reachable in a unit run, and the adapter itself is covered by
+    ``test_app_permission_registration.py``. What the wave-3 services owe is
+    that they *call* it — creation projects the owner (AC-11), deletion projects
+    the removal — so the stub records calls and the tests assert on them.
+    """
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    class _Adapter:
+        async def load_permission_record(self, resource_id: str):
+            calls.append(("load_permission_record", {"resource_id": resource_id}))
+            return SimpleNamespace(resource_id=resource_id)
+
+        async def authorize_created(self, **kwargs):
+            calls.append(("authorize_created", kwargs))
+
+        async def project_delete(self, **kwargs):
+            calls.append(("project_delete", kwargs))
+
+    adapter = _Adapter()
+
+    async def _get_adapter(resource_type: str):
+        assert resource_type == "app"
+        return adapter
+
+    for target in _PERMISSION_ADAPTER_TARGETS:
+        module = _optional_module(target)
+        if module is not None and hasattr(module, "get_f048_resource_adapter"):
+            monkeypatch.setattr(module, "get_f048_resource_adapter", _get_adapter)
+    return SimpleNamespace(calls=calls, adapter=adapter, actions=lambda: [name for name, _ in calls])
+
+
+@pytest.fixture()
+def tenant_admins(monkeypatch):
+    """``tenant_admins.grant(user_id, tenant_id)`` → that pair passes ``check_tenant_admin``.
+
+    Real tenant-admin resolution goes through the permission application layer;
+    here the point is only *which* branch of the business pre-check a caller
+    lands in, so the membership set is explicit and readable in the test.
+    """
+    granted: set[tuple[int, int]] = set()
+
+    async def _check(user_id: int, tenant_id: int) -> bool:
+        return (int(user_id), int(tenant_id)) in granted
+
+    for target in _TENANT_ADMIN_TARGETS:
+        module = _optional_module(target)
+        if module is not None and hasattr(module, "check_tenant_admin"):
+            monkeypatch.setattr(module, "check_tenant_admin", _check)
+    return SimpleNamespace(grant=lambda user_id, tenant_id: granted.add((int(user_id), int(tenant_id))))
+
+
+@pytest.fixture()
+def api_app():
+    """``api_app(payload)`` → an ``httpx.AsyncClient`` bound to the F054 router.
+
+    Two deliberate choices:
+
+    * **ASGITransport, not ``TestClient``.** ``TestClient`` drives the app on its
+      own event loop, while the in-memory aiosqlite engine and every ContextVar
+      these tests set live on the test's loop — the first DB call would fail with
+      "attached to a different loop". Driving the ASGI app in-process keeps one
+      loop end to end.
+    * **The router alone, not ``bisheng.main.create_app``.** The full app brings
+      its middleware chain, which re-resolves tenants against a database these
+      tests replaced. A failure here should point at F054, not at an unrelated
+      module's import.
+    """
+    import httpx
+    from fastapi import FastAPI
+    from fastapi.responses import JSONResponse
+
+    from bisheng.app_runtime.api.exception_handlers import register_app_runtime_exception_handlers
+    from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.common.errcode.base import BaseErrorCode
+
+    def _handle(_request, exc: BaseErrorCode) -> JSONResponse:
+        # Mirrors bisheng.main.handle_http_exception: business errors ride in a
+        # 200 envelope, because the platform SPA turns a real 403/404 on a GET
+        # into a full-page redirect (design pit 25).
+        return JSONResponse(status_code=200, content=exc.to_dict())
+
+    def _build(payload=None):
+        from bisheng.app_runtime.api.router import router as app_runtime_router
+
+        app = FastAPI(exception_handlers={BaseErrorCode: _handle})
+        register_app_runtime_exception_handlers(app)
+        app.include_router(app_runtime_router, prefix="/api/v1")
+        if payload is not None:
+            app.dependency_overrides[UserPayload.get_login_user] = lambda: payload
+        return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver")
+
+    return _build

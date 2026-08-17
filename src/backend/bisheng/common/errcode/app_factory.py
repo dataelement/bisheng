@@ -93,6 +93,20 @@ class AppOwnerOnlyError(AppFactoryError):
     Msg: str = "Only the application owner may perform this action"
 
 
+class AppManageForbiddenError(AppFactoryError):
+    """Management action reserved to the owner, a tenant administrator or a super admin.
+
+    Kept apart from :class:`AppOwnerOnlyError` because the two answer different
+    questions and the copy differs accordingly: 16105 means "**only** the owner"
+    (delete, the data tab — a tenant admin is refused there too), 16106 means
+    "you are none of the three". Folding them together would tell a tenant
+    administrator who just stopped an app that only its owner may do so.
+    """
+
+    Code: int = 16106
+    Msg: str = "Only the application owner or an administrator may perform this action"
+
+
 # ---------------------------------------------------------------------------
 # 16120-16139 — runtime / orchestration
 # ---------------------------------------------------------------------------

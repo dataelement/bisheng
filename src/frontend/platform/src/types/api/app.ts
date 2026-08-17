@@ -20,4 +20,12 @@ export type AppConfig = {
   enable_media_upload?: boolean;
     /** 是否部署 ETL4LM  */
     enable_etl4lm: boolean;
+    /** F049: open capability layer switch (deployment level, needs a restart). */
+    open_platform_enabled?: boolean;
+    /**
+     * F054: whether the app-factory runtime layer is deployed (deployment
+     * level, needs a restart). Anonymously readable so the `apps/*` guide page
+     * can decide what to say before anyone logs in.
+     */
+    app_runtime_enabled?: boolean;
 };

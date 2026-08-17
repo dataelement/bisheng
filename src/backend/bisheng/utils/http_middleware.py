@@ -33,6 +33,13 @@ TENANT_CHECK_EXEMPT_PATHS = (
     # v2.5.1 F015: HMAC-signed relink + resolve-conflict endpoints.
     "/api/v1/internal/departments/relink",
     "/api/v1/internal/departments/relink/resolve-conflict",
+    # v3.0.0 F054: app-proxy's HMAC-signed entry authorization. No JWT rides on
+    # this request — the visitor's session token is *data in the body* to be
+    # judged — so there is no tenant context and the handler runs under bypass.
+    "/api/v1/internal/app-proxy/authorize",
+    # The nginx error_page fallback: a static page served when app-proxy is down.
+    # Reached by an anonymous browser, so it must not require a session.
+    "/api/v1/apps/_unavailable",
     # Share-link reads are anonymous by design (recipients open the URL
     # without logging in). The token itself authorizes access; downstream
     # DAOs must run under bypass since the recipient has no tenant context.

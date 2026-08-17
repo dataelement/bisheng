@@ -94,7 +94,11 @@ export function LocationProvider({ children }: { children: ReactNode }) {
           // F049: gates the three `local_dev_toolkit` scopes and the
           // owner-picker deploy notice. The service-account module itself
           // is always on, whatever this flag says (AC-49).
-          openPlatformEnabled: !!res.open_platform_enabled
+          openPlatformEnabled: !!res.open_platform_enabled,
+          // F054: gates the third build-page type, the hosted-app detail page
+          // and the `apps/*` guide copy. Deployment-level, not a tenant
+          // preference — it only changes when config.yaml changes.
+          appRuntimeEnabled: !!res.app_runtime_enabled
         }));
 
         // backend version

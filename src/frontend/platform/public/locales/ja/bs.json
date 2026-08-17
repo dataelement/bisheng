@@ -1073,7 +1073,8 @@
     "unsavedChangesLeave": "未保存の変更があります。本当に離れますか？",
     "leaveAndSave": "保存して離れる",
     "leaveWithoutSave": "保存せずに終了",
-    "selectModel": "モデルを選択してください"
+    "selectModel": "モデルを選択してください",
+    "noEditPermission": "編集権限がありません"
   },
   "bench": {
     "daily": "日常",
@@ -2085,5 +2086,125 @@
     "webPreview": "ウェブプレビュー",
     "openSourcePage": "元のページを開く",
     "noWebSnapshot": "ウェブスナップショットがありません。登録テキストを確認するか、元のページを開いてください。"
+  },
+  "hostedApp": {
+    "typeName": "ホスティングアプリ",
+    "state": {
+      "draft": "下書き",
+      "online": "公開中",
+      "pendingCapacity": "公開待ち（リソース不足）",
+      "stopped": "停止中",
+      "deleted": "削除済み"
+    },
+    "phase": {
+      "pending": "待機中",
+      "building": "ビルド中",
+      "starting": "起動中",
+      "running": "実行中",
+      "unhealthy": "異常",
+      "stopped": "停止",
+      "failed": "失敗"
+    },
+    "switch": {
+      "on": "公開中",
+      "off": "停止中"
+    },
+    "version": {
+      "placeholder": "バージョン",
+      "loading": "読み込み中…",
+      "empty": "バージョンがありません",
+      "loadFailed": "バージョンの読み込みに失敗しました",
+      "current": "実行中",
+      "pending": "適用待ち",
+      "readonlyTip": "バージョンは閲覧のみです。ホスティングアプリはここで切り替えできません"
+    },
+    "actions": {
+      "stopTitle": "アプリを停止しますか？",
+      "stopDesc": "「{{name}}」を停止すると、アクセス入口とアプリ広場の両方が「停止中」と表示され、利用中のユーザーは中断されます。",
+      "stopOk": "停止",
+      "resumeTitle": "アプリを再開しますか？",
+      "resumeDesc": "「{{name}}」の再開ではまず実行環境の容量審査を行い、通過後に現行バージョンを起動してアクセスを復旧します。",
+      "resumeOk": "再開",
+      "manualPublishTitle": "手動で公開しますか？",
+      "manualPublishDesc": "「{{name}}」に実行リソースを再度割り当てて公開します。再承認は不要です。",
+      "manualPublishOk": "手動公開",
+      "deleteTitle": "アプリを削除しますか？",
+      "deleteDesc": "「{{name}}」を削除すると、アプリのコード・会話履歴・本番データもあわせて削除され、復元できません。",
+      "deleteOk": "削除",
+      "deleteBlockedHint": "先に停止してください",
+      "capacityShortage": "実行環境の容量が不足しているため、アプリは「公開待ち（リソース不足）」になりました",
+      "failed": "操作に失敗しました",
+      "done": {
+        "stop": "停止しました",
+        "resume": "再開しました",
+        "manualPublish": "公開しました",
+        "delete": "削除しました"
+      }
+    },
+    "detail": {
+      "back": "アプリ一覧に戻る",
+      "tabs": {
+        "publish": "公開",
+        "data": "データ",
+        "logs": "実行ログ",
+        "versions": "バージョン"
+      },
+      "noPermission": "このアプリを閲覧する権限がありません",
+      "notFound": "アプリが存在しないか、削除されています",
+      "loadFailed": "アプリ情報の読み込みに失敗しました"
+    },
+    "publish": {
+      "stateLabel": "アプリ状態",
+      "entryLabel": "アクセス入口",
+      "copy": "リンクをコピー",
+      "copied": "リンクをコピーしました",
+      "open": "開く",
+      "entryInactive": "アプリは現在稼働していないため、入口には対応する案内ページが表示されます。",
+      "stop": "停止",
+      "resume": "再開",
+      "manualPublish": "手動公開",
+      "instanceTitle": "実行インスタンス",
+      "instancePhase": "インスタンス状態",
+      "instanceHealth": "ヘルス",
+      "instanceRestart": "再起動回数",
+      "instanceStartedAt": "起動時刻",
+      "instanceUnavailable": "実行インスタンスの状態を取得できません"
+    },
+    "logs": {
+      "sincePlaceholder": "開始時刻",
+      "keywordPlaceholder": "キーワードで絞り込み",
+      "tail": "行数",
+      "tailLines": "直近 {{lines}} 行",
+      "refresh": "更新",
+      "clear": "条件をリセット",
+      "autoRefresh": "自動更新",
+      "hint": "アプリ自身の実行出力とエラー情報のみを表示し、直近の一定期間のみ保持します。",
+      "empty": "実行ログがありません",
+      "forbidden": "このアプリの実行ログを閲覧する権限がありません",
+      "loadFailed": "実行ログの取得に失敗しました"
+    },
+    "versions": {
+      "no": "バージョン",
+      "kind": "種別",
+      "kindInitial": "初回",
+      "kindIteration": "改訂",
+      "terminalState": "承認結果",
+      "submittedAt": "提出時刻",
+      "marker": "マーク",
+      "current": "実行中",
+      "pending": "適用待ち",
+      "empty": "バージョン記録がありません",
+      "loadFailed": "バージョン記録の読み込みに失敗しました"
+    },
+    "data": {
+      "placeholder": "アプリ固有データの閲覧・編集・エクスポートは今後のリリースで提供します。"
+    },
+    "guide": {
+      "title": "この環境ではアプリ工場が有効化されていません",
+      "descDisabled": "この環境では「アプリ工場」ランタイム層が有効化されていないため、ホスティングアプリのアクセス入口は利用できません。",
+      "descEnabled": "「アプリ工場」ランタイム層が未デプロイ、または現在利用できないため、ホスティングアプリのアクセス入口は利用できません。",
+      "contact": "プラットフォームのスーパー管理者にデプロイと有効化を依頼してから、再度アクセスしてください。",
+      "backHome": "ホームへ戻る"
+    }
   }
 }

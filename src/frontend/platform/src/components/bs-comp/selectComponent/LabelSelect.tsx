@@ -53,8 +53,13 @@ export default function LabelSelect({ labels, all, children, resource, onUpdate 
         setData(pre => pre.map(d => ({ ...d, edit: d.value === id })))
     }
 
+    // flow_type -> ResourceTypeEnum. 5 (assistant) -> 3, 1 (legacy skill) -> 2,
+    // 35 (F054 hosted application) -> 10, everything else (10 = workflow) -> 5.
+    const resourceTypeOf = (flowType) =>
+        flowType === 5 ? 3 : flowType === 1 ? 2 : flowType === 35 ? 10 : 5
+
     const handleChecked = (id) => {
-        const type = resource.type === 5 ? 3 : resource.type === 1 ? 2 : 5
+        const type = resourceTypeOf(resource.type)
         setData(pre => {
             const newData = pre.map(d => d.value === id ? { ...d, selected: !d.selected } : d)
             const cur = newData.find(d => d.value === id)

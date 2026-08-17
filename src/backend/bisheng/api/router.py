@@ -20,6 +20,7 @@ from bisheng.api.v1 import (
                             workflow_router,
                             workstation_router,
 )
+from bisheng.app_runtime.api.router import router as app_runtime_router
 from bisheng.approval.api.router import router as approval_router
 from bisheng.brand.api.router import router as brand_router
 from bisheng.channel.api.router import router as channel_router
@@ -110,6 +111,8 @@ router.include_router(brand_router)
 router.include_router(sensitive_word_policy_router)
 # F049: service-account management face (session auth, tenant-admin gated).
 router.include_router(service_account_router)
+# F054: hosted application state actions, read side and the app-proxy hook.
+router.include_router(app_runtime_router)
 
 router_rpc = APIRouter(prefix='/api/v2', )
 router_rpc.include_router(knowledge_router_rpc)

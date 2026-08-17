@@ -31,7 +31,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, DateTime, Index, Integer, String, UniqueConstraint, text, update
+from sqlalchemy import Column, DateTime, Index, Integer, String, UniqueConstraint, delete, text, update
 from sqlmodel import Field, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -142,6 +142,21 @@ class AppDao:
         return list(result.all())
 
     @classmethod
+    async def alist_by_tenant(cls, session: AsyncSession, tenant_id: int) -> list[App]:
+        """Every app of one tenant, newest first — the administrator's scope (AC-57).
+
+        The ``tenant_id`` predicate is written out instead of relying on the
+        automatic filter: that listener rewrites SELECT statements only in a
+        process that installed it, so a management read that leaned on it would
+        silently widen to every tenant on any code path without it.
+        """
+        statement = (
+            select(App).where(App.tenant_id == tenant_id).order_by(col(App.update_time).desc(), col(App.id).desc())
+        )
+        result = await session.exec(statement)
+        return list(result.all())
+
+    @classmethod
     async def aupdate_state_cas(
         cls,
         session: AsyncSession,
@@ -170,4 +185,22 @@ class AppDao:
         result = await session.exec(
             update(App).where(App.id == app_id, col(App.state).in_(from_states)).values(**values)
         )
+        return bool(result.rowcount)
+
+    @classmethod
+    async def adelete_row(cls, session: AsyncSession, app_id: str) -> bool:
+        """Physically remove one row — **compensation only**, never a lifecycle step.
+
+        Explicit deletion of an application is a *state* transition to
+        ``deleted`` (the row survives for audit, AC-43). This method exists for
+        the one case where no row should ever have existed: ``create_draft``
+        wrote the row and the F048 owner projection then failed, leaving an app
+        nobody can see or manage. Compensating with ``state='deleted'`` instead
+        would keep the globally unique ``slug`` occupied forever, so the next
+        ``bisheng deploy`` of the same app would fail with 16103 and no way out.
+
+        Pinned to the primary key, so the tenant listener's SELECT-only
+        rewriting (design K5 ③) cannot let it reach another tenant's row.
+        """
+        result = await session.exec(delete(App).where(App.id == app_id))
         return bool(result.rowcount)

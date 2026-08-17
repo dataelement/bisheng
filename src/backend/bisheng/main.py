@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from bisheng.api.router import router, router_rpc
+from bisheng.app_runtime.api.exception_handlers import register_app_runtime_exception_handlers
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
@@ -174,6 +175,9 @@ def create_app():
     # registered class, so the narrower 260xx handler wins for those errors and
     # ``handle_http_exception`` keeps every other error unchanged.
     register_open_api_exception_handlers(app)
+    # F054: app-proxy branches on a real 401 to tell "our shared secret is
+    # wrong" from "this visitor may not enter" (which is 200 + a decision).
+    register_app_runtime_exception_handlers(app)
 
     app.include_router(router)
     app.include_router(router_rpc)
