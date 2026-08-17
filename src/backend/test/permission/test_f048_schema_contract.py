@@ -133,13 +133,24 @@ def test_f048_unique_and_foreign_key_contract() -> None:
     } <= foreign_targets
 
 
-def test_f048_revision_is_the_single_alembic_head() -> None:
+def test_f048_revision_is_on_the_single_alembic_head_line() -> None:
+    """One head, and the F048 revisions are on its ancestry — no parallel branch.
+
+    The assertion used to pin the head to ``f048_migration_item_message_longtext``,
+    which turned every later release into a false failure (F049's
+    ``f049_user_user_type`` was the first). What F048 actually needs guarded is
+    that its revisions stay on a single, linear head line.
+    """
     config = Config(str(BACKEND_ROOT / "alembic.ini"))
     config.set_main_option(
         "script_location",
         str(BACKEND_ROOT / "bisheng/core/database/alembic"),
     )
-    assert ScriptDirectory.from_config(config).get_heads() == ["f048_migration_item_message_longtext"]
+    script = ScriptDirectory.from_config(config)
+    heads = script.get_heads()
+    assert len(heads) == 1, f"multiple alembic heads: {heads}"
+    ancestry = {revision.revision for revision in script.walk_revisions("base", heads[0])}
+    assert {"f048_permission_grants", "f048_migration_item_message_longtext"} <= ancestry
 
 
 def test_f048_message_revision_is_static_ddl_only() -> None:

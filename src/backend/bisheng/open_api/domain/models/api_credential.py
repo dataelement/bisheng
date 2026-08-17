@@ -12,7 +12,9 @@ Facts that are easy to get wrong (design K3 / K5 / K6):
 * ``scopes`` is ``JsonType`` — CLOB on DM8, so scope checks happen in Python
   after the row is loaded, never in SQL.
 * The DAO is single-row ORM only (no bulk ``update()`` / ``delete()`` and no
-  ``text()``): the tenant filter rewrites SELECT statements only. Lookups by
+  ``text()``): the tenant filter rewrites SELECT statements only. The sole
+  exception is :meth:`ApiCredentialDao.amark_expired`, a conditional UPDATE
+  pinned to one primary key (the lazy-expiry idempotency latch). Lookups by
   hash run before any tenant context exists, so the *caller* wraps
   :meth:`ApiCredentialDao.aget_by_hash` in ``bypass_tenant_filter()``.
 * Every DAO method takes the caller's ``AsyncSession`` — the service owns the
@@ -23,7 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Index, Integer, String, text
+from sqlalchemy import Column, DateTime, Index, Integer, String, text, update
 from sqlmodel import Field, col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -174,3 +176,22 @@ class ApiCredentialDao:
         session.add(row)
         await session.flush()
         return row
+
+    @classmethod
+    async def amark_expired(cls, session: AsyncSession, credential_id: int) -> bool:
+        """Latch ``revoke_reason='expired'`` on one row; True only for the caller that won.
+
+        The single conditional statement in this DAO, and the only one that is
+        not a plain ORM row write. It is pinned to the primary key, so the K6
+        concern (bulk writes escaping the SELECT-only tenant filter) does not
+        apply: no row outside ``id`` can be reached. It exists because lazy
+        expiry must be idempotent across processes — ``rowcount == 1`` is what
+        makes exactly one caller write the audit event (design T010 / AC-12).
+        ``revoked_at`` is deliberately left NULL (K3).
+        """
+        result = await session.exec(
+            update(ApiCredential)
+            .where(ApiCredential.id == credential_id, col(ApiCredential.revoke_reason).is_(None))
+            .values(revoke_reason=REVOKE_REASON_EXPIRED, update_time=datetime.now())
+        )
+        return bool(result.rowcount)

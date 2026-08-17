@@ -30,7 +30,7 @@ from bisheng.department.domain.services.department_service import (
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
-from bisheng.user.domain.models.user import User
+from bisheng.user.domain.models.user import USER_TYPE_HUMAN, User
 
 # A department-bound space whose department is gone has no candidate in scope;
 # an empty path would match everything instead of nothing.
@@ -87,7 +87,12 @@ async def list_candidate_users(
             )
             statement = (
                 select(User.user_id, User.user_name, User.external_id)
-                .where(User.delete == 0, in_tenant)
+                # v3.0.0 F049 / AC-16: service accounts are granted only from
+                # their own detail page. This picker has its own SQL and never
+                # goes through UserDao, so the exclusion has to be repeated here
+                # (design pit 9) — otherwise the resource-side dialog stays the
+                # one place they remain selectable.
+                .where(User.delete == 0, User.user_type == USER_TYPE_HUMAN, in_tenant)
                 .order_by(col(User.user_id).desc())
             )
             if scope.department_path is not None:

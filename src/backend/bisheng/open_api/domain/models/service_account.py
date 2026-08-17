@@ -33,6 +33,13 @@ from bisheng.database.models.tenant import UserTenant
 # the three login-candidate lookups structurally never match (design D1 / K5).
 SERVICE_ACCOUNT_USER_SOURCE = "service_account"
 
+# ``user.password`` is NOT NULL and every login path stores an md5 hash, so a
+# value that is not 32 hex characters can never be produced by a password check.
+# The 26012 guard rejects service accounts before any password comparison
+# anyway — this sentinel exists so the column is satisfiable without inventing a
+# credential that somebody could try to guess.
+SERVICE_ACCOUNT_PASSWORD_SENTINEL = "!service-account:no-login!"
+
 
 class ServiceAccount(SQLModelSerializable, table=True):
     __tablename__ = "service_account"

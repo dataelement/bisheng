@@ -51,6 +51,10 @@ class PermissionSubjectDirectoryPort(Protocol):
         subject_id: str,
         userset_relation: str | None,
         include_children: bool,
+        # v3.0.0 F049 / D7: subject kinds the business side refuses by default
+        # (service accounts) may only be authored by a caller that says so
+        # explicitly. Resource-side endpoints never pass it.
+        allow_service_account_subject: bool = False,
     ) -> GrantSourceRecord: ...
 
     async def display_names(
@@ -64,12 +68,12 @@ class PermissionSubjectDirectoryPort(Protocol):
     ) -> dict[tuple[str, str], str]: ...
 
 
-
 def _split_resource_key(resource_key: str) -> tuple[str, str]:
     """Split "knowledge_space:3377" into its type and id."""
 
     resource_type, _, resource_id = resource_key.partition(":")
     return resource_type, resource_id
+
 
 def _encode_cursor(payload: dict[str, object]) -> str:
     raw = json.dumps(
@@ -196,9 +200,7 @@ class F048ResourcePermissionApi:
         # roster used to render "knowledge_space:3377" at users. Resolved through
         # the business side, the same way subject names already are.
         parents = tuple(
-            dict.fromkeys(
-                _split_resource_key(row.inherited_from) for row in selected if row.inherited_from
-            )
+            dict.fromkeys(_split_resource_key(row.inherited_from) for row in selected if row.inherited_from)
         )
         parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
@@ -292,7 +294,15 @@ class F048ResourcePermissionApi:
         resource_id: str,
         actor: PermissionActor,
         request: GrantMutationRequest,
+        allow_service_account_subject: bool = False,
     ) -> dict:
+        """Apply grant changes.
+
+        ``allow_service_account_subject`` (v3.0.0 F049 / D6 W2) is forwarded to
+        the subject directory. It stays False for every resource-side caller;
+        only the service-account detail page opts in, which is what keeps that
+        page the single authoring path (AC-16 / INV-29).
+        """
         target = await self._target(
             resource_type,
             resource_id,
@@ -312,6 +322,7 @@ class F048ResourcePermissionApi:
                     subject_id=change.subject.id,
                     userset_relation=change.subject.userset_relation,
                     include_children=change.subject.include_children,
+                    allow_service_account_subject=allow_service_account_subject,
                 )
             canonical.append(
                 CanonicalGrantChange(

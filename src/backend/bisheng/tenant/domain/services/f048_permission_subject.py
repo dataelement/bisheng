@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from bisheng.common.errcode.open_api import ServiceAccountNotGrantSubjectError
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.database.models.department import (
     DepartmentDao,
@@ -17,7 +18,7 @@ from bisheng.permission.domain.services.grant_source_service import (
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
-from bisheng.user.domain.models.user import UserDao
+from bisheng.user.domain.models.user import USER_TYPE_SERVICE, UserDao
 
 
 class TenantPermissionSubjectDirectory:
@@ -59,13 +60,26 @@ class TenantPermissionSubjectDirectory:
         subject_id: str,
         userset_relation: str | None,
         include_children: bool,
+        allow_service_account_subject: bool = False,
     ) -> GrantSourceRecord:
+        """Validate a grant subject.
+
+        ``allow_service_account_subject`` (v3.0.0 F049 / D7) defaults to False:
+        the resource-side ``grants:mutate`` never sets it, so a service account
+        can only be granted from its own detail page (T065), which passes True
+        explicitly. The permission domain still knows nothing about "service
+        accounts" — it reads ``user_type`` and one caller-supplied flag (C4).
+        """
         normalized_type = subject_type.strip().lower()
         normalized_id = subject_id.strip()
         if not normalized_id.isdigit():
             raise PermissionInvalidResourceError()
         identifier = int(normalized_id)
         if normalized_type == "user":
+            if not allow_service_account_subject:
+                subject_user = await UserDao.aget_user(identifier)
+                if subject_user is not None and subject_user.user_type == USER_TYPE_SERVICE:
+                    raise ServiceAccountNotGrantSubjectError()
             rows = await UserTenantDao.aget_user_tenants(identifier)
             valid = any(row.tenant_id == tenant_id and row.status == "active" and row.is_active == 1 for row in rows)
             source_type = "DIRECT"

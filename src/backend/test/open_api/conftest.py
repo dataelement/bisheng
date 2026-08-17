@@ -69,7 +69,7 @@ _REDIS_PATCH_TARGETS = (
     "bisheng.open_api.domain.services.service_account_service",
     "bisheng.open_api.api.dependencies",
 )
-_TABLES = ("tenant", "user", "user_tenant", "audit_log", "api_credential", "service_account")
+_TABLES = ("tenant", "user", "user_tenant", "auditlog", "api_credential", "service_account")
 
 
 def _optional_module(name: str):
@@ -299,6 +299,41 @@ def _resolve_redis_url() -> str | None:
         return None
 
 
+def _real_redis_client_class():
+    """``RedisClient``, loaded from source when the repo-wide premock replaced its module.
+
+    ``test/fixtures/mock_services.premock_import_chain`` installs a ``MagicMock``
+    for ``bisheng.core.cache.redis_conn`` (it is on the import chain of
+    ``tenant_service``), so a plain import here yields a mock whose
+    ``__new__`` raises ``TypeError: issubclass() arg 1 must be a class``. The
+    module itself imports cleanly (``redis`` / ``redis.exceptions`` are the real
+    packages), so load it from its file under a private name — leaving
+    ``sys.modules["bisheng.core.cache.redis_conn"]`` untouched for every other
+    test package that relies on the mock.
+    """
+    import sys
+
+    module = sys.modules.get("bisheng.core.cache.redis_conn")
+    candidate = getattr(module, "RedisClient", None)
+    if isinstance(candidate, type):
+        return candidate
+
+    import importlib.util
+    import pathlib
+
+    import bisheng
+
+    private_name = "_open_api_test_redis_conn"
+    if private_name in sys.modules:
+        return sys.modules[private_name].RedisClient
+    path = pathlib.Path(bisheng.__file__).parent / "core" / "cache" / "redis_conn.py"
+    spec = importlib.util.spec_from_file_location(private_name, path)
+    real = importlib.util.module_from_spec(spec)
+    sys.modules[private_name] = real
+    spec.loader.exec_module(real)
+    return real.RedisClient
+
+
 @pytest.fixture()
 async def redis_client(monkeypatch):
     """A ``RedisClient`` on a real Redis when reachable, else fakeredis; ``oapi:*`` keys cleaned afterwards.
@@ -307,9 +342,9 @@ async def redis_client(monkeypatch):
     ``get_redis_client`` by name, so the code under test and the assertions
     talk to the same store. Skips when neither backend is available.
     """
-    from bisheng.core.cache.redis_conn import RedisClient
+    RedisClient = _real_redis_client_class()
 
-    client: RedisClient | None = None
+    client = None
     url = _resolve_redis_url()
     if url:
         try:

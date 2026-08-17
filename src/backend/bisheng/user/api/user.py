@@ -662,6 +662,10 @@ async def _can_manage_member_account_status(
 
 @router.post("/user/update", status_code=201)
 async def update(*, request: Request, user: UserUpdate, login_user: LoginUser = Depends(LoginUser.get_login_user)):
+    # F049 AC-20: people-only operation. Asserted before any read or write so a
+    # service account cannot be disabled / re-enabled / re-avatared as a person
+    # (the ``delete`` toggle below writes that column directly).
+    await UserService.aassert_natural_persons([user.user_id])
     db_user = UserDao.get_user(user.user_id)
     if not db_user:
         raise HTTPException(status_code=500, detail="Pengguna tidak ada")
@@ -878,6 +882,9 @@ async def user_addrole(
     """
     Resets the role of the user. The scope of the data varies depending on the permissions
     """
+    # F049 AC-22: no role may be assigned to a service account — "never a super
+    # admin standing behind a key" starts with never giving it a role at all.
+    await UserService.aassert_natural_persons([user_role.user_id])
     # Get a list of the user's previous roles
     all_old_roles = [one.role_id for one in UserRoleDao.get_user_roles(user_role.user_id)]
     old_roles = all_old_roles.copy()
@@ -1039,6 +1046,8 @@ async def reset_password(
     """
     Admin Reset User Password
     """
+    # F049 AC-20: a service account has no password to reset (design D7).
+    await UserService.aassert_natural_persons([user_id])
     # Get user information to change password
     user_info = UserDao.get_user(user_id)
     if not user_info:

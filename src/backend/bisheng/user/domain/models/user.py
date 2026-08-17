@@ -229,7 +229,13 @@ class UserDao(UserBase):
 
     @classmethod
     async def aget_login_candidates_by_account(cls, account: str) -> list[User]:
-        """登录账号仅支持 external_id（人员ID），并过滤禁用账号。"""
+        """登录账号仅支持 external_id（人员ID），并过滤禁用账号。
+
+        v3.0.0 F049: ``user_type == 'human'`` is the second lock. Service
+        accounts are created with ``external_id=NULL`` and therefore never match
+        here anyway (design pit 5); this condition makes that a stated rule
+        rather than an accident of the create path.
+        """
         acc = (account or "").strip()
         if not acc:
             return []
@@ -237,6 +243,7 @@ class UserDao(UserBase):
             statement = select(User).where(
                 User.delete == 0,
                 User.external_id == acc,
+                User.user_type == USER_TYPE_HUMAN,
             )
             result = await session.exec(statement)
             return list(result.all())
@@ -275,19 +282,41 @@ class UserDao(UserBase):
             return user
 
     @classmethod
-    def _filter_users_statement(cls, statement, user_ids: list[int], keyword: str = None):
+    def _filter_users_statement(
+        cls,
+        statement,
+        user_ids: list[int],
+        keyword: str = None,
+        user_type: str | None = USER_TYPE_HUMAN,
+    ):
+        """Shared base of ``/user/list`` and its eight consumers.
+
+        v3.0.0 F049 / design D7: ``user_type`` defaults to ``'human'`` so service
+        accounts disappear from every people picker without each consumer opting
+        in — the failure direction of a forgotten parameter is "cannot see",
+        never "leaked". Pass ``user_type=None`` to include every principal type.
+        """
         if user_ids:
             statement = statement.where(User.user_id.in_(user_ids))
         if keyword:
             statement = statement.where(User.user_name.like(f"%{keyword}%"))
+        if user_type is not None:
+            statement = statement.where(User.user_type == user_type)
         return statement.order_by(User.user_id.desc())
 
     @classmethod
-    def filter_users(cls, user_ids: list[int], keyword: str = None, page: int = 0, limit: int = 0) -> (list[User], int):
+    def filter_users(
+        cls,
+        user_ids: list[int],
+        keyword: str = None,
+        page: int = 0,
+        limit: int = 0,
+        user_type: str | None = USER_TYPE_HUMAN,
+    ) -> (list[User], int):
         statement = select(User)
-        statement = cls._filter_users_statement(statement, user_ids, keyword)
+        statement = cls._filter_users_statement(statement, user_ids, keyword, user_type)
         count_statement = select(func.count(User.user_id))
-        count_statement = cls._filter_users_statement(count_statement, user_ids, keyword)
+        count_statement = cls._filter_users_statement(count_statement, user_ids, keyword, user_type)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(User.user_id.desc())
@@ -295,9 +324,16 @@ class UserDao(UserBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    async def afilter_users(cls, user_ids: list[int], keyword: str = None, page: int = 0, limit: int = 0) -> list[User]:
+    async def afilter_users(
+        cls,
+        user_ids: list[int],
+        keyword: str = None,
+        page: int = 0,
+        limit: int = 0,
+        user_type: str | None = USER_TYPE_HUMAN,
+    ) -> list[User]:
         statement = select(User)
-        statement = cls._filter_users_statement(statement, user_ids, keyword)
+        statement = cls._filter_users_statement(statement, user_ids, keyword, user_type)
         if page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
         statement = statement.order_by(User.user_id.desc())

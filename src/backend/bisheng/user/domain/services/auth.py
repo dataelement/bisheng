@@ -23,6 +23,7 @@ from bisheng.database.models.group import GroupDao
 from bisheng.database.models.role import RoleDao
 from bisheng.database.models.role_access import AccessType, RoleAccessDao, WebMenuResource
 from bisheng.database.models.user_group import UserGroupDao
+from bisheng.open_api.domain.context import OpenApiPrincipal
 
 from ..models.user import User, UserDao
 from ..models.user_role import UserRoleDao
@@ -214,6 +215,15 @@ class LoginUser(BaseModel):
     is_global_super: bool = Field(
         default=False,
         description="True iff system:global#super_admin",
+    )
+    # v3.0.0 F049: set only on /api/v2 requests authenticated by a bs-sak-
+    # credential or a share token; ``None`` for every JWT-authenticated user.
+    # Business services read it to learn the resource owner a service account
+    # creates on behalf of (design D5). ``OpenApiPrincipal`` imports nothing
+    # from the user domain, so there is no import cycle.
+    open_api_principal: OpenApiPrincipal | None = Field(
+        default=None,
+        description="F049 open API principal (credential / share-link identity)",
     )
 
     def __init__(self, **kwargs):
