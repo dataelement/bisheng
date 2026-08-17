@@ -2,9 +2,28 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from bisheng.channel.domain.models.channel import ChannelFilterRules, ChannelVisibilityEnum
+from bisheng.permission.domain.schemas import GrantSubjectInput
+
+
+class ChannelInitialPermissionGrant(BaseModel):
+    model_key: str = Field(..., min_length=1, max_length=64)
+    subject: GrantSubjectInput
+
+
+class ChannelInitialPermissionsRequest(BaseModel):
+    expected_catalog_release_id: int = Field(..., gt=0)
+    grants: list[ChannelInitialPermissionGrant] = Field(default_factory=list, max_length=50)
+
+
+class ChannelInitialPermissionApplyResult(BaseModel):
+    status: Literal["succeeded", "failed"]
+    resource_version: int | None = None
+    assignee_ids: list[str] = Field(default_factory=list)
+    error_code: int | None = None
+    message: str | None = None
 
 
 class SubscriptionStatusEnum(StrEnum):
@@ -57,6 +76,29 @@ class CreateChannelRequest(BaseModel):
     filter_rules: list[ChannelFilterRules] | None = Field(default_factory=list, description="Filter Conditions")
     is_released: bool = Field(default=False, description="Whether the channel is released")
     knowledge_sync: KnowledgeSyncConfig | None = Field(None, description="Knowledge space sync configuration")
+    creation_request_id: str | None = Field(default=None, min_length=1, max_length=64)
+    initial_permissions: ChannelInitialPermissionsRequest | None = None
+
+    @model_validator(mode="after")
+    def require_request_id_for_initial_permissions(self):
+        if self.initial_permissions is not None and self.creation_request_id is None:
+            raise ValueError("initial_permissions requires creation_request_id")
+        return self
+
+
+class CreateChannelResponse(BaseModel):
+    id: str
+    name: str
+    source_list: list[str] = Field(default_factory=list)
+    visibility: ChannelVisibilityEnum
+    description: str | None = None
+    filter_rules: list[dict] = Field(default_factory=list)
+    user_id: int
+    is_released: bool = False
+    tenant_id: int | None = None
+    create_time: datetime | None = None
+    update_time: datetime | None = None
+    initial_permission_result: ChannelInitialPermissionApplyResult | None = None
 
 
 class UpdateChannelRequest(BaseModel):

@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 9 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 11 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -81,13 +81,13 @@
   - **验证**: T008 全部通过。
   - **依赖**: T008
 
-- [ ] **T010 Channel 创建幂等与初始授权测试**
+- [x] **T010 Channel 创建幂等与初始授权测试**
   - **文件**: `src/backend/test/channel/test_unified_permission_creation.py`
   - **逻辑**: 旧/新 payload、订阅外部信息源后重试不重复、owner/Grant 失败分界、同 key/hash 语义，保留 filter/subchannel/`knowledge_sync`。
   - **覆盖 AC**: AC-02, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18, AC-19, AC-30, AC-32, AC-33
   - **依赖**: T007
 
-- [ ] **T011 Channel 创建编排实现**
+- [x] **T011 Channel 创建编排实现**
   - **文件**: `src/backend/bisheng/channel/domain/services/channel_service.py`, `src/backend/bisheng/channel/domain/schemas/channel_manager_schema.py`
   - **逻辑**: 持久 request/hash；对已完成外部订阅的重试跳过重复副作用；资源 + owner 后调 Initial Grant port；保留知识同步/通知。
   - **验证**: T010 全部通过。

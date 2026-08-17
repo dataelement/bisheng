@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
+from hashlib import sha256
 from typing import TYPE_CHECKING, Any
 
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
@@ -29,12 +31,14 @@ from bisheng.channel.domain.schemas.article_schema import (
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     AddArticlesToKnowledgeSpaceRequest,
     ChannelDetailResponse,
+    ChannelInitialPermissionApplyResult,
     ChannelItemResponse,
     ChannelMemberPageResponse,
     ChannelMemberResponse,
     ChannelSquareItemResponse,
     ChannelSquarePageResponse,
     CreateChannelRequest,
+    CreateChannelResponse,
     KnowledgeSyncConfig,
     KnowledgeSyncMainConfig,
     KnowledgeSyncSpaceItem,
@@ -55,11 +59,13 @@ from bisheng.channel.domain.services.f048_channel_permission import (
     ChannelPermissionRecord,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.channel import (
     ArticleSensitiveViolationError,
     ChannelAccessDeniedError,
     ChannelAdminLimitExceededError,
     ChannelCreateLimitExceededError,
+    ChannelCreationRequestConflictError,
     ChannelNotFoundError,
     ChannelOrganizationGrantUnsubscribeDeniedError,
 )
@@ -86,6 +92,11 @@ from bisheng.permission.application.business_authorization import (
     require_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.permission.application.initial_grant import (
+    InitialGrantAddition,
+    InitialGrantApplication,
+    InitialGrantRequest,
+)
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
@@ -199,6 +210,7 @@ class ChannelService:
         article_read_repository: "ArticleReadRepository" = None,
         message_service: MessageService | None = None,
         approval_gate: ApprovalGate | None = None,
+        initial_grant_application: InitialGrantApplication | None = None,
     ):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
@@ -207,6 +219,7 @@ class ChannelService:
         self.article_read_repository = article_read_repository
         self.message_service = message_service
         self.approval_gate = approval_gate
+        self.initial_grant_application = initial_grant_application
 
     async def _get_channel_actions(
         self,
@@ -428,8 +441,32 @@ class ChannelService:
 
         return {"to_sub": len(to_sub), "to_unsub": len(to_unsub), "failed": failed}
 
-    async def create_channel(self, channel_data: CreateChannelRequest, login_user: UserPayload, request=None):
+    async def create_channel(
+        self,
+        channel_data: CreateChannelRequest,
+        login_user: UserPayload,
+        request=None,
+    ) -> Channel | CreateChannelResponse:
         """Create a new channel based on the provided data and the logged-in user."""
+        tenant_id = self._current_tenant_id(login_user)
+        payload_hash = self._creation_payload_hash(channel_data)
+        existing = None
+        if channel_data.creation_request_id is not None:
+            existing = await self.channel_repository.find_by_creation_request(
+                tenant_id=tenant_id,
+                user_id=login_user.user_id,
+                creation_request_id=channel_data.creation_request_id,
+            )
+        if existing is not None:
+            self._require_matching_creation(existing, payload_hash)
+            return await self._complete_channel_creation(
+                existing,
+                channel_data=channel_data,
+                login_user=login_user,
+                request=request,
+                created=False,
+            )
+
         # Check if the user has reached the role-configurable channel creation quota
         # (F005 quota: `channel`, default 10; admins/-1 = unlimited). effective already
         # folds in the tenant-chain cap, so this enforces both role and tenant limits.
@@ -481,12 +518,38 @@ class ChannelService:
             filter_rules=[] if not channel_data.filter_rules else [f.model_dump() for f in channel_data.filter_rules],
             user_id=login_user.user_id,
             is_released=channel_data.is_released,
+            tenant_id=tenant_id,
+            creation_request_id=channel_data.creation_request_id,
+            creation_payload_hash=(payload_hash if channel_data.creation_request_id is not None else None),
         )
 
-        channel_model = await self.channel_repository.save(channel_model)
+        created = True
+        if channel_data.creation_request_id is None:
+            channel_model = await self.channel_repository.save(channel_model)
+        else:
+            channel_model, created = await self.channel_repository.save_creation(channel_model)
+            self._require_matching_creation(channel_model, payload_hash)
 
+        return await self._complete_channel_creation(
+            channel_model,
+            channel_data=channel_data,
+            login_user=login_user,
+            request=request,
+            created=created,
+        )
+
+    async def _complete_channel_creation(
+        self,
+        channel_model: Channel,
+        *,
+        channel_data: CreateChannelRequest,
+        login_user: UserPayload,
+        request,
+        created: bool,
+    ) -> CreateChannelResponse:
         tenant_id = int(channel_model.tenant_id or self._current_tenant_id(login_user))
         adapter = await get_f048_resource_adapter("channel")
+        actor = await resolve_permission_actor(login_user)
         await adapter.authorize_created(
             record=ChannelPermissionRecord(
                 tenant_id=tenant_id,
@@ -496,26 +559,39 @@ class ChannelService:
                 permission_version=0,
                 context_version=f"channel-create:{channel_model.id}"[:64],
             ),
-            actor=await resolve_permission_actor(login_user),
+            actor=actor,
         )
 
-        # Add the creator as a member of the channel
-        await self.space_channel_member_repository.add_member(
-            business_id=channel_model.id,
-            business_type=BusinessTypeEnum.CHANNEL,
-            user_id=login_user.user_id,
-            role=UserRoleEnum.CREATOR,
-            relation=ChannelRelationEnum.OWNER,
-            grant_subject_type="self",
-            grant_subject_id=login_user.user_id,
-            grant_relation=ChannelRelationEnum.OWNER,
-            grant_model_id=ChannelRelationEnum.OWNER.value,
-            grant_binding_key=_self_channel_binding_key(
-                str(channel_model.id),
-                login_user.user_id,
-                ChannelRelationEnum.OWNER,
-            ),
-        )
+        # The request-key path may resume after the row was committed. Ensure the
+        # legacy creator projection without duplicating it on retry.
+        creator_exists = False
+        if channel_data.creation_request_id is not None:
+            creator_exists = (
+                await self.space_channel_member_repository.find_membership(
+                    business_id=channel_model.id,
+                    business_type=BusinessTypeEnum.CHANNEL,
+                    user_id=login_user.user_id,
+                    include_inactive=True,
+                )
+                is not None
+            )
+        if not creator_exists:
+            await self.space_channel_member_repository.add_member(
+                business_id=channel_model.id,
+                business_type=BusinessTypeEnum.CHANNEL,
+                user_id=login_user.user_id,
+                role=UserRoleEnum.CREATOR,
+                relation=ChannelRelationEnum.OWNER,
+                grant_subject_type="self",
+                grant_subject_id=login_user.user_id,
+                grant_relation=ChannelRelationEnum.OWNER,
+                grant_model_id=ChannelRelationEnum.OWNER.value,
+                grant_binding_key=_self_channel_binding_key(
+                    str(channel_model.id),
+                    login_user.user_id,
+                    ChannelRelationEnum.OWNER,
+                ),
+            )
 
         # Update latest_article_update_time for the new channel
         if channel_model.source_list:
@@ -532,12 +608,95 @@ class ChannelService:
         # Audit log
         from bisheng.api.services.audit_log import AuditLogService
 
-        if request:
+        if request and created:
             await AuditLogService.create_channel(
                 login_user, get_request_ip(request), str(channel_model.id), channel_model.name
             )
 
-        return channel_model
+        permission_result = None
+        if channel_data.initial_permissions is not None and channel_data.initial_permissions.grants:
+            if self.initial_grant_application is None or channel_data.creation_request_id is None:
+                raise RuntimeError("F050 Initial Grant application is not configured")
+            target = await adapter.resolve_permission_target(
+                resource_id=str(channel_model.id),
+                actor=actor,
+                action="manage_permission",
+            )
+            initial_request = InitialGrantRequest(
+                command_key=channel_data.creation_request_id,
+                expected_catalog_release_id=channel_data.initial_permissions.expected_catalog_release_id,
+                additions=tuple(
+                    InitialGrantAddition(
+                        model_key=grant.model_key,
+                        subject_type=grant.subject.type,
+                        subject_id=grant.subject.id,
+                        userset_relation=grant.subject.userset_relation,
+                        include_children=grant.subject.include_children,
+                    )
+                    for grant in channel_data.initial_permissions.grants
+                ),
+            )
+            try:
+                mutation = await self.initial_grant_application.apply(
+                    actor=actor,
+                    target=target,
+                    request=initial_request,
+                )
+                permission_result = ChannelInitialPermissionApplyResult(
+                    status="succeeded",
+                    resource_version=mutation.resource_version,
+                    assignee_ids=[
+                        str(source.source_id)
+                        for grant in mutation.grants
+                        for source in grant.sources
+                        if source.active and not source.protected
+                    ],
+                )
+            except Exception as exc:
+                # The Channel and protected owner are already durable; ordinary
+                # Grant failure is returned as an explicit partial success.
+                logger.exception("Initial Channel Grant mutation failed")
+                permission_result = ChannelInitialPermissionApplyResult(
+                    status="failed",
+                    error_code=exc.code if isinstance(exc, BaseErrorCode) else 500,
+                    message=exc.message if isinstance(exc, BaseErrorCode) else "Initial permission update failed",
+                )
+
+        if channel_data.creation_request_id is None and channel_data.initial_permissions is None:
+            return channel_model
+
+        return CreateChannelResponse.model_validate(
+            {
+                **channel_model.model_dump(),
+                "initial_permission_result": permission_result,
+            }
+        )
+
+    @staticmethod
+    def _require_matching_creation(channel: Channel, payload_hash: str) -> None:
+        if channel.creation_payload_hash != payload_hash:
+            raise ChannelCreationRequestConflictError()
+
+    @staticmethod
+    def _creation_payload_hash(channel_data: CreateChannelRequest) -> str:
+        payload = channel_data.model_dump(
+            mode="json",
+            exclude={"creation_request_id"},
+        )
+        initial = payload.get("initial_permissions")
+        if initial is not None:
+            initial["grants"] = sorted(
+                initial["grants"],
+                key=lambda row: (
+                    row["model_key"].strip(),
+                    row["subject"]["type"].strip().lower(),
+                    row["subject"]["id"].strip(),
+                    row["subject"].get("userset_relation") or "",
+                    row["subject"].get("include_children", False),
+                ),
+            )
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return sha256(canonical.encode()).hexdigest()
 
     async def get_my_channels(
         self, query_data: MyChannelQueryRequest, login_user: UserPayload
