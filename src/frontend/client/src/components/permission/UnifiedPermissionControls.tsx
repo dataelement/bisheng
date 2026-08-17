@@ -1,6 +1,6 @@
 import { Button } from "@bisheng/ui";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { Outlined } from "bisheng-icons";
+import { Layers3, Settings, ShieldCheck } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { Switch } from "~/components/ui/Switch";
 import { TruncatedTooltip } from "./TruncatedTooltip";
@@ -16,9 +16,9 @@ const SECTION_ICONS: Record<
   SettingsSectionKind,
   ComponentType<{ className?: string }>
 > = {
-  basic: Outlined.Layer,
-  advanced: Outlined.Setting,
-  permission: Outlined.PeopleSafe,
+  basic: Layers3,
+  advanced: Settings,
+  permission: ShieldCheck,
 };
 
 export function SettingsSectionHeader({

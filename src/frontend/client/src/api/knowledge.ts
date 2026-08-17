@@ -136,6 +136,7 @@ export interface KnowledgeSpace {
     departmentName?: string;
     approvalEnabled?: boolean;
     sensitiveCheckEnabled?: boolean;
+    actions?: string[];
     initialPermissionResult?: InitialPermissionResult;
 }
 
@@ -239,6 +240,7 @@ interface RawKnowledgeSpace {
     is_followed?: boolean;
     subscription_status?: string;
     initial_permission_result?: RawInitialPermissionResult | null;
+    actions?: string[];
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -364,6 +366,7 @@ function mapSpace(raw: RawKnowledgeSpace): KnowledgeSpace {
             (raw as any).sensitive_check_enabled !== undefined
                 ? Boolean((raw as any).sensitive_check_enabled)
                 : undefined,
+        actions: Array.isArray(raw.actions) ? raw.actions : [],
     };
 }
 

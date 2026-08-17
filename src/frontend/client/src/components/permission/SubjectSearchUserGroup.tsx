@@ -10,7 +10,7 @@ interface UserGroup {
   group_name: string;
 }
 
-interface SubjectSearchUserGroupProps {
+export interface SubjectSearchUserGroupProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
   resourceType?: ResourceType;
@@ -18,6 +18,7 @@ interface SubjectSearchUserGroupProps {
   disabledIds?: number[];
   /** subjectId -> the permission model(s) that subject already holds here. */
   grantedLabels?: Record<string, string>;
+  userGroupsApi?: typeof getUserGroups;
 }
 
 export function SubjectSearchUserGroup({
@@ -27,6 +28,7 @@ export function SubjectSearchUserGroup({
   resourceId,
   disabledIds = [],
   grantedLabels = {},
+  userGroupsApi,
 }: SubjectSearchUserGroupProps) {
   const localize = useLocalize();
   const [groups, setGroups] = useState<UserGroup[]>([]);
@@ -36,7 +38,7 @@ export function SubjectSearchUserGroup({
   useEffect(() => {
     const controller = new AbortController();
     if (!resourceType || !resourceId) return;
-    const request = getUserGroups(resourceType, resourceId, {
+    const request = (userGroupsApi ?? getUserGroups)(resourceType, resourceId, {
       signal: controller.signal,
     });
 
@@ -52,7 +54,7 @@ export function SubjectSearchUserGroup({
       });
 
     return () => controller.abort();
-  }, [resourceId, resourceType]);
+  }, [resourceId, resourceType, userGroupsApi]);
 
   const filtered = useMemo(() => {
     if (!keyword) return groups;

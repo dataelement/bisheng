@@ -3,12 +3,12 @@ import { Outlined } from "bisheng-icons";
 import { useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  getChannelGrantSubjectsDepartmentChildrenApi,
-  getChannelGrantSubjectsUserGroupsApi,
-  getChannelGrantSubjectsUsersApi,
-  searchChannelGrantSubjectsDepartmentsApi,
-} from "~/api/channels";
-import type { SubjectType } from "~/api/permission";
+  getCreationDepartmentChildren,
+  getCreationUserGroups,
+  searchCreationDepartments,
+  searchCreationUsers,
+  type SubjectType,
+} from "~/api/permission";
 import { NotificationSeverity } from "~/common";
 import {
   PermissionDraftPickerDialog,
@@ -57,55 +57,39 @@ export function ChannelSettingsPage() {
   const relationOptions = useMemo(
     () =>
       relationModels.map((model) => ({
-        id: model.id,
-        name: model.is_system
-          ? localize(`com_permission.level_${model.relation}`)
-          : model.name,
-        relation: model.relation,
+        id: model.key,
+        name: model.name,
+        level: model.level,
       })),
-    [localize, relationModels],
+    [relationModels],
   );
   const permissionSearchApi = useMemo<PermissionDraftSearchApi | undefined>(
     () =>
-      isEditMode
+      !isEditMode
         ? {
-            grantUsersApi: (_resourceType, resourceId, params, config) =>
-              getChannelGrantSubjectsUsersApi(resourceId, params, config),
-            grantDepartmentChildrenApi: (
+            usersApi: (_resourceType, _resourceId, name, params, config) =>
+              searchCreationUsers("channel", name, params, config),
+            departmentChildrenApi: (
               _resourceType,
-              resourceId,
+              _resourceId,
               parentId,
               config,
             ) =>
-              getChannelGrantSubjectsDepartmentChildrenApi(
-                resourceId,
-                parentId,
-                config,
-              ),
-            grantDepartmentSearchApi: (
+              getCreationDepartmentChildren("channel", parentId, config),
+            departmentSearchApi: (
               _resourceType,
-              resourceId,
+              _resourceId,
               keyword,
               limit,
               config,
             ) =>
-              searchChannelGrantSubjectsDepartmentsApi(
-                resourceId,
-                keyword,
-                limit,
-                config,
-              ),
-            grantUserGroupsApi: (
+              searchCreationDepartments("channel", keyword, limit, config),
+            userGroupsApi: (
               _resourceType,
-              resourceId,
-              params,
+              _resourceId,
               config,
             ) =>
-              getChannelGrantSubjectsUserGroupsApi(
-                resourceId,
-                params,
-                config,
-              ),
+              getCreationUserGroups("channel", config),
           }
         : undefined,
     [isEditMode],
@@ -113,18 +97,18 @@ export function ChannelSettingsPage() {
   const creatorRow = useMemo<PermissionDraftRow | null>(() => {
     if (isEditMode || !user) return null;
     const numericUserId = Number(user.id);
-    const ownerModel = relationOptions.find(
-      (model) => model.relation === "owner",
-    );
+    const ownerModel = relationOptions.find((model) => model.level === 4);
     return {
       subjectType: "user",
       subjectId: Number.isFinite(numericUserId) ? numericUserId : -1,
       subjectName: user.name || user.username || user.email,
-      relation: "owner",
-      modelId: ownerModel?.id ?? "owner",
-      immutableCreator: true,
+      modelKey: ownerModel?.id ?? "owner",
+      modelName: localize("creator"),
+      modelLevel: ownerModel?.level ?? 4,
+      protected: true,
+      editable: false,
     };
-  }, [isEditMode, relationOptions, user]);
+  }, [isEditMode, localize, relationOptions, user]);
   const displayedPermissionRows = useMemo(
     () =>
       creatorRow
@@ -370,9 +354,7 @@ export function ChannelSettingsPage() {
         resourceId={channelId}
         disabledIds={disabledSubjectIds}
         relationModels={relationOptions}
-        canAddNonUserSubjects={relationOptions.some(
-          (model) => model.relation !== "owner",
-        )}
+        canAddNonUserSubjects={relationOptions.length > 0}
         onConfirm={settings.permissionDraft.addRows}
         searchApi={permissionSearchApi}
       />

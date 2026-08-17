@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createSpaceApi,
@@ -14,13 +14,13 @@ import type {
   KnowledgeSpaceTagLibraryListItem,
 } from "~/api/knowledge";
 import {
-  authorizeResource,
-  checkPermission,
-  getCreationGrantableRelationModels,
-  getGrantableRelationModels,
-  getResourcePermissions,
+  getCreationPermissionContext,
+  getGrantablePermissionModels,
+  getResourcePermissionContext,
+  getResourcePermissionGrants,
+  mutateResourceGrants,
 } from "~/api/permission";
-import type { RelationModel } from "~/api/permission";
+import type { GrantablePermissionModel } from "~/api/permission";
 import { usePermissionDraft } from "~/components/permission/usePermissionDraft";
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
 
@@ -51,16 +51,23 @@ const INITIAL_FORM: KnowledgeSpaceSettingsFormState = {
 };
 
 function permissionEntryToDraftRow(
-  entry: Awaited<ReturnType<typeof getResourcePermissions>>[number],
+  entry: Awaited<ReturnType<typeof getResourcePermissionGrants>>["data"][number],
 ): PermissionDraftRow {
   return {
-    subjectType: entry.subject_type,
-    subjectId: entry.subject_id,
-    subjectName: entry.subject_name ?? "",
-    relation: entry.relation,
-    modelId: entry.model_id,
-    includeChildren: entry.include_children,
-    immutableCreator: entry.is_creator === true,
+    subjectType: entry.subject.type,
+    subjectId: Number(entry.subject.id),
+    subjectName: entry.subject.name ?? "",
+    modelKey: entry.model.key,
+    modelName: entry.model.name,
+    modelLevel: entry.model.level,
+    includeChildren: entry.source.include_children,
+    assigneeId: entry.assignee_id,
+    assigneeVersion: entry.assignee_version,
+    sourceType: entry.source.type,
+    scope: entry.scope,
+    inheritedFrom: entry.inherited_from,
+    protected: entry.protected,
+    editable: entry.editable,
   };
 }
 
@@ -94,7 +101,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [canEdit, setCanEdit] = useState(mode === "create");
   const [canManagePermissions, setCanManagePermissions] = useState(false);
-  const [relationModels, setRelationModels] = useState<RelationModel[]>([]);
+  const [relationModels, setRelationModels] = useState<GrantablePermissionModel[]>([]);
+  const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
+  const [resourceVersion, setResourceVersion] = useState<number | null>(null);
+  const creationRequestIdRef = useRef(crypto.randomUUID());
   const [createdSpace, setCreatedSpace] = useState<KnowledgeSpace | null>(null);
   const [permissionRetryStatus, setPermissionRetryStatus] = useState<
     "idle" | "retrying" | "success" | "failed"
@@ -171,11 +181,11 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     const load = async () => {
       if (mode === "create") {
         try {
-          const models =
-            await getCreationGrantableRelationModels("knowledge_space");
+          const context = await getCreationPermissionContext("knowledge_space");
           if (!cancelled) {
-            setRelationModels(models);
-            setCanManagePermissions(models.length > 0);
+            setRelationModels(context.grantable_models);
+            setCatalogReleaseId(context.catalog_release_id);
+            setCanManagePermissions(context.can_configure_initial_permissions);
           }
         } catch {
           if (!cancelled) {
@@ -191,18 +201,12 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       if (!spaceId) return;
       setLoading(true);
       try {
-        const [space, editResult, manageResult] = await Promise.all([
+        const [space, context] = await Promise.all([
           getSpaceInfoApi(spaceId),
-          checkPermission("knowledge_space", spaceId, "can_edit", "edit_space"),
-          checkPermission(
-            "knowledge_space",
-            spaceId,
-            "can_manage",
-            "manage_space_relation",
-          ),
+          getResourcePermissionContext("knowledge_space", spaceId),
         ]);
         if (cancelled) return;
-        setCanEdit(Boolean(editResult.allowed));
+        setCanEdit(Boolean(space.actions?.includes("edit")));
         setForm({
           name: space.name,
           description: space.description ?? "",
@@ -214,18 +218,23 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           autoTagCustomText: (space.autoTagCustomTags ?? []).join("\n"),
         });
 
-        if (!manageResult.allowed) {
+        setCatalogReleaseId(context.catalog_release_id);
+        setResourceVersion(context.resource_version);
+        if (!context.can_manage_permission) {
           setCanManagePermissions(false);
           return;
         }
         const [models, permissions] = await Promise.all([
-          getGrantableRelationModels("knowledge_space", spaceId),
-          getResourcePermissions("knowledge_space", spaceId),
+          getGrantablePermissionModels("knowledge_space", spaceId),
+          getResourcePermissionGrants("knowledge_space", spaceId, { page_size: 200 }),
         ]);
         if (cancelled) return;
         setRelationModels(models);
         setCanManagePermissions(true);
-        resetPermissionDraft(permissions.map(permissionEntryToDraftRow));
+        resetPermissionDraft(permissions.data.map(permissionEntryToDraftRow), {
+          resourceVersion: context.resource_version,
+          catalogReleaseId: context.catalog_release_id,
+        });
       } catch (error) {
         if (!cancelled)
           setLoadError(
@@ -274,19 +283,30 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           form.visibility === VisibilityType.PRIVATE
             ? []
             : permissionRows
-                .filter((row) => !row.immutableCreator)
                 .map((row) => ({
-                  subject_type: row.subjectType,
-                  subject_id: row.subjectId,
-                  relation: row.relation,
-                  ...(row.modelId ? { model_id: row.modelId } : {}),
-                  ...(row.includeChildren === undefined
-                    ? {}
-                    : { include_children: row.includeChildren }),
+                  model_key: row.modelKey,
+                  subject: {
+                    type: row.subjectType,
+                    id: String(row.subjectId),
+                    ...(row.subjectType === "department"
+                      ? {
+                          userset_relation: row.includeChildren ? "subtree_member" : null,
+                          include_children: Boolean(row.includeChildren),
+                        }
+                      : {}),
+                  },
                 }));
         const result = await createSpaceApi({
           ...payload,
-          ...(grants.length > 0 ? { initialPermissions: { grants } } : {}),
+          ...(grants.length > 0 && catalogReleaseId != null
+            ? {
+                creationRequestId: creationRequestIdRef.current,
+                initialPermissions: {
+                  expected_catalog_release_id: catalogReleaseId,
+                  grants,
+                },
+              }
+            : {}),
         });
         setCreatedSpace(result);
         await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
@@ -301,12 +321,13 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         canManagePermissions &&
         permissionHasChanges
       ) {
-        await authorizeResource(
-          "knowledge_space",
-          spaceId,
-          permissionDiff.grants,
-          permissionDiff.revokes,
-        );
+        if (resourceVersion == null || catalogReleaseId == null) return result;
+        await mutateResourceGrants("knowledge_space", spaceId, {
+          idempotency_key: crypto.randomUUID(),
+          expected_resource_version: resourceVersion,
+          expected_catalog_release_id: catalogReleaseId,
+          changes: permissionDiff.changes,
+        });
         resetPermissionDraft(permissionRows);
       } else if (form.visibility === VisibilityType.PRIVATE) {
         resetPermissionDraft([]);
@@ -323,11 +344,12 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     form.name,
     form.visibility,
     mode,
-    permissionDiff.grants,
-    permissionDiff.revokes,
+    permissionDiff.changes,
     permissionHasChanges,
     permissionRows,
     queryClient,
+    catalogReleaseId,
+    resourceVersion,
     resetPermissionDraft,
     spaceId,
     submitting,
@@ -337,25 +359,20 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     if (!createdSpace || permissionRows.length === 0) return false;
     setPermissionRetryStatus("retrying");
     try {
-      const grants = permissionRows
-        .filter((row) => !row.immutableCreator)
-        .map((row) => ({
-          subject_type: row.subjectType,
-          subject_id: row.subjectId,
-          relation: row.relation,
-          ...(row.modelId ? { model_id: row.modelId } : {}),
-          ...(row.includeChildren === undefined
-            ? {}
-            : { include_children: row.includeChildren }),
-        }));
-      await authorizeResource("knowledge_space", createdSpace.id, grants, []);
+      const context = await getResourcePermissionContext("knowledge_space", createdSpace.id);
+      await mutateResourceGrants("knowledge_space", createdSpace.id, {
+        idempotency_key: crypto.randomUUID(),
+        expected_resource_version: context.resource_version,
+        expected_catalog_release_id: context.catalog_release_id,
+        changes: permissionDraft.diff.changes,
+      });
       setPermissionRetryStatus("success");
       return true;
     } catch {
       setPermissionRetryStatus("failed");
       return false;
     }
-  }, [createdSpace, permissionRows]);
+  }, [createdSpace, permissionDraft.diff.changes, permissionRows]);
 
   return {
     mode,
@@ -367,9 +384,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     canEdit,
     canManagePermissions,
     relationModels,
-    canAddNonUserSubjects: relationModels.some(
-      (model) => model.relation !== "owner",
-    ),
+    canAddNonUserSubjects: relationModels.length > 0,
     permissionRows,
     permissionDiff,
     permissionHasChanges,
