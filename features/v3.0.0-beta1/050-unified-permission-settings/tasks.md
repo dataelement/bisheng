@@ -13,13 +13,13 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🔲 未开始 | 0 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 1 / 37 完成；偏差见本文末尾 |
 
 ---
 
 ## Wave 0：合并基线与数据库基础
 
-- [ ] **T001 合入 2.6 UI 迁移基线**
+- [x] **T001 合入 2.6 UI 迁移基线**
   - **范围**: Git merge `origin/feat/2.6.0` → `feat/3.0.0-beta1-merge-2.6.0`
   - **逻辑**: 按 Design D8 逐项解冲突；完整页面布局/文案/移动交互取 2.6，F044 relation/permission_id/binding 不作为运行时保留，F048 代码与契约取 beta1；排除 COFCO F045/F046。
   - **验证**: 无 unmerged path；`git diff --check`；记录冲突文件与裁决结果。

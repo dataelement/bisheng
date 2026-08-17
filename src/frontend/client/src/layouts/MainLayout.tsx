@@ -336,10 +336,15 @@ export default function MainLayout() {
   );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
-  /** 订阅 / 应用中心 / 应用对话：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
+  const isKnowledgeSettingsRoute = Boolean(
+    matchPath({ path: '/knowledge/create', end: true }, pathForMatch) ||
+    matchPath({ path: '/knowledge/space/:spaceId/settings', end: true }, pathForMatch),
+  );
+  /** These full-height surfaces keep the white shell fixed and delegate scrolling to their page content. */
   const innerScrollShell =
     /^\/(c|linsight)(\/|$)/.test(pathname) ||
     isChannelRoute ||
+    isKnowledgeSettingsRoute ||
     isAppChatRoute ||
     (isAppsArea && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);

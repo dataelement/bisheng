@@ -1,6 +1,14 @@
 // @ts-strict-ignore
 import request from "./request";
 import { resolveKnowledgeParseFailureMessage } from "./knowledgeParseFailureMessage";
+import { mapInitialPermissionResult } from "./permission";
+import type {
+    InitialPermissionResult,
+    InitialPermissionsPayload,
+    RawInitialPermissionResult,
+} from "./permission";
+
+export type { InitialPermissionResult } from "./permission";
 
 // Standard backend response wrapper
 interface ApiResponse<T> {
@@ -128,6 +136,7 @@ export interface KnowledgeSpace {
     departmentName?: string;
     approvalEnabled?: boolean;
     sensitiveCheckEnabled?: boolean;
+    initialPermissionResult?: InitialPermissionResult;
 }
 
 export type SpaceSubscribeStatus = "subscribed" | "pending";
@@ -229,6 +238,7 @@ interface RawKnowledgeSpace {
     is_pending?: boolean;
     is_followed?: boolean;
     subscription_status?: string;
+    initial_permission_result?: RawInitialPermissionResult | null;
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -962,7 +972,7 @@ export async function getSquareSpacesApi(params?: {
 /**
  * Create a new knowledge space
  */
-export async function createSpaceApi(data: {
+export interface CreateSpacePayload {
     name: string;
     description?: string;
     icon?: string;
@@ -971,8 +981,16 @@ export async function createSpaceApi(data: {
     auto_tag_enabled?: boolean;
     auto_tag_library_id?: number | null;
     auto_tag_custom_tags?: string[] | null;
-}): Promise<KnowledgeSpace> {
-    const res: any = await request.post(`/api/v1/knowledge/space`, data);
+    initialPermissions?: InitialPermissionsPayload;
+}
+
+export async function createSpaceApi(data: CreateSpacePayload): Promise<KnowledgeSpace> {
+    const { initialPermissions, ...spaceData } = data;
+    const body = {
+        ...spaceData,
+        ...(initialPermissions ? { initial_permissions: initialPermissions } : {}),
+    };
+    const res = await request.post(`/api/v1/knowledge/space`, body);
     const statusCode = res?.status_code ?? res?.code ?? 200;
     if (statusCode !== 200) {
         throw new Error(res?.status_message || res?.message || "createSpaceApi failed");
@@ -981,7 +999,12 @@ export async function createSpaceApi(data: {
     if (!raw || raw?.id === undefined || raw?.id === null) {
         throw new Error("createSpaceApi: missing data");
     }
-    return mapSpace({ ...raw, user_role: SpaceRole.CREATOR });
+    const space = mapSpace({ ...raw, user_role: SpaceRole.CREATOR });
+    const initialPermissionResult = mapInitialPermissionResult(raw.initial_permission_result);
+    return {
+        ...space,
+        ...(initialPermissionResult ? { initialPermissionResult } : {}),
+    };
 }
 
 /**

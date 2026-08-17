@@ -8,10 +8,12 @@
  *    我加入的. Callers drop empty groups before passing them in, so a group
  *    title never renders without rows underneath it.
  */
-import { Loader2, SearchIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { Outlined } from "bisheng-icons";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenuItem, Input } from "~/components/ui";
 import { Checkbox } from "~/components/ui/Checkbox";
+import { EmptyStateIllustration } from "~/components/illustrations";
 import { useScrollRevealRef } from "~/hooks";
 import { cn } from "~/utils";
 import type { KnowledgeItem } from "./knowledgeTypes";
@@ -42,6 +44,10 @@ interface KnowledgeListPanelProps {
   hasMore: boolean;
   onLoadMore: () => void;
   emptyText: string;
+  /** Hold the list at its unfiltered height while a keyword is active, so a
+   *  centre-aligned panel doesn't jump as results shrink. Opt-in: only the
+   *  panels that are vertically centred on their trigger need it. */
+  freezeHeightOnFilter?: boolean;
 }
 
 export const KnowledgeListPanel = ({
@@ -56,6 +62,7 @@ export const KnowledgeListPanel = ({
   hasMore,
   onLoadMore,
   emptyText,
+  freezeHeightOnFilter = false,
 }: KnowledgeListPanelProps) => {
   const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   // Direct ref to the scroll container so we can read scroll metrics for the
@@ -81,6 +88,17 @@ export const KnowledgeListPanel = ({
     [sections],
   );
 
+  // Filtering shrinks the list; on a panel that is centred on its trigger that
+  // reads as the panel jumping. Sample the unfiltered height and hold it as a
+  // floor while a keyword is active.
+  const listAreaRef = useRef<HTMLDivElement | null>(null);
+  const [unfilteredHeight, setUnfilteredHeight] = useState<number>();
+  useLayoutEffect(() => {
+    if (!freezeHeightOnFilter || keyword) return; // only the unfiltered list is a valid sample
+    const el = listAreaRef.current;
+    if (el) setUnfilteredHeight(el.getBoundingClientRect().height);
+  }, [freezeHeightOnFilter, keyword, totalCount]);
+
   // Edge shadows: visible only when there is content above / below the current
   // viewport. Shadows fade out at the top/bottom boundary.
   const [canScrollUp, setCanScrollUp] = useState(false);
@@ -105,12 +123,16 @@ export const KnowledgeListPanel = ({
   };
 
   return (
-    <div className="flex flex-col gap-1 min-h-0 flex-1">
+    // gap-2: 8px between the search box and the list below it, so the first row
+    // doesn't crowd the input's bottom border (matches the skill panel).
+    <div className="flex flex-col gap-2 min-h-0 flex-1">
       {/* 搜索框 */}
       <div className="relative shrink-0">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+        {/* top nudged 1px past centre: the magnifier's ring sits above the glyph's
+            own box, so a mathematically centred icon reads high next to the text. */}
+        <Outlined.Search size={14} className="absolute left-3 top-[calc(50%+1px)] -translate-y-1/2 text-slate-400" />
         <Input
-          className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-md pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
+          className="h-[28px] py-0 text-[12px] bg-white border border-[#ECECEC] rounded-lg pl-8 placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
           placeholder={placeholder}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -121,7 +143,11 @@ export const KnowledgeListPanel = ({
 
       {/* 滚动列表 — wrapped in a relative container so the top/bottom edge
           shadows can be absolutely positioned over the scroll viewport. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={listAreaRef}
+        className="relative flex min-h-0 flex-1 flex-col"
+        style={freezeHeightOnFilter && keyword ? { minHeight: unfilteredHeight } : undefined}
+      >
         {/* Top edge fade — solid popup-white fades to transparent so list
             content visually dissolves into the menu surface. */}
         <div
@@ -143,7 +169,7 @@ export const KnowledgeListPanel = ({
         />
         <div
           ref={setScrollRefs}
-          className="overflow-y-auto flex flex-col gap-0 scrollbar-on-scroll min-h-0 flex-1 pb-2"
+          className="overflow-y-auto flex flex-col gap-1 scrollbar-on-scroll min-h-0 flex-1 pb-3"
           onScroll={handleScroll}
         >
           {sections.map((section) => (
@@ -163,7 +189,7 @@ export const KnowledgeListPanel = ({
                       e.preventDefault();
                       onToggle(item);
                     }}
-                    className="flex items-center gap-2 px-2 py-[5px] cursor-pointer rounded-md data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
+                    className="flex h-8 items-center gap-2 px-2 cursor-pointer rounded-lg data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
                   >
                     <Checkbox
                       checked={isChecked}
@@ -185,7 +211,12 @@ export const KnowledgeListPanel = ({
             </div>
           )}
           {!isFetching && totalCount === 0 && (
-            <div className="text-center text-[12px] text-slate-400 py-10">{emptyText}</div>
+            // Fills the scroll viewport so the copy sits in the panel's middle
+            // rather than stranded under the search box.
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-4">
+              <EmptyStateIllustration grey className="size-[100px] shrink-0" />
+              <p className="text-center text-[12px] text-slate-400">{emptyText}</p>
+            </div>
           )}
         </div>
       </div>

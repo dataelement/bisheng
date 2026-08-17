@@ -279,7 +279,7 @@ function FeedbackTrigger({ onOpen }: { onOpen: () => void }) {
     );
 }
 
-// ─── Panel (add flow — drill-down inside CreateChannelDrawer) ──────────────
+// ─── Panel (add flow - drill-down inside ChannelSettingsPage) ──────────────
 
 export interface CrawlPreviewPanelProps {
     url: string;
