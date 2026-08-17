@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 3 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 5 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -41,13 +41,13 @@
 
 ## Wave 1：Permission Application Protocol（后端 Test-First）
 
-- [ ] **T004 Prospective Grant 协议测试**
+- [x] **T004 Prospective Grant 协议测试**
   - **文件**: `src/backend/test/permission/test_prospective_grant_application.py`
   - **逻辑**: 测试 owner 可授予 active models、Catalog release、tenant/active 主体 canonicalization、创建前不构造 target/不 Check/不写 Grant。
   - **覆盖 AC**: AC-01, AC-02, AC-07, AC-12, AC-13, AC-14, AC-18, AC-19, AC-27, AC-33
   - **依赖**: T003
 
-- [ ] **T005 Prospective Grant 协议实现**
+- [x] **T005 Prospective Grant 协议实现**
   - **文件**: `src/backend/bisheng/permission/application/prospective_grant.py`, `src/backend/bisheng/permission/application/ports.py`
   - **逻辑**: 实现 `ProspectiveGrantApplicationPort`；只读 Catalog/subject directory，返回 release + grantable models，禁止业务 ORM 查询和权限写入。
   - **验证**: T004 全部通过。
