@@ -275,3 +275,39 @@ class F048AppPermissionAdapter:
             resource_version=record.permission_version,
             context_version=record.context_version,
         )
+
+
+#: The wildcard relation that makes an app usable by everyone. In the F048 model
+#: ``app`` is not in ``SYSTEM_SHARED_ACTION_TYPES["use"]``, so its ``system_can_use``
+#: reduces to exactly this marker: writing ``system_use_marker@user:*`` flips
+#: ``can_use`` to true for every user. Cross-tenant visitors are still refused
+#: upstream by ``_target``'s tenant guard, so ``user:*`` here means, in effect,
+#: "everyone in the app's own tenant" — which is what "应用广场:所有人都可以访问"
+#: asks for once an app goes online.
+_SYSTEM_USE_MARKER = "system_use_marker"
+
+
+async def enable_tenant_use(app_id: str) -> None:
+    """Make an online app usable by everyone in its tenant (best-effort).
+
+    Called on the publish/online transition, not on create: a draft must not be
+    reachable. Idempotent (the write ignores duplicates) so re-publish and
+    resume are safe. Best-effort by design — a failure here must not fail the
+    publish, because the app is already online; the worst case is that it stays
+    owner-only until re-asserted, which is a visibility gap, not an outage.
+    """
+    if not app_id:
+        return
+    from loguru import logger
+
+    from bisheng.core.context.manager import app_context
+
+    try:
+        client = await app_context.async_get_instance("openfga")
+        await client.write_tuples(
+            writes=[{"user": "user:*", "relation": _SYSTEM_USE_MARKER, "object": f"{RESOURCE_TYPE}:{app_id}"}],
+            ignore_duplicate_writes=True,
+        )
+        logger.info("app_runtime.enable_tenant_use app_id={} — everyone in the tenant may now use it", app_id)
+    except Exception:
+        logger.exception("app_runtime.enable_tenant_use failed app_id={} — app stays owner-only until re-asserted", app_id)
