@@ -293,7 +293,7 @@
   - 返回体带**判定快照**（`mem_available_mb / committed_mb / total_mb / cpu`），供 F055 把"待上线（资源不足）"的成因如实展示（AC-65）、供超管的运行环境状态接口（AC-23）复用。
 - **档位限额映射（GOV-03 落地）**：`ResourceTier` 实体归 **F055**（release-contract 表 1），F054 **只读**。MVP-核心期 F055 的表可能尚未落 → F054 内置**兜底常量表** `DEFAULT_TIERS`（轻量 0.5 vCPU / 512 MiB、标准 1 / 1024、增强 2 / 2048），**表存在时以表为准**；
   - **与 F055 seed 的对账口径（不定死就会两套数值打架）**：`DEFAULT_TIERS` 是**三档出厂规格的唯一代码来源**，**F055 的 `ResourceTier` seed 从这张常量表读取落库**（登记为 §6.1 Outgoing 契约），所以"表未落"与"表刚 seed 完"两个时刻的规格恒等；超管调整后以表为准（AC-64）。**AC-63「实例限额与档位规格一致」的核验基准恒是"该实例所属版本快照里 `tier_id` 当时解析出的规格"**（拉起时固化进容器，`docker inspect` 的 `NanoCpus` / `Memory`），**不是**"当下的常量表"也**不是**"当下的 `ResourceTier` 表"——否则超管调完规格，运行中实例会被判成不一致（而 AC-64 恰恰要求运行中实例不受影响）。
-  - **何时该重新考虑**：F055 决定让 `ResourceTier` 支持删档 / 停用档（那时 F054 要处理"版本快照引用了已删档位"——按快照里冻结的规格值拉起，不再解析 `tier_id`）。档位 → `--cpus` / `--memory`（AC-63 可在运行环境中核验：`docker inspect` 的 `NanoCpus` / `Memory`）。档位规格调整**自下一次发布或重新启用生效**、运行中实例不受影响（AC-64）——落地手段 = 限额在**创建容器时**固化，不做在线 update。
+  - **何时该重新考虑**：**「支持删档」这条已被 F055 关掉**——`ResourceTierDao` 不提供删除，退役只有 `enabled=False`，且停用只拦新选择、存量 `tier_id` 照常解析规格（F055 design D11 / AC-47）。**「`tier_id` 永远解析得出」因此是 F054 可以依赖的不变量**，不需要为"版本快照引用了已删档位"准备兜底。真正该重新考虑的是反向情形：若日后产品要求物理删档，先改 F055 AC-47，F054 才轮到改成按快照冻结的规格值拉起。档位 → `--cpus` / `--memory`（AC-63 可在运行环境中核验：`docker inspect` 的 `NanoCpus` / `Memory`）。档位规格调整**自下一次发布或重新启用生效**、运行中实例不受影响（AC-64）——落地手段 = 限额在**创建容器时**固化，不做在线 update。
 - **原因**：spec §3「容量准入是硬闸门 …… 判定与档位限额同源」；两个闸各自能被现实证伪（A 被"连拉 N 个"证伪，B 被 114 的 0.9G 证伪），取与是最省的正确解。
 - **何时该重新考虑**：多机 / k8s（判定改为问调度器，本接口语义不变——这是 INV-33 的一次检验）；cgroup v2 能给出更精确的"实际可分配"统计。
 
@@ -601,7 +601,7 @@ runtime-manager reconcile 循环（15s）
 | `AppStateService.stage_version(app_id, version_id)`（落已审批待运行版本，写 `app.pending_version_id`、不改应用态；`resume` / `publish` 取 `pending ?? current`） | 内部 Python API | **F055**（审批通过节点；AC-04「已停运态可落新版本但不自动启用」的唯一落点） |
 | `AppMetaService.update_meta` + `PATCH /api/v1/apps/{app_id}`（不改态 / 不产版本 / 计审计 `app.meta_update`，AC-06） | 内部 Python API + HTTP | **F055**（release-contract「元信息随 deploy 更新」调它，**不另写一份**）· platform 详情页 |
 | **删除事件钩子** `lifecycle_hooks.register_app_deleted_hook(fn)` → 删除动作末尾同步 `on_app_deleted(app_id, actor, tenant_id)`（AC-43） | 内部 Python 回调（**F055 在组合根注册**） | **F055**（收到即取消在途审批单 → 已取消 + 通知审批人，F055 AC-35）。**钩子失败不回滚删除**（写 `app.delete_hook_failed` 审计）→ **F055 侧必须自带防御**：审批单读侧对"应用已删除"独立判定并按已取消呈现 |
-| `DEFAULT_TIERS` 三档出厂规格常量（轻量 0.5/512 · 标准 1/1024 · 增强 2/2048） | 内部 Python 常量 | **F055** 的 `ResourceTier` seed **从本常量读取落库**（保证"表未落"与"表刚 seed"两个时刻规格恒等，D11 对账口径）；超管调整后以表为准 |
+| `DEFAULT_TIERS` 三档出厂规格常量（轻量 **1C/2G** · 标准 **2C/4G** · 性能 **4C/8G**；数值与第三档名以 F055 spec AC-44 为准，2026-08-17 由 F055 T015 回写，坑 27） | 内部 Python 常量 | **F055** 的 `ResourceTier` seed **从本常量读取落库**（保证"表未落"与"表刚 seed"两个时刻规格恒等，D11 对账口径）；超管调整后以表为准 |
 | runtime-manager 意图 RPC（§4.2 ①）经 `orchestrator_client` 暴露的 Python 门面：`build / deploy / stop / destroy / probe / admission / status / logs / runtime_status` | 内部 Python API | **F055**（托管预检、上线终检、预览实例）· **F059**（同一门面换 k8s 后端，INV-33） |
 | `GET /api/v1/apps/{id}/logs`（三入口同一服务方法、内容范围一致） | HTTP + Python | 详情页运行日志 tab · **F053** CLI `logs` · **F052** MCP 日志工具 |
 | `GET /api/v1/apps/{id}/instance`、`GET /api/v1/apps/runtime-status` | HTTP | **F052** MCP 应用状态工具 · 超管运行环境状态 |

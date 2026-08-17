@@ -111,13 +111,50 @@ class AppAuditAction(StrEnum):
 #: seeded one resolve the same limits. Once the table exists it wins — a super
 #: admin may retune the specs (AC-64), and running instances keep the limits
 #: frozen into them at create time (AC-63).
+#:
+#: **Numbers and the third tier's name are F055 spec AC-44's, not F054's**
+#: (F055 design D11 / 坑 27): 轻量 1C/2G · 标准 2C/4G · 性能 4C/8G. The earlier
+#: 0.5/512 · 1/1024 · 2/2048「增强」 disagreed with the product copy in both
+#: values and naming, which would have made ``docker inspect`` contradict the
+#: admin page the moment the table was seeded. A machine too small for 1C/2G
+#: sets ``settings.app_runtime.default_tiers`` instead of editing this table —
+#: seeding is idempotent by code, so the override has to be in place *before*
+#: the first boot that seeds.
+#:
+#: ``cpu`` stays a **vCPU float** here because that is what runtime-manager's
+#: ``tier{cpu, mem}`` payload speaks; the ``resource_tier`` table stores integer
+#: millicores and ``ResourceTierService`` owns the one conversion between them.
+#: A ``description`` (plain-language guidance, AC-44) and ``sort_order`` ride
+#: along so the seed does not need a second table of its own.
 DEFAULT_TIERS: tuple[dict[str, object], ...] = (
-    {"tier_id": "light", "name": "轻量", "cpu": 0.5, "memory_mb": 512},
-    {"tier_id": "standard", "name": "标准", "cpu": 1.0, "memory_mb": 1024},
-    {"tier_id": "enhanced", "name": "增强", "cpu": 2.0, "memory_mb": 2048},
+    {
+        "tier_id": "light",
+        "name": "轻量",
+        "cpu": 1.0,
+        "memory_mb": 2048,
+        "description": "内部工具、表单、看板类应用, 并发个位数",
+        "sort_order": 0,
+    },
+    {
+        "tier_id": "standard",
+        "name": "标准",
+        "cpu": 2.0,
+        "memory_mb": 4096,
+        "description": "带数据处理或文件解析的应用, 日常并发几十",
+        "sort_order": 1,
+    },
+    {
+        "tier_id": "performance",
+        "name": "性能",
+        "cpu": 4.0,
+        "memory_mb": 8192,
+        "description": "计算密集或需要常驻大内存的应用",
+        "sort_order": 2,
+    },
 )
 
-DEFAULT_TIER_ID = "standard"
+#: Tier a submission gets when it declares none (F055 AC-46 says 轻量).
+DEFAULT_TIER_ID = "light"
 
 
 def default_tier(tier_id: str) -> dict[str, object] | None:

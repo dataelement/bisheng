@@ -139,9 +139,9 @@
   |---|---|---|---|---|
   | 1 | `precheck_manifest` | **同步** | YAML 解析 + pydantic 校验（D3） | 16221 / 16203 |
   | 2 | `precheck_manifest` | **同步** | **本地可判的引用校验**：`runtime` ∈ **本地枚举常量**（`SUPPORTED_RUNTIMES`）· `tier` 存在且 `enabled`（查本地 `resource_tier` 表）· 能力声明格式 · 密钥引用出现即拒 | 16222 / 16223 / 16224 / 16230 |
-  | 3 | `precheck_build` | 异步 | 起手先向 manager **复核 `runtime`**（`GET /v1/runtime/status.supported_runtimes`，本地枚举与 manager 支持集取交）→ `POST /v1/intents/build` → 轮询 `GET /v1/builds/{id}`（manager 侧阶段 `fetch_source/render_dockerfile/docker_build/probe`） | 16222 / 16226 / 16227（含 manager 回的 `stage/message/tail`） |
-  | 4 | `precheck_probe` | 异步 | `POST /v1/intents/probe`（临时形态：`image_ref + env + port + health`，不占实例名额） | 16228 |
-  | 5 | `secret_scan` | 异步 | 密钥扫描（D5） | 16241 |
+  | 3 | `secret_scan` | 异步 | 密钥扫描（D5）——**排在构建之前**：扫描是秒级正则、构建是分钟级 + 一次容量闸，命中即终止的前提下先构建等于每次命中白烧一次构建 | 16241 |
+  | 4 | `precheck_build` | 异步 | 起手先向 manager **复核 `runtime`**（`GET /v1/runtime/status.supported_runtimes`，本地枚举与 manager 支持集取交）→ `POST /v1/intents/build` → 轮询 `GET /v1/builds/{id}`（manager 侧阶段 `fetch_source/render_dockerfile/docker_build/probe`） | 16222 / 16226 / 16227（含 manager 回的 `stage/message/tail`） |
+  | 5 | `precheck_probe` | 异步 | `POST /v1/intents/probe`（临时形态：`image_ref + env + port + health`，不占实例名额） | 16228 |
 
   - **⚠️ 第 2 步为什么不问 manager（对 D1 选 C 的兑现）**：`precheck_manifest` 整块在**同步端点内**（§4.1 ①，D1「秒级错误秒级回」）。若在这里发 `GET /v1/runtime/status`，manager 不可达就会把 `POST /deploy` 变成一个挂在 RPC 超时上的请求——秒级反馈当场失效。→ **同步段只做本地可判的校验**（枚举常量 + 本地表查询），`runtime` 与 manager 支持集的复核**下沉到异步段 `precheck_build` 起手**。代价：本地枚举与 manager 模板集漂移时，错的 `runtime` 要多等一次进队列才报 16222——可接受，且 F054 加模板时两处同批改（§6.2 已登记该风险）。
   - **AC-08（依赖托管契约外的中间件 / 白名单外外网）怎么落**：本轮**不做静态依赖分析**（读 `requirements.txt` 猜"是不是连了 MySQL"是幻觉级判据）——判据下沉为**启动探活失败**（应用连不上自带的 MySQL 就起不来 → 16228），错误 `hints` 里给出托管运行契约的改造指引（"平台不提供自带数据库 / 消息队列 / 缓存；数据请改接 `BISHENG_APP_DB_URL`"）。出站白名单的实际拦截随 F054 D12 后置，本期 `egress.domains` 只做格式校验。
@@ -151,7 +151,7 @@
 - **原因**：spec AC-07 的"依次校验"本就是线性语义；把 machine+human 收成一个五元组而不是两个字段，是因为 F053 AC-35 与 F055 AC-11 是同一份数据的两个视图——分成两套会立刻漂移。
 - **何时该重新考虑**：预检阶段数超过 8 个或出现分支（如 `runtime=static` 跳过构建）→ 阶段表要升级为带前置条件的有向图；或本地 agent 反馈"`hints` 修不动"（表现：同一 `code` 反复失败 3 次以上）→ 那时把 `hints` 从静态文案升级为按 `details` 生成的定向指引。
 
-### D5：密钥扫描规则集 = 常量规则表 + 输出永不含值（**执行位置按 spec 字面顺序，提前方案待 ★ 确认**）
+### D5：密钥扫描规则集 = 常量规则表 + 输出永不含值（**扫描排在构建之前，2026-08-17 已拍板**）
 
 - **备选（规则引擎）**：
   - A. 引入 `detect-secrets` / `gitleaks` — 缺点：全仓**零先例**（`grep -rn "detect-secrets|gitleaks|trufflehog"` 零命中）、新增二进制或 Python 依赖、规则集不可控且大量误报，与"与平台内发布同一规则集"（AC-10）的自持要求相冲突
@@ -162,11 +162,13 @@
   - `aws_akid`（`\bAKIA[0-9A-Z]{16}\b`）· `openai_sk`（`\bsk-[A-Za-z0-9]{20,}\b`）· `private_key_pem`（`-----BEGIN (RSA |EC |OPENSSH |)PRIVATE KEY-----`）· `db_conn_string`（`(mysql|postgresql|postgres|mongodb(\+srv)?|redis)://[^\s:@/]+:[^\s@/]+@`，**用户名密码都在串里才算命中**——只有 host 的连接串是正常配置）· `generic_high_entropy`（`(?i)(password|passwd|secret|token|api[_-]?key)\s*[=:]\s*["']([^"'\s]{20,})["']`，且值不匹配占位符白名单 `^(xxx+|your[_-]|<.*>|\$\{|change[_-]?me|example)`）
 - **扫描范围与性能闸**：解包后逐文件；跳过 `.git/` · `node_modules/` · `venv/` · `__pycache__/` · `dist/` · `build/`；**二进制嗅探**（前 8KB 含 `\x00` 即跳过）；单文件 > **1 MiB** 跳过并在结果里标 `skipped`（不静默——大文件被跳过必须可见，否则等于假通过）。
 - **输出（AC-10 硬承诺）**：`hits: [{rule_id, name_i18n_key, file, line}]`——**连脱敏后的值都不给**。理由：任何"前 4 后 4"式脱敏在低熵密钥上等于泄漏，而定位一个密钥有 `file:line` 已经足够。
-- **⚠️ 扫描执行位置 = 按 spec 字面顺序（预检之后），"提前到构建之前"是一个待 ★ 确认的偏离、本文不自行拍板**：
-  - **现状口径（本文默认实现的那个）**：spec **AC-01** 写的是「托管预检 → 密钥扫描 → 审批单」，F053 **AC-31a** 逐字写的是「按阶段依次输出结果：**托管预检 → 发布前安全扫描 → 审批单生成**」（`053-dev-cli-skills/spec.md:109`）。→ D4 阶段表把 `secret_scan` 放在 `precheck_probe` **之后**（第 5 步），CLI 输出顺序 `manifest → 构建 → 探活 → 扫描 → 审批单`，与两份已定稿 spec 字面一致。
-  - **提前方案（待确认，不要擅自实现）**：把 `secret_scan` 挪到 manifest 校验之后、构建之前。**收益**：扫描是纯正则、秒级，构建是分钟级——命中即阻断的前提下，先构建再扫描等于**每一次命中都白烧一次构建**（114 上是数分钟 + 一次容量闸占用）。**代价**：CLI 输出变成 `manifest → 扫描 → 构建 → 探活`，扫描被塞进"托管预检"中间，**与 F053 AC-31a 的字面表述相悖**——此前本文声称"仍满足 AC-31a"是**错的**，已订正。
-  - **为什么不在 design 里直接拍**：它同时推翻 F055 AC-01 与 F053 AC-31a 两份**已 ★ 确认**的 spec，按 SDD-Guide 必须停下与用户确认；且回改成本为零（调换 `PIPELINE_STAGES` 元组里两个 step 的注册顺序），没有"先做了再说"的理由。
-  - **确认通过后要同批改三处**：F055 spec AC-01 的顺序措辞 · F053 spec AC-31a 的阶段序 · 本文 D4 阶段表与 §4.1 数据流。已登记 §8 与修订历史。
+- **✅ 扫描执行位置 = 构建之前（2026-08-17 拍板，此前挂 ★ 待确认）**：
+  - **定案**：`PIPELINE_STAGES` 顺序为 `secret_scan → precheck_build → precheck_probe`，CLI 输出 `manifest → 扫描 → 构建 → 探活 → 审批单`。
+  - **理由**：①扫描是纯正则、秒级，构建是分钟级 + 一次容量闸占用（114 上尤其贵）——命中即终止的前提下，先构建再扫描等于**每一次命中都白烧一次构建**；②扫描的输入是**解包后的源码根**（`run_pipeline` 在阶段循环之前就已 `_materialise_snapshot`），**不依赖任何构建产物**，所以这只是一次元组重排，没有技术代价；③PRD-1 DEV-04 列的四步是**逻辑分组**（说清"要过哪几道门"），AC 层真正约束的是「两道门都过、任一失败都不进审批」，顺序未被写成契约。
+  - **代价（如实记）**：这与 F055 AC-01 与 F053 AC-31a 的**字面表述**相悖，两份 spec 已在同一次改动里同批订正——这是对 PRD 字面顺序的一处**自觉偏离**，按 SDD-Guide 偏离再确认规则登记在案（裁决记录见 `053-dev-cli-skills/spec.md` 决议-13 与 `mvp-114-path.md` §5）。
+  - **同批已改的四处**：F055 spec AC-01 顺序措辞 · F053 spec AC-31a 阶段序 · 本文 D4 阶段表与 §4.1 数据流 · `publish_pipeline_service.PIPELINE_STAGES` 与其顺序断言单测。
+  - **CLI 侧不跟着写死**：F053 的 `STAGE_LABELS` 是**无序 dict**、只按服务端到达顺序输出、未知 stage 原样打印。顺序既然改过一次就可能再改，把服务端的编排决策复制到客户端就是下一次返工的来源。
+  - **何时该重新考虑**：若扫描对象从源码包改成**镜像层**（扫构建产物里的密钥），它就真的依赖构建了，顺序必须换回去。
 - **测试即验收**：`test/app_publish/test_secret_rules.py` 遍历规则表，每条规则一个正样本（必须命中）+ 一个反样本（必须不命中）+ 断言输出结构里**不含样本密钥子串**——AC-10「规则集内样本 100% 被阻断」由这个遍历式单测直接承载。
 - **何时该重新考虑**：误报率高到开发者开始想办法绕（表现：`generic_high_entropy` 被反复投诉）→ 引入**行级抑制注释**（`# bisheng:allow-secret <理由>`）并把抑制计入审计，而不是放宽规则；或平台内发布（PRD-2）接入后规则需要按来源分档 → 那时 `SecretRule` 加 `applies_to` 字段。
 
@@ -427,11 +429,11 @@ CLI: POST /api/v2/apps/deploy  (multipart: package.tar.gz + app_id? + confirm_sc
   │    └ INSERT app_deployment(stage=received, status=running) → 返回 {deployment_id}
   │
   └─ ② Celery 后段（bisheng.worker.app_publish.run_pipeline，默认 celery 队列）
+       ├ secret_scan     密钥扫描（D5；**排在构建之前**——秒级正则先跑，
+       │                 命中即终止就不必白烧一次分钟级构建）      命中→16241，终止
        ├ precheck_build  起手向 manager 复核 runtime（supported_runtimes）→ 16222
        │                 → build → 轮询 builds      容量不足→16226 / 失败→16227，终止
        ├ precheck_probe  orchestrator_client.probe                失败→16228，终止
-       ├ secret_scan     密钥扫描（D5；位置按 spec AC-01 / F053 AC-31a 字面顺序，
-       │                 「提前到构建之前」是待 ★ 确认的偏离）    命中→16241，终止
        ├ AppMetaService.update_meta(name/description/logo)         # AC-05，不等审批
        ├ approval_created:
        │    ├ ApprovalGate.request_or_pass(business_key=deployment_id,
@@ -743,7 +745,7 @@ platform 发布面 / F052 MCP 应用状态工具
    - `SELECT code, cpu_millicores, memory_mb, enabled FROM resource_tier;` → 三行；**114 上确认 `light` 已按 `settings.app_runtime.default_tiers` 下调**（坑 27）；
    - `SELECT tenant_id, scenario_code, enabled FROM approval_scenario WHERE scenario_code='app_publish_request';` → 有行；
    - `ps -ef | grep 'celery.*worker'` → 有消费默认队列的 worker（K12）。
-1. **步 3（deploy → 预检 → 扫描 → 审批单）**：用步 1–2 拿到的服务账号密钥执行 `bisheng deploy`；观察 CLI 分阶段输出 `manifest → 构建 → 探活 → 扫描 → 审批单已生成`（**spec 字面顺序**；若 D5 的提前方案获 ★ 确认，则为 `manifest → 扫描 → 构建 → 探活`）；
+1. **步 3（deploy → 预检 → 扫描 → 审批单）**：用步 1–2 拿到的服务账号密钥执行 `bisheng deploy`；观察 CLI 分阶段输出 `manifest → 扫描 → 构建 → 探活 → 审批单已生成`（D5 已拍板扫描前置）；
    - **故意验证扫描**：在包里塞一行 `token = "bs-sak-<43位>"` 再 deploy → 断言被阻断、输出含 `文件:行号`、**输出里 grep 不到那 43 位串**（AC-10）；
    - **故意验证 manifest**：删掉 `runtime` 再 deploy → 16221 且 `details` 指出缺哪个字段（AC-11）；
    - **验证在途闸**：不撤回直接再 deploy → 16251（AC-03）。

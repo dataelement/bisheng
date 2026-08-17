@@ -49,11 +49,12 @@ import gzip
 import importlib
 import io
 import os
+import sys
 import tarfile
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
@@ -779,6 +780,15 @@ class _FakeMinioStorage:
     async def put_object(self, *, bucket_name: str | None = None, object_name: str, file: Any, **kwargs: Any) -> None:
         self.put_object_sync(bucket_name=bucket_name, object_name=object_name, file=file, **kwargs)
 
+    def get_share_link_sync(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
+        """Presigned download URL. The build intent carries one (``code_url``), so the
+        orchestrator can fetch the snapshot without a MinIO credential of its own."""
+        self.calls.append(("get_share_link", {"bucket": bucket, "object_name": object_name, "expire_days": expire_days}))
+        return f"http://minio.test/{bucket or self.bucket}/{object_name}?X-Amz-Expires={expire_days * 86400}"
+
+    async def get_share_link(self, object_name, bucket=None, clear_host: bool = True, expire_days: int = 7) -> str:
+        return self.get_share_link_sync(object_name, bucket=bucket, clear_host=clear_host, expire_days=expire_days)
+
     def get_object_sync(self, bucket_name: str | None = None, object_name: str | None = None) -> bytes | None:
         self.calls.append(("get_object", {"bucket_name": bucket_name, "object_name": object_name}))
         target = self._path(bucket_name, object_name or "")
@@ -862,7 +872,18 @@ def fake_orchestrator(monkeypatch):
     """
     module = _optional_module("bisheng.app_runtime.domain.services.orchestrator_client")
     if module is None:
-        pytest.skip("orchestrator_client (F054 T047) not implemented yet")
+        # F054 T047 has not landed. Rather than skipping — which would leave the
+        # whole precheck / pipeline suite green-by-absence — stand a module of
+        # the same name into ``sys.modules``. F055's services import the facade
+        # lazily inside the call, so they bind to this one; the moment the real
+        # facade exists this branch stops being taken and the assertion below
+        # starts guarding the real surface again.
+        module = _install_stub_module(
+            monkeypatch,
+            "bisheng.app_runtime.domain.services.orchestrator_client",
+            ORCHESTRATOR_METHODS,
+            container="orchestrator_client",
+        )
 
     client = getattr(module, "orchestrator_client", None) or module
     public = {
@@ -929,6 +950,117 @@ def fake_orchestrator(monkeypatch):
         monkeypatch.setattr(client, name, _make(name), raising=False)
 
     return SimpleNamespace(calls=calls, responses=responses)
+
+
+def _install_stub_module(monkeypatch, dotted: str, methods, *, container: str | None = None):
+    """Register a placeholder module under ``dotted`` carrying async no-op ``methods``.
+
+    Used only while an upstream feature has not landed. Two properties make it
+    safe rather than a way to fake a green suite:
+
+    * it is registered in ``sys.modules`` and removed again after the test, so
+      nothing leaks between tests or into production imports;
+    * every method it exposes is replaced by the caller with a programmable stub
+      immediately afterwards — the placeholder itself has no behaviour, so a
+      test that forgets to program a response fails loudly with ``KeyError``
+      rather than quietly getting ``None``.
+    """
+    module = ModuleType(dotted)
+    target = SimpleNamespace() if container else module
+
+    for name in methods:
+        async def _unprogrammed(*_args, __name=name, **_kwargs):
+            raise NotImplementedError(f"{dotted}.{__name} was called but never programmed")
+
+        setattr(target, name, _unprogrammed)
+    if container:
+        setattr(module, container, target)
+    monkeypatch.setitem(sys.modules, dotted, module)
+    parent_name, _, leaf = dotted.rpartition(".")
+    parent = _optional_module(parent_name)
+    if parent is not None:
+        monkeypatch.setattr(parent, leaf, module, raising=False)
+    return module
+
+
+#: The F054 domain services F055's pipeline calls. Stubbed the same way as the
+#: orchestrator while F054's service layer is still in flight.
+F054_SERVICE_METHODS = {
+    "bisheng.app_runtime.domain.services.app_provision_service": ("create_draft",),
+    "bisheng.app_runtime.domain.services.app_meta_service": ("update_meta",),
+}
+
+
+@pytest.fixture()
+def fake_f054_services(monkeypatch):
+    """Programmable stand-ins for ``AppProvisionService.create_draft`` / ``AppMetaService.update_meta``.
+
+    Returns a namespace with ``calls`` and ``responses``, same contract as
+    ``fake_orchestrator``. F055 must never write the ``app`` table itself
+    (决议-8: F054 owns application state), so these two calls are the *only*
+    way a first publish can create an application — which is exactly why they
+    are asserted on rather than bypassed.
+    """
+    calls: list[tuple[str, dict[str, Any]]] = []
+    responses: dict[str, Any] = {"create_draft": None, "update_meta": None}
+
+    def _bind(dotted: str, container: str, methods: tuple[str, ...]):
+        module = _optional_module(dotted)
+        if module is None:
+            module = _install_stub_module(monkeypatch, dotted, methods, container=container)
+        target = getattr(module, container, None) or module
+        for name in methods:
+
+            async def _stub(*_args, __name=name, **kwargs):
+                calls.append((__name, kwargs))
+                value = responses[__name]
+                if isinstance(value, Exception):
+                    raise value
+                return value
+
+            monkeypatch.setattr(target, name, _stub, raising=False)
+
+    _bind("bisheng.app_runtime.domain.services.app_provision_service", "AppProvisionService", ("create_draft",))
+    _bind("bisheng.app_runtime.domain.services.app_meta_service", "AppMetaService", ("update_meta",))
+    return SimpleNamespace(calls=calls, responses=responses)
+
+
+@pytest.fixture()
+def fake_publish_approval(monkeypatch):
+    """Programmable stand-in for Wave 3's ``publish_approval_service`` module.
+
+    The pipeline needs three things from it: the two pre-submission gates
+    (in-flight request → 16251, pending-online → 16252) and ``submit`` /
+    ``cancel``. They are stubbed here so Wave 2's ordering guarantees can be
+    asserted before Wave 3 exists; when it lands, the same fixture patches the
+    real module instead.
+    """
+    methods = ("assert_submittable", "submit", "cancel")
+    dotted = "bisheng.app_publish.domain.services.publish_approval_service"
+    module = _optional_module(dotted)
+    if module is None:
+        module = _install_stub_module(monkeypatch, dotted, methods)
+
+    from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateResult
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+    responses: dict[str, Any] = {
+        "assert_submittable": None,
+        "submit": ApprovalGateResult(decision=ApprovalGateDecision.PENDING, instance_id=9001),
+        "cancel": None,
+    }
+
+    for name in methods:
+
+        async def _stub(*args: Any, __name=name, **kwargs: Any):
+            calls.append((__name, {"args": args, **kwargs}))
+            value = responses[__name]
+            if isinstance(value, Exception):
+                raise value
+            return value
+
+        monkeypatch.setattr(module, name, _stub, raising=False)
+    return SimpleNamespace(calls=calls, responses=responses, module=module)
 
 
 # ---------------------------------------------------------------------------

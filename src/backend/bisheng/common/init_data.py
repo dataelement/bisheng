@@ -127,6 +127,12 @@ async def init_default_data():
                 # Initialize preset approval scenarios (channel / knowledge-space subscribe)
                 await _init_default_approval_scenarios(session)
 
+                # Initialize the three hosted-app resource tiers (F055 AC-44).
+                # Runs in its own session on purpose — it is a startup step, not
+                # part of this unit of work — and is idempotent by ``code``, so
+                # an upgrade never resets a tier a super admin retuned.
+                await _init_resource_tiers()
+
                 # Initialize preset application templates
                 templates = await session.exec(select(Template).limit(1))
                 templates = templates.all()
@@ -337,6 +343,35 @@ _DEFAULT_APPROVAL_SCENARIO_SEEDS = [
         "sources": [{"type": "knowledge_space_owner"}, {"type": "knowledge_space_manager"}],
     },
 ]
+
+
+async def _init_resource_tiers():
+    """Idempotently seed the three hosted-app resource tiers (F055 AC-44).
+
+    Delegates to ``ResourceTierService`` rather than writing rows here: the
+    unit conversion between F054's vCPU floats and the table's integer
+    millicores, and the "deployment configuration overrides the constant"
+    precedence, both have exactly one implementation (F055 design D11).
+
+    Imported lazily inside the function — ``common/`` must not carry a
+    top-level import of a domain module (arch-guard RULE-1), and a boot step
+    that only some deployments need has no business widening this module's
+    import graph.
+
+    Best-effort: a deployment whose tier table cannot be seeded must still
+    finish booting. The publish pipeline fails loudly with 16223 on the first
+    ``deploy`` instead, which is a far more locatable symptom than a backend
+    that refuses to start.
+    """
+    try:
+        from bisheng.app_publish.domain.services.resource_tier_service import ResourceTierService
+
+        await ResourceTierService.seed_resource_tiers()
+    except Exception as exc:
+        # Best effort by design: see the docstring — the publish pipeline fails
+        # loudly with 16223 on the first deploy, which is far easier to locate
+        # than a backend that refuses to start.
+        logger.warning(f"resource tier seed skipped: {exc}")
 
 
 async def _init_default_approval_scenarios(session):

@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 33 条修订，65 AC 定稿（决议-1～9） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 15 条修订（D1–D16 / 30 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；70 任务 / 7 Wave / 53 条 `[MVP-核心]`（2026-08-17 独立审查 14 条修订：Celery 登记 / 组合根接线 / 跨 Wave 执行序 / 档位依赖链 / 图标落地 / 16207 闸 / T044·T027 拆分 / 路径与 i18n 补齐 / 建桶接线 / 顺延任务测试载体 / 追溯表订正 / T051 上提） |
-| 实现 | 🚧 进行中 | 7 / 70 完成（Wave 1 全部落地，2026-08-17）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 23 / 70 完成（Wave 1 + Wave 2 全部落地，2026-08-17；`uv run pytest test/app_publish -q` 147 passed）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -120,14 +120,14 @@ T001–T007（Wave 1，可并行）
 
 ### Wave 2 · `[MVP-核心]` 管线服务（Test-First 成对）
 
-- [ ] **T008**: `[MVP-核心]` AppManifest 校验矩阵测试
+- [x] **T008**: `[MVP-核心]` AppManifest 校验矩阵测试
   **文件**: `src/backend/test/app_publish/test_app_manifest.py`（新）
   **逻辑**: 断言 `AppManifest` 的解析与拒绝矩阵，以及失败五元组 `{stage, code, message, details, hints}` 的结构（AC-11 的唯一形态）。
   **测试**: `test_missing_required_name_runtime_port_each_rejected`（三个必填项各缺一次 → `16221` 且 `details` 逐字指出缺哪个字段）→ AC-07, AC-11 / `test_unknown_field_rejected_with_suggestion`（`extra='forbid'`；`runtimee` → 提示"是不是想写 runtime"）→ AC-07 / `test_runtime_not_in_local_enum_rejected_16222` → AC-07 / `test_port_out_of_range_rejected` → AC-07 / `test_manifest_version_ahead_hints_upgrade_platform` → AC-07 / `test_yaml_uses_safe_load_rejects_python_object_tag`（`!!python/object` 不得被反序列化）→ AC-07 / `test_tier_absent_defaults_to_light` → AC-46 / `test_tier_unknown_or_disabled_rejected_16223_with_details_reason`（`details.reason ∈ {not_found, disabled}`，**不拆码**）→ AC-46 / `test_capabilities_non_empty_rejected_16231`（MVP 期声明非空即拒并提示「本环境未启用能力总线」，**不静默忽略**，D16）→ AC-07 / `test_secret_reference_rejected_16230` → AC-56 / `test_database_tables_declared_gives_hints_not_reject`（本期允许声明但不建表、只给 `hints`，D3）→ AC-07 / `test_failure_tuple_has_machine_and_human_forms`（`code` + `stage` + `details` 机读、`message` + `hints` 人读）→ AC-11
   **覆盖 AC**: AC-07, AC-11, AC-46, AC-56
   **依赖**: T007, T015（`tier_seed` fixture + `resolve_tier` 已存在）
 
-- [ ] **T009**: `[MVP-核心]` AppManifest schema + 本地引用校验实现
+- [x] **T009**: `[MVP-核心]` AppManifest schema + 本地引用校验实现
   **文件**: `src/backend/bisheng/app_publish/domain/schemas/app_manifest.py`（新，**AppManifest 权威 schema，release-contract 表 1 归本 Feature**）, `src/backend/bisheng/app_publish/domain/services/manifest_validator.py`（新）
   **逻辑**: pydantic v2 模型 + `extra='forbid'`（D3，零新依赖；`ValidationError.errors()` 的 `{loc,msg,type}` 三元组直接映射 AC-11 双形态）。字段按 design §4.2 ③ 表：必填 `name`(1–64) / `runtime`(枚举) / `port`(1–65535)；可选 `description` / `icon` / `slug` / `tier`(默认 `light`) / `capabilities{models[],knowledge_bases[]}` / `database.tables[]` / `egress.domains[]` / `manifest_version`(默认 1)。`SUPPORTED_RUNTIMES` **本地枚举常量**（MVP 期仅 `python3.11`）——它是 F054 manager `supported_runtimes` 的**副本**，与 manager 的复核**下沉到 T019 的异步段**（同步段不发 RPC，D4）；在常量旁写一行注释「F054 加运行时模板时必须同批改这里」。`manifest_validator`：YAML `yaml.safe_load`（**禁 `full_load` / `unsafe_load`**）→ pydantic → 本地引用校验（`tier` **直接调 T015 的 `ResourceTierService.resolve_tier(code)`** · 能力声明格式 · 密钥引用出现即拒 16230 · `capabilities` 非空即拒 16231）→ 失败一律构造五元组。
   **⚠️ 档位解析只有一份实现**：`manifest_validator` **不得自己再写一遍**"查表 + 判 `enabled` + 拼 `details.reason`"——两份实现必然在 `details.reason ∈ {not_found, disabled}` 的口径上分叉（AC-46 / AC-47 的判据就落在这个字段上）。`resolve_tier` 抛出的 `16223` 原样上抛，`manifest_validator` 只负责包成五元组。
@@ -136,42 +136,42 @@ T001–T007（Wave 1，可并行）
   **依赖**: T008, T002, T004, **T015**
   **⚠️ 编号 ≠ 执行顺序**：本任务依赖 T014/T015（`ResourceTierService.resolve_tier` + 三档 seed）的产出，实际排在它们之后；编号保留在此只为与 T008 相邻。
 
-- [ ] **T010**: `[MVP-核心]` 包接收、解包安全闸与快照存储测试
+- [x] **T010**: `[MVP-核心]` 包接收、解包安全闸与快照存储测试
   **文件**: `src/backend/test/app_publish/test_package_service.py`（新）
   **逻辑**: 用 `tarball_factory` 造六类恶意条目与三类超限包，断言全部被拒且错误码正确；断言快照键布局与"不整包进内存"。
   **测试**: `test_reject_absolute_path_entry` / `test_reject_dotdot_traversal` / `test_reject_symlink` / `test_reject_hardlink` / `test_reject_device_file` / `test_reject_fifo`（**tar 比 zip 多后四类**，仓内唯一先例 `skill_store.py:171-176 _safe_rel_path` 只防前两类，坑 15）→ 各自 `16202` / `test_reject_over_max_package_mb_16201` → AC-02 / `test_reject_over_max_unpacked_mb`（tar bomb）→ AC-02 / `test_reject_over_max_package_entries` → AC-02 / `test_snapshot_key_layout_matches_f054`（`apps/{app_id}/versions/{version_id}/code.tar.gz`，`version_id` 在**接收时**生成、预检通过后被 `app_version` 复用；**不先写 deployments 键再 server-side copy**——那是幻觉优化，memory `project_linsight_skill_object_storage`）→ AC-02, AC-43 / `test_upload_never_read_into_memory`（断言走 `put_object(file=Path(...))` 而非 `await file.read()`）→ AC-02 / `test_bucket_ensured_idempotently_on_first_use`（`minio_storage.py:291 _init_bucket_conf` **只建 public / tmp 两桶**，坑 14 → `bisheng-apps` 由 `package_service` 自己 ensure；断言首次 `store_package` 会建桶、第二次不重复建、且**不修改 `_init_bucket_conf`**）→ AC-02 / `test_snapshot_immutable_and_retrievable`（快照可完整取回、内容不可改）→ AC-43 / `test_orphan_cleanup_on_next_deploy_same_app`（超 7 天且无 deployment 引用的孤儿键被清；**不起 Beat**，D2）→ AC-02
   **覆盖 AC**: AC-02, AC-43
   **依赖**: T007, T005
 
-- [ ] **T011**: `[MVP-核心]` `package_service` 实现
+- [x] **T011**: `[MVP-核心]` `package_service` 实现
   **文件**: `src/backend/bisheng/app_publish/domain/services/package_service.py`（新）
   **逻辑**: `store_package(upload, app_id, version_id)`：`UploadFile` **落临时盘后** `put_object(file=Path(...))`（走 `fput_object` + `asyncio.to_thread`，`minio_storage.py:359-407`），键 `apps/{app_id}/versions/{version_id}/code.tar.gz`，桶 `bisheng-apps`（**独立桶，不挂 nginx location、不设匿名策略**——`src/frontend/nginx.conf:49` 的 `location ~ ^(/workspace/bisheng|bisheng|tmp-dir)/` 会把公共桶任意 key 匿名转发出去，K5 / 坑 13）；**桶由 `package_service` 内部 `_ensure_bucket()` 幂等保证**——首次 `store_package` 时 `create_bucket_sync(bucket_name='bisheng-apps')`（存在即 no-op），进程内加一个 `_bucket_ready` 标志避免每次调用都发 `bucket_exists`。**不改 `minio_storage.py:291 _init_bucket_conf`、不挂 lifespan**（坑 14：那里只建 public / tmp 两桶且给 public 桶设了匿名读策略；把 `bisheng-apps` 塞进去等于把独立桶的生命周期绑到共享初始化路径上，还会诱导后人顺手给它加匿名策略——K5 明令禁止）。`safe_extract(tar_path, dest)`：照抄 `skill_store.py:171-176 _safe_rel_path` 拒绝绝对路径与 `..`，**额外拒 `TarInfo.issym() / islnk() / isdev() / isfifo()`**；边解包边累计大小与条目数，越限即中止。`cleanup_orphans(app_id)`：同 `app_id` 前缀下无 `app_version` 行、无 deployment 引用且超 7 天的键删除，**挂在下一次同应用 deploy 的接收阶段顺手做**（不引 Beat，D2）。三闸阈值读 `settings.app_runtime.*`（T005）。
   **测试**: T010 全部通过。
   **覆盖 AC**: AC-02, AC-43
   **依赖**: T010, T005
 
-- [ ] **T012**: `[MVP-核心]` 密钥扫描规则集遍历测试（AC-10 的直接承载）
+- [x] **T012**: `[MVP-核心]` 密钥扫描规则集遍历测试（AC-10 的直接承载）
   **文件**: `src/backend/test/app_publish/test_secret_rules.py`（新）
   **逻辑**: **遍历 `SECRET_SCAN_RULES` 元组**，每条规则一个正样本（必须命中）+ 一个反样本（必须不命中）——AC-10「规则集内样本 100% 被阻断」由这个遍历式单测直接承载，**新增规则时忘了加样本 = 测试红**。
   **测试**: `test_every_rule_has_positive_and_negative_sample`（元组驱动，规则数 == 样本对数）→ AC-10 / `test_every_positive_sample_blocks_publish` → AC-10 / `test_output_never_contains_secret_value`（把扫描结果 JSON 序列化后断言**不含样本密钥子串**，连脱敏值都不给）→ AC-10 / `test_bs_sak_rule_follows_key_prefix_constant`（规则由 F049 `api_credential.KEY_PREFIX` / `KEY_SECRET_LENGTH` **拼出**，改常量后规则自动跟随；C6 禁硬编码字面量）→ AC-10 / `test_db_conn_string_requires_user_and_password`（只有 host 的连接串是正常配置、不得命中）→ AC-10 / `test_generic_high_entropy_skips_placeholders`（`your_key` / `<...>` / `${…}` / `change_me` / `example` 白名单）→ AC-10 / `test_binary_file_skipped_by_null_byte_sniff` → AC-10 / `test_large_file_marked_skipped_not_silent`（单文件 > 1 MiB 跳过并在结果里标 `skipped`——**大文件被静默跳过等于假通过**）→ AC-10 / `test_hit_report_shape_is_file_and_line_only`（`{rule_id, name_i18n_key, file, line}`）→ AC-10, AC-11
   **覆盖 AC**: AC-10, AC-11
   **依赖**: T007
 
-- [ ] **T013**: `[MVP-核心]` `secret_scanner` 实现
+- [x] **T013**: `[MVP-核心]` `secret_scanner` 实现
   **文件**: `src/backend/bisheng/app_publish/domain/services/secret_scanner.py`（新）
   **逻辑**: `SECRET_SCAN_RULES: tuple[SecretRule, ...]` 常量表（形态同 `open_api/domain/scopes.py:66-185 OPEN_API_SCOPES`），`SecretRule(rule_id, name_i18n_key, pattern: re.Pattern, description_i18n_key)`。首批规则见 design D5：`bs_sak`（**引 F049 常量拼**）· `aws_akid` · `openai_sk` · `private_key_pem` · `db_conn_string`（用户名密码都在串里才算命中）· `generic_high_entropy`（带占位符白名单）。`scan_package(root) -> ScanResult`：逐文件；跳过 `.git/` / `node_modules/` / `venv/` / `__pycache__/` / `dist/` / `build/`；二进制嗅探（前 8KB 含 `\x00` 即跳过）；单文件 > 1 MiB 标 `skipped`。命中 → `16241` 阻断，`hits: [{rule_id, name_i18n_key, file, line}]`——**永不含值**（AC-10 硬承诺）。**不引 `detect-secrets` / `gitleaks`**（全仓零先例 + 规则集不可控，D5）；**不做行级抑制机制**（一开就会被用来绕过，design §8）。**本常量是 AC-10「与平台内发布同一规则集」的落地手段**——PRD-2 平台内发布直接复用它，只有一份（§6.1 Outgoing）。
   **测试**: T012 全部通过。
   **覆盖 AC**: AC-10, AC-11
   **依赖**: T012, T004
 
-- [ ] **T014**: `[MVP-核心]` `ResourceTierService` 测试（seed / 选档 / 停用 / 无删除）
+- [x] **T014**: `[MVP-核心]` `ResourceTierService` 测试（seed / 选档 / 停用 / 无删除）
   **文件**: `src/backend/test/app_publish/test_resource_tier_service.py`（新）
   **逻辑**: 断言三档 seed 的幂等与数值来源、选档解析、停用语义与"不可删"不变量。
   **测试**: `test_seed_creates_three_platform_level_tiers`（轻量 1C/2G · 标准 2C/4G · 性能 4C/8G；**无 `tenant_id` 列、跨租户共享**）→ AC-44 / `test_seed_values_come_from_f054_default_tiers_constant`（seed 从 F054 `DEFAULT_TIERS` 读取落库，保证"表未落"与"表刚 seed 完"两个时刻规格恒等）→ AC-44 / `test_settings_default_tiers_overrides_constant`（`settings.app_runtime.default_tiers` > 常量；**114 必须用它把 `light` 下调**，坑 27）→ AC-44 / `test_seed_idempotent_by_code_does_not_reset_admin_edits`（跑两次不重复；超管改过的规格不被升级重置，与 AC-19 同判据）→ AC-44 / `test_manifest_without_tier_resolves_light` → AC-46 / `test_unknown_tier_rejected_16223_reason_not_found` → AC-46 / `test_disabled_tier_rejected_16223_reason_disabled` → AC-46, AC-47 / `test_disabled_tier_existing_apps_keep_running_and_resolve_spec`（停用**只拦新选择**，存量版本仍可解析规格）→ AC-47 / `test_dao_has_no_delete_method`（**不可删是 F054 可依赖的不变量**：`tier_id` 永远可解析）→ AC-47 / `test_tier_code_written_into_version_snapshot_spec_read_at_runtime`（快照记**档位标识**、规格取运行时当前值 → 规格调整自下一次发布 / 重新启用生效）→ AC-48 / `test_tier_in_use_app_count_counts_online_versions_only`（**仅为 Wave 7 的 T065 预置计数口径，不计入本任务的 `覆盖 AC`**；AC-45 的承载任务是 T065 / T066，追溯表以那两条为准）
   **覆盖 AC**: AC-44, AC-46, AC-47, AC-48
   **依赖**: T007, T002
 
-- [ ] **T015**: `[MVP-核心]` `ResourceTierService` + 三档 seed 实现（含回写 F054 常量）
+- [x] **T015**: `[MVP-核心]` `ResourceTierService` + 三档 seed 实现（含回写 F054 常量）
   **文件**: `src/backend/bisheng/app_publish/domain/services/resource_tier_service.py`（新）, `src/backend/bisheng/common/init_data.py`（`init_default_data` 内加档位 seed 调用）, `src/backend/bisheng/app_runtime/domain/constants.py`（**回写 F054 `DEFAULT_TIERS`**）
   **逻辑**: `seed_resource_tiers()`：优先级 `settings.app_runtime.default_tiers`（T005）> F054 `DEFAULT_TIERS` 常量；**幂等按 `code` 存在即跳过**。`resolve_tier(code | None) -> ResourceTier`：`None` → `light`；不存在或 `enabled=False` → `16223`（`details.reason ∈ {not_found, disabled}`，**不拆码**）。`list_tiers()` / `update_tier(code, patch)`（Wave 7 的管理 tab 消费）/ `count_apps_using(tier_id)` = `SELECT COUNT(DISTINCT app_id) FROM app_version WHERE tier_id=? AND terminal_state='online'`。**无 delete**（D11）。
   **跨 Feature 回写**（design §8 回写项 1）：F054 `DEFAULT_TIERS` 现为 `0.5 vCPU/512 MiB · 1/1024 · 2/2048「增强」`，与本 spec **AC-44** 的 `1C/2G · 2C/4G · 4C/8G「性能」` 数值与命名皆冲突（坑 27）→ **以本 spec 的产品口径为准**，改数值 + 第三档名「增强」→「性能」，并把 F054 design D11「何时重新考虑」里的"支持删档"改为"档位只可停用不可删"。**改常量不影响存量表**（seed 幂等按 `code` 跳过）。
@@ -179,21 +179,21 @@ T001–T007（Wave 1，可并行）
   **覆盖 AC**: AC-44, AC-46, AC-47, AC-48
   **依赖**: T014, T005
 
-- [ ] **T016**: `[MVP-核心]` `VersionService` 测试（写入时点 / 终态标注 / 派生显示 / 补偿）
+- [x] **T016**: `[MVP-核心]` `VersionService` 测试（写入时点 / 终态标注 / 派生显示 / 补偿）
   **文件**: `src/backend/test/app_publish/test_version_service.py`（新）
   **逻辑**: 断言"先 Gate 后 INSERT"的写入时点、`terminal_state` 四取值、"待上线"是派生显示不是列值、并发兜底与补偿路径。
   **测试**: `test_version_row_only_created_after_precheck_and_scan_pass`（预检 / 扫描失败的提交**不进版本列表**，只在 `app_deployment` 留记录，决议-9）→ AC-02 / `test_version_row_created_after_gate_not_before`（Gate 会抛「场景未启用」→ 先 INSERT 会留一条永远没有终态也没有审批单的僵尸版本，D6-B 的致命缺陷）→ AC-02 / `test_gate_exception_approver_empty_still_inserts_version`（`decision=EXCEPTION` 也算"已进入审批流"，否则管理员处理完异常后没有对象可上线）→ AC-18 / `test_gate_raises_scenario_disabled_marks_deployment_failed_16225_no_version` → AC-02 / `test_compensation_cancels_approval_when_insert_fails`（Gate 自带写库与 commit、**不能与 INSERT 同事务** → 显式两阶段补偿：`cancel_instance_by_business` + deployment failed + 审计 `app.release.rollback`）→ AC-02 / `test_version_no_is_max_plus_one_with_unique_constraint`（`UNIQUE(app_id, version_no)` 兜并发）→ AC-40 / `test_kind_initial_vs_iteration` → AC-39 / `test_terminal_state_only_four_values`（`online` / `rejected` / `withdrawn` / `NULL`；**F055 不给它加过程值**）→ AC-39 / `test_pending_online_is_derived_display_not_column`（`terminal_state IS NULL ∧ app.pending_version_id == version.id` → 显示「待上线」；存在在途审批单 → 显示「待审」）→ AC-39 / `test_manual_publish_flips_null_to_online_without_new_row`（决议-6）→ AC-39 / `test_app_deleted_cancel_keeps_terminal_state_null`（不引入第五个取值）→ AC-39 / `test_mark_terminal_state_is_the_only_update_writer`（`app_version` 唯一被 UPDATE 的列、唯一写入函数）→ AC-40 / `test_version_row_never_deleted` → AC-40 / `test_read_by_version_id_requires_app_scope`（**`app_version` 无 `tenant_id`**，登记进 `_TENANT_AWARE_MODEL_MODULES` 也不受自动过滤 → 按 `version_id` 起手必须先借道 `app` 行校验归属，坑 19）→ AC-40 / `test_snapshot_retrievable_and_immutable_for_any_version` → AC-43
   **覆盖 AC**: AC-02, AC-18, AC-39, AC-40, AC-43
   **依赖**: T007, T011
 
-- [ ] **T017**: `[MVP-核心]` `VersionService` 实现
+- [x] **T017**: `[MVP-核心]` `VersionService` 实现
   **文件**: `src/backend/bisheng/app_publish/domain/services/version_service.py`（新）
   **逻辑**: `insert_version(deployment, approval_instance_id | None)`：`version_no = MAX(version_no)+1 WHERE app_id=?` 在同一事务内取；`kind` = `initial`（该 app 首条）/ `iteration`；写 `code_object_key` / `manifest` / `capabilities` / `injections` / `tier_id`（**四者同属一个快照**，F054 AC-02 已定"任何写入方不得只改其一"）。`mark_terminal_state(app_id, version_id, state)`：**唯一被授权 UPDATE `terminal_state` 的函数**（F054 D8 的只增不改例外），单行带前态断言。`derive_display_state(app, version)`：派生「待上线」/「待审」，**不落库**。`get_snapshot(app_id, version_id)`：经 `package_service` 取回 tar（供审读视图 / 预览拉起 / 将来回滚）。**每个按 `version_id` 起手的方法签名强制带 `app_id`**（坑 19）。
   **测试**: T016 全部通过。
   **覆盖 AC**: AC-02, AC-18, AC-39, AC-40, AC-43
   **依赖**: T016, T011
 
-- [ ] **T018**: `[MVP-核心]` 托管预检编排测试（线性 fail-fast + 五元组）
+- [x] **T018**: `[MVP-核心]` 托管预检编排测试（线性 fail-fast + 五元组）
   **文件**: `src/backend/test/app_publish/test_precheck_service.py`（新）
   **逻辑**: 用 `fake_orchestrator` 编程构建 / 探活的成功与三类失败，断言阶段序、fail-fast 与失败五元组。
   **测试**: `test_stage_order_manifest_build_probe_then_scan`（**spec AC-01 / F053 AC-31a 的字面顺序**；扫描提前是待 ★ 确认的偏离，**不得在此实现**）→ AC-07 / `test_fail_fast_stops_at_first_failing_stage`（manifest 层内部一次性报全，跨阶段 fail-fast）→ AC-07 / `test_manifest_stage_makes_no_rpc`（同步段不发任何 RPC——manager 不可达就会把 `deploy` 变成挂在超时上的请求，D4/D1-C 的兑现）→ AC-07 / `test_runtime_rechecked_against_manager_in_async_stage_16222`（本地枚举与 manager `supported_runtimes` 取交，复核在 `precheck_build` 起手）→ AC-07 / `test_build_capacity_shortage_is_16226_not_16225`（**一码一义红线**：16225 专归"审批场景未启用"）→ AC-07 / `test_build_failure_16227_carries_manager_stage_message_tail` → AC-07, AC-11 / `test_probe_failure_16228_with_hosting_contract_hints`（AC-08 的判据**下沉为探活失败**：本轮不做静态依赖分析，`hints` 给"平台不提供自带数据库 / 消息队列 / 缓存；数据请改接 `BISHENG_APP_DB_URL`"）→ AC-08 / `test_egress_domains_format_only_this_round` → AC-08 / `test_failure_shape_is_five_tuple_in_all_stages` → AC-11 / `test_precheck_failure_produces_no_approval_and_no_version`（AC-07 的硬承诺）→ AC-07
@@ -201,14 +201,14 @@ T001–T007（Wave 1，可并行）
   **依赖**: T009, T013, T015
   **⚠️ 编号 ≠ 执行顺序**：本任务依赖 T009 / T013 / T015 三个实现任务的产出（`manifest_validator` / `secret_scanner` / `ResourceTierService` 接口），故实际排在它们之后；编号保留在此只为与 T019 相邻。
 
-- [ ] **T019**: `[MVP-核心]` `precheck_service` 实现
+- [x] **T019**: `[MVP-核心]` `precheck_service` 实现
   **文件**: `src/backend/bisheng/app_publish/domain/services/precheck_service.py`（新）
   **逻辑**: 线性 fail-fast 阶段机（design D4 阶段表）：① `precheck_manifest`（**同步段**：YAML + pydantic，16221/16203）② `precheck_manifest`（**同步段**：本地可判的引用校验——`runtime` ∈ 本地枚举常量 · `tier` 查本地表 · 能力声明格式 · 密钥引用，16222/16223/16224/16230/16231）③ `precheck_build`（**异步段**：起手 `GET /v1/runtime/status.supported_runtimes` 复核 `runtime` → `POST /v1/intents/build` → 轮询 `GET /v1/builds/{id}`；容量不足 **16226**、失败 16227）④ `precheck_probe`（异步段：`POST /v1/intents/probe` 临时形态，不占实例名额，16228）。失败原因恒为 `{stage, code, message, details, hints[]}` **五元组**，同一结构同时出现在 CLI 轮询返回、发布面审批状态区、`app_deployment.failure` 落库（AC-11）。**编排器一律经 F054 `orchestrator_client` 门面**，backend 零 docker 依赖。
   **测试**: T018 全部通过。
   **覆盖 AC**: AC-07, AC-08, AC-11
   **依赖**: T018
 
-- [ ] **T020**: `[MVP-核心]` 管线同步前段 `accept()` 测试（归属 / 两道闸 / 首发建草稿）
+- [x] **T020**: `[MVP-核心]` 管线同步前段 `accept()` 测试（归属 / 两道闸 / 首发建草稿）
   **文件**: `src/backend/test/app_publish/test_pipeline_accept.py`（新）
   **逻辑**: 断言同步前段的顺序与每个拒绝分支；断言首发建草稿应用走 F054 而非直写 `app` 表。
   **测试**: `test_first_deploy_creates_draft_app_via_f054_create_app`（**F055 不得直写 `app` 表**，决议-8；owner = 密钥所属服务账号的 `resource_owner_user_id`）→ AC-01, AC-04 / `test_iteration_deploy_requires_owner_match_else_16205`（迭代只对该归属人 owner 的应用放行，含租户管理员名下服务账号的密钥）→ AC-04 / `test_owner_read_from_resource_owner_user_id_not_subject_user_id`（坑 28）→ AC-04 / `test_active_approval_blocks_new_submit_16251`（**断言不是"静默返回既有实例"**——Gate 的重复提交拦截是静默返回，AC-03 必须在**调 Gate 之前**自查，K2 ① / 坑 8）→ AC-03 / `test_pending_online_state_blocks_new_submit_16252`（提示"须先手动上线或删除"）→ AC-03 / `test_deployment_row_created_with_stage_received` → AC-01 / `test_version_id_generated_at_accept_and_reused_by_version_row` → AC-02 / `test_meta_not_updated_at_accept`（元信息在**预检 + 扫描通过后**才更新，失败不更新，AC-05）→ AC-05 / `test_retry_deploy_reuses_same_app_id_not_new_draft`（CLI 把 app_id 随项目保存，重试复用，D2-B 的代价控制）→ AC-01 / `test_accept_returns_deployment_id_within_seconds_no_rpc` → AC-01
@@ -216,21 +216,21 @@ T001–T007（Wave 1，可并行）
   **依赖**: T011, T017
   **⚠️ 执行顺序（Wave 编号 ≠ 拓扑序）**：本任务与 T021 / T022 / T023 依赖 T031（在途闸 / 待上线闸 / Gate 提交都落在 `publish_approval_service`，Wave 3.2），而 T031 → T030 → T029 → T028 → T027a/T027b → T025 整条链都在 Wave 3 —— **实际执行序见「开发模式 · 跨 Wave 执行序」：Wave 3.1–3.2 先跑完再回来做 T020–T023**。测试可先落盘（红测即预期），实现一律按 `依赖:` 排。
 
-- [ ] **T021**: `[MVP-核心]` `publish_pipeline_service.accept()` 实现（同步前段）
+- [x] **T021**: `[MVP-核心]` `publish_pipeline_service.accept()` 实现（同步前段）
   **文件**: `src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py`（新，本任务只落 `accept()`）
   **逻辑**: 按 design §4.1-A ① 的顺序：归属判定（`principal.resource_owner_user_id == app.owner_user_id`，否 → 16205）→ 大小闸 → 落临时盘 → `put_object` 到 `bisheng-apps` → 解包安全闸 + 解包大小闸 + 条目数闸 → 读 `bisheng-app.yaml` → `manifest_validator`（T009）→ 本地引用校验 → **首发**：调 F054 `AppStateService.create_app(manifest, owner_user_id, tenant_id)` 建草稿应用（**不直写 `app` 表**）→ 在途审批单闸（16251）/ 待上线态闸（16252）→ INSERT `app_deployment(stage=received, status=running)` → `apply_async` 后段 → 返回 `{deployment_id, app_id, version_id}`。**本段绝不发任何编排器 RPC**（D1-C 的兑现：秒级错误秒级回）。审计 `app.release.submit`。
   **测试**: T020 全部通过。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05
   **依赖**: T020, T031
 
-- [ ] **T022**: `[MVP-核心]` 管线异步后段阶段机测试（阶段推进 / 元信息 / 审计）
+- [x] **T022**: `[MVP-核心]` 管线异步后段阶段机测试（阶段推进 / 元信息 / 审计）
   **文件**: `src/backend/test/app_publish/test_pipeline_run.py`（新）
   **逻辑**: 断言 `run_pipeline` 的阶段推进、每阶段一条审计、元信息更新时点与失败终止。
   **测试**: `test_stage_advances_one_row_update_per_stage` → AC-01 / `test_each_stage_writes_one_app_release_audit_with_app_id_and_version_no`（metadata 恒带 `app_id` / `version_no` / `deployment_id`；`target_type='app_version'`——**审批族审计的 `target_type` 恒为 `approval_instance`，按"对象=应用"筛不到**，坑 20）→ AC-01 / `test_scan_hit_terminates_pipeline_16241_no_version_no_approval` → AC-02, AC-10 / `test_precheck_failure_terminates_and_persists_failure_tuple` → AC-02, AC-11 / `test_meta_updated_after_precheck_and_scan_pass_not_awaiting_approval`（调 F054 `AppMetaService.update_meta`，**F055 不另写一份更新逻辑**）→ AC-05 / `test_icon_extracted_from_package_and_stored_as_minio_object_name`（**断言 `app.logo` 落的是公共桶 object_name `icon/{uuid}.png`**，既不是包内相对路径〔写进去图标全站不显示〕，也不是 `/upload/icon` helper 返回的 `file_path`〔那是 **7 天过期的预签名 URL**，一周后全站图标 403，坑 16〕；同时断言 >1 MiB 或扩展名 ∉ {jpeg,jpg,png} 的图标被跳过并给 `hints`、**不阻断发布**）→ AC-05 / `test_tier_and_capabilities_enter_snapshot` → AC-05, AC-48 / `test_capability_declaration_change_audited_each_release`（`app.release.capability_declared`）→ AC-55 / `test_status_becomes_waiting_approval_after_approval_created` → AC-01 / `test_worker_tenant_context_restored_from_celery_header`（租户 ContextVar 经 header 自动透传，`worker/tenant_context.py:63-90`；断言子租户发布不串租户）→ AC-01
   **覆盖 AC**: AC-01, AC-02, AC-05, AC-10, AC-11, AC-48, AC-55
   **依赖**: T019, T021
 
-- [ ] **T023**: `[MVP-核心]` `run_pipeline()` 实现 + Celery 任务
+- [x] **T023**: `[MVP-核心]` `run_pipeline()` 实现 + Celery 任务
   **文件**: `src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py`（**增量**加 `run_pipeline()`，不改 T021 已落的 `accept()`）, `src/backend/bisheng/worker/app_publish/tasks.py`（新）, `src/backend/bisheng/worker/app_publish/__init__.py`（新，空）, **`src/backend/bisheng/worker/__init__.py`（存量：顶部 `# register tasks` 块追加 `from bisheng.worker.app_publish.tasks import run_publish_pipeline`）**
   **逻辑**: `run_pipeline(deployment_id)`：`precheck_build → precheck_probe → secret_scan → update_meta（含图标）→ approval_created`（**spec 字面顺序**，扫描提前是待 ★ 确认的偏离，勿自行调换）。每次阶段推进 = 一次 `app_deployment` 单行 UPDATE + 一条 `app.release.*` 审计。
   **⚠️ Celery 任务必须显式登记**（否则整条异步后段永不执行）：celery app 是 `Celery("bisheng", include=["bisheng.worker"])`（`worker/main.py:22`），**只 import 包、不扫子模块** → 任务全靠 `worker/__init__.py` 顶部 `# register tasks` 的显式 import 块注册（`admin_scope` / `approval`（outbox）/ `knowledge` / `workflow` 全在那里）。漏这一行的现象是**最难定位的形态**：`apply_async` 正常返回、`deploy` 报成功、worker 侧 `NotRegistered`、114 上表现为「状态永远卡在 `received`」且后端日志无异常。落码后自检：`uv run celery -A bisheng.worker.main:bisheng_celery inspect registered | grep app_publish`。
@@ -696,3 +696,10 @@ T001–T007（Wave 1，可并行）
 3. **`ResourceTierDao.aupdate_row` 的行键参数名取 `tier_code` 而非 `code`** —— 叫 `code` 时 `aupdate_row(session, "light", code="tiny")` 是 `TypeError`，"禁止改 code"这条守卫永远走不到；改名后 `code=` 落进 `**values` 被显式拒绝。
 4. **`test/app_publish/conftest.py` 加 `_sqlite_ddl_quirks`** —— `userrole` 是复合主键 + 代理键 autoincrement，SQLite 直接拒绝建表（"does not support autoincrement for composite primary keys"）。只在 `create_all` 期间清 `autoincrement` 再还原，生产 DDL 归 Alembic、不受影响；代价是 fixture 写 `userrole` / `department_admin_grant` / `user_department` 需显式 `id`。
 5. **Wave 1 增加一个 `test/app_publish/test_wave1_infra.py`** —— 本节标注「无测试配对」，但 F049 Wave 1 有同名先例（`test/open_api/test_wave1_infra.py`）。只断言基础设施（错误码唯一性与一码一义、审计 lockstep、settings 五键、两个 DAO、conftest fixture 自身），**不认领任何 AC**；AC 覆盖仍归 T008–T017。
+
+6. **Wave 2 增建 `app_publish/domain/schemas/failure.py`（`failure_from_error`）与 `domain/services/release_audit.py`（`write_release_audit`）** —— 五元组构造与 `app.release.*` 写入被 Wave 2 的六个 service 共用；不抽出来就是六份 `{stage, code, message, details, hints}` 拼装与六份 `ainsert_v2(target_type=...)`，AC-11 与 AC-01「按应用筛选」两条都会在第一次改动时分叉。
+7. **`accept()` 的实际顺序是「解包 → manifest → 建草稿/归属判定 → 两道闸 → 落 MinIO」，与 design §4.1-A ① 的箭头顺序不同** —— 那张图把 `put_object 到 apps/{app_id}/…` 画在 `create_draft` 之前，而首发时 `app_id` 正是 `create_draft` 才产生的，照图实现无键可写。D2「键先于版本行」的实质（version_id 接收时生成、不做 staging key + server-side copy）完全保留。
+8. **孤儿快照清理按 `app_deployment` 行驱动，不列桶前缀** —— design D2 写的是「同 `app_id` 前缀下…的键」，但 `MinioStorage` 没有列举方法（只有 conftest 的 fake 有 `list_object_names`），而每一个写过的键都记在一行永不删除的 `app_deployment` 上，表本身就是完整索引。副作用是更安全：清理只删自己记过账的键，永远碰不到别的 Feature 放在同桶的对象。
+9. **`test/app_publish/conftest.py` 的 `fake_orchestrator` 由「缺 F054 T047 就 skip」改为「缺就往 `sys.modules` 立同名占位模块」，并新增 `fake_f054_services` / `fake_publish_approval`** —— F054 的 backend 服务层（`orchestrator_client` / `AppProvisionService.create_draft` / `AppMetaService.update_meta`）与 Wave 3.2 的 `publish_approval_service` 目前都还不存在，照原 skip 语义 Wave 2 后半（T018–T023，约 40 条断言）会**全绿于缺席**。占位模块的方法一律未编程即抛 `NotImplementedError`（不是静默返回 `None`），且随 monkeypatch 退出即从 `sys.modules` 摘除；上游一落地这三个 fixture 自动改为 patch 真模块。生产代码侧对应的是「按调用点惰性 import 上游」，不是新增旁路实现。
+10. **`test/app_publish/conftest.py` 的 `_FakeMinioStorage` 补 `get_share_link` / `get_share_link_sync`** —— `POST /v1/intents/build` 必带 MinIO 预签 `code_url`（contracts-runtime-manager §2），fake 缺这两个方法则构建阶段无法自测。
+11. **`VersionService.record_version` 收 `approval` 端口参数（`submit` / `cancel` 两个协程）而不是直接 import `publish_approval_service`** —— D6 的「先 Gate 后 INSERT + 两阶段补偿」是版本记录自己的不变量，作为参数传入才能让顺序由拥有该不变量的函数强制，而不是靠调用方记得；同时让 Wave 2 在 Wave 3.2 落地前可测。Wave 3 的 `publish_approval_service` 模块对象**原样满足**该端口，无需适配层。
