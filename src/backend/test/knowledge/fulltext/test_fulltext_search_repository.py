@@ -178,6 +178,46 @@ def test_condition_query_is_left_associative_and_keeps_scope_outside_expression(
     assert '"display_title"' not in serialized
 
 
+def test_uploader_name_condition_compiles_to_exact_term_and_keeps_legacy_id():
+    repository, _ = repository_with_client()
+    query = KnowledgeFulltextAdvancedSearchQuery(
+        space_ids=[1],
+        conditions=[
+            {
+                "relation": None,
+                "field": "original_uploader_name",
+                "match_mode": "exact",
+                "value": "  张三  ",
+            },
+            {
+                "relation": "or",
+                "field": "original_uploader_id",
+                "match_mode": "exact",
+                "value": 7,
+            },
+        ],
+    )
+
+    assert query.conditions is not None
+    assert query.conditions[0].value == "张三"
+    serialized = json.dumps(repository.build_query(query), ensure_ascii=False)
+    assert '"term": {"original_uploader_name": "张三"}' in serialized
+    assert '"term": {"original_uploader_id": 7}' in serialized
+
+    with pytest.raises(ValidationError, match="original_uploader_name"):
+        KnowledgeFulltextAdvancedSearchQuery(
+            space_ids=[1],
+            conditions=[
+                {
+                    "relation": None,
+                    "field": "original_uploader_name",
+                    "match_mode": "exact",
+                    "value": "用" * 201,
+                }
+            ],
+        )
+
+
 def test_empty_conditions_compile_to_match_all_with_permission_scope():
     repository, _ = repository_with_client()
 
