@@ -311,52 +311,52 @@
   **逻辑**: `fake_backend`（可编程 authorize 响应：六种 decision + 头材料 + OBO）/ `fake_manager`（可编程 route 响应，支持"先失败后成功"以测缓存作废重取）/ `echo_upstream`（一个把收到的 **全部请求头 + 路径 + query** 原样回显的 ASGI 应用，用于断言剥离 / 注入 / 前缀）/ `proxy_client`（`TestClient`，可设 `Sec-Fetch-Mode` / `Accept` / cookie）/ `frozen_clock`（缓存 TTL 用例）。
   **依赖**: T036
 
-- [ ] **T038**: `[MVP-核心]` 头归一化剥离与注入测试
+- [x] **T038**: `[MVP-核心]` 头归一化剥离与注入测试
   **文件**: `src/app-proxy/tests/test_headers.py`（新）
   **逻辑**: `test_strip_all_x_bisheng_equivalence_class`（`X_BiSheng_User_Id` / `x-bisheng-user-id` / `X-BISHENG-USER-ID` / `x_bisheng_USER_name` 混合下划线连字符大小写**全部被丢弃**——按 `lower()` + `_`→`-` 归一后凡以 `x-bisheng-` 开头一律丢，**不是只丢精确的十个名字**；WSGI/ASGI 框架把 `X_BiSheng_User_Id` 与 `X-BiSheng-User-Id` 归一到同一个 `HTTP_X_BISHENG_USER_ID` 是常态，只按精确名剥离等于没剥离）→ AC-32 / `test_forged_header_has_no_effect_on_upstream`（客户端伪造 → 上游读到的仍是真实访问者）→ AC-32 / `test_inject_ten_headers`（十个 `X-BiSheng-*` 齐全）→ AC-31 / `test_forwarded_headers_rewritten_not_passthrough`（`X-Forwarded-Prefix` / `Proto` / `Host` **先丢客户端值再由 app-proxy 写入**——否则应用会用伪造 Host 生成外链，D5.2）→ AC-32 / `test_percent_encoded_chinese_values_pass_latin1`（三个含中文的头编码后可被 uvicorn/h11 正常发出，坑 9）→ AC-31。
   **覆盖 AC**: AC-31, AC-32
   **依赖**: T037
 
-- [ ] **T039**: `[MVP-核心]` 头处理实现
+- [x] **T039**: `[MVP-核心]` 头处理实现
   **文件**: `src/app-proxy/app_proxy/headers.py`（新）
   **逻辑**: `strip_platform_headers(headers)` + `build_injected_headers(material, slug, request_id)`（§4.2 ③ 十头 + 三个 `X-Forwarded-*`）。WS 升级请求走同一段代码（Wave 4 接线时复用，不另写一份）。
   **测试**: T038 全部通过。
   **覆盖 AC**: AC-31, AC-32
   **依赖**: T038
 
-- [ ] **T040**: `[MVP-核心]` 判定接入 + 3s 缓存 + 四类兜底页测试
+- [x] **T040**: `[MVP-核心]` 判定接入 + 3s 缓存 + 四类兜底页测试
   **文件**: `src/app-proxy/tests/test_authz_and_fallback.py`（新）
   **逻辑**: `test_authorize_cached_3s_by_cookie_hash_and_slug`（同一 `(cookie 哈希, slug)` 3 秒内只问一次 backend；**与路由缓存互不干扰**）/ `test_visibility_revoke_effective_after_cache_expiry`（撤销后 ≤3s 生效，与 AC-10「自下一次请求起生效」口径相容）→ AC-10, AC-26 / `test_allow_forwards`（allow → 进入反代路径）→ AC-26 / `test_forbidden_page_content`（应用名 + owner + 无访问权限文案 + 引导联系 owner 或租户管理员 + 「返回广场」按钮；**本版无在线申请入口**）→ AC-28 / `test_stopped_page_content`（应用名 + 已停用提示 + 引导 + 返回广场）→ AC-29 / `test_not_found_page_for_draft_pending_deleted_and_unknown`（四种情形同一页，不落报错页）→ AC-29 / `test_not_enabled_guide_page_not_404_or_5xx`→ AC-30 / `test_backend_timeout_or_5xx_fail_closed`（内部端点超时 / 5xx → 拒绝而非放行）→ AC-12 / `test_recovering_static_page_on_upstream_unreachable`（MVP 期切换窗口 / 崩溃窗口表现为「应用恢复中」**静态版**，不落报错页；自动重试版见 T082）→ AC-36。
   **覆盖 AC**: AC-10, AC-12, AC-26, AC-28, AC-29, AC-30, AC-36
   **依赖**: T037, T039
 
-- [ ] **T041**: `[MVP-核心]` 判定接入与兜底页实现
+- [x] **T041**: `[MVP-核心]` 判定接入与兜底页实现
   **文件**: `src/app-proxy/app_proxy/authz.py`（新）, `src/app-proxy/app_proxy/pages.py`（新，四类兜底页 + 「应用恢复中」静态版 HTML 模板）
   **逻辑**: D7-A′：**app-proxy 自渲染**（URL 不变，扫码 / 收藏 / 刷新重试语义最稳；hash 零丢失；client 零改动）。被否的 B（302 → client gate 路由）有竞态型缺陷：`AuthContextProvider` 一挂载就拉 `/user/info`、401 拦截器的 `redirectToLogin()` 是**首次调用胜出的一次性守卫**，会把 gate 页 URL 写进 `LOGIN_PATHNAME`。页面用极简内联样式，不引外部资源。
   **测试**: T040 全部通过。
   **覆盖 AC**: AC-10, AC-12, AC-26, AC-28, AC-29, AC-30, AC-36
   **依赖**: T040
 
-- [ ] **T042**: `[MVP-核心]` 登录交接页与非导航请求分流测试
+- [x] **T042**: `[MVP-核心]` 登录交接页与非导航请求分流测试
   **文件**: `src/app-proxy/tests/test_login_handoff.py`（新）
   **逻辑**: `test_navigation_gets_inline_js_handoff`（`Sec-Fetch-Mode: navigate` → 返回内联 JS 页：写 `localStorage.LOGIN_PATHNAME = location.href`（**天然含 query + hash**）+ `LOGIN_PATHNAME_AT` 后 `location.replace('/admin')`）→ AC-27 / `test_query_and_hash_preserved`（`/apps/foo?a=1#b` 登录后回到含 `?a=1#b` 的原地址——**服务端 302 做不到**：hash 永不上送服务器，且 platform 登录页**只认这两个 localStorage key、不认任何 `?redirect=` query`**，坑 11）→ AC-27 / `test_key_names_and_ttl_match_platform_contract`（键名 / 10 分钟时效 / 同源校验必须与 `platform/utils/loginReturnTo.ts:35-70` 原样一致——这是跨 SPA 契约）→ AC-27 / `test_xhr_gets_json_and_real_status`（非导航请求返回 JSON + 真实 401/403/404/503，**不返回 HTML**，否则应用内 XHR 拿到一坨 HTML 会解析崩）/ `test_ws_upgrade_rejected_with_close_code`。
   **覆盖 AC**: AC-27
   **依赖**: T037, T041
 
-- [ ] **T043**: `[MVP-核心]` 登录交接页与分流实现
+- [x] **T043**: `[MVP-核心]` 登录交接页与分流实现
   **文件**: `src/app-proxy/app_proxy/login_handoff.py`（新）
   **逻辑**: D7：分流判据 = `Sec-Fetch-Mode: navigate`（或 `Sec-Fetch-Dest: document`，回落 `Accept: text/html`）。交接页跳 `/admin`——未登录即 platform `LoginPage`；配了 SSO 时它自己跳 IdP，回来后 `App.tsx:154-160` 或 `login.tsx:168-172` 消费同一 key 回跳。
   **测试**: T042 全部通过。
   **覆盖 AC**: AC-27
   **依赖**: T042
 
-- [ ] **T044**: `[MVP-核心]` 上游解析 + 前缀剥离 + HTTP 反代测试
+- [x] **T044**: `[MVP-核心]` 上游解析 + 前缀剥离 + HTTP 反代测试
   **文件**: `src/app-proxy/tests/test_proxy.py`（新）
   **逻辑**: `test_route_cached_3s_and_invalidated_on_conn_error`（连接失败〔`ECONNREFUSED` / 连接超时〕→ **立刻作废该条并重取一次**，再失败才渲染「应用恢复中」）→ AC-25, AC-36 / `test_prefix_stripped_three_forms`（`/apps/foo` → `/`、`/apps/foo/` → `/`、`/apps/foo/x?y=1` → `/x?y=1`；`X-Forwarded-Prefix` 恒为 `/apps/foo`）→ AC-25 / `test_relative_paths_work_through_entry`（上游生成的相对路径经入口可达）→ AC-25 / `test_entry_stable_across_version_switch`（`generation` 变化后同一 `/apps/{slug}` 仍可达，路由缓存过期后指向新实例；宽限 30s ≫ 3s 缓存 → 切换窗口内命中旧地址仍被旧容器正常服务、**不产生 502**）→ AC-21, AC-25 / `test_upstream_is_bridge_ip_not_published_port`（断言反代目标是 bridge IP，**不经任何宿主 published 端口**——绕过入口直连不可行）→ AC-33 / `test_streaming_and_large_body_passthrough`。
   **覆盖 AC**: AC-21, AC-25, AC-33, AC-36
   **依赖**: T037, T039, T041
 
-- [ ] **T045**: `[MVP-核心]` 反代实现（路由解析 + 前缀剥离 + HTTP 转发）
+- [x] **T045**: `[MVP-核心]` 反代实现（路由解析 + 前缀剥离 + HTTP 转发）
   **文件**: `src/app-proxy/app_proxy/proxy.py`（新）, `src/app-proxy/app_proxy/routing.py`（新）
   **逻辑**: D5.1 + D5.2：问 manager `GET /v1/apps/{app_id}/route` 取 `upstream`（3s 缓存，与鉴权缓存**两把独立**）→ 剥 `/apps/{slug}` 前缀 → 重写 `X-Forwarded-Prefix/Proto/Host` → 注入十头 → httpx 流式转发。**WS 反代属 Wave 4**（T079/T080），MVP 期只反代 HTTP。
   **测试**: T044 全部通过。
@@ -838,6 +838,11 @@
 | T009 | `chinese_name_user` fixture 显式给 `UserDepartment.id` | 否 | `user_department.id` 是 BIGINT，SQLite 只对 `INTEGER PRIMARY KEY` 自增，不给就 NOT NULL 失败 |
 | T011 | `RESOURCE_ACTION_SCOPES` / `ACTION_RESOURCE_SCOPES` 只手工加 4 个 action，`manage_permission` / `delete` 由 `MIGRATED_RESOURCE_TYPES` 自动带上 | 是（design D9 第 2/4 项加一句） | 那两个 action 的 scope 直接引用 `MIGRATED_RESOURCE_TYPES`，手工再加会写重复值 |
 | T016 | 测试注册 `@compiles(BigInteger, "sqlite")` → `INTEGER` | 否 | 同 T009 的根因，四张 F048 控制面表主键全是 BIGINT；SQLite 的 INTEGER 本就是 64 位，无语义损失 |
+| T041 | 兜底页对**导航请求一律 200**（含「不存在或未上线」），真实状态码（401/403/404/503）只给非导航的 JSON 分支 | 否（design §7 步 7 已写死「不是 502 / 404」） | 扫码落到浏览器错误页与「平台挂了」无法区分；程序化调用仍需要真状态码 |
+| T041 | 判定枚举比 §4.2 多一个 `unavailable`（本地 fail-closed），且**未知 decision 一律按拒绝处理** | 建议 design D6 判定顺序末尾补一句 | 16146 需要一个可渲染的判定值；backend 领先发布出现新 decision 时不能退化成「放行」 |
+| T041 | 「应用恢复中」的 JSON 分支复用 `16121`（编排器不可用），未新增码位 | 否 | 161 段没给过渡态留码，新增 16147 要动 backend 的 errcode 文件（批 1 owner） |
+| T041 | T040 里 8 条依赖真实转发的用例（`test_allow_forwards` / `test_recovering_*` / 缓存计数类）在 **T045 落地后才转绿** | 否（tasks 自身的拆分产物：T044 依赖 T041） | 「allow → 进入反代路径」这句话没有反代就无从断言 |
+| T039 | 转发前额外从 `Cookie` 头里摘掉 `access_token_cookie`（只摘这一条，应用自己的 cookie 原样透传；`strip_session_cookie` 可关） | 建议 design D6 注入头一节补一句 | 浏览器对 `/apps/*` 天然带上该 cookie（host-only + `path=/`，K7），不摘等于把「能冒充访问者调用全平台 API」的长效凭据交给被托管容器——比刻意签的 900s OBO 权限大得多，AC-34 的存在理由被架空 |
 | T017 | `OPENFGA_RELEASE_VERSION` 从 `permission/migration/f048_runtime_storage.py` 取，不在 `core/openfga/authorization_model_f048.py` | 否（design 未写过该符号位置） | 与 `_find_remote_model` 同属迁移存储层，按"模型常量都在 model 文件"的直觉去找会扑空 |
 | T010 / T016 / T017 | 三个文件被 arch-guard 报 RULE-9（import `bisheng.core.openfga`） | 否 | **仓库根目录就叫 `bisheng`**，规则的 `/bisheng/` 路径匹配对任何绝对路径都成立；在树的 `test/permission/test_f048_action_catalog_policy.py`、`scripts/f048_migration_runtime.py`、`scripts/benchmark_f048_permission_paths.py` 报同一条，且 constitution C4 明文豁免"运维迁移工具" |
 
