@@ -302,6 +302,7 @@ class LoginSyncService:
                     user_name=(attrs.name.strip() if attrs.name else "") or ext,
                     email=cls._normalize_contact_field(attrs.email),
                     phone_number=cls._normalize_contact_field(attrs.phone),
+                    job_grade=cls._normalize_contact_field(attrs.job_grade),
                     external_id=ext,
                     source=row_source,
                     password="",
@@ -399,6 +400,10 @@ class LoginSyncService:
             np = cls._normalize_contact_field(attrs.phone)
             if user.phone_number != np:
                 user.phone_number = np
+        if attrs.job_grade is not None:
+            ng = cls._normalize_contact_field(attrs.job_grade)
+            if user.job_grade != ng:
+                user.job_grade = ng
 
     @classmethod
     def _touch_user_sync_time(cls, user: User) -> None:

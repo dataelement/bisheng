@@ -21,7 +21,7 @@ See spec.md §5.1 / §5.2. Field semantics:
 
 from typing import List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from bisheng.sso_sync.domain.constants import SSO_SOURCE, WECOM_SOURCE
 
@@ -38,9 +38,17 @@ def _normalize_sync_source(value: Optional[str]) -> Optional[str]:
 class UserAttrsDTO(BaseModel):
     """Soft user attributes pushed alongside SSO login. All fields optional
     because the upstream HR system may not populate every attribute."""
+    #: Gateway pushes ``jobGrade`` in camelCase; keep snake_case internally.
+    model_config = ConfigDict(populate_by_name=True)
+
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    job_grade: Optional[str] = Field(
+        default=None,
+        alias='jobGrade',
+        description='Upstream HR job grade, stored as ``user.job_grade``.',
+    )
 
 
 class TenantMappingItem(BaseModel):
