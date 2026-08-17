@@ -4,12 +4,15 @@ import { FileStatus, SortDirection, SortType } from "~/api/knowledge";
 import { Checkbox } from "~/components";
 import {
     DropdownMenu,
-    DropdownMenuCheckboxItem,
-    DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger,
 } from "~/components/ui/DropdownMenu";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
+import {
+    ActionMenuCheckboxItem,
+    ActionMenuContent,
+    ActionMenuItem,
+    actionMenuLabelClassName,
+    actionMenuSectionLabelClassName,
+} from "~/components/ActionMenu";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { PENDING_REVIEW_FILTER, type FileStatusFilter } from "../knowledgeUtils";
@@ -137,21 +140,34 @@ export function FileListToolbar({
                                     {localize("com_knowledge.filter")}
                                 </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                                <div className="px-2 py-1.5 text-xs font-medium text-text-3">
+                            {/* 120px wide, 8px padding, 32px rows spaced 4px apart, 12px
+                                panel radius (Figma 13198:78111 — the dropdown-panel radius
+                                the 圆角规范 calls for). Past 240px the list scrolls inside
+                                instead of running down the viewport. */}
+                            <ActionMenuContent
+                                align="center"
+                                width={120}
+                                // min-w-0 is required: the shared content base sets
+                                // min-w-[8rem] (128px), which would otherwise win over
+                                // the 120px width.
+                                className="max-h-[240px] min-w-0 gap-1 overflow-y-auto rounded-xl"
+                            >
+                                <div className={actionMenuSectionLabelClassName}>
                                     {localize("com_knowledge.filter_file_status")}
                                 </div>
                                 {statusOptions.map((option) => (
-                                    <DropdownMenuCheckboxItem
+                                    <ActionMenuCheckboxItem
                                         key={option.value}
                                         checked={statusFilter.includes(option.value)}
                                         onCheckedChange={(checked) => onFilterStatus(option.value, checked)}
                                         onSelect={(e) => e.preventDefault()}
                                     >
-                                        {localize(option.labelKey)}
-                                    </DropdownMenuCheckboxItem>
+                                        <span className={actionMenuLabelClassName}>
+                                            {localize(option.labelKey)}
+                                        </span>
+                                    </ActionMenuCheckboxItem>
                                 ))}
-                            </DropdownMenuContent>
+                            </ActionMenuContent>
                         </DropdownMenu>
                     </>
                 )}
@@ -164,17 +180,36 @@ export function FileListToolbar({
                             {localize("com_knowledge.sort")}
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <div className="px-2 py-1.5 text-xs font-medium text-text-3">
+                    {/* Same panel as the filter menu: 120px, centred on the trigger,
+                        32px rows, 12px radius, scrolls past 240px. The active field's
+                        direction sits in the trailing slot the filter uses for its check. */}
+                    <ActionMenuContent
+                        align="center"
+                        width={120}
+                        className="max-h-[240px] min-w-0 gap-1 overflow-y-auto rounded-xl"
+                    >
+                        <div className={actionMenuSectionLabelClassName}>
                             {localize("com_knowledge.sort_field")}
                         </div>
                         {SORT_OPTIONS.map((option) => (
-                            <DropdownMenuItem key={option.value} onClick={() => onSort(option.value)}>
-                                {localize(option.labelKey)}
-                                {sortBy === option.value && (sortDirection === SortDirection.ASC ? " ↑" : " ↓")}
-                            </DropdownMenuItem>
+                            <ActionMenuItem
+                                key={option.value}
+                                className="rounded-lg"
+                                onClick={() => onSort(option.value)}
+                            >
+                                <span className={actionMenuLabelClassName}>
+                                    {localize(option.labelKey)}
+                                </span>
+                                {sortBy === option.value && (
+                                    <span className="ml-auto flex size-4 shrink-0 items-center justify-center text-primary">
+                                        {sortDirection === SortDirection.ASC
+                                            ? <Outlined.ArrowUp className="size-4" />
+                                            : <Outlined.ArrowDown className="size-4" />}
+                                    </span>
+                                )}
+                            </ActionMenuItem>
                         ))}
-                    </DropdownMenuContent>
+                    </ActionMenuContent>
                 </DropdownMenu>
 
                 {showViewToggle && (
