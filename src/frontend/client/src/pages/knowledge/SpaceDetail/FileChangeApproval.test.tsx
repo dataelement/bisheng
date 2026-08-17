@@ -23,6 +23,7 @@ import {
     mergeFileChangeApprovalEnrichment,
     projectPendingUploadAsKnowledgeFile,
     selectApprovablePendingUploads,
+    selectVisiblePendingUploads,
     summarizeBatchApprovalResult,
     useFileChangeApproval,
 } from "../hooks/useFileChangeApproval";
@@ -181,6 +182,19 @@ describe("F046 file change approval projection", () => {
             expect(statusType).not.toContain(`"${legacyExecutionStatus}"`);
         }
         expect(apiSource).toContain("approvalStatus: raw.approval_status");
+    });
+
+    it("stops projecting applied uploads after they become formal files", () => {
+        const queued = pendingBusinessItem("queued", 1);
+        const applying = pendingBusinessItem("applying", 2);
+        const applied = pendingBusinessItem("applied", 3);
+        const failed = pendingBusinessItem("failed", 4);
+
+        expect(selectVisiblePendingUploads([queued, applying, applied, failed])).toEqual([
+            queued,
+            applying,
+            failed,
+        ]);
     });
 
     it.each(BUSINESS_STATES)(

@@ -70,6 +70,13 @@ export function selectApprovablePendingUploads(
     return items.filter(canDecidePendingUpload);
 }
 
+/** Applied uploads are formal files and must no longer be projected as pending rows. */
+export function selectVisiblePendingUploads(
+    items: PendingUploadFileChange[],
+): PendingUploadFileChange[] {
+    return items.filter((item) => item.status !== "applied");
+}
+
 export function canDecidePendingUpload(item?: PendingUploadFileChange): boolean {
     return Boolean(item?.approvalStatus === "pending" && item.canApprove);
 }

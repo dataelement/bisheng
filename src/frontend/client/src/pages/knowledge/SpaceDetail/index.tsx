@@ -80,6 +80,7 @@ import {
     canDecidePendingUpload,
     getFileChangeLockState,
     projectPendingUploadAsKnowledgeFile,
+    selectVisiblePendingUploads,
     useFileChangeApproval,
 } from "../hooks/useFileChangeApproval";
 
@@ -202,7 +203,7 @@ export function KnowledgeSpaceContent({
         parentId: currentFolderId,
         onFormalFilesRefresh: () => onDeleteFile(""),
     });
-    const pendingUploadFiles = fileChangeApproval.pendingItems.map((item) =>
+    const pendingUploadFiles = selectVisiblePendingUploads(fileChangeApproval.pendingItems).map((item) =>
         projectPendingUploadAsKnowledgeFile(item, space.id),
     );
     // Pending uploads are merged client-side, so the status filter has to gate

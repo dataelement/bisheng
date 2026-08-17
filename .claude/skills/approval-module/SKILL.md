@@ -275,7 +275,8 @@ resolver/OpenFGA 故障必须传播，绝不能伪造成空审批人集合，也
 - **列表投影**：待审上传仍是 `knowledge_space_upload_stage + knowledge_space_file_change_request`，不提前生成正式
   `KnowledgeFile`。Client 按 request 的 `source_parent_id` 查询并投影成不可选择、不可移动/重命名的虚拟文件行；
   根目录仅展示 `source_parent_id IS NULL`，子目录仅展示等于当前目录 ID 的记录。列表内预览继续读取暂存对象，
-  当前审批人可直接同意/拒绝，状态标签可进入完整详情及 Knowledge 业务重试/清理。
+  当前审批人可直接同意/拒绝，状态标签可进入完整详情及 Knowledge 业务重试/清理。`applied` 上传已经成为正式
+  文件，Client 不再将其投影为虚拟待审行，也不在文件列表展示“已生效”标签；后续仅展示普通文件生命周期状态。
 - **执行**：审批决定交付只把 Knowledge request 置 `queued`；之后由 Knowledge generation token、request/step/footprint
   独立推进，业务失败不回写 F025。upload 的完成判据固定为正式文件图已提交、OpenFGA 权限写入成功且普通文件
   解析调度已接收；之后的解析、索引、向量化成功或失败只属于文件生命周期，不回写或回退审批状态。
