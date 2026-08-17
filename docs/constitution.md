@@ -105,7 +105,7 @@ await require_business_action(
 
 - 5-digit `MMMEE` (3-digit module + 2-digit error), defined in `common/errcode/`.
 
-**Module registry** (34 in use as of 2026-08-06). The authoritative source is always the `Code: int = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
+**Module registry** (35 in use as of 2026-08-17). The authoritative source is always the `Code: int = NNNNN` literals themselves; this table mirrors them and *will* drift. **Before claiming a new module number, re-derive the list:**
 
 ```bash
 grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py \
@@ -118,11 +118,11 @@ grep -rhoE "Code:\s*int\s*=\s*[0-9]{5}" src/backend/bisheng/common/errcode/*.py 
 | 11x | 110 linsight · 111 linsight (second block) |
 | 12x–18x | 120 workstation · 140 message · 150 tool · 160 dataset · 170 telemetry · 180 knowledge_space · 181 approval |
 | 19x (tenant / permission) | 190 channel **and** permission ⚠️ · 191 tenant_resolver · 192 tenant_fga · 193 sso_sync · 194 tenant_quota · 195 tenant_sharing · 196 resource_owner_transfer · 197 admin_scope · 198 llm_tenant |
-| 20x–25x (org) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission |
+| 20x–26x (org / open API) | 200 tenant · 210 department · 220 org_sync **and** tenant_tree ⚠️ · 230 user_group · 240 role · 250 permission · 260 open_api |
 
 - ⚠️ **190 and 220 are each shared by two modules** — pre-existing collisions, not a precedent. Never reuse an occupied number.
 - **130 was registered as `chat` but is not used by any error code.** Do not treat it as free without checking; do not cite it as an example.
-- **260 is reserved** for the Open API (`/api/v2`) authentication module. Not yet implemented — do not claim it for anything else.
+- **260 = open_api** (F049, `common/errcode/open_api.py`): open face `/api/v2` uses 26001–26019 (26001 / 26002 / 26003 / 26004 / 26012 implemented; 26005–26007 / 26010 / 26016 reserved for F050 delegation; 26013 / 26014 retired, never reuse), management face `/api/v1/service-accounts/**` uses 26020+ (26020–26031 implemented). Every 260xx carries a real `http_status` for the `/api/v2` handler; copy for each code must land in `packages/locales/src/api_errors/*.json` (all three languages) in the same change.
 - When you claim a number, add it here in the same change.
 
 ## C6. No Hardcoded Secrets (RULE-7)

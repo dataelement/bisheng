@@ -99,6 +99,9 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.finetune.domain.models.preset_train",
     "bisheng.finetune.domain.models.model_deploy",
     "bisheng.finetune.domain.models.finetune",
+    # F049 open API auth: api_credential / service_account both carry tenant_id.
+    "bisheng.open_api.domain.models.api_credential",
+    "bisheng.open_api.domain.models.service_account",
 )
 
 

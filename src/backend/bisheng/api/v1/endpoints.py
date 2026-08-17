@@ -92,6 +92,9 @@ def get_env():
     env["version"] = __version__
     env["enable_etl4lm"] = image_parser_enabled
     env["multi_tenant_enabled"] = bisheng_settings.multi_tenant.enabled
+    # F049: open platform switch → platform appConfig.openPlatformEnabled
+    # (gates the local-dev-toolkit scopes and the connect-info panel only).
+    env["open_platform_enabled"] = bisheng_settings.open_platform.enabled
 
     # Expose knowledge-space version management flag so the client can toggle UI affordances.
     vm = getattr(bisheng_settings.get_knowledge(), "version_management", None)

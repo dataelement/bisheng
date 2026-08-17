@@ -17,6 +17,10 @@ from bisheng.database.models.tenant import UserTenant
 from bisheng.database.models.user_group import UserGroup
 from bisheng.user.domain.models.user_role import UserRole
 
+# v3.0.0 F049 principal types (``user.user_type``).
+USER_TYPE_HUMAN = "human"
+USER_TYPE_SERVICE = "service"
+
 
 class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True)
@@ -88,6 +92,21 @@ class User(UserBase, table=True):
             nullable=False,
             server_default=text("0"),
             comment="v2.5.1 F012: JWT invalidation counter; +1 on leaf tenant change",
+        ),
+    )
+    # v3.0.0 F049: principal type. ``'human'`` for every natural person (all
+    # pre-existing rows via server_default); ``'service'`` for service accounts,
+    # which never log in and never appear in people pickers. Extra
+    # service-account attributes live in ``service_account`` (open_api module).
+    user_type: str = Field(
+        default=USER_TYPE_HUMAN,
+        sa_column=Column(
+            "user_type",
+            String(16),
+            nullable=False,
+            index=True,
+            server_default=text("'human'"),
+            comment="v3.0.0 F049: principal type — human | service",
         ),
     )
 
