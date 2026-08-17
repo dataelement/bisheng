@@ -30,7 +30,6 @@ interface KnowledgeSpaceSidebarProps {
     onSpaceSelect: (space: KnowledgeSpace | null) => void;
     onCreateSpace: () => void;
     onSpaceSettings: (space: KnowledgeSpace) => void;
-    onManageMembers: (space: KnowledgeSpace) => void;
     onKnowledgeSquare?: () => void;
     collapsed?: boolean;
     onCollapsedChange?: (collapsed: boolean) => void;
@@ -54,7 +53,6 @@ export function KnowledgeSpaceSidebar({
     onSpaceSelect,
     onCreateSpace,
     onSpaceSettings,
-    onManageMembers,
     onKnowledgeSquare,
     collapsed: collapsedProp,
     onCollapsedChange,
@@ -290,7 +288,6 @@ export function KnowledgeSpaceSidebar({
                 onLeave={handleLeaveSpace}
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
-                onManageMembers={onManageMembers}
                 onMenuOpen={() => ensureSpaceActions(s.id)}
                 {...getItemPermissions(s)}
             />
@@ -306,7 +303,6 @@ export function KnowledgeSpaceSidebar({
                 onLeave={handleLeaveSpace}
                 onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
                 onSettings={onSpaceSettings}
-                onManageMembers={onManageMembers}
                 onMenuOpen={() => ensureSpaceActions(s.id)}
                 {...getItemPermissions(s)}
             />
@@ -336,7 +332,6 @@ export function KnowledgeSpaceSidebar({
             onLeave={handleLeaveSpace}
             onPin={(id, pinned) => handlePinSpace(id, pinned, sectionType)}
             onSettings={onSpaceSettings}
-            onManageMembers={onManageMembers}
             hideMoreMenu
             compact
             onAfterNavigate={onNavigateAway}

@@ -1,4 +1,4 @@
-import { Minus, Plus, Search, X } from "lucide-react";
+import { Outlined } from "bisheng-icons";
 import { useState, useEffect, useRef, type MouseEvent } from "react";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 // the app's base path and fingerprints it — no env-var lookup at render time.
 import wechatCopyLinkGuide from "./wechat-copy-link-guide.png";
 
-const MAX_SOURCES = 200;
+const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
 
 /**
@@ -241,9 +241,9 @@ export function AddSourceDropdown({
                     onKeyDown={(e) => e.key === "Enter" && onExpandChange(true)}
                 >
                     <div className="flex shrink-0 items-center gap-2 bg-[#F7F7F7] px-4 py-3">
-                        <Plus className="size-4 flex-shrink-0 text-[#86909C]" />
-                        <span className="flex-1 text-[14px] text-[#86909C] text-left">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
-                        <span className="flex-shrink-0 text-[12px] text-[#86909C]">
+                        <Outlined.Plus className="size-4 flex-shrink-0 text-[#999999]" />
+                        <span className="flex-1 text-left text-[14px] text-[#999999]">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
+                        <span className="flex-shrink-0 text-[12px] text-[#999999]">
                             {sources.length}/{MAX_SOURCES}
                         </span>
                     </div>
@@ -295,7 +295,7 @@ export function AddSourceDropdown({
                                             aria-label={localize("com_subscription.remove_source")}
                                         >
                                             <span className="inline-flex items-center justify-center w-3 h-3 border-[1px] border-[#F53F3F]">
-                                                <Minus className="size-3 text-[#F53F3F]" />
+                                                <span className="h-px w-2 bg-[#F53F3F]" />
                                             </span>
                                         </button>
                                     </div>
@@ -316,7 +316,7 @@ export function AddSourceDropdown({
             {expanded && (
                 <div className="flex items-center gap-2 h-[46px]">
                     <div className="flex-1" />
-                    <span className="flex-shrink-0 text-[12px] text-[#86909C]">
+                    <span className="flex-shrink-0 text-[12px] text-[#999999]">
                         {mgr.pendingSources.length}/{MAX_SOURCES}
                     </span>
                 </div>
@@ -334,7 +334,7 @@ export function AddSourceDropdown({
                 >
                     <div className="flex shrink-0 items-center gap-2 border-b border-[#E5E6EB] pb-0 mb-2">
                         <div className="relative flex-1 rounded-lg m-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#999999]" />
+                            <Outlined.Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
                             <Input
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
@@ -358,7 +358,7 @@ export function AddSourceDropdown({
                                     }}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-[#999999] hover:text-[#4E5969]"
                                 >
-                                    <X className="size-4" />
+                                    <Outlined.Close className="size-4" />
                                 </button>
                             )}
                         </div>
@@ -475,7 +475,7 @@ export function AddSourceDropdown({
                         {mgr.viewMode === "list" && (
                             <>
                                 {displayList.length === 0 ? (
-                                    <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-[#86909C]">{localize("com_subscription.no_data")}</div>
+                                    <div className="flex min-h-full items-center justify-center p-8 text-center text-[14px] text-[#999999]">{localize("com_subscription.no_data")}</div>
                                 ) : (
                                     <div className="">
                                         {displayList.map((source) => {
@@ -488,7 +488,7 @@ export function AddSourceDropdown({
                                                     className={cn(
                                                         "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 cursor-pointer",
                                                         dis && "opacity-60 cursor-not-allowed",
-                                                        sel && "bg-blue-50"
+                                                        sel && "bg-[#FBFBFB]"
                                                     )}
                                                 >
                                                     <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#F2F3F5]">
@@ -546,7 +546,7 @@ export function AddSourceDropdown({
                     </div>
                     {mgr.viewMode === "list" && (
                         <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-[#E5E6EB] bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
-                            <span className="text-[12px] text-[#86909C]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
+                            <span className="text-[12px] text-[#999999]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2 touch-mobile:w-full">
                                 <Button

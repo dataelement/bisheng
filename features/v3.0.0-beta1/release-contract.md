@@ -37,6 +37,7 @@
 | AuthorizationModelRelease / PermissionMigrationRun / PermissionMigrationItem | F048-rebac-permission-model-grants | 现有 OpenFGA Store 中的新 Authorization Model 版本、唯一生产固定版本，以及由 `src/backend/scripts/` 专用数据迁移脚本写入的逐项映射、checkpoint、旧 tuple 退役、校验、启服和人工处置结果；不是 Alembic revision 状态 |
 | PermissionVisibleSourceProjection | F048-rebac-permission-model-grants | 原 F048 正式迁移和后续运行时从 canonical Grant assignee 生成的展平可见派生索引；随同一 PermissionMigrationRun/Item 追溯；system/public/shared 继续由各 Owner 事实与 system tuple 追溯；均不可独立编辑或参与数据库 ALLOW |
 | —（无新增） | F049-knowledge-space-children-read-optimization | 只调整既有目录与搜索列表的读取、最终可见性批量判断、文件夹统计响应和性能观测；不新增领域对象、表、错误码、Grant、权限模式或 OpenFGA relation |
+| —（无新增） | F050-unified-permission-settings | 统一知识空间/频道新建与设置页面；复用既有 Knowledge、Channel、F048 Grant/Assignee 与 protected owner，不建立第二套权限领域对象 |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -71,6 +72,7 @@
 | INV-25 | user-owned 资源创建仍必须通过 `PermissionService.authorize()` 为创建者建立受保护 owner Grant 并遵守失败补偿；一个资源可以同时有多个 owner，其他 owner 作为独立普通来源存在。F048 启服后不再要求继续写旧资源 `owner` tuple。只有经资源 adapter 代码 allowlist 与 canonical business predicate 双重确认的 platform system-owned 资源可以不伪造用户 owner，并继续只由 C4 system identity 管理。OQ-07 已选择 A：F048 启服时退役既有 F018 owner 交接 API，本期不实现 protected owner transfer；创建者 protected owner 不可通过普通成员接口删除或转让 | ProtectedPermissionAssignment, PermissionGrant | F048 |
 | INV-26 | F048 的 Alembic revision 只允许 MySQL/DM8 schema DDL，不得读取、转换、回填、去重、清理或 seed 旧权限数据，也不得访问 OpenFGA。所有旧 Config、业务事实和 tuple 数据迁移必须由运维人员在已启动但 F048 未就绪的 backend 容器内，通过 `src/backend/scripts/` 下的专用脚本于 schema upgrade 成功后显式执行；不得由 API、Celery 或应用启动钩子自动触发 | PermissionMigrationRun, PermissionMigrationItem | F048 |
 | INV-27 | 权限模型、Grant、Grant 主体和权限模式以规范化 MySQL/DM8 关系表为控制面真相；组织成员、系统身份和资源状态以各自 Owner 业务域的 canonical 事实为真相；OpenFGA 是这些事实发布后的唯一权限执行面。每条有效资源可见结果必须可追溯到至少一个当前有效来源；模型停用只禁止新增或变更授权，已有授权保持有效；模型删除前必须撤销或替换全部绑定，并在引用、来源投影和残留 tuple 清零后才允许删除。来源撤销只清除该来源贡献，并保证 Check 与可见资源枚举一致，不得删除其他仍有效来源的可见性 | PermissionModel, PermissionGrant, PermissionGrantAssignee, AuthorizationModelRelease | F048 |
+| INV-28 | 知识空间和频道统一创建页只能在业务资源与 protected owner 成功后应用初始普通 Grant；普通 Grant 失败必须保留并返回真实资源、允许基于同一持久请求键前向重试且不得重复创建资源。创建前不得伪造 VerifiedPermissionTarget，旧 relation/permission_id 路径不得作为 fallback | Knowledge, Channel, ProtectedPermissionAssignment, PermissionGrant | F050 |
 
 （INV-1~7 为 v2.6.0 存量不变量，继续有效，见 `features/v2.6.0/release-contract.md`。）
 
@@ -93,6 +95,7 @@
 | F048-rebac-permission-model-grants | F004, F006, F007, F008 | 依赖既有 OpenFGA 核心、历史 ReBAC 迁移、资源权限界面和资源接入基线，并替换其中的四档静态关系与 Config 细粒度执行语义 |
 | F048-rebac-permission-model-grants | F027, F036, F040 | 依赖既有候选枚举、继承评估和列表性能基线；实现时必须保证分页与性能契约不倒退，并移除对旧 binding 第二次求值的依赖 |
 | F049-knowledge-space-children-read-optimization | F027, F040, F048 | 沿用目录 cursor、搜索页码候选扫描与 F048 OpenFGA 唯一执行面；不得用 `INHERIT` 数据库模式绕过最终候选可见性判断 |
+| F050-unified-permission-settings | v2.6.0 F044, F048 | 只继承 F044 的完整页面与统一入口目标；权限上下文、候选、protected owner、Grant mutation、版本和投影全部以 F048 为准 |
 
 ---
 
@@ -140,3 +143,4 @@
 | 2026-08-13 | 纠正 F048 可见投影迁移拓扑：F048 尚未上线，不新增旧 F048 到新 F048 model 的二次迁移；原 PermissionMigrationRun/Item 从旧 Config/四档关系和 Owner 事实直接生成最终单槽浅层 visible model、Grant/Assignee、PermissionVisibleSourceProjection 与 tuple | F048 |
 | 2026-08-13 | 明确模型停用/删除语义：停用只禁止新增或变更授权，已有 Grant 保持有效；删除必须先清零或替换全部绑定并完成残留投影对账。因停用不再触发批量撤权，F048 可见执行投影采用单槽浅层 `visible`，不引入 A/B 槽与运行时 switch | F048 |
 | 2026-08-14 | 登记 F049 知识空间目录与搜索读取优化：指定资源的超级管理员按 C4 系统身份策略放行、去重空间鉴权、页大小驱动的有界候选扫描、移除未展示的文件夹数量统计并保留失败存在性、增加分段性能观测；普通用户候选最终可见性继续统一使用 OpenFGA BatchCheck，不新增继承捷径 | F049、F027、F040、F048 |
+| 2026-08-14 | 登记 F050 统一权限设置入口：保留 v2.6.0 F044 页面目标，创建/编辑权限完全改接 F048，并增加创建后初始 Grant 部分失败与持久幂等约束 INV-28 | F050、F048 |

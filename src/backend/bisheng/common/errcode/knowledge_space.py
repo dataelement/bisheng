@@ -85,6 +85,11 @@ class SpaceOrganizationGrantExitDeniedError(BaseErrorCode):
     Msg: str = "本空间通过部门/用户组授权给你，暂无法退出"
 
 
+class SpaceCreationRequestConflictError(BaseErrorCode):
+    Code: int = 18072
+    Msg: str = "Knowledge Space creation request conflicts with an earlier payload"
+
+
 # ── Move (F034) ───────────────────────────────────────────────────────────────
 
 

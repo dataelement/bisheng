@@ -1,8 +1,7 @@
 import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { EmptyStateIllustration } from "~/components/illustrations";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useActivate, useUnactivate } from "react-activation";
 import { useAuthContext } from "~/hooks/AuthContext";
 import {
@@ -10,8 +9,6 @@ import {
     Channel,
     ChannelRole,
     SortType,
-    createManagerChannelApi,
-    updateChannelApi,
     getChannelDetailApi,
     getChannelsApi,
 } from "~/api/channels";
@@ -26,15 +23,10 @@ import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { ChannelPreviewDrawer } from "./ChannelPreviewDrawer";
 import FullScreenArticle from "./Article/FullScreenArticle";
 import { ChannelSidebar } from "./Sidebar/ChannelSidebar";
-import { CreateChannelDrawer } from "./CreateChannel/CreateChannelDrawer";
-import type { CreateChannelFormData } from "./CreateChannel/CreateChannelDrawer";
-import { buildCreateChannelPayload } from "./channelUtils";
-import { createApiStatusError, extractApiStatusCode } from "./errorUtils";
 import { Outlined } from "bisheng-icons";
 import { useSetRecoilState, useRecoilValue } from "recoil";
 import store from "~/store";
 import { subscriptionDetailPaneWidthState, subscriptionMobileChannelDropdownOpenState } from "~/store/subscriptionLayout";
-import { ChannelShareDialog } from "./ChannelShareDialog";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 
 const extractShareChannelIdFromPath = (pathname: string): string | undefined => {
@@ -70,9 +62,8 @@ export default function Subscription() {
     const previewChannelId = routePreviewChannelId || manualPreviewChannelId;
     const detailChannelId = !isShareRoute ? extractDetailChannelIdFromPath(location.pathname) : undefined;
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
-    const [channelRefreshToken, setChannelRefreshToken] = useState(0);
+    const [channelRefreshToken] = useState(0);
     const [showChannelSquare, setShowChannelSquare] = useState(false);
-    const [showCreateChannelDrawer, setShowCreateChannelDrawer] = useState(false);
     const [fullScreenArticle, setFullScreenArticle] = useState<Article | null>(null);
     const [showAiAssistant, setShowAiAssistant] = useState(false);
     const [showFullScreenBtn, setShowFullScreenBtn] = useState(true);
@@ -84,11 +75,8 @@ export default function Subscription() {
     const [channelSquareRefreshKey, setChannelSquareRefreshKey] = useState(0);
     /** Bumped on KeepAlive re-activation so share-preview effect re-runs (deps may be unchanged vs cached instance). */
     const [channelTabActivateEpoch, setChannelTabActivateEpoch] = useState(0);
-    const [channelPermissionDialogOpen, setChannelPermissionDialogOpen] = useState(false);
-    const [channelPermissionDialogChannel, setChannelPermissionDialogChannel] = useState<Channel | null>(null);
     const isH5 = usePrefersMobileLayout();
     const [channelListDrawerOpen, setChannelListDrawerOpen] = useState(false);
-    const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
     const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
@@ -99,11 +87,6 @@ export default function Subscription() {
     // 频道/广场 tab, matching the header's left/right action buttons.
     const mobileChannelDropdownOpen = useRecoilValue(subscriptionMobileChannelDropdownOpenState);
     const mobileHeadIconBtnClassName = "inline-flex size-8 items-center justify-center rounded-md text-[#212121] hover:bg-[#F7F8FA]";
-
-    const openChannelPermissionDialog = (channel: Channel) => {
-        setChannelPermissionDialogChannel(channel);
-        setChannelPermissionDialogOpen(true);
-    };
 
     const channelPluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
         if (isUserLoading) return "loading";
@@ -425,7 +408,6 @@ export default function Subscription() {
 
     // Create channel - opens drawer (with limit check)
     const handleCreateChannel = () => {
-        setEditingChannel(null);
         if (isOverQuota("channel", createdChannelCountRef.current)) {
             showToast({
                 message: localize("com_subscription.channel_limit_reached"),
@@ -433,45 +415,7 @@ export default function Subscription() {
             });
             return;
         }
-        setShowCreateChannelDrawer(true);
-    };
-
-    const handleCreateChannelConfirm = async (data: CreateChannelFormData): Promise<{ channelId: string }> => {
-        const payload = buildCreateChannelPayload(data);
-
-        // 编辑模式：使用 PUT /api/v1/channel/manager/{channel_id}，保证权限设置、内容筛选、子频道等一起更新
-        if (editingChannel) {
-            const response = await updateChannelApi(editingChannel.id, payload);
-            const updateCode = extractApiStatusCode(response);
-            if (updateCode && updateCode !== 200) {
-                throw createApiStatusError(response);
-            }
-            await queryClient.invalidateQueries({ queryKey: ["channels"] });
-            // Refresh channel detail cache so ArticleList & tooltip pick up new settings
-            await queryClient.invalidateQueries({ queryKey: ["channelDetail", editingChannel.id] });
-            // Bump refresh token so ChannelLayout remounts and reloads articles
-            setChannelRefreshToken(t => t + 1);
-            return { channelId: editingChannel.id };
-        }
-
-        // 创建模式：POST /api/v1/channel/manager/create
-        const res: any = await createManagerChannelApi(payload);
-        const createCode = extractApiStatusCode(res);
-        if (createCode && createCode !== 200) {
-            throw createApiStatusError(res);
-        }
-        await queryClient.invalidateQueries({ queryKey: ["channels"] });
-        const root = res?.data ?? res;
-        const payloadRes = root?.data ?? root;
-        const channelId = String(
-            payloadRes?.id ??
-            payloadRes?.channel_id ??
-            payloadRes?.data?.id ??
-            payloadRes?.data?.channel_id ??
-            ""
-        );
-        if (!channelId) throw new Error("missing channel id");
-        return { channelId };
+        navigate("/channel/create");
     };
 
     // Channel square
@@ -554,23 +498,9 @@ export default function Subscription() {
                                     onCreateChannel={handleCreateChannel}
                                     onChannelSquare={handleChannelSquare}
                                     onCreatedCountChange={(count) => { createdChannelCountRef.current = count; }}
-                                    onManageMembers={(channel) => {
-                                        setChannelListDrawerOpen(false);
-                                        openChannelPermissionDialog(channel);
-                                    }}
                                     onChannelSettings={(channel) => {
                                         setChannelListDrawerOpen(false);
-                                        setEditingChannel(null);
-                                        (async () => {
-                                            try {
-                                                const detail = await getChannelDetailApi(channel.id);
-                                                setEditingChannel({ ...channel, ...detail });
-                                            } catch {
-                                                setEditingChannel(channel);
-                                            } finally {
-                                                setShowCreateChannelDrawer(true);
-                                            }
-                                        })();
+                                        navigate(`/channel/${channel.id}/settings`);
                                     }}
                                 />
                             </div>
@@ -589,20 +519,7 @@ export default function Subscription() {
                                 key={`${activeChannel.id}-${channelRefreshToken}`}
                                 channel={activeChannel}
                                 onChannelSelect={handleChannelSelect}
-                                onManageMembers={(channel) => openChannelPermissionDialog(channel)}
-                                onChannelSettings={(channel) => {
-                                    setEditingChannel(null);
-                                    (async () => {
-                                        try {
-                                            const detail = await getChannelDetailApi(channel.id);
-                                            setEditingChannel({ ...channel, ...detail });
-                                        } catch {
-                                            setEditingChannel(channel);
-                                        } finally {
-                                            setShowCreateChannelDrawer(true);
-                                        }
-                                    })();
-                                }}
+                                onChannelSettings={(channel) => navigate(`/channel/${channel.id}/settings`)}
                                 onOpenChannelNav={isH5 ? () => setSystemMenuOpen(true) : undefined}
                                 onGoChannelSquare={handleChannelSquare}
                                 onCreateChannel={handleCreateChannel}
@@ -658,51 +575,6 @@ export default function Subscription() {
                     </div>
                 </>
             )}
-
-            {/* 创建频道抽屉 */}
-            <CreateChannelDrawer
-                open={showCreateChannelDrawer}
-                onOpenChange={setShowCreateChannelDrawer}
-                onConfirm={handleCreateChannelConfirm}
-                mode={editingChannel ? "edit" : "create"}
-                editingChannel={editingChannel}
-                onViewChannel={(channelId) => {
-                    // 关闭创建抽屉
-                    setShowCreateChannelDrawer(false);
-                    // 尝试从已创建频道列表中找到新频道并设为当前激活
-                    const createdList =
-                        queryClient.getQueryData<Channel[]>(["channels", "created", SortType.RECENT_UPDATE]) || [];
-                    const subscribedList =
-                        queryClient.getQueryData<Channel[]>(["channels", "subscribed", SortType.RECENT_UPDATE]) || [];
-                    const all = [...createdList, ...subscribedList];
-                    const target = all.find((c) => c.id === channelId);
-                    if (target) {
-                        setActiveChannel(target);
-                    }
-                }}
-                onManageMembers={(channelId) => {
-                    openChannelPermissionDialog({
-                        id: channelId,
-                        name: "",
-                        creator: "",
-                        creatorId: "",
-                        subscriberCount: 0,
-                        articleCount: 0,
-                        unreadCount: 0,
-                        role: ChannelRole.CREATOR,
-                        isPinned: false,
-                        createdAt: "",
-                        updatedAt: "",
-                        subChannels: []
-                    });
-                }}
-            />
-
-            <ChannelShareDialog
-                open={channelPermissionDialogOpen}
-                onOpenChange={setChannelPermissionDialogOpen}
-                channel={channelPermissionDialogChannel}
-            />
 
             {/* Full-screen overlay — absolute inset-0 covers the entire Subscription (including the channel sidebar), but doesn't affect MainLayout's primary navigation */}
             {fullScreenArticle && (

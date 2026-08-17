@@ -1,11 +1,30 @@
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
+from bisheng.permission.domain.schemas import GrantSubjectInput
+
+
+class InitialPermissionGrant(BaseModel):
+    model_key: str = Field(..., min_length=1, max_length=64)
+    subject: GrantSubjectInput
+
+
+class InitialPermissionsRequest(BaseModel):
+    expected_catalog_release_id: int = Field(..., gt=0)
+    grants: list[InitialPermissionGrant] = Field(default_factory=list, max_length=50)
+
+
+class InitialPermissionApplyResult(BaseModel):
+    status: Literal["succeeded", "failed"]
+    resource_version: int | None = None
+    assignee_ids: list[str] = Field(default_factory=list)
+    error_code: int | None = None
+    message: str | None = None
 
 
 class SpaceSubscriptionStatusEnum(str, Enum):
@@ -44,6 +63,19 @@ class KnowledgeSpaceCreateReq(BaseModel):
             "upserted server-side."
         ),
     )
+    creation_request_id: str | None = Field(default=None, min_length=1, max_length=64)
+    initial_permissions: InitialPermissionsRequest | None = None
+
+    @model_validator(mode="after")
+    def require_request_id_for_initial_permissions(self):
+        if self.initial_permissions is not None and self.creation_request_id is None:
+            raise ValueError("initial_permissions requires creation_request_id")
+        return self
+
+
+class KnowledgeSpaceCreateResp(KnowledgeBase):
+    id: int
+    initial_permission_result: InitialPermissionApplyResult | None = None
 
 
 class KnowledgeSpaceInfoResp(KnowledgeBase):

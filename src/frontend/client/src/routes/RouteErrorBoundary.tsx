@@ -3,6 +3,7 @@ import { useContext, useMemo } from 'react';
 import { useRouteError } from 'react-router-dom';
 import { SystemErrorIllustration } from '~/components/illustrations';
 import { AuthContext } from '~/hooks/AuthContext';
+import { useToastContext } from '~/Providers';
 import { useLocalize } from '~/hooks';
 
 /**
@@ -28,6 +29,9 @@ export default function RouteErrorBoundary() {
   // lives outside the layout that provides it. A crash screen that can itself
   // crash leaves the user with a white page and nothing to report.
   const auth = useContext(AuthContext);
+  // The toast provider and its viewport both sit outside the router, so they
+  // survive the crash that put this screen on screen.
+  const { showToast } = useToastContext();
 
   // Collected once: the trace id names this occurrence, and a re-render must not
   // rename it after the user has already screenshotted it.
@@ -48,13 +52,13 @@ export default function RouteErrorBoundary() {
     <ErrorPage
       diagnostics={diagnostics}
       illustration={<SystemErrorIllustration className="size-[120px]" />}
+      onCopied={() => showToast({ message: localize('com_ui_copied_to_clipboard'), status: 'success' })}
       labels={{
         title: localize('com_error_page.title'),
         description: localize('com_error_page.description'),
         copyBefore: localize('com_error_page.copy_before'),
         copyLink: localize('com_error_page.copy_link'),
         copyAfter: localize('com_error_page.copy_after'),
-        copied: localize('com_error_page.copied'),
         refresh: localize('com_error_page.refresh'),
         download: localize('com_error_page.download'),
         screenshotHint: localize('com_error_page.screenshot_hint'),

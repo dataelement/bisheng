@@ -72,8 +72,12 @@ SelectScrollDownButton.displayName =
 
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, headNode = null, footerNode = null, auto, position = "popper", ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content> & {
+    /** Padding etc. for the inner viewport — `className` lands on the surface,
+     *  which cannot reach it. */
+    viewportClassName?: string
+  }
+>(({ className, children, headNode = null, footerNode = null, auto, viewportClassName, position = "popper", ...props }, ref) => (
   <SelectPrimitive.Portal>
     <SelectPrimitive.Content
       ref={ref}
@@ -92,7 +96,8 @@ const SelectContent = React.forwardRef<
         className={cn(
           "p-2",
           position === "popper" && !auto &&
-          "w-full min-w-[var(--radix-select-trigger-width)]"
+          "w-full min-w-[var(--radix-select-trigger-width)]",
+          viewportClassName
         )}
       >
         {children}
