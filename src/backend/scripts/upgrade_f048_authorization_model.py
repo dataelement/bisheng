@@ -633,10 +633,15 @@ async def _build_context() -> UpgradeContext:
 
 
 async def execute(args: argparse.Namespace) -> int:
+    from bisheng.common.services.config_service import settings
     from bisheng.core.context.manager import close_app_context, initialize_app_context
     from bisheng.core.context.tenant import bypass_tenant_filter
 
-    await initialize_app_context()
+    # ``initialize_app_context`` grew a required ``config`` argument when
+    # feat/3.0.0-beta1 merged in; the sibling backfill scripts already pass it.
+    # This script was on the other branch and did not get updated in the merge —
+    # a no-arg call raised TypeError before it could even print the plan.
+    await initialize_app_context(config=settings)
     try:
         ctx = await _build_context()
         # The control-plane tables carry no tenant_id, but the listener still
