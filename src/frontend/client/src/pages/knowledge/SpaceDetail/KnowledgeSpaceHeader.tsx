@@ -11,7 +11,6 @@ import {
     ActionMenuItem,
     actionMenuLabelClassName,
 } from "~/components/ActionMenu";
-import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { KnowledgeBreadcrumb } from "./KnowledgeBreadcrumb";
@@ -35,9 +34,6 @@ interface KnowledgeSpaceHeaderProps {
     onTriggerWebLink: () => void;
     canCreateFolder?: boolean;
     canUploadFile?: boolean;
-    approvablePendingUploadCount?: number;
-    onBatchApprovePendingUploads?: () => void;
-    batchApprovingPendingUploads?: boolean;
 
     // Batch Operation Props
     selectedCount: number;
@@ -82,9 +78,6 @@ export function KnowledgeSpaceHeader({
     onTriggerWebLink,
     canCreateFolder = false,
     canUploadFile = false,
-    approvablePendingUploadCount = 0,
-    onBatchApprovePendingUploads,
-    batchApprovingPendingUploads = false,
     selectedCount,
     hasFoldersSelected,
     hasFailedFiles,
@@ -113,10 +106,8 @@ export function KnowledgeSpaceHeader({
     const showShare = canShareSpace && space.visibility !== VisibilityType.PRIVATE;
     const selectedThreshold = isH5 ? 0 : 1;
     const showAddMenu = canCreateFolder || canUploadFile;
-    // Filter / sort / search / view-toggle all moved into FileListToolbar; the
-    // approve-all button is the only thing left that can carry this row on its own.
-    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold
-        || approvablePendingUploadCount > 0;
+    // Filter / sort / search / view-toggle all moved into FileListToolbar.
+    const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
     // Pending-upload rows can only be approved or rejected — the reviewed-file
     // actions below never apply to them (Figma 13198:78120).
     const showPendingBatchGroup = pendingSelectedCount > 0
@@ -126,20 +117,6 @@ export function KnowledgeSpaceHeader({
 
     const batchAndAddActions = showToolbarActions && (
         <div className="flex shrink-0 items-center gap-2">
-            {/* Approve every approvable pending upload in this folder — unlike the
-                menu groups below, it does not depend on the row selection. */}
-            {approvablePendingUploadCount > 0 && onBatchApprovePendingUploads && (
-                <Button
-                    size="sm"
-                    onClick={onBatchApprovePendingUploads}
-                    disabled={batchApprovingPendingUploads}
-                    className="h-8 rounded-md font-normal"
-                >
-                    {localize("com_knowledge.file_change_batch_approve")}
-                    {` (${approvablePendingUploadCount})`}
-                </Button>
-            )}
-
             {selectedCount > selectedThreshold && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>

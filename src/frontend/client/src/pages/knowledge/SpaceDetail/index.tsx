@@ -80,7 +80,6 @@ import {
     canDecidePendingUpload,
     getFileChangeLockState,
     projectPendingUploadAsKnowledgeFile,
-    selectApprovablePendingUploads,
     useFileChangeApproval,
 } from "../hooks/useFileChangeApproval";
 
@@ -1459,13 +1458,6 @@ export function KnowledgeSpaceContent({
                 onTriggerWebLink={triggerWebLink}
                 canCreateFolder={canCreateFolder}
                 canUploadFile={canUploadFile}
-                approvablePendingUploadCount={selectApprovablePendingUploads(fileChangeApproval.pendingItems).length}
-                onBatchApprovePendingUploads={() => {
-                    void handleBatchApproveFileChanges(
-                        selectApprovablePendingUploads(fileChangeApproval.pendingItems).map((item) => item.requestId),
-                    );
-                }}
-                batchApprovingPendingUploads={fileChangeApproval.batchApproving}
                 selectedCount={selectedFiles.size}
                 hasFoldersSelected={hasFoldersSelected}
                 hasFailedFiles={hasFailedFiles}
