@@ -1,0 +1,63 @@
+# BiSheng hosted-app image — runtime: python3.11
+#
+# Platform-owned (D3 / PRD-1 DEV-04): the developer never writes a Dockerfile,
+# which is exactly why the security baseline below cannot be opted out of.
+#   * runs as a non-root user
+#   * writes nothing under / at runtime → survives ReadonlyRootfs (AC-17)
+#   * exec-form ENTRYPOINT → the app is pid 1's process and receives SIGTERM
+#   * dependencies resolved from the deployment's configured index only
+#
+# Only classic-builder-compatible syntax is used (no `COPY --chmod`, no
+# heredocs): 114 and the 信创 baselines build through the plain daemon builder,
+# and a BuildKit-only Dockerfile would fail there with a syntax error that looks
+# nothing like "your Docker is too old".
+FROM {{ base_image }}
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+ARG PIP_INDEX_URL=""
+ARG PIP_TRUSTED_HOST=""
+
+RUN set -eux; \
+    groupadd --system --gid {{ app_gid }} {{ app_user }}; \
+    useradd --system --uid {{ app_uid }} --gid {{ app_gid }} --home-dir /app --no-create-home {{ app_user }}; \
+    mkdir -p /app /data; \
+    chown {{ app_user }}:{{ app_user }} /data
+
+WORKDIR /app
+
+# Dependencies first: a code-only change reuses this layer, which is what keeps
+# an iteration build from re-resolving the whole dependency tree. The builder
+# always materialises requirements.txt (empty when the app has no deps) so this
+# COPY needs no optional-path trick.
+COPY requirements.txt /app/requirements.txt
+RUN set -eux; \
+    if [ -s requirements.txt ]; then \
+        pip install --no-cache-dir \
+            ${PIP_INDEX_URL:+--index-url "$PIP_INDEX_URL"} \
+            ${PIP_TRUSTED_HOST:+--trusted-host "$PIP_TRUSTED_HOST"} \
+            -r requirements.txt; \
+    fi
+
+COPY --chown={{ app_user }}:{{ app_user }} . /app
+
+COPY entrypoint.sh /usr/local/bin/bisheng-app-entrypoint
+COPY healthcheck.py /usr/local/bin/bisheng-healthcheck
+RUN chmod 0755 /usr/local/bin/bisheng-app-entrypoint /usr/local/bin/bisheng-healthcheck
+
+ENV BISHENG_APP_PORT={{ port }} \
+    PORT={{ port }} \
+    BISHENG_APP_DB_PATH=/data/app.db \
+    BISHENG_APP_DB_URL=sqlite:////data/app.db
+
+EXPOSE {{ port }}
+USER {{ app_user }}
+
+# Durations are overridden at create time from the tier (D4); the command lives
+# in the image so every runtime template owns the probe that suits it.
+HEALTHCHECK --interval=10s --timeout=3s --retries=3 CMD ["/usr/local/bin/bisheng-healthcheck"]
+
+ENTRYPOINT ["/usr/local/bin/bisheng-app-entrypoint"]

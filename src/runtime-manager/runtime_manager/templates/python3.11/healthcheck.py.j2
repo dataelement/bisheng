@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Container HEALTHCHECK probe for the python3.11 runtime.
+
+Shipped in the image rather than expressed as a `curl` command at create time
+because the slim base images carry neither curl nor wget, and because each
+runtime template should own the probe that suits it (the node20 and static
+templates bring their own). The path and port come from the same environment
+variables the platform injects, so there is exactly one place they are defined.
+"""
+import os
+import sys
+import urllib.request
+
+port = os.environ.get("BISHENG_APP_PORT") or os.environ.get("PORT") or "{{ port }}"
+path = os.environ.get("BISHENG_APP_HEALTH_PATH") or "{{ health_path }}"
+if not path.startswith("/"):
+    path = "/" + path
+
+url = f"http://127.0.0.1:{port}{path}"
+try:
+    with urllib.request.urlopen(url, timeout=2) as response:  # noqa: S310 - loopback only
+        sys.exit(0 if response.status < 500 else 1)
+except Exception as exc:  # noqa: BLE001 - any failure is an unhealthy verdict
+    print(f"health probe {url} failed: {exc}", file=sys.stderr)
+    sys.exit(1)

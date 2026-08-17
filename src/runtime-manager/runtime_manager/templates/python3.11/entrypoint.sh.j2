@@ -1,0 +1,51 @@
+#!/bin/sh
+# BiSheng hosted-app entrypoint (D5.2).
+#
+# The platform serves every app under /apps/{slug} while the same code runs at
+# the root path under `bisheng dev`. INV-32 makes the *variable name* identical
+# in both places (BISHENG_APP_BASE_PATH); this wrapper is what connects that
+# variable to whichever framework the app happens to use, so an app that follows
+# the DEV-04 contract needs no per-environment branching of its own.
+set -eu
+
+BISHENG_APP_BASE_PATH="${BISHENG_APP_BASE_PATH:-}"
+PORT="${PORT:-${BISHENG_APP_PORT:-{{ port }}}}"
+BISHENG_APP_PORT="$PORT"
+export PORT BISHENG_APP_PORT BISHENG_APP_BASE_PATH
+
+# Framework-specific spellings of the same idea. Set unconditionally (empty is
+# the correct value at the root path) so behaviour is identical in dev and prod.
+export UVICORN_ROOT_PATH="$BISHENG_APP_BASE_PATH"
+export STREAMLIT_SERVER_BASE_URL_PATH="${BISHENG_APP_BASE_PATH#/}"
+export GRADIO_ROOT_PATH="$BISHENG_APP_BASE_PATH"
+# The app is always behind app-proxy; without this uvicorn drops the
+# X-Forwarded-* headers app-proxy just rewrote and generates root-absolute URLs.
+export FORWARDED_ALLOW_IPS="${FORWARDED_ALLOW_IPS:-*}"
+
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
+
+# Start command resolution, most explicit first. Whatever wins is `exec`d so the
+# app becomes pid 1's process: docker stop, the restart policy and the reconcile
+# loop all assume SIGTERM reaches the application itself.
+if [ -n "${BISHENG_APP_START:-}" ]; then
+    exec /bin/sh -c "$BISHENG_APP_START"
+fi
+
+if [ -f /app/Procfile ]; then
+    web_cmd="$(sed -n 's/^web:[[:space:]]*//p' /app/Procfile | head -n 1)"
+    if [ -n "$web_cmd" ]; then
+        exec /bin/sh -c "$web_cmd"
+    fi
+fi
+
+for candidate in main.py app.py; do
+    if [ -f "/app/$candidate" ]; then
+        exec python "/app/$candidate"
+    fi
+done
+
+echo "bisheng: no start command found." >&2
+echo "Provide one of: BISHENG_APP_START, a Procfile 'web:' line, main.py or app.py." >&2
+exit 78
