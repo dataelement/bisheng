@@ -7,14 +7,25 @@ that the backend's ``orchestrator_client`` maps onto them:
 =========================  ==========================================
 manager code               backend error code
 =========================  ==========================================
-``unauthorized``           401 → 16121 (orchestrator unavailable)
 ``backend_unavailable``    16121 编排器不可用
-``unsupported_runtime``    16123 runtime 取值不支持
-``capacity_exhausted``     16125 运行环境容量不足
 ``build_failed``           16122 构建失败
+``unsupported_runtime``    16123 runtime 取值不支持
 ``probe_failed``           16124 启动探活失败
-``not_found``              16101 / route 404
+``capacity_exhausted``     16125 运行环境容量不足
+``not_found``              16101 应用 / 实例不存在
+``unauthorized``           16121 编排器不可用（见下）
+``invalid_request``        16121 编排器不可用（见下）
 =========================  ==========================================
+
+The last two rows are deliberate. ``unauthorized`` means the manager rejected
+*our own* HMAC signature and ``invalid_request`` means we sent it an intent it
+could not parse — both are backend↔manager contract breakage, never anything
+the caller did or can fix. Surfacing them as their own user-facing codes would
+invite a support loop over a shared-secret or version mismatch, so they fold
+into "the orchestrator is unavailable" and the real cause goes to the log.
+Do **not** map ``unauthorized`` onto a 401 for the caller: the caller's own
+credentials were fine, and answering 401 would make the platform look like it
+logged them out.
 """
 
 from __future__ import annotations

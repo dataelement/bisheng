@@ -193,7 +193,7 @@
 - **`--follow` 的实现**：无流式接口（服务端链路是 `GET /api/v2/.../logs` → F054 `GET /api/v1/apps/{id}/logs` → runtime-manager `docker logs`，全是一次性响应），所以只能**携 `since` 短轮询**（3 s）。⚠️ **必须做去重**：docker 时间戳是秒级，同一秒的多行在下一轮 `since` 里会重复返回（同类坑在本仓咬过：memory `project_chat_history_sameSecond_order`「create_time 秒级打平」）→ 保留上一轮最后 N 行的内容哈希集合，命中则跳过。
 - **AC-43（无运行实例时提示应用态）目前落不全**：F055 的 logs 返回**只有 `{lines[]}`**，没有 `app_state`。→ 已登记为**跨 Feature 回写项 2**（§6.2），建议 F055 把返回补成 `{lines[], app_state, pending_reason}`。**在补上之前的降级行为**：`lines` 为空时输出"未取到日志：应用可能没有运行实例（草稿 / 待上线 / 已停运），请在应用详情页确认应用态"——**明确提示而不是空白**，满足 AC-43 的精神但不满足其字面（tasks 里对应任务标 `[受阻于 F055 回写]`）。
 - **日志保留期不做承诺**：runtime-manager 侧是 docker 日志轮转窗口（30 MB/应用，F054 design `:334`）——CLI 对 `--since` 取到空结果只说"该时间段无日志或已轮转"，不说"没有发生过"。
-- **何时该重新考虑**：runtime-manager 实现了流式 logs（`contracts-runtime-manager.md:64` §8 明列 `GET /v1/apps/{id}/logs` 尚未实现，属 T030/T031 后续批次）→ `--follow` 可换 chunked 流，但仍要保留短轮询回落（nginx 300 s 上限对流式同样成立）。
+- **何时该重新考虑**：runtime-manager 实现了**流式** logs（其 `GET /v1/apps/{id}/logs` 已由批 4 落码〔commit `d693feeb3`〕，但只回 `{lines:[...]}` 快照、非流式）→ `--follow` 可换 chunked 流，但仍要保留短轮询回落（nginx 300 s 上限对流式同样成立）。
 
 ### D9：错误呈现 = 「原始 code + 一句人话 + 下一步」三件套，且必须两套信封都认
 
@@ -515,7 +515,7 @@ bisheng logs [--app-id] [--tail N] [--since TS] [--keyword K] [--follow] [--json
 | 15 | **`delegate` 位在 F049 期根本签不出来**（`open_api/domain/scopes.py:186-188` 的 NOTE 逐字："deliberately NOT registered … ships with F050"） | 实现者去 114 上试 AC-09，试不出来，判定"功能没生效"并去改代码 | AC-09 / AC-13 的验收方式**只能是单测**（构造 mock `whoami` 响应）；tasks 里必须写明（D14） |
 | 16 | **服务端权限位有 3 秒正向缓存上界**（`core/config/open_platform.py:31-35`，默认 3、硬顶 5） | 以为"编辑权限位立刻生效"是零延迟，测试里补勾后立刻验证会偶发失败 | AC-52 的验收留 5 秒余量；CLI 侧零缓存（D3） |
 | 17 | **`GET /api/v2/apps/deploy-limits` 取不到时不能挡死发布**（F055 design D2 逐字） | 端点还没上线 / 网络抖动时 `deploy` 直接不可用——一个软校验把主流程打死 | `commands/deploy.py`：取不到 → 用内置默认值只提示、继续上传，由 16201 兜底 |
-| 18 | **`GET /api/v2/apps/{id}/logs` 的服务端链路目前是断的**：runtime-manager 的 logs 端点"尚未实现"（`contracts-runtime-manager.md:64` §8 明列属 T030/T031 后续批次） | 按契约写完 CLI 后在 114 上验不通，误判为 CLI bug | `logs` 的联调排在 F054/F055 之后；tasks 标 `[受阻于 F054 T030/T031]`；CLI 侧单测用 mock |
+| 18 | **`GET /api/v2/apps/{id}/logs` 的服务端链路目前是断的——但断点不在 runtime-manager**：manager 侧 `GET /v1/apps/{id}/logs` 批 4 已实现（`contracts-runtime-manager.md` §2 已列为就绪端点），真正缺的是**链路中段** F054 T057（backend 转发）与 F055 T039（权限判定）| 按契约写完 CLI 后在 114 上验不通，误判为 CLI bug 或误以为要等编排器 | `logs` 联调排在 F054 T057 / F055 T039 之后；CLI 侧单测用 mock。manager 侧口径已定：`since` 收 epoch 秒或 `30m/2h/7d`；带 `keyword` 时行数 < `tail` 是设计；dockerd 宕机返 503→`16121`（**不是** 404，404 只表示实例不存在）|
 | 19 | **`docker logs` 时间戳是秒级**，`--follow` 用 `since` 续拉时同一秒的行会重复返回 | 日志刷屏重复，看起来像应用在疯狂打同一行（同类坑：memory `project_chat_history_sameSecond_order`） | `commands/logs.py` 按最后 N 行内容哈希去重（D8） |
 | 20 | **tar 里丢掉可执行位，上线后 entrypoint 脚本不可执行**，而故障要到构建 / 探活阶段才暴露（16227 / 16228） | 排查方向跑偏到"平台构建有问题"，实际是打包把 `0755` 归一成了 `0644` | `packaging.py` 模式归一时**保留 owner 执行位**（D4） |
 | 21 | **`/api/v1/env` 的 `version` 是硬编码 `'2.6.0-fix'`**（`src/backend/bisheng/__init__.py:7`，3.0-vibe 实测） | 拿它做 CLI 与平台的版本比对 → 永远判"不兼容"或永远判"兼容"，两种都错 | 分发端点自带版本真相（D10 / §4.2 ⑤）；CLAUDE.md §7 已列此陷阱 |
@@ -550,7 +550,7 @@ bisheng logs [--app-id] [--tail N] [--since TS] [--keyword K] [--follow] [--json
 | **F049 `open_api_subject("app:manage")` 与 3 秒缓存上界** | 服务端行为 | 缓存上界变化 → AC-52 的验收余量要跟着改 |
 | **F049 `whoami` 恒在注册 + 服务账号模块恒在** | 部署形态 | **⚠️ 回写项 4（spec 侧）**：`open_api_v2_router` 挂在 `router_rpc` 上恒在（`api/router.py:123-126`），服务账号模块「恒在、不随 open_platform 开关消失」是 F049 显式设计（`core/config/open_platform.py:17-18` 注释）→ **AC-05 的"login 校验入口不可达"这一半本轮不实现**，CLI 用前置探测在打 whoami 之前退出 8 作等价保证（D10 偏离登记）。建议改 spec 措辞而非改 F049 实现 |
 | **F055 `logs` 返回形状** | HTTP | **⚠️ 回写项 2：目前只有 `{lines[]}`，缺 `app_state` / `pending_reason`**，AC-43「明确提示应用态」只能降级实现（D8） |
-| **F054 `GET /api/v1/apps/{id}/logs` → runtime-manager `GET /v1/apps/{id}/logs`** | 服务端链路 | **尚未实现**（`contracts-runtime-manager.md:64` §8）→ `logs` 联调排在其后（坑 18） |
+| **F054 `GET /api/v1/apps/{id}/logs` → runtime-manager `GET /v1/apps/{id}/logs`** | 服务端链路 | manager 段**已实现**（批 4 `d693feeb3`）；缺的是中段 **F054 T057 + F055 T039** → `logs` 联调排在这两条之后（坑 18） |
 | **F054 `contracts-runtime-manager.md` §5 注入环境变量清单** | 数据契约 | `bisheng dev` 顺延，但**将来必须同名注入**：`BISHENG_APP_DB_URL` · `BISHENG_APP_DB_PATH` · `BISHENG_APP_ID` · `BISHENG_APP_SLUG` · `BISHENG_APP_VERSION` · `BISHENG_APP_VERSION_ID` · `BISHENG_PLATFORM_API_BASE` · `PORT` 与 `BISHENG_APP_PORT`（恒等）· `BISHENG_APP_BASE_PATH`（dev 期为空串）· `BISHENG_APP_HEALTH_PATH`。**清单唯一来源是该文件，不得在 CLI 侧另抄一份定义**；平台保留 env 名**覆盖**调用方同名值 |
 | **平台 `settings.open_platform.enabled` / `settings.app_runtime.enabled`** | 部署配置 | 进程级 YAML；`load_settings_from_yaml` 对未知顶层键 `raise KeyError`（`common/services/config_service.py:107`）→ **先发代码、再改 YAML、最后重启** |
 | `bisheng/api/router.py` 的 include 顺序 · `TENANT_CHECK_EXEMPT_PATHS` | 注册点 | 漏加豁免 → 多租户环境下端点一旦读表即 `NoTenantContextError`（D10） |
