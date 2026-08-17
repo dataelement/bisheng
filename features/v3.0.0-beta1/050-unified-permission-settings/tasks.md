@@ -13,7 +13,7 @@
 | spec.md | ✅ 已评审 | 用户已确认 |
 | design.md | ✅ 已评审 | 2026-08-17 用户确认；接手时第一入口 |
 | tasks.md | ✅ 已拆解 | `/sdd-review tasks` 21 项评审 LGTM |
-| 实现 | 🟡 进行中 | 20 / 37 完成；偏差见本文末尾 |
+| 实现 | 🟡 进行中 | 23 / 37 完成；偏差见本文末尾 |
 
 ---
 
@@ -189,13 +189,13 @@
   - **验证**: T024 全部通过。
   - **依赖**: T024
 
-- [ ] **T026 Knowledge 路由与旧独立入口收敛测试**
+- [x] **T026 Knowledge 路由与旧独立入口收敛测试**
   - **文件**: `src/frontend/client/src/pages/unifiedPermissionEntryRoutes.test.tsx`
   - **逻辑**: 空间/频道 create/settings 路由；列表/详情跳转；无 edit 不显示；直达失权；两类资源的旧独立权限弹窗入口消失。
   - **覆盖 AC**: AC-03, AC-04, AC-05, AC-10, AC-11
   - **依赖**: T025
 
-- [ ] **T027 Knowledge 路由与菜单收敛**
+- [x] **T027 Knowledge 路由与菜单收敛**
   - **文件**: `src/frontend/client/src/routes/index.tsx`, `src/frontend/client/src/pages/knowledge/index.tsx`
   - **逻辑**: 注册完整页路由，将创建/设置操作指向新页，移除知识空间独立权限入口；其他菜单能力不变。
   - **验证**: T026 对应断言通过。
@@ -229,7 +229,7 @@
   - **验证**: T030 全部通过。
   - **依赖**: T030
 
-- [ ] **T032 Channel 路由与旧独立入口收敛**
+- [x] **T032 Channel 路由与旧独立入口收敛**
   - **文件**: `src/frontend/client/src/pages/Subscription/index.tsx`, `src/frontend/client/src/pages/Subscription/ArticleList/ChannelActionsMenu.tsx`
   - **逻辑**: create/settings 指向完整页；移除 ChannelPermissionDialog/ShareDialog 的独立成员权限入口；保留置顶/退出/删除/解散能力。
   - **覆盖 AC**: AC-04, AC-05, AC-10

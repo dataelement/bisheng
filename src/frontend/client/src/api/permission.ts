@@ -188,20 +188,29 @@ interface PermissionRequestConfig {
 // Client request layer returns the full backend envelope {status_code, status_message, data}.
 // All functions below unwrap .data so callers get the payload directly.
 
-function assertSuccess(res: any) {
-  if (res && typeof res === "object" && "status_code" in res && res.status_code !== 200) {
-    throw new Error(res.status_message || `Permission request failed: ${res.status_code}`);
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord | null {
+  return value !== null && typeof value === "object" ? value as JsonRecord : null;
+}
+
+function assertSuccess(res: unknown) {
+  const record = asRecord(res);
+  if (record && "status_code" in record && record.status_code !== 200) {
+    throw new Error(String(record.status_message || `Permission request failed: ${record.status_code}`));
   }
 }
 
-function unwrap<T>(res: any): T {
+function unwrap<T>(res: unknown): T {
   assertSuccess(res);
-  return res?.data ?? res;
+  const record = asRecord(res);
+  return (record && "data" in record ? record.data : res) as T;
 }
 
-function unwrapArray<T = any>(res: any): T[] {
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data?.list ?? data?.records ?? data;
+function unwrapArray<T>(res: unknown): T[] {
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? record?.list ?? record?.records ?? data;
   return Array.isArray(rows) ? rows : [];
 }
 
@@ -263,10 +272,11 @@ export async function searchCreationUsers(
       ...withPermissionRequestOptions(config),
     },
   );
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data;
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
   const list = Array.isArray(rows) ? rows : [];
-  return { data: list, total: Number(data?.total ?? list.length) };
+  return { data: list as GrantUser[], total: Number(record?.total ?? list.length) };
 }
 
 export async function getCreationDepartmentChildren(
@@ -311,10 +321,14 @@ export async function getCreationUserGroups(
       ...withPermissionRequestOptions(config),
     },
   );
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data;
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
   return Array.isArray(rows)
-    ? rows.map((row: any) => ({ id: row.id, group_name: row.name ?? row.group_name }))
+    ? rows.map((row) => {
+        const item = asRecord(row) ?? {};
+        return { id: Number(item.id), group_name: String(item.name ?? item.group_name ?? "") };
+      })
     : [];
 }
 
@@ -473,10 +487,11 @@ export async function searchUsers(
       ...withPermissionRequestOptions(config),
     }
   );
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data;
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
   const list = Array.isArray(rows) ? rows : [];
-  return { data: list, total: Number(data?.total ?? list.length) };
+  return { data: list as GrantUser[], total: Number(record?.total ?? list.length) };
 }
 
 // ── Lazy organization-department tree ────────────────
@@ -562,9 +577,13 @@ export async function getUserGroups(
       ...withPermissionRequestOptions(config),
     }
   );
-  const data = unwrap<any>(res);
-  const rows = data?.data ?? data;
+  const data = unwrap<unknown>(res);
+  const record = asRecord(data);
+  const rows = record?.data ?? data;
   return Array.isArray(rows)
-    ? rows.map((row: any) => ({ id: row.id, group_name: row.name ?? row.group_name }))
+    ? rows.map((row) => {
+        const item = asRecord(row) ?? {};
+        return { id: Number(item.id), group_name: String(item.name ?? item.group_name ?? "") };
+      })
     : [];
 }
