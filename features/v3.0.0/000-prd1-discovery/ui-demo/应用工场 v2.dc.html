@@ -1,0 +1,1782 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style data-omelette-injected>html,body{background:transparent}</style><script data-omelette-injected>(()=>{{const n=new URLSearchParams(location.search).get("theme");if(n==="light"||n==="dark"){document.documentElement.dataset.theme=n}}{if(new URLSearchParams(location.search).get("_omthumb")==="1"){const n=(f)=>{const g=f.focus;if(!g)return;f.focus=function(h){g.call(this,{...h,preventScroll:true})}};n(HTMLElement.prototype);n(SVGElement.prototype);if(typeof MathMLElement!=="undefined"){n(MathMLElement.prototype)}const d=(f)=>{f.removeAttribute("autofocus");f.inert=true;if(!(f instanceof HTMLElement))f.removeAttribute("tabindex")};const p=(f)=>{if(f.hasAttribute("autofocus"))d(f);for(const g of f.querySelectorAll("[autofocus]")){d(g)}};p(document.documentElement);new MutationObserver((f)=>{for(const g of f){for(const h of g.addedNodes){if(h.nodeType===1)p(h)}}}).observe(document,{childList:true,subtree:true})}}{const n=()=>{try{if(document.querySelector('meta[name="color-scheme"]'))return;const d=getComputedStyle(document.documentElement).getPropertyValue("color-scheme").trim();if(d&&d!=="normal")return;const p=(y)=>{if(!y)return null;const m=getComputedStyle(y).backgroundColor.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+%?))?\s*\)$/);if(!m)return null;const w=m[4]==null?1:parseFloat(m[4])/(m[4].endsWith("%")?100:1);if(w<0.99)return null;return[+m[1],+m[2],+m[3]]};const f=p(document.body)||p(document.documentElement);if(!f)return;const g=(y)=>{const m=y/255;return m<=0.04045?m/12.92:((m+0.055)/1.055)**2.4};const h=0.2126*g(f[0])+0.7152*g(f[1])+0.0722*g(f[2]);document.documentElement.style.setProperty("color-scheme",h<0.4?"dark":"light")}catch{}};if(document.readyState==="complete")n();else window.addEventListener("load",n)}var I=[];var B=false;var K=false;var C=()=>{};if(K===true){try{const n=setTimeout.bind(window);const d=1e4;const p=15;const f=1e4;const g=120000;const h=200;const y=(o)=>{try{let r;if(typeof o==="string")r=o;else if(o instanceof URL)r=o.href;else if(typeof Request!=="undefined"&&o instanceof Request)r=o.url;else return null;if(!r)return null;const l=document.baseURI;const i=new URL(r,l);if(i.protocol!=="http:"&&i.protocol!=="https:")return null;if(i.origin!==new URL(l).origin)return null;return i.origin+i.pathname}catch{return null}};const m=new Map;const w=(o)=>{let r=m.get(o);if(!r){if(m.size>=h){const l=m.keys().next().value;if(l!==undefined)m.delete(l)}r={fails:[],until:0,cooldown:f,hard:false};m.set(o,r)}return r};const R=(o)=>{const r=m.get(o);return r!==undefined&&r.until>Date.now()};const O=(o,r)=>{const l=Date.now();const i=w(o);if(r)i.hard=true;if(i.until>l)return;i.fails.push(l);while(i.fails.length>0&&i.fails[0]<=l-d)i.fails.shift();if(i.fails.length>=p){i.until=l+i.cooldown;if(i.hard)i.cooldown=Math.min(i.cooldown*2,g);i.fails.length=0;try{n(()=>{try{S(true)}catch{}},i.until-l+100)}catch{}console.warn("[omelette] asset circuit breaker: pausing requests to "+o+" for "+Math.round((i.until-l)/1000)+"s after "+p+" failures in "+d/1000+"s")}};const e=(o)=>{m.delete(o)};const t=100;const a=new WeakMap;const u=new Set;let s=null;const S=(o)=>{for(const r of Array.from(u)){try{const l=a.get(r);if(l===undefined){u.delete(r);continue}if(o){const i=y(l);if(i!==null&&R(i))continue}a.delete(r);u.delete(r);if(s!==null)s.call(r,l)}catch{}}};C=()=>{try{m.clear();S(false)}catch{}};document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")C()});const _=window.fetch;if(typeof _==="function"){const o=function(...r){let l=null;try{l=y(r[0])}catch{}if(l!==null&&R(l)){let c;try{if(r[1]&&r[1].signal!==undefined){c=r[1].signal||undefined}else if(typeof Request!=="undefined"&&r[0]instanceof Request){c=r[0].signal||undefined}}catch{c=undefined}return new Promise((k,b)=>{const E=()=>{try{return c.reason!==undefined?c.reason:new DOMException("The operation was aborted.","AbortError")}catch{return new DOMException("The operation was aborted.","AbortError")}};try{if(c&&c.aborted){b(E());return}}catch{}let T=false;const j=()=>{if(T)return;T=true;b(E())};try{if(c)c.addEventListener("abort",j,{once:true})}catch{}n(()=>{if(T)return;T=true;try{if(c)c.removeEventListener("abort",j)}catch{}let L;try{L=new Response(null,{status:429,statusText:"Too Many Requests",headers:{"Retry-After":"10"}})}catch{L={ok:false,status:429}}k(L)},250)})}const i=_.apply(window,r);if(l!==null){const c=l;i.then((k)=>{try{if(k.ok)e(c);else if(k.status===401||k.status===403||k.status===404||k.status===429){O(c,k.status!==404)}}catch{}},()=>{})}return i};window.fetch=o}const v=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,"src");if(v!==undefined&&v.set!==undefined&&v.get!==undefined){const o=v.set;s=o;Object.defineProperty(HTMLImageElement.prototype,"src",{configurable:true,enumerable:v.enumerable,get:v.get,set(r){const l=`${r}`;try{const i=y(l);if(i!==null&&R(i)){a.set(this,l);if(u.size<t)u.add(this);return}}catch{}try{a.delete(this);u.delete(this)}catch{}o.call(this,l)}})}try{const o=HTMLImageElement.prototype.setAttribute;HTMLImageElement.prototype.setAttribute=function(r,l){if(arguments.length<2){o.apply(this,arguments);return}if(typeof r==="string"&&r.toLowerCase()==="src"){const i=`${l}`;try{const c=y(i);if(c!==null&&R(c)){a.set(this,i);if(u.size<t)u.add(this);return}a.delete(this);u.delete(this)}catch{}o.call(this,r,i);return}o.call(this,r,l)}}catch{}window.addEventListener("error",(o)=>{try{const r=o.target;if(r instanceof HTMLImageElement){const l=y(r.currentSrc||r.src||"");if(l!==null)O(l,true)}}catch{}},true);window.addEventListener("load",(o)=>{try{const r=o.target;if(r instanceof HTMLImageElement){const l=y(r.currentSrc||r.src||"");if(l!==null)e(l);const i=a.get(r);if(i!==undefined){let c=false;try{c=new URL(i,document.baseURI).href===new URL(r.currentSrc||r.src||"",document.baseURI).href}catch{c=false}if(c){a.delete(r);u.delete(r)}}}}catch{}},true)}catch{}}var J=30000;var G=3000;document.addEventListener("DOMContentLoaded",()=>{const n=window.Babel;const d="om-src-id";if(n&&n.registerPlugin&&!(n.availablePlugins&&n.availablePlugins[d])){n.registerPlugin(d,({types:h})=>({visitor:{JSXOpeningElement(y,m){const w=y.node;if(w.name&&w.name.type==="JSXMemberExpression")return;for(let t=0;t<w.attributes.length;t++){const a=w.attributes[t];if(a.type==="JSXAttribute"&&a.name&&a.name.name==="data-om-id")return}const R=m.file&&m.file.opts&&m.file.opts.filename||"?";const O=w.loc&&w.loc.start;const e=`jsx:${R}:${w.start??0}:${O?O.line:0}:${O?O.column+1:0}`;w.attributes.push(h.jsxAttribute(h.jsxIdentifier("data-om-id"),h.stringLiteral(e)))}}}))}const p="om-text-extract";let f=false;if(B&&n&&n.registerPlugin&&!(n.availablePlugins&&n.availablePlugins[p])){const h=window.React;if(h&&h.useSyncExternalStore&&h.createElement){f=true;const y={};const m=new Set;let w=0;window.__omTextO=y;window.__omTextSet=(e)=>{for(const t in e){const a=e[t];if(a==null)delete y[t];else y[t]=a}w++;m.forEach((t)=>t())};const R=(e)=>{m.add(e);return()=>m.delete(e)};const O=()=>w;window.__OmT=function e(t){h.useSyncExternalStore(R,O,O);return h.createElement("span",{"data-om-text":t.i,className:"__om-t"},t.i in y?y[t.i]:t.children)};n.registerPlugin(p,({types:e})=>{const t={style:1,script:1,noscript:1,textarea:1,title:1,option:1,text:1,tspan:1,textPath:1};const a={placeholder:1,alt:1,title:1,label:1,"aria-label":1,"aria-description":1,"aria-placeholder":1};const u=(o,r)=>e.logicalExpression("??",e.memberExpression(e.logicalExpression("||",e.memberExpression(e.identifier("window"),e.identifier("__omTextO")),e.objectExpression([])),e.stringLiteral(o),true),r);const s=(o)=>o.file&&o.file.opts&&o.file.opts.filename||"?";const S=(o)=>o.file&&o.file.code||"";const _=(o,r)=>{const l=(c)=>c&&c.start!=null&&c.end!=null&&(c.type==="StringLiteral"||c.type==="TemplateLiteral"&&c.expressions.length===0)?[c.start,c.end]:null;const i=l(r);if(i)return i;if(r&&r.type==="Identifier"){const c=o.scope.getBinding(r.name);if(c&&c.constant&&c.path.node.type==="VariableDeclarator"){return l(c.path.node.init)}}return null};const v=(o,r,l)=>{const i=o.node;let c=false;const k=(E,T)=>{c=true;return e.jsxElement(e.jsxOpeningElement(e.jsxIdentifier("__OmT"),[e.jsxAttribute(e.jsxIdentifier("i"),e.stringLiteral(E))],false),e.jsxClosingElement(e.jsxIdentifier("__OmT")),[T],false)};const b=i.children.map((E)=>{if(E.type==="JSXText"){if(E.start==null||E.end==null)return E;const T=l.slice(E.start,E.end);const j=T.length-T.trimStart().length;const L=T.length-T.trimEnd().length;if(j+L>=T.length)return E;return k(`txt:${r}:${E.start+j}:${E.end-L}`,E)}if(E.type==="JSXExpressionContainer"){const T=_(o,E.expression);if(T)return k(`str:${r}:${T[0]}:${T[1]}`,E)}return E});if(c)i.children=b};return{visitor:{JSXOpeningElement(o,r){const l=o.node;const i=s(r);const c={};for(let k=0;k<l.attributes.length;k++){const b=l.attributes[k];if(b.type!=="JSXAttribute"||!b.name)continue;const E=b.name.name;if(!a[E])continue;if(!b.value||b.value.type!=="StringLiteral")continue;if(b.value.start==null||b.value.end==null)continue;const T=`txt:${i}:${b.value.start}:${b.value.end}`;c[E]=T;b.value=e.jsxExpressionContainer(u(T,e.stringLiteral(b.value.value)))}if(Object.keys(c).length){l.attributes.push(e.jsxAttribute(e.jsxIdentifier("data-om-text-attrs"),e.stringLiteral(JSON.stringify(c))))}},JSXElement(o,r){const l=o.node.openingElement;const i=l&&l.name&&l.name.name;if(i==="__OmT")return;if(typeof i==="string"&&t[i])return;v(o,s(r),S(r))},JSXFragment(o,r){v(o,s(r),S(r))}}}})}}const g=f?["transform-react-jsx-source",d,p]:["transform-react-jsx-source",d];document.querySelectorAll('script[type="text/babel"],script[type="text/jsx"]').forEach((h,y)=>{const m=h.getAttribute("data-plugins")||"";const w=g.filter((R)=>m.indexOf(R)<0);if(w.length){h.setAttribute("data-plugins",m?`${m},${w.join(",")}`:w.join(","))}if(!h.hasAttribute("data-filename")){h.setAttribute("data-filename",h.getAttribute("src")||`inline-${y}`)}})});var A=window.parent;var U="not editable here — open the project in the Claude Design editor to save";var W=()=>Promise.resolve({persisted:false,noHost:true,reason:U});var H=W;var M="data/storage.json";var z=()=>{try{const n=new URL(document.baseURI);const d=n.pathname.match(/\/projects\/([^/]+)\/serve\//);if(d)return d[1];return n.hostname.split(".")[0]||""}catch{return location.hostname.split(".")[0]||""}};var Z=()=>{try{const n=new URL(document.baseURI);const d=n.pathname.indexOf("/serve/");if(d>=0)return n.origin+n.pathname.slice(0,d+"/serve/".length)+M}catch{}return"./"+M};var x=null;var N=()=>{if(!x){x=fetch(Z(),{cache:"no-store"}).then((n)=>{if(n.ok)return n.text();return n.status===404?"":null}).catch(()=>null).then((n)=>{if(n===null){x=null;return null}const d=new Map;if(!n)return d;let p;try{p=JSON.parse(n)}catch{console.warn("[omelette.storage] "+M+" is not valid JSON; treating the store as unreadable so a save cannot overwrite the "+"hand-edited bytes. Fix the JSON (or delete the file) to re-enable persistence.");x=null;return null}if(p===null||typeof p!=="object"||Array.isArray(p)){console.warn("[omelette.storage] "+M+" doesn't hold a JSON object; treating the store as unreadable so a save cannot "+"overwrite the hand-edited bytes. Make the top level a JSON object to re-enable persistence.");x=null;return null}const f=p;if("data"in f){const g=f.data;if(g===null||typeof g!=="object"||Array.isArray(g)){console.warn("[omelette.storage] "+M+' has a "data" field that is not a JSON object; treating the store as unreadable so a '+'save cannot overwrite the hand-edited bytes. Make "data" a JSON object to re-enable persistence.');x=null;return null}const h=f._meta;const y=h!==null&&typeof h==="object"?h.project:undefined;if(typeof y==="string"&&y!==""&&y!==z())return d;for(const m of Object.keys(g))d.set(m,g[m]);return d}for(const g of Object.keys(f)){if(g!=="_meta")d.set(g,f[g])}return d})}return x};var F=(n)=>H(M,JSON.stringify({_meta:{project:z(),version:1},data:Object.fromEntries(n)},null,2));var D=Promise.resolve();var $=(n)=>{const d=D.then(n);D=d.then(()=>{return},()=>{return});return d};var V=/sk-(?:ant-)?[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[a-z]-[A-Za-z0-9][A-Za-z0-9-]{9,}|AIza[0-9A-Za-z_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/;var Y=/password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|credential/i;var Q=(n,d,p)=>{if(V.test(d)||Y.test(n)&&typeof p==="string"&&p.length>=8){console.warn('[omelette.storage] the value for "'+n+'" looks like a credential. The storage file is a plaintext project file — visible to '+"everyone with project access and copied when the project is duplicated. Do not store secrets here.")}};var q={persisted:false,reason:"could not load the existing store — not overwriting it"};var X={persisted:false,reason:"stored value changed since a failed read — re-read this key before saving"};var P=new Set;var ee={get:(n)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.get: key must be a string"))}return $(N).then((d)=>{if(d===null){P.add(n);return null}P.delete(n);if(!d.has(n))return null;const p=d.get(n);return p==null?null:JSON.parse(JSON.stringify(p))})},set:(n,d)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.set: key must be a string"))}let p;try{p=JSON.stringify(d)}catch(g){return Promise.reject(new TypeError("storage.set: value must be JSON-serializable ("+String(g)+")"))}if(p===undefined){return Promise.reject(new TypeError("storage.set: value must be JSON-serializable"))}Q(n,p,d);const f=JSON.parse(p);return $(()=>N().then((g)=>{if(g===null)return q;if(P.has(n)){if(g.has(n))return X;P.delete(n)}g.set(n,f);return F(g)}))},delete:(n)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.delete: key must be a string"))}return $(()=>N().then((d)=>{if(d===null)return q;if(P.has(n)){if(d.has(n))return X;P.delete(n)}d.delete(n);return F(d)}))},keys:()=>$(N).then((n)=>n===null?[]:Array.from(n.keys()))};window.omelette={writeFile:(n,d)=>H(n,d).then((p)=>{if(!p.persisted&&!p.noHost){throw new Error(p.reason||"write failed")}}),storage:ee};if(A&&A!==window){const n=(e,t)=>{try{A.postMessage({__omelette_log:true,type:e,data:t},"*")}catch{}};["log","warn","error"].forEach((e)=>{const t=console[e];console[e]=(...a)=>{const u=a.map((s)=>{try{return typeof s==="object"?JSON.stringify(s):String(s)}catch{try{return String(s)}catch{return"[unstringifiable]"}}}).join(" ");n(e,u);t.apply(console,a)}});window.addEventListener("error",(e)=>{const t=e.target;if(t&&t!==window&&t.tagName){const a=t.src||t.href||"";n("resource_error",`${t.tagName} failed to load: ${a}`)}else{n("error",`${e.message||"Unknown error"} at ${e.filename||"?"}:${e.lineno||0}:${e.colno||0}`)}},true);window.addEventListener("unhandledrejection",(e)=>{const t=e.reason;const a=t instanceof Error?`${t.message} ${t.stack}`:String(t);n("error",`Unhandled rejection: ${a}`)});window.addEventListener("click",(e)=>{if(e.defaultPrevented||e.button!==0)return;if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;const t=e.composedPath?e.composedPath():[];const a=["button","input","select","textarea","summary","label"];let u=null;for(const v of t){if(!(v instanceof Element))continue;if(v.localName==="a"){if(!(v instanceof HTMLAnchorElement))return;u=v;break}if(a.indexOf(v.localName)!==-1)return}if(!u)return;if(u.isContentEditable)return;const s=u.closest("[contenteditable]");if(s&&s.getAttribute("contenteditable")!=="false")return;const S=(u.getAttribute("target")||"_self").toLowerCase();if(S!=="_self"&&S!=="_top"&&S!=="_parent")return;let _;try{_=new URL(u.href)}catch{return}if(_.protocol!=="http:"&&_.protocol!=="https:")return;if(location.origin==="null")return;if(_.origin===location.origin)return;e.preventDefault();window.open(_.href,"_blank","noopener,noreferrer")});const d=()=>{try{A.postMessage({type:"omelette:height",height:document.documentElement.scrollHeight},"*")}catch{}};if(window.ResizeObserver)new ResizeObserver(d).observe(document.documentElement);const p=()=>{d();if(!document.querySelector('script[type="text/babel"],script[type="text/jsx"]'))return;const e=()=>document.getElementById("root")||document.querySelector("body > div[id]");const t=e()?.firstElementChild??null;let a=0;const u=()=>{const s=e();if(s&&s.firstElementChild!==t||++a>30){d();return}setTimeout(u,100)};setTimeout(u,100)};if(document.readyState==="complete")p();else window.addEventListener("load",p);const f={};let g=0;const h=(e)=>new Promise((t,a)=>{if(!I.length){a(new Error("claude.complete: no parent origin"));return}const u=`c${++g}`;const s=()=>setTimeout(()=>{delete f[u];a(new Error(`claude.complete: no data for ${J/1000}s`))},J);const S=s();f[u]={resolve:t,reject:a,text:"",t:S,arm:s};try{for(const _ of I){A.postMessage({__om_api:true,id:u,body:e},_)}}catch(_){clearTimeout(S);delete f[u];a(_)}});const y=8;const m=async(e,t)=>{if(!Array.isArray(e.messages)){throw new Error("claude.complete: tools require a messages array")}const a=e.messages.slice();const u={...e,tools:e.tools.map((_)=>{if(_===null||typeof _!=="object")return _;const v={};for(const o of Object.keys(_)){if(typeof _[o]!=="function")v[o]=_[o]}return v})};const s=u.tool_choice;const S=s!=null&&(s.type==="any"||s.type==="tool")?{...u,tool_choice:s.disable_parallel_tool_use!==undefined?{type:"auto",disable_parallel_tool_use:s.disable_parallel_tool_use}:{type:"auto"}}:u;for(let _=0;_<y;_++){const v=await h({..._===0?u:S,messages:a});const o=v.message;const r=o&&Array.isArray(o.content)?o.content:null;const l=r?r.filter((c)=>c?.type==="tool_use"):[];if(o?.stop_reason!=="tool_use"||l.length===0){return v.text}const i=[];for(const c of l){const k=t.get(c.name);if(!k){i.push({type:"tool_result",tool_use_id:c.id,content:`no handler for tool "${c.name}"`,is_error:true});continue}try{const b=await k(c.input);const E=typeof b==="string"?b:O(b)??"";i.push({type:"tool_result",tool_use_id:c.id,content:E})}catch(b){i.push({type:"tool_result",tool_use_id:c.id,content:String(b?.message??b??"tool handler failed"),is_error:true})}}a.push({role:"assistant",content:r},{role:"user",content:i})}throw new Error(`claude.complete: exceeded ${y} tool turns`)};window.claude={complete(e){const t=e;if(t!==null&&typeof t==="object"&&Array.isArray(t.tools)&&t.tools.some((a)=>a!==null&&typeof a==="object"&&typeof a.run==="function")){const a=new Map;for(const u of t.tools){if(u!==null&&typeof u==="object"&&typeof u.run==="function"){a.set(String(u.name),u.run)}}return m(t,a)}return h(e).then((a)=>a.text)}};const w={};let R=0;H=(e,t)=>new Promise((a)=>{if(!I.length){a({persisted:false,noHost:true,reason:U});return}const u=`f${++R}`;const s=setTimeout(()=>{delete w[u];a({persisted:false,noHost:true,reason:U})},G);w[u]={settle:a,t:s};try{for(const S of I){A.postMessage({__om_file:true,id:u,op:"write",path:e,content:t},S)}}catch{clearTimeout(s);delete w[u];a({persisted:false,noHost:true,reason:U})}});const O=(e)=>{try{return JSON.stringify(e)}catch{return JSON.stringify(String(e))}};window.addEventListener("message",(e)=>{if(I.indexOf(e.origin)<0)return;if(e.source!==A)return;const t=e.data;if(!t)return;if(t.type==="omelette-preview-refresh"){if(typeof t.token!=="string"||!/^[0-9a-f.-]+(\.(rc|pr-[0-9]+))?(\.[0-9]+\.[0-9a-f]{16})?$/.test(t.token))return;const s=Math.max(1,Math.floor((t.expiresAt||0)-Date.now()/1000));document.cookie="__Host-omelette-preview="+t.token+"; Path=/; Secure; SameSite=None; Partitioned; Max-Age="+s;C();return}if(t.__om_file_r){const s=w[t.id];if(!s)return;clearTimeout(s.t);delete w[t.id];s.settle(t.ok?{persisted:true}:{persisted:false,reason:t.error||"write failed"});return}if(t.__om_api_r){const s=f[t.id];if(!s)return;if(t.error!=null){clearTimeout(s.t);delete f[t.id];s.reject(new Error(t.error));return}if(t.chunk!=null){clearTimeout(s.t);s.t=s.arm();s.text+=t.chunk;return}if(t.done){clearTimeout(s.t);delete f[t.id];s.resolve({text:t.text!=null?t.text:s.text,message:t.message});return}return}if(!t.__om_eval)return;const a=t;const u=(s)=>{e.source.postMessage({...s,__om_eval_r:1,id:a.id},e.origin)};try{const s=(0,eval)(a.code);if(s&&typeof s.then==="function"){s.then((S)=>u({ok:1,v:O(S)}),(S)=>u({ok:0,e:String(S)}))}else{u({ok:1,v:O(s)})}}catch(s){u({ok:0,e:String(s)})}})}})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4f5f8;font-family:"PingFang SC","Noto Sans SC",Inter,-apple-system,"Microsoft YaHei",sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased}
+a{color:#024DE3;text-decoration:none}a:hover{text-decoration:underline}
+input,button,select,textarea{font-family:inherit}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:#ccc;border-radius:999px}::-webkit-scrollbar-track{background:#f1f1f1}
+@keyframes dcIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes dcFade{from{opacity:0}to{opacity:1}}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;height:100vh;min-height:760px;background:#f4f5f8;overflow:hidden">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;min-height:60px;flex-shrink:0;padding:8px 24px 8px 34px;gap:20px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <img src="assets/bisheng-logo.png" alt="BISHENG" style="height:20px;width:auto">
+      <span style="font-size:16px;font-weight:600;letter-spacing:.08em;color:#212121">BISHENG</span>
+      <span style="margin-left:12px;font-size:12px;color:#86909C;border:1px solid #E5E6EB;border-radius:5px;padding:2px 8px;background:#fff">应用工场 PRD-1 · v1.9 交互 demo</span>
+    </div>
+    <sc-if value="{{ isBuildList }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1;min-width:260px;display:flex;align-items:center;justify-content:center;gap:6px">
+        <sc-for list="{{ buildTabs }}" as="b" hint-placeholder-count="3">
+          <div onClick="{{ b.go }}" style="{{ b.style }}">{{ b.label }}</div>
+        </sc-for>
+      </div>
+    </sc-if>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:1;min-width:0">
+      <div onClick="{{ openMsgs }}" style="height:32px;width:32px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#4E5969;cursor:pointer;position:relative" style-hover="color:#024DE3">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg>
+        <span style="position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:#F5483B"></span>
+      </div>
+      <div style="height:32px;padding:0 6px 0 12px;background:#fff;border-radius:8px;display:flex;align-items:center;gap:8px;font-size:13px;color:#86909C">视角
+        <sc-for list="{{ personas }}" as="p" hint-placeholder-count="4">
+          <span onClick="{{ p.pick }}" style="{{ p.style }}">{{ p.label }}</span>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;padding-left:6px">
+        <div style="height:26px;width:26px;border-radius:14px;background:#C9CDD4;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">{{ meInitial }}</div>
+        <span style="font-size:13.5px;color:#212121;white-space:nowrap">{{ meName }}</span>
+        <span style="{{ meRoleStyle }}">{{ meRole }}</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex:1;min-height:0">
+    <nav style="width:180px;min-width:180px;padding:0 12px;display:flex;flex-direction:column;gap:3px">
+      <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+        <div onClick="{{ n.go }}" style="{{ n.style }}">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="{{ n.iconPath }}" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+          <span style="font-size:14px;white-space:nowrap">{{ n.label }}</span>
+        </div>
+      </sc-for>
+      <div style="margin-top:auto;padding:12px 8px;font-size:11.5px;line-height:17px;color:#A0A6B0">承载面 = platform「构建 → 应用」，与工作流 / 助手同一列表。本册零新增一级菜单、零新增权限点（GOV-07）。</div>
+    </nav>
+
+    <div style="flex:1;min-width:0;background:#fff;border-radius:9px;display:flex;flex-direction:column;overflow:hidden">
+      <sc-if value="{{ hasTabs }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:16px 24px 0">
+          <div style="display:inline-flex;height:34px;align-items:center;border-radius:8px;padding:3px;background:#f4f5f8;gap:2px">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+              <div onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:20px 24px 56px">
+
+        <!-- ========== 构建 → 应用（卡片流） ========== -->
+        <sc-if value="{{ isBuildList }}" hint-placeholder-val="{{ true }}">
+          <div style="animation:dcIn .18s ease">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <div style="position:relative;width:236px">
+                <svg style="position:absolute;left:10px;top:9px;color:#86909C" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                <input placeholder="搜索应用名称" value="{{ search }}" onInput="{{ onSearch }}" style="width:100%;height:34px;border:1px solid #EBECF0;border-radius:6px;padding:0 10px 0 32px;font-size:14px;outline:none;box-sizing:border-box;color:#212121">
+              </div>
+              <sc-for list="{{ listSelects }}" as="sel" hint-placeholder-count="3">
+                <div onClick="{{ sel.cycle }}" style="{{ sel.style }}">
+                  <span style="{{ sel.valStyle }}">{{ sel.value }}</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#86909C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="m6 9 6 6 6-6"></path></svg>
+                </div>
+              </sc-for>
+              <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+                <sc-if value="{{ canScope }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:inline-flex;height:32px;align-items:center;border:1px solid #E8E9EB;border-radius:8px;padding:3px;gap:2px;background:#fff">
+                    <sc-for list="{{ scopeTabs }}" as="sc" hint-placeholder-count="2">
+                      <span onClick="{{ sc.pick }}" style="{{ sc.style }}">{{ sc.label }}</span>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <span style="{{ createPermStyle }}">{{ createPermText }}</span>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:10px;margin:14px 0 4px;flex-wrap:wrap">
+              <span style="font-size:12.5px;color:#86909C">{{ listHint }}</span>
+            </div>
+
+            <div style="border:1px solid #E8ECF5;border-radius:10px;background:#FAFBFF;padding:14px 18px;margin:12px 0 18px">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+                <span style="font-size:13.5px;font-weight:500;color:#212121">本地 <span style="font-family:ui-monospace,Menlo,monospace">bisheng</span> CLI</span>
+                <span style="font-size:12px;color:#86909C">deploy 管线：托管预检 → 密钥扫描 → 审批 → 上线托管。运行时形态：<span style="color:#024DE3">{{ formLabel }}</span></span>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <sc-for list="{{ deploySims }}" as="d" hint-placeholder-count="6">
+                  <span onClick="{{ d.run }}" style="{{ d.style }}">{{ d.label }}</span>
+                </sc-for>
+              </div>
+              <sc-if value="{{ deployLog }}" hint-placeholder-val="{{ false }}">
+                <div style="margin-top:12px;background:#0f172a;border-radius:8px;padding:12px 14px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;line-height:19px;color:#C9D4E8;white-space:pre-wrap;animation:dcFade .2s ease">{{ deployLog }}</div>
+              </sc-if>
+            </div>
+
+            <div style="display:flex;gap:12px;flex-wrap:wrap">
+              <sc-for list="{{ cards }}" as="a" hint-placeholder-count="4">
+                <div style="{{ a.wrapStyle }}">
+                  <div onClick="{{ a.open }}" style="position:absolute;inset:0;cursor:pointer"></div>
+                  <div style="position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px">
+                    <span style="{{ a.logoStyle }}">{{ a.logoText }}</span>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span onClick="{{ a.cycleVersion }}" style="display:inline-flex;align-items:center;gap:3px;font-size:12px;color:#86909C;cursor:pointer;position:relative" style-hover="color:#024DE3">{{ a.versionText }}
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+                      </span>
+                      <span onClick="{{ a.toggleRun }}" style="{{ a.switchTrack }}"><span style="{{ a.switchKnob }}"></span></span>
+                      <span onClick="{{ a.openMenu }}" style="position:relative;width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#86909C;cursor:pointer" style-hover="background:#F2F3F5;color:#024DE3">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                      </span>
+                    </div>
+                  </div>
+                  <div style="position:relative;font-size:14px;font-weight:500;line-height:20px;color:#212121;margin-bottom:6px">{{ a.name }}</div>
+                  <div style="position:relative;height:60px;overflow:hidden;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">{{ a.desc }}</div>
+                  <div style="position:relative;display:flex;align-items:center;gap:8px;height:34px;font-size:12.5px;color:#86909C">
+                    <span style="width:19px;height:19px;border-radius:10px;background:#C9CDD4;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center">{{ a.ownerInitial }}</span>
+                    {{ a.owner }}
+                    <span style="{{ a.statusStyle }}">{{ a.statusText }}</span>
+                  </div>
+                  <sc-if value="{{ a.badge }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ a.badgeStyle }}">{{ a.badge }}</div>
+                  </sc-if>
+                  <span style="position:absolute;right:0;bottom:0;background:#024DE3;color:#fff;font-size:11.5px;padding:1px 7px;border-radius:0 0 11px 0">托管应用</span>
+                  <sc-if value="{{ a.menuOpen }}" hint-placeholder-val="{{ false }}">
+                    <div style="position:absolute;top:40px;right:8px;width:196px;background:#fff;border:1px solid #E5E6EB;border-radius:9px;box-shadow:0 8px 28px rgba(7,34,88,.14);padding:5px;z-index:20;animation:dcIn .14s ease">
+                      <div onClick="{{ a.manageAuth }}" style="height:32px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:13px;color:#212121;cursor:pointer" style-hover="background:#F4F5F8">管理权限</div>
+                      <div onClick="{{ a.del }}" style="{{ a.delStyle }}">删除{{ a.delSuffix }}</div>
+                      <div style="padding:6px 10px 4px;font-size:11px;line-height:16px;color:#A0A6B0">托管应用只保留这两项——「创建模板 / 复制」涉及代码与数据拷贝，本版不提供（GOV-01）</div>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ listEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:44px;text-align:center;border:1px dashed #E5E6EB;border-radius:9px">
+                <div style="font-size:13.5px;color:#4E5969">没有符合条件的托管应用</div>
+                <div style="font-size:12.5px;color:#86909C;margin-top:6px;line-height:19px">首发 <span style="font-family:ui-monospace,Menlo,monospace">bisheng deploy</span> 后应用出现在这里，owner = 该 key 所属服务账号的资源归属人。</div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- ========== 应用详情页 ========== -->
+        <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:dcIn .18s ease">
+            <div onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:#64748b;cursor:pointer;margin-bottom:10px" style-hover="color:#024DE3">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>返回构建 · 应用
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <span style="{{ app.logoStyle }}">{{ app.logoText }}</span>
+              <span style="font-size:19px;font-weight:500;color:#0f172a">{{ app.name }}</span>
+              <span style="{{ app.statusStyle }}">{{ app.statusText }}</span>
+              <span style="font-size:12.5px;color:#86909C">owner {{ app.owner }} · {{ app.source }} · {{ app.tierName }}档 · {{ formLabel }}</span>
+            </div>
+            <div style="font-size:13px;color:#86909C;margin:6px 0 14px;max-width:760px;text-wrap:pretty">{{ app.desc }}</div>
+
+            <div style="display:flex;align-items:center;gap:0;flex-wrap:wrap;border-bottom:1px solid #F2F3F5;margin-bottom:20px">
+              <sc-for list="{{ detailTabs }}" as="d" hint-placeholder-count="4">
+                <div onClick="{{ d.go }}" style="{{ d.style }}">{{ d.label }}</div>
+              </sc-for>
+              <span style="flex:1;min-width:180px;text-align:right;padding-bottom:10px;font-size:11.5px;color:#A0A6B0">本册形态：无左侧对话区、无管家</span>
+            </div>
+
+            <!-- 发布 -->
+            <sc-if value="{{ dtPublish }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <sc-if value="{{ app.needVis }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;gap:14px;border:1px solid #FFDCA8;background:#FFF9F0;border-radius:10px;padding:14px 18px;margin-bottom:16px;animation:dcIn .2s ease">
+                  <span style="width:30px;height:30px;border-radius:9px;background:#FFEFD6;color:#B54708;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"></path><circle cx="12" cy="12" r="9"></circle></svg>
+                  </span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13.5px;font-weight:500;color:#B54708">已上线，但目前<span style="text-decoration:underline">仅 owner 可见</span></div>
+                    <div style="font-size:12.5px;color:#8A6A3A;margin-top:2px;line-height:19px">上线 ≠ 可用。设置可见范围是首发后的必经一步——不设，同事在广场里看不到它。</div>
+                  </div>
+                  <button onClick="{{ openAuth }}" style="height:32px;padding:0 16px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;flex-shrink:0">设置可见范围</button>
+                </div>
+              </sc-if>
+
+              <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+                <div style="flex:1;min-width:500px;display:flex;flex-direction:column;gap:14px">
+
+                  <div style="{{ app.pipeBoxStyle }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+                      <span style="font-size:14px;font-weight:500;color:#212121">发布管线</span>
+                      <div style="display:flex;gap:8px">
+                        <sc-if value="{{ app.canSubmit }}" hint-placeholder-val="{{ false }}">
+                          <button onClick="{{ submitPublish }}" style="height:32px;padding:0 14px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer">提交发布</button>
+                        </sc-if>
+                        <sc-if value="{{ app.canWithdraw }}" hint-placeholder-val="{{ false }}">
+                          <button onClick="{{ withdraw }}" style="height:32px;padding:0 14px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13px;color:#212121;cursor:pointer" style-hover="background:#f4f5f8">撤回审批单</button>
+                        </sc-if>
+                        <sc-if value="{{ app.canManualOnline }}" hint-placeholder-val="{{ false }}">
+                          <button onClick="{{ manualOnline }}" style="height:32px;padding:0 14px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer">手动上线</button>
+                        </sc-if>
+                      </div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:0">
+                      <sc-for list="{{ app.steps }}" as="st" hint-placeholder-count="4">
+                        <div style="{{ st.wrap }}">
+                          <div style="display:flex;align-items:center;gap:0">
+                            <span style="{{ st.dot }}">{{ st.mark }}</span>
+                            <span style="{{ st.bar }}"></span>
+                          </div>
+                          <div style="{{ st.labelStyle }}">{{ st.label }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <p style="margin:14px 0 0;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">{{ app.approvalText }}</p>
+                    <sc-if value="{{ app.reject }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:10px;background:#fff;border:1px solid #FBD7D3;border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:20px;color:#4E5969"><span style="color:#ef4444">驳回理由全文：</span>{{ app.reject }}</div>
+                    </sc-if>
+                  </div>
+
+                  <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">
+                      <span style="font-size:14px;font-weight:500;color:#212121">能力声明</span>
+                      <span style="font-size:12px;color:#86909C">完整白话清单 · 取自 bisheng-app.yaml，审批通过 = 应用侧授权</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px">
+                      <sc-for list="{{ app.caps }}" as="c" hint-placeholder-count="4">
+                        <div style="display:flex;align-items:flex-start;gap:10px;background:#FBFBFB;border:1px solid #F2F3F5;border-radius:8px;padding:10px 12px">
+                          <span style="{{ c.iconStyle }}">{{ c.iconText }}</span>
+                          <div style="min-width:0">
+                            <div style="font-size:13.5px;color:#212121">{{ c.name }}</div>
+                            <div style="font-size:12px;color:#86909C;margin-top:2px;line-height:18px">{{ c.note }}</div>
+                          </div>
+                          <sc-if value="{{ c.dead }}" hint-placeholder-val="{{ false }}">
+                            <span style="margin-left:auto;flex-shrink:0;font-size:11.5px;color:#B54708;background:#FFF4E5;border:1px solid #FFDCA8;border-radius:5px;padding:2px 8px">能力已被收回 · 调用返回明确错误态</span>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">运行期检索可及范围 = 声明的知识库 ∩ 当前访问用户可见范围（文件级、fail-closed），两层缺一不可。</div>
+                  </div>
+
+                  <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">
+                      <span style="font-size:14px;font-weight:500;color:#212121">资源档位</span>
+                      <span style="font-size:12px;color:#86909C">只能从平台预置档位选；CLI 路径在应用包中声明，未声明取轻量档</span>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap">
+                      <sc-for list="{{ tierOptions }}" as="t" hint-placeholder-count="3">
+                        <div onClick="{{ t.pick }}" style="{{ t.style }}">
+                          <div style="display:flex;align-items:center;gap:8px">
+                            <span style="{{ t.radioStyle }}"></span>
+                            <span style="font-size:13.5px;font-weight:500;color:#212121">{{ t.name }}</span>
+                          </div>
+                          <div style="font-size:12px;color:#4E5969;margin-top:6px">{{ t.spec }}</div>
+                          <div style="font-size:11.5px;color:#86909C;margin-top:3px;line-height:17px">{{ t.desc }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+
+                  <div style="border:1px solid #FBD7D3;border-radius:10px;padding:18px 20px">
+                    <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:6px">危险操作</div>
+                    <p style="margin:0 0 12px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">删除会一并带走<span style="color:#ef4444">代码、对话历史与应用生产数据</span>，不可恢复；在途审批单自动取消并通知审批人。仅 owner 可删除（租户管理员的兜底手段是停运）。已上线态入口置灰——须先停运。</p>
+                    <button onClick="{{ openDelete }}" style="{{ deleteEntryStyle }}">{{ deleteEntryText }}</button>
+                  </div>
+                </div>
+
+                <div style="width:322px;display:flex;flex-direction:column;gap:14px">
+                  <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                      <span style="font-size:14px;font-weight:500;color:#212121">可见范围</span>
+                      <span onClick="{{ openAuth }}" style="font-size:13px;color:#024DE3;cursor:pointer" style-hover="text-decoration:underline">设置</span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px">
+                      <sc-for list="{{ app.visChips }}" as="c" hint-placeholder-count="2">
+                        <span style="{{ c.style }}">{{ c.name }}</span>
+                      </sc-for>
+                    </div>
+                    <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">与卡片 ⚙️「管理权限」是同一个弹窗。变更即时生效、不经审批、计审计，不属版本快照。</div>
+                  </div>
+
+                  <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                    <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:10px">入口链接与二维码</div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div style="flex:1;min-width:0;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#212121;background:#f4f5f8;border-radius:7px;padding:9px 10px;word-break:break-all">{{ app.url }}</div>
+                      <span onClick="{{ copyUrl }}" style="font-size:12.5px;color:#024DE3;cursor:pointer;flex-shrink:0" style-hover="text-decoration:underline">复制</span>
+                    </div>
+                    <div style="display:flex;gap:12px;align-items:center;margin-top:12px">
+                      <div style="width:76px;height:76px;border:1px solid #E5E6EB;border-radius:8px;display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(7,1fr);gap:1px;padding:6px;box-sizing:border-box;flex-shrink:0">
+                        <sc-for list="{{ qrCells }}" as="q" hint-placeholder-count="49">
+                          <span style="{{ q }}"></span>
+                        </sc-for>
+                      </div>
+                      <div style="font-size:11.5px;line-height:18px;color:#86909C">扫码访问内网入口；无登录态先跳平台登录页（含已配置 SSO），登录后回跳原地址，应用侧零登录代码。</div>
+                    </div>
+                  </div>
+
+                  <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                    <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:10px">运营动作</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                      <button onClick="{{ toggleRunBtn }}" style="height:32px;padding:0 14px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13px;color:#212121;cursor:pointer" style-hover="background:#f4f5f8">{{ app.runBtn }}</button>
+                      <button onClick="{{ openRun }}" style="height:32px;padding:0 14px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13px;color:#212121;cursor:pointer" style-hover="background:#f4f5f8">打开应用</button>
+                    </div>
+                    <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">停运即时止血、无需审批，资产不受影响；重新启用叠加运行环境容量校验。owner 与租户管理员均可操作、均计审计。</div>
+                  </div>
+
+                  <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                    <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:10px">元信息</div>
+                    <div style="display:grid;grid-template-columns:44px 1fr;row-gap:8px;column-gap:10px;font-size:13px">
+                      <span style="color:#86909C">名称</span><span style="color:#212121">{{ app.name }}</span>
+                      <span style="color:#86909C">描述</span><span style="color:#212121;line-height:19px">{{ app.desc }}</span>
+                      <span style="color:#86909C">标签</span><span style="color:#A0A6B0">未设标签（本版不做标签设置）</span>
+                    </div>
+                    <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">取自 bisheng-app.yaml、随 deploy 更新。元信息不属能力声明，修改不触发审批、计审计。</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            </sc-if>
+
+            <!-- 数据 -->
+            <sc-if value="{{ dtData }}" hint-placeholder-val="{{ false }}">
+              <div style="max-width:880px">
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">
+                  <span style="font-size:15px;font-weight:500;color:#212121">应用数据</span>
+                  <span style="font-size:12px;color:#86909C">应用自有业务表 · 查改导出（WB-06）；行编辑计审计</span>
+                </div>
+                <div style="border:1px solid #E5E6EB;border-radius:10px;overflow:hidden">
+                  <div style="display:flex;padding:11px 16px;background:#FBFBFB;border-bottom:1px solid #F2F3F5;font-size:12.5px;color:#64748b">
+                    <span style="flex:1">表名</span><span style="width:70px">列数</span><span style="width:90px">行数</span><span style="width:140px">最近写入</span><span style="width:80px;text-align:right">操作</span>
+                  </div>
+                  <sc-for list="{{ dataTables }}" as="t" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #F7F8FA;font-size:13.5px;color:#212121">
+                      <span style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:12.5px">{{ t.name }}</span>
+                      <span style="width:70px;color:#4E5969">{{ t.cols }}</span>
+                      <span style="width:90px;color:#4E5969">{{ t.rows }}</span>
+                      <span style="width:140px;color:#4E5969">{{ t.last }}</span>
+                      <span onClick="{{ t.exp }}" style="width:80px;text-align:right;font-size:13px;color:#024DE3;cursor:pointer" style-hover="text-decoration:underline">导出</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-size:12px;color:#86909C;margin-top:12px;line-height:19px">结构演进：加列无需确认、自动迁移；改 / 删列在 CLI <span style="font-family:ui-monospace,Menlo,monospace">deploy</span> 时显式确认，迁移前自动留生产数据快照。删除应用是唯一会删除这些数据的路径。</div>
+              </div>
+            </sc-if>
+
+            <!-- 运行日志 -->
+            <sc-if value="{{ dtLogs }}" hint-placeholder-val="{{ false }}">
+              <div style="max-width:880px">
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">
+                  <span style="font-size:15px;font-weight:500;color:#212121">运行日志</span>
+                  <span style="font-size:12px;color:#86909C">只读 · 与 <span style="font-family:ui-monospace,Menlo,monospace">bisheng logs</span>、MCP 日志工具同权限口径与内容范围</span>
+                </div>
+                <div style="background:#0f172a;border-radius:10px;padding:14px 16px;font-family:ui-monospace,Menlo,monospace;font-size:12px;line-height:20px;color:#C9D4E8;max-height:400px;overflow-y:auto">
+                  <sc-for list="{{ logLines }}" as="l" hint-placeholder-count="6">
+                    <div>{{ l }}</div>
+                  </sc-for>
+                </div>
+                <div style="font-size:12px;color:#86909C;margin-top:12px;line-height:19px">三个入口按操作者选：MCP 工具（本地 agent）· CLI logs（终端）· 本页（图形界面）。<span style="color:#212121">查他人应用日志只有本页这条路</span>，且仅租户管理员——经 MCP 查他人应用一律被拒。</div>
+              </div>
+            </sc-if>
+
+            <!-- 版本 -->
+            <sc-if value="{{ dtVersion }}" hint-placeholder-val="{{ false }}">
+              <div style="max-width:880px">
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">
+                  <span style="font-size:15px;font-weight:500;color:#212121">版本</span>
+                  <span style="font-size:12px;color:#86909C">只增不改 · 只读，本版无回滚入口</span>
+                </div>
+                <div style="border:1px solid #E5E6EB;border-radius:10px;overflow:hidden">
+                  <sc-for list="{{ app.versions }}" as="v" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 16px;border-bottom:1px solid #F7F8FA">
+                      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+                        <span style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#212121;width:34px">{{ v.no }}</span>
+                        <div style="min-width:0">
+                          <div style="font-size:13.5px;color:#212121">{{ v.type }}</div>
+                          <div style="font-size:12px;color:#86909C;margin-top:2px">{{ v.time }} · {{ v.caps }}</div>
+                        </div>
+                      </div>
+                      <span style="{{ v.stateStyle }}">{{ v.stateText }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="border:1px dashed #E5E6EB;border-radius:10px;padding:14px 16px;margin-top:14px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">本版不做平台侧回滚：本地有完整 git 历史，等价手段是 <span style="font-family:ui-monospace,Menlo,monospace">git checkout</span> 旧版本后重新 <span style="font-family:ui-monospace,Menlo,monospace">bisheng deploy</span>，走同一条审批管线。应急止血始终是<span style="color:#212121">停运</span>。版本快照的四要素（代码 / 能力声明 / 注入配置 / 资源档位）已按同一快照存储，将来补回滚可统一回退。</div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- ========== 审批中心 · 待办 ========== -->
+        <sc-if value="{{ isTodo }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:dcIn .18s ease">
+            <div style="font-size:17px;font-weight:500;color:#0f172a">应用发布审批</div>
+            <p style="margin:6px 0 16px;font-size:12.5px;line-height:20px;color:#86909C;max-width:820px;text-wrap:pretty">首发与迭代每次发布均需审批，无免审路径。平台预置流程：单节点<span style="color:#212121">或签</span>，审批人 = 应用 owner 所属部门的部门管理员 ∪ 租户管理员，任一人处理即出终态。</p>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ tickets }}" as="t" hint-placeholder-count="2">
+                <div style="border:1px solid #E5E6EB;border-radius:10px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:20px;transition:border-color .15s ease" style-hover="border-color:#024DE3">
+                  <div style="min-width:0">
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                      <span style="font-size:15px;font-weight:500;color:#212121">{{ t.appName }}</span>
+                      <span style="font-size:11.5px;background:#E6EDFC;color:#024DE3;border-radius:5px;padding:2px 8px">{{ t.kind }}</span>
+                      <span style="{{ t.stateStyle }}">{{ t.stateText }}</span>
+                    </div>
+                    <div style="font-size:12.5px;color:#86909C;margin-top:5px">{{ t.meta }}</div>
+                  </div>
+                  <button onClick="{{ t.open }}" style="height:32px;padding:0 16px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;flex-shrink:0">{{ t.btn }}</button>
+                </div>
+              </sc-for>
+              <sc-if value="{{ noTickets }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:40px;text-align:center;font-size:13px;color:#86909C;border:1px dashed #E5E6EB;border-radius:10px">暂无待处理的发布审批单</div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 审批单详情 ========== -->
+        <sc-if value="{{ isTicket }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:dcIn .18s ease">
+            <div onClick="{{ backTodo }}" style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:#64748b;cursor:pointer;margin-bottom:12px" style-hover="color:#024DE3">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>返回审批中心
+            </div>
+            <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex:1;min-width:500px;display:flex;flex-direction:column;gap:14px">
+                <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+                    <span style="font-size:18px;font-weight:500;color:#0f172a">{{ ticket.appName }}</span>
+                    <span style="font-size:11.5px;background:#E6EDFC;color:#024DE3;border-radius:5px;padding:2px 8px">{{ ticket.kind }}</span>
+                  </div>
+                  <div style="display:grid;grid-template-columns:84px 1fr;row-gap:9px;column-gap:12px;font-size:13.5px">
+                    <span style="color:#86909C">owner</span><span style="color:#212121">{{ ticket.owner }} · {{ ticket.dept }}（部门管理员由此解析）</span>
+                    <span style="color:#86909C">来源</span><span style="color:#212121">{{ ticket.source }}</span>
+                    <span style="color:#86909C">提交时间</span><span style="color:#212121">{{ ticket.submitted }}</span>
+                    <span style="color:#86909C">资源档位</span><span style="color:#212121">{{ ticket.tier }}</span>
+                    <span style="color:#86909C">审批人</span><span style="color:#212121">{{ approverText }}</span>
+                  </div>
+                </div>
+
+                <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                  <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+                    <span style="font-size:14px;font-weight:500;color:#212121">能力声明白话摘要</span>
+                    <span style="font-size:12px;color:#86909C">待上线版本快照</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <sc-for list="{{ ticket.caps }}" as="c" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:flex-start;gap:10px;background:#FBFBFB;border:1px solid #F2F3F5;border-radius:8px;padding:10px 12px">
+                        <span style="{{ c.iconStyle }}">{{ c.iconText }}</span>
+                        <div><div style="font-size:13.5px;color:#212121">{{ c.name }}</div><div style="font-size:12px;color:#86909C;margin-top:2px">{{ c.note }}</div></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">本版不做迭代变更摘要（顺延）——变更请经审读视图的<span style="color:#212121">文件差异</span>自行比对。</div>
+                </div>
+
+                <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                  <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:8px">可见范围（提交时快照）</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+                    <sc-for list="{{ ticket.visChips }}" as="c" hint-placeholder-count="2">
+                      <span style="font-size:12.5px;background:#F2F3F5;color:#4E5969;border-radius:5px;padding:3px 9px">{{ c }}</span>
+                    </sc-for>
+                  </div>
+                  <div style="font-size:12px;color:#B54708;background:#FFF9F0;border:1px solid #FFDCA8;border-radius:7px;padding:8px 10px;line-height:18px">仅供参考——可见范围变更即时生效、不经审批，审批期间可能已被改。</div>
+                </div>
+              </div>
+
+              <div style="width:322px;display:flex;flex-direction:column;gap:14px">
+                <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                  <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:10px">审读与试用</div>
+                  <button onClick="{{ openReview }}" style="width:100%;height:34px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13px;color:#212121;cursor:pointer;margin-bottom:10px" style-hover="background:#f4f5f8">查看待上线版本</button>
+                  <div style="font-size:12px;color:#86909C;line-height:18px">审读的权威对象 = 提交发布时冻结的待上线版本快照。owner 的本地工程与草稿不对审批人开放。</div>
+                </div>
+                <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                  <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:10px">处理</div>
+                  <textarea value="{{ rejectText }}" onInput="{{ onRejectText }}" placeholder="驳回理由（驳回时必填，全文回传 owner）" style="width:100%;height:74px;border:1px solid #EBECF0;border-radius:7px;padding:8px 10px;font-size:13px;outline:none;box-sizing:border-box;resize:none;color:#212121"></textarea>
+                  <div style="display:flex;gap:10px;margin-top:12px">
+                    <button onClick="{{ approve }}" style="flex:1;height:34px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:500;cursor:pointer">通过</button>
+                    <button onClick="{{ reject }}" style="{{ rejectBtnStyle }}">驳回</button>
+                  </div>
+                  <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">或签：任一审批人处理即出终态，另一方待办同步关闭。通过后走上线终检（运行环境容量）。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 审读视图 ========== -->
+        <sc-if value="{{ isReview }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:dcIn .18s ease">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px;flex-wrap:wrap">
+              <div onClick="{{ backTicket }}" style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:#64748b;cursor:pointer" style-hover="color:#024DE3">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>返回审批单
+              </div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="font-size:12.5px;color:#86909C">{{ previewNote }}</span>
+                <sc-if value="{{ previewCanRecycle }}" hint-placeholder-val="{{ false }}">
+                  <span onClick="{{ previewRecycle }}" style="font-size:13px;color:#ef4444;cursor:pointer" style-hover="text-decoration:underline">手动回收</span>
+                </sc-if>
+                <button onClick="{{ previewAction }}" style="{{ previewBtnStyle }}">{{ previewBtnText }}</button>
+              </div>
+            </div>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;padding:12px 16px;margin-bottom:14px;background:#FBFBFB;display:flex;gap:12px;align-items:flex-start">
+              <span style="{{ previewDotStyle }}"></span>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13.5px;color:#212121">审批期临时预览实例：{{ previewStateText }}</div>
+                <div style="font-size:12px;color:#86909C;margin-top:3px;line-height:18px">{{ previewDesc }}</div>
+                <sc-if value="{{ previewFailed }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:8px;font-size:12px;line-height:19px;color:#ef4444;background:#FEF6F5;border:1px solid #FBD7D3;border-radius:7px;padding:8px 10px">失败原因：依赖 <span style="font-family:ui-monospace,Menlo,monospace">psycopg2-binary==2.9.9</span> 在平台内网镜像中不存在，启动探活未通过。可重新拉起，或驳回要求 owner 修复后重新 deploy。</div>
+                </sc-if>
+              </div>
+              <sc-if value="{{ previewCanFail }}" hint-placeholder-val="{{ false }}">
+                <span onClick="{{ previewFail }}" style="font-size:12px;color:#86909C;cursor:pointer;flex-shrink:0" style-hover="color:#ef4444">模拟拉起失败</span>
+              </sc-if>
+            </div>
+            <div style="display:inline-flex;background:#f4f5f8;border-radius:8px;padding:3px;gap:2px;margin-bottom:14px">
+              <sc-for list="{{ reviewTabs }}" as="t" hint-placeholder-count="4">
+                <div onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+              </sc-for>
+            </div>
+            <div style="display:flex;border:1px solid #E5E6EB;border-radius:10px;overflow:hidden;min-height:360px">
+              <div style="width:214px;border-right:1px solid #F2F3F5;padding:10px 8px;background:#FBFBFB;flex-shrink:0">
+                <sc-for list="{{ fileTree }}" as="f" hint-placeholder-count="5">
+                  <div onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</div>
+                </sc-for>
+              </div>
+              <div style="flex:1;min-width:0;padding:14px 18px;overflow-x:auto">
+                <sc-if value="{{ reviewIsCode }}" hint-placeholder-val="{{ true }}">
+                  <div>
+                    <div style="font-size:12.5px;color:#86909C;margin-bottom:8px">{{ activeFile }} · 只读</div>
+                    <pre style="margin:0;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:20px;color:#212121;white-space:pre">{{ fileBody }}</pre>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ reviewIsDiff }}" hint-placeholder-val="{{ false }}">
+                  <div>
+                    <div style="font-size:12.5px;color:#86909C;margin-bottom:8px">相对上一已发布版本的文件差异（迭代时提供）</div>
+                    <sc-for list="{{ diffLines }}" as="d" hint-placeholder-count="8">
+                      <div style="{{ d.style }}">{{ d.text }}</div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ reviewIsCaps }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <div style="font-size:12.5px;color:#86909C">能力声明完整清单 · 待上线版本</div>
+                    <sc-for list="{{ ticket.caps }}" as="c" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:flex-start;gap:10px;background:#FBFBFB;border:1px solid #F2F3F5;border-radius:8px;padding:10px 12px">
+                        <span style="{{ c.iconStyle }}">{{ c.iconText }}</span>
+                        <div><div style="font-size:13.5px;color:#212121">{{ c.name }}</div><div style="font-size:12px;color:#86909C;margin-top:2px">{{ c.note }}</div></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ reviewIsHistory }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:2px">
+                    <sc-for list="{{ ticketVersions }}" as="v" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #F7F8FA">
+                        <span style="font-family:ui-monospace,Menlo,monospace;font-size:13px;width:34px;color:#212121">{{ v.no }}</span>
+                        <span style="font-size:13px;color:#4E5969;flex:1">{{ v.type }} · {{ v.time }}</span>
+                        <span style="{{ v.stateStyle }}">{{ v.stateText }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+              </div>
+            </div>
+            <div style="font-size:12px;color:#86909C;margin-top:12px;line-height:18px">预览期注入身份 = 审批人本人，平台能力按 owner 权限放行（审批例外条款、计审计）；复用 deploy 预检的启动探活能力，不额外占用运行实例名额；审批出终态或超时（默认 7 天）即回收，回收后可再次拉起。</div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 审批中心 · 场景配置 ========== -->
+        <sc-if value="{{ isScene }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:800px;animation:dcIn .18s ease">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:17px;font-weight:500;color:#0f172a">场景配置 · 应用发布</span>
+              <span style="{{ scenePresetStyle }}">平台预置 · 部署即生效</span>
+            </div>
+            <p style="margin:6px 0 16px;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">管理员<span style="color:#212121">不需要先做任何配置</span>，第一次发布就能跑通；不提供免审配置项。此页可在预置基础上改配，改配后平台升级不会重置。</p>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;overflow:hidden">
+              <sc-for list="{{ sceneSpec }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex;gap:16px;align-items:flex-start;padding:14px 18px;border-bottom:1px solid #F7F8FA">
+                  <span style="width:92px;flex-shrink:0;font-size:13px;color:#86909C">{{ r.k }}</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13.5px;color:#212121">{{ r.v }}</div>
+                    <div style="font-size:12px;color:#86909C;margin-top:3px;line-height:18px">{{ r.note }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px;margin-top:16px">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap">
+                <div>
+                  <div style="font-size:14px;font-weight:500;color:#212121">改配审批人（可选）</div>
+                  <div style="font-size:12px;color:#86909C;margin-top:3px">不选 = 沿用预置来源；提交人若在候选中则该节点自动跳过</div>
+                </div>
+                <span style="{{ sceneStateStyle }}">{{ sceneStateText }}</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
+                <sc-for list="{{ approverOptions }}" as="a" hint-placeholder-count="4">
+                  <div onClick="{{ a.toggle }}" style="{{ a.style }}">{{ a.name }}</div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="border:1px dashed #E5E6EB;border-radius:10px;padding:14px 18px;margin-top:14px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">两个来源同时解析为空时进审批中心异常态并通知管理员——<span style="color:#212121">不放行、也不静默卡死</span>。预置须覆盖新建租户（租户创建时同步落库），否则新租户的第一次发布会因场景缺失失败。</div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 审计 ========== -->
+        <sc-if value="{{ isAudit }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:dcIn .18s ease">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:14px;flex-wrap:wrap">
+              <div style="max-width:660px">
+                <div style="font-size:17px;font-weight:500;color:#0f172a">审计</div>
+                <p style="margin:6px 0 0;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">造 / 接 / 发布 / 删除 / 数据编辑 / 密钥事件全链路留痕。租户管理员限本租户，跨租户仅平台超管。记录中不出现密钥明文。</p>
+              </div>
+              <button onClick="{{ exportAudit }}" style="height:32px;padding:0 14px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13px;color:#212121;cursor:pointer;flex-shrink:0" style-hover="background:#f4f5f8">导出</button>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+              <div style="display:flex;align-items:center;gap:6px;height:30px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:12.5px;color:#4E5969">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>2026-08-01 ~ 2026-08-17
+              </div>
+              <input value="{{ auditActor }}" onInput="{{ onAuditActor }}" placeholder="操作人" style="width:130px;height:30px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:12.5px;outline:none;box-sizing:border-box;color:#212121">
+              <input value="{{ auditObject }}" onInput="{{ onAuditObject }}" placeholder="对象应用" style="width:150px;height:30px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:12.5px;outline:none;box-sizing:border-box;color:#212121">
+              <sc-for list="{{ auditFilters }}" as="f" hint-placeholder-count="5">
+                <span onClick="{{ f.pick }}" style="{{ f.style }}">{{ f.label }}</span>
+              </sc-for>
+            </div>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;overflow:hidden">
+              <div style="display:flex;padding:11px 16px;background:#FBFBFB;border-bottom:1px solid #F2F3F5;font-size:12.5px;color:#64748b">
+                <span style="width:132px;flex-shrink:0">时间</span><span style="width:150px;flex-shrink:0">操作人</span><span style="width:150px;flex-shrink:0">事件类型</span><span style="width:160px;flex-shrink:0">对象</span><span style="flex:1">详情</span>
+              </div>
+              <sc-for list="{{ auditRows }}" as="r" hint-placeholder-count="8">
+                <div style="display:flex;padding:11px 16px;border-bottom:1px solid #F7F8FA;font-size:12.5px;color:#4E5969;line-height:19px">
+                  <span style="width:132px;flex-shrink:0;font-family:Inter,sans-serif">{{ r.time }}</span>
+                  <span style="width:150px;flex-shrink:0;color:#212121">{{ r.actor }}</span>
+                  <span style="width:150px;flex-shrink:0"><span style="font-size:11.5px;background:#F2F3F5;color:#4E5969;border-radius:5px;padding:2px 8px">{{ r.type }}</span></span>
+                  <span style="width:160px;flex-shrink:0">{{ r.object }}</span>
+                  <span style="flex:1;min-width:0">{{ r.detail }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font-size:12px;color:#86909C;margin-top:12px;line-height:19px">模型调用<span style="color:#212121">逐条留痕</span>（含模型与 token 数），本版不做聚合账单；运行期能力调用为双归属：actor = 应用，subject = 当前访问用户。</div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 系统管理 · 角色与权限 ========== -->
+        <sc-if value="{{ isRoles }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:820px;animation:dcIn .18s ease">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:17px;font-weight:500;color:#0f172a">角色与权限</span>
+              <span style="{{ zeroAddStyle }}">本册零新增菜单、零新增权限点</span>
+            </div>
+            <p style="margin:6px 0 16px;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">托管应用是构建页第三种类型，天然被<span style="font-family:ui-monospace,Menlo,monospace">「构建」→「创建应用」</span>这对既有父子权限点管住。升级前后角色配置面的项数完全一致。</p>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;overflow:hidden">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 18px;background:#FBFBFB;border-bottom:1px solid #F2F3F5;font-size:12.5px;color:#64748b">
+                <span style="flex:1">角色</span><span style="width:120px">「构建」菜单</span><span style="width:140px">「创建应用」子项</span>
+              </div>
+              <sc-for list="{{ roleRows }}" as="r" hint-placeholder-count="4">
+                <div style="{{ r.rowStyle }}">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13.5px;color:#212121">{{ r.name }}</div>
+                    <div style="font-size:12px;color:#86909C;margin-top:2px">{{ r.note }}</div>
+                  </div>
+                  <div style="width:120px"><span onClick="{{ r.toggleBuild }}" style="{{ r.buildStyle }}">{{ r.buildText }}</span></div>
+                  <div style="width:140px"><span onClick="{{ r.toggleCreate }}" style="{{ r.createStyle }}">{{ r.createText }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;padding:16px 18px;margin-top:16px">
+              <div style="font-size:13.5px;font-weight:500;color:#212121;margin-bottom:8px">两条通道，各有各的闸，互不校验</div>
+              <div style="display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:20px;color:#4E5969">
+                <div style="background:#FBFBFB;border:1px solid #F2F3F5;border-radius:8px;padding:10px 12px">界面通道（构建 → 应用 → 新建入口）：既有<span style="font-family:ui-monospace,Menlo,monospace"> create_app </span>权限点。关闭父项「构建」时级联失效。</div>
+                <div style="background:#FBFBFB;border:1px solid #F2F3F5;border-radius:8px;padding:10px 12px">CLI 通道（<span style="font-family:ui-monospace,Menlo,monospace">bisheng deploy</span> 首发）：闸在 key 的<span style="font-family:ui-monospace,Menlo,monospace"> app:manage </span>位——<span style="color:#212121">不查资源归属人的角色权限</span>，否则「归属人一停用其名下密钥即失效」。</div>
+              </div>
+              <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">代价：复用既有权限点意味着无法单独灰度托管应用（勾了就三种类型都能建）。真正的灰度闸是部署开关（环境级）与按人签发密钥（人级）。</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 系统管理 · 能力总线 ========== -->
+        <sc-if value="{{ isBus }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:900px;animation:dcIn .18s ease">
+            <div style="font-size:17px;font-weight:500;color:#0f172a">能力总线</div>
+            <p style="margin:6px 0 16px;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">配置一次、声明使用、零新建配置面。本版总线范围 = 模型 · 知识库 · 密钥引用，配置动作全部回既有界面完成。</p>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px;margin-bottom:14px">
+              <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+                <span style="font-size:14px;font-weight:500;color:#212121">模型</span>
+                <span style="font-size:12px;color:#86909C">既有「模型管理」页配置一次 · 助手 / 工作流与托管应用共享；协议面本版<span style="color:#212121">仅 OpenAI 兼容</span></span>
+              </div>
+              <sc-for list="{{ busModels }}" as="m" hint-placeholder-count="3">
+                <div style="{{ m.rowStyle }}">
+                  <div style="min-width:0">
+                    <div style="font-size:13.5px;color:#212121">{{ m.name }}</div>
+                    <div style="font-size:12px;color:#86909C;margin-top:2px">{{ m.meta }}</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:14px;flex-shrink:0">
+                    <span style="{{ m.stateStyle }}">{{ m.stateText }}</span>
+                    <span onClick="{{ m.toggle }}" style="font-size:13px;color:#024DE3;cursor:pointer" style-hover="text-decoration:underline">{{ m.toggleText }}</span>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">下线已被声明的模型：该能力调用返回明确错误态、不回退旧值，应用整体保持可用；owner 在发布面可见失效提示。</div>
+            </div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap">
+              <div style="flex:1;min-width:300px;border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:6px">知识库</div>
+                <p style="margin:0;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">无新增配置动作。运行期可及范围 = <span style="color:#024DE3">声明白名单 ∩ 当前访问用户可见范围</span>（逐资源鉴权、文件级、fail-closed），两层缺一不可。声明层是白名单收窄，不是两个主体求交集。</p>
+              </div>
+              <div style="flex:1;min-width:300px;border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:6px">密钥引用</div>
+                <p style="margin:0;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">owner 录入应用自有第三方凭证（随 PRD-2），引用名进入能力声明，运行时按引用注入值——一切界面只见引用名，审计不记录密钥值。</p>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 系统管理 · 部署形态 ========== -->
+        <sc-if value="{{ isDeployTab }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:880px;animation:dcIn .18s ease">
+            <div style="font-size:17px;font-weight:500;color:#0f172a">部署形态</div>
+            <p style="margin:6px 0 16px;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">三层可选部署。本面板用于在 demo 中验证「不装某层 / 换运行时形态 / 资源不足」时界面如何变化。</p>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;overflow:hidden">
+              <sc-for list="{{ layerRows }}" as="l" hint-placeholder-count="3">
+                <div style="{{ l.rowStyle }}">
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13.5px;color:#212121">{{ l.name }}</div>
+                    <div style="font-size:12px;color:#86909C;margin-top:3px;line-height:18px">{{ l.note }}</div>
+                  </div>
+                  <span onClick="{{ l.toggle }}" style="{{ l.btnStyle }}">{{ l.btnText }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px">
+              <div style="flex:1;min-width:320px;border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:6px">运行时形态：{{ formLabel }}</div>
+                <p style="margin:0;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">compose 单机与 k8s 集群<span style="color:#212121">部署期二选一</span>，产品面完全一致：发布管线、资源档位、审批、权限、日志、崩溃自愈的行为与验收在两形态下不得有任何差异，差异一律压在编排器内部。档位在 compose 下是容器资源限额，在 k8s 下映射为 Pod requests / limits。</p>
+                <div style="font-size:12px;color:#86909C;margin-top:10px">形态在右侧 Tweaks 面板切换（部署期设定，运行期不可迁移）。</div>
+              </div>
+              <div style="flex:1;min-width:320px;border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:6px">
+                  <span style="font-size:14px;font-weight:500;color:#212121">模拟运行环境容量不足</span>
+                  <span onClick="{{ toggleScarce }}" style="{{ scarceStyle }}">{{ scarceText }}</span>
+                </div>
+                <p style="margin:0;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">开启后，审批通过的上线终检会失败：审批单保持通过，应用进入「待上线（资源不足）」态（{{ formLabel }}下的成因 = {{ scarceCause }}），资源释放后 owner 手动上线、无需重新审批。本版不做租户级实例数配额。</p>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 系统管理 · 资源档位 ========== -->
+        <sc-if value="{{ isTiers }}" hint-placeholder-val="{{ false }}">
+          <div style="max-width:900px;animation:dcIn .18s ease">
+            <div style="font-size:17px;font-weight:500;color:#0f172a">资源档位</div>
+            <p style="margin:6px 0 16px;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">平台预置档位模板，规格由平台超管维护；业务侧发布时只能选档，无自定义规格、无实例数 / 并发调节。停用只拦新选择，存量应用沿用原档位继续运行与迭代。</p>
+            <div style="border:1px solid #E5E6EB;border-radius:10px;overflow:hidden">
+              <div style="display:flex;padding:11px 16px;background:#FBFBFB;border-bottom:1px solid #F2F3F5;font-size:12.5px;color:#64748b">
+                <span style="width:80px;flex-shrink:0">档位</span><span style="width:170px;flex-shrink:0">规格</span><span style="flex:1">适用说明</span><span style="width:80px;flex-shrink:0">状态</span><span style="width:90px;flex-shrink:0">使用中</span><span style="width:70px;flex-shrink:0;text-align:right">操作</span>
+              </div>
+              <sc-for list="{{ tierRows }}" as="t" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid #F7F8FA;font-size:13px">
+                  <span style="width:80px;flex-shrink:0;color:#212121;font-weight:500">{{ t.name }}</span>
+                  <span style="width:170px;flex-shrink:0;color:#4E5969">{{ t.spec }}</span>
+                  <span style="flex:1;min-width:0;color:#4E5969">{{ t.desc }}</span>
+                  <span style="width:80px;flex-shrink:0"><span style="{{ t.stateStyle }}">{{ t.stateText }}</span></span>
+                  <span style="width:90px;flex-shrink:0;color:#4E5969">{{ t.usedText }}</span>
+                  <span onClick="{{ t.toggle }}" style="width:70px;flex-shrink:0;text-align:right;color:#024DE3;cursor:pointer" style-hover="text-decoration:underline">{{ t.toggleText }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border:1px dashed #E5E6EB;border-radius:10px;padding:14px 18px;margin-top:14px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">本版不做租户级实例数配额（顺延，将来须以 CPU / 内存为单位而非实例数）。应用代码存档与附件<span style="color:#212121">均不计入</span>平台存储配额；token 用量只计量、不设上限。</div>
+          </div>
+        </sc-if>
+
+        <!-- ========== API key 管理 ========== -->
+        <sc-if value="{{ isSa }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:dcIn .18s ease">
+            <div style="font-size:17px;font-weight:500;color:#0f172a">服务账号与密钥</div>
+            <p style="margin:6px 0 16px;font-size:12.5px;line-height:20px;color:#86909C;max-width:860px;text-wrap:pretty">全平台只有服务账号一类密钥主体（<span style="font-family:ui-monospace,Menlo,monospace">bs-sak-</span>），无自然人个人凭据、无独立「开发者 key」界面。应用工场在鉴权 PRD 的服务账号模块上只有两处增量——<span style="color:#212121">权限位新增「本地开发工具包」三位</span>与<span style="color:#212121">接入信息区</span>。</p>
+            <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex:1;min-width:460px;border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
+                <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px">
+                  <span style="font-size:14px;font-weight:500;color:#212121">密钥签发</span>
+                  <span style="font-size:12px;color:#86909C">服务账号「中粮 · 李工开发者」· 资源归属人 = 李工</span>
+                </div>
+                <input value="{{ keyName }}" onInput="{{ onKeyName }}" placeholder="密钥名称（必填）" style="width:100%;height:34px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:13.5px;outline:none;box-sizing:border-box;color:#212121;margin-bottom:14px">
+                <sc-for list="{{ bitGroups }}" as="g" hint-placeholder-count="2">
+                  <div style="margin-bottom:14px">
+                    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+                      <span style="font-size:13px;font-weight:500;color:#212121">{{ g.title }}</span>
+                      <span style="font-size:11.5px;color:#86909C">{{ g.note }}</span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:6px">
+                      <sc-for list="{{ g.bits }}" as="b" hint-placeholder-count="3">
+                        <div onClick="{{ b.toggle }}" style="{{ b.rowStyle }}">
+                          <span style="{{ b.boxStyle }}">{{ b.check }}</span>
+                          <div style="min-width:0">
+                            <div style="font-size:13px;color:#212121"><span style="font-family:ui-monospace,Menlo,monospace">{{ b.id }}</span> · {{ b.label }}</div>
+                            <div style="{{ b.noteStyle }}">{{ b.note }}</div>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ keyConflict }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:19px;color:#ef4444;background:#FEF6F5;border:1px solid #FBD7D3;border-radius:8px;padding:10px 12px;margin-bottom:12px;animation:dcIn .16s ease">
+                    <svg style="flex-shrink:0;margin-top:2px" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+                    <span><span style="font-weight:500">硬阻断，无法保存：</span>配了委托（delegate）的 key 不能用于本地开发，请另发一把。这样的 key 在 MCP / 模型协议 / CLI 三面必然全废，签出来即废件。</span>
+                  </div>
+                </sc-if>
+                <button onClick="{{ issueKey }}" style="{{ issueBtnStyle }}">签发密钥</button>
+                <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">默认全不勾。未勾任何位的 key 仅可 <span style="font-family:ui-monospace,Menlo,monospace">login</span> / <span style="font-family:ui-monospace,Menlo,monospace">skills sync</span>。权限位签发后可编辑、即时生效、无需重签，变更计审计。</div>
+              </div>
+
+              <div style="width:360px;display:flex;flex-direction:column;gap:14px">
+                <div style="border:1px solid #D6E0FF;background:#F7F9FF;border-radius:10px;padding:18px 20px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px">
+                    <span style="font-size:14px;font-weight:500;color:#212121">接入信息</span>
+                    <span style="font-size:11.5px;color:#86909C">应用工场增量</span>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:8px;font-size:12px;line-height:18px">
+                    <div style="background:#fff;border:1px solid #E4EAFB;border-radius:7px;padding:8px 10px"><div style="color:#86909C">MCP Server</div><div style="font-family:ui-monospace,Menlo,monospace;color:#212121;word-break:break-all">https://bisheng.cofco.com/mcp</div></div>
+                    <div style="background:#fff;border:1px solid #E4EAFB;border-radius:7px;padding:8px 10px"><div style="color:#86909C">OpenAI 兼容 base URL</div><div style="font-family:ui-monospace,Menlo,monospace;color:#212121;word-break:break-all">https://bisheng.cofco.com/v1</div></div>
+                    <div style="background:#fff;border:1px solid #E4EAFB;border-radius:7px;padding:8px 10px"><div style="color:#86909C">CLI 安装包（链接，非文件）</div><div style="font-family:ui-monospace,Menlo,monospace;color:#212121;word-break:break-all">https://bisheng.cofco.com/dl/bisheng-cli</div></div>
+                    <div style="background:#fff;border:1px solid #E4EAFB;border-radius:7px;padding:8px 10px"><div style="color:#86909C">登录指引</div><div style="font-family:ui-monospace,Menlo,monospace;color:#212121">bisheng login --key &lt;你的 key&gt;</div></div>
+                  </div>
+                  <button onClick="{{ copyAccess }}" style="width:100%;height:34px;margin-top:12px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:13.5px;font-weight:500;cursor:pointer">一键复制接入信息</button>
+                  <div style="font-size:11.5px;color:#86909C;margin-top:9px;line-height:17px">文本<span style="color:#212121">不含 key 值</span>，也不含任何可换取 key 值的凭据——接入信息不机密、可随时重发；key 值机密、只有一次，由管理员单独转交。未部署开放能力层时本区不出现。</div>
+                </div>
+                <div style="border:1px solid #E5E6EB;border-radius:10px;padding:16px 18px">
+                  <div style="font-size:13.5px;font-weight:500;color:#212121;margin-bottom:8px">已签发密钥</div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <sc-for list="{{ keyList }}" as="k" hint-placeholder-count="2">
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px">
+                        <div style="min-width:0">
+                          <div style="font-family:ui-monospace,Menlo,monospace;color:#212121">{{ k.masked }}</div>
+                          <div style="color:#86909C;margin-top:2px">{{ k.bits }}</div>
+                        </div>
+                        <span onClick="{{ k.revoke }}" style="{{ k.actStyle }}">{{ k.actText }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="font-size:11.5px;color:#86909C;margin-top:10px;line-height:17px">吊销生效上界 5 秒，<span style="color:#212121">MCP / 模型协议 / CLI 三面同时被拒绝</span>；支持按服务账号一键吊销名下全部 key。无开发者自助吊销入口。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ========== 应用广场 ========== -->
+        <sc-if value="{{ isSquare }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:dcIn .18s ease">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:16px;flex-wrap:wrap">
+              <div style="max-width:600px">
+                <div style="font-size:17px;font-weight:500;color:#0f172a">应用广场</div>
+                <p style="margin:6px 0 0;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">托管应用与工作流 / 助手并列，共用同一套标签体系；只显示你可见范围内的应用，点卡片即用、免二次登录。</p>
+              </div>
+              <div style="border:1px solid #E5E6EB;border-radius:9px;padding:10px 12px;flex-shrink:0">
+                <div style="font-size:11.5px;color:#86909C;margin-bottom:7px">模拟访问分支（RT-01 / RT-08）</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;max-width:340px">
+                  <sc-for list="{{ fallbackBtns }}" as="b" hint-placeholder-count="6">
+                    <span onClick="{{ b.pick }}" style="{{ b.style }}">{{ b.label }}</span>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px">
+              <sc-for list="{{ squareCards }}" as="c" hint-placeholder-count="3">
+                <div onClick="{{ c.open }}" style="border:1px solid #E5E6EB;border-radius:12px;padding:18px;cursor:pointer;box-shadow:0 0 20px rgba(7,34,88,.03);transition:border-color .15s ease" style-hover="border-color:#024DE3">
+                  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                    <span style="{{ c.iconStyle }}">{{ c.iconText }}</span>
+                    <span style="font-size:14.5px;font-weight:500;color:#212121">{{ c.name }}</span>
+                  </div>
+                  <div style="font-size:12.5px;line-height:19px;color:#86909C;min-height:38px;text-wrap:pretty">{{ c.desc }}</div>
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+                    <span style="font-size:11.5px;background:#F2F3F5;color:#4E5969;border-radius:5px;padding:2px 8px">托管应用</span>
+                    <span style="font-size:12px;color:#86909C">owner {{ c.owner }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <sc-if value="{{ squareEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:44px;text-align:center;font-size:13px;color:#86909C;border:1px dashed #E5E6EB;border-radius:10px">你的可见范围内暂无托管应用 —— 上线 ≠ 可用，owner 还需设置可见范围</div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 应用运行 / 兜底页 ===== -->
+  <sc-if value="{{ runtimeOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(15,23,42,.5);display:flex;align-items:center;justify-content:center;z-index:70;padding:40px;animation:dcFade .16s ease">
+      <div style="width:960px;max-width:100%;height:100%;max-height:600px;background:#fff;border-radius:12px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 16px 48px rgba(7,34,88,.26)">
+        <div style="height:44px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid #F2F3F5;background:#FBFBFB">
+          <span onClick="{{ closeRuntime }}" style="width:11px;height:11px;border-radius:50%;background:#F5483B;cursor:pointer;flex-shrink:0"></span>
+          <div style="flex:1;height:26px;border-radius:6px;background:#fff;border:1px solid #EBECF0;display:flex;align-items:center;padding:0 10px;font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#4E5969">{{ runtimeUrl }}</div>
+          <span onClick="{{ closeRuntime }}" style="font-size:13px;color:#024DE3;cursor:pointer">关闭</span>
+        </div>
+        <div style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:32px;overflow-y:auto">
+          <sc-if value="{{ runtimeOk }}" hint-placeholder-val="{{ true }}">
+            <div style="width:100%;max-width:700px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap">
+                <div>
+                  <div style="font-size:19px;font-weight:500;color:#0f172a">{{ runtimeApp }}</div>
+                  <div style="font-size:12.5px;color:#86909C;margin-top:4px">当前访问者：{{ runtimeWho }}（平台注入身份 · 应用侧零登录代码）</div>
+                </div>
+                <span style="font-size:12px;background:#E8F6EE;color:#00873D;border-radius:5px;padding:3px 10px">运行中</span>
+              </div>
+              <div style="border:1px solid #E5E6EB;border-radius:10px;padding:20px">
+                <div style="font-size:12.5px;color:#4E5969;margin-bottom:12px">检索问答 —— 结果 = 应用声明的知识库 ∩ 你本人可见范围（含文件级）</div>
+                <div style="height:38px;border:1px solid #EBECF0;border-radius:8px;display:flex;align-items:center;padding:0 12px;font-size:13px;color:#A0A6B0;margin-bottom:14px">「差旅住宿标准是多少？」</div>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                  <div style="background:#FBFBFB;border:1px solid #F2F3F5;border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:19px;color:#4E5969">参考来源 · 集团差旅管理办法 v6（你有权限）</div>
+                  <div style="background:#FBFBFB;border:1px dashed #E5E6EB;border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:19px;color:#A0A6B0">高管差旅补充规定（你无权限 → 不出现在结果里，且不报错）</div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ runtimeFallback }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center;max-width:440px">
+              <div style="width:48px;height:48px;border-radius:14px;background:#F2F3F5;color:#86909C;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+              </div>
+              <div style="font-size:16.5px;font-weight:500;color:#0f172a;margin-bottom:8px">{{ fallbackTitle }}</div>
+              <p style="margin:0 0 18px;font-size:13px;line-height:21px;color:#86909C;text-wrap:pretty">{{ fallbackBody }}</p>
+              <button onClick="{{ fallbackAction }}" style="height:34px;padding:0 18px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13.5px;color:#212121;cursor:pointer" style-hover="background:#f4f5f8">{{ fallbackBtn }}</button>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== 授权弹窗（= 卡片 ⚙️「管理权限」同一个弹窗） ===== -->
+  <sc-if value="{{ modalAuth }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:80;animation:dcFade .14s ease">
+      <div style="width:700px;max-height:86vh;background:#fff;border-radius:12px;padding:26px 30px 18px;box-shadow:0 16px 48px rgba(7,34,88,.2);display:flex;flex-direction:column;animation:dcIn .18s ease">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+          <div>
+            <div style="font-size:19px;font-weight:500;color:#212121">管理权限 · {{ authAppName }}</div>
+            <p style="margin:6px 0 0;font-size:12.5px;line-height:19px;color:#86909C">平台通用授权弹窗（与工作流 / 助手同一个）。变更即时生效、不经审批、计审计。{{ authNote }}</p>
+          </div>
+          <span onClick="{{ closeModal }}" style="font-size:20px;line-height:20px;color:#86909C;cursor:pointer;flex-shrink:0" style-hover="color:#212121">✕</span>
+        </div>
+        <div style="display:inline-flex;align-self:flex-start;gap:2px;margin:18px 0 12px;padding:3px;border:1px solid #E8E9EB;border-radius:10px;background:#fff">
+          <sc-for list="{{ authTabs }}" as="t" hint-placeholder-count="3">
+            <div onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</div>
+          </sc-for>
+        </div>
+        <div style="position:relative;margin-bottom:12px">
+          <svg style="position:absolute;left:13px;top:11px;color:#A0A6B0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+          <input placeholder="{{ authSearchPh }}" value="{{ authSearch }}" onInput="{{ onAuthSearch }}" style="width:100%;height:38px;border:1px solid #EBECF0;border-radius:10px;padding:0 12px 0 38px;font-size:14px;color:#212121;outline:none;box-sizing:border-box">
+        </div>
+        <div style="flex:1;min-height:190px;max-height:280px;border:1px solid #EBECF0;border-radius:10px;padding:6px 12px;overflow-y:auto">
+          <sc-for list="{{ authOptions }}" as="o" hint-placeholder-count="6">
+            <div onClick="{{ o.toggle }}" style="display:flex;align-items:center;gap:12px;padding:11px 4px;cursor:pointer;border-radius:8px" style-hover="background:#F4F5F8">
+              <span style="{{ o.boxStyle }}">{{ o.check }}</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#86909C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="8" r="3.2"></circle><path d="M5.5 20c0-3.6 2.9-5.5 6.5-5.5s6.5 1.9 6.5 5.5"></path></svg>
+              <div style="min-width:0">
+                <div style="font-size:14px;color:#212121;line-height:20px">{{ o.name }}</div>
+                <div style="font-size:12px;color:#8A93A5;line-height:18px;margin-top:1px">{{ o.sub }}</div>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ authEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:40px 0;text-align:center;font-size:13px;color:#A0A6B0">未找到匹配项</div>
+          </sc-if>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 0;border-bottom:1px solid #F2F3F5">
+          <span style="font-size:13.5px;color:#8A93A5;flex-shrink:0">已选：</span>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:120px">
+            <sc-for list="{{ authChips }}" as="c" hint-placeholder-count="2">
+              <span style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 4px 0 10px;border-radius:6px;background:#E6EDFC;color:#024DE3;font-size:12.5px">{{ c.name }}<span onClick="{{ c.remove }}" style="cursor:pointer;font-size:13px;padding:0 3px">✕</span></span>
+            </sc-for>
+            <sc-if value="{{ authNoneSelected }}" hint-placeholder-val="{{ true }}">
+              <span style="font-size:12.5px;color:#A0A6B0">未选择 —— 提交后仍为「仅 owner 可见」</span>
+            </sc-if>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+            <span style="font-size:13.5px;color:#8A93A5">授权</span>
+            <div onClick="{{ cycleAuthLevel }}" style="height:32px;min-width:118px;padding:0 10px;box-sizing:border-box;border:1px solid #E5E6EB;border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13.5px;color:#212121;cursor:pointer" style-hover="background:#F4F5F8">可使用
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#86909C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:12px;line-height:18px;color:#86909C;padding-top:10px">「可使用」= 入口可访问 + 广场可见。托管应用不开放「可编辑」——改码权恒在本地，平台侧对导入应用的代码只读。</div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
+          <button onClick="{{ closeModal }}" style="height:34px;padding:0 16px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:14px;color:#212121;cursor:pointer">取消</button>
+          <button onClick="{{ saveAuth }}" style="height:34px;padding:0 22px;border:none;border-radius:7px;font-size:14px;font-weight:500;cursor:pointer;background:#024DE3;color:#fff">提交</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== 删除二次确认（对标工作流：不要求输入应用名） ===== -->
+  <sc-if value="{{ modalDelete }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:80;animation:dcFade .14s ease">
+      <div style="width:520px;background:#fff;border-radius:12px;padding:24px;box-shadow:0 16px 48px rgba(7,34,88,.2);animation:dcIn .18s ease">
+        <div style="display:flex;gap:10px;margin-bottom:10px">
+          <svg style="color:#ef4444;flex-shrink:0;margin-top:2px" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+          <div style="font-size:16px;font-weight:500;color:#212121">删除「{{ authAppName }}」？</div>
+        </div>
+        <p style="margin:0 0 12px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">这不只是删一条编排——删除会一并带走：</p>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+          <sc-for list="{{ deleteScope }}" as="d" hint-placeholder-count="3">
+            <div style="display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:19px;color:#4E5969;background:#FEF6F5;border:1px solid #FBD7D3;border-radius:7px;padding:8px 10px">
+              <span style="color:#ef4444;flex-shrink:0">•</span>{{ d }}
+            </div>
+          </sc-for>
+        </div>
+        <p style="margin:0;font-size:12px;line-height:19px;color:#86909C">在途审批单自动取消并站内消息通知审批人；存量入口链接与二维码此后呈「应用不存在或未上线」。删除计审计。</p>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+          <button onClick="{{ closeModal }}" style="height:34px;padding:0 16px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:14px;color:#212121;cursor:pointer">取消</button>
+          <button onClick="{{ confirmDelete }}" style="height:34px;padding:0 16px;background:#ef4444;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:500;cursor:pointer">确认删除</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== 一次性明文弹窗 ===== -->
+  <sc-if value="{{ modalKey }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:80;animation:dcFade .14s ease">
+      <div style="width:540px;background:#fff;border-radius:12px;padding:24px;box-shadow:0 16px 48px rgba(7,34,88,.2);animation:dcIn .18s ease">
+        <div style="font-size:16px;font-weight:500;color:#212121;margin-bottom:8px">密钥已签发 —— 明文只展示这一次</div>
+        <p style="margin:0 0 14px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">服务端仅存单向哈希，明文不可还原；关闭后任何界面只见掩码。请由你单独转交开发者，<span style="color:#212121">不要和接入信息放在同一条消息里</span>。</p>
+        <div style="display:flex;align-items:center;gap:10px;background:#0f172a;border-radius:8px;padding:12px 14px;font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#fff;word-break:break-all">{{ newKeyValue }}</div>
+        <div onClick="{{ toggleKeySaved }}" style="display:flex;align-items:center;gap:10px;margin-top:16px;cursor:pointer">
+          <span style="{{ keySavedBox }}">{{ keySavedCheck }}</span>
+          <span style="font-size:13px;color:#212121">我已保存该密钥</span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px">
+          <button onClick="{{ closeKeyModal }}" style="{{ keyDoneStyle }}">完成</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== 消息提醒 ===== -->
+  <sc-if value="{{ modalMsgs }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" style="position:fixed;inset:0;z-index:80">
+      <div style="position:absolute;top:56px;right:24px;width:392px;background:#fff;border:1px solid #E5E6EB;border-radius:12px;box-shadow:0 16px 44px rgba(7,34,88,.18);overflow:hidden;animation:dcIn .16s ease">
+        <div style="padding:13px 18px;border-bottom:1px solid #F2F3F5;font-size:14px;font-weight:500;color:#212121">消息提醒</div>
+        <div style="max-height:330px;overflow-y:auto">
+          <sc-for list="{{ messages }}" as="m" hint-placeholder-count="4">
+            <div style="padding:12px 18px;border-bottom:1px solid #F7F8FA">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="{{ m.dotStyle }}"></span>
+                <span style="font-size:13px;color:#212121">{{ m.title }}</span>
+                <span style="font-size:11.5px;color:#A0A6B0;margin-left:auto">{{ m.time }}</span>
+              </div>
+              <div style="font-size:12px;line-height:19px;color:#86909C;margin-top:5px;padding-left:15px">{{ m.body }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="padding:10px 18px;font-size:11.5px;color:#A0A6B0;line-height:17px">站内消息为通知性质、不承载操作，处理动作回各自界面完成。催办与超时提醒本版不做。</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;top:18px;left:50%;transform:translateX(-50%);background:#0f172a;border-radius:9px;padding:11px 18px;font-size:13px;line-height:20px;color:#fff;z-index:95;max-width:680px;text-align:center;box-shadow:0 10px 30px rgba(7,34,88,.22);animation:dcIn .16s ease">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;runtimeForm&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;compose 单机&quot;,&quot;k8s 集群&quot;],&quot;default&quot;:&quot;compose 单机&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;部署形态&quot;},&quot;singleTenant&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;部署形态&quot;}}">
+const pill = (bg, fg) => "display:inline-flex;align-items:center;font-size:12px;padding:2px 9px;border-radius:5px;flex-shrink:0;background:" + bg + ";color:" + fg;
+const chipStyle = (on) => "height:28px;padding:0 12px;display:inline-flex;align-items:center;border-radius:6px;font-size:12.5px;cursor:pointer;border:1px solid " +
+  (on ? "#024DE3;background:#E6EDFC;color:#024DE3" : "#E5E6EB;background:#fff;color:#4E5969");
+const STATUS = {
+  draft: ["草稿", "#F2F3F5", "#86909C"],
+  online: ["已上线", "#E8F6EE", "#00873D"],
+  pending_res: ["待上线（资源不足）", "#FFF4E5", "#B54708"],
+  stopped: ["已停运", "#F2F3F5", "#86909C"]
+};
+const VSTATE = { online: ["已上线", "#E8F6EE", "#00873D"], was: ["曾上线", "#F2F3F5", "#4E5969"], rejected: ["被驳回", "#FEF2F2", "#ef4444"], pending: ["待审", "#FFF4E5", "#B54708"], approved: ["已通过 · 待上线", "#E6EDFC", "#024DE3"], withdrawn: ["已撤回", "#F2F3F5", "#86909C"] };
+const ICONS = {
+  build: "M11.5 11.5L20 14V18C20 19.1046 19.1046 20 18 20H14L11.5 11.5ZM11.5 11.5L3 9L3 5C3 3.89543 3.89543 3 5 3L9 3L11.5 11.5Z",
+  kb: "M12 6.88C12 6.38 12.38 5.95 12.88 5.89L18.88 5.14C19.47 5.07 20 5.53 20 6.13V15.94C20 16.51 19.51 16.97 18.94 16.93L12.94 16.56C12.41 16.53 12 16.09 12 15.56V6.88ZM3 6.13C3 5.53 3.53 5.07 4.12 5.14L10.12 5.89C10.62 5.95 11 6.38 11 6.88V15.56C11 16.09 10.59 16.53 10.06 16.56L4.06 16.93C3.49 16.97 3 16.51 3 15.94V6.13Z",
+  approval: "M9.9 14.1V11.56C8.05 12.37 6.75 10.52 6.75 8.36C6.75 5.46 9.1 3.1 12 3.1C14.9 3.1 17.25 5.46 17.25 8.36C17.25 10.51 15.95 12.36 14.1 11.56V14.1H18.83C20.28 14.1 21.45 15.27 21.45 16.73V19.35H2.55V16.73C2.55 15.28 3.73 14.1 5.17 14.1H9.9ZM3.6 20.4H20.4V21.5H3.6V20.4Z",
+  audit: "M12 2C12.11 2 12.22 2.04 12.31 2.12C13.31 2.98 16.65 5.5 21.82 5.65C22.08 5.66 22.29 5.87 22.29 6.14V14.2C22.29 18.7 15.66 24 12 24C8.24 24 1.71 18.7 1.71 14.2V6.14C1.71 5.87 1.92 5.66 2.18 5.65C7.36 5.5 10.7 2.98 11.69 2.12C11.78 2.04 11.89 2 12 2ZM11.43 8.64L8.38 15H13.17L11.43 18.72L13.19 19.54L16.21 13.05H12.4L14.11 9.5L11.43 8.64Z",
+  system: "M12 2.95C14.08 2.95 16.1 3.6 17.79 4.8C19.48 6 20.76 7.7 21.44 9.66C22.13 11.62 22.18 13.74 21.61 15.73C21.03 17.73 19.85 19.49 18.22 20.78C18.05 20.92 17.83 21 17.6 21H6.4C6.17 21 5.95 20.92 5.78 20.78C4.15 19.49 2.97 17.73 2.39 15.73C1.82 13.74 1.87 11.62 2.56 9.66C3.24 7.7 4.52 6 6.21 4.8C7.9 3.6 9.93 2.95 12 2.95ZM16.21 8.79C16.02 8.61 15.77 8.5 15.5 8.5C15.23 8.5 14.98 8.61 14.79 8.79L12.52 11.07C12.23 10.99 11.93 10.98 11.64 11.03C11.35 11.09 11.07 11.21 10.83 11.38C10.59 11.55 10.39 11.78 10.25 12.04C10.1 12.3 10.02 12.59 10 12.88L10 13C10 13.28 10.06 13.57 10.18 13.82C10.3 14.08 10.47 14.31 10.68 14.5C10.9 14.69 11.15 14.83 11.42 14.91C11.69 14.99 11.98 15.02 12.26 14.98C12.54 14.94 12.81 14.85 13.05 14.7C13.3 14.55 13.5 14.35 13.66 14.11C13.82 13.87 13.93 13.61 13.97 13.33C14.02 13.05 14.01 12.76 13.93 12.48L16.21 10.21C16.39 10.02 16.5 9.77 16.5 9.5C16.5 9.23 16.39 8.98 16.21 8.79Z",
+  apikey: "M3.5 8H11V3.5H20.5V21H3.5ZM5 11H6.5V12.5H5ZM8 11H9.5V12.5H8ZM5 14.5H6.5V16H5ZM8 14.5H9.5V16H8ZM13 6.5H14.5V8H13ZM17 6.5H18.5V8H17ZM13 10.5H14.5V12H13ZM17 10.5H18.5V12H17ZM14.5 16H17V21H14.5Z",
+  square: "M20 6.71C20.31 6.89 20.5 7.22 20.5 7.57V16.43C20.5 16.78 20.31 17.11 20 17.29L12.51 21.7C12.19 21.89 11.81 21.89 11.49 21.7L3.99 17.29C3.69 17.11 3.5 16.78 3.5 16.43V7.57C3.5 7.22 3.69 6.89 3.99 6.71L11.49 2.3C11.81 2.11 12.19 2.11 12.51 2.3L20 6.71ZM8.53 8.65L7.68 8.12L6.62 9.82L7.47 10.35L11 12.56V16.5V17.5H13V16.5V12.55L16.53 10.35L17.38 9.82L16.32 8.12L15.47 8.65L12 10.82L8.53 8.65Z"
+};
+const AUTH_OPTS = [
+  { id: "u-li", name: "李工", kind: "用户", sub: "li_gong@cofco.com · 中粮集团/信息技术部" },
+  { id: "u-wang", name: "王敏", kind: "用户", sub: "wangmin@cofco.com · 中粮集团/信息技术部" },
+  { id: "u-chen", name: "陈果", kind: "用户", sub: "chenguo@cofco.com · 中粮集团/法务部" },
+  { id: "u-zhao", name: "赵越", kind: "用户", sub: "zhaoyue@cofco.com · 中粮集团/财务部" },
+  { id: "u-sun", name: "孙晴", kind: "用户", sub: "sunqing@cofco.com · 中粮集团/销售一部" },
+  { id: "d-legal", name: "法务部", kind: "部门", sub: "中粮集团/法务部 · 24 人" },
+  { id: "d-fin", name: "财务部", kind: "部门", sub: "中粮集团/财务部 · 56 人" },
+  { id: "d-it", name: "信息技术部", kind: "部门", sub: "中粮集团/信息技术部 · 88 人" },
+  { id: "g-sales", name: "销售一线用户组", kind: "用户组", sub: "用户组 · 132 人" },
+  { id: "g-audit", name: "内审用户组", kind: "用户组", sub: "用户组 · 11 人" }
+];
+const seedApps = () => ([
+  { id: "app-1", name: "合同台账助手", owner: "李工", desc: "从合同 PDF 抽取关键条款生成台账，支持按对手方检索。", status: "online", tier: "std", source: "CLI 导入", vis: ["d-legal", "u-wang"], inflight: false, reject: null, vi: 0,
+    caps: [
+      { name: "集团制度知识库", type: "knowledge", note: "检索 · 运行期按当前访问用户逐资源鉴权（文件级）" },
+      { name: "Qwen2.5-72B-Instruct", type: "model", note: "模型名即模型管理页原名，无逻辑档位转换" },
+      { name: "OCR 服务凭据（引用名 ocr_key）", type: "secret", note: "运行时按引用注入值，密钥值零暴露" },
+      { name: "应用数据库 contract_ledger", type: "db", note: "本次迭代加列 counterparty_tax_id（加列自动迁移）" }],
+    versions: [{ no: "v3", type: "迭代", time: "2026-08-14 17:22", caps: "4 项能力声明", state: "online" }, { no: "v2", type: "迭代", time: "2026-07-30 10:05", caps: "3 项能力声明", state: "was" }, { no: "v1", type: "首发", time: "2026-07-02 15:40", caps: "2 项能力声明", state: "was" }] },
+  { id: "app-2", name: "报销单核对", owner: "李工", desc: "核对报销单与差旅标准，标出超标项。", status: "pending_res", tier: "light", source: "CLI 导入", vis: [], inflight: false, reject: null, vi: 0,
+    caps: [{ name: "集团差旅管理办法库", type: "knowledge", note: "检索 · 声明层白名单收窄" }, { name: "Qwen2.5-14B-Instruct", type: "model", note: "OpenAI 兼容通道由平台注入" }],
+    versions: [{ no: "v1", type: "首发", time: "2026-08-15 09:10", caps: "2 项能力声明", state: "approved" }] },
+  { id: "app-3", name: "客服知识速查", owner: "陈果", desc: "客服坐席快速检索产品手册与话术。", status: "online", tier: "perf", source: "CLI 导入", vis: ["g-sales", "u-chen"], inflight: true, reject: null, vi: 0,
+    caps: [{ name: "公开产品手册库", type: "knowledge", note: "检索" }, { name: "销售话术库", type: "knowledge", note: "本次迭代新增声明" }, { name: "Qwen2.5-72B-Instruct", type: "model", note: "模型名即模型管理页原名" }],
+    versions: [{ no: "v4", type: "迭代", time: "2026-08-15 11:02", caps: "3 项能力声明", state: "pending" }, { no: "v3", type: "迭代", time: "2026-08-08 09:31", caps: "2 项能力声明", state: "online" }, { no: "v2", type: "迭代", time: "2026-07-21 14:12", caps: "2 项能力声明", state: "rejected" }, { no: "v1", type: "首发", time: "2026-07-05 16:48", caps: "1 项能力声明", state: "was" }] },
+  { id: "app-4", name: "供应商比价", owner: "李工", desc: "抓取内部报价单做横向比价。", status: "stopped", tier: "light", source: "CLI 导入", vis: ["u-li"], inflight: false, reject: "能力声明中的密钥引用未说明用途，请补充后重新提交。", vi: 0,
+    caps: [{ name: "应用数据库 quote_compare", type: "db", note: "本版无结构变更" }],
+    versions: [{ no: "v2", type: "迭代", time: "2026-08-11 20:05", caps: "1 项能力声明", state: "rejected" }, { no: "v1", type: "首发", time: "2026-06-18 11:20", caps: "1 项能力声明", state: "online" }] },
+  { id: "app-5", name: "出差申请小工具", owner: "李工", desc: "本地开发完成、尚未 deploy——草稿 owner-only。", status: "draft", tier: "light", source: "CLI 导入", vis: [], inflight: false, reject: null, vi: 0,
+    caps: [{ name: "集团差旅管理办法库", type: "knowledge", note: "待首发 deploy 时声明生效" }], versions: [] }
+]);
+const seedTickets = () => ([
+  { id: "t-1", appId: "app-3", appName: "客服知识速查", kind: "迭代", owner: "陈果", dept: "法务部", source: "CLI 导入", submitted: "2026-08-15 11:02", tier: "性能（4 核 / 8 GB）", state: "pending" },
+  { id: "t-2", appId: "app-2", appName: "报销单核对", kind: "首发", owner: "李工", dept: "信息技术部", source: "CLI 导入", submitted: "2026-08-15 09:10", tier: "轻量（1 核 / 2 GB）", state: "approved" }
+]);
+
+class Component extends DCLogic {
+  state = {
+    persona: "dev", nav: "build", scope: "mine", view: null, appId: null, from: "mine",
+    detailTab: "publish", approvalTab: "todo", ticketId: null, reviewTab: "code", activeFile: "app.py", preview: "idle",
+    systemTab: "roles", apikeyTab: "sa",
+    apps: seedApps(), tickets: seedTickets(),
+    tiers: [
+      { id: "light", name: "轻量", spec: "1 核 CPU / 2 GB 内存", desc: "适合表单、台账类轻量应用（默认推荐档）", enabled: true },
+      { id: "std", name: "标准", spec: "2 核 CPU / 4 GB 内存", desc: "适合多数日常业务应用", enabled: true },
+      { id: "perf", name: "性能", spec: "4 核 CPU / 8 GB 内存", desc: "适合数据处理量大、访问人数较多的应用", enabled: true }
+    ],
+    models: [
+      { id: "m1", name: "Qwen2.5-72B-Instruct", meta: "vLLM 私有部署 · 被 2 个应用声明使用", on: true },
+      { id: "m2", name: "Qwen2.5-14B-Instruct", meta: "vLLM 私有部署 · 被 1 个应用声明使用", on: true },
+      { id: "m3", name: "bge-large-zh embedding", meta: "向量模型 · 知识库检索内部使用", on: true }
+    ],
+    search: "", statusFilter: "全部状态", typeFilter: "托管应用", tagFilter: "全部标签",
+    menuApp: null, modal: null, rejectText: "", authDraft: [], authTab: "用户", authSearch: "",
+    deployLog: null, runtime: null, toast: null, scarce: false,
+    layers: { runtime: true, open: true },
+    roles: { admin: { build: true, create: true }, dev: { build: true, create: true }, biz: { build: false, create: false }, approver: { build: false, create: false } },
+    keyBits: { "knowledge:read": false, "model:invoke": false, "identity:read": false, "app:manage": false, "delegate": false },
+    keyName: "", keySaved: false, approvers: null, auditType: "全部", auditActor: "", auditObject: ""
+  };
+
+  flash(msg) { clearTimeout(this._t); this.setState({ toast: msg }); this._t = setTimeout(() => this.setState({ toast: null }), 3200); }
+  app() { return this.state.apps.find(a => a.id === this.state.appId) || this.state.apps[0]; }
+  ticket() { return this.state.tickets.find(t => t.id === this.state.ticketId) || this.state.tickets[0]; }
+  patchApp(id, fn) { this.setState(s => ({ apps: s.apps.map(a => a.id === id ? fn({ ...a }) : a) })); }
+  me() { const p = this.state.persona; return p === "admin" ? "王敏" : p === "approver" ? "周颖" : p === "super" ? "平台超管" : "李工"; }
+  toggleRun(a) {
+    if (a.status === "stopped") { this.patchApp(a.id, x => ({ ...x, status: "online" })); this.flash("已重新启用 · 代码、对话历史与生产数据完整无损；重新启用叠加运行环境容量校验"); }
+    else if (a.status === "online") { this.patchApp(a.id, x => ({ ...x, status: "stopped" })); this.flash("已停运 · 入口与广场呈「已停用」页，资产不受影响；停运即时生效、无需审批"); }
+    else this.flash("当前状态不可直接上下线：" + STATUS[a.status][0]);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const isSuper = s.persona === "super";
+    const isAdmin = s.persona === "admin" || isSuper;
+    const isApprover = s.persona === "approver";
+    const me = this.me();
+    const roleKey = isAdmin ? "admin" : isApprover ? "approver" : "dev";
+    const L = s.layers;
+    const form = (this.props.runtimeForm || "compose 单机") ;
+    const buildOk = s.roles[roleKey].build;
+    const createOk = s.roles[roleKey].create;
+
+    const navDefs = [
+      { id: "build", label: "构建", show: buildOk && L.runtime },
+      { id: "approval", label: "审批中心", show: (isAdmin || isApprover) && L.runtime },
+      { id: "audit", label: "审计", show: isAdmin },
+      { id: "system", label: "系统管理", show: isAdmin },
+      { id: "apikey", label: "API key 管理", show: isAdmin && L.open },
+      { id: "square", label: "应用广场", show: L.runtime }
+    ].filter(n => n.show);
+    if (!navDefs.some(n => n.id === s.nav)) setTimeout(() => this.setState({ nav: navDefs[0].id, view: null }), 0);
+    const navItems = navDefs.map(n => ({
+      label: n.label, iconPath: ICONS[n.id === "build" ? "build" : n.id] || ICONS.build,
+      go: () => this.setState({ nav: n.id, view: null, appId: null, ticketId: null, menuApp: null }),
+      style: "display:flex;align-items:center;gap:12px;height:44px;padding:0 18px;border-radius:9px;cursor:pointer;" +
+        (s.nav === n.id ? "background:#fff;color:#024DE3;box-shadow:0 1px 2px rgba(0,0,0,.06)" : "color:#212121")
+    }));
+
+    const scope = isAdmin ? s.scope : "mine";
+    const kw = s.search.trim();
+    const pool = s.apps.filter(a => (scope === "all" ? true : a.owner === me));
+    const list = pool.filter(a => (!kw || a.name.indexOf(kw) >= 0) && (s.statusFilter === "全部状态" || STATUS[a.status][0] === s.statusFilter));
+
+    const cards = list.map(a => {
+      const d = STATUS[a.status];
+      const on = a.status === "online";
+      const badge = a.status === "pending_res" ? "审批已通过，上线终检遇运行环境容量不足（" + form + "）— 资源释放后手动上线，无需重新审批"
+        : a.inflight ? "在途审批单 · 待审 — 在途期间再次 deploy 会被拒绝"
+        : a.reject ? "上一次发布被驳回 — 当前版本继续运行，修改后重新 deploy"
+        : a.status === "draft" ? "从未发布 · 草稿 owner-only" : "";
+      const canDel = a.status !== "online";
+      return {
+        name: a.name, desc: a.desc, owner: a.owner, ownerInitial: a.owner.slice(0, 1),
+        logoText: a.name.slice(0, 1),
+        logoStyle: "width:26px;height:26px;border-radius:7px;background:#E6EDFC;color:#024DE3;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center",
+        versionText: (a.versions[a.vi] || { no: "—" }).no,
+        cycleVersion: (e) => { e.stopPropagation(); if (!a.versions.length) return; this.patchApp(a.id, x => ({ ...x, vi: (x.vi + 1) % x.versions.length })); },
+        switchTrack: "width:32px;height:17px;border-radius:9px;display:inline-flex;align-items:center;padding:0 2px;box-sizing:border-box;cursor:pointer;transition:background .18s ease;background:" + (on ? "#024DE3" : "#D8DBE0") + ";justify-content:" + (on ? "flex-end" : "flex-start"),
+        switchKnob: "width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.18)",
+        toggleRun: (e) => { e.stopPropagation(); this.toggleRun(a); },
+        statusText: d[0], statusStyle: pill(d[1], d[2]),
+        badge, badgeStyle: "position:relative;margin-top:2px;font-size:11.5px;line-height:17px;color:" + (a.reject ? "#ef4444" : "#B54708") + ";background:" + (a.reject ? "#FEF6F5" : "#FFF9F0") + ";border:1px solid " + (a.reject ? "#FBD7D3" : "#FFDCA8") + ";border-radius:7px;padding:7px 9px",
+        wrapStyle: "position:relative;width:318px;border:1px solid " + (s.menuApp === a.id ? "#024DE3" : "#E5E6EB") + ";border-radius:12px;background:#fff;padding:18px;box-sizing:border-box;box-shadow:0 0 20px rgba(7,34,88,.03);transition:border-color .16s ease",
+        open: () => this.setState({ view: "app", appId: a.id, from: scope, detailTab: "publish", menuApp: null }),
+        openMenu: (e) => { e.stopPropagation(); this.setState({ menuApp: s.menuApp === a.id ? null : a.id }); },
+        menuOpen: s.menuApp === a.id,
+        manageAuth: (e) => { e.stopPropagation(); this.setState({ modal: "auth", appId: a.id, authDraft: [...a.vis], menuApp: null }); },
+        delSuffix: canDel ? "" : "（请先停运）",
+        delStyle: "height:32px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:13px;" +
+          (canDel ? "color:#ef4444;cursor:pointer" : "color:#C9CDD4;cursor:not-allowed"),
+        del: (e) => {
+          e.stopPropagation();
+          if (!canDel) { this.flash("已上线态删除入口置灰 —— 请先停运（RT-07 前置状态闸）"); return; }
+          if (a.owner !== me) { this.flash("仅 owner 可删除应用；管理侧兜底手段 = 停运"); this.setState({ menuApp: null }); return; }
+          this.setState({ modal: "delete", appId: a.id, menuApp: null });
+        }
+      };
+    });
+
+    const selects = [
+      { value: s.typeFilter, w: 132, cycle: () => this.setState({ typeFilter: s.typeFilter === "托管应用" ? "全部应用类型" : s.typeFilter === "全部应用类型" ? "工作流" : s.typeFilter === "工作流" ? "助手" : "托管应用" }), hi: s.typeFilter === "托管应用" },
+      { value: s.statusFilter, w: 168, cycle: () => { const o = ["全部状态", "已上线", "待上线（资源不足）", "已停运", "草稿"]; this.setState({ statusFilter: o[(o.indexOf(s.statusFilter) + 1) % o.length] }); }, hi: s.statusFilter !== "全部状态" },
+      { value: s.tagFilter, w: 124, cycle: () => this.flash("本版不做应用标签设置（顺延）——未设标签的应用在广场默认分类中正常可见"), hi: false }
+    ];
+
+    // ---- 模块内 tab
+    let tabDefs = [];
+    if (s.nav === "approval") tabDefs = isAdmin ? [["todo", "待办"], ["scene", "场景配置"]] : [["todo", "待办"]];
+    if (s.nav === "system") tabDefs = [["roles", "角色与权限"], ["bus", "能力总线"], ["deploy", "部署形态"]].concat(L.runtime ? [["tier", "资源档位"]] : []);
+    if (s.nav === "apikey") tabDefs = [["sa", "服务账号与密钥"]];
+    const tabKey = s.nav === "approval" ? "approvalTab" : s.nav === "system" ? "systemTab" : "apikeyTab";
+    const curTab = s.nav === "approval" ? s.approvalTab : s.nav === "system" ? s.systemTab : s.apikeyTab;
+
+    // ---- 应用详情
+    const app = this.app();
+    const CAPICON = { knowledge: ["知", "#E6EDFC", "#024DE3"], model: ["模", "#E8F1FF", "#0EA5E9"], secret: ["密", "#FFF1E8", "#D46B08"], db: ["数", "#E8F6EE", "#00A34A"] };
+    const capRow = (c) => { const ic = CAPICON[c.type] || CAPICON.knowledge; return { ...c, iconText: ic[0], iconStyle: "width:25px;height:25px;flex-shrink:0;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;background:" + ic[1] + ";color:" + ic[2] }; };
+    const aStat = STATUS[app.status] || STATUS.draft;
+    const tierName = (s.tiers.find(t => t.id === app.tier) || { name: "轻量" }).name;
+    const stepIdx = app.status === "online" ? 4 : app.status === "pending_res" ? 3 : app.inflight ? 2 : 0;
+    const steps = ["提交发布", "密钥扫描", "审批", "上线托管"].map((label, i) => {
+      const done = stepIdx > i + 1 || app.status === "online";
+      const cur = stepIdx === i + 1 || (stepIdx === i && app.inflight);
+      const active = done || cur || stepIdx > i;
+      return {
+        label, mark: done ? "✓" : String(i + 1),
+        wrap: "flex:" + (i === 3 ? "0 0 auto" : "1") + ";min-width:0",
+        dot: "width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:500;" +
+          (done ? "background:#024DE3;color:#fff" : cur ? "background:#fff;color:#024DE3;border:1.5px solid #024DE3" : "background:#F2F3F5;color:#A0A6B0"),
+        bar: i === 3 ? "display:none" : "flex:1;height:2px;background:" + (done ? "#024DE3" : "#EEF0F4"),
+        labelStyle: "font-size:12px;margin-top:6px;color:" + (active ? "#212121" : "#A0A6B0")
+      };
+    });
+    const approvalText = app.inflight
+      ? "在途：" + (app.versions[0] || {}).type + "审批单 · 待审（提交于 " + (app.versions[0] || {}).time + "）。同一应用同时至多一个在途审批单，在途期间再次 deploy 会被拒绝。审批人 = owner 所属部门的部门管理员 ∪ 租户管理员，或签。"
+      : app.status === "pending_res"
+        ? "审批已通过，上线终检遇运行环境容量不足（" + form + "）→ 应用处于「待上线（资源不足）」态。资源释放后由 owner 手动上线，无需重新审批。"
+        : app.reject
+          ? "上一次发布被驳回。迭代驳回不改变应用已上线态——当前版本继续运行，仅待上线版本被弃。"
+          : app.status === "draft" ? "尚未发布。首发与迭代每次发布均需审批，不存在免审路径。"
+            : "无在途审批单。每次发布（首发 / 迭代）都生成审批单，走平台预置审批流——部署即生效，管理员无需先配置。";
+    const canDelHere = app.status !== "online" && app.owner === me;
+    const qrCells = "1101011100010110110101101001011011010110010111011001010101100101101".slice(0, 49).split("").map(ch => "border-radius:1px;background:" + (ch === "1" ? "#0f172a" : "transparent"));
+
+    // ---- 审批
+    const ticket = this.ticket() || { appId: "", appName: "—", kind: "—", owner: "—", dept: "—", source: "—", submitted: "—", tier: "—", state: "pending" };
+    const tApp = s.apps.find(a => a.id === ticket.appId) || app;
+    const approverText = (s.approvers && s.approvers.length)
+      ? s.approvers.join("、") + "（改配 · 或签）"
+      : (this.props.singleTenant ? "平台超管（单租户回退）∪ " : "租户管理员 王敏 ∪ ") + ticket.dept + "管理员（或签）";
+    const PVMAP = {
+      idle: ["未拉起", "按需拉起，不预先起实例。以待上线版本快照拉起，连应用草稿库。", "拉起预览", "#C9CDD4"],
+      starting: ["拉起中", "复用 deploy 预检启动探活的同一能力，构建依赖并探活…", "拉起中…", "#B54708"],
+      running: ["运行中", "注入身份 = 审批人本人，平台能力按 owner 权限放行（审批例外、计审计）。", "打开预览", "#00873D"],
+      failed: ["拉起失败", "失败不影响审批单本身，可重新拉起或直接驳回。", "重新拉起", "#ef4444"],
+      recycled: ["已回收", "审批出终态 / 超时（默认 7 天，部署配置项）/ 手动回收后实例被回收。", "重新拉起", "#86909C"]
+    };
+    const PV = PVMAP[s.preview] || PVMAP.idle;
+    const fileList = ["bisheng-app.yaml", "app.py", "requirements.txt", "AGENTS.md"];
+    const fileBody = s.activeFile === "bisheng-app.yaml"
+      ? "name: " + ticket.appName + "\nruntime: python3.11\nresource_tier: perf          # 未声明时取轻量档\ncapabilities:\n  knowledge:\n    - 公开产品手册库\n    - 销售话术库              # 本次迭代新增声明\n  models:\n    - Qwen2.5-72B-Instruct    # 模型管理页原名\n  secrets:\n    - crm_token               # 引用名，值由平台注入"
+      : s.activeFile === "requirements.txt"
+        ? "bisheng-sdk>=0.3          # auth / retrieve / storage 三件套\nopenai>=1.40              # 模型走官方 OpenAI 兼容客户端，不进 SDK\nSQLAlchemy>=2.0           # 应用数据库用标准库连平台注入的连接\nfastapi>=0.111"
+        : s.activeFile === "AGENTS.md"
+          ? "# 本项目由本地 coding agent 维护\n\n技能目录：.bisheng/skills（bisheng skills sync 拉取，首发两包）\n- 部署纳管\n- 平台能力接线   ⚠ auth 一节：禁止自建登录页——唯一的静默失败点"
+          : "from bisheng_sdk import auth, retrieve, storage\nfrom openai import OpenAI          # 模型：行业标准库 + 平台注入的 base_url/key\nimport os\n\nuser = auth.current_user()          # 平台注入身份，唯一可信来源；不写登录页\ndocs = retrieve.search(\n    kb=\"公开产品手册库\",             # 能力声明内的知识库\n    query=q,\n    as_user=user,                    # per-user 过滤，文件级、fail-closed\n)\nllm = OpenAI(base_url=os.environ[\"BISHENG_MODEL_BASE_URL\"],\n             api_key=os.environ[\"BISHENG_MODEL_KEY\"])";
+    const diffLines = [
+      { t: "--- a/app.py", k: "m" }, { t: "+++ b/app.py", k: "m" }, { t: "@@ -12,6 +12,9 @@", k: "m" },
+      { t: "  docs = retrieve.search(kb=\"公开产品手册库\", query=q, as_user=user)", k: "c" },
+      { t: "+ scripts = retrieve.search(kb=\"销售话术库\", query=q, as_user=user)", k: "a" },
+      { t: "+ crm = http.get(CRM_URL, token=os.environ[\"crm_token\"])", k: "a" },
+      { t: "- return render(docs)", k: "d" },
+      { t: "+ return render(docs, scripts, crm)", k: "a" }
+    ].map(d => ({ text: d.t, style: "font-family:ui-monospace,Menlo,monospace;font-size:12.5px;line-height:20px;padding:0 6px;white-space:pre;color:" + (d.k === "a" ? "#00873D;background:#F0FAF4" : d.k === "d" ? "#ef4444;background:#FEF2F2" : d.k === "m" ? "#86909C" : "#4E5969") }));
+
+    // ---- 授权弹窗 / 审计 / 广场
+    const authQ = (s.authSearch || "").trim();
+    const authList = AUTH_OPTS.filter(o => o.kind === s.authTab && (!authQ || o.name.indexOf(authQ) >= 0 || o.sub.indexOf(authQ) >= 0));
+    const AUDIT = [
+      { time: "2026-08-17 10:44", actor: "李工", type: "造应用（CLI 导入）", object: "差旅报销问答", detail: "首发 deploy · owner = 服务账号资源归属人；准入闸 = key 的 app:manage 位" },
+      { time: "2026-08-16 11:02", actor: "陈果", type: "发布提交", object: "客服知识速查 v4", detail: "CLI deploy · 生成迭代审批单，落到部门管理员 ∪ 租户管理员（或签）" },
+      { time: "2026-08-16 10:41", actor: "应用：合同台账助手", type: "运行期能力调用", object: "集团制度知识库", detail: "双归属：actor = 应用，subject = 王敏；文件级过滤、fail-closed" },
+      { time: "2026-08-16 10:41", actor: "应用：合同台账助手", type: "模型调用", object: "Qwen2.5-72B-Instruct", detail: "tokens_in=812 tokens_out=204 · 逐条留痕，本版不做聚合账单" },
+      { time: "2026-08-16 09:12", actor: "系统", type: "上线终检", object: "报销单核对", detail: "运行环境容量不足（" + form + "）→ 应用入待上线态，已通知 owner 与租户管理员" },
+      { time: "2026-08-15 17:22", actor: "李工", type: "可见范围变更", object: "合同台账助手", detail: "新增 法务部 · 即时生效、不产生审批单" },
+      { time: "2026-08-15 16:58", actor: "王敏", type: "key 权限位调整", object: "服务账号：中粮 · 李工开发者", detail: "新增 app:manage · 即时生效、无需重签（不含密钥值）" },
+      { time: "2026-08-15 16:20", actor: "系统", type: "运行期凭据自动重签", object: "合同台账助手", detail: "随发布自动签发与回收 · 无管理入口、owner 全程零感知" },
+      { time: "2026-08-11 20:31", actor: "王敏", type: "审批驳回", object: "供应商比价 v2", detail: "驳回理由全文已回传 owner；应用保持已上线态" },
+      { time: "2026-08-11 09:04", actor: "王敏", type: "停运", object: "供应商比价", detail: "租户管理员操作 · 资产不受影响" }
+    ];
+    const aa = s.auditActor.trim(), ao = s.auditObject.trim();
+    const auditRows = AUDIT.filter(r => (s.auditType === "全部" || r.type === s.auditType) && (!aa || r.actor.indexOf(aa) >= 0) && (!ao || r.object.indexOf(ao) >= 0));
+    const visibleTo = (a) => {
+      if (isAdmin) return a.vis.indexOf("u-wang") >= 0 || a.vis.indexOf("d-it") >= 0;
+      if (isApprover) return false;
+      return a.vis.indexOf("u-li") >= 0 || a.vis.indexOf("d-legal") >= 0 || a.vis.indexOf("d-fin") >= 0 || a.vis.indexOf("d-it") >= 0;
+    };
+    const FB = {
+      noperm: ["无访问权限", "应用「合同台账助手」· owner 李工。你不在该应用的可见范围内，请联系应用 owner 或租户管理员开通权限。本版不含在线申请入口。", "返回广场"],
+      stopped: ["应用已停用", "该应用已停运，暂不可访问。请联系应用 owner 或租户管理员。", "返回广场"],
+      gone: ["应用不存在或未上线", "该入口链接指向的应用已被删除，或从未上线（草稿 / 待上线态）。", "返回广场"],
+      nofactory: ["本环境未启用应用工场", "本环境未部署应用工场运行时层，应用托管与广场入口不可用。请联系平台超管开启。", "知道了"],
+      login: ["跳转平台登录页", "检测到无登录态（含手机扫码访问）→ 重定向到平台登录页，含已配置的账号密码与企业微信 / 钉钉 SSO 扫码。登录成功后回跳原地址，应用侧零登录代码。", "模拟登录并回跳"],
+      deploying: ["发布中", "新版本上线的切换窗口：入口呈短暂「发布中」提示、不落报错页，切换完成自动恢复。", "返回"],
+      recovering: ["应用恢复中", "该应用崩溃后处于自动恢复窗口内（承诺 5 分钟内无人工干预恢复）。应用与平台、应用与应用运行隔离——平台其余功能与其他应用访问正常；两种运行时形态口径相同。", "返回"]
+    };
+    const fbKind = (s.runtime || {}).kind;
+    const fb = FB[fbKind] || FB.noperm;
+    const BITS = [
+      { g: 0, id: "knowledge:read", label: "知识库检索与清单查询", note: "该 PRD 既有位，复用——知识库检索不另设位" },
+      { g: 0, id: "delegate", label: "受限委托（模式 D）", note: "只用于 V2 开放 API 面。持有它的 key 接本地开发三面一律被拒，连 login 都拒" },
+      { g: 1, id: "model:invoke", label: "模型 OpenAI 兼容直连 + 模型清单查询", note: "裸透传、不建会话，与 chat:invoke 互不蕴含" },
+      { g: 1, id: "identity:read", label: "用户身份 / 组织查询 + dev 身份注入", note: "⚠ 高危：勾选即本租户组织架构全量可读，平台不存在把部分部门授予服务账号的机制，无法收窄" },
+      { g: 1, id: "app:manage", label: "应用数据 / 状态 / 日志 + deploy、logs", note: "部署应用需勾选它；只对该 key 资源归属人 owner 的应用放行" }
+    ];
+    const conflict = s.keyBits["delegate"] && (s.keyBits["model:invoke"] || s.keyBits["identity:read"] || s.keyBits["app:manage"]);
+
+    return {
+      isAudit: s.nav === "audit" && !s.view,
+      auditRows, auditActor: s.auditActor, auditObject: s.auditObject,
+      onAuditActor: (e) => this.setState({ auditActor: e.target.value }),
+      onAuditObject: (e) => this.setState({ auditObject: e.target.value }),
+      auditFilters: ["全部", "发布提交", "审批驳回", "可见范围变更", "运行期能力调用", "模型调用"].map(t => ({
+        label: t, pick: () => this.setState({ auditType: t }), style: chipStyle(s.auditType === t)
+      })),
+      exportAudit: () => this.flash("已导出当前筛选结果 · 记录中不含密钥明文等敏感值"),
+
+      isRoles: s.nav === "system" && s.systemTab === "roles" && !s.view,
+      zeroAddStyle: pill("#E8F6EE", "#00873D"),
+      roleRows: [
+        { key: "admin", name: "租户管理员", note: "治理面必须可达" },
+        { key: "dev", name: "业务技术员（开发者）", note: "灰度放量：给试点角色勾「创建应用」" },
+        { key: "biz", name: "普通业务用户", note: "使用面走应用可见范围，与本项无关" },
+        { key: "approver", name: "审批人", note: "处理审批单不需要构建菜单" }
+      ].map((r, i, arr) => {
+        const v = s.roles[r.key];
+        const sw = (on) => "display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:6px;font-size:12.5px;cursor:pointer;" + (on ? "background:#E6EDFC;color:#024DE3" : "background:#F2F3F5;color:#86909C");
+        return {
+          name: r.name, note: r.note,
+          rowStyle: "display:flex;align-items:center;gap:12px;padding:14px 18px;" + (i === arr.length - 1 ? "" : "border-bottom:1px solid #F7F8FA"),
+          buildText: v.build ? "可见" : "隐藏", buildStyle: sw(v.build),
+          createText: v.create ? "已开通" : "关闭", createStyle: sw(v.create),
+          toggleBuild: () => { const nb = !v.build; this.setState(st => ({ roles: { ...st.roles, [r.key]: { build: nb, create: nb ? st.roles[r.key].create : false } } })); if (!nb) this.flash("关闭父项「构建」时子项「创建应用」级联失效"); },
+          toggleCreate: () => { if (!v.build) { this.flash("须先开启父项「构建」菜单"); return; } this.setState(st => ({ roles: { ...st.roles, [r.key]: { ...st.roles[r.key], create: !st.roles[r.key].create } } })); }
+        };
+      }),
+
+      isBus: s.nav === "system" && s.systemTab === "bus" && !s.view,
+      busModels: s.models.map((m, i, arr) => ({
+        name: m.name, meta: m.meta,
+        rowStyle: "display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;" + (i === arr.length - 1 ? "" : "border-bottom:1px solid #F7F8FA"),
+        stateText: m.on ? "已启用" : "已下线", stateStyle: m.on ? pill("#E8F6EE", "#00873D") : pill("#F2F3F5", "#86909C"),
+        toggleText: m.on ? "下线" : "重新启用",
+        toggle: () => {
+          this.setState(st => ({
+            models: st.models.map(x => x.id === m.id ? { ...x, on: !x.on } : x),
+            apps: st.apps.map(a => ({ ...a, caps: a.caps.map(c => c.type === "model" && c.name === m.name ? { ...c, dead: m.on, note: m.on ? "已被收回" : "模型名即模型管理页原名" } : c) }))
+          }));
+          this.flash(m.on ? "已下线「" + m.name + "」· 声明它的已上线应用：该能力调用返回明确错误态、应用其余功能可用，owner 在发布面可见失效提示" : "已重新启用「" + m.name + "」");
+        }
+      })),
+
+      isDeployTab: s.nav === "system" && s.systemTab === "deploy" && !s.view,
+      layerRows: [
+        { key: "core", name: "平台核心", note: "平台既有全部功能 · 基座，必装", fixed: true, on: true },
+        { key: "open", name: "开放能力层", note: "服务账号密钥、模型 OpenAI 兼容接入、MCP 工具面 · 可独立于工场运行时层部署", on: L.open },
+        { key: "runtime", name: "工场运行时层", note: "应用托管运行、应用广场、发布管线 · 可整层不装；不装时构建页不出现「托管应用」类型、广场不出现托管应用，应用链接呈统一引导页", on: L.runtime }
+      ].map((l, i) => ({
+        name: l.name, note: l.note,
+        rowStyle: "display:flex;align-items:center;gap:16px;padding:14px 18px;" + (i === 2 ? "" : "border-bottom:1px solid #F7F8FA"),
+        btnText: l.fixed ? "必装" : (l.on ? "已部署" : "未部署"),
+        btnStyle: "display:inline-flex;align-items:center;height:28px;padding:0 12px;border-radius:6px;font-size:12.5px;flex-shrink:0;" +
+          (l.fixed ? "background:#F2F3F5;color:#86909C;cursor:not-allowed" : (l.on ? "background:#E8F6EE;color:#00873D;cursor:pointer" : "background:#F2F3F5;color:#86909C;cursor:pointer")),
+        toggle: () => {
+          if (l.fixed) return;
+          this.setState(st => ({ layers: { ...st.layers, [l.key]: !st.layers[l.key] }, nav: "system", systemTab: "deploy", view: null }));
+          if (l.key === "runtime") this.flash(l.on ? "已模拟「不装工场运行时层」：构建 / 审批 / 广场入口不出现，应用链接呈统一引导页；平台其余功能行为零变化" : "工场运行时层已部署");
+          else this.flash(l.on ? "已模拟「不装开放能力层」：管理后台 API key 管理页整页入口不出现，接入信息区同步消失" : "开放能力层已部署");
+        }
+      })),
+      toggleScarce: () => { this.setState({ scarce: !s.scarce }); this.flash(s.scarce ? "已恢复容量充足" : "已模拟容量不足 —— 去审批中心通过一单，看它落到「待上线（资源不足）」"); },
+      scarceText: s.scarce ? "已开启" : "关闭",
+      scarceStyle: "display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:6px;font-size:12.5px;cursor:pointer;" + (s.scarce ? "background:#FFF4E5;color:#B54708" : "background:#F2F3F5;color:#86909C"),
+      scarceCause: form.indexOf("k8s") >= 0 ? "无可调度资源" : "单机资源耗尽",
+
+      isTiers: s.nav === "system" && s.systemTab === "tier" && L.runtime && !s.view,
+      tierRows: s.tiers.map(t => ({
+        name: t.name, spec: t.spec, desc: t.desc,
+        stateText: t.enabled ? "启用" : "停用", stateStyle: t.enabled ? pill("#E8F6EE", "#00873D") : pill("#F2F3F5", "#86909C"),
+        usedText: s.apps.filter(a => a.tier === t.id && a.status !== "draft").length + " 个应用",
+        toggleText: t.enabled ? "停用" : "启用",
+        toggle: () => { this.setState(st => ({ tiers: st.tiers.map(x => x.id === t.id ? { ...x, enabled: !x.enabled } : x) })); this.flash(t.enabled ? "已停用「" + t.name + "」档：存量应用不动、继续运行与迭代，发布面不再可选" : "已启用「" + t.name + "」档"); }
+      })),
+
+      isSa: s.nav === "apikey" && L.open && !s.view,
+      keyName: s.keyName, onKeyName: (e) => this.setState({ keyName: e.target.value }),
+      bitGroups: [
+        { title: "开放 API（该 PRD 既有位）", note: "转交个人使用的 key 建议仅配本地开发工具包权限位（软提示）", g: 0 },
+        { title: "本地开发工具包（应用工场新增三位）", note: "MCP 工具面 / 模型协议面 / CLI", g: 1 }
+      ].map(gr => ({
+        title: gr.title, note: gr.note,
+        bits: BITS.filter(b => b.g === gr.g).map(b => {
+          const on = !!s.keyBits[b.id];
+          const bad = conflict && (b.id === "delegate" || b.g === 1) && on;
+          return {
+            id: b.id, label: b.label, note: b.note,
+            check: on ? "✓" : "",
+            boxStyle: "width:18px;height:18px;flex-shrink:0;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;margin-top:1px;" +
+              (on ? (bad ? "background:#ef4444;border:1px solid #ef4444" : "background:#024DE3;border:1px solid #024DE3") : "background:#fff;border:1.5px solid #D3D8E0"),
+            noteStyle: "font-size:11.5px;line-height:17px;margin-top:2px;color:" + (b.id === "identity:read" && on ? "#B54708" : bad ? "#ef4444" : "#86909C"),
+            rowStyle: "display:flex;gap:10px;align-items:flex-start;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid " +
+              (bad ? "#FBD7D3;background:#FEF6F5" : on ? "#D6E0FF;background:#F7F9FF" : "#F2F3F5;background:#FBFBFB"),
+            toggle: () => this.setState(st => ({ keyBits: { ...st.keyBits, [b.id]: !st.keyBits[b.id] } }))
+          };
+        })
+      })),
+      keyConflict: conflict,
+      issueBtnStyle: "height:34px;padding:0 18px;border:none;border-radius:7px;font-size:14px;font-weight:500;" +
+        (!conflict && s.keyName.trim() ? "background:#024DE3;color:#fff;cursor:pointer" : "background:#A8BCF3;color:#fff;cursor:not-allowed"),
+      issueKey: () => {
+        if (conflict) { this.flash("保存失败：delegate 与「本地开发工具包」三位互斥、硬阻断"); return; }
+        if (!s.keyName.trim()) { this.flash("密钥名称必填"); return; }
+        this.setState({ modal: "key", keySaved: false });
+      },
+      newKeyValue: "bs-sak-" + "8f2ac41d93b7e60254aa" + "d31c",
+      keySavedBox: "width:18px;height:18px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;" + (s.keySaved ? "background:#024DE3;border:1px solid #024DE3" : "background:#fff;border:1.5px solid #D3D8E0"),
+      keySavedCheck: s.keySaved ? "✓" : "",
+      toggleKeySaved: () => this.setState({ keySaved: !s.keySaved }),
+      keyDoneStyle: "height:34px;padding:0 20px;border:none;border-radius:7px;font-size:14px;font-weight:500;" + (s.keySaved ? "background:#024DE3;color:#fff;cursor:pointer" : "background:#A8BCF3;color:#fff;cursor:not-allowed"),
+      closeKeyModal: () => { if (!s.keySaved) { this.flash("请先勾选「我已保存该密钥」—— 明文此后不可再查看"); return; } this.setState({ modal: null, keyName: "" }); this.flash("已签发 · 此后任何界面只见掩码（前缀 + 末四位）；签发事件计审计"); },
+      modalKey: s.modal === "key",
+      keyList: [
+        { masked: "bs-sak-••••••••d31c", bits: "knowledge:read · model:invoke · app:manage", revoked: false },
+        { masked: "bs-sak-••••••••7d31", bits: "delegate（委托专用 · 本地开发三面全拒）", revoked: false }
+      ].map((k, i) => ({
+        masked: k.masked, bits: k.bits,
+        actText: "吊销", actStyle: "font-size:12.5px;color:#ef4444;cursor:pointer;flex-shrink:0",
+        revoke: () => this.flash("已吊销 · 生效上界 5 秒；MCP / 模型协议 / CLI 三面同时被拒绝，CLI 提示重新 login")
+      })),
+      copyAccess: () => this.flash("已复制接入信息（MCP 地址 · base URL · CLI 下载链接 · login 指引）—— 不含 key 值，可随时重发"),
+
+      isSquare: s.nav === "square" && L.runtime && !s.view,
+      squareCards: s.apps.filter(a => a.status === "online" && visibleTo(a)).map(a => ({
+        name: a.name, desc: a.desc, owner: a.owner,
+        iconText: a.name.slice(0, 1),
+        iconStyle: "width:30px;height:30px;border-radius:8px;background:#E6EDFC;color:#024DE3;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;flex-shrink:0",
+        open: () => this.setState({ runtime: { kind: "ok", app: a.name } })
+      })),
+      squareEmpty: s.apps.filter(a => a.status === "online" && visibleTo(a)).length === 0,
+      fallbackBtns: [["login", "无登录态 / 扫码"], ["noperm", "无权限"], ["stopped", "已停用"], ["gone", "已删除入口"], ["deploying", "发布中"], ["recovering", "崩溃恢复中"], ["nofactory", "未部署工场"]].map(([k, l]) => ({
+        label: l, pick: () => this.setState({ runtime: { kind: k } }), style: chipStyle(false)
+      })),
+      runtimeOpen: !!s.runtime, runtimeOk: fbKind === "ok", runtimeFallback: !!s.runtime && fbKind !== "ok",
+      runtimeApp: (s.runtime || {}).app,
+      runtimeWho: (s.runtime || {}).approver ? "周颖 · 法务部（审批人本人；平台能力按 owner 权限放行、计审计）" : me + " · 信息技术部",
+      runtimeUrl: "https://bisheng.cofco.com/apps/" + (fbKind === "ok" ? "contract-ledger" : "app-x"),
+      closeRuntime: () => this.setState({ runtime: null }),
+      fallbackTitle: fb[0], fallbackBody: fb[1], fallbackBtn: fb[2],
+      fallbackAction: () => {
+        if (fbKind === "login") { this.setState({ runtime: { kind: "ok", app: "合同台账助手" } }); this.flash("登录成功后回跳原地址 · 免二次登录，应用自动获得访问者身份与组织信息"); }
+        else this.setState({ runtime: null });
+      },
+
+      modalAuth: s.modal === "auth", modalDelete: s.modal === "delete", modalMsgs: s.modal === "msgs",
+      closeModal: () => this.setState({ modal: null }),
+      authAppName: app.name,
+      authNote: isAdmin ? "租户管理员对本租户任一应用均可调整（平台既有行为），变更记录变更人。" : "",
+      authTabs: ["用户", "部门", "用户组"].map(t => ({
+        label: t, go: () => this.setState({ authTab: t, authSearch: "" }),
+        style: "min-width:88px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:14px;cursor:pointer;" +
+          (s.authTab === t ? "background:#E6EDFC;color:#024DE3" : "color:#4E5969")
+      })),
+      authSearchPh: "搜索" + s.authTab + "…", authSearch: s.authSearch,
+      onAuthSearch: (e) => this.setState({ authSearch: e.target.value }),
+      authOptions: authList.map(o => {
+        const on = s.authDraft.indexOf(o.id) >= 0;
+        return {
+          name: o.name, sub: o.sub, check: on ? "✓" : "",
+          boxStyle: "width:19px;height:19px;flex-shrink:0;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;" + (on ? "background:#024DE3;border:1px solid #024DE3" : "background:#fff;border:1.5px solid #D3D8E0"),
+          toggle: () => this.setState(st => ({ authDraft: on ? st.authDraft.filter(x => x !== o.id) : [...st.authDraft, o.id] }))
+        };
+      }),
+      authEmpty: authList.length === 0,
+      authNoneSelected: s.authDraft.length === 0,
+      authChips: s.authDraft.map(id => {
+        const o = AUTH_OPTS.find(x => x.id === id) || { name: id };
+        return { name: o.name, remove: (e) => { e.stopPropagation(); this.setState(st => ({ authDraft: st.authDraft.filter(x => x !== id) })); } };
+      }),
+      cycleAuthLevel: () => this.flash("托管应用只有「可使用」一档 —— 改码权恒在本地，平台不提供在线改码"),
+      saveAuth: () => {
+        this.patchApp(app.id, a => ({ ...a, vis: [...s.authDraft] }));
+        this.setState({ modal: null });
+        this.flash(s.authDraft.length ? "可见范围已更新 · 自被授权用户的下一次请求起生效（入口访问 + 广场可见性），不产生审批单、计审计" : "已保存 · 仍为「仅 owner 可见」——同事在广场里看不到它");
+      },
+      deleteScope: ["代码与版本存档（含全部历史版本快照）", "对话历史", "应用生产数据 —— 用户填报的业务记录"],
+      confirmDelete: () => {
+        const id = app.id;
+        this.setState(st => ({ apps: st.apps.filter(a => a.id !== id), tickets: st.tickets.filter(t => t.appId !== id), modal: null, view: null, appId: null }));
+        this.flash("已删除 · 资产不可恢复；在途审批单自动取消并通知审批人；存量入口链接呈「应用不存在或未上线」；删除计审计");
+      },
+      messages: [
+        { title: "审批单生成 · 客服知识速查（迭代）", time: "11:02", body: "已进入审批中心待办 —— 部门管理员 ∪ 租户管理员，或签。", dot: "#024DE3" },
+        { title: "上线终检容量不足 · 报销单核对", time: "09:12", body: "应用入「待上线（资源不足）」态，资源释放后由 owner 在详情页 · 发布手动上线。", dot: "#B54708" },
+        { title: "审批驳回 · 供应商比价 v2", time: "昨天", body: "驳回理由全文可在详情页 · 发布或 MCP 应用状态工具查看。", dot: "#ef4444" },
+        { title: "租户管理员停运 · 供应商比价", time: "昨天", body: "停运会通知 owner，并在发布面状态与审计记录中可查。", dot: "#86909C" }
+      ].map(m => ({ ...m, dotStyle: "width:7px;height:7px;border-radius:50%;flex-shrink:0;background:" + m.dot })),
+
+      isTodo: s.nav === "approval" && s.approvalTab === "todo" && !s.view,
+      isTicket: s.view === "ticket", isReview: s.view === "review",
+      isScene: s.nav === "approval" && s.approvalTab === "scene" && isAdmin && !s.view,
+      tickets: s.tickets.map(t => ({
+        appName: t.appName, kind: t.kind,
+        stateText: t.state === "pending" ? "待审" : t.state === "approved" ? "已通过 · 待上线" : "已处理",
+        stateStyle: t.state === "pending" ? pill("#FFF4E5", "#B54708") : pill("#E6EDFC", "#024DE3"),
+        meta: "owner " + t.owner + " · " + t.dept + " · " + t.source + " · 提交于 " + t.submitted + " · " + t.tier,
+        btn: t.state === "pending" ? "处理" : "查看",
+        open: () => this.setState({ view: "ticket", ticketId: t.id, rejectText: "", preview: "idle", reviewTab: "code", activeFile: "app.py" })
+      })),
+      noTickets: s.tickets.length === 0,
+      ticket: {
+        appName: ticket.appName, kind: ticket.kind, owner: ticket.owner, dept: ticket.dept, source: ticket.source, submitted: ticket.submitted, tier: ticket.tier,
+        caps: (tApp.caps || []).map(capRow),
+        visChips: (tApp.vis || []).length ? tApp.vis.map(v => (AUTH_OPTS.find(o => o.id === v) || { name: v }).name) : ["仅 owner"]
+      },
+      approverText,
+      backTodo: () => this.setState({ view: null, ticketId: null }),
+      rejectText: s.rejectText, onRejectText: (e) => this.setState({ rejectText: e.target.value }),
+      rejectBtnStyle: "flex:1;height:34px;border-radius:7px;font-size:14px;font-weight:500;border:1px solid " +
+        (s.rejectText.trim() ? "#FBD7D3;background:#fff;color:#ef4444;cursor:pointer" : "#F2F3F5;background:#fff;color:#C9CDD4;cursor:not-allowed"),
+      approve: () => {
+        const scarce = s.scarce;
+        this.setState(st => ({ tickets: st.tickets.filter(t => t.id !== ticket.id), view: null, ticketId: null }));
+        if (scarce) {
+          this.patchApp(ticket.appId, a => ({ ...a, inflight: false, status: "pending_res", versions: a.versions.map(v => v.state === "pending" ? { ...v, state: "approved" } : v) }));
+          this.flash("已通过 · 上线终检遇运行环境容量不足（" + form + "）→ 应用入「待上线（资源不足）」态，已通知 owner 与租户管理员");
+        } else {
+          this.patchApp(ticket.appId, a => ({ ...a, inflight: false, status: "online", versions: a.versions.map(v => v.state === "pending" ? { ...v, state: "online" } : v) }));
+          this.flash("已通过 · 上线终检通过，应用上线并进入广场；另一位审批人的待办同步关闭（或签）");
+        }
+      },
+      reject: () => {
+        if (!s.rejectText.trim()) { this.flash("驳回理由必填 —— 全文回传 owner，也可经 MCP 应用状态工具查询"); return; }
+        const reason = s.rejectText.trim();
+        this.setState(st => ({ tickets: st.tickets.filter(t => t.id !== ticket.id), view: null, ticketId: null, rejectText: "" }));
+        this.patchApp(ticket.appId, a => ({ ...a, inflight: false, reject: reason, status: ticket.kind === "首发" ? "draft" : a.status, versions: a.versions.map(v => v.state === "pending" ? { ...v, state: "rejected" } : v) }));
+        this.flash(ticket.kind === "首发" ? "已驳回 · 应用回草稿态，理由已回传 owner" : "已驳回 · 应用保持已上线、当前版本继续服务，仅待上线版本被弃");
+      },
+      openReview: () => this.setState({ view: "review" }),
+      backTicket: () => this.setState({ view: "ticket" }),
+      reviewTabs: [["code", "代码"], ["diff", "文件差异"], ["caps", "能力声明清单"], ["history", "版本历史"]].map(([id, label]) => ({
+        label, go: () => this.setState({ reviewTab: id }),
+        style: "padding:0 14px;height:28px;display:flex;align-items:center;border-radius:6px;font-size:13px;cursor:pointer;" +
+          (s.reviewTab === id ? "background:#fff;color:#024DE3;font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06)" : "color:#4E5969")
+      })),
+      reviewIsCode: s.reviewTab === "code", reviewIsDiff: s.reviewTab === "diff", reviewIsCaps: s.reviewTab === "caps", reviewIsHistory: s.reviewTab === "history",
+      fileTree: fileList.map(f => ({
+        label: f, pick: () => this.setState({ activeFile: f, reviewTab: "code" }),
+        style: "padding:7px 10px;border-radius:6px;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;cursor:pointer;" +
+          (s.activeFile === f && s.reviewTab === "code" ? "background:#E6EDFC;color:#024DE3" : "color:#4E5969")
+      })),
+      activeFile: s.activeFile, fileBody, diffLines,
+      ticketVersions: (tApp.versions || []).map(v => { const d = VSTATE[v.state] || VSTATE.was; return { ...v, stateText: d[0], stateStyle: pill(d[1], d[2]) }; }),
+      previewStateText: PV[0], previewDesc: PV[1], previewBtnText: PV[2],
+      previewDotStyle: "width:9px;height:9px;border-radius:50%;margin-top:5px;flex-shrink:0;background:" + PV[3],
+      previewBtnStyle: "height:32px;padding:0 14px;border-radius:7px;font-size:13px;font-weight:500;border:none;" +
+        (s.preview === "starting" ? "background:#D3DAFF;color:#fff;cursor:wait" : "background:#024DE3;color:#fff;cursor:pointer"),
+      previewAction: () => {
+        if (s.preview === "running") { this.setState({ runtime: { kind: "ok", app: ticket.appName + "（审批期临时预览实例）", approver: true } }); return; }
+        this.setState({ preview: "starting" });
+        setTimeout(() => this.setState({ preview: "running" }), 1100);
+      },
+      previewNote: s.preview === "running" ? "审批出终态即自动回收" : "审读的权威对象 = 待上线版本快照",
+      previewCanRecycle: s.preview === "running",
+      previewRecycle: () => { this.setState({ preview: "recycled" }); this.flash("临时预览实例已手动回收 · 可再次拉起"); },
+      previewCanFail: s.preview === "idle" || s.preview === "recycled",
+      previewFailed: s.preview === "failed",
+      previewFail: () => { this.setState({ preview: "starting" }); setTimeout(() => this.setState({ preview: "failed" }), 900); },
+      scenePresetStyle: pill("#E8F6EE", "#00873D"),
+      sceneSpec: [
+        { k: "场景", v: "「应用发布」· 随部署启用", note: "管理员无需先建场景；新建租户时同步落库，否则新租户首次发布会因场景缺失失败" },
+        { k: "分支", v: "单条无条件分支", note: "所有发布一律走审批，不存在直通分支" },
+        { k: "节点", v: "单节点 · 或签", note: "任一审批人处理即出终态，另一方待办同步关闭" },
+        { k: "审批人来源", v: this.props.singleTenant ? "① owner 主部门的部门管理员 ② 平台超管（单租户回退）" : "① owner 主部门的部门管理员 ② 租户管理员", note: "两来源并列本身就是兜底：部门取 owner 主部门、不向上回溯；解析为空时由另一来源承接" }
+      ],
+      sceneStateText: (s.approvers && s.approvers.length) ? "已改配 " + s.approvers.length + " 人" : "沿用预置来源",
+      sceneStateStyle: (s.approvers && s.approvers.length) ? pill("#E6EDFC", "#024DE3") : pill("#F2F3F5", "#86909C"),
+      approverOptions: ["周颖（法务部管理员）", "王敏（租户管理员）", "赵敏（信息技术部管理员）", "陈果（销售部）"].map(n => {
+        const cur = s.approvers || [];
+        const on = cur.indexOf(n) >= 0;
+        return { name: n, style: chipStyle(on), toggle: () => this.setState({ approvers: on ? cur.filter(x => x !== n) : [...cur, n] }) };
+      }),
+      isDetail: s.view === "app",
+      app: {
+        name: app.name, desc: app.desc, owner: app.owner, source: app.source, tierName,
+        logoText: app.name.slice(0, 1),
+        logoStyle: "width:30px;height:30px;border-radius:8px;background:#E6EDFC;color:#024DE3;font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:center;flex-shrink:0",
+        statusText: aStat[0], statusStyle: pill(aStat[1], aStat[2]),
+        caps: app.caps.map(capRow),
+        versions: app.versions.map(v => { const d = VSTATE[v.state] || VSTATE.was; return { ...v, stateText: d[0], stateStyle: pill(d[1], d[2]) }; }),
+        steps, approvalText, reject: app.reject,
+        pipeBoxStyle: "border-radius:10px;padding:18px 20px;border:1px solid " + (app.inflight ? "#FFDCA8;background:#FFF9F0" : app.reject ? "#FBD7D3;background:#FEF6F5" : app.status === "pending_res" ? "#FFDCA8;background:#FFF9F0" : "#E5E6EB"),
+        canSubmit: !app.inflight && (app.status === "draft" || app.status === "online" || app.status === "stopped"),
+        canWithdraw: app.inflight, canManualOnline: app.status === "pending_res",
+        needVis: app.status === "online" && app.vis.length === 0,
+        visChips: (app.vis.length ? app.vis.map(v => ({ name: (AUTH_OPTS.find(o => o.id === v) || { name: v }).name, style: "font-size:12.5px;background:#E6EDFC;color:#024DE3;border-radius:5px;padding:3px 9px" }))
+          : [{ name: "仅 owner 可见", style: "font-size:12.5px;background:#FFF4E5;color:#B54708;border-radius:5px;padding:3px 9px" }]),
+        url: "https://bisheng.cofco.com/apps/" + app.id,
+        runBtn: app.status === "stopped" ? "重新启用" : "停运"
+      },
+      detailTabs: [["publish", "发布"], ["data", "数据"], ["logs", "运行日志"], ["version", "版本"]].map(([id, label]) => ({
+        label, go: () => this.setState({ detailTab: id }),
+        style: "padding:0 2px 10px;margin-right:24px;font-size:14px;white-space:nowrap;flex-shrink:0;cursor:pointer;border-bottom:2px solid " +
+          (s.detailTab === id ? "#024DE3;color:#024DE3;font-weight:500" : "transparent;color:#4E5969")
+      })),
+      dtPublish: s.detailTab === "publish", dtData: s.detailTab === "data", dtLogs: s.detailTab === "logs", dtVersion: s.detailTab === "version",
+      tierOptions: s.tiers.map(t => ({
+        name: t.name, spec: t.spec, desc: t.enabled ? t.desc : "该档位已停用，新发布不可再选",
+        pick: () => { if (!t.enabled) { this.flash("该档位已停用，新发布不可再选；存量应用沿用原档位继续运行"); return; } this.patchApp(app.id, a => ({ ...a, tier: t.id })); this.flash("已选「" + t.name + "」档 · 规格自下一次发布或重新启用生效"); },
+        style: "flex:1;min-width:172px;border-radius:9px;padding:12px 14px;cursor:pointer;transition:border-color .15s ease;border:1px solid " +
+          (app.tier === t.id ? "#024DE3;background:#F5F8FF" : "#E5E6EB;background:#fff") + (t.enabled ? "" : ";opacity:.5"),
+        radioStyle: "width:14px;height:14px;border-radius:50%;flex-shrink:0;border:" + (app.tier === t.id ? "4px solid #024DE3" : "1px solid #C9CDD4")
+      })),
+      dataTables: [
+        { name: "contract_ledger", cols: 11, rows: "12,480", last: "2026-08-16 10:41", exp: () => this.flash("已导出 · 生产数据行编辑与导出均计审计（GOV-04）") },
+        { name: "audit_trace", cols: 6, rows: "3,207", last: "2026-08-16 10:39", exp: () => this.flash("已导出 · 敏感字段分类分级与脱敏导出顺延 v3.1") },
+        { name: "kv_settings", cols: 3, rows: "18", last: "2026-08-12 16:20", exp: () => this.flash("已导出") }
+      ],
+      logLines: [
+        "2026-08-16 10:41:02 INFO  request id=8f2a user=王敏 dept=信息技术部（平台注入身份）",
+        "2026-08-16 10:41:02 INFO  retrieve kb=集团制度知识库 filter=file-level hits=3",
+        "2026-08-16 10:41:03 INFO  model=Qwen2.5-72B-Instruct tokens_in=812 tokens_out=204",
+        "2026-08-16 10:41:03 INFO  appdb insert table=contract_ledger rows=1 (SQLAlchemy, 平台注入连接)",
+        "2026-08-16 10:39:55 WARN  storage ref=ocr_key latency=1.4s (upstream slow)",
+        "2026-08-16 10:38:10 INFO  health probe ok · runtime=" + form
+      ],
+      qrCells,
+      back: () => this.setState({ view: null, appId: null }),
+      submitPublish: () => {
+        this.patchApp(app.id, a => ({ ...a, inflight: true, reject: null, versions: [{ no: "v" + (a.versions.length + 1), type: a.versions.length ? "迭代" : "首发", time: "2026-08-17 10:52", caps: a.caps.length + " 项能力声明", state: "pending" }, ...a.versions] }));
+        this.setState(st => ({ tickets: [{ id: "t-" + Date.now(), appId: app.id, appName: app.name, kind: app.versions.length ? "迭代" : "首发", owner: app.owner, dept: "信息技术部", source: app.source, submitted: "2026-08-17 10:52", tier: tierName + "（" + (s.tiers.find(t => t.id === app.tier) || {}).spec + "）", state: "pending" }, ...st.tickets] }));
+        this.flash("已提交发布 · 冻结待上线版本快照 → 密钥扫描 → 审批单进入审批中心（与本地 bisheng deploy 等价）");
+      },
+      withdraw: () => {
+        this.patchApp(app.id, a => ({ ...a, inflight: false, versions: a.versions.map(v => v.state === "pending" ? { ...v, state: "withdrawn" } : v) }));
+        this.setState(st => ({ tickets: st.tickets.filter(t => !(t.appId === app.id && t.state === "pending")) }));
+        this.flash("审批单已撤回 · 已收到待办的审批人收到站内消息；修改后重新提交将生成新审批单");
+      },
+      manualOnline: () => {
+        if (s.scarce) { this.flash("运行环境容量仍不足（" + form + "）—— 释放资源后再试；审批单保持通过，无需重新审批"); return; }
+        this.patchApp(app.id, a => ({ ...a, status: "online", versions: a.versions.map((v, i) => i === 0 ? { ...v, state: "online" } : v) }));
+        this.flash("已手动上线 · 无需重新审批，应用进入广场");
+      },
+      toggleRunBtn: () => this.toggleRun(app),
+      openRun: () => this.setState({ runtime: { kind: app.status === "online" ? "ok" : app.status === "stopped" ? "stopped" : "gone", app: app.name } }),
+      copyUrl: () => this.flash("已复制入口链接 · 已登录同事点开即用，免二次登录"),
+      openAuth: () => this.setState({ modal: "auth", authDraft: [...app.vis] }),
+      deleteEntryText: app.status === "online" ? "删除应用（请先停运）" : "删除应用",
+      deleteEntryStyle: "height:32px;padding:0 14px;border-radius:7px;font-size:13px;border:1px solid " +
+        (canDelHere ? "#FBD7D3;background:#fff;color:#ef4444;cursor:pointer" : "#F2F3F5;background:#FBFBFB;color:#C9CDD4;cursor:not-allowed"),
+      openDelete: () => {
+        if (app.status === "online") { this.flash("已上线态删除入口置灰 —— 须先停运（前置状态闸比强确认更稳）"); return; }
+        if (app.owner !== me) { this.flash("仅 owner 可删除应用；管理侧兜底手段 = 停运"); return; }
+        this.setState({ modal: "delete" });
+      },
+      meName: me, meInitial: me.slice(0, 1),
+      meRole: isSuper ? "平台超管" : isAdmin ? "租户管理员" : isApprover ? "审批人" : "开发者 · owner",
+      meRoleStyle: pill("#F2F3F5", "#86909C"),
+      personas: [["dev", "开发者"], ["admin", "租户管理员"], ["approver", "审批人"], ["super", "平台超管"]].map(([id, label]) => ({
+        label,
+        pick: () => this.setState({ persona: id, nav: id === "approver" ? "approval" : id === "super" ? "system" : "build", scope: id === "admin" || id === "super" ? "all" : "mine", systemTab: id === "super" ? "tier" : "roles", view: null, appId: null, ticketId: null, menuApp: null }),
+        style: "height:24px;padding:0 9px;display:inline-flex;align-items:center;border-radius:5px;cursor:pointer;font-size:12.5px;transition:background .15s ease;" +
+          (s.persona === id ? "background:#E6EDFC;color:#024DE3" : "color:#86909C")
+      })),
+      navItems,
+      buildTabs: [["apps", "应用"], ["tools", "工具"], ["client", "工作台配置"]].map(([id, label]) => ({
+        label, go: () => { if (id !== "apps") this.flash("既有构建区 tab，本 demo 只演示「应用」"); },
+        style: "display:flex;align-items:center;padding:7px 26px;border-radius:7px;cursor:pointer;font-size:14px;font-weight:600;white-space:nowrap;flex-shrink:0;" +
+          (id === "apps" ? "background:#fff;color:#024DE3;box-shadow:0 1px 2px rgba(0,0,0,.05)" : "color:#86909C")
+      })),
+      hasTabs: tabDefs.length > 1 && !s.view,
+      tabs: tabDefs.map(([id, label]) => ({
+        label,
+        go: () => { const p = { view: null, appId: null, ticketId: null }; p[tabKey] = id; this.setState(p); },
+        style: "padding:0 14px;height:28px;display:flex;align-items:center;border-radius:6px;font-size:13.5px;font-weight:500;cursor:pointer;" +
+          (curTab === id ? "background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.06)" : "color:#64748b")
+      })),
+      isBuildList: s.nav === "build" && !s.view,
+      search: s.search, onSearch: (e) => this.setState({ search: e.target.value }),
+      listSelects: selects.map(o => ({
+        value: o.value, cycle: o.cycle,
+        valStyle: "color:" + (o.hi ? "#024DE3" : "#212121"),
+        style: "height:34px;width:" + o.w + "px;padding:0 10px;box-sizing:border-box;border:1px solid " + (o.hi ? "#C9D6FF" : "#E5E6EB") + ";border-radius:6px;background:" + (o.hi ? "#F5F8FF" : "#fff") + ";display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:13.5px;cursor:pointer"
+      })),
+      canScope: isAdmin,
+      scopeTabs: [["mine", "我的"], ["all", "全租户"]].map(([id, label]) => ({
+        label, pick: () => this.setState({ scope: id }),
+        style: "height:26px;padding:0 12px;display:inline-flex;align-items:center;border-radius:6px;font-size:12.5px;cursor:pointer;" +
+          (scope === id ? "background:#E6EDFC;color:#024DE3" : "color:#86909C")
+      })),
+      createPermText: createOk ? "新建应用权限（既有 create_app）：已开通" : "新建应用权限：未开通",
+      createPermStyle: pill(createOk ? "#E8F6EE" : "#FFF4E5", createOk ? "#00873D" : "#B54708"),
+      listHint: scope === "all"
+        ? "全租户视角：租户管理员对本租户全部应用天然可见（平台既有身份短路），不另建治理列表（GOV-09 取消）。"
+        : "owner 视角 = 同一页按归属过滤。卡片只保留列表级轻操作（上下线、版本下拉、⚙️ 管理权限 / 删除），其余动作在详情页。",
+      formLabel: form,
+      cards, listEmpty: cards.length === 0,
+      deployLog: s.deployLog,
+      deploySims: [
+        ["首发 deploy", () => {
+          if (!s.keyBits["app:manage"] && false) return "";
+          const id = "app-" + Date.now();
+          this.setState(st => ({
+            apps: [...st.apps, { id, name: "差旅报销问答", owner: me, desc: "本地开发的差旅问答，首发 deploy 导入纳管。", status: "draft", tier: "light", source: "CLI 导入", vis: [], inflight: true, reject: null, vi: 0, caps: [{ name: "集团差旅管理办法库", type: "knowledge", note: "检索 · 声明层白名单收窄" }], versions: [{ no: "v1", type: "首发", time: "2026-08-17 10:44", caps: "1 项能力声明", state: "pending" }] }],
+            tickets: [{ id: "t-" + Date.now(), appId: id, appName: "差旅报销问答", kind: "首发", owner: me, dept: "信息技术部", source: "CLI 导入", submitted: "2026-08-17 10:44", tier: "轻量（1 核 / 2 GB）", state: "pending" }, ...st.tickets]
+          }));
+          return "$ bisheng deploy\n✔ 托管预检通过（依赖构建 / 应用包声明校验 / 启动探活）\n✔ 发布前密钥扫描通过\n✔ 已生成首发审批单 → 平台预置审批流（部门管理员 ∪ 租户管理员，或签）\n  owner = 该 key 所属服务账号的资源归属人（" + me + "）\n  准入闸 = key 上的 app:manage 位，与角色权限无关\n  ↳ 上线后别忘了去「详情页 · 发布」设置可见范围，否则除你之外无人可见";
+        }],
+        ["持 delegate 的 key login", () => "$ bisheng login --key bs-sak-••••7d31\n✖ 拒绝：这把 key 配置为委托专用（持 delegate 位），本地开发请另发一把\n  MCP 工具面 / 模型协议面 / CLI 三面一律以服务账号自身身份执行，不承载委托\n  按权限位在通道入口直接拒绝——不静默落回模式 S，也不返回 26016 参数错误"],
+        ["预检失败（自带中间件）", () => "$ bisheng deploy\n✖ 托管预检失败：docker-compose.yml 声明了 postgres:15\n  托管运行契约：平台提供语言运行时 / 应用数据库 / 附件存储 / 能力总线与密钥注入 / 内网镜像依赖安装\n  应用不得自带数据库、消息队列、缓存，或白名单外的外网地址\n  改造指引见「部署纳管」技能包；应用数据库用标准库连平台注入的连接（不走 SDK）\n  预检失败不产生审批单"],
+        ["密钥扫描阻断", () => "$ bisheng deploy\n✔ 托管预检通过\n✖ 发布前密钥扫描命中 2 条规则（与平台内发布同一规则集）\n  config/settings.py:14  规则 platform-key-prefix（bs-sak- 前缀模式）\n  config/settings.py:19  规则 db-connection-string\n  （不回显命中的密钥值本身）\n  本地修复后重新 deploy"],
+        ["在途审批单再 deploy", () => "$ bisheng deploy\n✖ 拒绝：应用「客服知识速查」存在在途审批单（迭代 · 待审）\n  同一应用同时至多一个在途审批单，请先在详情页 · 发布撤回，或等待终态"],
+        ["改/删列未确认", () => "$ bisheng deploy\n✖ 预检检出破坏性结构变更：contract_ledger 删除列 legacy_no、修改列 amount 类型\n  需显式确认：交互确认或 --confirm-schema-change\n  确认后进入管线，迁移前自动留生产数据快照"],
+        ["非归属人的 key", () => "$ bisheng deploy\n✖ 拒绝：应用「合同台账助手」owner 为「李工」，当前 key 的资源归属人不是 owner\n  归属在创建时固化、改字段不追溯已有应用；归属转移顺延 v3.1"],
+        ["skills sync", () => "$ bisheng skills sync\n✔ 已从当前登录平台拉取毕昇开发技能包（首发两包）\n  · 部署纳管      bisheng-app.yaml / 能力声明 / 安全红线 / 托管运行契约 / deploy 排障\n  · 平台能力接线  SDK 三件套（auth / retrieve / storage）+ 模型与应用数据库的标准库接法\n  ⚠ auth 一节是唯一「写错了应用照样跑、只是身份错了」的静默失败点\n  提示：login 成功后已自动 sync 过一次，本命令用于平台升级后更新"]
+      ].map(([label, fn]) => ({ label, style: chipStyle(false), run: () => { const out = fn(); if (out) this.setState({ deployLog: out }); } })),
+      openMsgs: () => this.setState({ modal: "msgs" }),
+      toast: s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>

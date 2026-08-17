@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style data-omelette-injected>html,body{background:transparent}</style><script data-omelette-injected>(()=>{{const n=new URLSearchParams(location.search).get("theme");if(n==="light"||n==="dark"){document.documentElement.dataset.theme=n}}{if(new URLSearchParams(location.search).get("_omthumb")==="1"){const n=(f)=>{const g=f.focus;if(!g)return;f.focus=function(h){g.call(this,{...h,preventScroll:true})}};n(HTMLElement.prototype);n(SVGElement.prototype);if(typeof MathMLElement!=="undefined"){n(MathMLElement.prototype)}const d=(f)=>{f.removeAttribute("autofocus");f.inert=true;if(!(f instanceof HTMLElement))f.removeAttribute("tabindex")};const p=(f)=>{if(f.hasAttribute("autofocus"))d(f);for(const g of f.querySelectorAll("[autofocus]")){d(g)}};p(document.documentElement);new MutationObserver((f)=>{for(const g of f){for(const h of g.addedNodes){if(h.nodeType===1)p(h)}}}).observe(document,{childList:true,subtree:true})}}{const n=()=>{try{if(document.querySelector('meta[name="color-scheme"]'))return;const d=getComputedStyle(document.documentElement).getPropertyValue("color-scheme").trim();if(d&&d!=="normal")return;const p=(y)=>{if(!y)return null;const m=getComputedStyle(y).backgroundColor.match(/^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+%?))?\s*\)$/);if(!m)return null;const w=m[4]==null?1:parseFloat(m[4])/(m[4].endsWith("%")?100:1);if(w<0.99)return null;return[+m[1],+m[2],+m[3]]};const f=p(document.body)||p(document.documentElement);if(!f)return;const g=(y)=>{const m=y/255;return m<=0.04045?m/12.92:((m+0.055)/1.055)**2.4};const h=0.2126*g(f[0])+0.7152*g(f[1])+0.0722*g(f[2]);document.documentElement.style.setProperty("color-scheme",h<0.4?"dark":"light")}catch{}};if(document.readyState==="complete")n();else window.addEventListener("load",n)}var I=[];var B=false;var K=false;var C=()=>{};if(K===true){try{const n=setTimeout.bind(window);const d=1e4;const p=15;const f=1e4;const g=120000;const h=200;const y=(o)=>{try{let r;if(typeof o==="string")r=o;else if(o instanceof URL)r=o.href;else if(typeof Request!=="undefined"&&o instanceof Request)r=o.url;else return null;if(!r)return null;const l=document.baseURI;const i=new URL(r,l);if(i.protocol!=="http:"&&i.protocol!=="https:")return null;if(i.origin!==new URL(l).origin)return null;return i.origin+i.pathname}catch{return null}};const m=new Map;const w=(o)=>{let r=m.get(o);if(!r){if(m.size>=h){const l=m.keys().next().value;if(l!==undefined)m.delete(l)}r={fails:[],until:0,cooldown:f,hard:false};m.set(o,r)}return r};const R=(o)=>{const r=m.get(o);return r!==undefined&&r.until>Date.now()};const O=(o,r)=>{const l=Date.now();const i=w(o);if(r)i.hard=true;if(i.until>l)return;i.fails.push(l);while(i.fails.length>0&&i.fails[0]<=l-d)i.fails.shift();if(i.fails.length>=p){i.until=l+i.cooldown;if(i.hard)i.cooldown=Math.min(i.cooldown*2,g);i.fails.length=0;try{n(()=>{try{S(true)}catch{}},i.until-l+100)}catch{}console.warn("[omelette] asset circuit breaker: pausing requests to "+o+" for "+Math.round((i.until-l)/1000)+"s after "+p+" failures in "+d/1000+"s")}};const e=(o)=>{m.delete(o)};const t=100;const a=new WeakMap;const u=new Set;let s=null;const S=(o)=>{for(const r of Array.from(u)){try{const l=a.get(r);if(l===undefined){u.delete(r);continue}if(o){const i=y(l);if(i!==null&&R(i))continue}a.delete(r);u.delete(r);if(s!==null)s.call(r,l)}catch{}}};C=()=>{try{m.clear();S(false)}catch{}};document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")C()});const _=window.fetch;if(typeof _==="function"){const o=function(...r){let l=null;try{l=y(r[0])}catch{}if(l!==null&&R(l)){let c;try{if(r[1]&&r[1].signal!==undefined){c=r[1].signal||undefined}else if(typeof Request!=="undefined"&&r[0]instanceof Request){c=r[0].signal||undefined}}catch{c=undefined}return new Promise((k,b)=>{const E=()=>{try{return c.reason!==undefined?c.reason:new DOMException("The operation was aborted.","AbortError")}catch{return new DOMException("The operation was aborted.","AbortError")}};try{if(c&&c.aborted){b(E());return}}catch{}let T=false;const j=()=>{if(T)return;T=true;b(E())};try{if(c)c.addEventListener("abort",j,{once:true})}catch{}n(()=>{if(T)return;T=true;try{if(c)c.removeEventListener("abort",j)}catch{}let L;try{L=new Response(null,{status:429,statusText:"Too Many Requests",headers:{"Retry-After":"10"}})}catch{L={ok:false,status:429}}k(L)},250)})}const i=_.apply(window,r);if(l!==null){const c=l;i.then((k)=>{try{if(k.ok)e(c);else if(k.status===401||k.status===403||k.status===404||k.status===429){O(c,k.status!==404)}}catch{}},()=>{})}return i};window.fetch=o}const v=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,"src");if(v!==undefined&&v.set!==undefined&&v.get!==undefined){const o=v.set;s=o;Object.defineProperty(HTMLImageElement.prototype,"src",{configurable:true,enumerable:v.enumerable,get:v.get,set(r){const l=`${r}`;try{const i=y(l);if(i!==null&&R(i)){a.set(this,l);if(u.size<t)u.add(this);return}}catch{}try{a.delete(this);u.delete(this)}catch{}o.call(this,l)}})}try{const o=HTMLImageElement.prototype.setAttribute;HTMLImageElement.prototype.setAttribute=function(r,l){if(arguments.length<2){o.apply(this,arguments);return}if(typeof r==="string"&&r.toLowerCase()==="src"){const i=`${l}`;try{const c=y(i);if(c!==null&&R(c)){a.set(this,i);if(u.size<t)u.add(this);return}a.delete(this);u.delete(this)}catch{}o.call(this,r,i);return}o.call(this,r,l)}}catch{}window.addEventListener("error",(o)=>{try{const r=o.target;if(r instanceof HTMLImageElement){const l=y(r.currentSrc||r.src||"");if(l!==null)O(l,true)}}catch{}},true);window.addEventListener("load",(o)=>{try{const r=o.target;if(r instanceof HTMLImageElement){const l=y(r.currentSrc||r.src||"");if(l!==null)e(l);const i=a.get(r);if(i!==undefined){let c=false;try{c=new URL(i,document.baseURI).href===new URL(r.currentSrc||r.src||"",document.baseURI).href}catch{c=false}if(c){a.delete(r);u.delete(r)}}}}catch{}},true)}catch{}}var J=30000;var G=3000;document.addEventListener("DOMContentLoaded",()=>{const n=window.Babel;const d="om-src-id";if(n&&n.registerPlugin&&!(n.availablePlugins&&n.availablePlugins[d])){n.registerPlugin(d,({types:h})=>({visitor:{JSXOpeningElement(y,m){const w=y.node;if(w.name&&w.name.type==="JSXMemberExpression")return;for(let t=0;t<w.attributes.length;t++){const a=w.attributes[t];if(a.type==="JSXAttribute"&&a.name&&a.name.name==="data-om-id")return}const R=m.file&&m.file.opts&&m.file.opts.filename||"?";const O=w.loc&&w.loc.start;const e=`jsx:${R}:${w.start??0}:${O?O.line:0}:${O?O.column+1:0}`;w.attributes.push(h.jsxAttribute(h.jsxIdentifier("data-om-id"),h.stringLiteral(e)))}}}))}const p="om-text-extract";let f=false;if(B&&n&&n.registerPlugin&&!(n.availablePlugins&&n.availablePlugins[p])){const h=window.React;if(h&&h.useSyncExternalStore&&h.createElement){f=true;const y={};const m=new Set;let w=0;window.__omTextO=y;window.__omTextSet=(e)=>{for(const t in e){const a=e[t];if(a==null)delete y[t];else y[t]=a}w++;m.forEach((t)=>t())};const R=(e)=>{m.add(e);return()=>m.delete(e)};const O=()=>w;window.__OmT=function e(t){h.useSyncExternalStore(R,O,O);return h.createElement("span",{"data-om-text":t.i,className:"__om-t"},t.i in y?y[t.i]:t.children)};n.registerPlugin(p,({types:e})=>{const t={style:1,script:1,noscript:1,textarea:1,title:1,option:1,text:1,tspan:1,textPath:1};const a={placeholder:1,alt:1,title:1,label:1,"aria-label":1,"aria-description":1,"aria-placeholder":1};const u=(o,r)=>e.logicalExpression("??",e.memberExpression(e.logicalExpression("||",e.memberExpression(e.identifier("window"),e.identifier("__omTextO")),e.objectExpression([])),e.stringLiteral(o),true),r);const s=(o)=>o.file&&o.file.opts&&o.file.opts.filename||"?";const S=(o)=>o.file&&o.file.code||"";const _=(o,r)=>{const l=(c)=>c&&c.start!=null&&c.end!=null&&(c.type==="StringLiteral"||c.type==="TemplateLiteral"&&c.expressions.length===0)?[c.start,c.end]:null;const i=l(r);if(i)return i;if(r&&r.type==="Identifier"){const c=o.scope.getBinding(r.name);if(c&&c.constant&&c.path.node.type==="VariableDeclarator"){return l(c.path.node.init)}}return null};const v=(o,r,l)=>{const i=o.node;let c=false;const k=(E,T)=>{c=true;return e.jsxElement(e.jsxOpeningElement(e.jsxIdentifier("__OmT"),[e.jsxAttribute(e.jsxIdentifier("i"),e.stringLiteral(E))],false),e.jsxClosingElement(e.jsxIdentifier("__OmT")),[T],false)};const b=i.children.map((E)=>{if(E.type==="JSXText"){if(E.start==null||E.end==null)return E;const T=l.slice(E.start,E.end);const j=T.length-T.trimStart().length;const L=T.length-T.trimEnd().length;if(j+L>=T.length)return E;return k(`txt:${r}:${E.start+j}:${E.end-L}`,E)}if(E.type==="JSXExpressionContainer"){const T=_(o,E.expression);if(T)return k(`str:${r}:${T[0]}:${T[1]}`,E)}return E});if(c)i.children=b};return{visitor:{JSXOpeningElement(o,r){const l=o.node;const i=s(r);const c={};for(let k=0;k<l.attributes.length;k++){const b=l.attributes[k];if(b.type!=="JSXAttribute"||!b.name)continue;const E=b.name.name;if(!a[E])continue;if(!b.value||b.value.type!=="StringLiteral")continue;if(b.value.start==null||b.value.end==null)continue;const T=`txt:${i}:${b.value.start}:${b.value.end}`;c[E]=T;b.value=e.jsxExpressionContainer(u(T,e.stringLiteral(b.value.value)))}if(Object.keys(c).length){l.attributes.push(e.jsxAttribute(e.jsxIdentifier("data-om-text-attrs"),e.stringLiteral(JSON.stringify(c))))}},JSXElement(o,r){const l=o.node.openingElement;const i=l&&l.name&&l.name.name;if(i==="__OmT")return;if(typeof i==="string"&&t[i])return;v(o,s(r),S(r))},JSXFragment(o,r){v(o,s(r),S(r))}}}})}}const g=f?["transform-react-jsx-source",d,p]:["transform-react-jsx-source",d];document.querySelectorAll('script[type="text/babel"],script[type="text/jsx"]').forEach((h,y)=>{const m=h.getAttribute("data-plugins")||"";const w=g.filter((R)=>m.indexOf(R)<0);if(w.length){h.setAttribute("data-plugins",m?`${m},${w.join(",")}`:w.join(","))}if(!h.hasAttribute("data-filename")){h.setAttribute("data-filename",h.getAttribute("src")||`inline-${y}`)}})});var A=window.parent;var U="not editable here — open the project in the Claude Design editor to save";var W=()=>Promise.resolve({persisted:false,noHost:true,reason:U});var H=W;var M="data/storage.json";var z=()=>{try{const n=new URL(document.baseURI);const d=n.pathname.match(/\/projects\/([^/]+)\/serve\//);if(d)return d[1];return n.hostname.split(".")[0]||""}catch{return location.hostname.split(".")[0]||""}};var Z=()=>{try{const n=new URL(document.baseURI);const d=n.pathname.indexOf("/serve/");if(d>=0)return n.origin+n.pathname.slice(0,d+"/serve/".length)+M}catch{}return"./"+M};var x=null;var N=()=>{if(!x){x=fetch(Z(),{cache:"no-store"}).then((n)=>{if(n.ok)return n.text();return n.status===404?"":null}).catch(()=>null).then((n)=>{if(n===null){x=null;return null}const d=new Map;if(!n)return d;let p;try{p=JSON.parse(n)}catch{console.warn("[omelette.storage] "+M+" is not valid JSON; treating the store as unreadable so a save cannot overwrite the "+"hand-edited bytes. Fix the JSON (or delete the file) to re-enable persistence.");x=null;return null}if(p===null||typeof p!=="object"||Array.isArray(p)){console.warn("[omelette.storage] "+M+" doesn't hold a JSON object; treating the store as unreadable so a save cannot "+"overwrite the hand-edited bytes. Make the top level a JSON object to re-enable persistence.");x=null;return null}const f=p;if("data"in f){const g=f.data;if(g===null||typeof g!=="object"||Array.isArray(g)){console.warn("[omelette.storage] "+M+' has a "data" field that is not a JSON object; treating the store as unreadable so a '+'save cannot overwrite the hand-edited bytes. Make "data" a JSON object to re-enable persistence.');x=null;return null}const h=f._meta;const y=h!==null&&typeof h==="object"?h.project:undefined;if(typeof y==="string"&&y!==""&&y!==z())return d;for(const m of Object.keys(g))d.set(m,g[m]);return d}for(const g of Object.keys(f)){if(g!=="_meta")d.set(g,f[g])}return d})}return x};var F=(n)=>H(M,JSON.stringify({_meta:{project:z(),version:1},data:Object.fromEntries(n)},null,2));var D=Promise.resolve();var $=(n)=>{const d=D.then(n);D=d.then(()=>{return},()=>{return});return d};var V=/sk-(?:ant-)?[A-Za-z0-9_-]{16,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[a-z]-[A-Za-z0-9][A-Za-z0-9-]{9,}|AIza[0-9A-Za-z_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/;var Y=/password|passwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|credential/i;var Q=(n,d,p)=>{if(V.test(d)||Y.test(n)&&typeof p==="string"&&p.length>=8){console.warn('[omelette.storage] the value for "'+n+'" looks like a credential. The storage file is a plaintext project file — visible to '+"everyone with project access and copied when the project is duplicated. Do not store secrets here.")}};var q={persisted:false,reason:"could not load the existing store — not overwriting it"};var X={persisted:false,reason:"stored value changed since a failed read — re-read this key before saving"};var P=new Set;var ee={get:(n)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.get: key must be a string"))}return $(N).then((d)=>{if(d===null){P.add(n);return null}P.delete(n);if(!d.has(n))return null;const p=d.get(n);return p==null?null:JSON.parse(JSON.stringify(p))})},set:(n,d)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.set: key must be a string"))}let p;try{p=JSON.stringify(d)}catch(g){return Promise.reject(new TypeError("storage.set: value must be JSON-serializable ("+String(g)+")"))}if(p===undefined){return Promise.reject(new TypeError("storage.set: value must be JSON-serializable"))}Q(n,p,d);const f=JSON.parse(p);return $(()=>N().then((g)=>{if(g===null)return q;if(P.has(n)){if(g.has(n))return X;P.delete(n)}g.set(n,f);return F(g)}))},delete:(n)=>{if(typeof n!=="string"){return Promise.reject(new TypeError("storage.delete: key must be a string"))}return $(()=>N().then((d)=>{if(d===null)return q;if(P.has(n)){if(d.has(n))return X;P.delete(n)}d.delete(n);return F(d)}))},keys:()=>$(N).then((n)=>n===null?[]:Array.from(n.keys()))};window.omelette={writeFile:(n,d)=>H(n,d).then((p)=>{if(!p.persisted&&!p.noHost){throw new Error(p.reason||"write failed")}}),storage:ee};if(A&&A!==window){const n=(e,t)=>{try{A.postMessage({__omelette_log:true,type:e,data:t},"*")}catch{}};["log","warn","error"].forEach((e)=>{const t=console[e];console[e]=(...a)=>{const u=a.map((s)=>{try{return typeof s==="object"?JSON.stringify(s):String(s)}catch{try{return String(s)}catch{return"[unstringifiable]"}}}).join(" ");n(e,u);t.apply(console,a)}});window.addEventListener("error",(e)=>{const t=e.target;if(t&&t!==window&&t.tagName){const a=t.src||t.href||"";n("resource_error",`${t.tagName} failed to load: ${a}`)}else{n("error",`${e.message||"Unknown error"} at ${e.filename||"?"}:${e.lineno||0}:${e.colno||0}`)}},true);window.addEventListener("unhandledrejection",(e)=>{const t=e.reason;const a=t instanceof Error?`${t.message} ${t.stack}`:String(t);n("error",`Unhandled rejection: ${a}`)});window.addEventListener("click",(e)=>{if(e.defaultPrevented||e.button!==0)return;if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;const t=e.composedPath?e.composedPath():[];const a=["button","input","select","textarea","summary","label"];let u=null;for(const v of t){if(!(v instanceof Element))continue;if(v.localName==="a"){if(!(v instanceof HTMLAnchorElement))return;u=v;break}if(a.indexOf(v.localName)!==-1)return}if(!u)return;if(u.isContentEditable)return;const s=u.closest("[contenteditable]");if(s&&s.getAttribute("contenteditable")!=="false")return;const S=(u.getAttribute("target")||"_self").toLowerCase();if(S!=="_self"&&S!=="_top"&&S!=="_parent")return;let _;try{_=new URL(u.href)}catch{return}if(_.protocol!=="http:"&&_.protocol!=="https:")return;if(location.origin==="null")return;if(_.origin===location.origin)return;e.preventDefault();window.open(_.href,"_blank","noopener,noreferrer")});const d=()=>{try{A.postMessage({type:"omelette:height",height:document.documentElement.scrollHeight},"*")}catch{}};if(window.ResizeObserver)new ResizeObserver(d).observe(document.documentElement);const p=()=>{d();if(!document.querySelector('script[type="text/babel"],script[type="text/jsx"]'))return;const e=()=>document.getElementById("root")||document.querySelector("body > div[id]");const t=e()?.firstElementChild??null;let a=0;const u=()=>{const s=e();if(s&&s.firstElementChild!==t||++a>30){d();return}setTimeout(u,100)};setTimeout(u,100)};if(document.readyState==="complete")p();else window.addEventListener("load",p);const f={};let g=0;const h=(e)=>new Promise((t,a)=>{if(!I.length){a(new Error("claude.complete: no parent origin"));return}const u=`c${++g}`;const s=()=>setTimeout(()=>{delete f[u];a(new Error(`claude.complete: no data for ${J/1000}s`))},J);const S=s();f[u]={resolve:t,reject:a,text:"",t:S,arm:s};try{for(const _ of I){A.postMessage({__om_api:true,id:u,body:e},_)}}catch(_){clearTimeout(S);delete f[u];a(_)}});const y=8;const m=async(e,t)=>{if(!Array.isArray(e.messages)){throw new Error("claude.complete: tools require a messages array")}const a=e.messages.slice();const u={...e,tools:e.tools.map((_)=>{if(_===null||typeof _!=="object")return _;const v={};for(const o of Object.keys(_)){if(typeof _[o]!=="function")v[o]=_[o]}return v})};const s=u.tool_choice;const S=s!=null&&(s.type==="any"||s.type==="tool")?{...u,tool_choice:s.disable_parallel_tool_use!==undefined?{type:"auto",disable_parallel_tool_use:s.disable_parallel_tool_use}:{type:"auto"}}:u;for(let _=0;_<y;_++){const v=await h({..._===0?u:S,messages:a});const o=v.message;const r=o&&Array.isArray(o.content)?o.content:null;const l=r?r.filter((c)=>c?.type==="tool_use"):[];if(o?.stop_reason!=="tool_use"||l.length===0){return v.text}const i=[];for(const c of l){const k=t.get(c.name);if(!k){i.push({type:"tool_result",tool_use_id:c.id,content:`no handler for tool "${c.name}"`,is_error:true});continue}try{const b=await k(c.input);const E=typeof b==="string"?b:O(b)??"";i.push({type:"tool_result",tool_use_id:c.id,content:E})}catch(b){i.push({type:"tool_result",tool_use_id:c.id,content:String(b?.message??b??"tool handler failed"),is_error:true})}}a.push({role:"assistant",content:r},{role:"user",content:i})}throw new Error(`claude.complete: exceeded ${y} tool turns`)};window.claude={complete(e){const t=e;if(t!==null&&typeof t==="object"&&Array.isArray(t.tools)&&t.tools.some((a)=>a!==null&&typeof a==="object"&&typeof a.run==="function")){const a=new Map;for(const u of t.tools){if(u!==null&&typeof u==="object"&&typeof u.run==="function"){a.set(String(u.name),u.run)}}return m(t,a)}return h(e).then((a)=>a.text)}};const w={};let R=0;H=(e,t)=>new Promise((a)=>{if(!I.length){a({persisted:false,noHost:true,reason:U});return}const u=`f${++R}`;const s=setTimeout(()=>{delete w[u];a({persisted:false,noHost:true,reason:U})},G);w[u]={settle:a,t:s};try{for(const S of I){A.postMessage({__om_file:true,id:u,op:"write",path:e,content:t},S)}}catch{clearTimeout(s);delete w[u];a({persisted:false,noHost:true,reason:U})}});const O=(e)=>{try{return JSON.stringify(e)}catch{return JSON.stringify(String(e))}};window.addEventListener("message",(e)=>{if(I.indexOf(e.origin)<0)return;if(e.source!==A)return;const t=e.data;if(!t)return;if(t.type==="omelette-preview-refresh"){if(typeof t.token!=="string"||!/^[0-9a-f.-]+(\.(rc|pr-[0-9]+))?(\.[0-9]+\.[0-9a-f]{16})?$/.test(t.token))return;const s=Math.max(1,Math.floor((t.expiresAt||0)-Date.now()/1000));document.cookie="__Host-omelette-preview="+t.token+"; Path=/; Secure; SameSite=None; Partitioned; Max-Age="+s;C();return}if(t.__om_file_r){const s=w[t.id];if(!s)return;clearTimeout(s.t);delete w[t.id];s.settle(t.ok?{persisted:true}:{persisted:false,reason:t.error||"write failed"});return}if(t.__om_api_r){const s=f[t.id];if(!s)return;if(t.error!=null){clearTimeout(s.t);delete f[t.id];s.reject(new Error(t.error));return}if(t.chunk!=null){clearTimeout(s.t);s.t=s.arm();s.text+=t.chunk;return}if(t.done){clearTimeout(s.t);delete f[t.id];s.resolve({text:t.text!=null?t.text:s.text,message:t.message});return}return}if(!t.__om_eval)return;const a=t;const u=(s)=>{e.source.postMessage({...s,__om_eval_r:1,id:a.id},e.origin)};try{const s=(0,eval)(a.code);if(s&&typeof s.then==="function"){s.then((S)=>u({ok:1,v:O(S)}),(S)=>u({ok:0,e:String(S)}))}else{u({ok:1,v:O(s)})}}catch(s){u({ok:0,e:String(s)})}})}})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4f5f8;font-family:"PingFang SC","Noto Sans SC",Inter,-apple-system,"Microsoft YaHei",sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased}
+a{color:#024DE3;text-decoration:none}a:hover{text-decoration:underline}
+input,button,select{font-family:inherit}
+::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:#ccc;border-radius:999px}::-webkit-scrollbar-track{background:#f1f1f1}
+</style>
+</helmet>
+<div style="display:flex;flex-direction:column;height:100vh;min-height:760px;background:#f4f5f8;overflow:hidden">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;height:64px;flex-shrink:0;padding:0 24px 0 38px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <img src="assets/bisheng-logo.png" alt="BISHENG" style="height:22px;width:auto">
+      <span style="font-size:17px;font-weight:600;letter-spacing:.08em;color:#212121">BISHENG</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="height:32px;width:32px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#4E5969">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path></svg>
+      </div>
+      <div style="height:32px;padding:0 12px;background:#fff;border-radius:8px;display:flex;align-items:center;gap:4px;font-size:14px;color:#212121">中文
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </div>
+      <div style="width:1px;height:24px;background:#dddddd;margin:0 8px"></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="height:28px;width:28px;border-radius:16px;background:#C9CDD4;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">王</div>
+        <span style="font-size:14px;color:#212121">王敏</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex:1;min-height:0">
+    <nav style="width:184px;min-width:184px;padding:0 12px;display:flex;flex-direction:column;gap:3.5px">
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;color:#212121" style-hover="background:#fff">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2.9541C14.075 2.95399 16.0986 3.59936 17.7904 4.80075C19.4822 6.00214 20.7584 7.70005 21.4421 9.65916C22.1258 11.6183 22.1831 13.7415 21.6062 15.7347C21.0292 17.7278 19.8465 19.4922 18.222 20.7831C18.0451 20.9236 17.8259 21.0001 17.6 21.0001H6.40001C6.17411 21.0001 5.95488 20.9236 5.77801 20.7831C4.1535 19.4922 2.97081 17.7278 2.39384 15.7347C1.81687 13.7415 1.87421 11.6183 2.55791 9.65916C3.2416 7.70005 4.51779 6.00214 6.20959 4.80075C7.9014 3.59936 9.92502 2.95399 12 2.9541ZM16.207 8.7931C16.0195 8.60563 15.7652 8.50032 15.5 8.50032C15.2348 8.50032 14.9805 8.60563 14.793 8.7931L12.517 11.0671C12.2303 10.9909 11.9302 10.9793 11.6384 11.0332C11.3466 11.0871 11.0705 11.2052 10.8299 11.3789C10.5893 11.5525 10.3904 11.7775 10.2474 12.0375C10.1044 12.2974 10.0209 12.5859 10.003 12.8821L10 13.0001C10.0005 13.2844 10.0617 13.5654 10.1794 13.8243C10.2971 14.0831 10.4686 14.3139 10.6825 14.5012C10.8965 14.6885 11.1479 14.828 11.42 14.9105C11.6922 14.9929 11.9787 15.0164 12.2607 14.9794C12.5426 14.9423 12.8134 14.8456 13.0549 14.6956C13.2965 14.5456 13.5033 14.3458 13.6616 14.1096C13.8199 13.8734 13.9259 13.6061 13.9727 13.3256C14.0195 13.0451 14.006 12.7579 13.933 12.4831L16.207 10.2071C16.3945 10.0196 16.4998 9.76527 16.4998 9.5001C16.4998 9.23494 16.3945 8.98063 16.207 8.7931Z" fill="currentColor"></path></svg>
+        <span style="font-size:14px">仪表盘</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;color:#212121" style-hover="background:#fff">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M11 5H17C17.5523 5 18 5.44772 18 6V12" stroke="currentColor" stroke-width="2"></path>
+          <path d="M11.5 11.5L20 14V18C20 19.1046 19.1046 20 18 20H14L11.5 11.5Z" fill="currentColor"></path>
+          <path d="M11.5 11.5L3 9L3 5C3 3.89543 3.89543 3 5 3L9 3L11.5 11.5Z" fill="currentColor"></path>
+          <path d="M12 18L6 18C5.44771 18 5 17.5523 5 17L5 11" stroke="currentColor" stroke-width="2"></path>
+        </svg>
+        <span style="font-size:14px">技能</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;color:#212121" style-hover="background:#fff">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 6.88284C12 6.37851 12.3755 5.95311 12.876 5.89056L18.876 5.14056C19.4728 5.06595 20 5.53134 20 6.13284V15.9356C20 16.5124 19.5133 16.9696 18.9376 16.9337L12.9376 16.5587C12.4106 16.5257 12 16.0887 12 15.5606V6.88284Z" fill="currentColor"></path>
+          <path d="M7 19L11.3896 18.5123C11.463 18.5041 11.537 18.5041 11.6104 18.5123L16 19" stroke="currentColor" stroke-width="2"></path>
+          <path d="M3 6.13278C3 5.53128 3.52718 5.0659 4.12403 5.1405L10.124 5.8905C10.6245 5.95306 11 6.37846 11 6.88278V15.5605C11 16.0886 10.5894 16.5257 10.0624 16.5586L4.06238 16.9336C3.48668 16.9696 3 16.5124 3 15.9355V6.13278Z" fill="currentColor"></path>
+        </svg>
+        <span style="font-size:14px">知识库</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;color:#212121" style-hover="background:#fff">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M4.10899 4.54601C4 4.75992 4 5.03995 4 5.6V18.4C4 18.9601 4 19.2401 4.10899 19.454C4.20487 19.6422 4.35785 19.7951 4.54601 19.891C4.75992 20 5.03995 20 5.6 20H18.4C18.9601 20 19.2401 20 19.454 19.891C19.6422 19.7951 19.7951 19.6422 19.891 19.454C20 19.2401 20 18.9601 20 18.4V5.6C20 5.03995 20 4.75992 19.891 4.54601C19.7951 4.35785 19.6422 4.20487 19.454 4.10899C19.2401 4 18.9601 4 18.4 4H5.6C5.03995 4 4.75992 4 4.54601 4.10899C4.35785 4.20487 4.20487 4.35785 4.10899 4.54601ZM7 9H6V11H7H11V14V15H12H17H18V13H17H13V10V9H12H7Z" fill="currentColor"></path></svg>
+        <span style="font-size:14px">模型</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;color:#212121" style-hover="background:#fff">
+        <svg width="24" height="24" viewBox="-160 -160 1344 1344" fill="currentColor"><path d="M887.994182 46.545455H146.245818C95.976727 46.545455 46.545455 88.110545 46.545455 138.612364V512h183.761454L298.821818 446.370909c7.68-7.68 18.618182-9.448727 29.230546-7.447273a33.512727 33.512727 0 0 1 23.738181 20.014546l83.409455 196.096 129.117091-389.259637a33.186909 33.186909 0 0 1 30.72-22.202181c15.266909 0.325818 27.508364 6.656 31.464727 20.573091L697.809455 512h92.625454a31.650909 31.650909 0 1 1 0 63.488h-117.201454c-14.522182 0-27.275636-5.585455-31.278546-19.549091l-49.198545-171.054545-118.784 371.712c-4.282182 12.8-25.460364 22.248727-25.460364 22.807272v0.279273c-21.131636 0-30.068364-7.586909-35.281455-19.549091l-100.258909-230.4-45.102545 40.308364c-6.050909 6.097455-15.406545 5.445818-24.064 5.445818H46.545455v309.248C46.545455 935.284364 96.023273 977.454545 146.245818 977.454545h741.748364c50.269091 0 89.460364-42.170182 89.460363-92.718545V138.612364C977.454545 88.110545 938.216727 46.545455 887.994182 46.545455z" fill="currentColor"></path></svg>
+        <span style="font-size:14px">评测</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;color:#212121" style-hover="background:#fff">
+        <svg width="24" height="24" viewBox="-100 -100 1224 1224" fill="currentColor"><path d="M817.403509 589.249123c0-18.863158-6.287719-35.031579-19.761404-49.403509L412.294737 155.396491c-13.473684-13.473684-32.336842-25.150877-54.792982-35.031579-23.354386-9.880702-44.014035-14.37193-62.877193-14.37193L70.063158 105.992982c-18.863158 0-35.031579 7.185965-48.505263 20.659649-13.473684 13.473684-20.659649 29.642105-20.659649 48.505263l0 223.663158c0 18.863158 4.491228 40.421053 14.37193 62.877193 9.880702 23.354386 20.659649 41.319298 35.031579 54.792982l385.347368 385.347368c13.473684 13.473684 29.642105 19.761404 48.505263 19.761404 18.863158 0 35.031579-6.287719 49.403509-19.761404L797.642105 637.754386C810.217544 624.280702 817.403509 608.112281 817.403509 589.249123L817.403509 589.249123zM221.866667 327.859649c-13.473684 13.473684-29.642105 19.761404-48.505263 19.761404-18.863158 0-35.031579-6.287719-48.505263-19.761404-13.473684-13.473684-19.761404-29.642105-19.761404-48.505263 0-18.863158 6.287719-35.031579 19.761404-48.505263 13.473684-13.473684 29.642105-19.761404 48.505263-19.761404 18.863158 0 35.031579 6.287719 48.505263 19.761404 13.473684 13.473684 19.761404 29.642105 19.761404 48.505263C242.526316 298.217544 235.340351 314.385965 221.866667 327.859649L221.866667 327.859649zM1004.238596 539.845614 618.891228 155.396491c-13.473684-13.473684-32.336842-25.150877-54.792982-35.031579-23.354386-9.880702-44.014035-14.37193-62.877193-14.37193L379.957895 105.992982c18.863158 0 40.421053 4.491228 62.877193 14.37193 23.354386 9.880702 41.319298 20.659649 54.792982 35.031579l385.347368 384.449123c13.473684 14.37193 19.761404 30.540351 19.761404 49.403509 0 18.863158-6.287719 35.031579-19.761404 48.505263L630.568421 891.059649c10.778947 10.778947 20.659649 18.863158 28.74386 24.252632 8.084211 5.389474 18.863158 7.185965 31.438596 7.185965 18.863158 0 35.031579-6.287719 49.403509-19.761404L1004.238596 637.754386c13.473684-13.473684 19.761404-29.642105 19.761404-48.505263C1024 570.385965 1017.712281 554.217544 1004.238596 539.845614L1004.238596 539.845614zM1004.238596 539.845614" fill="currentColor"></path></svg>
+        <span style="font-size:14px">标注</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;color:#212121" style-hover="background:#fff">
+        <svg width="24" height="24" viewBox="-100 -100 1224 1224" fill="currentColor"><path d="M511.999269 0c4.608 0 9.289143 1.755429 13.165714 5.046857 42.422857 36.644571 185.051429 144.237714 405.650286 150.454857 11.117714 0.438857 20.187429 9.508571 20.041142 21.065143V605.622857C950.856411 797.622857 668.232411 1024 511.999269 1024c-160.621714 0-438.857143-226.377143-438.857143-418.377143V176.347429c0-11.483429 9.069714-20.626286 20.187428-20.918858C314.001554 149.284571 456.703269 41.691429 498.833554 4.900571A20.626286 20.626286 0 0 1 511.999269 0z m-24.356572 283.209143l-130.194286 270.336h204.214858L487.496411 712.704l75.044572 34.962286 129.024-277.065143H489.324983l72.996571-151.552-74.678857-35.84z" fill="currentColor"></path></svg>
+        <span style="font-size:14px">日志</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;color:#212121" style-hover="background:#fff">
+        <svg width="24" height="24" viewBox="0 0 1024 1024" fill="currentColor"><path d="M422.399 601.6V493.323c-79.111-34.622-134.4-113.655-134.4-205.323 0-123.711 100.54-224 224-224 123.711 0 224 100.545 224 224 0 91.814-55.379 170.725-134.4 205.313V601.6h201.472c61.925 0 112.128 49.716 112.128 112.003V825.6H108.801V713.598c0-61.855 50.444-111.998 112.126-111.998h201.472zM153.601 870.4h716.793V960H153.6v-89.6z"></path></svg>
+        <span style="font-size:14px">审批</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;height:48px;padding:0 20px;border-radius:9px;cursor:pointer;background:#fff;color:#024DE3;box-shadow:0 1px 2px rgba(0,0,0,.06)">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M12.6999 2.68537C12.3111 2.30458 11.6892 2.30458 11.3004 2.68537L9.34074 4.60478C9.15641 4.78533 8.90941 4.88764 8.65139 4.89032L5.90848 4.91879C5.36431 4.92443 4.92455 5.36419 4.91891 5.90835L4.89044 8.65127C4.88776 8.90929 4.78545 9.15628 4.6049 9.34062L2.6855 11.3003C2.3047 11.6891 2.3047 12.311 2.6855 12.6997L4.6049 14.6594C4.78545 14.8438 4.88776 15.0907 4.89044 15.3488L4.91891 18.0917C4.92455 18.6358 5.36431 19.0756 5.90848 19.0812L8.65139 19.1097C8.90941 19.1124 9.15641 19.2147 9.34074 19.3953L11.3004 21.3147C11.6892 21.6955 12.3111 21.6955 12.6999 21.3147L14.6595 19.3953C14.8439 19.2147 15.0909 19.1124 15.3489 19.1097L18.0918 19.0812C18.636 19.0756 19.0757 18.6358 19.0814 18.0917L19.1098 15.3488C19.1125 15.0907 19.2148 14.8438 19.3954 14.6594L21.3148 12.6997C21.6956 12.311 21.6956 11.6891 21.3148 11.3003L19.3954 9.34062C19.2148 9.15628 19.1125 8.90929 19.1098 8.65127L19.0814 5.90835C19.0757 5.36419 18.636 4.92443 18.0918 4.91879L15.3489 4.89032C15.0909 4.88764 14.8439 4.78533 14.6595 4.60478L12.6999 2.68537ZM14.5981 10.5004L12 9.00037L9.40192 10.5004V13.5004L12 15.0004L14.5981 13.5004V10.5004Z" fill="currentColor"></path></svg>
+        <span style="font-size:14px">系统管理</span>
+      </div>
+    </nav>
+
+    <div style="flex:1;min-width:0;background:#fff;border-radius:9px;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:16px 8px 0">
+        <div style="display:inline-flex;height:38px;align-items:center;border-radius:7px;padding:4px;background:#024DE3;gap:2px">
+          <sc-for list="{{ sysTabs }}" as="tab" hint-placeholder-count="5">
+            <div style="{{ tab.style }}">{{ tab.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:20px 24px 40px">
+
+        <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:16px">
+              <div style="max-width:640px">
+                <div style="font-size:18px;color:#0f172a;font-weight:500">服务账号</div>
+                <p style="margin:6px 0 0;font-size:13px;line-height:20px;color:#86909C;text-wrap:pretty">服务账号是开放 API 密钥的唯一主体：不可登录平台、权限单独授予、不占租户席位。密钥与资源授权都在服务账号详情内管理。</p>
+              </div>
+              <div style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+                <div style="position:relative;width:200px">
+                  <svg style="position:absolute;left:10px;top:9px;color:#86909C" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+                  <input placeholder="服务账号名称" value="{{ search }}" onInput="{{ onSearch }}" style="width:100%;height:34px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px 0 32px;font-size:14px;background:#fff;outline:none;color:#212121;box-sizing:border-box">
+                </div>
+                <button onClick="{{ openCreate }}" style="height:36px;padding:0 16px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:500;cursor:pointer;display:flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,.06)" style-hover="background:#0246cc">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>创建服务账号
+                </button>
+              </div>
+            </div>
+
+            <table style="width:100%;border-collapse:separate;border-spacing:0 4px;font-size:14px">
+              <colgroup><col style="width:22%"><col style="width:8%"><col style="width:9%"><col style="width:22%"><col style="width:14%"><col style="width:12%"><col style="width:13%"></colgroup>
+              <thead>
+                <tr>
+                  <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">名称</th>
+                  <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">状态</th>
+                  <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">密钥数</th>
+                  <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">委托</th>
+                  <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">最后调用</th>
+                  <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">创建人</th>
+                  <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ rows }}" as="row" hint-placeholder-count="5">
+                  <tr onMouseEnter="{{ row.onEnter }}" onMouseLeave="{{ row.onLeave }}">
+                    <td style="{{ row.cellFirst }}">
+                      <span onClick="{{ row.open }}" style="color:#024DE3;cursor:pointer;font-weight:500" style-hover="text-decoration:underline">{{ row.name }}</span>
+                      <div style="font-size:12px;color:#86909C;margin-top:2px">{{ row.desc }}</div>
+                    </td>
+                    <td style="{{ row.cell }}"><span style="{{ row.statusStyle }}">{{ row.statusText }}</span></td>
+                    <td style="{{ row.cell }}"><span style="{{ row.keyCountStyle }}">{{ row.keyCountText }}</span></td>
+                    <td style="{{ row.cell }}"><span style="{{ row.delegateStyle }}">{{ row.delegateText }}</span></td>
+                    <td style="{{ row.cell }}"><span style="color:#4E5969">{{ row.lastCall }}</span></td>
+                    <td style="{{ row.cell }}"><span style="color:#4E5969">{{ row.creator }}</span></td>
+                    <td style="{{ row.cellLast }}">
+                      <span onClick="{{ row.open }}" style="color:#024DE3;cursor:pointer" style-hover="text-decoration:underline">管理</span>
+                      <span onClick="{{ row.toggle }}" style="color:#024DE3;cursor:pointer;margin-left:16px" style-hover="text-decoration:underline">{{ row.toggleText }}</span>
+                    </td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;font-size:13px;color:#64748b">
+              <span>共 {{ rowCount }} 条</span>
+              <span style="display:flex;gap:6px;align-items:center"><span style="width:28px;height:28px;border-radius:6px;background:#024DE3;color:#fff;display:flex;align-items:center;justify-content:center">1</span></span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div onClick="{{ back }}" style="display:inline-flex;align-items:center;gap:4px;font-size:13px;color:#64748b;cursor:pointer;margin-bottom:10px" style-hover="color:#024DE3">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"></path></svg>返回服务账号列表
+            </div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
+              <span style="font-size:20px;font-weight:500;color:#0f172a">{{ acct.name }}</span>
+              <span style="{{ acct.statusStyle }}">{{ acct.statusText }}</span>
+            </div>
+            <div style="font-size:13px;color:#86909C;margin-bottom:18px">{{ acct.desc }}</div>
+
+            <div style="display:inline-flex;background:#f4f5f8;border-radius:8px;padding:4px;gap:2px;margin-bottom:18px">
+              <sc-for list="{{ detailTabs }}" as="tab" hint-placeholder-count="3">
+                <div onClick="{{ tab.onClick }}" style="{{ tab.style }}">{{ tab.label }}</div>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+                <div style="flex:1;min-width:420px;border:1px solid #E5E6EB;border-radius:9px;padding:20px 24px">
+                  <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:14px">基本信息</div>
+                  <div style="display:grid;grid-template-columns:96px 1fr;row-gap:12px;column-gap:12px;font-size:14px">
+                    <span style="color:#86909C">名称</span><span style="color:#212121">{{ acct.name }}</span>
+                    <span style="color:#86909C">描述</span><span style="color:#212121">{{ acct.desc }}</span>
+                    <span style="color:#86909C">租户</span><span style="color:#212121">{{ acct.tenant }}<span style="font-size:12px;color:#86909C;margin-left:8px">创建后不可更换</span></span>
+                    <span style="color:#86909C">主体类型</span><span style="color:#212121">服务账号 · 不可登录平台 · 不占用租户席位</span>
+                    <span style="color:#86909C">资源归属人</span><span style="color:#212121">{{ acct.ownerPerson }}<span style="font-size:12px;color:#86909C;margin-left:8px">该账号经 API / CLI 创建的资源统一归属此人；变更只对此后创建的资源生效</span></span>
+                    <span style="color:#86909C">创建信息</span><span style="color:#212121">{{ acct.creator }} · {{ acct.created }}</span>
+                    <span style="color:#86909C">最后调用</span><span style="color:#212121">{{ acct.lastCallFull }}</span>
+                  </div>
+                </div>
+                <div style="width:340px;border:1px solid #E5E6EB;border-radius:9px;padding:20px 24px">
+                  <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:6px">停用 / 启用</div>
+                  <p style="margin:0 0 12px;font-size:12px;line-height:19px;color:#86909C;text-wrap:pretty">停用后名下全部密钥立即拒绝调用，授权与配置全部保留，启用后原样恢复。这是推荐的常规下线方式。</p>
+                  <button onClick="{{ toggleAcct }}" style="height:32px;padding:0 14px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:14px;color:#212121;cursor:pointer" style-hover="background:#f4f5f8">{{ acct.toggleText }}</button>
+                  <div style="height:1px;background:#F2F3F5;margin:20px 0"></div>
+                  <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:6px">删除</div>
+                  <p style="margin:0 0 12px;font-size:12px;line-height:19px;color:#86909C;text-wrap:pretty">名下仍有未撤销的资源授权时不可删除，需先在资源授权页撤销。</p>
+                  <button onClick="{{ openDelete }}" style="height:32px;padding:0 14px;border:1px solid #FBD7D3;background:#fff;border-radius:7px;font-size:14px;color:#ef4444;cursor:pointer" style-hover="background:#FEF2F2">删除服务账号</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isKeys }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <div style="border:1px solid #E5E6EB;border-radius:9px;padding:16px 20px;margin-bottom:16px;background:#FBFBFB">
+                  <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px">
+                    <div style="display:flex;align-items:baseline;gap:8px">
+                      <span style="font-size:14px;font-weight:500;color:#212121">接入信息</span>
+                      <span style="font-size:12px;color:#86909C">随密钥一并转交开发者 · 平台自身分发，无公网依赖</span>
+                    </div>
+                    <button onClick="{{ copyAccess }}" style="{{ copyBtnStyle }}">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                      {{ copyBtnText }}
+                    </button>
+                  </div>
+                  <div style="display:grid;grid-template-columns:104px 1fr;row-gap:10px;column-gap:12px;font-size:13px;align-items:center">
+                    <span style="color:#86909C">MCP Server</span><span style="font-family:ui-monospace,Menlo,monospace;color:#212121">https://bisheng.cofco.com/mcp</span>
+                    <span style="color:#86909C">模型 base URL</span><span style="font-family:ui-monospace,Menlo,monospace;color:#212121">https://bisheng.cofco.com/v1<span style="font-family:inherit;font-size:12px;color:#86909C;margin-left:8px">OpenAI 兼容 · 本版无 Anthropic 协议面</span></span>
+                    <span style="color:#86909C">CLI</span><span style="color:#212121"><a href="#">下载 bisheng CLI 安装包</a><span style="font-size:12px;color:#86909C;margin-left:8px">安装后执行 <span style="font-family:ui-monospace,Menlo,monospace">bisheng login</span> 粘贴本页签发的密钥</span></span>
+                  </div>
+                  <div style="font-size:12px;color:#86909C;margin-top:12px;line-height:19px;text-wrap:pretty">一键复制生成一段可直接粘贴的接入说明（企微 / 邮件转交开发者），<span style="color:#212121">不含密钥明文</span>——明文只在签发弹窗出现一次，需管理员另行安全转交。</div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                  <div style="font-size:13px;color:#86909C">密钥明文仅在签发时展示一次，列表只显示前缀与末四位。</div>
+                  <div style="display:flex;gap:10px">
+                    <button onClick="{{ openRevokeAll }}" style="height:34px;padding:0 14px;border:1px solid #FBD7D3;background:#fff;border-radius:7px;font-size:14px;color:#ef4444;cursor:pointer" style-hover="background:#FEF2F2">撤销该账号全部密钥</button>
+                    <button onClick="{{ openIssue }}" style="height:34px;padding:0 16px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:14px;font-weight:500;cursor:pointer" style-hover="background:#0246cc">签发密钥</button>
+                  </div>
+                </div>
+                <table style="width:100%;border-collapse:separate;border-spacing:0 4px;font-size:14px">
+                  <colgroup><col style="width:20%"><col style="width:16%"><col style="width:24%"><col style="width:14%"><col style="width:12%"><col style="width:14%"></colgroup>
+                  <thead><tr>
+                    <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">名称</th>
+                    <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">密钥</th>
+                    <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">权限位 / 委托</th>
+                    <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">最后使用</th>
+                    <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">过期时间</th>
+                    <th style="height:40px;padding:0 12px;text-align:left;font-weight:500;color:#64748b;font-size:13px">操作</th>
+                  </tr></thead>
+                  <tbody>
+                    <sc-for list="{{ keyRows }}" as="k" hint-placeholder-count="2">
+                      <tr>
+                        <td style="{{ k.cellFirst }}">
+                          <div style="color:#212121;font-weight:500">{{ k.name }}</div>
+                          <span style="{{ k.stateStyle }}">{{ k.stateText }}</span>
+                        </td>
+                        <td style="{{ k.cell }}"><span style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#4E5969">{{ k.masked }}</span></td>
+                        <td style="{{ k.cell }}">
+                          <div style="display:flex;flex-wrap:wrap;gap:4px">
+                            <sc-for list="{{ k.bits }}" as="b" hint-placeholder-count="3">
+                              <span style="{{ b.style }}">{{ b.label }}</span>
+                            </sc-for>
+                          </div>
+                          <div style="font-size:12px;color:#86909C;margin-top:6px">{{ k.delegateSummary }}</div>
+                        </td>
+                        <td style="{{ k.cell }}"><span style="color:#4E5969">{{ k.lastUsed }}</span></td>
+                        <td style="{{ k.cell }}"><span style="color:#4E5969">{{ k.expire }}</span></td>
+                        <td style="{{ k.cellLast }}">
+                          <span onClick="{{ k.edit }}" style="color:#024DE3;cursor:pointer" style-hover="text-decoration:underline">编辑</span>
+                          <span onClick="{{ k.revoke }}" style="{{ k.revokeStyle }}">撤销</span>
+                        </td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+                <div style="margin-top:14px;font-size:12.5px;color:#86909C">编辑可改名称、权限位、委托配置与过期时间，无需轮换密钥，改完即时生效。</div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isGrants }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <div style="border:1px solid #D6E0FF;background:#F5F8FF;border-radius:9px;padding:16px 20px;margin-bottom:16px">
+                  <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:4px">一次调用能不能通过，由两层「与」关系决定</div>
+                  <p style="margin:0 0 14px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">两层分别由不同的界面配置，缺任一层都会被拒绝，且错误码不同。本页只配置第二层。</p>
+                  <div style="display:flex;gap:14px;flex-wrap:wrap">
+                    <div style="flex:1;min-width:300px;background:#fff;border:1px solid #E5E6EB;border-radius:8px;padding:14px 16px">
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                        <span style="width:20px;height:20px;border-radius:6px;background:#E6EDFC;color:#024DE3;font-size:12px;display:flex;align-items:center;justify-content:center;font-weight:600">1</span>
+                        <span style="font-size:13px;font-weight:500;color:#212121">密钥权限位 · 能做哪一类动作</span>
+                      </div>
+                      <div style="font-size:12px;color:#86909C;margin-bottom:8px">在「API 密钥」页配置 · 不足返回 26003</div>
+                      <div style="display:flex;flex-wrap:wrap;gap:4px">
+                        <sc-for list="{{ heldBits }}" as="b" hint-placeholder-count="4">
+                          <span style="{{ b.style }}">{{ b.label }}</span>
+                        </sc-for>
+                      </div>
+                      <div style="font-size:12px;color:#86909C;margin-top:8px">名下 {{ activeKeyCount }} 把有效密钥合计持有以上权限位</div>
+                    </div>
+                    <div style="flex:1;min-width:300px;background:#fff;border:1px solid #E5E6EB;border-radius:8px;padding:14px 16px">
+                      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                        <span style="width:20px;height:20px;border-radius:6px;background:#E6EDFC;color:#024DE3;font-size:12px;display:flex;align-items:center;justify-content:center;font-weight:600">2</span>
+                        <span style="font-size:13px;font-weight:500;color:#212121">主体资源授权 · 对这一个资源有什么权限</span>
+                      </div>
+                      <div style="font-size:12px;color:#86909C;margin-bottom:8px">在本页配置 · 不足返回各业务模块的资源权限错误</div>
+                      <div style="font-size:13px;color:#212121">已授予 {{ grantedCount }} 个资源</div>
+                    </div>
+                  </div>
+                </div>
+
+                <sc-if value="{{ hasDelegateKey }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;gap:10px;border:1px solid #FBD7D3;background:#FEF6F5;border-radius:9px;padding:14px 18px;margin-bottom:16px">
+                    <svg style="color:#ef4444;flex-shrink:0;margin-top:1px" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+                    <div>
+                      <div style="font-size:13px;font-weight:500;color:#212121;margin-bottom:3px">该账号名下存在持有 delegate 的密钥，本页授权不是全局上限</div>
+                      <p style="margin:0;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">委托生效时权限基准整个换成被代表用户，服务账号自身的资源授权此刻完全不参与判定。即使本页零授权，这把密钥仍可读到被代表用户能读的全部内容。</p>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                  <div style="font-size:14px;font-weight:500;color:#212121">被授予资源<span style="font-size:12px;color:#86909C;font-weight:400;margin-left:8px">管理员在本页授予，可在此撤销</span></div>
+                  <div style="display:flex;gap:10px">
+                    <button onClick="{{ revokeAllGrants }}" style="height:32px;padding:0 12px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13px;color:#4E5969;cursor:pointer" style-hover="background:#f4f5f8">全部撤销</button>
+                    <button onClick="{{ openGrantAdd }}" style="height:32px;padding:0 14px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#0246cc">授予资源</button>
+                  </div>
+                </div>
+                <div style="border:1px solid #E5E6EB;border-radius:9px;overflow:hidden">
+                  <sc-for list="{{ grantedRows }}" as="g" hint-placeholder-count="3">
+                    <div style="{{ g.rowStyle }}">
+                      <div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1">
+                        <span style="{{ g.iconStyle }}">{{ g.iconText }}</span>
+                        <div style="min-width:0">
+                          <div style="font-size:14px;color:#212121">{{ g.name }}</div>
+                          <div style="font-size:12px;color:#86909C;margin-top:2px">{{ g.meta }}</div>
+                        </div>
+                        <sc-if value="{{ g.warn }}" hint-placeholder-val="{{ false }}">
+                          <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:#B54708;background:#FFF4E5;border:1px solid #FFDCA8;border-radius:5px;padding:2px 8px">{{ g.warnText }}</span>
+                        </sc-if>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:18px;flex-shrink:0">
+                        <span style="font-size:13px;color:#4E5969">{{ g.model }}</span>
+                        <span onClick="{{ g.revoke }}" style="font-size:13px;color:#ef4444;cursor:pointer" style-hover="text-decoration:underline">撤销</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ noGrants }}" hint-placeholder-val="{{ false }}">
+                    <div style="padding:28px;text-align:center;font-size:13px;color:#86909C">尚未授予任何资源 — 该服务账号的密钥调用任何资源都会失败</div>
+                  </sc-if>
+                </div>
+
+                <div style="font-size:12px;color:#86909C;margin-top:14px;line-height:19px;text-wrap:pretty">服务账号经 API 创建的资源统一归属「资源归属人」（见概览），不在本页汇总，管理与转移到资源自身界面处理。</div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ showCreate }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:60">
+      <div style="width:520px;background:#fff;border-radius:12px;padding:24px;box-shadow:0 12px 40px rgba(7,34,88,.18)">
+        <div style="font-size:16px;font-weight:500;color:#212121;margin-bottom:4px">创建服务账号</div>
+        <p style="margin:0 0 18px;font-size:12.5px;color:#86909C">租户取当前管理员所在租户（中粮集团），创建后不可更换。</p>
+        <label style="display:block;font-size:13px;color:#4E5969;margin-bottom:6px">名称 <span style="color:#ef4444">*</span></label>
+        <input value="{{ createName }}" onInput="{{ onCreateName }}" placeholder="例如：中粮 OA 问答集成" style="width:100%;height:36px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:14px;outline:none;box-sizing:border-box;margin-bottom:14px">
+        <label style="display:block;font-size:13px;color:#4E5969;margin-bottom:6px">描述</label>
+        <input value="{{ createDesc }}" onInput="{{ onCreateDesc }}" placeholder="这个集成要做什么" style="width:100%;height:36px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:14px;outline:none;box-sizing:border-box">
+        <label style="display:block;font-size:13px;color:#4E5969;margin:14px 0 6px">资源归属人 <span style="color:#ef4444">*</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{ ownerOptions }}" as="o" hint-placeholder-count="4">
+            <div onClick="{{ o.pick }}" style="{{ o.style }}">{{ o.name }}</div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;border:1px solid #FFDCA8;background:#FFF9F0;border-radius:8px;padding:10px 12px">
+          <svg style="color:#B54708;flex-shrink:0;margin-top:1px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+          <div style="font-size:12px;line-height:19px;color:#4E5969;text-wrap:pretty">选错难纠正：该账号首发 <span style="font-family:ui-monospace,Menlo,monospace">bisheng deploy</span> 的应用以此人为 owner，而删除 / 回滚 / 撤回在途审批单与交接改码权仅 owner 可为，平台超管与租户管理员均不可代行。归属在创建时固化、改字段不追溯已有应用，选错只能等归属转移，管理侧兜底手段仅停运。知识库等其它资源无此约束——管理员随时可另授「可管理」给他人。</div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px">
+          <button onClick="{{ closeModal }}" style="height:34px;padding:0 16px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:14px;color:#212121;cursor:pointer">取消</button>
+          <button onClick="{{ submitCreate }}" style="{{ createBtnStyle }}">创建并签发第一把密钥</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showIssue }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:60;padding:24px">
+      <div style="width:760px;max-height:100%;background:#fff;border-radius:12px;display:flex;flex-direction:column;box-shadow:0 12px 40px rgba(7,34,88,.18);overflow:hidden">
+        <div style="padding:22px 26px 14px;border-bottom:1px solid #F2F3F5">
+          <div style="font-size:16px;font-weight:500;color:#212121">{{ issueTitle }}</div>
+          <div style="font-size:12.5px;color:#86909C;margin-top:4px">主体：{{ acct.name }} · 权限位默认全不勾，按最小必要授予</div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:20px 26px">
+          <div style="font-size:13px;font-weight:500;color:#212121;margin-bottom:10px">基本</div>
+          <div style="display:flex;gap:14px;margin-bottom:22px">
+            <div style="flex:1">
+              <label style="display:block;font-size:12.5px;color:#4E5969;margin-bottom:6px">名称 <span style="color:#ef4444">*</span></label>
+              <input value="{{ form.name }}" onInput="{{ onKeyName }}" placeholder="例如：OA 生产环境" style="width:100%;height:36px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:14px;outline:none;box-sizing:border-box">
+            </div>
+            <div style="flex:1">
+              <label style="display:block;font-size:12.5px;color:#4E5969;margin-bottom:6px">过期时间</label>
+              <input value="{{ form.expire }}" onInput="{{ onKeyExpire }}" placeholder="留空 = 长期有效" style="width:100%;height:36px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:14px;outline:none;box-sizing:border-box">
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:10px">
+            <span style="font-size:13px;font-weight:500;color:#212121">权限位</span>
+            <span style="font-size:12px;color:#86909C">第一层判定 · 决定这把密钥能做哪一类动作，与资源授权是「与」关系</span>
+          </div>
+          <div style="font-size:12px;line-height:19px;color:#86909C;margin:-4px 0 12px;text-wrap:pretty">开放 API 侧共 8 位（含 delegate）：会话的历史 / 列表查询、反馈类与消息回填不对外暴露——调用方自建系统有自己的消息存储，反馈类无场景，<span style="font-family:ui-monospace,Menlo,monospace">/chat/sync/messages</span> 可向任意 chat_id 注入消息、风险最高，故原 session:read / session:write / session:sync 三位一并取消。</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px">
+            <sc-for list="{{ bitGroups }}" as="grp" hint-placeholder-count="4">
+              <div style="border:1px solid #E5E6EB;border-radius:8px;padding:12px 14px">
+                <div style="font-size:12.5px;color:#86909C;margin-bottom:8px">{{ grp.label }}</div>
+                <sc-for list="{{ grp.bits }}" as="b" hint-placeholder-count="2">
+                  <div onClick="{{ b.toggle }}" style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;cursor:pointer">
+                    <span style="{{ b.boxStyle }}">{{ b.check }}</span>
+                    <div>
+                      <div style="font-size:13px;color:#212121;font-family:ui-monospace,Menlo,monospace">{{ b.key }}</div>
+                      <div style="font-size:12px;color:#86909C;margin-top:1px">{{ b.desc }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ identityWarn }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:10px;border:1px solid #FBD7D3;background:#FEF6F5;border-radius:8px;padding:12px 14px;margin:-10px 0 16px">
+              <svg style="color:#ef4444;flex-shrink:0;margin-top:1px" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+              <div>
+                <div style="font-size:13px;font-weight:500;color:#212121;margin-bottom:3px">已勾选 identity:read —— 高危位</div>
+                <p style="margin:0;font-size:12.5px;line-height:19px;color:#4E5969;text-wrap:pretty">勾选即<span style="color:#ef4444">本租户组织架构全量可读</span>（姓名、部门、层级），平台不提供「只授予某些部门」这类收窄——服务账号刻意不属于任何部门，没有可推导可见范围的立足点。边界由「给不给这个位」承担。租户隔离仍然生效：跨租户的部门与用户一律读不到。</p>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ mixTip }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:8px;border:1px solid #FFDCA8;background:#FFF9F0;border-radius:8px;padding:10px 12px;margin:-10px 0 16px">
+              <span style="font-size:12.5px;line-height:19px;color:#4E5969">转交个人使用的 key 建议仅配「本地开发工具包」权限位——已勾选开放 API 端点权限位或 delegate（提示不阻断）。</span>
+            </div>
+          </sc-if>
+          <div style="{{ delegateBoxStyle }}">
+            <div onClick="{{ toggleDelegate }}" style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">
+              <span style="{{ delegateCheckStyle }}">{{ delegateCheck }}</span>
+              <div>
+                <div style="font-size:13px;color:#212121;font-family:ui-monospace,Menlo,monospace">delegate</div>
+                <div style="font-size:12px;color:#86909C;margin-top:2px">代表平台用户执行 · 独立权限位，不被任何其他权限蕴含；勾选即强制委托，每次调用都必须传 X-Bisheng-On-Behalf-Of，漏传返回 400（26016），不降级执行</div>
+              </div>
+            </div>
+
+            <sc-if value="{{ form.delegate }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:14px">
+                <div style="display:flex;gap:10px;background:#FEF6F5;border:1px solid #FBD7D3;border-radius:8px;padding:10px 12px;margin-bottom:14px">
+                  <svg style="color:#ef4444;flex-shrink:0;margin-top:1px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"></path><path d="M12 9v4M12 17h.01"></path></svg>
+                  <div style="font-size:12.5px;line-height:19px;color:#4E5969">开启委托意味着这把密钥能以他人身份读取数据。委托目标必须是自然人，且不能是超级管理员或租户管理员。</div>
+                </div>
+                <div style="font-size:12.5px;color:#4E5969;margin-bottom:8px">可代表范围 <span style="color:#ef4444">*</span><span style="color:#86909C;margin-left:8px">范围为空即谁都代表不了，没有「允许代表任意人」这一档</span></div>
+                <div style="display:flex;gap:14px">
+                  <div style="flex:1;border:1px solid #E5E6EB;border-radius:8px;padding:12px 14px">
+                    <div style="font-size:12px;color:#86909C;margin-bottom:8px">按部门（含子树）</div>
+                    <sc-for list="{{ deptOptions }}" as="d" hint-placeholder-count="4">
+                      <div onClick="{{ d.toggle }}" style="{{ d.rowStyle }}">
+                        <span style="{{ d.boxStyle }}">{{ d.check }}</span>
+                        <span style="font-size:13px;color:#212121">{{ d.name }}</span>
+                        <span style="font-size:12px;color:#86909C;margin-left:auto">{{ d.count }}</span>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="flex:1;border:1px solid #E5E6EB;border-radius:8px;padding:12px 14px">
+                    <div style="font-size:12px;color:#86909C;margin-bottom:8px">按用户</div>
+                    <div style="position:relative;margin-bottom:8px">
+                      <input value="{{ userQuery }}" onInput="{{ onUserQuery }}" placeholder="搜索用户名或 ID" style="width:100%;height:32px;border:1px solid #EBECF0;border-radius:7px;padding:0 10px;font-size:13px;outline:none;box-sizing:border-box">
+                    </div>
+                    <sc-for list="{{ userOptions }}" as="u" hint-placeholder-count="3">
+                      <div onClick="{{ u.toggle }}" style="{{ u.rowStyle }}">
+                        <span style="{{ u.boxStyle }}">{{ u.check }}</span>
+                        <span style="font-size:13px;color:#212121">{{ u.name }}</span>
+                        <span style="font-size:12px;color:#86909C;margin-left:auto">{{ u.meta }}</span>
+                      </div>
+                    </sc-for>
+                    <div style="font-size:11.5px;color:#86909C;margin-top:8px">选人框中不会出现服务账号</div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="border:1px solid #E5E6EB;border-radius:8px;padding:12px 14px;margin-top:14px;opacity:.55">
+            <div style="font-size:12.5px;color:#86909C">网络 · IP 白名单（P2，暂未开放）</div>
+          </div>
+        </div>
+        <div style="padding:14px 26px;border-top:1px solid #F2F3F5;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12.5px;color:#ef4444">{{ saveHint }}</span>
+          <div style="display:flex;gap:10px">
+            <button onClick="{{ closeModal }}" style="height:34px;padding:0 16px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:14px;color:#212121;cursor:pointer">取消</button>
+            <button onClick="{{ submitKey }}" style="{{ saveBtnStyle }}">{{ saveBtnText }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showSecret }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:70">
+      <div style="width:560px;background:#fff;border-radius:12px;padding:24px;box-shadow:0 12px 40px rgba(7,34,88,.18)">
+        <div style="font-size:16px;font-weight:500;color:#212121;margin-bottom:4px">密钥已签发</div>
+        <p style="margin:0 0 16px;font-size:12.5px;color:#86909C">明文仅此一次展示，关闭后将无法再次查看；列表页只显示前缀与末四位。</p>
+        <div style="display:flex;align-items:center;gap:10px;background:#f4f5f8;border-radius:8px;padding:12px 14px">
+          <span style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#212121;word-break:break-all">{{ secretPlain }}</span>
+          <button onClick="{{ copySecret }}" style="height:30px;padding:0 12px;border:1px solid #E5E6EB;background:#fff;border-radius:6px;font-size:13px;color:#212121;cursor:pointer;white-space:nowrap">{{ copyText }}</button>
+        </div>
+        <div onClick="{{ toggleSaved }}" style="display:flex;align-items:center;gap:8px;margin-top:18px;cursor:pointer">
+          <span style="{{ savedBoxStyle }}">{{ savedCheck }}</span>
+          <span style="font-size:13px;color:#212121">我已保存该密钥</span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:20px">
+          <button onClick="{{ closeSecret }}" style="{{ secretBtnStyle }}">关闭</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showDelete }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:60">
+      <div style="width:560px;background:#fff;border-radius:12px;padding:24px;box-shadow:0 12px 40px rgba(7,34,88,.18)">
+        <div style="display:flex;gap:10px;margin-bottom:6px">
+          <svg style="color:#ef4444;flex-shrink:0;margin-top:2px" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+          <div style="font-size:16px;font-weight:500;color:#212121">无法删除该服务账号<span style="font-size:12px;color:#86909C;margin-left:8px">26013</span></div>
+        </div>
+        <p style="margin:0 0 14px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">名下仍有未撤销的资源授权。请先处理以下清单，或改用「停用」——停用保留全部授权与配置，是推荐的常规下线方式。</p>
+        <div style="border:1px solid #E5E6EB;border-radius:8px;max-height:220px;overflow-y:auto">
+          <sc-for list="{{ blockingRows }}" as="g" hint-placeholder-count="3">
+            <div style="{{ g.rowStyle }}">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="{{ g.iconStyle }}">{{ g.iconText }}</span>
+                <div>
+                  <div style="font-size:13.5px;color:#212121">{{ g.name }}</div>
+                  <div style="font-size:12px;color:#86909C">{{ g.meta }}</div>
+                </div>
+              </div>
+              <span style="font-size:12.5px;color:#4E5969">{{ g.action }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px">
+          <button onClick="{{ closeModal }}" style="height:34px;padding:0 16px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:14px;color:#212121;cursor:pointer">知道了</button>
+          <button onClick="{{ disableFromDelete }}" style="height:34px;padding:0 16px;background:#024DE3;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer">改为停用</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showRevokeOne }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:60">
+      <div style="width:500px;background:#fff;border-radius:12px;padding:24px;box-shadow:0 12px 40px rgba(7,34,88,.18)">
+        <div style="font-size:16px;font-weight:500;color:#212121;margin-bottom:6px">撤销密钥「{{ revokeName }}」？</div>
+        <p style="margin:0 0 8px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">撤销后该密钥自下一次调用起被拒绝，<span style="color:#ef4444">MCP / 模型协议 / CLI 三面同时被拒绝</span>，开放 API 亦一并拒绝；生效上界 5 秒（撤销主动清缓存，通常即时）。</p>
+        <p style="margin:0 0 18px;font-size:12.5px;line-height:20px;color:#86909C;text-wrap:pretty">撤销为软撤销，记录保留供审计追溯；本账号的资源授权与委托配置不受影响。无开发者自助吊销入口，恢复须由租户管理员重新签发。</p>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button onClick="{{ closeModal }}" style="height:34px;padding:0 16px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:14px;color:#212121;cursor:pointer">取消</button>
+          <button onClick="{{ confirmRevokeOne }}" style="height:34px;padding:0 16px;background:#ef4444;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer">确认撤销</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showRevokeAll }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.44);display:flex;align-items:center;justify-content:center;z-index:60">
+      <div style="width:480px;background:#fff;border-radius:12px;padding:24px;box-shadow:0 12px 40px rgba(7,34,88,.18)">
+        <div style="font-size:16px;font-weight:500;color:#212121;margin-bottom:6px">撤销该账号全部密钥？</div>
+        <p style="margin:0 0 18px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">用于密钥泄漏应急。撤销后全部密钥在 5 秒内失效，记录保留用于审计；资源授权与委托配置不受影响。</p>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button onClick="{{ closeModal }}" style="height:34px;padding:0 16px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:14px;color:#212121;cursor:pointer">取消</button>
+          <button onClick="{{ confirmRevokeAll }}" style="height:34px;padding:0 16px;background:#ef4444;color:#fff;border:none;border-radius:7px;font-size:14px;cursor:pointer">全部撤销</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#fff;border:1px solid #E5E6EB;box-shadow:0 6px 24px rgba(7,34,88,.12);border-radius:8px;padding:10px 18px;font-size:13px;color:#212121;z-index:90">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900}}">
+const BITS = {
+  "workflow:invoke": ["工作流", "触发与停止工作流"],
+  "workflow:read": ["工作流", "查询工作流信息"],
+  "knowledge:read": ["知识库", "知识资源与文档的读"],
+  "knowledge:write": ["知识库", "知识资源与文档的写"],
+  "assistant:invoke": ["助手", "助手对话"],
+  "assistant:read": ["助手", "助手信息与列表"],
+  "chat:invoke": ["会话", "日常模式会话：POST /responses、按 id 取回、会话附件上传"]
+};
+const DEVBITS = {
+  "model:invoke": ["本地开发工具包", "OpenAI 兼容协议直连平台托管模型 · 与 chat:invoke 互不蕴含"],
+  "identity:read": ["本地开发工具包", "⚠ 勾选即本租户组织架构全量可读，无法收窄到部分部门"],
+  "app:manage": ["本地开发工具包", "部署应用、状态/日志自查、查询应用数据表结构与数据 · 只有开发者需要，不再拆分数据位"]
+};
+Object.keys(DEVBITS).forEach(k => { BITS[k] = DEVBITS[k]; });
+const GROUPS = ["工作流", "知识库", "助手", "会话", "本地开发工具包"];
+const DEPTS = [
+  { id: "d0", name: "中粮集团（根部门）", count: "1284 人" },
+  { id: "d1", name: "销售部及下级", count: "312 人" },
+  { id: "d2", name: "财务部", count: "64 人" },
+  { id: "d3", name: "信息技术部", count: "88 人" }
+];
+const USERS = [
+  { id: "10086", name: "张三", meta: "销售部 · ID 10086" },
+  { id: "10231", name: "李四", meta: "财务部 · ID 10231" },
+  { id: "10455", name: "赵敏", meta: "信息技术部 · ID 10455" },
+  { id: "10712", name: "陈果", meta: "销售部 · ID 10712" }
+];
+const RES_BIT = { knowledge: "knowledge:read", workflow: "workflow:invoke", assistant: "assistant:invoke" };
+const RES_ICON = { knowledge: ["知", "#E6EDFC", "#024DE3"], workflow: ["流", "#E8F6EE", "#00A34A"], assistant: ["助", "#FFF1E8", "#D46B08"] };
+
+const seed = () => ([
+  {
+    id: "sa-1", name: "中粮 OA 问答集成", desc: "集团 OA 内嵌问答入口，代表员工检索知识库", enabled: true,
+    tenant: "中粮集团", creator: "王敏", ownerPerson: "李工（信息技术部）", created: "2026-06-12", lastCall: "08-15 09:42", lastCallFull: "2026-08-15 09:42:11",
+    keys: [
+      { id: "k1", name: "OA 生产环境", tail: "9f2a", bits: ["knowledge:read", "chat:invoke"], delegate: true, depts: ["d1"], users: ["10231"], lastUsed: "08-15 09:42", expire: "长期有效", revoked: false },
+      { id: "k2", name: "OA 灰度环境", tail: "41c7", bits: ["knowledge:read"], delegate: false, depts: [], users: [], lastUsed: "08-02 14:20", expire: "2026-12-31", revoked: false }
+    ],
+    grants: [
+      { id: "g1", name: "集团制度知识库", type: "knowledge", model: "可见", meta: "知识库 · 1,204 个文件" },
+      { id: "g2", name: "销售话术库", type: "knowledge", model: "可编辑", meta: "知识库 · 318 个文件" },
+      { id: "g3", name: "合同审批工作流", type: "workflow", model: "可见", meta: "工作流 · 已上线" }
+    ],
+    owned: [{ id: "o1", name: "OA 反馈归档库", type: "knowledge", meta: "知识库 · 经 API 创建于 2026-07-03" }]
+  },
+  {
+    id: "sa-2", name: "对外客服机器人", desc: "面向公网访客的客服应用，按外部标识分区会话", enabled: true,
+    tenant: "中粮集团", creator: "王敏", ownerPerson: "李工（信息技术部）", created: "2026-07-01", lastCall: "08-15 10:03", lastCallFull: "2026-08-15 10:03:47",
+    keys: [{ id: "k3", name: "客服机器人生产", tail: "7b10", bits: ["knowledge:read", "chat:invoke"], delegate: false, depts: [], users: [], lastUsed: "08-15 10:03", expire: "长期有效", revoked: false }],
+    grants: [{ id: "g4", name: "公开产品手册库", type: "knowledge", model: "可见", meta: "知识库 · 可对公网访客开放" }],
+    owned: []
+  },
+  {
+    id: "sa-3", name: "ERP 合同同步", desc: "每日凌晨把 ERP 新合同同步进知识库", enabled: true,
+    tenant: "中粮集团", creator: "李工", ownerPerson: "李工（信息技术部）", created: "2026-05-20", lastCall: "08-15 03:00", lastCallFull: "2026-08-15 03:00:02",
+    keys: [{ id: "k4", name: "ERP 定时任务", tail: "c3d8", bits: ["knowledge:write"], delegate: true, depts: [], users: ["10086"], force: false, lastUsed: "08-15 03:00", expire: "长期有效", revoked: false }],
+    grants: [], owned: [{ id: "o2", name: "合同归档库", type: "knowledge", meta: "知识库 · 经 API 创建于 2026-05-21" }]
+  },
+  {
+    id: "sa-4", name: "数据看板同步", desc: "BI 看板拉取工作流运行数据", enabled: false,
+    tenant: "中粮集团", creator: "王敏", ownerPerson: "李工（信息技术部）", created: "2026-04-08", lastCall: "—", lastCallFull: "从未调用",
+    keys: [], grants: [], owned: []
+  },
+  {
+    id: "sa-5", name: "默认操作员（存量转型）", desc: "升级迁移自 default_operator，已强制降权", enabled: true,
+    tenant: "中粮集团", creator: "系统迁移", ownerPerson: "赵敏（信息技术部）", created: "2026-08-14", lastCall: "08-14 22:10", lastCallFull: "2026-08-14 22:10:38",
+    keys: [{ id: "k5", name: "存量调用方", tail: "0a5e", bits: ["workflow:invoke", "knowledge:read"], delegate: false, depts: [], users: [], lastUsed: "08-14 22:10", expire: "2026-11-30", revoked: false }],
+    grants: [{ id: "g5", name: "运营日报工作流", type: "workflow", model: "可见", meta: "工作流 · 已上线" }],
+    owned: []
+  }
+]);
+
+const chip = (on) => "font-family:ui-monospace,Menlo,monospace;font-size:11.5px;padding:2px 7px;border-radius:5px;" +
+  (on ? "background:#E6EDFC;color:#024DE3" : "background:#F2F3F5;color:#86909C");
+const box = (on) => "width:16px;height:16px;flex-shrink:0;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;margin-top:1px;" +
+  (on ? "background:#024DE3;border:1px solid #024DE3" : "background:#fff;border:1px solid #C9CDD4");
+
+class Component extends DCLogic {
+  state = {
+    view: "list", acctId: "sa-1", tab: "overview", modal: null, hover: null, search: "",
+    accounts: seed(), createName: "", createDesc: "", createOwner: "李工（信息技术部）", userQuery: "", toast: null, copied: false, saved: false,
+    editingKey: null, pendingCreate: false,
+    form: { name: "", expire: "", bits: [], delegate: false, depts: [], users: [] }
+  };
+
+  flash(msg) {
+    clearTimeout(this._t);
+    this.setState({ toast: msg });
+    this._t = setTimeout(() => this.setState({ toast: null }), 2200);
+  }
+  acct() { return this.state.accounts.find(a => a.id === this.state.acctId) || this.state.accounts[0]; }
+  patch(id, fn) {
+    this.setState(s => ({ accounts: s.accounts.map(a => a.id === id ? fn({ ...a }) : a) }));
+  }
+
+  renderVals() {
+    const s = this.state;
+    const acct = this.acct();
+    const sysTabs = ["组织与成员", "用户组管理", "角色与权限", "服务账号", "组织同步", "系统配置", "外观设置"].map(label => ({
+      label,
+      style: "padding:0 12px;height:30px;display:flex;align-items:center;border-radius:5px;font-size:14px;font-weight:500;cursor:pointer;" +
+        (label === "服务账号" ? "background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(0,0,0,.06)" : "color:#fff")
+    }));
+
+    const cellBase = (i, hov) => {
+      const bg = hov ? "#ebf0ff" : (i % 2 ? "#f4f5f8" : "#FBFBFB");
+      return "padding:12px;vertical-align:middle;background:" + bg + ";";
+    };
+    const statusPill = (on) => "display:inline-flex;align-items:center;gap:5px;font-size:12.5px;padding:2px 9px;border-radius:5px;" +
+      (on ? "background:#E8F6EE;color:#00873D" : "background:#F2F3F5;color:#86909C");
+
+    const kw = s.search.trim();
+    const list = s.accounts.filter(a => !kw || a.name.includes(kw));
+    const rows = list.map((a, i) => {
+      const hov = s.hover === a.id;
+      const active = a.keys.filter(k => !k.revoked);
+      const dk = active.find(k => k.delegate);
+      const scope = dk ? [...dk.depts.map(d => (DEPTS.find(x => x.id === d) || {}).name), ...dk.users.map(u => (USERS.find(x => x.id === u) || {}).name)].filter(Boolean).join("、") : "";
+      return {
+        ...a,
+        onEnter: () => this.setState({ hover: a.id }), onLeave: () => this.setState({ hover: null }),
+        open: () => this.setState({ view: "detail", acctId: a.id, tab: "overview" }),
+        toggle: () => { this.patch(a.id, x => ({ ...x, enabled: !x.enabled })); this.flash(a.enabled ? "已停用，名下密钥立即拒绝调用" : "已启用，原授权原样恢复"); },
+        toggleText: a.enabled ? "停用" : "启用",
+        cell: cellBase(i, hov), cellFirst: cellBase(i, hov) + "border-radius:7px 0 0 7px", cellLast: cellBase(i, hov) + "border-radius:0 7px 7px 0",
+        statusStyle: statusPill(a.enabled), statusText: a.enabled ? "启用" : "停用",
+        keyCountText: active.length === 0 ? "0 · 未签发密钥" : String(active.length),
+        keyCountStyle: active.length === 0 ? "display:inline-flex;font-size:12.5px;padding:2px 8px;border-radius:5px;background:#FFF4E5;color:#B54708;border:1px solid #FFDCA8" : "color:#212121",
+        delegateText: dk ? "是 · " + scope : "否",
+        delegateStyle: dk ? "font-size:13px;color:#024DE3" : "font-size:13px;color:#86909C"
+      };
+    });
+
+    const active = acct.keys.filter(k => !k.revoked);
+    const held = [];
+    active.forEach(k => k.bits.forEach(b => held.indexOf(b) < 0 && held.push(b)));
+    const hasDelegateKey = active.some(k => k.delegate);
+
+    const keyRows = acct.keys.map(k => ({
+      ...k,
+      masked: "bs-sak-••••••••" + k.tail,
+      cell: "padding:12px;background:#FBFBFB;vertical-align:top;",
+      cellFirst: "padding:12px;background:#FBFBFB;vertical-align:top;border-radius:7px 0 0 7px",
+      cellLast: "padding:12px;background:#FBFBFB;vertical-align:top;border-radius:0 7px 7px 0",
+      stateStyle: k.revoked ? "display:inline-block;margin-top:4px;font-size:12px;color:#86909C" : "display:inline-block;margin-top:4px;font-size:12px;color:#00873D",
+      stateText: k.revoked ? "已撤销 · 记录保留用于审计" : "有效",
+      bits: (k.bits.length ? k.bits : ["未勾选任何权限位"]).concat(k.delegate ? ["delegate"] : []).map(b => ({ label: b, style: chip(b !== "未勾选任何权限位") })),
+      delegateSummary: k.delegate
+        ? "可代表：" + [...k.depts.map(d => (DEPTS.find(x => x.id === d) || {}).name), ...k.users.map(u => (USERS.find(x => x.id === u) || {}).name)].filter(Boolean).join("、") + " · 每次调用必须指定被代表用户"
+        : "未开启委托",
+      edit: () => this.setState({ modal: "issue", editingKey: k.id, form: { name: k.name, expire: k.expire === "长期有效" ? "" : k.expire, bits: [...k.bits], delegate: k.delegate, depts: [...k.depts], users: [...k.users] } }),
+      revokeStyle: "margin-left:16px;cursor:pointer;color:" + (k.revoked ? "#C9CDD4" : "#ef4444"),
+      revoke: () => { if (k.revoked) return; this.setState({ modal: "revokeOne", revokeId: k.id }); }
+    }));
+
+    const resRow = (g, i, last) => {
+      const ic = RES_ICON[g.type];
+      return {
+        ...g,
+        rowStyle: "display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;" + (last ? "" : "border-bottom:1px solid #F2F3F5;"),
+        iconStyle: "width:30px;height:30px;flex-shrink:0;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;background:" + ic[1] + ";color:" + ic[2],
+        iconText: ic[0]
+      };
+    };
+    const grantedRows = acct.grants.map((g, i) => {
+      const need = RES_BIT[g.type];
+      const warn = held.indexOf(need) < 0;
+      return Object.assign(resRow(g, i, i === acct.grants.length - 1), {
+        warn, warnText: "无密钥持有 " + need,
+        revoke: () => { this.patch(acct.id, a => ({ ...a, grants: a.grants.filter(x => x.id !== g.id) })); this.flash("已撤销 " + g.name + " 的授权"); }
+      });
+    });
+    const blocking = acct.grants.map(g => ({ ...g, action: "在本页撤销" }));
+    const blockingRows = blocking.map((g, i) => Object.assign(resRow(g, i, i === blocking.length - 1), { action: g.action }));
+
+    const f = s.form;
+    const toggleBit = (key) => () => this.setState(st => ({ form: { ...st.form, bits: st.form.bits.indexOf(key) < 0 ? [...st.form.bits, key] : st.form.bits.filter(b => b !== key) } }));
+    const bitGroups = GROUPS.map(g => ({
+      label: g,
+      bits: Object.keys(BITS).filter(k => BITS[k][0] === g).map(k => {
+        const on = f.bits.indexOf(k) >= 0;
+        return { key: k, desc: BITS[k][1], toggle: toggleBit(k), boxStyle: box(on), check: on ? "✓" : "" };
+      })
+    }));
+    const uq = s.userQuery.trim();
+    const optRow = (on) => "display:flex;align-items:center;gap:8px;padding:6px 0;cursor:pointer;" + (on ? "" : "");
+    const deptOptions = DEPTS.map(d => {
+      const on = f.depts.indexOf(d.id) >= 0;
+      return { ...d, rowStyle: optRow(on), boxStyle: box(on), check: on ? "✓" : "", toggle: () => this.setState(st => ({ form: { ...st.form, depts: on ? st.form.depts.filter(x => x !== d.id) : [...st.form.depts, d.id] } })) };
+    });
+    const userOptions = USERS.filter(u => !uq || u.name.includes(uq) || u.id.indexOf(uq) >= 0).map(u => {
+      const on = f.users.indexOf(u.id) >= 0;
+      return { ...u, rowStyle: optRow(on), boxStyle: box(on), check: on ? "✓" : "", toggle: () => this.setState(st => ({ form: { ...st.form, users: on ? st.form.users.filter(x => x !== u.id) : [...st.form.users, u.id] } })) };
+    });
+    const scopeEmpty = f.delegate && f.depts.length === 0 && f.users.length === 0;
+    const canSave = f.name.trim().length > 0 && !scopeEmpty;
+    const btn = (ok) => "height:34px;padding:0 16px;border:none;border-radius:7px;font-size:14px;font-weight:500;" +
+      (ok ? "background:#024DE3;color:#fff;cursor:pointer" : "background:#D3DAFF;color:#fff;cursor:not-allowed");
+
+    const submitKey = () => {
+      if (!canSave) return;
+      const editing = s.editingKey;
+      const expire = f.expire.trim() || "长期有效";
+      this.patch(acct.id, a => {
+        if (editing) return { ...a, keys: a.keys.map(k => k.id === editing ? { ...k, name: f.name, bits: [...f.bits], delegate: f.delegate, depts: [...f.depts], users: [...f.users], expire } : k) };
+        return { ...a, keys: [...a.keys, { id: "k" + Date.now(), name: f.name, tail: Math.random().toString(16).slice(2, 6), bits: [...f.bits], delegate: f.delegate, depts: [...f.depts], users: [...f.users], lastUsed: "—", expire, revoked: false }] };
+      });
+      if (editing) { this.setState({ modal: null, editingKey: null }); this.flash("已更新，无需轮换密钥，原密钥立即按新权限生效"); }
+      else this.setState({ modal: "secret", copied: false, saved: false });
+    };
+
+    return {
+      sysTabs, rows, rowCount: rows.length, search: s.search,
+      isList: s.view === "list", isDetail: s.view === "detail",
+      isOverview: s.tab === "overview", isKeys: s.tab === "keys", isGrants: s.tab === "grants",
+      onSearch: (e) => this.setState({ search: e.target.value }),
+      back: () => this.setState({ view: "list" }),
+      detailTabs: [["overview", "概览"], ["keys", "API 密钥"], ["grants", "资源授权"]].map(([id, label]) => ({
+        label, onClick: () => this.setState({ tab: id }),
+        style: "padding:0 16px;height:30px;display:flex;align-items:center;border-radius:6px;font-size:13.5px;cursor:pointer;" +
+          (s.tab === id ? "background:#fff;color:#024DE3;font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06)" : "color:#4E5969")
+      })),
+      acct: { ...acct, statusStyle: statusPill(acct.enabled), statusText: acct.enabled ? "启用" : "停用", toggleText: acct.enabled ? "停用服务账号" : "启用服务账号" },
+      toggleAcct: () => { this.patch(acct.id, a => ({ ...a, enabled: !a.enabled })); this.flash(acct.enabled ? "已停用 · 授权与配置全部保留" : "已启用 · 原授权原样生效"); },
+      copyBtnText: s.copied ? "已复制" : "一键复制接入信息",
+      copyBtnStyle: "display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:7px;font-size:13px;cursor:pointer;flex-shrink:0;border:1px solid " +
+        (s.copied ? "#B7E1C6;background:#E8F6EE;color:#00873D" : "#E5E6EB;background:#fff;color:#212121"),
+      copyAccess: () => {
+        const text = [
+          "BiSheng 平台接入信息（服务账号：" + acct.name + "）",
+          "",
+          "1. MCP Server 地址",
+          "   https://bisheng.cofco.com/mcp",
+          "",
+          "2. 模型调用 base URL（OpenAI 兼容协议）",
+          "   https://bisheng.cofco.com/v1",
+          "",
+          "3. CLI",
+          "   下载：https://bisheng.cofco.com/download/bisheng-cli",
+          "   安装后执行：bisheng login",
+          "   按提示粘贴管理员另行转交给你的 API 密钥即可完成登录。",
+          "",
+          "说明：以上地址均为内网地址，无公网依赖。密钥明文不随本说明下发，请向管理员单独索取；密钥仅在签发时展示一次，遗失需重新签发。"
+        ].join("\n");
+        try { navigator.clipboard.writeText(text); } catch (e) {}
+        clearTimeout(this._c);
+        this.setState({ copied: true });
+        this._c = setTimeout(() => this.setState({ copied: false }), 2200);
+        this.flash("接入信息已复制到剪贴板 · 可直接粘贴到企微 / 邮件发给开发者（不含密钥明文）");
+      },
+      keyRows, grantedRows, blockingRows,
+      noGrants: acct.grants.length === 0,
+      grantedCount: acct.grants.length, activeKeyCount: active.length,
+      heldBits: (held.length ? held : ["无有效密钥"]).map(b => ({ label: b, style: chip(held.length > 0) })),
+      hasDelegateKey,
+      revokeAllGrants: () => { this.patch(acct.id, a => ({ ...a, grants: [] })); this.flash("已撤销全部被授予资源"); },
+      openGrantAdd: () => this.flash("资源授权选择器：本 demo 未展开"),
+      openIssue: () => this.setState({ modal: "issue", editingKey: null, form: { name: "", expire: "", bits: [], delegate: false, depts: [], users: [] } }),
+      openRevokeAll: () => this.setState({ modal: "revokeAll" }),
+      confirmRevokeAll: () => { this.patch(acct.id, a => ({ ...a, keys: a.keys.map(k => ({ ...k, revoked: true })) })); this.setState({ modal: null }); this.flash("名下全部密钥已撤销，5 秒内失效"); },
+      openDelete: () => acct.grants.length ? this.setState({ modal: "delete" }) : this.flash("该账号无残留授权，可直接删除"),
+      disableFromDelete: () => { this.patch(acct.id, a => ({ ...a, enabled: false })); this.setState({ modal: null }); this.flash("已改为停用 · 授权与配置全部保留"); },
+      showCreate: s.modal === "create", showIssue: s.modal === "issue", showSecret: s.modal === "secret",
+      showDelete: s.modal === "delete", showRevokeAll: s.modal === "revokeAll",
+      openCreate: () => this.setState({ modal: "create", createName: "", createDesc: "", createOwner: "李工（信息技术部）" }),
+      ownerOptions: ["李工（信息技术部）", "陈果（销售部）", "赵敏（信息技术部）", "王敏（信息技术部）"].map(n => ({
+        name: n, pick: () => this.setState({ createOwner: n }),
+        style: "height:30px;padding:0 12px;display:flex;align-items:center;border-radius:6px;font-size:13px;cursor:pointer;border:1px solid " +
+          (s.createOwner === n ? "#024DE3;background:#E6EDFC;color:#024DE3" : "#E5E6EB;background:#fff;color:#4E5969")
+      })),
+      mixTip: f.delegate || f.bits.some(b => !DEVBITS[b]),
+      identityWarn: f.bits.indexOf("identity:read") >= 0,
+      showRevokeOne: s.modal === "revokeOne",
+      revokeName: ((acct.keys.find(k => k.id === s.revokeId) || {}).name) || "",
+      confirmRevokeOne: () => {
+        const id = s.revokeId;
+        this.patch(acct.id, a => ({ ...a, keys: a.keys.map(x => x.id === id ? { ...x, revoked: true } : x) }));
+        this.setState({ modal: null, revokeId: null });
+        this.flash("密钥已撤销 · MCP / 模型协议 / CLI 三面同时被拒绝，5 秒内生效；记录保留供审计");
+      },
+      closeModal: () => this.setState({ modal: null, editingKey: null }),
+      createName: s.createName, createDesc: s.createDesc,
+      onCreateName: (e) => this.setState({ createName: e.target.value }),
+      onCreateDesc: (e) => this.setState({ createDesc: e.target.value }),
+      createBtnStyle: btn(s.createName.trim().length > 0),
+      submitCreate: () => {
+        if (!s.createName.trim()) return;
+        const id = "sa-" + Date.now();
+        this.setState(st => ({
+          accounts: [{ id, name: st.createName, desc: st.createDesc || "—", enabled: true, tenant: "中粮集团", creator: "王敏", ownerPerson: st.createOwner, created: "2026-08-15", lastCall: "—", lastCallFull: "从未调用", keys: [], grants: [], owned: [] }, ...st.accounts],
+          acctId: id, view: "detail", tab: "keys", modal: "issue", editingKey: null,
+          form: { name: "", expire: "", bits: [], delegate: false, depts: [], users: [] }
+        }));
+      },
+      issueTitle: s.editingKey ? "编辑密钥" : "签发密钥",
+      form: f, bitGroups, deptOptions, userOptions, userQuery: s.userQuery,
+      onUserQuery: (e) => this.setState({ userQuery: e.target.value }),
+      onKeyName: (e) => this.setState(st => ({ form: { ...st.form, name: e.target.value } })),
+      onKeyExpire: (e) => this.setState(st => ({ form: { ...st.form, expire: e.target.value } })),
+      toggleDelegate: () => this.setState(st => ({ form: { ...st.form, delegate: !st.form.delegate } })),
+      delegateCheck: f.delegate ? "✓" : "", delegateCheckStyle: box(f.delegate),
+      delegateBoxStyle: "border-radius:8px;padding:14px 16px;margin-top:4px;border:1px solid " + (f.delegate ? "#FBD7D3" : "#E5E6EB") + ";background:" + (f.delegate ? "#FFFCFC" : "#fff"),
+      saveHint: scopeEmpty ? "已勾选 delegate，必须至少配置一条可代表范围" : "",
+      saveBtnStyle: btn(canSave), saveBtnText: s.editingKey ? "保存" : "签发",
+      submitKey,
+      secretPlain: "bs-sak-3f9c1d4a7e2b" + (f.name ? "" : "") + "8c6f0a5b2d17e94f",
+      copyText: s.copied ? "已复制" : "复制",
+      copySecret: () => this.setState({ copied: true }),
+      toggleSaved: () => this.setState(st => ({ saved: !st.saved })),
+      savedBoxStyle: box(s.saved), savedCheck: s.saved ? "✓" : "",
+      secretBtnStyle: btn(s.saved),
+      closeSecret: () => { if (!s.saved) return; this.setState({ modal: null }); this.flash("密钥已签发 · 明文此后无法再次获取"); },
+      toast: s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>
