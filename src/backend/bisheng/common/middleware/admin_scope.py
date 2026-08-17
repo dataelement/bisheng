@@ -68,6 +68,9 @@ MANAGEMENT_API_PREFIXES: tuple[str, ...] = (
     '/api/v1/knowledge',
     '/api/v1/chat/online',
     '/api/v1/admin',
+    # F049: a super admin has no tenant-admin role, so the ScopeBar is the only
+    # way to create a service account inside a child tenant (AC-23, pit 23).
+    '/api/v1/service-accounts',
 )
 
 

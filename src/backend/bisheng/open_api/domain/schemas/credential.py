@@ -114,3 +114,50 @@ class WhoamiResponse(BaseModel):
     scopes: list[str] = Field(default_factory=list)
     key_mask: str
     expires_at: datetime | None = None
+
+
+class OpenApiScopeEndpoint(BaseModel):
+    """One ``(method, path)`` pair a scope unlocks - the issue form's hover text (AC-44)."""
+
+    method: str = Field(description="HTTP verb, or 'WS' for a WebSocket route")
+    path: str
+
+
+class OpenApiScopeItem(BaseModel):
+    """``GET /api/v1/service-accounts/scopes`` row - one grantable permission bit.
+
+    Copy is *not* included: only i18n keys, resolved by the front end from the
+    ``serviceAccount`` namespace (design §4.3 "no UI copy in the backend").
+    """
+
+    code: str
+    group: str
+    label_key: str
+    desc_key: str
+    endpoints: list[OpenApiScopeEndpoint] = Field(default_factory=list)
+    requires_open_platform: bool = False
+    # Set when the bit is issuable but its endpoints ship in a later version
+    # (``chat:invoke``); the form shows this note instead of an endpoint list.
+    pending_note_key: str | None = None
+    # Extra warnings the form must render prominently (AC-13).
+    hint_keys: list[str] = Field(default_factory=list)
+
+    @classmethod
+    def from_registry(cls, scope) -> OpenApiScopeItem:
+        return cls(
+            code=scope.code,
+            group=scope.group,
+            label_key=scope.label_key,
+            desc_key=scope.desc_key,
+            endpoints=[OpenApiScopeEndpoint(method=method, path=path) for method, path in scope.endpoints],
+            requires_open_platform=scope.requires_open_platform,
+            pending_note_key=scope.pending_note_key,
+            hint_keys=list(scope.hint_keys),
+        )
+
+
+class OpenApiScopeCatalog(BaseModel):
+    """The scope清单 as one deployment shows it (AC-13 / AC-49)."""
+
+    scopes: list[OpenApiScopeItem]
+    open_platform_enabled: bool

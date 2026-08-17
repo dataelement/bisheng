@@ -14,7 +14,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 ★ 已过（决议-6 f/g/h/i 拍板，65 AC 定稿） |
 | design.md | ✅ 已评审 | 本轮（2026-08-17 初版 + 同日 `/sdd-review design` 两轮 26 条修订）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；同日 `/sdd-review tasks` 一轮 21 条修订（1 high / 8 medium / 12 low）已就地吸收 |
-| 实现 | 🔲 未开始 | 0 / 76 完成。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | 26 / 76 完成（Wave 1 T001–T019 + Wave 2 后端 T020–T026）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -618,6 +618,9 @@
 
 | 任务 | 偏差 | 回写到 design | 原因（一句话） |
 |---|---|---|---|
-| — | — | — | — |
+| T024 | 管理面读写显式带 `tenant_id` 条件（`ServiceAccountService.get_row/get_detail/list_page` + `ServiceAccountDao.alist_page(tenant_id=)`），不只靠自动租户过滤 | design §4.3「open_api/」行 + 坑 14 旁注 | 子租户管理员的 `visible_tenant_ids` 是 `{leaf, Root}` IN-list，只靠自动过滤会让他看到 Root 的服务账号，违反 AC-07 |
+| T021 | `open_api_subject(scope)` 返回**依赖可调用对象**（用法 `Depends(open_api_subject(...))`），不是 `Depends` 实例 | design §4.3「`open_api_subject(scope=…)` `Depends` 工厂」措辞 | tasks T020 的验收写法即 `Depends(open_api_subject('app:manage'))`；返回 `Depends` 会变成 `Depends(Depends(...))` |
+| T022 | handler 函数定义在 `open_api/api/exception_handlers.py`，`main.py` 只调 `register_open_api_exception_handlers(app)` | design §4.3「main.py」行 | 让测试能在同一函数上验证 handler，且 `main.py` 不再堆 open_api 细节；注册点仍是 `main.create_app` |
+| T021 | 依赖出口不再重复调 `CredentialService.touch_last_used`（T012 已在 `validate_bearer` 内做） | 无（D2 顺序不变，只是落点在 validator） | 重复调用只会多一次同样被 60s 闸拦下的写，无额外信息 |
 
-（尚无偏差；实现期每条偏差一行，design 同步覆盖为「今天的状态」。）
+（实现期每条偏差一行，design 同步覆盖为「今天的状态」。）

@@ -15,6 +15,7 @@ from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import close_app_context, initialize_app_context
 from bisheng.core.logger import set_logger_config
+from bisheng.open_api.api.exception_handlers import register_open_api_exception_handlers
 from bisheng.utils.http_middleware import CustomMiddleware, WebSocketLoggingMiddleware
 from bisheng.utils.threadpool import thread_pool
 
@@ -165,6 +166,14 @@ def create_app():
     @app.exception_handler(AuthJWTException)
     def authjwt_exception_handler(request: Request, exc: AuthJWTException):
         return JSONResponse(status_code=401, content={"detail": str(exc)})
+
+    # F049 (design K4 / D2): /api/v2 answers with real HTTP status codes while
+    # keeping the platform envelope in the body. Registered here rather than in
+    # ``_EXCEPTION_HANDLERS`` because it must sit *below* ``BaseErrorCode`` in
+    # the lookup — Starlette walks ``type(exc).__mro__`` and picks the first
+    # registered class, so the narrower 260xx handler wins for those errors and
+    # ``handle_http_exception`` keeps every other error unchanged.
+    register_open_api_exception_handlers(app)
 
     app.include_router(router)
     app.include_router(router_rpc)

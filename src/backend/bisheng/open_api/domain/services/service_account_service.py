@@ -79,17 +79,35 @@ class ServiceAccountService:
     # ------------------------------------------------------------------
 
     @classmethod
-    async def get_row(cls, user_id: int, *, include_deleted: bool = False) -> ServiceAccount:
-        """One companion row, or 26020. Tenant scoping comes from the auto filter (AC-07)."""
+    async def get_row(
+        cls,
+        user_id: int,
+        *,
+        include_deleted: bool = False,
+        tenant_id: int | None = None,
+    ) -> ServiceAccount:
+        """One companion row, or 26020, pinned to exactly one tenant (AC-07).
+
+        The tenant is compared explicitly instead of leaning on the automatic
+        SELECT filter: that filter resolves to the ``visible_tenant_ids``
+        IN-list ``{leaf, Root}`` for a child-tenant admin, which would let them
+        address a Root account by id. ``tenant_id=None`` is for internal callers
+        that already established the scope (the validator runs under bypass).
+        """
         async with get_async_db_session() as session:
             row = await ServiceAccountDao.aget(session, user_id, include_deleted=include_deleted)
         if row is None:
             raise ServiceAccountNotFoundError()
+        if tenant_id is not None and int(row.tenant_id) != int(tenant_id):
+            # Same answer as "does not exist": the caller must not be able to
+            # probe another tenant's id space.
+            raise ServiceAccountNotFoundError()
         return row
 
     @classmethod
-    async def get_detail(cls, user_id: int) -> ServiceAccountDetail:
-        row = await cls.get_row(user_id)
+    async def get_detail(cls, operator: UserPayload, user_id: int) -> ServiceAccountDetail:
+        """Detail view scoped to the acting admin's tenant (26020 for anything else)."""
+        row = await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
         items = await cls._hydrate([row])
         item = items[0]
         return ServiceAccountDetail(**item.model_dump(), tenant_id=row.tenant_id)
@@ -107,8 +125,15 @@ class ServiceAccountService:
         user_ids: list[int] | None = None
         if keyword:
             user_ids = await cls._search_principal_ids(keyword)
+        tenant_id = cls._acting_tenant_id(operator)
         async with get_async_db_session() as session:
-            rows, total = await ServiceAccountDao.alist_page(session, page=page, page_size=page_size, user_ids=user_ids)
+            rows, total = await ServiceAccountDao.alist_page(
+                session,
+                page=page,
+                page_size=page_size,
+                user_ids=user_ids,
+                tenant_id=tenant_id,
+            )
         return ServiceAccountPage(
             data=await cls._hydrate(rows),
             total=total,
@@ -159,7 +184,7 @@ class ServiceAccountService:
     @classmethod
     async def update(cls, operator: UserPayload, user_id: int, data: ServiceAccountUpdate) -> ServiceAccount:
         """Edit name / description / resource owner. Owner changes are **not** retroactive (AC-27)."""
-        row = await cls.get_row(user_id)
+        row = await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
         if data.resource_owner_user_id is not None:
             await cls._assert_owner(data.resource_owner_user_id, row.tenant_id)
 
@@ -196,7 +221,7 @@ class ServiceAccountService:
     @classmethod
     async def disable(cls, operator: UserPayload, user_id: int) -> ServiceAccount:
         """Stop the account without losing anything: keys, grants and config stay (AC-21 / AC-47)."""
-        await cls.get_row(user_id)
+        await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
         row = await cls._set_lifecycle(user_id, disabled_at=datetime.now(), user_delete=1)
         await CredentialService.invalidate_subject_cache(
             operator,
@@ -210,7 +235,7 @@ class ServiceAccountService:
     @classmethod
     async def enable(cls, operator: UserPayload, user_id: int) -> ServiceAccount:
         """Restore a disabled account exactly as it was (AC-47)."""
-        await cls.get_row(user_id)
+        await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
         row = await cls._set_lifecycle(user_id, disabled_at=None, user_delete=0)
         await cls._audit(operator, AUDIT_ACTION_ENABLE, row)
         return row
@@ -222,7 +247,7 @@ class ServiceAccountService:
         T065 inserts the grant reverse-lookup + REMOVE step ahead of this body;
         the row itself is never physically deleted (audit + FK RESTRICT).
         """
-        await cls.get_row(user_id)
+        await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
         await CredentialService.revoke_by_subject(
             operator,
             SUBJECT_KIND_SERVICE_ACCOUNT,

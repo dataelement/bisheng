@@ -142,13 +142,22 @@ class ServiceAccountDao:
         page_size: int = 20,
         user_ids: list[int] | None = None,
         include_deleted: bool = False,
+        tenant_id: int | None = None,
     ) -> tuple[list[ServiceAccount], int]:
-        """Page of companion rows (tenant scoping via the auto filter), newest first.
+        """Page of companion rows, newest first.
+
+        ``tenant_id`` pins the page to exactly one tenant. The automatic filter
+        alone is **not** enough here: for a child-tenant admin it resolves to the
+        ``visible_tenant_ids`` IN-list ``{leaf, Root}`` (so Root's accounts would
+        show up), whereas AC-07 is "own tenant only". The service always passes
+        the acting tenant.
 
         ``user_ids`` narrows to a candidate set (e.g. name search resolved on the
         user table by the service). Name / status hydration is the service's job.
         """
         statement = select(ServiceAccount)
+        if tenant_id is not None:
+            statement = statement.where(ServiceAccount.tenant_id == tenant_id)
         if not include_deleted:
             statement = statement.where(col(ServiceAccount.deleted_at).is_(None))
         if user_ids is not None:

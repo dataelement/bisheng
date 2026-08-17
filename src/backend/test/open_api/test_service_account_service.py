@@ -305,7 +305,7 @@ async def test_owner_disabled_does_not_cascade(oapi_db, human_user, service_acco
     keys = await CredentialService.list_by_subject(SUBJECT_KIND_SERVICE_ACCOUNT, str(account.user_id))
     assert all(key.is_valid for key in keys)
 
-    detail = await ServiceAccountService.get_detail(account.user_id)
+    detail = await ServiceAccountService.get_detail(tenant_admin_payload, account.user_id)
     assert detail.owner_disabled is True
     assert detail.resource_owner.user_id == human_user.user_id and detail.resource_owner.disabled is True
     assert detail.status == "enabled" and detail.active_key_count == 1
