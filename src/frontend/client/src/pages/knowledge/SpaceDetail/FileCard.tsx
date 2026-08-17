@@ -19,7 +19,7 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { canDecidePendingUpload, getFileChangeLockState } from "../hooks/useFileChangeApproval";
+import { canDecidePendingUpload, getFileChangeLockState, isPendingUploadSelectable } from "../hooks/useFileChangeApproval";
 import { PendingUploadApprovalActions } from "./PendingUploadApprovalActions";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -172,10 +172,15 @@ export function FileCard({
     // Inline-create placeholders (isCreating) are excluded — a freshly created
     // folder is a normal folder with a highlighted rename input, no scrim/tag.
     const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
-    // A pending upload is only selectable while this user may still decide it;
-    // everything else is selectable unless it is an upload placeholder. Unselectable
-    // rows keep a disabled checkbox instead of dropping it, so the column stays put.
-    const isSelectable = pendingUpload ? canDecidePending : !isUploadingFolderPlaceholder;
+    // A pending-upload row is selectable only while awaiting a decision (审核中):
+    // the applicant can batch-withdraw and an approver can batch-decide. Once
+    // decided it moves into an execution state (处理中/执行失败/…) with no batch
+    // semantics, so it keeps a disabled checkbox. The frontend-only folder upload
+    // placeholder (no backend identity) also stays unselectable. Unselectable rows
+    // keep a disabled checkbox instead of dropping it, so the column stays put.
+    const isSelectable = pendingUpload
+        ? isPendingUploadSelectable(pendingUpload)
+        : !isUploadingFolderPlaceholder;
     /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
     const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
     /** Subset of isNotParsed that should show the "In progress" overlay tag. */

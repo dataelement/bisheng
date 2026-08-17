@@ -81,6 +81,42 @@ export function canDecidePendingUpload(item?: PendingUploadFileChange): boolean 
     return Boolean(item?.approvalStatus === "pending" && item.canApprove);
 }
 
+/**
+ * True when the current viewer is the applicant of this still-pending upload.
+ *
+ * Compares the row's applicant id against the current user id directly. The
+ * earlier `!canApprove` heuristic only held under the backend list-filter
+ * invariant (non-managers list only their own uploads); a direct ownership
+ * check stays correct even if that invariant changes (e.g. an auditor role that
+ * can list uploads it did not create). Withdraw is applicant-only on the
+ * backend, so this must match that guard.
+ */
+export function canWithdrawPendingUpload(
+    item: PendingUploadFileChange | undefined,
+    currentUserId: string | number | undefined,
+): boolean {
+    return Boolean(
+        item?.approvalStatus === "pending" &&
+        currentUserId != null &&
+        String(item.applicantUserId) === String(currentUserId),
+    );
+}
+
+/**
+ * Whether a pending-upload projection row may be ticked in the file list.
+ *
+ * Only rows whose approval is still pending are selectable — the applicant can
+ * batch-withdraw them and an approver can batch-decide them. Once the approval
+ * is decided the row moves into an execution state (queued / applying / failed /
+ * compensating); those rows carry no batch semantics (their retry / cleanup are
+ * per-row, applicant-only actions in the detail sheet), so they keep a disabled
+ * checkbox rather than becoming a dead selection. Mirrored by `isSelectable` in
+ * FileListRow / FileCard and `isSelectableFile` in the page container.
+ */
+export function isPendingUploadSelectable(item?: PendingUploadFileChange): boolean {
+    return item?.approvalStatus === "pending";
+}
+
 export function projectPendingUploadAsKnowledgeFile(
     item: PendingUploadFileChange,
     spaceId: string,

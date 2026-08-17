@@ -64,6 +64,7 @@ import {
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef, useVersionManagementEnabled } from "~/hooks";
+import { useAuthContext } from "~/hooks/AuthContext";
 import {
     knowledgeSpaceDropdownSurfaceClassName,
     SidebarListMoreMenuContent,
@@ -78,7 +79,9 @@ import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import {
     canDecidePendingUpload,
+    canWithdrawPendingUpload,
     getFileChangeLockState,
+    isPendingUploadSelectable,
     projectPendingUploadAsKnowledgeFile,
     selectVisiblePendingUploads,
     useFileChangeApproval,
@@ -193,6 +196,7 @@ export function KnowledgeSpaceContent({
     onSelectedContentChange,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
+    const { user } = useAuthContext();
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const [searchQuery, setSearchQuery] = useState("");
@@ -779,11 +783,15 @@ export function KnowledgeSpaceContent({
     const isFolderUploadPlaceholder = (f: KnowledgeFile) =>
         f.type === FileType.FOLDER && isKnowledgeItemUploading(f);
 
-    // A pending-upload row is selectable only when this user may decide it —
-    // batch 同意/拒绝 is the only action that applies to it.
+    // Pending-upload rows are selectable only while awaiting a decision (审核中):
+    // the applicant can batch-withdraw them and an approver can batch-decide them.
+    // Once decided they move into an execution state (处理中/执行失败/…) with no
+    // batch semantics, so they keep a disabled checkbox instead of becoming a dead
+    // selection. Uploading folder placeholders (no backend identity) also stay out.
+    // Mirrors `isSelectable` in FileListRow / FileCard.
     const isSelectableFile = (f: KnowledgeFile) =>
         f.pendingUploadApproval
-            ? canDecidePendingUpload(f.pendingUploadApproval)
+            ? isPendingUploadSelectable(f.pendingUploadApproval)
             : !isFolderUploadPlaceholder(f);
 
     const handleSelectFile = (fileId: string, selected: boolean) => {
@@ -921,6 +929,9 @@ export function KnowledgeSpaceContent({
             .map((f) => f.pendingUploadApproval!.requestId);
 
     const handleBatchApprovePending = async () => {
+        // Re-entrancy guard: the mobile toolbar buttons stay mounted while a batch
+        // runs, so a double-tap could otherwise fire a second overlapping run.
+        if (pendingBatchDeciding || fileChangeApproval.batchApproving) return;
         const requestIds = getPendingSelectionRequestIds();
         if (requestIds.length === 0) return;
         try {
@@ -938,6 +949,7 @@ export function KnowledgeSpaceContent({
     // There is no batch-reject endpoint — reject each request in turn and report
     // how many went through (mirrors the batch-approve summary).
     const handleBatchRejectPending = async () => {
+        if (pendingBatchDeciding || fileChangeApproval.batchApproving) return;
         const requestIds = getPendingSelectionRequestIds();
         if (requestIds.length === 0) return;
         setPendingBatchDeciding(true);
@@ -954,6 +966,55 @@ export function KnowledgeSpaceContent({
             });
         } catch {
             showToast({ message: localize("com_knowledge.batch_reject_failed"), status: "error" });
+        } finally {
+            setPendingBatchDeciding(false);
+        }
+    };
+
+    /** Request ids of the selected pending uploads the viewer initiated (may withdraw). */
+    const getPendingWithdrawRequestIds = () =>
+        displayFiles
+            .filter((f) => selectedFiles.has(f.id) && canWithdrawPendingUpload(f.pendingUploadApproval, user?.id))
+            .map((f) => f.pendingUploadApproval!.requestId);
+
+    // There is no batch-withdraw endpoint - withdraw each request in turn via
+    // the cleanup API (the backend withdraws the approval instance, closes the
+    // request and removes the staged file) and report how many went through.
+    const handleBatchWithdrawPending = async () => {
+        if (pendingBatchDeciding || fileChangeApproval.batchApproving) return;
+        const requestIds = getPendingWithdrawRequestIds();
+        if (requestIds.length === 0) return;
+        setPendingBatchDeciding(true);
+        let withdrawn = 0;
+        let failed = 0;
+        try {
+            // Each cleanup is an irreversible withdrawal, so a mid-loop failure
+            // must not abandon the rest: keep going and report the tally.
+            for (const requestId of requestIds) {
+                try {
+                    await fileChangeApproval.cleanup(requestId);
+                    withdrawn += 1;
+                } catch {
+                    failed += 1;
+                }
+            }
+            // Clear the selection once anything went through; the async refresh
+            // drops the withdrawn rows either way. On a total failure keep the
+            // selection so the user can retry.
+            if (withdrawn > 0) setSelectedFiles(new Set());
+            if (failed === 0) {
+                showToast({
+                    message: localize("com_knowledge.batch_withdraw_success", { 0: withdrawn }),
+                    status: "success",
+                });
+            } else if (withdrawn > 0) {
+                showToast({
+                    message: localize("com_knowledge.batch_withdraw_partial", { 0: withdrawn, 1: failed }),
+                    status: "warning",
+                });
+            } else {
+                showToast({ message: localize("com_knowledge.batch_withdraw_failed"), status: "error" });
+            }
         } finally {
             setPendingBatchDeciding(false);
         }
@@ -1148,9 +1209,16 @@ export function KnowledgeSpaceContent({
     const isSelectionIndeterminate =
         !isAllSelectedOnPage && selectableFiles.some((f) => selectedFiles.has(f.id));
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
-    // Pending uploads only support 同意 / 拒绝; every other batch action applies to
-    // the reviewed (formal) files in the selection (Figma 13198:78120).
+    // Pending uploads only support 同意 / 拒绝 (viewer may decide them) and 撤回
+    // (viewer initiated them); every other batch action applies to the reviewed
+    // (formal) files in the selection (Figma 13198:78120).
     const pendingSelectedList = selectedList.filter((f) => f.pendingUploadApproval);
+    const decidablePendingSelected = pendingSelectedList.filter((f) =>
+        canDecidePendingUpload(f.pendingUploadApproval)
+    );
+    const withdrawablePendingSelected = pendingSelectedList.filter((f) =>
+        canWithdrawPendingUpload(f.pendingUploadApproval, user?.id)
+    );
     const reviewedSelectedList = selectedList.filter((f) => !f.pendingUploadApproval);
     const hasFailedFiles = reviewedSelectedList.some(f =>
         f.status === FileStatus.FAILED ||
@@ -1228,8 +1296,18 @@ export function KnowledgeSpaceContent({
     const singleSelectedId = selectedFiles.size === 1 ? Array.from(selectedFiles)[0] : undefined;
     const canManageSinglePermission = !!singleSelectedId && permissionEntryIds.has(singleSelectedId);
 
-    type BatchAction = { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; onClick: () => void; danger?: boolean };
+    // A batch is in flight when the sequential reject/withdraw flag is set or the
+    // approve mutation is pending; the pending-group buttons disable during it so
+    // a double-tap can't fire a second overlapping run (mirrors the header).
+    const pendingBatchBusy = pendingBatchDeciding || fileChangeApproval.batchApproving;
+    type BatchAction = { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; onClick: () => void; danger?: boolean; disabled?: boolean };
     const batchActions: BatchAction[] = [
+        // Pending-upload actions come first, mirroring the desktop header's
+        // "待审核文件" group; each only addresses the selected rows the viewer
+        // may act on (decide / withdraw), so a mixed selection stays safe.
+        (decidablePendingSelected.length > 0) && { key: "pendingApprove", label: localize("com_approval_action_approve"), Icon: Outlined.Check, onClick: handleBatchApprovePending, disabled: pendingBatchBusy },
+        (decidablePendingSelected.length > 0) && { key: "pendingReject", label: localize("com_approval_action_reject"), Icon: Outlined.Close, onClick: handleBatchRejectPending, danger: true, disabled: pendingBatchBusy },
+        (withdrawablePendingSelected.length > 0) && { key: "pendingWithdraw", label: localize("com_approval_action_withdraw"), Icon: Outlined.CloseCircle, onClick: handleBatchWithdrawPending, danger: true, disabled: pendingBatchBusy },
         canBatchDownload && {
             key: "download",
             label: localize("com_knowledge.download"),
@@ -1478,8 +1556,11 @@ export function KnowledgeSpaceContent({
                 onProcessSimilar={handleProcessSimilar}
                 canManageMembers={canManageMembers}
                 pendingSelectedCount={pendingSelectedList.length}
+                decidablePendingCount={decidablePendingSelected.length}
+                withdrawablePendingCount={withdrawablePendingSelected.length}
                 onBatchApprovePending={handleBatchApprovePending}
                 onBatchRejectPending={handleBatchRejectPending}
+                onBatchWithdrawPending={handleBatchWithdrawPending}
                 pendingBatchDeciding={pendingBatchDeciding || fileChangeApproval.batchApproving}
             />
             </div>
@@ -1714,9 +1795,11 @@ export function KnowledgeSpaceContent({
                                 <button
                                     type="button"
                                     onClick={a.onClick}
+                                    disabled={a.disabled}
                                     className={cn(
                                         "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm",
                                         a.danger ? "text-[#F53F3F]" : "text-[#212121]",
+                                        a.disabled && "cursor-not-allowed opacity-50",
                                     )}
                                 >
                                     <a.Icon className="size-4" />
@@ -1742,6 +1825,7 @@ export function KnowledgeSpaceContent({
                                             <DropdownMenuItem
                                                 key={a.key}
                                                 onClick={a.onClick}
+                                                disabled={a.disabled}
                                                 className={a.danger ? sidebarListMoreMenuDangerItemClassName : sidebarListMoreMenuItemClassName}
                                             >
                                                 <a.Icon className={a.danger ? sidebarListMoreMenuDangerIconClassName : sidebarListMoreMenuIconClassName} />

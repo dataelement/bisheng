@@ -1285,7 +1285,7 @@
     "file_change_status": "状态",
     "file_change_status_applied": "已生效",
     "file_change_status_approved": "已通过",
-    "file_change_status_applying": "执行中",
+    "file_change_status_applying": "处理中",
     "file_change_status_approver_empty": "暂无审批人",
     "file_change_status_cancelled": "已取消",
     "file_change_status_closed": "已关闭",
@@ -1613,6 +1613,9 @@
     "batch_reject_success": "已拒绝 {{0}} 项",
     "batch_reject_failed": "批量拒绝失败",
     "batch_approve_success": "已同意 {{0}} 项",
+    "batch_withdraw_success": "已撤回 {{0}} 项",
+    "batch_withdraw_partial": "已撤回 {{0}} 项，{{1}} 项失败",
+    "batch_withdraw_failed": "批量撤回失败",
     "sort_by_size_label": "大小",
     "select_all": "全选"
   },

@@ -1359,7 +1359,7 @@
     "file_change_status": "Status",
     "file_change_status_applied": "Applied",
     "file_change_status_approved": "Approved",
-    "file_change_status_applying": "Applying",
+    "file_change_status_applying": "Processing",
     "file_change_status_approver_empty": "No approver available",
     "file_change_status_cancelled": "Cancelled",
     "file_change_status_closed": "Closed",
@@ -1686,6 +1686,9 @@
     "batch_reject_success": "Rejected {{0}} item(s)",
     "batch_reject_failed": "Batch reject failed",
     "batch_approve_success": "Approved {{0}} item(s)",
+    "batch_withdraw_success": "Withdrew {{0}} item(s)",
+    "batch_withdraw_partial": "Withdrew {{0}} item(s), {{1}} failed",
+    "batch_withdraw_failed": "Batch withdraw failed",
     "sort_by_size_label": "Sort by size",
     "select_all": "Select all"
   },

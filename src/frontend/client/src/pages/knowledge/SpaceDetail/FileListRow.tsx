@@ -8,7 +8,7 @@ import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { canDecidePendingUpload, getFileChangeLockState } from "../hooks/useFileChangeApproval";
+import { canDecidePendingUpload, getFileChangeLockState, isPendingUploadSelectable } from "../hooks/useFileChangeApproval";
 import { useInlineRename } from "../hooks/useInlineRename";
 import {
     formatTimeCard,
@@ -296,9 +296,14 @@ export function FileListRow({
     // A folder still uploading its batch: faded, not clickable, checkbox greyed out.
     const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
     const namePreviewable = Boolean(pendingUpload) || isKnowledgeItemPreviewable(file);
-    // A pending upload is only selectable while this user may still decide it;
-    // everything else is selectable unless it is an upload placeholder.
-    const isSelectable = pendingUpload ? canDecidePending : !isUploadingFolderPlaceholder;
+    // A pending-upload row is selectable only while awaiting a decision (审核中):
+    // the applicant can batch-withdraw and an approver can batch-decide. Once
+    // decided it moves into an execution state (处理中/执行失败/…) with no batch
+    // semantics, so it keeps a disabled checkbox. The frontend-only folder upload
+    // placeholder (no backend identity) also stays unselectable.
+    const isSelectable = pendingUpload
+        ? isPendingUploadSelectable(pendingUpload)
+        : !isUploadingFolderPlaceholder;
 
     // F040: resolve this file's action permissions lazily, only when the menu opens.
     const handleMoreMenuOpenChange = (open: boolean) => {

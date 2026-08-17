@@ -52,10 +52,16 @@ interface KnowledgeSpaceHeaderProps {
     canBatchMove?: boolean;
     onGoKnowledgeSquare?: () => void;
     canShareSpace?: boolean;
-    /** Batch approve/reject entries for the selected pending-upload files. */
+    /** Batch approve/reject/withdraw entries for the selected pending-upload files. */
     pendingSelectedCount?: number;
+    /** Selected pending uploads the viewer may decide (gates 同意/拒绝). */
+    decidablePendingCount?: number;
+    /** Selected pending uploads the viewer initiated (gates 撤回). */
+    withdrawablePendingCount?: number;
     onBatchApprovePending?: () => void;
     onBatchRejectPending?: () => void;
+    /** Withdraw (as the applicant) the selected pending uploads the viewer initiated. */
+    onBatchWithdrawPending?: () => void;
     pendingBatchDeciding?: boolean;
     /** Version management: gates the "process similar documents" entry + per-row version actions. */
     versionManagementEnabled?: boolean;
@@ -95,8 +101,11 @@ export function KnowledgeSpaceHeader({
     onProcessSimilar,
     canManageMembers = false,
     pendingSelectedCount = 0,
+    decidablePendingCount = 0,
+    withdrawablePendingCount = 0,
     onBatchApprovePending,
     onBatchRejectPending,
+    onBatchWithdrawPending,
     pendingBatchDeciding = false,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
@@ -108,10 +117,15 @@ export function KnowledgeSpaceHeader({
     const showAddMenu = canCreateFolder || canUploadFile;
     // Filter / sort / search / view-toggle all moved into FileListToolbar.
     const showToolbarActions = showAddMenu || isAdmin || selectedCount > selectedThreshold;
-    // Pending-upload rows can only be approved or rejected — the reviewed-file
-    // actions below never apply to them (Figma 13198:78120).
-    const showPendingBatchGroup = pendingSelectedCount > 0
+    // Pending-upload rows offer 同意/拒绝 for the rows the viewer may decide and
+    // 撤回 for the rows the viewer initiated - a mixed selection (e.g. an
+    // approver ticking their own upload plus others') can show both. The
+    // reviewed-file actions below never apply to them (Figma 13198:78120).
+    const canDecidePendingSelection = decidablePendingCount > 0
         && Boolean(onBatchApprovePending || onBatchRejectPending);
+    const canWithdrawPendingSelection = withdrawablePendingCount > 0
+        && Boolean(onBatchWithdrawPending);
+    const showPendingBatchGroup = canDecidePendingSelection || canWithdrawPendingSelection;
     const reviewedSelectedCount = selectedCount - pendingSelectedCount;
     const showReviewedBatchGroup = reviewedSelectedCount > 0;
 
@@ -134,7 +148,7 @@ export function KnowledgeSpaceHeader({
                                 <div className="px-2 py-1.5 text-xs font-medium text-text-3">
                                     {localize("com_knowledge.batch_group_pending")}
                                 </div>
-                                {onBatchApprovePending && (
+                                {canDecidePendingSelection && onBatchApprovePending && (
                                     <ActionMenuItem
                                         // Approve reads green, mirroring the row-level ✓ (Figma 13198:78122).
                                         className="text-success data-[highlighted]:text-success focus:text-success"
@@ -144,13 +158,22 @@ export function KnowledgeSpaceHeader({
                                         label={localize("com_approval_action_approve")}
                                     />
                                 )}
-                                {onBatchRejectPending && (
+                                {canDecidePendingSelection && onBatchRejectPending && (
                                     <ActionMenuItem
                                         danger
                                         disabled={pendingBatchDeciding}
                                         onClick={onBatchRejectPending}
                                         icon={<Outlined.Close />}
                                         label={localize("com_approval_action_reject")}
+                                    />
+                                )}
+                                {canWithdrawPendingSelection && onBatchWithdrawPending && (
+                                    <ActionMenuItem
+                                        danger
+                                        disabled={pendingBatchDeciding}
+                                        onClick={onBatchWithdrawPending}
+                                        icon={<Outlined.CloseCircle />}
+                                        label={localize("com_approval_action_withdraw")}
                                     />
                                 )}
                             </>

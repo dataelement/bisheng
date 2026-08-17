@@ -1283,7 +1283,7 @@
     "file_change_status": "ステータス",
     "file_change_status_applied": "適用済み",
     "file_change_status_approved": "承認済み",
-    "file_change_status_applying": "適用中",
+    "file_change_status_applying": "処理中",
     "file_change_status_approver_empty": "承認者がいません",
     "file_change_status_cancelled": "キャンセル済み",
     "file_change_status_closed": "クローズ済み",
@@ -1609,6 +1609,9 @@
     "batch_reject_success": "{{0}} 件を却下しました",
     "batch_reject_failed": "一括却下に失敗しました",
     "batch_approve_success": "{{0}} 件を承認しました",
+    "batch_withdraw_success": "{{0}} 件を撤回しました",
+    "batch_withdraw_partial": "{{0}} 件を撤回しました（{{1}} 件失敗）",
+    "batch_withdraw_failed": "一括撤回に失敗しました",
     "sort_by_size_label": "サイズで並べ替え",
     "select_all": "すべて選択"
   },
