@@ -145,3 +145,30 @@ def client_factory(build_app):
 
     for client in clients:
         client.__exit__(None, None, None)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_tenant_contextvars():
+    """Reset **both** tenant ContextVars around every test.
+
+    ``current_tenant_id`` and ``_bypass_tenant_filter`` are process-wide, and
+    the middleware only ever *sets* the bypass flag — on a non-exempt path it
+    leaves whatever was there. So a suite that ran an exempt request earlier
+    leaves bypass ``True`` for everything after it in the same process, and a
+    test asserting "this path is not exempt" passes on its own and fails only
+    when something else ran first. Measured: dropping the dev-toolkit prefix
+    from the exempt list still reported ``bypassed=True`` once the F054 / F055
+    suites had run.
+
+    Resetting only the tenant id (as `test/open_api` does) is not enough — the
+    bypass flag is the one that decides whether the filter runs at all.
+    """
+    from bisheng.core.context.tenant import _bypass_tenant_filter, current_tenant_id
+
+    tenant_token = current_tenant_id.set(None)
+    bypass_token = _bypass_tenant_filter.set(False)
+    try:
+        yield
+    finally:
+        current_tenant_id.reset(tenant_token)
+        _bypass_tenant_filter.reset(bypass_token)

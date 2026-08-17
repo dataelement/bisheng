@@ -102,11 +102,18 @@ def _isolate_tenant_context():
     """
     from bisheng.core.context.tenant import current_tenant_id
 
-    token = current_tenant_id.set(None)
+    from bisheng.core.context.tenant import _bypass_tenant_filter
+
+    tenant_token = current_tenant_id.set(None)
+    # The bypass flag matters as much as the id: the middleware only ever sets
+    # it, never clears it, so an exempt request in an earlier suite leaves the
+    # tenant filter switched off for everything that follows.
+    bypass_token = _bypass_tenant_filter.set(False)
     try:
         yield
     finally:
-        current_tenant_id.reset(token)
+        current_tenant_id.reset(tenant_token)
+        _bypass_tenant_filter.reset(bypass_token)
 
 
 # ---------------------------------------------------------------------------
