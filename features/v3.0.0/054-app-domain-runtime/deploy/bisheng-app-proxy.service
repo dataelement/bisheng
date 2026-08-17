@@ -1,0 +1,35 @@
+# BiSheng 托管应用入口反代（app-proxy）—— F054 T072 / design §4.2 ⑧
+#
+# ⚠️ 模板，真身在 `~/Projects/bisheng-ops/systemd/`（K10）。落库见 T075。
+#
+# 与 runtime-manager 的关键差别：**它不需要任何 docker 权限**。它只做
+# 「解析路由 → 剥归一化头 → 注入身份 → 转发」。给它 docker 组权限是纯粹的
+# 权限扩散，没有任何功能上的理由。
+[Unit]
+Description=BiSheng app-proxy (hosted app entry :8090)
+# 每个请求都要向 backend 问一次入口判定（3s 缓存 × 30s 宽限），
+# backend 没起来它只会一直回兜底页。
+After=network-online.target bisheng-api.service
+Wants=network-online.target
+PartOf=bisheng.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bisheng/src/app-proxy
+Environment=PYTHONPATH=/opt/bisheng/src/app-proxy
+# 同样只监听回环：它前面永远有 nginx 的 location /apps/。
+Environment=APP_PROXY_HOST=127.0.0.1
+Environment=APP_PROXY_PORT=8090
+# 与 backend 的 app_runtime.proxy_hmac_secret 必须一致。
+EnvironmentFile=/etc/bisheng/app-proxy.env
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+ExecStart=/opt/bisheng/src/app-proxy/.venv/bin/python -m uvicorn app_proxy.main:app --host 127.0.0.1 --port 8090 --workers 1 --no-access-log
+StandardOutput=append:/tmp/bisheng-app-proxy.log
+StandardError=append:/tmp/bisheng-app-proxy.log
+# 它可能正在转发一个长连接（应用的 WebSocket / 流式响应）。
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

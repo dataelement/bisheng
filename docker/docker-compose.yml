@@ -250,3 +250,54 @@ services:
     depends_on:
       - etcd
       - minio
+
+  # ── 应用工场运行时层（F054 T074）────────────────────────────────────
+  # 两个 service 都挂在 `app-runtime` profile 后面：**「整层不装」是产品明确
+  # 支持的形态**（GOV-10 / AC-59）。不带 --profile app-runtime 启动时它们根本
+  # 不创建，平台其余部分零变化——这正是 nginx 的 `location /apps/` 必须用
+  # 变量式 upstream 的原因（静态主机名解析不了会让 nginx 整个起不来）。
+  #
+  # 两者都**不 publish 端口**：外部流量一律经 frontend 的 nginx 进来。
+  runtime-manager:
+    container_name: bisheng-runtime-manager
+    profiles: [app-runtime]
+    build:
+      context: ../src/runtime-manager
+    environment:
+      TZ: Asia/Shanghai
+      RTM_HOST: '0.0.0.0'
+      RTM_PORT: '8091'
+      # 必须与 backend 的 app_runtime.manager_hmac_secret 一致。不一致的症状是
+      # 所有编排意图被回 401，而 backend 会把它折叠成 16121「编排器不可用」——
+      # 排查时容易误判成 dockerd 挂了。
+      RTM_HMAC_SECRET: ${BISHENG_RTM_HMAC_SECRET:-}
+      RTM_DATA_ROOT: /app-data
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      # 这是全平台唯一被允许挂 docker socket 的地方（arch-guard RULE-10 的另一
+      # 半：backend 编译期与运行期都不得持有编排访问面）。D2-B 的
+      # docker-socket-proxy 变体是 Wave 4 的事，届时只改 RTM_DOCKER_HOST。
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/app-runtime:/app-data
+    restart: on-failure
+
+  app-proxy:
+    container_name: bisheng-app-proxy
+    profiles: [app-runtime]
+    build:
+      context: ../src/app-proxy
+    environment:
+      TZ: Asia/Shanghai
+      APP_PROXY_HOST: '0.0.0.0'
+      APP_PROXY_PORT: '8090'
+      APP_PROXY_BACKEND_BASE_URL: 'http://backend:7860'
+      # 与 backend 的 app_runtime.proxy_hmac_secret 一致。
+      APP_PROXY_HMAC_SECRET: ${BISHENG_APP_PROXY_HMAC_SECRET:-}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    # 每个请求都要向 backend 问一次入口判定（3s 缓存 × 30s 宽限）。
+    depends_on:
+      - backend
+    restart: on-failure
+    # 刻意**不挂** docker socket：它只做解析路由 / 剥头 / 注入身份 / 转发，
+    # 给它编排权限是纯粹的权限扩散。

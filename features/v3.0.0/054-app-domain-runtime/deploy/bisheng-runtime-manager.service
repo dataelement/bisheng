@@ -1,0 +1,45 @@
+# BiSheng 编排器（runtime-manager）—— F054 T072 / design §4.2 ⑧
+#
+# ⚠️ 这份文件是**模板**。真身在独立运维仓 `~/Projects/bisheng-ops/systemd/`
+# （K10），产品仓不持有 114 的部署文件。落库由 T075 在 114 上执行：
+#   cp bisheng-runtime-manager.service /opt/bisheng-ops/systemd/
+#   ln -sf /opt/bisheng-ops/systemd/bisheng-runtime-manager.service /etc/systemd/system/
+#   systemctl daemon-reload && systemctl enable --now bisheng-runtime-manager
+#
+# 这是全平台**唯一**被允许持有容器编排访问面的进程（arch-guard RULE-10 的另一
+# 半：backend 不得 import docker、不得出现 docker.sock、不得读 DOCKER_HOST）。
+# 「安全来自笼子」的前提是 backend 自己在笼子外面拿不到钥匙——所以这个单元和
+# backend 单元的权限差异是刻意的，不要为了"方便"把 backend 也加进 docker 组。
+[Unit]
+Description=BiSheng runtime-manager (orchestrator RPC :8091)
+# 它要跟 dockerd 说话，dockerd 没起来它启动即失败并被 Restart 拉起，
+# 徒增噪声；用 After 让 systemd 排好序。
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+PartOf=bisheng.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/bisheng/src/runtime-manager
+Environment=PYTHONPATH=/opt/bisheng/src/runtime-manager
+# 只监听回环。它没有自己的鉴权门面之外的保护，暴露到 0.0.0.0 等于把编排能力
+# 挂到网上——HMAC 是防篡改不是防暴露。
+Environment=RTM_HOST=127.0.0.1
+Environment=RTM_PORT=8091
+# HMAC 共享密钥经环境注入，不落配置文件（C6）。与 backend 的
+# app_runtime.manager_hmac_secret 必须一致，两边不一致的症状是所有编排意图
+# 被回 401，而 backend 侧会把它折叠成 16121「编排器不可用」。
+EnvironmentFile=/etc/bisheng/runtime-manager.env
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+ExecStart=/opt/bisheng/src/runtime-manager/.venv/bin/python -m uvicorn runtime_manager.main:app --host 127.0.0.1 --port 8091 --workers 1 --no-access-log
+StandardOutput=append:/tmp/bisheng-runtime-manager.log
+StandardError=append:/tmp/bisheng-runtime-manager.log
+# 停机时正在跑的构建可能持有 docker 客户端连接，给足退出时间；
+# 强杀会留下悬挂的构建容器，下一次 reconcile 才收得掉。
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target

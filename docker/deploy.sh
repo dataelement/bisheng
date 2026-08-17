@@ -15,7 +15,29 @@ BACKEND_CONTAINER="bisheng-backend"
 WORKER_CONTAINER="bisheng-backend-worker"
 
 # 所有可管理的 compose service 名称
-ALL_SERVICES=(backend backend_worker frontend mysql redis elasticsearch minio milvus etcd)
+ALL_SERVICES=(backend backend_worker frontend mysql redis elasticsearch minio milvus etcd runtime-manager app-proxy)
+
+# 挂在 compose profile 后面的 service。它们默认**不启动**——「应用工场运行时层
+# 整层不装」是产品明确支持的形态（F054 GOV-10 / AC-59）。要带上它们，所有
+# compose 命令都得加 --profile，否则 docker compose 会说 "no such service"。
+PROFILE_SERVICES=(runtime-manager app-proxy)
+APP_RUNTIME_PROFILE="app-runtime"
+
+# 若参数里出现任何 profile service，就给 compose 命令补上 --profile。
+# 返回补好的 compose 前缀，调用方直接用。
+compose_with_profile() {
+  local svc
+  for svc in "$@"; do
+    local p
+    for p in "${PROFILE_SERVICES[@]}"; do
+      if [ "$svc" = "$p" ]; then
+        echo "${COMPOSE_CMD} --profile ${APP_RUNTIME_PROFILE}"
+        return 0
+      fi
+    done
+  done
+  echo "${COMPOSE_CMD}"
+}
 
 # ─── 颜色输出 ────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -75,6 +97,8 @@ resolve_service() {
     minio)                  echo "minio" ;;
     milvus)                 echo "milvus" ;;
     etcd)                   echo "etcd" ;;
+    rtm|runtime-manager)    echo "runtime-manager" ;;
+    proxy|app-proxy)        echo "app-proxy" ;;
     *)                      echo "$1" ;;  # 原样传入，让 docker compose 自行报错
   esac
 }
@@ -111,10 +135,10 @@ cmd_logs() {
 
   if [ "$lines" -eq 0 ]; then
     info "实时跟踪 ${service} 所有历史日志（Ctrl+C 退出）..."
-    ${COMPOSE_CMD} logs -f "${service}"
+    $(compose_with_profile "${service}") logs -f "${service}"
   else
     info "实时跟踪 ${service} 最近 ${lines} 行日志（Ctrl+C 退出）..."
-    ${COMPOSE_CMD} logs -f --tail="${lines}" "${service}"
+    $(compose_with_profile "${service}") logs -f --tail="${lines}" "${service}"
   fi
 }
 
@@ -177,13 +201,14 @@ cmd_update() {
   fi
 
   info "拉取最新镜像：${targets[*]}"
-  ${COMPOSE_CMD} pull "${targets[@]}"
+  local cc; cc=$(compose_with_profile "${targets[@]}")
+  ${cc} pull "${targets[@]}"
 
   info "重启服务（不重建依赖）：${targets[*]}"
-  ${COMPOSE_CMD} up -d --no-deps "${targets[@]}"
+  ${cc} up -d --no-deps "${targets[@]}"
 
   info "✅ 更新完成"
-  ${COMPOSE_CMD} ps "${targets[@]}"
+  ${cc} ps "${targets[@]}"
 }
 
 # ─── 重启容器 ─────────────────────────────────────────────────
@@ -199,10 +224,11 @@ cmd_restart() {
   fi
 
   info "重启服务：${targets[*]}"
-  ${COMPOSE_CMD} restart "${targets[@]}"
+  local cc; cc=$(compose_with_profile "${targets[@]}")
+  ${cc} restart "${targets[@]}"
 
   info "✅ 重启完成"
-  ${COMPOSE_CMD} ps "${targets[@]}"
+  ${cc} ps "${targets[@]}"
 }
 
 # ─── 入口 ────────────────────────────────────────────────────
