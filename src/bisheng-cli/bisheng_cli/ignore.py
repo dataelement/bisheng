@@ -69,8 +69,16 @@ SOFT_EXCLUDE_PATTERNS = (
 )
 
 SUBSET_NOTICE = (
-    "本项目不是 git 仓库（或本机没有 git），忽略规则按子集解析；"
+    "本项目不在 git 仓库内（或本机没有 git），忽略规则按子集解析；"
     "复杂规则请写进 .bishengignore（同 .gitignore 语法，最后加载、优先级最高）。"
+)
+
+#: git 回了一个空清单，但目录里确实有文件。这不是"没东西可打包"，而是"git 认为
+#: 这里的东西全被忽略了"——两者的下一步完全不同，而后续那个"缺 bisheng-app.yaml"
+#: 的报错完全指不到这个成因上。
+ALL_IGNORED_NOTICE = (
+    "git 认为这个目录下的文件全部被忽略（多半是上层 .gitignore 命中了整个目录），"
+    "因此打包清单为空。请检查忽略规则，或在 .bishengignore 里用 ! 显式取回需要的文件。"
 )
 
 GITIGNORE_NAME = ".gitignore"
@@ -221,6 +229,8 @@ def collect_files(root: Path, *, use_git: bool | None = None) -> IgnoreResult:
         notes.append(SUBSET_NOTICE)
     else:
         gitignore = Ruleset([])
+        if not git_files and candidates:
+            notes.append(ALL_IGNORED_NOTICE)
 
     included: list[str] = []
     excluded: list[str] = list(pruned)
@@ -280,8 +290,23 @@ def _join(rel_dir: PurePosixPath, name: str) -> str:
 
 
 def _git_ls_files(root: Path) -> set[str] | None:
-    """Ask git for the file list; None means "git could not answer"."""
-    if not (root / ".git").exists() or shutil.which("git") is None:
+    """Ask git for the file list; None means "git could not answer".
+
+    Deliberately **not** gated on ``root/".git"`` existing. An application
+    directory sitting inside a larger repository — a monorepo app, an
+    ``examples/`` folder, anything that is not itself the repo root — has no
+    ``.git`` of its own, and that is the common case, not the exotic one.
+    Requiring one there produced two wrong outcomes at once: the report claimed
+    "not a git repository" about a directory that plainly is in one, and the
+    fallback parser then read only ``root/.gitignore`` while the repo's real
+    ignore rules live at the repo root — so files git ignores (local data,
+    generated output, an ignored config holding real credentials) got packed
+    and uploaded. Let git answer instead: it walks up to find the repository,
+    applies every applicable ignore file, and prints paths relative to ``cwd``,
+    which is exactly the shape ``_walk`` produces. Outside a repository it
+    exits non-zero and we fall back as before.
+    """
+    if shutil.which("git") is None:
         return None
     try:
         result = subprocess.run(

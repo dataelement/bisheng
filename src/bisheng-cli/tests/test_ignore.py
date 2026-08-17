@@ -8,11 +8,12 @@ developer happened to have git installed.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from bisheng_cli.ignore import Ruleset, collect_files
+from bisheng_cli.ignore import ALL_IGNORED_NOTICE, SUBSET_NOTICE, Ruleset, collect_files
 
 
 def _names(root: Path, **kw) -> set[str]:
@@ -117,3 +118,49 @@ def test_excluded_entries_are_reported_not_silently_dropped(sample_project: Path
 @pytest.mark.parametrize("pattern", ["**", "", "   ", "#only a comment"])
 def test_degenerate_patterns_do_not_crash(pattern: str) -> None:
     Ruleset.parse(pattern + "\n").decide("a/b.txt", False)
+
+
+def test_app_directory_inside_a_repo_uses_git_not_the_subset_parser(tmp_path: Path) -> None:
+    """An app folder inside a larger repo is the common case, not the exotic one.
+
+    Gating on ``root/".git"`` made this directory report "not a git repository"
+    and fall back to reading only its own ``.gitignore`` — while the repo's real
+    rules sit at the repo root. Anything git ignores from above (local data,
+    generated output, an ignored config with real credentials in it) would then
+    be packed and uploaded.
+    """
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text("secrets.env\n*.local\n")
+    app = tmp_path / "examples" / "demo"
+    app.mkdir(parents=True)
+    (app / "main.py").write_text("print('hi')\n")
+    (app / "secrets.env").write_text("TOKEN=real\n")
+    (app / "notes.local").write_text("scratch\n")
+
+    result = collect_files(app)
+
+    assert result.used_git is True, "the parent repo must be found from a subdirectory"
+    assert "main.py" in result.files
+    assert "secrets.env" not in result.files, "an ignore rule from the repo root must still apply"
+    assert "notes.local" not in result.files
+    assert SUBSET_NOTICE not in result.notes
+
+
+def test_fully_ignored_directory_says_so_instead_of_packing_nothing_silently(tmp_path: Path) -> None:
+    """"git ignores everything here" and "there is nothing here" need different fixes.
+
+    Without the note, the only symptom is a later "bisheng-app.yaml missing"
+    error, which points at the manifest rather than at the ignore rule that
+    swallowed the whole directory.
+    """
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / ".gitignore").write_text("vendor/\n")
+    app = tmp_path / "vendor" / "app"
+    app.mkdir(parents=True)
+    (app / "main.py").write_text("print('hi')\n")
+    (app / "bisheng-app.yaml").write_text("name: x\n")
+
+    result = collect_files(app)
+
+    assert result.files == []
+    assert ALL_IGNORED_NOTICE in result.notes
