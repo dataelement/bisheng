@@ -18,6 +18,7 @@ import { FILE_CHANGE_APPROVAL_REFRESH_EVENT } from "~/events/fileChangeApprovalE
 
 import {
     buildFileChangeActionRows,
+    canDecidePendingUpload,
     getFileChangeLockState,
     mergeFileChangeApprovalEnrichment,
     projectPendingUploadAsKnowledgeFile,
@@ -396,6 +397,8 @@ describe("F046 file change approval projection", () => {
             { requestId: 3, approvalInstanceId: 13, uploadId: "u3", fileName: "c.pdf", fileSize: 1, applicantUserId: 2, status: "applying", approvalStatus: "approved", canApprove: true },
         ];
         expect(selectApprovablePendingUploads(uploads).map((item) => item.requestId)).toEqual([1]);
+        expect(canDecidePendingUpload(uploads[0])).toBe(true);
+        expect(canDecidePendingUpload(uploads[2])).toBe(false);
     });
 
     it("shows cleanup only when the backend grants it to the uploader", () => {

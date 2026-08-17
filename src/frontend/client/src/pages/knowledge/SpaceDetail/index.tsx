@@ -77,6 +77,7 @@ import {
 import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 import {
+    canDecidePendingUpload,
     getFileChangeLockState,
     projectPendingUploadAsKnowledgeFile,
     selectApprovablePendingUploads,
@@ -782,7 +783,7 @@ export function KnowledgeSpaceContent({
     // batch 同意/拒绝 is the only action that applies to it.
     const isSelectableFile = (f: KnowledgeFile) =>
         f.pendingUploadApproval
-            ? Boolean(f.pendingUploadApproval.canApprove)
+            ? canDecidePendingUpload(f.pendingUploadApproval)
             : !isFolderUploadPlaceholder(f);
 
     const handleSelectFile = (fileId: string, selected: boolean) => {
@@ -916,7 +917,7 @@ export function KnowledgeSpaceContent({
     /** Request ids of the selected pending uploads this user may decide. */
     const getPendingSelectionRequestIds = () =>
         displayFiles
-            .filter((f) => selectedFiles.has(f.id) && f.pendingUploadApproval?.canApprove)
+            .filter((f) => selectedFiles.has(f.id) && canDecidePendingUpload(f.pendingUploadApproval))
             .map((f) => f.pendingUploadApproval!.requestId);
 
     const handleBatchApprovePending = async () => {

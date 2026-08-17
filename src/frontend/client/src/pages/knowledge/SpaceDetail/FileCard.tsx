@@ -17,7 +17,7 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { getFileChangeLockState } from "../hooks/useFileChangeApproval";
+import { canDecidePendingUpload, getFileChangeLockState } from "../hooks/useFileChangeApproval";
 import { PendingUploadApprovalActions } from "./PendingUploadApprovalActions";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -139,6 +139,7 @@ export function FileCard({
     );
     const isCreating = !!file.isCreating;
     const pendingUpload = file.pendingUploadApproval;
+    const canDecidePending = canDecidePendingUpload(pendingUpload);
     // Uploading placeholder cards have no backend identity yet — not movable.
     const isUploading = isKnowledgeItemUploading(file);
     const fileChangeLock = getFileChangeLockState(file);
@@ -580,7 +581,7 @@ export function FileCard({
                     </div>
                 </div>
 
-                {pendingUpload?.canApprove && (
+                {pendingUpload && canDecidePending && (
                     <PendingUploadApprovalActions
                         requestId={pendingUpload.requestId}
                         disabled={pendingUploadDeciding}
@@ -589,7 +590,7 @@ export function FileCard({
                 )}
 
                 {/* Circular selection checkbox on the far right */}
-                {!pendingUpload && !hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                {(!pendingUpload || canDecidePending) && !hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
                     <RoundCheckbox
                         className="shrink-0"
                         checked={isSelected}
@@ -667,7 +668,7 @@ export function FileCard({
                 {isUploadingFolderPlaceholder && (
                     <div className="pointer-events-none absolute inset-0 z-10 bg-white/50" />
                 )}
-                {!pendingUpload && !hideSelectionCheckbox && mobileListMode && (
+                {(!pendingUpload || canDecidePending) && !hideSelectionCheckbox && mobileListMode && (
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
                             className={isSelected ? "border-primary" : "border-gray-400"}
@@ -699,7 +700,7 @@ export function FileCard({
                         {renderSimilarTag(true)}
                     </div>
 
-                    {!pendingUpload && !hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                    {(!pendingUpload || canDecidePending) && !hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
                         <div
                             className={cn(
                                 "absolute left-2 top-2 z-10 transition-opacity",
@@ -733,7 +734,7 @@ export function FileCard({
                                     : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                             )}
                         >
-                            {pendingUpload?.canApprove && (
+                            {pendingUpload && canDecidePending && (
                                 <PendingUploadApprovalActions
                                     requestId={pendingUpload.requestId}
                                     disabled={pendingUploadDeciding}

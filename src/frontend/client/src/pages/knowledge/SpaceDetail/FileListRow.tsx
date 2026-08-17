@@ -8,7 +8,7 @@ import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { getFileChangeLockState } from "../hooks/useFileChangeApproval";
+import { canDecidePendingUpload, getFileChangeLockState } from "../hooks/useFileChangeApproval";
 import { useInlineRename } from "../hooks/useInlineRename";
 import {
     formatTimeCard,
@@ -259,6 +259,7 @@ export function FileListRow({
     const isFolder = file.type === FileType.FOLDER;
     const isCreating = !!file.isCreating;
     const pendingUpload = file.pendingUploadApproval;
+    const canDecidePending = canDecidePendingUpload(pendingUpload);
     const isUploading = isKnowledgeItemUploading(file);
     const fileChangeLock = getFileChangeLockState(file);
     // A folder still uploading its batch: faded, not clickable, checkbox greyed out.
@@ -412,7 +413,7 @@ export function FileListRow({
             )}
             style={isSelected ? { backgroundColor: "rgb(var(--brand-500)/0.07)" } : undefined}
         >
-            {!pendingUpload && (
+            {(!pendingUpload || canDecidePending) && (
                 <Checkbox
                     checked={isSelected}
                     onCheckedChange={onSelect}
@@ -424,8 +425,7 @@ export function FileListRow({
                     )}
                 />
             )}
-            {/* Pending-upload rows have no checkbox; keep the columns aligned. */}
-            {pendingUpload && <span aria-hidden className="size-4 shrink-0" />}
+            {pendingUpload && !canDecidePending && <span aria-hidden className="size-4 shrink-0" />}
 
             <div
                 className={cn(
@@ -540,7 +540,7 @@ export function FileListRow({
             <StatusBadge file={file} onOpenApprovalDetail={onOpenApprovalDetail} />
 
             <div className="flex shrink-0 items-center">
-                {pendingUpload?.canApprove && (
+                {pendingUpload && canDecidePending && (
                     <PendingUploadApprovalActions
                         requestId={pendingUpload.requestId}
                         disabled={pendingUploadDeciding}
