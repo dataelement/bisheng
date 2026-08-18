@@ -134,6 +134,17 @@ export interface ApprovalInstanceDetail {
   }[];
 }
 
+/** 流程管理不展示的场景码：业务自建流程，管理员不可配置。 */
+export const ADMIN_HIDDEN_SCENARIO_CODES = new Set(["qa_question_publish"]);
+
+/**
+ * 流程管理列表/新增预置是否隐藏该场景。
+ * @param scenarioCode 审批场景码，可空
+ */
+export function isAdminHiddenApprovalScenario(scenarioCode?: string | null): boolean {
+  return Boolean(scenarioCode && ADMIN_HIDDEN_SCENARIO_CODES.has(scenarioCode));
+}
+
 export async function listApprovalScenarioPresetsApi(): Promise<ApprovalScenarioPreset[]> {
   return await axios.get("/api/v1/approval/admin/scenario-presets");
 }

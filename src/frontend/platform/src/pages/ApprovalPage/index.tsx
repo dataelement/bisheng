@@ -24,6 +24,7 @@ import {
   listApprovalExceptionsApi,
   listApprovalNodesApi,
   listApprovalRoutesApi,
+  isAdminHiddenApprovalScenario,
   listApprovalScenarioPresetsApi,
   listApprovalScenariosApi,
   reorderApprovalRoutesApi,
@@ -1920,10 +1921,15 @@ export default function ApprovalPage() {
       listApprovalScenariosApi(),
       listApprovalExceptionsApi(),
     ]);
-    setPresets(presetList);
-    setScenarios(scenarioList);
+    const visiblePresets = presetList.filter((p) => !isAdminHiddenApprovalScenario(p.scenario_code));
+    const visibleScenarios = scenarioList.filter((s) => !isAdminHiddenApprovalScenario(s.scenario_code));
+    setPresets(visiblePresets);
+    setScenarios(visibleScenarios);
     setExceptions(exceptionList);
-    const initId = selectedScenarioId ?? scenarioList[0]?.id ?? null;
+    const initId =
+      selectedScenarioId && visibleScenarios.some((s) => s.id === selectedScenarioId)
+        ? selectedScenarioId
+        : (visibleScenarios[0]?.id ?? null);
     if (initId) {
       setSelectedScenarioId(initId);
       await Promise.all([loadRoutes(initId), loadFlows(initId, selectedFlowId)]);
