@@ -2,7 +2,9 @@
 """转公开审批展示身份：匿名标志与实例 question_id 解析。"""
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+from bisheng.qa_expert.domain.publish_approval_bridge import applicant_department_id_for_initiator
 from bisheng.qa_expert.domain.publish_approval_identity import (
     anonymous_choice_for_user,
     question_id_from_instance,
@@ -35,3 +37,23 @@ def test_answerer_anonymous_choice_overrides_non_asker():
     named, named_reveal = anonymous_choice_for_user(question, answers, 8)
     assert named is False
     assert named_reveal is None
+
+
+async def test_applicant_department_id_skips_anonymous(monkeypatch) -> None:
+    """匿名发起人不查、不写部门。"""
+    lookup = AsyncMock(return_value=SimpleNamespace(department_id=101))
+    monkeypatch.setattr(
+        "bisheng.database.models.department.UserDepartmentDao.aget_user_primary_department",
+        lookup,
+    )
+    assert await applicant_department_id_for_initiator(anonymous=True, user_id=7) is None
+    lookup.assert_not_awaited()
+
+
+async def test_applicant_department_id_uses_primary_department(monkeypatch) -> None:
+    """实名发起人写入主部门 ID。"""
+    monkeypatch.setattr(
+        "bisheng.database.models.department.UserDepartmentDao.aget_user_primary_department",
+        AsyncMock(return_value=SimpleNamespace(department_id=101)),
+    )
+    assert await applicant_department_id_for_initiator(anonymous=False, user_id=7) == 101
