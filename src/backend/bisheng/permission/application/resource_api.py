@@ -457,7 +457,27 @@ class F048ResourcePermissionApi:
             include_roster=include_roster,
         )
 
+    @staticmethod
+    def _privileged(actor: PermissionActor, target) -> bool:
+        """A super admin (any tenant) or a tenant admin of the target's tenant.
+
+        This mirrors the identity shortcut the action decision path already
+        applies in ``check_action``. It is intentionally NOT applied by
+        ``check_visible``, which only consults FGA ``visible`` tuples — so an
+        admin who can plainly manage a resource (``check_action`` waves them
+        through for ``manage_permission``) was still denied at the visibility
+        gate of the permission-management endpoints.
+        """
+        if actor.super_admin:
+            return True
+        return (
+            target.tenant_id == actor.current_tenant_id
+            and target.tenant_id in actor.tenant_admin_tenant_ids
+        )
+
     async def _require_visible(self, actor, target) -> None:
+        if self._privileged(actor, target):
+            return
         if not await self._runtime.check_action(
             actor,
             target,

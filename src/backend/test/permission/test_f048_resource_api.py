@@ -174,6 +174,96 @@ async def test_super_admin_subject_validation_uses_target_tenant() -> None:
     assert runtime.page_calls == []
 
 
+class _ContextRuntime(_Runtime):
+    """A runtime whose FGA visible check always denies.
+
+    check_visible never waves admins through, so an admin's context request must
+    not depend on it — the API's own identity shortcut is what must let them in.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.visible_checks = 0
+
+    async def check_action(self, actor, target, action):
+        if action == "visible":
+            self.visible_checks += 1
+            return False
+        return True
+
+    async def current_mode(self, target):
+        del target
+        return SimpleNamespace(mode="CUSTOM", projection_state="READY")
+
+
+@pytest.mark.asyncio
+async def test_super_admin_reads_context_without_a_visible_tuple() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=5, super_admin=True)
+
+    result = await api.get_context(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    # The visibility gate must be skipped for the super admin, never consulted.
+    assert runtime.visible_checks == 0
+    assert result["mode"] == "CUSTOM"
+    assert result["can_manage_permission"] is True
+
+
+@pytest.mark.asyncio
+async def test_tenant_admin_reads_context_for_own_tenant_without_visible_tuple() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    # _Resources resolves the target into tenant 9.
+    actor = PermissionActor(
+        user_id=7,
+        current_tenant_id=9,
+        tenant_admin_tenant_ids=frozenset({9}),
+    )
+
+    result = await api.get_context(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    assert runtime.visible_checks == 0
+    assert result["can_manage_permission"] is True
+
+
+@pytest.mark.asyncio
+async def test_ordinary_user_context_still_requires_a_visible_tuple() -> None:
+    from bisheng.common.errcode.permission import PermissionDeniedError
+
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=9)
+
+    with pytest.raises(PermissionDeniedError):
+        await api.get_context(
+            resource_type="workflow",
+            resource_id="wf-1",
+            actor=actor,
+        )
+    assert runtime.visible_checks == 1
+
+
 @pytest.mark.asyncio
 async def test_roster_uses_bounded_sql_page_instead_of_full_explanation() -> None:
     runtime = _Runtime()
