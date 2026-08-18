@@ -463,8 +463,16 @@ class TagConsoleService:
         items: list[TagConsoleReviewRef],
         target_library_id: int,
         tenant_id: int,
+        *,
+        ack_similar: bool = False,
     ) -> TagConsoleBatchResult:
-        return await self._batch_review(items, tenant_id, approve=True, target_library_id=target_library_id)
+        return await self._batch_review(
+            items,
+            tenant_id,
+            approve=True,
+            target_library_id=target_library_id,
+            ack_similar=ack_similar,
+        )
 
     async def batch_reject(
         self,
@@ -484,11 +492,19 @@ class TagConsoleService:
         approve: bool,
         target_library_id: int | None = None,
         reject_reason: str | None = None,
+        ack_similar: bool = False,
     ) -> TagConsoleBatchResult:
         scope = await self._review_scope_or_full()
         self._validate_batch(items)
         if approve and not await self.repository.library_exists(target_library_id, tenant_id):
             raise KnowledgeSpaceTagLibraryNotExistError()
+        if approve:
+            await self.tags_service.ensure_review_tags_similar_acknowledged(
+                tag_names=[item.name for item in items],
+                tag_library_id=int(target_library_id),
+                tenant_id=tenant_id,
+                ack_similar=ack_similar,
+            )
 
         pairs = [(item.name, item.resource_type) for item in items]
         grouped = await self.repository.load_review_group(pairs, tenant_id=tenant_id, scope=scope)
@@ -531,6 +547,7 @@ class TagConsoleService:
                 "resource_type": item.resource_type,
                 "tag_library_id": target_library_id,
                 "knowledge_id": knowledge_id,
+                "ack_similar": ack_similar if approve else False,
             }
             if reject_reason is not None:
                 payload["reject_reason"] = reject_reason

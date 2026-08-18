@@ -85,7 +85,7 @@ async def batch_approve(
     service: TagConsoleService = Depends(get_tag_console_service),
     login_user=LoginUserDep,
 ):
-    return resp_200(await service.batch_approve(req.items, req.target_library_id, login_user.tenant_id))
+    return resp_200(await service.batch_approve(req.items, req.target_library_id, login_user.tenant_id, ack_similar=req.ack_similar))
 
 
 @router.post("/review/batch-reject", summary="Reject pending tags", response_model=UnifiedResponseModel)

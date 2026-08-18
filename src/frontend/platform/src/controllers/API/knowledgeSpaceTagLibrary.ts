@@ -201,8 +201,47 @@ export async function approveOrRejectReviewTagApi(data: {
   reject_reason?: string
   tag_library_id?: number
   knowledge_id?: number
+  ack_similar?: boolean
 }): Promise<boolean> {
   return await axios.post("/api/v1/workstation/tags/approve_or_reject", data)
+}
+
+export interface ReviewTagSimilarMatchItem {
+  name: string
+  match_kind: "exact" | "substring" | "similarity" | string
+  score?: number | null
+}
+
+export interface ReviewTagSimilarCheckResult {
+  exact_matches: ReviewTagSimilarMatchItem[]
+  similar_matches: ReviewTagSimilarMatchItem[]
+  similarity_threshold?: number
+}
+
+export async function checkReviewTagSimilarApi(data: {
+  tag_name: string
+  tag_library_id: number
+}): Promise<ReviewTagSimilarCheckResult> {
+  return await axios.post("/api/v1/workstation/tags/review_similar_check", data)
+}
+
+export interface ReviewTagSimilarBatchItem {
+  tag_name: string
+  exact_matches: ReviewTagSimilarMatchItem[]
+  similar_matches: ReviewTagSimilarMatchItem[]
+}
+
+export interface ReviewTagSimilarBatchCheckResult {
+  items: ReviewTagSimilarBatchItem[]
+  similar_tag_count: number
+  similarity_threshold?: number
+}
+
+export async function checkReviewTagSimilarBatchApi(data: {
+  tag_names: string[]
+  tag_library_id: number
+}): Promise<ReviewTagSimilarBatchCheckResult> {
+  return await axios.post("/api/v1/workstation/tags/review_similar_check_batch", data)
 }
 
 export async function deleteReviewTagApi(data: {
@@ -349,10 +388,12 @@ export async function getTagConsoleReviewDetailApi(
 export async function batchApproveTagConsoleApi(
   items: TagConsoleReviewRef[],
   targetLibraryId: number,
+  ackSimilar = false,
 ): Promise<TagConsoleBatchResult> {
   return await axios.post("/api/v1/workstation/tags/console/review/batch-approve", {
     items,
     target_library_id: targetLibraryId,
+    ack_similar: ackSimilar,
   })
 }
 

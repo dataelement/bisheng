@@ -16,7 +16,7 @@ import { cname } from "@/components/bs-ui/utils"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SourceFileLinks } from "./SourceFileLinks"
-import { BatchResultDialog, LibraryPickerDialog, RejectReasonDialog } from "./TagBatchDialogs"
+import { BatchApproveLibraryPickerDialog, BatchResultDialog, RejectReasonDialog } from "./TagBatchDialogs"
 import { TagFilterBar } from "./TagFilterBar"
 import { TagReviewDialog } from "./TagReviewDialog"
 import { TagSourceIcon, tagSourceLabel } from "./TagSourceIcon"
@@ -149,11 +149,11 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
         onReviewed()
     }
 
-    const handleApprove = async (targetLibraryId: number, items: TagConsoleReviewRef[]) => {
+    const handleApprove = async (targetLibraryId: number, items: TagConsoleReviewRef[], ackSimilar = false) => {
         setSaving(true)
         setApproveOpen(false)
         setReviewTarget(null)
-        finishBatch(await captureAndAlertRequestErrorHoc(batchApproveTagConsoleApi(items, targetLibraryId)))
+        finishBatch(await captureAndAlertRequestErrorHoc(batchApproveTagConsoleApi(items, targetLibraryId, ackSimilar)))
     }
 
     const handleReject = async (reason: string, items: TagConsoleReviewRef[]) => {
@@ -364,12 +364,13 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                 libraries={libraries}
                 saving={saving}
                 onClose={() => setReviewTarget(null)}
-                onApprove={(libraryId) => reviewTarget && handleApprove(libraryId, [reviewTarget])}
+                onApprove={(libraryId, ackSimilar) => reviewTarget && handleApprove(libraryId, [reviewTarget], ackSimilar)}
                 onReject={(reason) => reviewTarget && handleReject(reason, [reviewTarget])}
             />
-            <LibraryPickerDialog
+            <BatchApproveLibraryPickerDialog
                 open={approveOpen}
                 title={t("build.tagConsole.batchApprove", "批量入库")}
+                tagNames={actionableRows.map((row) => row.name)}
                 libraries={approvableLibraries}
                 loading={loadingLibraries}
                 emptyHint={t(
@@ -378,7 +379,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                 )}
                 saving={saving}
                 onOpenChange={setApproveOpen}
-                onConfirm={(libraryId) => handleApprove(libraryId, actionableRows.map(refOf))}
+                onConfirm={(libraryId, ackSimilar) => handleApprove(libraryId, actionableRows.map(refOf), ackSimilar)}
             />
             <RejectReasonDialog
                 open={rejectOpen}

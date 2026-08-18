@@ -9,6 +9,9 @@ import type {
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ReviewTagSimilarBatchConfirmDialog } from "../../reviewTag/ReviewTagSimilarBatchConfirmDialog"
+import { ReviewTagSimilarBatchSummary } from "../../reviewTag/ReviewTagSimilarBatchSummary"
+import { useReviewTagSimilarBatchCheck } from "../../reviewTag/useReviewTagSimilarBatchCheck"
 
 interface LibraryPickerDialogProps {
     open: boolean
@@ -81,6 +84,126 @@ export function LibraryPickerDialog({
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+    )
+}
+
+interface BatchApproveLibraryPickerDialogProps {
+    open: boolean
+    title: string
+    tagNames: string[]
+    libraries: KnowledgeSpaceTagLibraryListItem[]
+    saving: boolean
+    onOpenChange: (open: boolean) => void
+    onConfirm: (libraryId: number, ackSimilar?: boolean) => void
+    emptyHint?: string
+    loading?: boolean
+}
+
+/** Batch approve picker with target-library similar-tag check and second confirmation. */
+export function BatchApproveLibraryPickerDialog({
+    open,
+    title,
+    tagNames,
+    libraries,
+    saving,
+    onOpenChange,
+    onConfirm,
+    emptyHint,
+    loading = false,
+}: BatchApproveLibraryPickerDialogProps) {
+    const { t } = useTranslation()
+    const [libraryId, setLibraryId] = useState("")
+    const [similarConfirmOpen, setSimilarConfirmOpen] = useState(false)
+    const { result, loading: similarLoading, hasSimilar, similarItems } = useReviewTagSimilarBatchCheck(
+        tagNames,
+        libraryId,
+    )
+
+    useEffect(() => {
+        if (open) {
+            setLibraryId("")
+            setSimilarConfirmOpen(false)
+        }
+    }, [open, tagNames])
+
+    useEffect(() => {
+        setSimilarConfirmOpen(false)
+    }, [libraryId])
+
+    const submitApprove = (ackSimilar = false) => {
+        if (!libraryId) return
+        onConfirm(Number(libraryId), ackSimilar)
+    }
+
+    const handleConfirm = () => {
+        if (!libraryId) return
+        if (hasSimilar) {
+            setSimilarConfirmOpen(true)
+            return
+        }
+        submitApprove()
+    }
+
+    const handleSimilarConfirm = () => {
+        setSimilarConfirmOpen(false)
+        submitApprove(true)
+    }
+
+    return (
+        <>
+            <Dialog open={open} onOpenChange={onOpenChange}>
+                <DialogContent className="gap-0 p-0 sm:max-w-[520px] bg-background-login">
+                    <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
+                        <DialogTitle>{title}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 px-6 py-5">
+                        <div>
+                            <Label className="bisheng-label">
+                                {t("build.reviewTagSelectLibrary", "选择标签库")}
+                                <span className="bisheng-tip">*</span>
+                            </Label>
+                            <Select value={libraryId} onValueChange={setLibraryId} disabled={loading}>
+                                <SelectTrigger className="mt-2">
+                                    <SelectValue placeholder={t("build.reviewTagSelectLibraryPlaceholder", "请选择标签库")} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {libraries.map((library) => (
+                                        <SelectItem key={library.id} value={String(library.id)}>
+                                            {library.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {!loading && !libraries.length && emptyHint && (
+                                <p className="mt-2 text-xs text-[#F53F3F]">{emptyHint}</p>
+                            )}
+                        </div>
+                        {libraryId && <ReviewTagSimilarBatchSummary result={result} loading={similarLoading} />}
+                    </div>
+                    <DialogFooter className="border-t border-[#EBECF0] px-6 py-3">
+                        <Button variant="outline" className="px-8" onClick={() => onOpenChange(false)}>
+                            {t("cancel", { ns: "bs" })}
+                        </Button>
+                        <Button
+                            className="px-8"
+                            disabled={saving || loading || !libraryId}
+                            onClick={handleConfirm}
+                        >
+                            {hasSimilar
+                                ? t("build.reviewTagProceedWithSimilar", "继续审核")
+                                : t("confirm", { ns: "bs" })}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            <ReviewTagSimilarBatchConfirmDialog
+                open={similarConfirmOpen}
+                items={similarItems}
+                saving={saving}
+                onOpenChange={setSimilarConfirmOpen}
+                onConfirm={handleSimilarConfirm}
+            />
+        </>
     )
 }
 

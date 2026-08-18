@@ -203,6 +203,7 @@ class TagConsoleReviewSearchResp(BaseModel):
 class TagConsoleBatchApproveReq(BaseModel):
     items: list[TagConsoleReviewRef]
     target_library_id: int
+    ack_similar: bool = False
 
 
 class TagConsoleBatchRejectReq(BaseModel):

@@ -86,6 +86,7 @@ async def test_approve_review_tag_imports_to_selected_library():
     )
 
     with (
+        patch.object(service, "ensure_review_tag_similar_acknowledged", new=AsyncMock()),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService",
         ) as library_service_cls,
@@ -142,6 +143,7 @@ async def test_approve_review_tag_allows_any_library_when_tag_has_no_library_sco
     )
 
     with (
+        patch.object(service, "ensure_review_tag_similar_acknowledged", new=AsyncMock()),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService",
         ) as library_service_cls,

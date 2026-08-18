@@ -77,3 +77,38 @@ class ApproveOrRejectRequest(BaseModel):
     resource_type: TagResourceTypeEnum
     tag_library_id: int | None = None
     knowledge_id: int | None = None
+    ack_similar: bool = False
+
+
+class ReviewTagSimilarCheckRequest(BaseModel):
+    tag_name: str
+    tag_library_id: int
+
+
+class ReviewTagSimilarMatchItem(BaseModel):
+    name: str
+    match_kind: str
+    score: float | None = None
+
+
+class ReviewTagSimilarCheckResponse(BaseModel):
+    exact_matches: list[ReviewTagSimilarMatchItem] = []
+    similar_matches: list[ReviewTagSimilarMatchItem] = []
+    similarity_threshold: float = 0.85
+
+
+class ReviewTagSimilarBatchCheckRequest(BaseModel):
+    tag_names: list[str]
+    tag_library_id: int
+
+
+class ReviewTagSimilarBatchItem(BaseModel):
+    tag_name: str
+    exact_matches: list[ReviewTagSimilarMatchItem] = []
+    similar_matches: list[ReviewTagSimilarMatchItem] = []
+
+
+class ReviewTagSimilarBatchCheckResponse(BaseModel):
+    items: list[ReviewTagSimilarBatchItem] = []
+    similar_tag_count: int = 0
+    similarity_threshold: float = 0.85

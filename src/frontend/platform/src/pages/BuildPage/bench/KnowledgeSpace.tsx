@@ -9,13 +9,14 @@ import {
     type DepartmentKnowledgeSpaceSummary,
 } from "@/controllers/API/departmentKnowledgeSpace";
 import { userContext } from "@/contexts/userContext";
-import { getKnowledgeConfigApi, setKnowledgeConfigApi } from "@/controllers/API";
+import { getKnowledgeConfigApi, getAppConfig, setKnowledgeConfigApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
-import { NonNegativeInput, Textarea } from "@/components/bs-ui/input";
+import { NonNegativeInput, Textarea, Input } from "@/components/bs-ui/input";
 import { canManageWorkbenchConfig, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
 import Preview from "./Preview";
 import { resolveConfigString } from "./configValue";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { DepartmentKnowledgeSpaceManagerDialog } from "./DepartmentKnowledgeSpaceManagerDialog";
@@ -38,6 +39,8 @@ interface KnowledgeConfigForm {
     autoTagVisible: boolean;
     /** 租户级"待审核标签"功能可见性，对应接口 review_tag_visible */
     reviewTagVisible: boolean;
+    /** 租户级待审核标签相似度阈值；空字符串表示使用系统默认值 */
+    reviewTagSimilarityThreshold: string;
 }
 
 export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: number }) {
@@ -49,6 +52,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
         setErrors,
         handleSave: saveKnowledgeConfig,
         configMeta,
+        systemSimilarityThreshold,
     } = useKnowledgeConfig(scopeVersion);
     const sensitivePolicyRef = useRef<KnowledgeSpaceSensitivePolicyHandle>(null);
     const [managerOpen, setManagerOpen] = useState(false);
@@ -184,6 +188,39 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                 }
                             />
 
+                            {formData.reviewTagVisible && (
+                                <div className="p-5 rounded-lg">
+                                    <div className="border-t border-[#ECECEC] pt-6">
+                                        <Label className="bisheng-label">
+                                            {t("build.reviewTagSimilarityThreshold", "标签相似度阈值")}
+                                        </Label>
+                                        <p className="mt-1 text-sm text-[#86909C]">
+                                            {t(
+                                                "build.reviewTagSimilarityThresholdDesc",
+                                                "用于待审核标签入库与 AI 打标时的模糊匹配；留空则使用系统默认值 {{threshold}}。",
+                                                { threshold: systemSimilarityThreshold },
+                                            )}
+                                        </p>
+                                        <div className="mt-3 flex items-center max-w-40">
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                max={1}
+                                                step={0.01}
+                                                value={formData.reviewTagSimilarityThreshold}
+                                                placeholder={systemSimilarityThreshold}
+                                                onChange={(e) =>
+                                                    setFormData((prev) => ({
+                                                        ...prev,
+                                                        reviewTagSimilarityThreshold: e.target.value,
+                                                    }))
+                                                }
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <KnowledgeSpaceSensitivePolicy ref={sensitivePolicyRef} />
 
                             {isGlobalSuper && (
@@ -281,6 +318,38 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
 }
 
 // 只负责加载/保存系统提示词、用户提示词、max_chunk_size 的 hook
+function applyKnowledgeConfigResponse(
+    res: unknown,
+    t: TFunction,
+    setFormData: Dispatch<SetStateAction<KnowledgeConfigForm>>,
+    setConfigMeta: Dispatch<SetStateAction<any>>,
+) {
+    const { data: envData, meta } = resolveConfigEnvelope<Record<string, unknown>>(res);
+    setConfigMeta(meta);
+    const cfg = envData != null && typeof envData === "object" ? envData : null;
+    const systemPromptFromRes = cfg?.system_prompt ?? cfg?.systemPrompt;
+    const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
+    const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
+    const autoTagVisibleFromRes = cfg?.auto_tag_visible ?? cfg?.autoTagVisible;
+    const reviewTagVisibleFromRes = cfg?.review_tag_visible ?? cfg?.reviewTagVisible;
+    const reviewTagSimilarityThresholdFromRes =
+        cfg?.review_tag_similarity_threshold ?? cfg?.reviewTagSimilarityThreshold;
+    const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, "");
+    const resolvedUserPrompt = resolveConfigString(userPromptFromRes, "");
+    setFormData((prev) => ({
+        ...prev,
+        systemPrompt: resolvedSystemPrompt || t("chatConfig.aiPrompt"),
+        userPrompt: resolvedUserPrompt || t("chatConfig.retrievedAndQuestion"),
+        maxChunkSize: typeof maxChunkSizeFromRes === "number" ? maxChunkSizeFromRes : prev.maxChunkSize,
+        autoTagVisible: Boolean(autoTagVisibleFromRes),
+        reviewTagVisible: Boolean(reviewTagVisibleFromRes),
+        reviewTagSimilarityThreshold:
+            reviewTagSimilarityThresholdFromRes == null || reviewTagSimilarityThresholdFromRes === ""
+                ? ""
+                : String(reviewTagSimilarityThresholdFromRes),
+    }));
+}
+
 const useKnowledgeConfig = (scopeVersion = 0) => {
     const { t } = useTranslation();
     const [formData, setFormData] = useState<KnowledgeConfigForm>({
@@ -289,7 +358,9 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         maxChunkSize: 15000,
         autoTagVisible: false,
         reviewTagVisible: false,
+        reviewTagSimilarityThreshold: "",
     });
+    const [systemSimilarityThreshold, setSystemSimilarityThreshold] = useState("0.85");
 
     const [errors, setErrors] = useState<{ systemPrompt: string; userPrompt: string }>({
         systemPrompt: '',
@@ -300,27 +371,14 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
     // 初始化时从后台读取配置
     useEffect(() => {
         setConfigMeta(null);
+        getAppConfig().then((env: any) => {
+            const threshold = env?.knowledges?.tag_library?.review_tag_similarity_threshold;
+            if (typeof threshold === "number") {
+                setSystemSimilarityThreshold(String(threshold));
+            }
+        });
         getKnowledgeConfigApi().then((res) => {
-            const { data: envData, meta } = resolveConfigEnvelope<Record<string, unknown>>(res);
-            setConfigMeta(meta);
-            const cfg = envData != null && typeof envData === 'object' ? envData : null;
-            const systemPromptFromRes = cfg?.system_prompt ?? cfg?.systemPrompt;
-            const userPromptFromRes = cfg?.user_prompt ?? cfg?.userPrompt;
-            const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
-            const autoTagVisibleFromRes = cfg?.auto_tag_visible ?? cfg?.autoTagVisible;
-            const reviewTagVisibleFromRes = cfg?.review_tag_visible ?? cfg?.reviewTagVisible;
-            // When backend returns no saved value, seed the textarea with the
-            // localized default template so it is editable as a real value.
-            const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
-            const resolvedUserPrompt = resolveConfigString(userPromptFromRes, '');
-            setFormData((prev) => ({
-                ...prev,
-                systemPrompt: resolvedSystemPrompt || t('chatConfig.aiPrompt'),
-                userPrompt: resolvedUserPrompt || t('chatConfig.retrievedAndQuestion'),
-                maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
-                autoTagVisible: Boolean(autoTagVisibleFromRes),
-                reviewTagVisible: Boolean(reviewTagVisibleFromRes),
-            }));
+            applyKnowledgeConfigResponse(res, t, setFormData, setConfigMeta);
         });
     }, [scopeVersion, t]);
 
@@ -358,20 +416,43 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             return false;
         }
 
+        const parsedReviewTagSimilarityThreshold = (() => {
+            const raw = (formData.reviewTagSimilarityThreshold || "").trim();
+            if (!raw) return null;
+            const value = Number(raw);
+            if (!Number.isFinite(value) || value < 0 || value > 1) {
+                toast({
+                    variant: "error",
+                    description: t("build.reviewTagSimilarityThresholdInvalid", "相似度阈值必须为 0 到 1 之间的数字"),
+                });
+                return undefined;
+            }
+            return value;
+        })();
+        if (parsedReviewTagSimilarityThreshold === undefined) {
+            return false;
+        }
+
         const dataToSave = {
             system_prompt: finalSystemPrompt,
             user_prompt: finalUserPrompt,
             max_chunk_size: formData.maxChunkSize,
             auto_tag_visible: formData.autoTagVisible,
             review_tag_visible: formData.reviewTagVisible,
+            review_tag_similarity_threshold: parsedReviewTagSimilarityThreshold,
         };
 
         const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi(dataToSave));
         if (res) {
-            setConfigMeta({
-                inherited_from_root: false,
-                has_override: true,
-            });
+            const reloaded = await captureAndAlertRequestErrorHoc(getKnowledgeConfigApi());
+            if (reloaded) {
+                applyKnowledgeConfigResponse(reloaded, t, setFormData, setConfigMeta);
+            } else {
+                setConfigMeta({
+                    inherited_from_root: false,
+                    has_override: true,
+                });
+            }
             toast({
                 variant: 'success',
                 description: t('chatConfig.saveSuccess'),
@@ -388,6 +469,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         errors,
         setErrors,
         configMeta,
+        systemSimilarityThreshold,
         handleSave,
     };
 };

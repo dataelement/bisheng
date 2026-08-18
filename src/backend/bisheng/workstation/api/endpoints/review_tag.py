@@ -7,7 +7,11 @@ from bisheng.api.v1.schemas import (
 from bisheng.common.errcode.tag import ReviewTagParamIsEmptyError
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.workstation.api.dependencies import get_workstation_tags_service
-from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejectRequest
+from bisheng.workstation.domain.schemas.review_tags_schema import (
+    ApproveOrRejectRequest,
+    ReviewTagSimilarBatchCheckRequest,
+    ReviewTagSimilarCheckRequest,
+)
 from bisheng.workstation.domain.services.workstation_tags_service import WorkStationTagsService
 
 from ..dependencies import LoginUserDep
@@ -119,4 +123,42 @@ async def list_review_tags(
     login_user=LoginUserDep,
 ):
     result = await tags_service.list_review_tag_by_page(page, page_size, login_user.tenant_id, keyword)
+    return resp_200(result)
+
+
+@router.post("/review_similar_check", summary="Check similar tags in target library", response_model=UnifiedResponseModel)
+async def review_similar_check(
+    request: Request,
+    data: ReviewTagSimilarCheckRequest = Body(..., description="Similar tag check params"),
+    tags_service: WorkStationTagsService = Depends(get_workstation_tags_service),
+    login_user=LoginUserDep,
+):
+    if not data or not data.tag_name or not data.tag_library_id:
+        raise ReviewTagParamIsEmptyError.http_exception()
+    result = await tags_service.check_review_tag_similar_in_library(
+        tag_name=data.tag_name,
+        tag_library_id=int(data.tag_library_id),
+        tenant_id=login_user.tenant_id,
+    )
+    return resp_200(result)
+
+
+@router.post(
+    "/review_similar_check_batch",
+    summary="Batch check similar tags in target library",
+    response_model=UnifiedResponseModel,
+)
+async def review_similar_check_batch(
+    request: Request,
+    data: ReviewTagSimilarBatchCheckRequest = Body(..., description="Batch similar tag check params"),
+    tags_service: WorkStationTagsService = Depends(get_workstation_tags_service),
+    login_user=LoginUserDep,
+):
+    if not data or not data.tag_names or not data.tag_library_id:
+        raise ReviewTagParamIsEmptyError.http_exception()
+    result = await tags_service.check_review_tag_similar_in_library_batch(
+        tag_names=data.tag_names,
+        tag_library_id=int(data.tag_library_id),
+        tenant_id=login_user.tenant_id,
+    )
     return resp_200(result)

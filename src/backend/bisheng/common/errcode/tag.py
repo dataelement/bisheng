@@ -74,3 +74,10 @@ class ReviewTagSpaceOutOfScopeError(BaseErrorCode):
 
     Code: int = 10713
     Msg: str = "Review tag is outside managed review scope"
+
+
+class ReviewTagSimilarAckRequiredError(BaseErrorCode):
+    """Approve blocked because similar tags exist and ack_similar was not sent."""
+
+    Code: int = 10714
+    Msg: str = "Similar tags exist in the target library; confirmation is required"

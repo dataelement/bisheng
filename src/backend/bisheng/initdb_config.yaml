@@ -28,6 +28,8 @@ knowledges: # 知识库相关配置
     simhash_similarity_threshold: 0.85
     enable_tfidf_refine: true
     tfidf_similarity_threshold: 0.3
+  tag_library:
+    review_tag_similarity_threshold: 0.85
   pdf_artifact:
     enabled: true
     queue_name: "knowledge_pdf_celery"
