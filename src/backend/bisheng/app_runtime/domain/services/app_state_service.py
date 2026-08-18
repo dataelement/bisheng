@@ -291,12 +291,11 @@ class AppStateService:
             raise AppStateConflictError(msg="应用状态已变化, 请刷新后重试", app_id=app_id, action=audit_action.value)
 
         await _mark_version_online(app_id, version.id)
-        # Now that it is live, make it usable by everyone in the tenant — this is
-        # what "应用广场:所有人都可以访问" means. Best-effort (see the helper): a
-        # failure here leaves the app owner-only, not offline.
-        from bisheng.app_runtime.domain.services.f048_app_permission import enable_tenant_use
-
-        await enable_tenant_use(app_id)
+        # Going online does NOT grant anyone else access: an app stays owner-only
+        # until its owner or an admin authorizes subjects through the platform's
+        # permission-management UI (the F048 授权 dialog). Auto-opening every
+        # published app to the whole tenant was a shortcut that bypassed that
+        # explicit authorization step, so it was removed on purpose.
         await cls._set_instance_phase(
             app_id,
             str(deployed.get("phase") or PHASE_RUNNING),
