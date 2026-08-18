@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>从本地到毕昇 · 托管应用部署</title>
+<style>
+  :root{
+    --paper:#EEF2F7;
+    --paper-2:#E4EAF2;
+    --ink:#0B1B2B;
+    --ink-2:#334357;
+    --slate:#64748B;
+    --line:#2B57E6;         /* route line / brand */
+    --line-soft:#DBE3F5;
+    --amber:#E4922B;        /* arrival / live */
+    --amber-soft:#FBEBD3;
+    --hair:#CBD6E2;
+    --term:#0E1B2E;         /* terminal panel */
+    --term-ink:#CBE0FF;
+    --term-dim:#5E7CA8;
+    --term-green:#5FD08B;
+    --ok:#1E9E63;
+    --danger:#D8543B;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    --cjk: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:
+      radial-gradient(120% 90% at 100% -10%, rgba(43,87,230,.06), transparent 60%),
+      var(--paper);
+    color:var(--ink);
+    font-family:var(--cjk);
+    font-size:16px;
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+    letter-spacing:.01em;
+  }
+  a{color:inherit}
+  ::selection{background:rgba(43,87,230,.18)}
+
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+
+  /* ---------- top ticket bar ---------- */
+  .topbar{border-bottom:1px solid var(--hair)}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:56px;gap:16px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em}
+  .brand .dot{width:11px;height:11px;border-radius:3px;background:var(--line);box-shadow:0 0 0 4px rgba(43,87,230,.14)}
+  .topmeta{font-family:var(--mono);font-size:12px;color:var(--slate);letter-spacing:.04em}
+
+  /* ---------- hero ---------- */
+  .hero{padding:64px 0 28px}
+  .eyebrow{
+    font-family:var(--mono);font-size:12.5px;letter-spacing:.28em;text-transform:uppercase;
+    color:var(--line);font-weight:600;margin:0 0 18px
+  }
+  h1{
+    font-size:clamp(34px,6.2vw,60px);
+    line-height:1.06;
+    letter-spacing:-.01em;
+    font-weight:800;
+    margin:0 0 20px;
+    max-width:15ch;
+  }
+  h1 .u{
+    background:linear-gradient(180deg,transparent 62%, var(--amber-soft) 62%);
+    padding:0 .06em;
+  }
+  .lede{font-size:clamp(16px,2.2vw,19px);color:var(--ink-2);max-width:46ch;margin:0}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+  .chip{
+    font-family:var(--mono);font-size:12.5px;color:var(--ink-2);
+    background:#fff;border:1px solid var(--hair);border-radius:999px;padding:6px 13px;
+    display:inline-flex;align-items:center;gap:7px
+  }
+  .chip b{color:var(--line);font-weight:600}
+
+  /* ---------- route strip (signature) ---------- */
+  .routewrap{margin:40px 0 8px;overflow-x:auto;scrollbar-width:none}
+  .routewrap::-webkit-scrollbar{display:none}
+  .route{min-width:640px}
+  .route .lbls{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;color:var(--slate);margin-bottom:8px}
+  .route .lbls .a{color:var(--ink);font-weight:600}
+  .route .lbls .b{color:var(--amber);font-weight:600}
+  .route svg{display:block;width:100%;height:44px}
+  .stations{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--slate);margin-top:6px;letter-spacing:.02em}
+  .stations span{width:16.6%;text-align:center}
+
+  /* ---------- prep ---------- */
+  section{padding:14px 0}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--slate);margin:44px 0 14px;font-weight:600}
+  .prep{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .prepcard{background:#fff;border:1px solid var(--hair);border-radius:14px;padding:18px}
+  .prepcard .n{font-family:var(--mono);font-size:12px;color:var(--line);font-weight:600}
+  .prepcard h4{margin:8px 0 6px;font-size:16px}
+  .prepcard p{margin:0;font-size:13.5px;color:var(--slate);line-height:1.6}
+
+  /* ---------- steps / stations ---------- */
+  .steps{position:relative;margin:16px 0 0;padding-left:60px}
+  .steps:before{
+    content:"";position:absolute;left:19px;top:14px;bottom:60px;width:3px;
+    background:linear-gradient(180deg,var(--line),var(--line) 82%, var(--amber));border-radius:2px
+  }
+  .step{position:relative;padding:0 0 44px}
+  .step .node{
+    position:absolute;left:-60px;top:-2px;width:40px;height:40px;border-radius:50%;
+    background:#fff;border:3px solid var(--line);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-weight:700;font-size:15px;color:var(--line);
+    box-shadow:0 3px 0 rgba(43,87,230,.12)
+  }
+  .step.arrive .node{border-color:var(--amber);color:var(--amber);box-shadow:0 3px 0 rgba(228,146,43,.18)}
+  .step h3{margin:2px 0 4px;font-size:clamp(20px,3vw,24px);letter-spacing:-.01em}
+  .step .say{margin:0 0 14px;color:var(--ink-2);max-width:56ch}
+  .step .say b{color:var(--ink);font-weight:600}
+
+  /* code / terminal */
+  .code{
+    background:var(--term);border-radius:12px;overflow:hidden;border:1px solid #16283f;
+    box-shadow:0 14px 30px -18px rgba(11,27,43,.5)
+  }
+  .code .bar{display:flex;align-items:center;gap:7px;padding:10px 14px;border-bottom:1px solid #17293f}
+  .code .bar i{width:10px;height:10px;border-radius:50%;background:#25374f;display:inline-block}
+  .code .bar .name{margin-left:8px;font-family:var(--mono);font-size:12px;color:var(--term-dim);letter-spacing:.03em}
+  .code .bar .copy{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--term-dim);
+    background:transparent;border:1px solid #223650;border-radius:6px;padding:3px 9px;cursor:pointer;transition:.15s}
+  .code .bar .copy:hover{color:var(--term-ink);border-color:#2f4a6e}
+  .code pre{margin:0;padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--term-ink);tab-size:2}
+  .code pre::-webkit-scrollbar{height:8px}
+  .code pre::-webkit-scrollbar-thumb{background:#243b57;border-radius:8px}
+  .tok-c{color:var(--term-dim)}       /* comment */
+  .tok-p{color:var(--term-green)}     /* prompt $ */
+  .tok-k{color:#7FB0FF}               /* keyword */
+  .tok-s{color:#E4B67A}               /* string */
+  .tok-f{color:#9FE8C0}               /* flag / value */
+
+  /* tip */
+  .tip{
+    display:flex;gap:12px;margin-top:14px;background:#fff;border:1px solid var(--hair);
+    border-left:3px solid var(--amber);border-radius:10px;padding:13px 15px
+  }
+  .tip .t{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--amber);font-weight:700;text-transform:uppercase;padding-top:2px;white-space:nowrap}
+  .tip p{margin:0;font-size:14px;color:var(--ink-2);line-height:1.6}
+  .tip b{color:var(--ink)}
+
+  /* manifest / boarding pass stub */
+  .stub{background:#fff;border:1px solid var(--hair);border-radius:14px;overflow:hidden;margin-top:14px}
+  .stub .head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(90deg,rgba(43,87,230,.06),transparent)}
+  .stub .head .l{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--line);font-weight:600}
+  .stub .head .stamp{font-family:var(--mono);font-size:11px;color:var(--amber);border:1.5px solid var(--amber);border-radius:6px;padding:2px 8px;transform:rotate(-3deg);letter-spacing:.1em;font-weight:700}
+  .stub .rows{padding:6px 18px 16px}
+  .stub .r{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px dashed var(--line-soft);font-family:var(--mono);font-size:13px}
+  .stub .r:last-child{border-bottom:0}
+  .stub .r .k{color:var(--slate)}
+  .stub .r .v{color:var(--ink);font-weight:600;text-align:right}
+
+  /* ---------- pitfalls ---------- */
+  .pit{background:var(--ink);color:#E6ECF4;border-radius:20px;padding:36px clamp(20px,4vw,44px);margin:34px 0}
+  .pit h2{margin:0 0 6px;font-size:clamp(22px,3.4vw,28px);letter-spacing:-.01em;color:#fff}
+  .pit .sub{margin:0 0 24px;color:#93A4BC;font-size:14.5px}
+  .pit ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:2px 30px}
+  .pit li{padding:14px 0;border-top:1px solid #1c2c40;display:flex;gap:12px;align-items:flex-start}
+  .pit li .x{color:var(--danger);font-family:var(--mono);font-weight:700;flex:none;font-size:15px;line-height:1.5}
+  .pit li div{font-size:14px;line-height:1.6;color:#C4D0E0}
+  .pit li b{color:#fff;font-weight:600}
+  .pit li .m{font-family:var(--mono);color:var(--term-green);font-size:13px}
+
+  /* ---------- outro ---------- */
+  .outro{text-align:center;padding:56px 0 20px}
+  .outro .big{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-.01em;margin:0 0 10px}
+  .outro p{color:var(--ink-2);margin:0 auto 26px;max-width:44ch}
+  .cta{display:inline-flex;align-items:center;gap:10px;background:var(--line);color:#fff;text-decoration:none;
+    font-weight:600;padding:13px 22px;border-radius:12px;transition:.18s;box-shadow:0 10px 22px -12px rgba(43,87,230,.7)}
+  .cta:hover{transform:translateY(-2px)}
+  .foot{border-top:1px solid var(--hair);margin-top:40px}
+  .foot .wrap{display:flex;flex-wrap:wrap;gap:10px 20px;justify-content:space-between;padding:22px 24px;font-size:12.5px;color:var(--slate);font-family:var(--mono)}
+
+  a.link{color:var(--line);text-decoration:none;border-bottom:1px solid var(--line-soft);font-weight:600}
+  a.link:hover{border-bottom-color:var(--line)}
+
+  :focus-visible{outline:3px solid rgba(43,87,230,.5);outline-offset:3px;border-radius:6px}
+
+  /* traveling dot */
+  @keyframes travel{to{offset-distance:100%}}
+  #pod{offset-path:path("M2 22 H638");animation:travel 3.4s cubic-bezier(.65,0,.35,1) infinite}
+
+  @media (max-width:720px){
+    .prep{grid-template-columns:1fr}
+    .pit ul{grid-template-columns:1fr}
+    .steps{padding-left:48px}
+    .step .node{left:-48px;width:34px;height:34px;font-size:13px}
+    .steps:before{left:16px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #pod{animation:none;offset-distance:50%}
+    .cta:hover{transform:none}
+  }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="wrap">
+      <div class="brand"><span class="dot"></span>毕昇 · 应用工场</div>
+      <div class="topmeta">HOSTED APP / 上手手册 v1</div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="wrap">
+      <p class="eyebrow">托管应用 · 从本地到平台</p>
+      <h1>把你电脑上的<br><span class="u">小应用</span>,搬进毕昇</h1>
+      <p class="lede">不用改造成工作流,也不用学新框架。写好一个能跑起来的小程序,顺着下面这条线走 7 步,全公司就能在应用广场里点开用它。</p>
+
+      <div class="chips">
+        <span class="chip"><b>≈10</b> 分钟</span>
+        <span class="chip">只需<b>一点</b>代码基础</span>
+        <span class="chip">任意语言 · 示例用 <b>Python</b></span>
+      </div>
+
+      <div class="routewrap" aria-hidden="true">
+        <div class="route">
+          <div class="lbls"><span class="a">◐ 你的电脑</span><span class="b">应用广场 ●</span></div>
+          <svg viewBox="0 0 640 44" preserveAspectRatio="none">
+            <line x1="2" y1="22" x2="638" y2="22" stroke="var(--line-soft)" stroke-width="3"/>
+            <line x1="2" y1="22" x2="638" y2="22" stroke="var(--line)" stroke-width="3" stroke-dasharray="4 8" stroke-linecap="round"/>
+            <g>
+              <circle cx="2" cy="22" r="6" fill="var(--line)"/>
+              <circle cx="129" cy="22" r="4.5" fill="#fff" stroke="var(--line)" stroke-width="2.5"/>
+              <circle cx="256" cy="22" r="4.5" fill="#fff" stroke="var(--line)" stroke-width="2.5"/>
+              <circle cx="383" cy="22" r="4.5" fill="#fff" stroke="var(--line)" stroke-width="2.5"/>
+              <circle cx="510" cy="22" r="4.5" fill="#fff" stroke="var(--line)" stroke-width="2.5"/>
+              <circle cx="638" cy="22" r="7" fill="var(--amber)"/>
+            </g>
+            <circle id="pod" r="5.5" fill="var(--ink)" stroke="#fff" stroke-width="2"/>
+          </svg>
+          <div class="stations">
+            <span>写代码</span><span>打包</span><span>构建</span><span>审批</span><span>上线</span><span>授权</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="wrap">
+      <p class="kicker">出发前 · 备三样东西</p>
+      <div class="prep">
+        <div class="prepcard">
+          <div class="n">01</div>
+          <h4>一点代码基础</h4>
+          <p>会写一个能监听端口、返回一个网页的小程序就够了。用什么语言都行。</p>
+        </div>
+        <div class="prepcard">
+          <div class="n">02</div>
+          <h4>bisheng 命令行</h4>
+          <p>开发者 CLI,负责打包上传和部署。装好后运行 <span style="font-family:var(--mono);color:var(--line)">bisheng&nbsp;--help</span> 能看到 login / deploy。</p>
+        </div>
+        <div class="prepcard">
+          <div class="n">03</div>
+          <h4>一把服务账号密钥</h4>
+          <p>在平台「开放 API · 服务账号」里生成一把 <span style="font-family:var(--mono)">bs-sak-…</span>,它决定应用归谁名下。</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap">
+      <p class="kicker">这条线 · 7 站到达</p>
+      <div class="steps">
+
+        <!-- 1 -->
+        <div class="step">
+          <div class="node">1</div>
+          <h3>登录平台</h3>
+          <p class="say">把密钥喂给 CLI,它会在你本机记住凭据,后面就不用再输了。</p>
+          <div class="code">
+            <div class="bar"><i></i><i></i><i></i><span class="name">终端</span><button class="copy" data-copy>复制</button></div>
+<pre><span class="tok-p">$</span> cat deploy.key | bisheng login http://你的毕昇地址 <span class="tok-f">--api-key-stdin</span>
+<span class="tok-c"># ✓ 资源归属人: 张三   租户: 1   凭据已写入 ~/.bisheng</span></pre>
+          </div>
+        </div>
+
+        <!-- 2 -->
+        <div class="step">
+          <div class="node">2</div>
+          <h3>写一个能跑的小应用</h3>
+          <p class="say">这就是你要部署的东西——一个自己在电脑上能跑起来的小程序。下面用 Python 标准库写一个只返回一句话的网页。记住<b>三条铁律</b>,否则上了平台会起不来。</p>
+          <div class="code">
+            <div class="bar"><i></i><i></i><i></i><span class="name">main.py</span><button class="copy" data-copy>复制</button></div>
+<pre><span class="tok-k">import</span> os
+<span class="tok-k">from</span> http.server <span class="tok-k">import</span> BaseHTTPRequestHandler, ThreadingHTTPServer
+
+<span class="tok-c"># 铁律①:监听平台注入的 PORT 环境变量,别写死端口</span>
+PORT = <span class="tok-k">int</span>(os.environ.get(<span class="tok-s">"PORT"</span>) <span class="tok-k">or</span> <span class="tok-s">8080</span>)
+
+<span class="tok-k">class</span> App(BaseHTTPRequestHandler):
+    <span class="tok-k">def</span> do_GET(self):
+        self.send_response(<span class="tok-s">200</span>)
+        self.send_header(<span class="tok-s">"Content-Type"</span>, <span class="tok-s">"text/html; charset=utf-8"</span>)
+        self.end_headers()
+        self.wfile.write(<span class="tok-s">"&lt;h1&gt;你好,毕昇 👋&lt;/h1&gt;"</span>.encode())
+
+<span class="tok-c"># 铁律②:绑 0.0.0.0,不是 127.0.0.1</span>
+ThreadingHTTPServer((<span class="tok-s">"0.0.0.0"</span>, PORT), App).serve_forever()</pre>
+          </div>
+          <div class="tip"><span class="t">铁律③</span><p>容器里<b>根目录是只读的</b>,程序要写文件(数据库、缓存)只能写进 <b>/data</b> 目录,那里才可写。</p></div>
+        </div>
+
+        <!-- 3 -->
+        <div class="step">
+          <div class="node">3</div>
+          <h3>写一张应用清单</h3>
+          <p class="say">清单告诉平台:这个应用叫什么、用什么运行环境、监听哪个端口。它是 CLI 唯一读的配置文件,写错的字段会当场报错,不会静默忽略。</p>
+          <div class="stub">
+            <div class="head"><span class="l">bisheng-app.yaml · 应用清单</span><span class="stamp">MANIFEST</span></div>
+            <div class="rows">
+              <div class="r"><span class="k">name</span><span class="v">我的第一个应用</span></div>
+              <div class="r"><span class="k">slug</span><span class="v">my-first-app · 全局唯一</span></div>
+              <div class="r"><span class="k">runtime</span><span class="v">python3.11</span></div>
+              <div class="r"><span class="k">port</span><span class="v">8080</span></div>
+              <div class="r"><span class="k">requirements.txt</span><span class="v">可留空 · 纯标准库不用装依赖</span></div>
+            </div>
+          </div>
+          <div class="tip"><span class="t">省心</span><p>只用标准库时,<b>依赖留空</b>最稳——构建不需要联网拉包,在内网 / 信创环境不会卡在「装不上包」。</p></div>
+        </div>
+
+        <!-- 4 -->
+        <div class="step">
+          <div class="node">4</div>
+          <h3>一键部署</h3>
+          <p class="say">在应用目录里跑一条命令。CLI 会自动帮你打包 → 上传 → 构建镜像 → 启动探活,最后生成一张<b>发布审批单</b>。你不用管中间那些活儿。</p>
+          <div class="code">
+            <div class="bar"><i></i><i></i><i></i><span class="name">终端</span><button class="copy" data-copy>复制</button></div>
+<pre><span class="tok-p">$</span> bisheng deploy <span class="tok-f">--yes</span>
+<span class="tok-c">  打包条目 3 个 → 上传 100% → 依赖构建 → 启动探活</span>
+<span class="tok-c">  ✓ 平台已接收   审批单已生成:等待管理员通过</span></pre>
+          </div>
+        </div>
+
+        <!-- 5 -->
+        <div class="step">
+          <div class="node">5</div>
+          <h3>等审批通过</h3>
+          <p class="say">发布要过一道审批。管理员在 <b>客户端头像菜单 → 审批中心 → 待我审批</b> 里点「通过」,你的应用就会自动上线:容器拉起、健康检查变绿。</p>
+          <div class="tip"><span class="t">状态</span><p>审批通过后不用你再操作;想看进度,回「构建 → 应用」,卡片上会显示<b>「已上线」</b>。</p></div>
+        </div>
+
+        <!-- 6 -->
+        <div class="step">
+          <div class="node">6</div>
+          <h3>授权给大家</h3>
+          <p class="say"><b>上线 ≠ 公开。</b>刚上线时只有你自己能进。到「构建 → 应用」找到它,点卡片上的齿轮 → <b>管理权限</b> → 添加权限,把「查看者」授权给需要的人:选<b>部门 / 用户组</b>,想全员就勾顶层部门 +「包含子部门」。</p>
+          <div class="tip"><span class="t">别走捷径</span><p>授权就在这个界面点几下完成,一步到位——不用找后台、也不用改配置。</p></div>
+        </div>
+
+        <!-- 7 -->
+        <div class="step arrive">
+          <div class="node">7</div>
+          <h3>抵达 · 大家用起来</h3>
+          <p class="say">被授权的人打开<b>应用中心</b>,就能在「探索更多应用」里看到你的应用,点<b>「进入应用」</b>在新标签打开。用过一次,它还会自动出现在每个人的「最近使用」里。</p>
+          <div class="stub">
+            <div class="head"><span class="l">你的应用 · 应用广场</span><span class="stamp">LIVE</span></div>
+            <div class="rows">
+              <div class="r"><span class="k">入口</span><span class="v">应用中心 → 进入应用</span></div>
+              <div class="r"><span class="k">谁能看到</span><span class="v">你授权过的部门 / 用户组</span></div>
+              <div class="r"><span class="k">下次更新</span><span class="v">改代码 → bisheng deploy 再发一版</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="wrap">
+      <div class="pit">
+        <h2>六个最常见的翻车点</h2>
+        <p class="sub">本地跑得好好的,上了平台却起不来?八成是踩了下面某一条。</p>
+        <ul>
+          <li><span class="x">✕</span><div>绑了 <span class="m">127.0.0.1</span> → 容器里探针连不上,一直卡在「启动中」。<b>永远绑 0.0.0.0。</b></div></li>
+          <li><span class="x">✕</span><div>端口写死 → 平台按清单注入 <span class="m">PORT</span> 环境变量,<b>读它,别写死。</b></div></li>
+          <li><span class="x">✕</span><div>往当前目录写文件报只读 → 根目录只读,<b>只能写 /data。</b></div></li>
+          <li><span class="x">✕</span><div>页面外链 / 表单少了前缀 → 应用挂在 <span class="m">/apps/{slug}</span> 下,外链要带 <span class="m">BISHENG_APP_BASE_PATH</span>。</div></li>
+          <li><span class="x">✕</span><div>构建卡在装依赖 → 能用标准库<b>就别加依赖</b>;真要装,确认构建环境能联网。</div></li>
+          <li><span class="x">✕</span><div>别人访问不了 → 上线不等于公开,<b>记得回第 6 步授权。</b></div></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="outro wrap">
+      <p class="big">就这么多。你已经会部署了。</p>
+      <p>从本地一个小脚本,到全公司都能点开用的应用——中间的打包、构建、上线,平台都替你扛了。你只管写你的应用。</p>
+      <a class="cta" href="#top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ 回到起点,开始第 1 站</a>
+    </section>
+  </main>
+
+  <div class="foot">
+    <div class="wrap">
+      <span>毕昇 · 应用工场 · 托管应用上手手册</span>
+      <span>写代码 → 打包 → 构建 → 审批 → 上线 → 授权 → 广场</span>
+    </div>
+  </div>
+
+<script>
+  // copy-to-clipboard for terminal blocks
+  document.querySelectorAll('[data-copy]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var pre = btn.closest('.code').querySelector('pre');
+      var text = pre.innerText.replace(/^\s*\$\s?/gm,'').replace(/^\s*#.*$/gm,'').trim();
+      navigator.clipboard && navigator.clipboard.writeText(text).then(function(){
+        var old = btn.textContent; btn.textContent = '已复制 ✓';
+        setTimeout(function(){ btn.textContent = old; }, 1400);
+      });
+    });
+  });
+</script>
+</body>
+</html>

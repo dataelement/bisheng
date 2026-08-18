@@ -73,6 +73,26 @@ export default function AppTempSheet({ children, onCustomCreate, onSelect }) {
                             <span>{t('assistant')}</span>
                         </div>
                     </div>
+                    {/* Hosted app: not a template category — a shortcut to the
+                        "write your own code and deploy it" tutorial. Opens in a new
+                        tab so the drawer / builder stays put. */}
+                    <div className="mt-4 pt-4 border-t border-border w-[210px]">
+                        <div
+                            className="group flex flex-col gap-1.5 px-4 py-3 rounded-lg cursor-pointer border border-dashed border-border transition-all hover:border-primary/60 hover:bg-primary/5"
+                            onClick={() => window.open('/tutorial/hosted-app.html', '_blank', 'noopener')}
+                        >
+                            <div className="flex items-center gap-2 text-sm font-medium">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary shrink-0">
+                                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                                    <polyline points="8 9 11 12 8 15" />
+                                    <line x1="14" y1="15" x2="16" y2="15" />
+                                </svg>
+                                <span>{t('hostedApp')}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground leading-snug">{t('hostedAppDesc')}</span>
+                            <span className="text-xs font-medium text-primary group-hover:underline">{t('viewTutorial')} →</span>
+                        </div>
+                    </div>
                 </div>
                 <div className="flex-1 min-w-[696px] bg-[#fff] dark:bg-[#030712] p-5 pt-12 h-full flex flex-wrap gap-1.5 overflow-y-auto scrollbar-hide content-start">
                     <CardComponent
