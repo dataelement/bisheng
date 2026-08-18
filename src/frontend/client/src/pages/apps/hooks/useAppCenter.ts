@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import { NotificationSeverity } from '~/common';
 import type { AppItem } from '~/@types/app';
-import { getFrequently, pinAppApi } from '~/api/apps';
+import { getFrequently, pinAppApi, recordUsedAppApi } from '~/api/apps';
 import { useToastContext } from '~/Providers';
 import { getAppShareUrl } from '~/pages/apps/appUtils';
 import {
@@ -61,6 +61,19 @@ export function useAppCenter() {
   /** Navigate into an app — always create a new conversation */
   const continueChat = useCallback(
     (app: AppItem) => {
+      // Hosted applications (flow_type 35) are web surfaces, not conversations.
+      // From the "recently used" list they must re-enter `/apps/{slug}` (served
+      // outside this SPA), not the chat route they have none of — and re-record
+      // the open so they stay near the top. Navigate on settle so a slow / failed
+      // record never blocks entry.
+      if (app.flow_type === 35 && app.slug) {
+        recordUsedAppApi(String(app.id))
+          .catch(() => {})
+          .finally(() => {
+            window.location.assign(`/apps/${app.slug}`);
+          });
+        return;
+      }
       const chatId = generateUUID(32);
       const returnTo = normalizeAppChatReturn(location.pathname) ?? '/apps';
       writeAppChatOrigin(chatId, 'center');

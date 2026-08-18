@@ -3,7 +3,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useToastContext } from "~/Providers"
-import { getChatOnlineApi, getUncategorized } from "~/api/apps"
+import { getChatOnlineApi, getUncategorized, recordUsedAppApi } from "~/api/apps"
 import { NotificationSeverity } from "~/common"
 import { Button } from "~/components/ui/Button"
 import { EmptyStateIllustration } from "~/components/illustrations"
@@ -146,7 +146,14 @@ export default function ExplorePlaza() {
             // The origin keys below are not written either — they exist so the
             // conversation page can find its way back, and this navigation does
             // not come back.
-            window.location.assign(`/apps/${agent.slug}`);
+            // Record the open so this app lands in "recently used" (hosted apps
+            // have no MessageSession to infer usage from), then leave. Navigate on
+            // settle so a slow / failed record never blocks entry.
+            recordUsedAppApi(String(flowId))
+                .catch(() => {})
+                .finally(() => {
+                    window.location.assign(`/apps/${agent.slug}`);
+                });
             return;
         }
         try {

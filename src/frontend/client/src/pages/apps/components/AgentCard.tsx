@@ -36,6 +36,11 @@ export function AgentCard({
   const shouldUseHoverActionsInMobileCard = isMobileCard && canHover;
   // Only render pin affordances when a toggle handler is supplied.
   const showPin = typeof onTogglePin === 'function';
+  // Hosted applications (flow_type 35) are not conversational — they open a web
+  // surface at `/apps/{slug}`. Their primary action says "enter app", not "start chat".
+  const HOSTED_APP_FLOW_TYPE = 35;
+  const primaryActionLabel =
+    agent.flow_type === HOSTED_APP_FLOW_TYPE ? localize('com_app_enter_app') : localize('com_app_start_chat');
 
   // Desktop card actions — rendered once, reused for the hover overlay and the
   // no-hover inline fallback.
@@ -60,7 +65,7 @@ export function AgentCard({
         }}
         className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-md px-2 py-0 text-[14px] font-normal"
       >
-        {localize('com_app_start_chat')}
+        {primaryActionLabel}
       </Button>
     </>
   );
@@ -227,7 +232,7 @@ export function AgentCard({
                 : "opacity-100 pointer-events-auto",
             )}
           >
-            {localize('com_app_start_chat')}
+            {primaryActionLabel}
           </Button>
         </div>
       ) : (

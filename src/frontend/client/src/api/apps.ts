@@ -400,6 +400,11 @@ export async function unpinUsedAppApi(flowId: string) {
         data: { flow_id: flowId }
     });
 }
+
+/** Record that the user opened a hosted app so it lands in the recently-used list */
+export async function recordUsedAppApi(flowId: string) {
+    return await request.post('/api/v1/workstation/app/used/record', { flow_id: flowId });
+}
 export async function getUncategorized(page: number = 1, pageSize: number = 8, keyword?: string) {
     return await request.get('/api/v1/workstation/app/uncategorized', {
         params: {

@@ -55,6 +55,7 @@
   "com_app_share_link_copied": "应用链接已复制到剪贴板",
   "com_app_share_link_copy_failed": "复制应用链接失败",
   "com_app_start_chat": "开始对话",
+  "com_app_enter_app": "进入应用",
   "com_app_chat_sidebar_title": "应用对话",
   "com_app_chat_empty_line1": "还没有任何历史对话，",
   "com_app_chat_empty_cta": "开始一个新的对话吧",
