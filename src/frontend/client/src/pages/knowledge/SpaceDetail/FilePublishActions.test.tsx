@@ -19,6 +19,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.tag": "标签",
             "com_knowledge.file_encoding": "文件编码",
             "com_knowledge.update_time": "更新时间",
+            "com_knowledge.original_uploader": "原始上传人",
             "com_knowledge.status": "状态",
             "com_knowledge.success": "成功",
             "com_knowledge.parsing_status": "解析中",
@@ -133,6 +134,7 @@ const baseFile: KnowledgeFile = {
     fileEncoding: "",
     spaceId: "space-1",
     user_name: "张三",
+    originalUploaderName: "原始张三",
     updater_name: "李四",
 } as any;
 
@@ -198,6 +200,7 @@ describe("普通知识空间文件发布入口", () => {
             id: "file-2",
             name: "更新人兜底.pdf",
             user_name: "王五",
+            originalUploaderName: undefined,
             updater_name: undefined,
         } as KnowledgeFile;
 
@@ -224,6 +227,7 @@ describe("普通知识空间文件发布入口", () => {
         );
 
         expect(screen.getByText("上传人")).toBeInTheDocument();
+        expect(screen.getByText("原始上传人")).toBeInTheDocument();
         expect(screen.getByText("更新人")).toBeInTheDocument();
 
         const folderRow = screen.getByText("制度文件夹").closest("tr")!;
@@ -232,10 +236,11 @@ describe("普通知识空间文件发布入口", () => {
 
         const fileRow = screen.getByText(baseFile.name).closest("tr")!;
         expect(within(fileRow).getByText("张三")).toBeInTheDocument();
+        expect(within(fileRow).getByText("原始张三")).toBeInTheDocument();
         expect(within(fileRow).getByText("李四")).toBeInTheDocument();
 
         const fallbackRow = screen.getByText("更新人兜底.pdf").closest("tr")!;
-        expect(within(fallbackRow).getAllByText("王五")).toHaveLength(2);
+        expect(within(fallbackRow).getAllByText("王五")).toHaveLength(3);
     });
 
     test("卡片更多菜单展示发布并触发发布回调", () => {

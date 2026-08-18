@@ -212,6 +212,29 @@ async def test_distribution_origin_names_are_loaded_in_batches():
 
 
 @pytest.mark.asyncio
+async def test_normal_file_original_uploader_name_is_loaded():
+    svc = _make_svc()
+    normal_file = _make_file(9002)
+    normal_file.entry_type = None
+    normal_file.original_uploader_id = 42
+    normal_file.user_id = 7
+    normal_file.user_name = "token-user"
+    svc._entry_permission_ids_by_file = {9002: {"view_file"}}
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service.UserDao.aget_user_by_ids",
+        new_callable=AsyncMock,
+        return_value=[SimpleNamespace(user_id=42, user_name="原始上传人")],
+    ) as load_users:
+        result = await svc._load_document_distribution_info([normal_file])
+
+    assert result[9002]["original_uploader_id"] == 42
+    assert result[9002]["original_uploader_name"] == "原始上传人"
+    assert "original_knowledge_id" not in result[9002]
+    load_users.assert_awaited_once_with([42])
+
+
+@pytest.mark.asyncio
 async def test_share_entry_enrichment_keeps_target_folder_and_adds_direct_source_metadata():
     svc = _make_svc()
     logical = _make_file(9001)
