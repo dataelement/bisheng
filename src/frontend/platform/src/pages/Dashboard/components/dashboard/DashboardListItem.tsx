@@ -13,6 +13,7 @@ import { cn } from "@/utils"
 import { MoreHorizontal } from "lucide-react"
 import { useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useLazyDashboardPermission } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 
 
@@ -27,11 +28,6 @@ interface DashboardListItemProps {
     onDelete: (id: string) => void
     onPermission?: (dashboard: Dashboard) => void
     permissionBadge?: React.ReactNode
-    permissionActions: string[]
-    /** Resolved by the owner of the permission lookup, not re-derived here. */
-    visible?: boolean
-    /** Admins are waved through on identity, so they hold no grants to read. */
-    privileged?: boolean
 }
 
 export function DashboardListItem({
@@ -45,9 +41,6 @@ export function DashboardListItem({
     onDelete,
     onPermission,
     permissionBadge,
-    permissionActions,
-    visible = false,
-    privileged = false,
 }: DashboardListItemProps) {
     const { t } = useTranslation("dashboard")
 
@@ -56,6 +49,11 @@ export function DashboardListItem({
     const [title, setTitle] = useState('')
     const { toast } = useToast()
     const { appConfig } = useContext(locationContext)
+
+    // Visibility is decided by the server list; edit/delete/manage_permission
+    // are resolved lazily the moment the user reaches for them (menu open or a
+    // double-click rename), so the list never front-loads a request per row.
+    const { actions, privileged, ensureLoaded } = useLazyDashboardPermission(String(dashboard.id))
 
     useEffect(() => {
         setTitle(dashboard.title)
@@ -68,15 +66,15 @@ export function DashboardListItem({
         }
     }, [isEditing])
 
-    // The sidebar only renders items it already resolved as visible; "visible"
-    // is a relation in the permission model, never one of the returned actions.
-    const canView = privileged || visible
-    const canEdit = privileged || permissionActions.includes("edit")
-    const canDelete = privileged || permissionActions.includes("delete")
+    const canEdit = privileged || actions.includes("edit")
+    const canDelete = privileged || actions.includes("delete")
     const canManagePermission =
-        privileged || permissionActions.includes("manage_permission")
+        privileged || actions.includes("manage_permission")
 
     const handleDoubleClick = () => {
+        // Prefetch happened on hover; by the time a double-click lands the
+        // action list is usually ready. Trigger once more in case it was not.
+        ensureLoaded()
         if (canEdit) setIsEditing(true)
     }
 
@@ -113,8 +111,6 @@ export function DashboardListItem({
         }
     }
 
-    if (!canView) return null
-
     return (
         <div
             className={cn(
@@ -122,6 +118,7 @@ export function DashboardListItem({
                 selected ? "bg-[#002FFF]/10" : "hover:bg-[#f5f2f2f2]",
             )}
             onClick={onSelect}
+            onMouseEnter={ensureLoaded}
         >
             <div className="flex-1 min-w-0 mr-2">
                 {isEditing ? (
@@ -144,7 +141,7 @@ export function DashboardListItem({
             {permissionBadge}
             {dashboard.is_default && <Badge variant="outline" className="border border-primary rounded-sm py-0 px-1 text-primary scale-75">{t('default')}</Badge>}
 
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={(open) => { if (open) ensureLoaded() }}>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                     <Button
                         variant="ghost"

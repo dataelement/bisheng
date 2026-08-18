@@ -140,9 +140,14 @@ class DashboardService(BaseModel):
             keyword=keyword,
             dashboard_type=filter_types,
         )
+        # The list only decides visibility. Whether the user may edit/delete/
+        # manage a board is resolved lazily by the client (per-resource
+        # my-permissions) at the moment it reaches for those actions, so the
+        # list no longer pays to BatchCheck "edit" for every candidate — the
+        # cost drops from (candidates x 2) to (candidates x 1).
         action_map = await self._action_map(
             candidates,
-            ("visible", "edit"),
+            ("visible",),
         )
         res = [dashboard for dashboard in candidates if "visible" in action_map.get(str(dashboard.id), frozenset())]
         default_dashboard = await DashboardDao.get_default_dashboard(user_id=self.login_user.user_id)
@@ -151,10 +156,6 @@ class DashboardService(BaseModel):
             tmp = DashboardRead.model_validate(one)
             if default_dashboard and one.id == default_dashboard.dashboard_id:
                 tmp.is_default = True
-            tmp.write = "edit" in action_map.get(
-                str(one.id),
-                frozenset(),
-            )
             result.append(tmp)
         return result
 

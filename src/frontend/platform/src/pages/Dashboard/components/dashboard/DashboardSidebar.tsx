@@ -17,7 +17,7 @@ import type React from "react"
 import { useContext, useMemo, useState } from "react"
 import { useMutation, useQueryClient } from "react-query"
 import { useNavigate } from "react-router-dom"
-import { DashboardsQueryKey, useDashboardPermissions } from "../../hook"
+import { DashboardsQueryKey } from "../../hook"
 import { Dashboard } from "../../types/dataConfig"
 import { DashboardListItem } from "./DashboardListItem"
 import { useTranslation } from "react-i18next"
@@ -51,30 +51,17 @@ export function DashboardSidebar({
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
-    const dashboardIds = useMemo(
-        () => dashboards.map((dashboard) => String(dashboard.id)),
-        [dashboards],
-    )
-    const {
-        permissions: dashboardPermissions,
-        loading: permissionsLoading,
-        privileged,
-    } = useDashboardPermissions(dashboardIds)
-
     const canCreate = useMemo(() => {
         return user.web_menu?.includes('create_dashboard') || user.role === 'admin'
     }, [user])
 
+    // Visibility is already decided by the server list; the sidebar only narrows
+    // it by the search box. Per-row edit/delete/manage permissions are resolved
+    // lazily inside each item the moment the user reaches for them.
     const filteredDashboards = useMemo(() => {
-        const visibleDashboards = dashboards.filter(
-            (dashboard) =>
-                privileged ||
-                Object.hasOwn(dashboardPermissions, String(dashboard.id)),
-        )
-        if (!searchQuery.trim()) return visibleDashboards
-
-        return visibleDashboards.filter((dashboard) => dashboard.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    }, [dashboardPermissions, dashboards, privileged, searchQuery])
+        if (!searchQuery.trim()) return dashboards
+        return dashboards.filter((dashboard) => dashboard.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    }, [dashboards, searchQuery])
 
     const handleSearch = useMiniDebounce((e: React.ChangeEvent<HTMLInputElement>) => {
         setSearchQuery(e.target.value)
@@ -230,11 +217,7 @@ export function DashboardSidebar({
                     </div>
 
                     <div className="overflow-y-auto space-y-2 h-[calc(100vh-174px-var(--license-banner-h,0px))]">
-                        {permissionsLoading ? (
-                            <div className="py-8 text-center text-sm text-muted-foreground">
-                                {t("loading")}
-                            </div>
-                        ) : filteredDashboards.length === 0 ? (
+                        {filteredDashboards.length === 0 ? (
                             <div className="text-center text-muted-foreground text-sm py-8">
                                 {searchQuery ? t('noMatchingDashboards') : t('noDashboards')}
                             </div>
@@ -250,12 +233,7 @@ export function DashboardSidebar({
                                     onDefault={onDefault}
                                     onShare={onShare}
                                     onDelete={handleDelete}
-                                    permissionActions={dashboardPermissions[String(dashboard.id)] ?? []}
-                                    visible
-                                    privileged={privileged}
-                                    onPermission={privileged || dashboardPermissions[String(dashboard.id)]?.includes("manage_permission")
-                                        ? (d) => { setPermTarget({ id: String(d.id), name: d.title }); setPermDialogOpen(true); }
-                                        : undefined}
+                                    onPermission={(d) => { setPermTarget({ id: String(d.id), name: d.title }); setPermDialogOpen(true); }}
                                 />
                             ))
                         )}
