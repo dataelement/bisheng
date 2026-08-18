@@ -12,7 +12,7 @@ from bisheng.database.models.user_link import UserLinkDao
 from bisheng.permission.application.business_authorization import (
     check_business_action,
 )
-from bisheng.workstation.domain.services.constants import USED_APP_PIN_TYPE
+from bisheng.workstation.domain.services.constants import USED_APP_PIN_TYPE, USED_APP_RECENT_TYPE
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 from ..dependencies import LoginUserDep
@@ -111,20 +111,30 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     """
     flow_types = [FlowType.ASSISTANT.value, FlowType.WORKFLOW.value]
     used_apps = await MessageSessionDao.get_user_used_apps(user_id=login_user.user_id, flow_types=flow_types)
-    if not used_apps:
+    last_used_time_map = {app[0]: app[1] for app in used_apps}
+    # Hosted applications have no MessageSession (they are not conversational), so
+    # their "recently used" is recorded explicitly on entry via UserLink
+    # (USED_APP_RECENT_TYPE). Merge that history in so a hosted app the user has
+    # opened shows up here alongside chatted-with workflows / assistants.
+    recent_hosted_links = UserLinkDao.get_user_link(login_user.user_id, [USED_APP_RECENT_TYPE])
+    for link in recent_hosted_links:
+        last_used_time_map[link.type_detail] = link.update_time or link.create_time
+    if not last_used_time_map:
         return resp_200(data={"list": [], "total": 0})
 
-    flow_ids = [app[0] for app in used_apps]
-    last_used_time_map = {app[0]: app[1] for app in used_apps}
+    flow_ids = list(last_used_time_map.keys())
     pinned_links = UserLinkDao.get_user_link(login_user.user_id, [USED_APP_PIN_TYPE])
     pinned_flow_ids = {link.type_detail for link in pinned_links}
 
     apps, _ = await FlowDao.aget_all_apps(id_list=flow_ids, status=FlowStatus.ONLINE.value, page=0, limit=0)
+    # No type exclusion here: now that hosted-app usage is tracked, a hosted app is
+    # a legitimate "recently used" entry; the recorded candidate set above is what
+    # bounds the list. ``filter_apps_by_action`` still drops anything the user may
+    # no longer see (action="visible" routes flow_type=35 to the F048 app adapter).
     apps = await WorkFlowService.filter_apps_by_action(
         login_user,
         apps,
         "visible",
-        exclude_flow_types=CHAT_ENTRY_EXCLUDED_FLOW_TYPES,
     )
 
     def sort_key(app):
@@ -155,6 +165,30 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     await WorkFlowService.aenrich_apps_can_share(login_user, result)
 
     return resp_200(data={"list": result, "total": total})
+
+
+@router.post("/app/used/record")
+async def record_used_app(
+    login_user=LoginUserDep, data: UsedAppPin = Body(..., description="Hosted app the user just opened")
+):
+    """Record that the user opened a hosted application, for the "recently used" list.
+
+    Conversational apps (workflow / assistant) land in "recently used" through their
+    MessageSession; hosted applications have none, so the client posts the open here
+    when entering ``/apps/{slug}``. Idempotent per (user, app): the row's
+    ``update_time`` is bumped so the most recent open sorts first.
+
+    Authorization is delegated to ``check_business_action`` for resource_type
+    ``app``: a non-existent, cross-tenant, or not-permitted app is refused here
+    without leaking whether it exists (AC-29), so no separate existence check is
+    needed. Only hosted apps are addressed as ``app``; workflows/assistants would
+    resolve under their own types and are not the concern of this endpoint.
+    """
+    flow_id = data.flow_id
+    if not await check_business_action(login_user, resource_type="app", resource_id=flow_id, action="use"):
+        return UnAuthorizedError.return_resp()
+    UserLinkDao.touch_user_link(user_id=login_user.user_id, type=USED_APP_RECENT_TYPE, type_detail=flow_id)
+    return resp_200(message="Recorded")
 
 
 @router.post("/app/used/pin")
