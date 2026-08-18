@@ -32,10 +32,10 @@ def _all_option_strings(parser) -> set[str]:
     return strings
 
 
-def test_help_lists_exactly_login_deploy_logs() -> None:
+def test_help_lists_registered_commands() -> None:
     parser = build_parser()
     names = {name for name, _ in _subparser_actions(parser)}
-    assert names == {"login", "deploy", "logs"} == set(SUBCOMMANDS)
+    assert names == {"login", "deploy", "logs", "skills"} == set(SUBCOMMANDS)
 
 
 def test_help_footer_declares_deferred_commands() -> None:
@@ -48,7 +48,23 @@ def test_help_footer_declares_deferred_commands() -> None:
 
 def test_deferred_commands_are_not_registered() -> None:
     names = {name for name, _ in _subparser_actions(build_parser())}
-    assert "dev" not in names and "skills" not in names
+    # `skills` is now a real command (its `sync` verb shipped this round); only
+    # `dev` remains deferred, so nothing in DEFERRED_COMMANDS may be registered.
+    assert set(DEFERRED_COMMANDS).isdisjoint(names)
+    assert "dev" not in names
+
+
+def test_skills_sync_registered_and_parses() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["skills", "sync"])
+    assert args.command == "skills"
+    assert args.skills_command == "sync"
+    # A global flag after the two-token command must be accepted (mirror on the
+    # `sync` leaf), not "unrecognized arguments".
+    assert parser.parse_args(["skills", "sync", "--json"]).json_mode is True
+    # A bare `skills` leaves the verb unset for the handler to turn into a usage
+    # message rather than an argparse error.
+    assert parser.parse_args(["skills"]).skills_command is None
 
 
 def test_no_as_flag_anywhere() -> None:

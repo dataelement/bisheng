@@ -16,6 +16,8 @@ server or the design note — not this file.
 
 from __future__ import annotations
 
+import io
+import tarfile
 from collections.abc import Callable
 from typing import Any
 
@@ -78,6 +80,36 @@ def versions_ok(*, cli_version: str = "3.0.0", min_compatible: str = "3.0.0") ->
 def versions_404() -> httpx.Response:
     """The router was never registered — FastAPI's own 404, not an error code."""
     return httpx.Response(404, json={"detail": "Not Found"})
+
+
+DEFAULT_PACK = "deploy-hosting"
+
+
+def skills_path(pack: str = DEFAULT_PACK) -> str:
+    return f"/api/v1/dev-toolkit/skills/{pack}"
+
+
+def skill_pack(
+    files: dict[str, str] | None = None,
+    *,
+    pack: str = DEFAULT_PACK,
+    version: str = "3.0.0",
+) -> httpx.Response:
+    """A skill-pack tarball, shaped like ``GET /dev-toolkit/skills/{pack}`` serves it.
+
+    Members live under a ``pack/`` arcname and the platform version rides in a
+    header (the body is a tarball, not an envelope). Same shape the CLI's
+    ``skills sync`` unpacks in production.
+    """
+    files = files or {"SKILL.md": "# deploy-hosting\n"}
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        for rel, content in files.items():
+            data = content.encode("utf-8")
+            info = tarfile.TarInfo(f"{pack}/{rel}")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    return httpx.Response(200, content=buffer.getvalue(), headers={"x-bisheng-pack-version": version})
 
 
 def env_ok(*, open_platform_enabled: bool = True, app_runtime_enabled: bool = True) -> httpx.Response:
@@ -220,7 +252,9 @@ def logs(
     shape — a platform that predates the write-back simply omits them, and the
     CLI must still say something useful.
     """
-    return v2_ok({"lines": lines if lines is not None else [], "app_state": app_state, "pending_reason": pending_reason})
+    return v2_ok(
+        {"lines": lines if lines is not None else [], "app_state": app_state, "pending_reason": pending_reason}
+    )
 
 
 # ---- transport ----------------------------------------------------------

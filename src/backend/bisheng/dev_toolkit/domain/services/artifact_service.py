@@ -22,7 +22,11 @@ build, not of any tenant, which is what lets the endpoints stay anonymous.
 
 from __future__ import annotations
 
+import gzip
+import io
 import json
+import re
+import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +40,23 @@ from loguru import logger
 ARTIFACTS_DIR = Path(__file__).resolve().parents[2] / "artifacts"
 
 MANIFEST_NAME = "manifest.json"
+
+# ``bisheng/dev_toolkit/skills/`` — the developer skill packs (F053 DEV-03).
+# Unlike the CLI wheel these are plain committed source under a normal dir name,
+# so they ride the same in-package pattern with no packing step and no
+# ``.gitignore`` trap. Served over HTTP by ``read_skill_pack`` for ``skills
+# sync`` — a **single source** shared with any in-platform consumer (AC-15).
+SKILLS_DIR = Path(__file__).resolve().parents[2] / "skills"
+
+# A pack name is a URL path segment that becomes a filesystem lookup, so it is
+# validated the same way F055 validates a manifest ``slug`` before it ever
+# touches the disk — no dots, no slashes, nothing that could climb out of
+# ``SKILLS_DIR``.
+_PACK_SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+# Members skipped when packing a pack: build noise that must never reach a
+# developer's machine and would also make the archive non-reproducible.
+_PACK_EXCLUDE_NAMES = frozenset({"__pycache__", ".eval-workspace", ".DS_Store"})
 
 
 @dataclass(frozen=True)
@@ -119,3 +140,79 @@ def read_snapshot() -> DistributionSnapshot:
         ),
         platform_version=platform_version,
     )
+
+
+@dataclass(frozen=True)
+class SkillPackArchive:
+    """One developer skill pack, packed into a gzip tarball in memory.
+
+    The packs are small text bundles (a SKILL.md, a runnable example, a
+    self-check script), so building the archive in memory on each request is
+    cheaper than staging a second copy on disk and keeps the served bytes
+    identical to the single committed source (AC-15). ``version`` is the
+    platform version the pack shipped with, read from the same manifest the CLI
+    wheel uses; it is ``None`` only when the artifacts were never staged, which
+    is a release problem the caller surfaces readably rather than a reason to
+    withhold the pack.
+    """
+
+    pack: str
+    version: str | None
+    filename: str
+    content: bytes
+
+
+def _pack_dir(pack: str) -> Path | None:
+    """Resolve a pack slug to its source dir, or ``None`` if it is not a real pack.
+
+    Rejects anything that is not a bare slug before touching the disk, then
+    confirms the resolved path stays inside ``SKILLS_DIR`` (defence in depth
+    against a slug that slips through) and actually holds a ``SKILL.md``.
+    """
+    if not _PACK_SLUG_RE.match(pack or ""):
+        return None
+    skills_root = SKILLS_DIR.resolve()
+    pack_dir = (skills_root / pack).resolve()
+    if pack_dir.parent != skills_root:
+        return None
+    if not pack_dir.is_dir() or not (pack_dir / "SKILL.md").is_file():
+        return None
+    return pack_dir
+
+
+def _pack_filter(info: tarfile.TarInfo) -> tarfile.TarInfo | None:
+    """Drop build noise and normalise member metadata.
+
+    Zeroing mtime/owner means an unchanged pack unpacks to byte-identical files
+    with stable timestamps, so a re-sync is a genuine no-op on the developer's
+    disk instead of touching every file's mtime.
+    """
+    parts = set(Path(info.name).parts)
+    if parts & _PACK_EXCLUDE_NAMES or info.name.endswith(".pyc"):
+        return None
+    info.mtime = 0
+    info.uid = info.gid = 0
+    info.uname = info.gname = ""
+    return info
+
+
+def read_skill_pack(pack: str) -> SkillPackArchive | None:
+    """Pack a developer skill bundle for download, or ``None`` if it does not exist.
+
+    Never raises for an unknown pack — the endpoint turns ``None`` into a real
+    404 the same way the missing-wheel branch does, so ``skills sync`` can tell
+    "no such pack" apart from a transport error.
+    """
+    pack_dir = _pack_dir(pack)
+    if pack_dir is None:
+        return None
+
+    buffer = io.BytesIO()
+    # ``mtime=0`` on gzip pins the archive header clock; the filter pins every
+    # member's, so unchanged source packs to the same unpacked files each time.
+    with gzip.GzipFile(fileobj=buffer, mode="wb", mtime=0) as gz, tarfile.open(fileobj=gz, mode="w") as tar:
+        tar.add(pack_dir, arcname=pack, filter=_pack_filter)
+
+    manifest = _read_manifest() or {}
+    version = (manifest.get("platform") or {}).get("version")
+    return SkillPackArchive(pack=pack, version=version, filename=f"{pack}.tar.gz", content=buffer.getvalue())

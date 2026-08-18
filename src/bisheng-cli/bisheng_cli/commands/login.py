@@ -28,6 +28,7 @@ from collections.abc import Callable
 from typing import Any, TextIO
 
 from bisheng_cli import credentials
+from bisheng_cli.commands import skills
 from bisheng_cli.errors import EXIT_OK, EXIT_USAGE, CliError, delegate_refusal
 from bisheng_cli.http import PlatformClient, probe
 from bisheng_cli.output import Emitter
@@ -124,6 +125,13 @@ def run(args: Any, emitter: Emitter) -> int:
     )
 
     _report(emitter, base_url, whoami, account, owner)
+
+    # AC-08: pull the developer skill packs now so a first-time developer never
+    # has to know `skills sync` exists. This login already succeeded — a sync
+    # failure downgrades to a warning inside run_after_login and never touches
+    # the exit code or the result event below.
+    skills.run_after_login(credentials.Profile(base_url=base_url, api_key=api_key), args, emitter)
+
     emitter.result(
         COMMAND,
         ok=True,

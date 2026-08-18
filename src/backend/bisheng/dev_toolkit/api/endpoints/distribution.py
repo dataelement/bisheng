@@ -18,7 +18,7 @@ front-end nginx proxy — a CLI connecting directly would get a URL it cannot us
 """
 
 from fastapi import APIRouter
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from bisheng.common.schemas.api import resp_200, resp_500
 from bisheng.common.services.config_service import settings
@@ -27,6 +27,15 @@ from bisheng.dev_toolkit.domain.services import artifact_service
 router = APIRouter(prefix="/dev-toolkit", tags=["Dev Toolkit"])
 
 CLI_DOWNLOAD_PATH = "/api/v1/dev-toolkit/cli/download"
+
+# Header the ``skills sync`` output reads to report each pack's version (AC-14).
+# A header, not an envelope field, because the body is a tarball, not JSON.
+PACK_VERSION_HEADER = "X-Bisheng-Pack-Version"
+
+# Read by a developer whose `skills sync` came back empty. Names the actual
+# cause (the pack this platform version does not carry) and is not an error code
+# for the same reasons the CLI wheel's message is not (CON-8).
+SKILL_PACK_MISSING_MESSAGE = "技能包不存在或未随本次部署发布，请确认名称或联系平台管理员"  # noqa: RUF001
 
 # Read by a human staring at a failed `pip install`, so it names the actual
 # problem (a release did not ship its build output) and the actual next step.
@@ -98,3 +107,28 @@ def download_cli_installer():
         filename=snapshot.cli.filename,
         media_type="application/octet-stream",
     )
+
+
+@router.get("/skills/{pack}")
+def download_skill_pack(pack: str):
+    """Stream one developer skill pack as a gzip tarball for ``bisheng skills sync``.
+
+    Anonymous like its siblings: a skill pack is public guidance, and the same
+    bytes are what any in-platform consumer reads, so there is exactly one
+    source and one distribution path (AC-15). An unknown pack is a real 404
+    (not a 200-plus-envelope) so the CLI can tell "no such pack" apart from a
+    transport error the same way the wheel route does; the ``{pack}`` path
+    param means every name reaches this handler, and only a real pack dir with a
+    ``SKILL.md`` gets packed.
+    """
+    archive = artifact_service.read_skill_pack(pack)
+    if archive is None:
+        return JSONResponse(
+            status_code=404,
+            content=resp_500(code=404, message=SKILL_PACK_MISSING_MESSAGE).model_dump(),
+        )
+
+    headers = {"Content-Disposition": f'attachment; filename="{archive.filename}"'}
+    if archive.version:
+        headers[PACK_VERSION_HEADER] = archive.version
+    return Response(content=archive.content, media_type="application/gzip", headers=headers)

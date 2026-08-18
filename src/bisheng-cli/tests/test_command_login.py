@@ -24,6 +24,7 @@ import httpx
 import pytest
 
 from bisheng_cli.commands import login as login_mod
+from bisheng_cli.commands import skills as skills_mod
 from bisheng_cli.errors import (
     EXIT_AUTH,
     EXIT_FORBIDDEN,
@@ -38,6 +39,8 @@ from tests.helpers.platform_mock import (
     FAKE_KEY,
     PlatformMock,
     env_ok,
+    skill_pack,
+    skills_path,
     use_mock_transport,
     versions_404,
     versions_ok,
@@ -60,11 +63,18 @@ def _mock(whoami: httpx.Response | None = None) -> PlatformMock:
     mock = PlatformMock().get(VERSIONS, versions_ok())
     if whoami is not None:
         mock.get(WHOAMI, whoami)
+        # A successful login now auto-syncs the skill packs (AC-08). Serve the
+        # pack so the happy path exercises the real end-to-end shape; failure
+        # tests never reach this route because login raises before the sync.
+        mock.get(skills_path(), skill_pack())
     return mock
 
 
 def _run(argv: list[str], *, monkeypatch: pytest.MonkeyPatch, mock: PlatformMock) -> tuple[int, str, str]:
     use_mock_transport(monkeypatch, login_mod, mock)
+    # login's auto-sync builds its client inside the skills module, so that name
+    # needs the mock transport too.
+    use_mock_transport(monkeypatch, skills_mod, mock)
     out, err = io.StringIO(), io.StringIO()
     code = main_run(argv, stdout=out, stderr=err)
     return code, out.getvalue(), err.getvalue()
@@ -219,9 +229,21 @@ def test_relogin_overwrites_same_platform_profile(monkeypatch: pytest.MonkeyPatc
     assert stored["profiles"][BASE]["api_key"] == second_key
 
 
-def test_no_auto_skills_sync_this_round(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
-    # AC-08 ships with the deferred wave (T039). Asserting the absence keeps a
-    # future "helpful" auto-sync from appearing without its own tests.
+def test_login_auto_syncs_skill_packs(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    # AC-08 (T039): a successful login pulls the skill packs so a first-time
+    # developer never has to know `skills sync` exists.
     mock = _mock(whoami_ok())
-    _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
-    assert not [path for path in mock.paths_called() if "skill" in path]
+    code, _, _ = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK
+    assert [path for path in mock.paths_called() if "skills" in path] == [skills_path()]
+    assert (home_dir / ".bisheng" / "skills" / "deploy-hosting" / "SKILL.md").is_file()
+
+
+def test_login_still_succeeds_when_auto_sync_fails(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    # The sync is best-effort: if the pack endpoint 404s, login still succeeds
+    # and points the developer at a manual retry.
+    mock = PlatformMock().get(VERSIONS, versions_ok()).get(WHOAMI, whoami_ok())
+    mock.get(skills_path(), httpx.Response(404, json={"detail": "Not Found"}))
+    code, _, err = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK
+    assert "skills sync" in err

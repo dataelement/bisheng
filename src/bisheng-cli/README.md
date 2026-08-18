@@ -4,7 +4,7 @@
 
 它是一个**独立的 Python 包**，不依赖后端代码、不连任何数据库、不访问公网。安装件由平台自己分发，运行期只访问 `login` 时指定的那一个地址。
 
-本版本提供 `login` / `deploy` / `logs` 三条命令。`dev` 与 `skills sync` 随后续版本提供 —— 它们**没有**注册进命令行，`--help` 里看不到，也不会给出占位报错。
+本版本提供 `login` / `deploy` / `logs` / `skills sync` 四条命令。`dev` 随后续版本提供 —— 它**没有**注册进命令行，`--help` 里看不到，也不会给出占位报错。
 
 ---
 
@@ -13,12 +13,10 @@
 安装件由平台分发，不需要连公网 registry：
 
 ```bash
-# 方式一：先下载再装
-curl -sO http://<平台地址>/api/v1/dev-toolkit/cli/download
+# 下载到一个带 .whl 后缀的文件名，再装（-o 指定文件名，别用 -sO：
+# 那会按 URL 最后一段存成 download，装不上）
+curl -o bisheng_cli-3.0.0-py3-none-any.whl http://<平台地址>/api/v1/dev-toolkit/cli/download
 pip install ./bisheng_cli-3.0.0-py3-none-any.whl
-
-# 方式二：直接从平台装
-pip install http://<平台地址>/api/v1/dev-toolkit/cli/download
 
 bisheng --version
 ```
@@ -128,6 +126,19 @@ bisheng logs --follow
 - **`--follow` 会去重**：容器日志时间戳是秒级，同一秒的行会在下一轮窗口里重复返回。
 - **取不到日志不等于「什么都没发生」**：可能是应用没有运行实例（草稿 / 待上线 / 已下线），也可能是该时间段的日志已被轮转。平台对日志保留期不做承诺。
 - **归属判定完全在服务端**：owner-only 按密钥的**资源归属人**判，CLI 不做任何预检 —— 它拿不到权威数据，加一处判定只会与服务端分叉。
+
+### `bisheng skills sync`
+
+把平台**当前版本**的开发者技能包同步到 `~/.bisheng/skills/`。技能包是给 AI 编程工具读的指引 —— 让它照着平台的托管运行契约写出可部署的应用。
+
+- **登录时自动执行一次**（`login` 成功后即触发），一般无需手动敲；平台升级后重跑即更新到新版本。
+- **单向覆盖**：技能包是平台发布物，sync 以平台版本覆盖本地内容、并列出被覆盖的文件，**不做合并、不保留本地改动、不覆盖前确认**。要定制团队自己的约定，写在项目的 `AGENTS.md` 里、放在技能目录**之外**。
+- 同步完成后会输出「怎么让你的 AI 工具用上它」的指引（Claude Code 自动发现；其它引擎经 `AGENTS.md` 指向同一目录）。
+- 平台未部署开放能力层（端点 404）时以退出码 8 结束并提示。
+
+```bash
+bisheng skills sync
+```
 
 ---
 

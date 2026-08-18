@@ -363,17 +363,17 @@
 
 > design §8 把这一波列为顺延波次的**最高优先级**——它是 AC-47「agent 全程不离开本地对话」的前提。分发端点与匿名口径已由 T028 留位（`GET /api/v1/dev-toolkit/skills/{pack}`，同 router）。
 
-- [ ] **T035**: `skills sync` 命令（拉取 / 幂等覆盖 / 输出每包名称与版本与更新结果 / 列出被覆盖文件）
+- [x] **T035**: `skills sync` 命令（拉取 / 幂等覆盖 / 输出每包名称与版本与更新结果 / 列出被覆盖文件）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/skills.py`, `src/bisheng-cli/bisheng_cli/cli.py`（注册第四条命令）
   **测试载体**: `src/bisheng-cli/tests/test_command_skills.py`
   **覆盖 AC**: AC-03, AC-14, AC-19, AC-20, AC-21, AC-51
 
-- [ ] **T036**: 技能包分发端点 + 包随后端发布件同行
+- [x] **T036**: 技能包分发端点 + 包随后端发布件同行
   **文件**: `src/backend/bisheng/dev_toolkit/api/endpoints/distribution.py`（增量加 `skills/{pack}`）, `src/backend/bisheng/dev_toolkit/skills/`
   **测试载体**: `src/backend/test/dev_toolkit/test_distribution_api.py`（增量）
   **覆盖 AC**: AC-05, AC-14, AC-15
 
-- [ ] **T037**: 「部署纳管」包内容（`bisheng-app.yaml` 写法引用 F055 / 能力声明 / 安全红线 / 托管运行契约 / deploy 工作流与预检排障指引 + 样例 + 连通自检脚本）
+- [x] **T037**: 「部署纳管」包内容（`bisheng-app.yaml` 写法引用 F055 / 能力声明 / 安全红线 / 托管运行契约 / deploy 工作流与预检排障指引 + 样例 + 连通自检脚本）
   **文件**: `src/backend/bisheng/dev_toolkit/skills/deploy-hosting/`
   **测试载体**: `src/backend/test/dev_toolkit/test_skill_packs.py`（结构完整性 + 样例无真实密钥 + 自检脚本缺配置时输出可读原因而非堆栈）
   **覆盖 AC**: AC-16, AC-18, AC-19
@@ -383,12 +383,12 @@
   **测试载体**: `src/backend/test/dev_toolkit/test_skill_packs.py`（增量）
   **覆盖 AC**: AC-17, AC-18
 
-- [ ] **T039**: `login` 成功后自动执行一次 `skills sync`（失败不影响登录成功、输出原因并提示可手动重跑）
+- [x] **T039**: `login` 成功后自动执行一次 `skills sync`（失败不影响登录成功、输出原因并提示可手动重跑）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/login.py`（增量）
   **测试载体**: `src/bisheng-cli/tests/test_command_login.py`（增量，替换 T019 的 `test_no_auto_skills_sync_this_round`）
   **覆盖 AC**: AC-08
 
-- [ ] **T040**: 技能包触发评测样本集与跑分（≥ 10 条不含产品名的中性部署表述，「部署纳管」包触发率 100%；auth 静默失败点对照样本随 F057）
+- [x] **T040**: 技能包触发评测样本集与跑分（≥ 10 条不含产品名的中性部署表述，「部署纳管」包触发率 100%；auth 静默失败点对照样本随 F057）
   **文件**: `src/backend/test/dev_toolkit/fixtures/skill_trigger_samples.md`, `src/backend/test/dev_toolkit/test_skill_trigger.py`
   **覆盖 AC**: AC-22
 
@@ -442,7 +442,7 @@
   **测试载体**: `src/bisheng-cli/tests/test_http.py`（增量）
   **覆盖 AC**: AC-02
 
-- [ ] **T049**: 非 Claude Code 引擎经 AGENTS.md 引用同一技能目录的指引（sync 完成后输出引用方式）
+- [x] **T049**: 非 Claude Code 引擎经 AGENTS.md 引用同一技能目录的指引（sync 完成后输出引用方式）
   **文件**: `src/bisheng-cli/bisheng_cli/commands/skills.py`（增量）, `src/backend/bisheng/dev_toolkit/skills/README.md`
   **测试载体**: `src/bisheng-cli/tests/test_command_skills.py`（增量）
   **覆盖 AC**: AC-20

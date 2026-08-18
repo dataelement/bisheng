@@ -232,3 +232,69 @@ def test_missing_artifacts_degrade_readably_not_500(absent_artifacts, client_fac
     download = client.get(DOWNLOAD_PATH)
     assert download.status_code == 404
     assert "CLI 安装件未随本次部署发布" in download.json()["status_message"]
+
+
+# ---- F053 T036: skill-pack distribution ---------------------------------
+
+SKILLS_TEMPLATE = "/api/v1/dev-toolkit/skills/{pack}"
+SKILLS_PACK_PATH = "/api/v1/dev-toolkit/skills/deploy-hosting"
+
+
+def test_skill_pack_reachable_without_any_credential(staged_artifacts, client_factory):
+    """A skill pack is public guidance — no Bearer, no session cookie, no deps."""
+    client = client_factory()
+
+    response = client.get(SKILLS_PACK_PATH)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/gzip")
+
+    route = _route(client.app, SKILLS_TEMPLATE)
+    assert route is not None
+    assert _dependency_names(route.dependant) == set()
+    assert route.dependant.security_requirements == []
+
+
+def test_skill_pack_is_a_tarball_carrying_skill_md(staged_artifacts, client_factory):
+    import io
+    import tarfile
+
+    client = client_factory()
+    response = client.get(SKILLS_PACK_PATH)
+
+    with tarfile.open(fileobj=io.BytesIO(response.content), mode="r:gz") as tar:
+        names = set(tar.getnames())
+    assert "deploy-hosting/SKILL.md" in names
+    assert "deploy-hosting/example/main.py" in names
+    assert "deploy-hosting/selfcheck.py" in names
+    # No build noise leaked into the developer's machine.
+    assert not any("__pycache__" in n or n.endswith(".pyc") for n in names)
+    # Version rides in a header (the body is a tarball, not an envelope), and it
+    # comes from the shipped manifest — never from ``bisheng.__version__``.
+    assert response.headers.get("x-bisheng-pack-version") == MANIFEST_PLATFORM_VERSION
+
+
+def test_unknown_pack_is_a_real_404(staged_artifacts, client_factory):
+    """A name that is not a pack answers 404 so ``skills sync`` can tell it apart from a transport error."""
+    client = client_factory()
+
+    response = client.get(SKILLS_TEMPLATE.format(pack="no-such-pack"))
+
+    assert response.status_code == 404
+
+
+def test_pack_traversal_slug_is_404_not_a_file(staged_artifacts, client_factory):
+    """A slug that tries to climb out of the skills dir never resolves to a file."""
+    client = client_factory()
+    # A dotted / slashed name cannot pass the slug guard even before the route.
+    assert client.get(SKILLS_TEMPLATE.format(pack="..")).status_code in (404, 400)
+
+
+def test_skills_route_absent_when_open_platform_off(client_factory):
+    """AC-05 / D10: the whole dev-toolkit router is not registered — FastAPI's own 404."""
+    client = client_factory(open_platform_enabled=False)
+
+    response = client.get(SKILLS_PACK_PATH)
+
+    assert response.status_code == 404
+    assert _route(client.app, SKILLS_TEMPLATE) is None

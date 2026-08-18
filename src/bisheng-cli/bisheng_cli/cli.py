@@ -20,12 +20,12 @@ from collections.abc import Callable
 from bisheng_cli import __version__
 from bisheng_cli.errors import EXIT_USAGE, CliError
 
-SUBCOMMANDS = ("login", "deploy", "logs")
-DEFERRED_COMMANDS = ("dev", "skills sync")
+SUBCOMMANDS = ("login", "deploy", "logs", "skills")
+DEFERRED_COMMANDS = ("dev",)
 
 _EPILOG = (
-    "本版本提供 login / deploy / logs 三条命令。\n"
-    "dev 与 skills sync 随后续版本提供。\n"
+    "本版本提供 login / deploy / logs / skills sync 四条命令。\n"
+    "dev 随后续版本提供。\n"
     "机器可读输出: 加 --json，NDJSON 走 stdout、人读文本走 stderr，最后一行恒为 result 事件。"
 )
 
@@ -79,7 +79,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"bisheng {__version__}")
     _add_global_flags(parser, mirror=False)
 
-    subparsers = parser.add_subparsers(dest="command", metavar="{login,deploy,logs}")
+    subparsers = parser.add_subparsers(dest="command", metavar="{login,deploy,logs,skills}")
 
     login = subparsers.add_parser("login", help="校验服务账号密钥并把凭据写入本地用户目录")
     login.add_argument("base_url", metavar="BASE_URL", help="目标平台地址，例如 http://bisheng.example.com")
@@ -105,7 +105,17 @@ def build_parser() -> argparse.ArgumentParser:
     logs.add_argument("--keyword", default=None, help="只返回含该关键字的行（服务端过滤，行数可能少于 --tail）")
     logs.add_argument("--follow", action="store_true", help="持续拉取（短轮询 3 秒）")
 
-    for subparser in (login, deploy, logs):
+    # `skills` is the first two-token command: a plain subparser whose own
+    # subparsers carry the verb. Dispatch (main.py) keys off the top-level
+    # `command`, so `commands/skills.py` owns the `sync`-vs-missing branch.
+    skills = subparsers.add_parser("skills", help="同步平台的开发者技能包到本地用户目录")
+    skills_sub = skills.add_subparsers(dest="skills_command", metavar="{sync}")
+    sync = skills_sub.add_parser("sync", help="拉取平台当前版本的技能包到 ~/.bisheng/skills/（幂等，单向覆盖）")
+
+    # Every leaf that can receive a flag needs the mirror, or `--json` after it
+    # is "unrecognized arguments". `sync` is where `bisheng skills sync --json`
+    # lands; `skills` covers `bisheng skills --json sync`.
+    for subparser in (login, deploy, logs, skills, sync):
         _add_global_flags(subparser, mirror=True)
 
     return parser
