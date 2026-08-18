@@ -503,9 +503,7 @@ async def test_gate_auto_approves_when_applicant_is_only_approver(
                 enabled=True,
             )
         ),
-        list_route_rules=AsyncMock(
-            return_value=[SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)]
-        ),
+        list_route_rules=AsyncMock(return_value=[SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)]),
         get_active_flow_version=AsyncMock(return_value=SimpleNamespace(id=21)),
         list_node_definitions=AsyncMock(return_value=[node]),
     )
@@ -513,9 +511,7 @@ async def test_gate_auto_approves_when_applicant_is_only_approver(
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
         create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 300})),
-        create_tasks=AsyncMock(
-            side_effect=lambda rows: [rows[0].model_copy(update={"id": 301})]
-        ),
+        create_tasks=AsyncMock(side_effect=lambda rows: [rows[0].model_copy(update={"id": 301})]),
         create_action_log=AsyncMock(),
         get_instance=AsyncMock(return_value=approved_instance),
     )
@@ -539,17 +535,14 @@ async def test_gate_auto_approves_when_applicant_is_only_approver(
         assert comment == SELF_APPROVAL_COMMENT
 
     monkeypatch.setattr(
-        "bisheng.approval.domain.services.approval_center_service."
-        "ApprovalCenterService.decide_task",
+        "bisheng.approval.domain.services.approval_center_service.ApprovalCenterService.decide_task",
         decide_self_task,
     )
     gate = ApprovalGate(
         registry=SimpleNamespace(get_handler=AsyncMock(return_value=handler)),
         scenario_repository=scenario_repository,
         instance_repository=instance_repository,
-        route_matcher=AsyncMock(
-            return_value=SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)
-        ),
+        route_matcher=AsyncMock(return_value=SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)),
     )
 
     result = await gate.request_or_pass(
@@ -1428,6 +1421,8 @@ def test_registry_exposes_default_presets():
         "knowledge_space_subscribe_request",
         "knowledge_space_create_request",
         "knowledge_space_file_publish_request",
+        "knowledge_space_file_share_request",
         "department_file_view_request",
+        "qa_question_publish",
     }
     assert presets["menu_access_request"].handler_key == "menu_access_request"

@@ -17,6 +17,10 @@ from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagLink
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibrary
+from bisheng.workstation.domain.repositories.review_tags_repository import (
+    build_clinic_uploader_match_clause,
+)
+from bisheng.workstation.domain.schemas.review_tags_schema import ReviewTagScope
 from bisheng.workstation.domain.schemas.tag_console_schema import (
     TagConsoleFilter,
     TagConsoleReviewSearchReq,
@@ -385,37 +389,42 @@ class TagConsoleRepositoryImpl:
         )
 
     @classmethod
-    def _space_scope_clause(cls, tenant_id: int, space_ids: set[int] | None):
-        """Department-admin scope, mirroring the pending-review listing.
+    def _space_scope_clause(cls, tenant_id: int, scope: ReviewTagScope | None):
+        """按 ReviewTagScope 收窄审核列表；None 表示全租户不过滤。
 
-        Unlike library mode, review-mode rows *do* have per-space provenance, so
-        this narrowing is meaningful here (AC-38).
+        role 空间走 business_id / 文件 knowledge_id；科室路径并上上传人主部门
+        且 org_level=office 的团队/个人库（与待审列表同一 SQL）。
         """
-        if space_ids is None:
+        if scope is None or scope.full_tenant:
             return None
-        if not space_ids:
-            return ReviewTag.id == -1  # empty managed set matches nothing
-        space_id_list = sorted(int(space_id) for space_id in space_ids)
-        business_match = ReviewTag.business_type.in_(
-            [TagBusinessTypeEnum.KNOWLEDGE_SPACE.value, TagBusinessTypeEnum.KNOWLEDGE.value]
-        ) & ReviewTag.business_id.in_([str(space_id) for space_id in space_id_list])
-        link_match = exists(
-            select(1)
-            .select_from(ReviewTagLink)
-            .join(
-                KnowledgeFile,
-                # Compare as integers: resource_id is varchar, and CAST(id AS CHAR)
-                # hits collation mismatches on MySQL.
-                KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer),
+        parts = []
+        if scope.role_managed_space_ids:
+            space_id_list = sorted(int(space_id) for space_id in scope.role_managed_space_ids)
+            business_match = ReviewTag.business_type.in_(
+                [TagBusinessTypeEnum.KNOWLEDGE_SPACE.value, TagBusinessTypeEnum.KNOWLEDGE.value]
+            ) & ReviewTag.business_id.in_([str(space_id) for space_id in space_id_list])
+            link_match = exists(
+                select(1)
+                .select_from(ReviewTagLink)
+                .join(
+                    KnowledgeFile,
+                    # Compare as integers: resource_id is varchar, and CAST(id AS CHAR)
+                    # hits collation mismatches on MySQL.
+                    KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer),
+                )
+                .where(
+                    ReviewTagLink.tag_id == ReviewTag.id,
+                    ReviewTagLink.tenant_id == tenant_id,
+                    KnowledgeFile.tenant_id == tenant_id,
+                    KnowledgeFile.knowledge_id.in_(space_id_list),
+                )
             )
-            .where(
-                ReviewTagLink.tag_id == ReviewTag.id,
-                ReviewTagLink.tenant_id == tenant_id,
-                KnowledgeFile.tenant_id == tenant_id,
-                KnowledgeFile.knowledge_id.in_(space_id_list),
-            )
-        )
-        return or_(business_match, link_match)
+            parts.append(or_(business_match, link_match))
+        if scope.clinic_admin_department_ids:
+            parts.append(build_clinic_uploader_match_clause(tenant_id, set(scope.clinic_admin_department_ids)))
+        if not parts:
+            return ReviewTag.id == -1
+        return or_(*parts)
 
     @classmethod
     def _status_clause(cls, status: TagConsoleReviewStatus | None, tenant_id: int):
@@ -447,9 +456,9 @@ class TagConsoleRepositoryImpl:
         return or_(pending, rejected)
 
     @classmethod
-    def _review_filters(cls, req: TagConsoleReviewSearchReq, tenant_id: int, space_ids: set[int] | None) -> list:
+    def _review_filters(cls, req: TagConsoleReviewSearchReq, tenant_id: int, scope: ReviewTagScope | None) -> list:
         clauses = [ReviewTag.tenant_id == tenant_id, cls._status_clause(req.status, tenant_id)]
-        scope_clause = cls._space_scope_clause(tenant_id, space_ids)
+        scope_clause = cls._space_scope_clause(tenant_id, scope)
         if scope_clause is not None:
             clauses.append(scope_clause)
         if req.tag_name:
@@ -476,7 +485,7 @@ class TagConsoleRepositoryImpl:
         self,
         req: TagConsoleReviewSearchReq,
         tenant_id: int,
-        space_ids: set[int] | None,
+        scope: ReviewTagScope | None,
     ) -> tuple[list[tuple[str, str]], int]:
         """One page of ``(name, resource_type)`` pairs plus the unpaged total.
 
@@ -488,7 +497,7 @@ class TagConsoleRepositoryImpl:
         ``MAX(create_time) DESC, name, resource_type`` — the pair itself is
         unique, which makes that a total order and keeps paging stable.
         """
-        clauses = self._review_filters(req, tenant_id, space_ids)
+        clauses = self._review_filters(req, tenant_id, scope)
 
         total_stmt = select(func.count()).select_from(
             select(ReviewTag.name, ReviewTag.resource_type)
@@ -535,7 +544,7 @@ class TagConsoleRepositoryImpl:
         ).where(*cls._tag_field_filters(req, tenant_id), Tag.reviewer_id.is_not(None))
 
     @classmethod
-    def _rejected_leg(cls, req: TagConsoleReviewSearchReq, tenant_id: int, space_ids: set[int] | None):
+    def _rejected_leg(cls, req: TagConsoleReviewSearchReq, tenant_id: int, scope: ReviewTagScope | None):
         scoped = req.model_copy(update={"status": TagConsoleReviewStatus.REJECTED})
         return (
             select(
@@ -544,7 +553,7 @@ class TagConsoleRepositoryImpl:
                 ReviewTag.resource_type.label("resource_type"),
                 func.max(ReviewTag.review_time).label("sort_time"),
             )
-            .where(*cls._review_filters(scoped, tenant_id, space_ids))
+            .where(*cls._review_filters(scoped, tenant_id, scope))
             .group_by(ReviewTag.name, ReviewTag.resource_type)
         )
 
@@ -553,13 +562,13 @@ class TagConsoleRepositoryImpl:
         cls,
         req: TagConsoleReviewSearchReq,
         tenant_id: int,
-        space_ids: set[int] | None,
+        scope: ReviewTagScope | None,
     ):
         legs = []
         if req.status in (TagConsoleReviewStatus.APPROVED, TagConsoleReviewStatus.REVIEWED):
             legs.append(cls._approved_leg(req, tenant_id))
         if req.status in (TagConsoleReviewStatus.REJECTED, TagConsoleReviewStatus.REVIEWED):
-            legs.append(cls._rejected_leg(req, tenant_id, space_ids))
+            legs.append(cls._rejected_leg(req, tenant_id, scope))
         combined = legs[0] if len(legs) == 1 else union_all(*legs)
         return combined.subquery()
 
@@ -567,7 +576,7 @@ class TagConsoleRepositoryImpl:
         self,
         req: TagConsoleReviewSearchReq,
         tenant_id: int,
-        space_ids: set[int] | None,
+        scope: ReviewTagScope | None,
     ) -> tuple[list[tuple[int, str, str]], int]:
         """One page of ``(source, name, resource_type)`` plus the unpaged total.
 
@@ -576,7 +585,7 @@ class TagConsoleRepositoryImpl:
         stamps them all with the same value — so the pair itself and finally the
         source table break the tie, which makes the ordering total.
         """
-        subquery = self._reviewed_subquery(req, tenant_id, space_ids)
+        subquery = self._reviewed_subquery(req, tenant_id, scope)
 
         total = await self.session.scalar(select(func.count()).select_from(subquery))
 
@@ -598,7 +607,7 @@ class TagConsoleRepositoryImpl:
         self,
         req: TagConsoleReviewSearchReq,
         tenant_id: int,
-        space_ids: set[int] | None,
+        scope: ReviewTagScope | None,
     ) -> tuple[int, int, int]:
         """Pending / rejected / approved totals, deliberately ignoring the status
         filter.
@@ -609,7 +618,7 @@ class TagConsoleRepositoryImpl:
         counts = []
         for status in (TagConsoleReviewStatus.PENDING, TagConsoleReviewStatus.REJECTED):
             scoped = req.model_copy(update={"status": status})
-            clauses = self._review_filters(scoped, tenant_id, space_ids)
+            clauses = self._review_filters(scoped, tenant_id, scope)
             statement = select(func.count()).select_from(
                 select(ReviewTag.name, ReviewTag.resource_type)
                 .where(*clauses)
@@ -620,7 +629,7 @@ class TagConsoleRepositoryImpl:
 
         approved_req = req.model_copy(update={"status": TagConsoleReviewStatus.APPROVED})
         approved_total = await self.session.scalar(
-            select(func.count()).select_from(self._reviewed_subquery(approved_req, tenant_id, space_ids))
+            select(func.count()).select_from(self._reviewed_subquery(approved_req, tenant_id, scope))
         )
         counts.append(int(approved_total or 0))
         return counts[0], counts[1], counts[2]
@@ -629,7 +638,7 @@ class TagConsoleRepositoryImpl:
         self,
         pairs: list[tuple[str, str]],
         tenant_id: int,
-        space_ids: set[int] | None,
+        scope: ReviewTagScope | None,
     ) -> dict[tuple[str, str], list[ReviewTag]]:
         """All ``review_tag`` rows behind the page's grouped pairs."""
         if not pairs:
@@ -643,7 +652,7 @@ class TagConsoleRepositoryImpl:
                 ReviewTag.review_status == REJECTED_STATUS,
             ),
         ]
-        scope_clause = self._space_scope_clause(tenant_id, space_ids)
+        scope_clause = self._space_scope_clause(tenant_id, scope)
         if scope_clause is not None:
             clauses.append(scope_clause)
         rows = (await self.session.exec(select(ReviewTag).where(*clauses))).all()

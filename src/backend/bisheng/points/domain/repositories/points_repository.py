@@ -264,6 +264,20 @@ class PointsRepository:
         ).one()
         return int(value[0] if isinstance(value, tuple) else value or 0)
 
+    async def sum_tenant_earn(self, tenant_id: int, start: datetime, end: datetime) -> int:
+        """汇总租户在时间窗内的 earn 发放合计。"""
+        value = (
+            await self.session.exec(
+                select(func.coalesce(func.sum(UserPointLog.delta), 0)).where(
+                    UserPointLog.tenant_id == tenant_id,
+                    UserPointLog.direction == "earn",
+                    UserPointLog.occurred_at >= start,
+                    UserPointLog.occurred_at < end,
+                )
+            )
+        ).one()
+        return int(value[0] if isinstance(value, tuple) else value or 0)
+
     async def sum_total_balance(self, tenant_id: int) -> int:
         """租户当前余额合计。"""
         value = (

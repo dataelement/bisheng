@@ -19,6 +19,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagResourceTypeEnum
+from bisheng.workstation.domain.schemas.review_tags_schema import ReviewTagScope
 from bisheng.workstation.domain.services.tag_console_service import TagConsoleService
 
 TENANT_ID = 1
@@ -45,9 +46,15 @@ def _build_service(found: list[Tag], calls: list[str]):
     repository.session.commit = AsyncMock(side_effect=lambda: calls.append("commit"))
 
     tags_service = AsyncMock()
-    tags_service.resolve_reviewable_space_ids.return_value = None
+    tags_service.resolve_review_tag_scope.return_value = ReviewTagScope(full_tenant=True)
     return TagConsoleService(
-        login_user=SimpleNamespace(user_id=1, tenant_id=TENANT_ID),
+        login_user=SimpleNamespace(
+            user_id=1,
+            tenant_id=TENANT_ID,
+            is_global_super=False,
+            is_admin=lambda: True,
+            has_tenant_admin=AsyncMock(return_value=False),
+        ),
         repository=repository,
         tags_service=tags_service,
     )

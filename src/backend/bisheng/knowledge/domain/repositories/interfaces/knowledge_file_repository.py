@@ -97,6 +97,10 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """Mark every active entry pending at a canonical content generation."""
         ...
 
+    async def request_projection_rebuild(self, entry_id: int) -> bool:
+        """Atomically reopen one ready active logical entry for projection."""
+        ...
+
     async def find_projection_candidates(
         self,
         *,

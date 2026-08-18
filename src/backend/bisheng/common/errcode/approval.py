@@ -129,3 +129,8 @@ class ApprovalConfigInUseError(BaseErrorCode):
 class ApprovalConditionOptionInvalidError(BaseErrorCode):
     Code: int = 18125
     Msg: str = "approval_condition_option_invalid"
+
+
+class ApprovalWithdrawNotAllowedError(BaseErrorCode):
+    Code: int = 18126
+    Msg: str = "该审批不支持撤回"

@@ -63,14 +63,14 @@ class TagPageSizeParamsIsError(BaseErrorCode):
 
 
 class ReviewTagPermissionDeniedError(BaseErrorCode):
-    """Caller is not a workbench admin or org department admin for tag review."""
+    """Caller has no tag-review capacity (not space admin/creator, org admin, or platform admin)."""
 
     Code: int = 10712
     Msg: str = "No permission to review tags"
 
 
 class ReviewTagSpaceOutOfScopeError(BaseErrorCode):
-    """Department admin attempted to review a tag outside managed spaces."""
+    """Reviewer attempted to act on a tag/space outside their ReviewTagScope."""
 
     Code: int = 10713
-    Msg: str = "Review tag is outside managed department spaces"
+    Msg: str = "Review tag is outside managed review scope"

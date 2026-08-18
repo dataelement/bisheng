@@ -48,10 +48,11 @@ def test_parse_task_whitelist_routes_to_knowledge_queue(task_name: str):
     assert _resolve_queue(task_name, build_celery_task_routes({})) == KNOWLEDGE_PARSE_QUEUE
 
 
-def test_new_production_whitelist_contains_only_initial_and_retry_lifecycles():
+def test_production_parse_queue_whitelist_contains_parse_lifecycles_and_fulltext_repair():
     assert KNOWLEDGE_PARSE_TASKS == {
         "bisheng.worker.knowledge.file_worker.parse_knowledge_file_celery",
         "bisheng.worker.knowledge.file_worker.retry_knowledge_file_celery",
+        "bisheng.worker.knowledge.fulltext_index.repair_source",
     }
     assert KNOWLEDGE_PARSE_COMPAT_TASKS == {
         "bisheng.worker.knowledge.file_title_worker.extract_knowledge_file_title_celery",
@@ -143,6 +144,7 @@ def test_celery_conf_uses_canonical_routes_for_default_and_legacy_config():
 @pytest.mark.parametrize(
     "config_path",
     [
+        BACKEND_DIR / "bisheng/config.yaml",
         BACKEND_DIR / "bisheng/config_3002.yaml",
         BACKEND_DIR / "bisheng/config_3003.yaml",
         PROJECT_DIR / "docker/bisheng/config/config.yaml",
@@ -193,6 +195,7 @@ def test_worker_entrypoints_include_points_award_in_worker_bundle():
 def test_non_parse_production_dispatches_do_not_target_knowledge_queue():
     allowed_files = {
         BACKEND_DIR / "bisheng/knowledge/domain/services/knowledge_parse_dispatch_service.py",
+        BACKEND_DIR / "bisheng/worker/knowledge/fulltext_index.py",
     }
     violations: list[str] = []
 

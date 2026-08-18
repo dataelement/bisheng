@@ -184,6 +184,18 @@ class KnowledgeDao(KnowledgeBase):
     async def aupdate_one(cls, data: Knowledge) -> Knowledge:
         async with get_async_db_session() as session:
             session.add(data)
+            await session.flush()
+            if data.type == KnowledgeTypeEnum.SPACE.value:
+                from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                    request_knowledge_intent,
+                )
+
+                await request_knowledge_intent(
+                    session,
+                    knowledge_id=int(data.id),
+                    tenant_id=int(data.tenant_id or 1),
+                    trigger_type="knowledge_updated",
+                )
             await session.commit()
             await session.refresh(data)
             return data
@@ -1009,6 +1021,17 @@ class KnowledgeDao(KnowledgeBase):
         """ Async: Persist an updated Knowledge Space record """
         async with get_async_db_session() as session:
             session.add(space)
+            await session.flush()
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                request_knowledge_intent,
+            )
+
+            await request_knowledge_intent(
+                session,
+                knowledge_id=int(space.id),
+                tenant_id=int(space.tenant_id or 1),
+                trigger_type="knowledge_space_updated",
+            )
             await session.commit()
             await session.refresh(space)
             return space
@@ -1034,6 +1057,18 @@ class KnowledgeDao(KnowledgeBase):
             for space in spaces:
                 space.business_domain_codes = list(bindings.get(int(space.id), []))
                 session.add(space)
+            await session.flush()
+            from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+                request_knowledge_intent,
+            )
+
+            for space in spaces:
+                await request_knowledge_intent(
+                    session,
+                    knowledge_id=int(space.id),
+                    tenant_id=int(space.tenant_id or 1),
+                    trigger_type="knowledge_business_domains_updated",
+                )
             await session.commit()
             return len(spaces)
 

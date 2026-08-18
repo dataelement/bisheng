@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from dataclasses import dataclass
+from typing import Any
 
 from fastapi import Request, UploadFile
 from loguru import logger
@@ -136,6 +137,9 @@ class FilelibSyncService:
         endpoint_tag: str = "sync",
         trigger_type: str | None = None,
         allow_personal_fallback: bool = True,
+        target_folder_path_override: str | None = None,
+        target_folder_id_override: int | None = None,
+        extra_user_metadata: dict[str, Any] | None = None,
     ) -> FilelibSyncResponseData:
         self._require_dynamic_source_id(params)
         created_file: KnowledgeFile | None = None
@@ -155,7 +159,15 @@ class FilelibSyncService:
                 allow_personal_fallback=allow_personal_fallback,
             )
             if not target.used_personal_fallback:
-                folder_id = await self._resolve_target_folder(int(target.space.id), identity)
+                if target_folder_id_override is not None:
+                    folder_id = int(target_folder_id_override)
+                elif target_folder_path_override is not None:
+                    folder_id = await self._resolve_folder_path_override(
+                        int(target.space.id),
+                        target_folder_path_override,
+                    )
+                else:
+                    folder_id = await self._resolve_target_folder(int(target.space.id), identity)
                 target = ResolvedFileSyncTarget(
                     space=target.space,
                     folder_id=folder_id,
@@ -222,10 +234,15 @@ class FilelibSyncService:
                 created_file = await self.repository.find_by_id(file_id)
             if created_file is None:
                 raise FilelibSyncNotFoundError(msg="created knowledge file does not exist")
-            created_file.user_id = identity.responsible_user_id
-            created_file.user_name = identity.responsible_user_name
-            created_file.updater_id = identity.responsible_user_id
-            created_file.updater_name = identity.responsible_user_name
+            token_user_id = int(self.login_user.user_id)
+            token_user_name = str(self.login_user.user_name or "")
+            # File owner (DB user_id) is the API token user; original_uploader_id tracks
+            # the responsible person from params, defaulting to the token user when omitted.
+            created_file.user_id = token_user_id
+            created_file.user_name = token_user_name
+            created_file.updater_id = token_user_id
+            created_file.updater_name = token_user_name
+            created_file.original_uploader_id = int(identity.responsible_user_id)
             user_metadata = {
                 **(created_file.user_metadata or {}),
                 "external_file_id": params.external_file_id,
@@ -239,6 +256,8 @@ class FilelibSyncService:
             }
             if trigger_type is not None:
                 user_metadata["filelib_sync_trigger"] = trigger_type
+            if extra_user_metadata:
+                user_metadata.update(extra_user_metadata)
             if target.used_personal_fallback:
                 user_metadata[FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY] = (
                     FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE
@@ -452,14 +471,26 @@ class FilelibSyncService:
             params.department_id,
         )
         if mapping is None:
-            raise FilelibSyncNotFoundError(msg="external department mapping does not exist")
+            logger.warning(
+                "filelib sync department_id={} mapping missing; fallback to uploader primary department_id={}",
+                params.department_id,
+                default_department.id,
+            )
+            return default_department
 
         department = await self.repository.find_department_by_external_id(
             mapping.org_code,
             tenant_id=int(self.login_user.tenant_id),
         )
         if department is None:
-            raise FilelibSyncNotFoundError(msg="department does not exist")
+            logger.warning(
+                "filelib sync department_id={} org_code={} department missing; "
+                "fallback to uploader primary department_id={}",
+                params.department_id,
+                mapping.org_code,
+                default_department.id,
+            )
+            return default_department
         return department
 
     async def _resolve_unique_primary_department(
@@ -643,6 +674,24 @@ class FilelibSyncService:
             raise FilelibSyncNotFoundError(msg="personal fallback folder cannot be created") from exc
         except SpacePermissionDeniedError as exc:
             raise FilelibSyncPermissionDeniedError(msg="no permission to create personal fallback folder") from exc
+        if folder is None:
+            return None
+        return int(folder.id)
+
+    async def _resolve_folder_path_override(
+        self,
+        knowledge_id: int,
+        folder_path: str,
+    ) -> int | None:
+        try:
+            folder = await self.knowledge_space_service.find_or_create_folder_path_for_file_sync(
+                knowledge_id,
+                folder_path,
+            )
+        except SpaceFolderNotFoundError as exc:
+            raise FilelibSyncNotFoundError(msg="configured folder path does not exist") from exc
+        except SpacePermissionDeniedError as exc:
+            raise FilelibSyncPermissionDeniedError(msg="no permission to create target folder") from exc
         if folder is None:
             return None
         return int(folder.id)

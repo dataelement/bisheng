@@ -686,7 +686,8 @@ async def test_portal_discovery_resolver_separates_configured_spaces_and_single_
 
 
 @pytest.mark.asyncio
-async def test_portal_configured_admin_only_keeps_owned_joined_or_explicit_private_spaces() -> None:
+async def test_portal_configured_admin_only_keeps_owned_joined_or_explicit_private_spaces(
+) -> None:
     login_user = Mock(user_id=7, user_name="管理员", tenant_id=1)
     login_user.is_admin.return_value = True
     service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
@@ -698,12 +699,51 @@ async def test_portal_configured_admin_only_keeps_owned_joined_or_explicit_priva
             1,
             True,
         ),
-        _discovery_scope(40, KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceOwnerTypeEnum.USER, 8, False),
-        _discovery_scope(41, KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceOwnerTypeEnum.USER, 7, False, 7),
-        _discovery_scope(42, KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceOwnerTypeEnum.USER, 8, False),
-        _discovery_scope(43, KnowledgeSpaceLevelEnum.TEAM, KnowledgeSpaceOwnerTypeEnum.USER, 8, False),
-        _discovery_scope(50, KnowledgeSpaceLevelEnum.PERSONAL, KnowledgeSpaceOwnerTypeEnum.USER, 8, False, 8),
-        _discovery_scope(51, KnowledgeSpaceLevelEnum.PERSONAL, KnowledgeSpaceOwnerTypeEnum.USER, 7, False, 7),
+        _discovery_scope(
+            40,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            41,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            7,
+            False,
+            7,
+        ),
+        _discovery_scope(
+            42,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            43,
+            KnowledgeSpaceLevelEnum.TEAM,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+        ),
+        _discovery_scope(
+            50,
+            KnowledgeSpaceLevelEnum.PERSONAL,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            8,
+            False,
+            8,
+        ),
+        _discovery_scope(
+            51,
+            KnowledgeSpaceLevelEnum.PERSONAL,
+            KnowledgeSpaceOwnerTypeEnum.USER,
+            7,
+            False,
+            7,
+        ),
     ]
     service.knowledge_space_scope_repo = Mock(
         list_portal_candidates=AsyncMock(return_value=scopes)
@@ -976,7 +1016,7 @@ def test_safe_projection_only_redacts_discoverable_space_without_explicit_permis
     )
     authorized = service._map_shougang_portal_file_item(20, item)
 
-    assert redacted.summary == ""
+    assert redacted.summary == "完整摘要"
     assert redacted.file_size == ""
     assert redacted.file_encoding == ""
     assert redacted.source_path == ""
@@ -984,3 +1024,9 @@ def test_safe_projection_only_redacts_discoverable_space_without_explicit_permis
     assert authorized.file_size == "1024"
     assert authorized.file_encoding == "GF-STD-PM-001"
     assert authorized.source_path == "设备部/检修方案.pdf"
+
+    redacted_payload = redacted.model_dump(mode="json")
+    assert redacted_payload["summary"] == "完整摘要"
+    assert "file_size" not in redacted_payload
+    assert "file_encoding" not in redacted_payload
+    assert "source_path" not in redacted_payload

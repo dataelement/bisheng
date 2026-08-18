@@ -26,6 +26,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ChatReq,
     KnowledgeSpaceFolderStatsReq,
     ShougangPortalAdvancedFileSearchReq,
+    ShougangPortalAdvancedUploaderSearchReq,
+    ShougangPortalAdvancedUploaderSearchResp,
     ShougangPortalDomainBindableSpacesResp,
     ShougangPortalDomainFileCountReq,
     ShougangPortalDomainFileCountResp,
@@ -76,6 +78,9 @@ from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
 )
 from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
     RealtimeQaQuestionFact,
+)
+from bisheng.knowledge.domain.services.knowledge_fulltext_engagement_service import (
+    project_knowledge_fulltext_engagement_best_effort,
 )
 from bisheng.utils import generate_uuid
 
@@ -360,6 +365,16 @@ async def record_shougang_portal_telemetry_event(
         event_type=event_type,
         event_data=event_data,
     )
+    if event_type in {
+        BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ,
+        BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD,
+    }:
+        await project_knowledge_fulltext_engagement_best_effort(
+            event_type=event_type.value,
+            source_app=req.source_app,
+            status=req.status,
+            file_id=req.file_id,
+        )
     if event_type == BaseTelemetryTypeEnum.PORTAL_QA:
         try:
             await RealtimeQaQuestionFact.record_success(
@@ -498,6 +513,17 @@ async def advanced_search_shougang_portal_files(
     return resp_200(ShougangPortalFileSearchResp(**result).model_dump(mode="json"))
 
 
+@router.post("/files/advanced-search/uploaders")
+async def search_shougang_portal_advanced_uploaders(
+    req: ShougangPortalAdvancedUploaderSearchReq,
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.search_shougang_portal_advanced_uploaders(req)
+    return resp_200(
+        ShougangPortalAdvancedUploaderSearchResp(**result).model_dump(mode="json")
+    )
+
+
 @router.post("/files/browse")
 async def browse_shougang_portal_files(
     req: ShougangPortalFileBrowseReq,
@@ -516,13 +542,19 @@ async def search_shougang_portal_qa_files(
     return resp_200(ShougangPortalQaFileSearchResp(**result).model_dump(mode="json"))
 
 
+# 与 /spaces 列表对齐。门户登录选库会传 portal_configured；只接受 public 时会 422，门户再翻成 502。
+PortalQaChildrenDiscoveryScope = Literal[
+    "public",
+    "public_and_department",
+    "portal_public",
+    "portal_configured",
+]
+
+
 @router.get("/qa/spaces/{space_id}/children")
 async def list_shougang_portal_qa_children(
     space_id: int,
-    discovery_scope: Literal[
-        "public",
-        "public_and_department",
-    ] = "public_and_department",
+    discovery_scope: PortalQaChildrenDiscoveryScope = "public_and_department",
     parent_id: int | None = None,
     cursor: str | None = None,
     page_size: int = Query(default=10, ge=1, le=100),
@@ -542,10 +574,7 @@ async def list_shougang_portal_qa_children(
 async def get_shougang_portal_qa_folder_stats(
     space_id: int,
     req: KnowledgeSpaceFolderStatsReq,
-    discovery_scope: Literal[
-        "public",
-        "public_and_department",
-    ] = "public_and_department",
+    discovery_scope: PortalQaChildrenDiscoveryScope = "public_and_department",
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_shougang_portal_qa_folder_stats(

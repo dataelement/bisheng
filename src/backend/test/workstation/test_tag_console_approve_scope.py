@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.database.models.review_tags import ApproveOrRejectEnum
+from bisheng.workstation.domain.schemas.review_tags_schema import ReviewTagScope
 from bisheng.workstation.domain.schemas.tag_console_schema import TagConsoleReviewRef
 from bisheng.workstation.domain.services.tag_console_service import TagConsoleService
 
@@ -42,7 +43,7 @@ def _review_row():
     )
 
 
-def _build_service(*, space_ids=None, files_by_tag=None, briefs=None):
+def _build_service(*, scope=None, files_by_tag=None, briefs=None):
     repository = AsyncMock()
     repository.library_exists.return_value = True
     repository.load_review_group.return_value = {(TAG.name, TAG.resource_type): [_review_row()]}
@@ -56,7 +57,7 @@ def _build_service(*, space_ids=None, files_by_tag=None, briefs=None):
     )
 
     tags_service = AsyncMock()
-    tags_service.resolve_reviewable_space_ids.return_value = space_ids
+    tags_service.resolve_review_tag_scope.return_value = ReviewTagScope(full_tenant=True) if scope is None else scope
     return (
         TagConsoleService(
             login_user=SimpleNamespace(user_id=1, tenant_id=TENANT_ID),
@@ -84,7 +85,7 @@ async def test_approve_uses_the_space_from_the_source_file():
 @pytest.mark.asyncio
 async def test_approve_fails_when_the_space_is_out_of_the_admins_scope():
     """A department admin must not approve a tag sourced from someone else's space."""
-    service, tags_service = _build_service(space_ids={999})
+    service, tags_service = _build_service(scope=ReviewTagScope(role_managed_space_ids=frozenset({999})))
 
     result = await service.batch_approve([TAG], LIBRARY_ID, TENANT_ID)
 
@@ -115,3 +116,16 @@ async def test_reject_does_not_need_a_source_space():
     request = tags_service.approve_or_reject_review_tag.await_args.args[0]
     assert request.status == ApproveOrRejectEnum.REJECT
     assert request.reject_reason == "不建议新增"
+
+
+@pytest.mark.asyncio
+async def test_approve_clinic_admin_uses_source_team_or_personal_space():
+    """科室路径下来源空间不在 role 集合里，仍应写回来源团队/个人库。"""
+    service, tags_service = _build_service(scope=ReviewTagScope(clinic_admin_department_ids=frozenset({10})))
+
+    result = await service.batch_approve([TAG], LIBRARY_ID, TENANT_ID)
+
+    assert result.succeeded == 1
+    request = tags_service.approve_or_reject_review_tag.await_args.args[0]
+    assert request.knowledge_id == SPACE_ID
+    assert request.tag_library_id == LIBRARY_ID

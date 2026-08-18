@@ -29,3 +29,7 @@ class UserRepository(BaseRepository[User, int], ABC):
     async def list_active_by_external_id(self, external_id: str) -> list[User]:
         """Return every active user matching the external ID across sources."""
         pass
+
+    async def list_active_by_name(self, keyword: str, *, limit: int) -> list[User]:
+        """返回门户安全候选构建所需的有界活动用户名称候选。"""
+        pass

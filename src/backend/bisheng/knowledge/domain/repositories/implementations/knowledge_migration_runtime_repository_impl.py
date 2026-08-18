@@ -47,6 +47,10 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_migration_runtim
 from bisheng.knowledge.domain.services.file_migration.planner import (
     normalize_folder_name,
 )
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    commit_tracked_fulltext_changes,
+    track_fulltext_file_changes,
+)
 from bisheng.share_link.domain.models.share_link import (
     ResourceTypeEnum as ShareResourceTypeEnum,
 )
@@ -57,6 +61,13 @@ from bisheng.user.domain.models.user import User
 class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepository):
     def __init__(self, session: AsyncSession):
         self.session = session
+        track_fulltext_file_changes(session)
+
+    async def _commit(self) -> None:
+        await commit_tracked_fulltext_changes(
+            self.session,
+            trigger_type="knowledge_migration_updated",
+        )
 
     async def _control_rows(
         self,
@@ -517,7 +528,7 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         unit.planned_target_folder_id = target_folder_id
         unit.folder_mapping_snapshot = mapping
         self.session.add(unit)
-        await self.session.commit()
+        await self._commit()
         return await self.load_context(unit_id)
 
     @staticmethod
@@ -911,7 +922,7 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         for control in control_files:
             control.checkpoint = KnowledgeMigrationCheckpoint.DB_SWITCHED.value
             self.session.add(control)
-        await self.session.commit()
+        await self._commit()
 
     async def cleanup_source_rows(self, unit_id: int) -> None:
         batch, _, control_files = await self._control_rows(
@@ -942,7 +953,7 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
         for space in spaces:
             space.update_time = datetime.now()
             self.session.add(space)
-        await self.session.commit()
+        await self._commit()
 
     async def cleanup_new_target_rows(
         self,
@@ -1011,4 +1022,4 @@ class KnowledgeMigrationRuntimeRepositoryImpl(KnowledgeMigrationRuntimeRepositor
             for item in unit.folder_mapping_snapshot or []
         ]
         self.session.add(unit)
-        await self.session.commit()
+        await self._commit()

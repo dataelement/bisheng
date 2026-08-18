@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, cast, delete, exists, func, or_, select, update
+from sqlalchemy import Integer, and_, cast, delete, exists, func, or_, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.tag import (
@@ -10,11 +10,81 @@ from bisheng.common.errcode.tag import (
     TargetTagInUsedError,
 )
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScope
+from bisheng.points.domain.constants.org_levels import ORG_LEVEL_OFFICE
 from bisheng.workstation.domain.repositories.tags_repository import TagRepositoryImpl
-from bisheng.workstation.domain.schemas.review_tags_schema import ReviewTagSubmitterTarget
+from bisheng.workstation.domain.schemas.review_tags_schema import (
+    ORG_UPLOADER_REVIEW_LEVELS,
+    ReviewTagScope,
+    ReviewTagSubmitterTarget,
+)
+
+
+def build_clinic_uploader_match_clause(tenant_id: int, department_ids: set[int]):
+    """团队/个人库：文件上传人主部门是已打 office 标、且落在给定科室 ID 集合。
+
+    必须用 ``knowledge_file.user_id``，不能用 review_tag / review_tag_link.user_id。
+    """
+    dept_id_list = sorted(int(dept_id) for dept_id in department_ids)
+    org_levels = sorted(ORG_UPLOADER_REVIEW_LEVELS)
+    org_link_match = exists(
+        select(1)
+        .select_from(ReviewTagLink)
+        .join(
+            KnowledgeFile,
+            KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer),
+        )
+        .join(
+            KnowledgeSpaceScope,
+            KnowledgeSpaceScope.space_id == KnowledgeFile.knowledge_id,
+        )
+        .join(
+            UserDepartment,
+            (UserDepartment.user_id == KnowledgeFile.user_id) & (UserDepartment.is_primary == 1),
+        )
+        .join(Department, Department.id == UserDepartment.department_id)
+        .where(
+            ReviewTagLink.tag_id == ReviewTag.id,
+            ReviewTagLink.tenant_id == tenant_id,
+            ReviewTagLink.is_deleted == False,  # noqa: E712
+            KnowledgeFile.tenant_id == tenant_id,
+            KnowledgeSpaceScope.level.in_(org_levels),
+            Department.org_level == ORG_LEVEL_OFFICE,
+            Department.id.in_(dept_id_list),
+        )
+    )
+    org_business_match = and_(
+        ReviewTag.business_type.in_(
+            [
+                TagBusinessTypeEnum.KNOWLEDGE_SPACE.value,
+                TagBusinessTypeEnum.KNOWLEDGE.value,
+            ]
+        ),
+        exists(
+            select(1)
+            .select_from(KnowledgeSpaceScope)
+            .where(
+                KnowledgeSpaceScope.space_id == cast(ReviewTag.business_id, Integer),
+                KnowledgeSpaceScope.level.in_(org_levels),
+            )
+        ),
+        exists(
+            select(1)
+            .select_from(UserDepartment)
+            .join(Department, Department.id == UserDepartment.department_id)
+            .where(
+                UserDepartment.user_id == ReviewTag.user_id,
+                UserDepartment.is_primary == 1,
+                Department.org_level == ORG_LEVEL_OFFICE,
+                Department.id.in_(dept_id_list),
+            )
+        ),
+    )
+    return or_(org_business_match, org_link_match)
 
 
 class ReviewTagsRepositoryImpl:
@@ -30,17 +100,20 @@ class ReviewTagsRepositoryImpl:
         folder_ids = [int(part) for part in (file_level_path or "").split("/") if part.isdigit()]
         return folder_ids[-1] if folder_ids else None
 
-    def _pending_space_scope_clause(self, tenant_id: int, space_ids: set[int] | None):
-        """Restrict pending review tags to associations within ``space_ids``.
-
-        Matches either ``business_id`` on knowledge-space tags or an active
-        file link whose ``KnowledgeFile.knowledge_id`` is in scope.
-        """
+    @staticmethod
+    def _coerce_review_scope(
+        scope: ReviewTagScope | None = None,
+        space_ids: set[int] | None = None,
+    ) -> ReviewTagScope | None:
+        """归一化审核范围；返回 None 表示全租户不过滤。"""
+        if scope is not None:
+            return None if scope.full_tenant else scope
         if space_ids is None:
             return None
-        if not space_ids:
-            # Empty managed set: match nothing.
-            return ReviewTag.id == -1
+        return ReviewTagScope(role_managed_space_ids=frozenset(int(i) for i in space_ids))
+
+    def _role_space_match_clause(self, tenant_id: int, space_ids: set[int]):
+        """库角色范围：business_id 或文件 knowledge_id 落在 role 空间。"""
         space_id_list = sorted(int(space_id) for space_id in space_ids)
         space_id_strs = [str(space_id) for space_id in space_id_list]
         business_match = ReviewTag.business_type.in_(
@@ -54,8 +127,6 @@ class ReviewTagsRepositoryImpl:
             .select_from(ReviewTagLink)
             .join(
                 KnowledgeFile,
-                # Compare as integers to avoid MySQL collation mismatches between
-                # CAST(id AS CHAR) and resource_id varchar collations.
                 KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer),
             )
             .where(
@@ -67,6 +138,27 @@ class ReviewTagsRepositoryImpl:
             )
         )
         return or_(business_match, link_match)
+
+    def _clinic_uploader_match_clause(self, tenant_id: int, department_ids: set[int]):
+        """科室库管理员范围：团队/个人库，上传人主部门落在所管科室。"""
+        return build_clinic_uploader_match_clause(tenant_id, department_ids)
+
+    def _pending_review_scope_clause(self, tenant_id: int, scope: ReviewTagScope | None):
+        """按 ReviewTagScope 限制待审标签；None 表示全租户。"""
+        if scope is None or scope.full_tenant:
+            return None
+        parts = []
+        if scope.role_managed_space_ids:
+            parts.append(self._role_space_match_clause(tenant_id, set(scope.role_managed_space_ids)))
+        if scope.clinic_admin_department_ids:
+            parts.append(self._clinic_uploader_match_clause(tenant_id, set(scope.clinic_admin_department_ids)))
+        if not parts:
+            return ReviewTag.id == -1
+        return or_(*parts)
+
+    def _pending_space_scope_clause(self, tenant_id: int, space_ids: set[int] | None):
+        """兼容旧 space_ids 过滤（仅 role 空间维度）。"""
+        return self._pending_review_scope_clause(tenant_id, self._coerce_review_scope(space_ids=space_ids))
 
     async def delete_review_tag_link(self, tag_id: int, tenant_id: int):
         await self.session.exec(
@@ -95,21 +187,25 @@ class ReviewTagsRepositoryImpl:
         tag_name: str,
         resource_type: TagResourceTypeEnum,
         tenant_id: int,
+        scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
     ):
         """Hard-delete pending rows for ``tag_name``.
 
-        When ``space_ids`` is set, only in-scope file links are removed. The
-        ``ReviewTag`` row is deleted only when no active links remain — so other
-        departments' same-name file associations stay pending.
+        When scoped, only in-scope file links are removed. The ``ReviewTag`` row
+        is deleted only when no active links remain — so out-of-scope same-name
+        associations stay pending.
         """
-        tags = await self.get_review_tag_list_by_tag_name(tag_name, resource_type, tenant_id, space_ids=space_ids)
+        effective = self._coerce_review_scope(scope=scope, space_ids=space_ids)
+        tags = await self.get_review_tag_list_by_tag_name(
+            tag_name, resource_type, tenant_id, scope=scope, space_ids=space_ids
+        )
         if not tags:
             return
         for tag in tags:
             if tag.id is None:
                 continue
-            if space_ids is None:
+            if effective is None:
                 await self.session.exec(
                     delete(ReviewTagLink).where(
                         ReviewTagLink.tag_id == tag.id,
@@ -124,7 +220,7 @@ class ReviewTagsRepositoryImpl:
                 )
                 continue
 
-            in_scope_link_ids = await self._in_scope_link_ids_for_tag(int(tag.id), tenant_id, space_ids)
+            in_scope_link_ids = await self._in_scope_link_ids_for_tag(int(tag.id), tenant_id, effective, tag=tag)
             if in_scope_link_ids:
                 await self.session.exec(
                     delete(ReviewTagLink).where(
@@ -147,10 +243,11 @@ class ReviewTagsRepositoryImpl:
         reject_reason: str,
         resource_type: TagResourceTypeEnum,
         tenant_id: int,
+        scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
         reviewer_id: int | None = None,
     ):
-        """Soft-delete pending rows for ``tag_name``, optionally space-scoped.
+        """Soft-delete pending rows for ``tag_name``, optionally scoped.
 
         Scoped reject only soft-deletes in-scope links. The parent ``ReviewTag``
         is rejected only when no active links remain outside the scope.
@@ -158,14 +255,17 @@ class ReviewTagsRepositoryImpl:
         Unlike approve — which hard-deletes the row — reject keeps it around, so
         this is where the reviewer is recorded for rejected tags.
         """
-        tags = await self.get_review_tag_list_by_tag_name(tag_name, resource_type, tenant_id, space_ids=space_ids)
+        effective = self._coerce_review_scope(scope=scope, space_ids=space_ids)
+        tags = await self.get_review_tag_list_by_tag_name(
+            tag_name, resource_type, tenant_id, scope=scope, space_ids=space_ids
+        )
         if not tags:
             return
         now = datetime.now()
         for tag in tags:
             if tag.id is None:
                 continue
-            if space_ids is None:
+            if effective is None:
                 await self.session.exec(
                     update(ReviewTag)
                     .where(
@@ -191,7 +291,7 @@ class ReviewTagsRepositoryImpl:
                 )
                 continue
 
-            in_scope_link_ids = await self._in_scope_link_ids_for_tag(int(tag.id), tenant_id, space_ids)
+            in_scope_link_ids = await self._in_scope_link_ids_for_tag(int(tag.id), tenant_id, effective, tag=tag)
             if in_scope_link_ids:
                 await self.session.exec(
                     update(ReviewTagLink)
@@ -225,9 +325,12 @@ class ReviewTagsRepositoryImpl:
         resource_type: TagResourceTypeEnum,
         tenant_id: int,
         *,
+        scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
     ) -> list[int]:
-        tags = await self.get_review_tag_list_by_tag_name(tag_name, resource_type, tenant_id, space_ids=space_ids)
+        tags = await self.get_review_tag_list_by_tag_name(
+            tag_name, resource_type, tenant_id, scope=scope, space_ids=space_ids
+        )
         return [int(tag.id) for tag in tags or [] if tag.id is not None]
 
     async def delete_review_tag_link_jilian(self, tag_name: str, resource_type: TagResourceTypeEnum, tenant_id: int):
@@ -408,6 +511,7 @@ class ReviewTagsRepositoryImpl:
         page_size: int,
         tenant_id: int,
         keyword: str = "",
+        scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
     ):
         where_clause = [
@@ -417,7 +521,8 @@ class ReviewTagsRepositoryImpl:
             ReviewTag.name.not_in(self._library_tag_name_subquery(tenant_id)),
             self._active_review_tag_link_exists(tenant_id),
         ]
-        scope_clause = self._pending_space_scope_clause(tenant_id, space_ids)
+        effective = self._coerce_review_scope(scope=scope, space_ids=space_ids)
+        scope_clause = self._pending_review_scope_clause(tenant_id, effective)
         if scope_clause is not None:
             where_clause.append(scope_clause)
         if keyword:
@@ -437,7 +542,11 @@ class ReviewTagsRepositoryImpl:
         return [{"name": row.name, "resource_type": row.resource_type} for row in rows]
 
     async def get_review_tag_group_count_by_page(
-        self, tenant_id: int, keyword: str = "", space_ids: set[int] | None = None
+        self,
+        tenant_id: int,
+        keyword: str = "",
+        scope: ReviewTagScope | None = None,
+        space_ids: set[int] | None = None,
     ):
         where_clause = [
             ReviewTag.tenant_id == tenant_id,
@@ -446,7 +555,8 @@ class ReviewTagsRepositoryImpl:
             ReviewTag.name.not_in(self._library_tag_name_subquery(tenant_id)),
             self._active_review_tag_link_exists(tenant_id),
         ]
-        scope_clause = self._pending_space_scope_clause(tenant_id, space_ids)
+        effective = self._coerce_review_scope(scope=scope, space_ids=space_ids)
+        scope_clause = self._pending_review_scope_clause(tenant_id, effective)
         if scope_clause is not None:
             where_clause.append(scope_clause)
         if keyword:
@@ -479,23 +589,30 @@ class ReviewTagsRepositoryImpl:
         group_tag_name: str,
         resource_type: TagResourceTypeEnum,
         tenant_id: int,
+        scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
     ):
+        effective = self._coerce_review_scope(scope=scope, space_ids=space_ids)
         tag_list = await self.get_review_tag_list_by_tag_name(
-            group_tag_name, resource_type, tenant_id, space_ids=space_ids
+            group_tag_name, resource_type, tenant_id, scope=scope, space_ids=space_ids
         )
+        tag_by_id = {int(tag.id): tag for tag in (tag_list or []) if tag.id is not None}
         tag_library_id = self._resolve_review_tag_library_id(tag_list)
-        knowledge_ids = list(
-            dict.fromkeys(
-                int(tag.business_id)
-                for tag in (tag_list or [])
-                if tag.business_type == TagBusinessTypeEnum.KNOWLEDGE_SPACE.value
-                and tag.business_id is not None
-                and str(tag.business_id).isdigit()
-            )
-        )
-        if space_ids is not None:
-            knowledge_ids = [kid for kid in knowledge_ids if kid in space_ids]
+        knowledge_ids: list[int] = []
+        for tag in tag_list or []:
+            if tag.business_type != TagBusinessTypeEnum.KNOWLEDGE_SPACE.value:
+                continue
+            if tag.business_id is None or not str(tag.business_id).isdigit():
+                continue
+            kid = int(tag.business_id)
+            if effective is not None:
+                level = await self._level_for_space(kid)
+                if not await self._allows_in_scope(
+                    effective, space_id=kid, level=level, uploader_id=int(tag.user_id or 0)
+                ):
+                    continue
+            if kid not in knowledge_ids:
+                knowledge_ids.append(kid)
         if tag_list and len(tag_list) > 0:
             minio_client = await get_minio_storage()
             resource_list = []
@@ -504,6 +621,12 @@ class ReviewTagsRepositoryImpl:
             if review_tag_link_list and len(review_tag_link_list) > 0:
                 tag_create_time_by_id = {tag.id: tag.create_time for tag in tag_list}
                 for tag_link in review_tag_link_list:
+                    parent_tag = tag_by_id.get(int(tag_link.tag_id)) if tag_link.tag_id is not None else None
+                    if effective is not None and parent_tag is not None:
+                        if not await self.link_in_review_scope(tag_link, parent_tag, tenant_id, effective):
+                            continue
+                    elif effective is not None and parent_tag is None:
+                        continue
                     file_info = {}
                     knowledgefile = await self.tags_repository.get_knowledgefile_by_resource_id(
                         tag_link.resource_id, tenant_id
@@ -512,8 +635,6 @@ class ReviewTagsRepositoryImpl:
                         file_space_id = (
                             int(knowledgefile.knowledge_id) if knowledgefile.knowledge_id is not None else None
                         )
-                        if space_ids is not None and (file_space_id is None or file_space_id not in space_ids):
-                            continue
                         if file_space_id is not None and file_space_id not in knowledge_ids:
                             knowledge_ids.append(file_space_id)
                         if knowledgefile.object_name:
@@ -572,6 +693,7 @@ class ReviewTagsRepositoryImpl:
         tag_name: str,
         resource_type: TagResourceTypeEnum,
         tenant_id: int,
+        scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
     ):
         statement = select(ReviewTag).where(
@@ -583,37 +705,116 @@ class ReviewTagsRepositoryImpl:
         )
         review_tag_list = await self.session.exec(statement)
         tags = list(review_tag_list.scalars().all())
-        if space_ids is None:
+        effective = self._coerce_review_scope(scope=scope, space_ids=space_ids)
+        if effective is None:
             return tags
         scoped: list[ReviewTag] = []
         for tag in tags:
-            # A single ReviewTag row may link files across departments; include it
-            # when any business_id or file link intersects managed spaces.
-            if await self.tag_intersects_space_scope(tag, tenant_id, space_ids):
+            # 同名待审可能跨库；任一 link/business 命中 scope 即保留。
+            if await self.tag_intersects_review_scope(tag, tenant_id, effective):
                 scoped.append(tag)
         return scoped
 
     async def tag_intersects_space_scope(self, tag: ReviewTag, tenant_id: int, space_ids: set[int]) -> bool:
-        """Return True when the pending tag touches any space in ``space_ids``."""
-        if not space_ids:
-            return False
-        space_id = self._space_id_from_review_tag(tag)
-        if space_id is not None and int(space_id) in space_ids:
+        """兼容旧 API：仅按 role 空间集合判断。"""
+        return await self.tag_intersects_review_scope(
+            tag, tenant_id, ReviewTagScope(role_managed_space_ids=frozenset(int(i) for i in space_ids))
+        )
+
+    async def tag_intersects_review_scope(self, tag: ReviewTag, tenant_id: int, scope: ReviewTagScope) -> bool:
+        """待审标签是否触及给定 ReviewTagScope。"""
+        if scope.full_tenant:
             return True
+        space_id = self._space_id_from_review_tag(tag)
+        if space_id is not None:
+            level = await self._level_for_space(int(space_id))
+            if await self._allows_in_scope(
+                scope, space_id=int(space_id), level=level, uploader_id=int(tag.user_id or 0)
+            ):
+                return True
         if tag.id is None:
             return False
-        link_ids = await self._in_scope_link_ids_for_tag(int(tag.id), tenant_id, space_ids)
+        link_ids = await self._in_scope_link_ids_for_tag(int(tag.id), tenant_id, scope, tag=tag)
         return bool(link_ids)
 
-    async def _in_scope_link_ids_for_tag(self, tag_id: int, tenant_id: int, space_ids: set[int]) -> list[int]:
-        """Return active link ids whose file ``knowledge_id`` is in ``space_ids``."""
+    async def _level_for_space(self, space_id: int | None) -> str | None:
+        if space_id is None:
+            return None
+        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao
+
+        row = await KnowledgeSpaceScopeDao.aget_by_space_id(int(space_id))
+        if row is None:
+            return None
+        return str(getattr(row, "level", "") or "") or None
+
+    async def _uploader_office_department_id(self, user_id: int | None) -> int | None:
+        """上传人主部门仅在已打 office 标时返回 department_id；否则 None（不上溯）。"""
+        if user_id is None or int(user_id) <= 0:
+            return None
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+
+        primary = await UserDepartmentDao.aget_user_primary_department(int(user_id))
+        if primary is None or getattr(primary, "department_id", None) is None:
+            return None
+        dept = await DepartmentDao.aget_by_id(int(primary.department_id))
+        if dept is None:
+            return None
+        if str(getattr(dept, "org_level", "") or "") != ORG_LEVEL_OFFICE:
+            return None
+        return int(dept.id)
+
+    async def _allows_in_scope(
+        self,
+        scope: ReviewTagScope,
+        *,
+        space_id: int | None,
+        level: str | None,
+        uploader_id: int | None,
+    ) -> bool:
+        office_dept_id = await self._uploader_office_department_id(uploader_id)
+        return scope.allows_space_for_uploader(
+            space_id=space_id,
+            level=level,
+            uploader_id=uploader_id,
+            uploader_office_department_id=office_dept_id,
+        )
+
+    async def link_in_review_scope(
+        self,
+        link: ReviewTagLink,
+        tag: ReviewTag,
+        tenant_id: int,
+        scope: ReviewTagScope,
+    ) -> bool:
+        """单条 link 是否在审核范围内。"""
+        if scope.full_tenant:
+            return True
+        space_id, _, _, _, file_uploader_id = await self._resolve_file_target_from_link(link, tenant_id)
+        # 有文件时按上传人；无文件才回退打标人（遗留无挂接行）。
+        uploader_id = int(file_uploader_id or 0) or int(link.user_id or 0) or int(tag.user_id or 0)
+        level = await self._level_for_space(space_id)
+        return await self._allows_in_scope(scope, space_id=space_id, level=level, uploader_id=uploader_id)
+
+    async def _in_scope_link_ids_for_tag(
+        self,
+        tag_id: int,
+        tenant_id: int,
+        scope: ReviewTagScope | set[int],
+        tag: ReviewTag | None = None,
+    ) -> list[int]:
+        """返回落在审核范围内的 active link id。"""
+        if isinstance(scope, set):
+            scope = ReviewTagScope(role_managed_space_ids=frozenset(int(i) for i in scope))
+        if tag is None:
+            tag = await self.get_review_tag_by_tag_id(tag_id, tenant_id)
+        if tag is None:
+            return []
         links = await self.get_review_tag_link_list_by_tag_id([tag_id], tenant_id)
         in_scope: list[int] = []
         for link in links or []:
             if link.id is None:
                 continue
-            space_id, _, _, _ = await self._resolve_file_target_from_link(link, tenant_id)
-            if space_id is not None and int(space_id) in space_ids:
+            if await self.link_in_review_scope(link, tag, tenant_id, scope):
                 in_scope.append(int(link.id))
         return in_scope
 
@@ -659,30 +860,37 @@ class ReviewTagsRepositoryImpl:
         self,
         link,
         tenant_id: int,
-    ) -> tuple[int | None, int | None, str | None, str | None]:
+    ) -> tuple[int | None, int | None, str | None, str | None, int | None]:
+        """从 link 解析空间、文件及文件上传人。
+
+        Returns:
+            (space_id, file_id, file_name, file_type, file_uploader_id)
+        """
         knowledgefile = await self.tags_repository.get_knowledgefile_by_resource_id(
             link.resource_id,
             tenant_id,
         )
         if not knowledgefile or knowledgefile.id is None:
-            return None, None, None, None
+            return None, None, None, None, None
         space_id = int(knowledgefile.knowledge_id) if knowledgefile.knowledge_id else None
         file_id = int(knowledgefile.id)
         file_name = knowledgefile.file_name
         file_type = knowledgefile.file_type
-        return space_id, file_id, file_name, file_type
+        raw_uploader = getattr(knowledgefile, "user_id", None)
+        file_uploader_id = int(raw_uploader) if raw_uploader else None
+        return space_id, file_id, file_name, file_type, file_uploader_id
 
     async def _resolve_primary_file_for_tag(
         self,
         tag_id: int,
         user_id: int,
         tenant_id: int,
-    ) -> tuple[int | None, int | None, str | None, str | None]:
+    ) -> tuple[int | None, int | None, str | None, str | None, int | None]:
         links = await self.get_review_tag_link_list_by_tag_id([tag_id], tenant_id)
         preferred = next((link for link in links or [] if int(link.user_id or 0) == user_id), None)
         chosen = preferred or ((links or [None])[0])
         if chosen is None:
-            return None, None, None, None
+            return None, None, None, None, None
         return await self._resolve_file_target_from_link(chosen, tenant_id)
 
     async def list_submitter_notification_targets(
@@ -692,10 +900,14 @@ class ReviewTagsRepositoryImpl:
         tenant_id: int,
         *,
         exclude_user_id: int | None = None,
+        scope: ReviewTagScope | None = None,
         space_ids: set[int] | None = None,
     ) -> list[ReviewTagSubmitterTarget]:
         """Return unique submitters with their related knowledge space and file."""
-        tags = await self.get_review_tag_list_by_tag_name(tag_name, resource_type, tenant_id, space_ids=space_ids)
+        effective = self._coerce_review_scope(scope=scope, space_ids=space_ids)
+        tags = await self.get_review_tag_list_by_tag_name(
+            tag_name, resource_type, tenant_id, scope=scope, space_ids=space_ids
+        )
         user_targets: dict[int, ReviewTagSubmitterTarget] = {}
 
         for tag in tags:
@@ -706,8 +918,15 @@ class ReviewTagsRepositoryImpl:
             file_id: int | None = None
             file_name: str | None = None
             file_type: str | None = None
+            file_uploader_id: int | None = None
             if tag.id is not None:
-                resolved_space, resolved_file, resolved_name, resolved_type = await self._resolve_primary_file_for_tag(
+                (
+                    resolved_space,
+                    resolved_file,
+                    resolved_name,
+                    resolved_type,
+                    file_uploader_id,
+                ) = await self._resolve_primary_file_for_tag(
                     int(tag.id),
                     user_id,
                     tenant_id,
@@ -717,8 +936,13 @@ class ReviewTagsRepositoryImpl:
                 file_id = resolved_file
                 file_name = resolved_name
                 file_type = resolved_type
-            if space_ids is not None and (space_id is None or int(space_id) not in space_ids):
-                continue
+            if effective is not None:
+                level = await self._level_for_space(space_id)
+                scope_uploader = file_uploader_id or user_id
+                if not await self._allows_in_scope(
+                    effective, space_id=space_id, level=level, uploader_id=scope_uploader
+                ):
+                    continue
             existing = user_targets.get(user_id)
             if existing is None or (existing.knowledge_space_id is None and space_id is not None):
                 user_targets[user_id] = ReviewTagSubmitterTarget(
@@ -737,14 +961,17 @@ class ReviewTagsRepositoryImpl:
                 user_id = int(link.user_id or 0)
                 if user_id <= 0 or user_id in user_targets:
                     continue
-                space_id, file_id, file_name, file_type = await self._resolve_file_target_from_link(link, tenant_id)
+                parent_tag = tag_by_id.get(int(link.tag_id)) if link.tag_id is not None else None
+                if effective is not None and parent_tag is not None:
+                    if not await self.link_in_review_scope(link, parent_tag, tenant_id, effective):
+                        continue
+                elif effective is not None and parent_tag is None:
+                    continue
+                space_id, file_id, file_name, file_type, _ = await self._resolve_file_target_from_link(link, tenant_id)
                 if space_id is None:
-                    parent_tag = tag_by_id.get(int(link.tag_id))
                     space_id = self._space_id_from_review_tag(parent_tag) if parent_tag else None
                     if space_id is None and parent_tag and parent_tag.id is not None:
                         space_id = await self._resolve_space_id_from_tag_links(int(parent_tag.id), tenant_id)
-                if space_ids is not None and (space_id is None or int(space_id) not in space_ids):
-                    continue
                 user_targets[user_id] = ReviewTagSubmitterTarget(
                     user_id=user_id,
                     knowledge_space_id=space_id,

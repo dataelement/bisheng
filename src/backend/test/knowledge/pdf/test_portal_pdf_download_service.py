@@ -319,6 +319,7 @@ def _build_service(
     capacity: PortalPdfDownloadProcessCapacity | None = None,
     runner: CapturingRunner | None = None,
     telemetry: list | None = None,
+    engagement: list | None = None,
     grant_service=None,
     daily_download_counter: FakeDailyDownloadCounter | None = None,
     daily_limit: int = -1,
@@ -332,6 +333,7 @@ def _build_service(
     selected_capacity = capacity or PortalPdfDownloadProcessCapacity(2)
     selected_runner = runner or CapturingRunner()
     telemetry_events = telemetry if telemetry is not None else []
+    engagement_events = engagement if engagement is not None else []
     selected_counter = daily_download_counter or FakeDailyDownloadCounter()
 
     selected_ensurer = artifact_ensurer or FakeArtifactEnsurer([selected_artifact])
@@ -352,6 +354,7 @@ def _build_service(
         capacity_limiter=selected_capacity,
         watermark_runner=selected_runner,
         telemetry_recorder=telemetry_events.append,
+        engagement_recorder=lambda **kwargs: engagement_events.append(kwargs),
         temp_root=tmp_path,
         now_provider=lambda: datetime(2026, 7, 21, 17, 30, 0),
         daily_download_counter=selected_counter,
@@ -364,6 +367,7 @@ def _build_service(
         "capacity": selected_capacity,
         "runner": selected_runner,
         "telemetry": telemetry_events,
+        "engagement": engagement_events,
         "daily_counter": selected_counter,
         "grant": service.share_grant_service,
         "artifact_ensurer": selected_ensurer,
@@ -673,9 +677,22 @@ async def test_watermark_second_line_uses_portal_config(tmp_path: Path, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_success_stream_records_once_then_cleans_temp_and_releases_lock(tmp_path: Path) -> None:
+async def test_success_stream_records_once_then_cleans_temp_and_releases_lock(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    async def resolve_watermark_text(*, tenant_id=None):
+        del tenant_id
+        return DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
+
+    monkeypatch.setattr(
+        ShougangPortalConfigService,
+        "get_watermark_horizontal_text",
+        staticmethod(resolve_watermark_text),
+    )
     telemetry: list = []
-    service, fakes = _build_service(tmp_path, telemetry=telemetry)
+    engagement: list = []
+    service, fakes = _build_service(tmp_path, telemetry=telemetry, engagement=engagement)
     prepared = await service.prepare_download(_request(entry_point="search"), _login_user())
     temp_dir = prepared.path.parent
 
@@ -684,6 +701,14 @@ async def test_success_stream_records_once_then_cleans_temp_and_releases_lock(tm
     assert b"".join(chunks).startswith(b"%PDF")
     assert len(telemetry) == 1
     assert telemetry[0]["entry_point"] == "search"
+    assert engagement == [
+        {
+            "event_type": "portal_document_download",
+            "source_app": "shougang_portal",
+            "status": "success",
+            "file_id": 1580,
+        }
+    ]
     assert not temp_dir.exists()
     assert fakes["lock"].release_calls == [(5, 7, "owner-token")]
 

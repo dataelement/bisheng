@@ -26,6 +26,9 @@ from bisheng.knowledge.domain.models.knowledge_file_pdf_artifact import (
 from bisheng.knowledge.domain.models.knowledge_file_similarity_candidate import (
     KnowledgeFileSimilarityCandidate,
 )
+from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import (
+    KnowledgeFulltextOutbox,
+)
 from bisheng.knowledge.domain.models.knowledge_migration import (
     KnowledgeMigrationAttempt,
     KnowledgeMigrationBatch,
@@ -66,6 +69,7 @@ async def runtime_session():
         KnowledgeFile.__table__,
         KnowledgeFilePdfArtifact.__table__,
         KnowledgeFileSimilarityCandidate.__table__,
+        KnowledgeFulltextOutbox.__table__,
         PortalRecommendationFileProjection.__table__,
         ShareLink.__table__,
         KnowledgeDocument.__table__,

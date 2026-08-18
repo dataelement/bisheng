@@ -34,7 +34,7 @@ class FixedOrNodeDecisionResult:
 
 
 class ApprovalInstanceRepository:
-    _DUPLICATE_ACTIVE_STATUSES = ('pending', 'exception', 'execute_failed')
+    _DUPLICATE_ACTIVE_STATUSES = ("pending", "exception", "execute_failed")
 
     @classmethod
     async def create_instance(
@@ -78,8 +78,8 @@ class ApprovalInstanceRepository:
         async with get_async_db_session() as session:
             saved = await session.get(ApprovalInstance, row.id)
             if saved is None:
-                raise ValueError(f'approval instance not found: {row.id}')
-            for key, value in row.model_dump(mode='python', exclude_unset=False).items():
+                raise ValueError(f"approval instance not found: {row.id}")
+            for key, value in row.model_dump(mode="python", exclude_unset=False).items():
                 setattr(saved, key, value)
             session.add(saved)
             await session.commit()
@@ -100,15 +100,40 @@ class ApprovalInstanceRepository:
         statuses = tuple(active_statuses) if active_statuses is not None else cls._DUPLICATE_ACTIVE_STATUSES
         if not statuses:
             return None
-        statement = select(ApprovalInstance).where(
-            ApprovalInstance.tenant_id == tenant_id,
-            ApprovalInstance.scenario_code == scenario_code,
-            ApprovalInstance.business_key == business_key,
-            ApprovalInstance.applicant_user_id == applicant_user_id,
-            ApprovalInstance.status.in_(statuses),
-        ).order_by(ApprovalInstance.id.desc())
+        statement = (
+            select(ApprovalInstance)
+            .where(
+                ApprovalInstance.tenant_id == tenant_id,
+                ApprovalInstance.scenario_code == scenario_code,
+                ApprovalInstance.business_key == business_key,
+                ApprovalInstance.applicant_user_id == applicant_user_id,
+                ApprovalInstance.status.in_(statuses),
+            )
+            .order_by(ApprovalInstance.id.desc())
+        )
         if session is not None:
             return (await session.exec(statement)).first()
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).first()
+
+    @classmethod
+    async def find_latest_by_business_key(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_code: str,
+        business_key: str,
+    ) -> ApprovalInstance | None:
+        """按业务键取最新一条实例，不限状态。"""
+        statement = (
+            select(ApprovalInstance)
+            .where(
+                ApprovalInstance.tenant_id == tenant_id,
+                ApprovalInstance.scenario_code == scenario_code,
+                ApprovalInstance.business_key == business_key,
+            )
+            .order_by(ApprovalInstance.id.desc())
+        )
         async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
 
@@ -186,8 +211,8 @@ class ApprovalInstanceRepository:
         async with get_async_db_session() as session:
             saved = await session.get(ApprovalTask, row.id)
             if saved is None:
-                raise ValueError(f'approval task not found: {row.id}')
-            for key, value in row.model_dump(mode='python', exclude_unset=False).items():
+                raise ValueError(f"approval task not found: {row.id}")
+            for key, value in row.model_dump(mode="python", exclude_unset=False).items():
                 setattr(saved, key, value)
             session.add(saved)
             await session.commit()
@@ -196,9 +221,13 @@ class ApprovalInstanceRepository:
 
     @classmethod
     async def list_tasks(cls, instance_id: int) -> list[ApprovalTask]:
-        statement = select(ApprovalTask).where(ApprovalTask.instance_id == instance_id).order_by(
-            ApprovalTask.node_order.asc(),
-            ApprovalTask.id.asc(),
+        statement = (
+            select(ApprovalTask)
+            .where(ApprovalTask.instance_id == instance_id)
+            .order_by(
+                ApprovalTask.node_order.asc(),
+                ApprovalTask.id.asc(),
+            )
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
@@ -230,8 +259,8 @@ class ApprovalInstanceRepository:
         async with get_async_db_session() as session:
             saved = await session.get(ApprovalException, row.id)
             if saved is None:
-                raise ValueError(f'approval exception not found: {row.id}')
-            for key, value in row.model_dump(mode='python', exclude_unset=False).items():
+                raise ValueError(f"approval exception not found: {row.id}")
+            for key, value in row.model_dump(mode="python", exclude_unset=False).items():
                 setattr(saved, key, value)
             session.add(saved)
             await session.commit()
@@ -240,8 +269,12 @@ class ApprovalInstanceRepository:
 
     @classmethod
     async def list_exceptions(cls, instance_id: int) -> list[ApprovalException]:
-        statement = select(ApprovalException).where(ApprovalException.instance_id == instance_id).order_by(
-            ApprovalException.id.asc(),
+        statement = (
+            select(ApprovalException)
+            .where(ApprovalException.instance_id == instance_id)
+            .order_by(
+                ApprovalException.id.asc(),
+            )
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
@@ -273,8 +306,8 @@ class ApprovalInstanceRepository:
         async with get_async_db_session() as session:
             saved = await session.get(ApprovalOutbox, row.id)
             if saved is None:
-                raise ValueError(f'approval outbox not found: {row.id}')
-            for key, value in row.model_dump(mode='python', exclude_unset=False).items():
+                raise ValueError(f"approval outbox not found: {row.id}")
+            for key, value in row.model_dump(mode="python", exclude_unset=False).items():
                 setattr(saved, key, value)
             session.add(saved)
             await session.commit()
@@ -283,8 +316,12 @@ class ApprovalInstanceRepository:
 
     @classmethod
     async def list_outbox(cls, instance_id: int) -> list[ApprovalOutbox]:
-        statement = select(ApprovalOutbox).where(ApprovalOutbox.instance_id == instance_id).order_by(
-            ApprovalOutbox.id.asc(),
+        statement = (
+            select(ApprovalOutbox)
+            .where(ApprovalOutbox.instance_id == instance_id)
+            .order_by(
+                ApprovalOutbox.id.asc(),
+            )
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
@@ -308,8 +345,12 @@ class ApprovalInstanceRepository:
 
     @classmethod
     async def list_action_logs(cls, instance_id: int) -> list[ApprovalActionLog]:
-        statement = select(ApprovalActionLog).where(ApprovalActionLog.instance_id == instance_id).order_by(
-            ApprovalActionLog.id.asc(),
+        statement = (
+            select(ApprovalActionLog)
+            .where(ApprovalActionLog.instance_id == instance_id)
+            .order_by(
+                ApprovalActionLog.id.asc(),
+            )
         )
         async with get_async_db_session() as session:
             return list((await session.exec(statement)).all())
@@ -327,10 +368,7 @@ class ApprovalInstanceRepository:
             ApprovalActionLog.action == action,
         )
         async with get_async_db_session() as session:
-            return {
-                int(instance_id)
-                for instance_id in (await session.exec(statement)).all()
-            }
+            return {int(instance_id) for instance_id in (await session.exec(statement)).all()}
 
     @classmethod
     async def decide_fixed_or_node_atomic(
@@ -351,38 +389,25 @@ class ApprovalInstanceRepository:
         async with get_async_db_session() as session:
             try:
                 task_result = await session.execute(
-                    select(ApprovalTask)
-                    .where(ApprovalTask.id == task_id)
-                    .with_for_update()
+                    select(ApprovalTask).where(ApprovalTask.id == task_id).with_for_update()
                 )
                 task = task_result.scalars().first()
                 if task is None:
                     raise ApprovalRequestNotFoundError()
 
                 instance_result = await session.execute(
-                    select(ApprovalInstance)
-                    .where(ApprovalInstance.id == task.instance_id)
-                    .with_for_update()
+                    select(ApprovalInstance).where(ApprovalInstance.id == task.instance_id).with_for_update()
                 )
                 instance = instance_result.scalars().first()
                 if instance is None:
                     raise ApprovalRequestNotFoundError()
-                if (
-                    instance.scenario_code != "department_file_view_request"
-                    or task.node_mode != "or"
-                ):
+                if instance.scenario_code != "department_file_view_request" or task.node_mode != "or":
                     raise ValueError("task is not a fixed department-file OR-node task")
                 if instance.tenant_id != operator_tenant_id:
                     raise ApprovalRequestPermissionDeniedError()
-                if (
-                    not operator_is_admin
-                    and task.approver_user_id != operator_user_id
-                ):
+                if not operator_is_admin and task.approver_user_id != operator_user_id:
                     raise ApprovalRequestPermissionDeniedError()
-                if (
-                    instance.status != ApprovalInstanceStatus.PENDING
-                    or task.status != ApprovalTaskStatus.PENDING
-                ):
+                if instance.status != ApprovalInstanceStatus.PENDING or task.status != ApprovalTaskStatus.PENDING:
                     raise ApprovalRequestAlreadyProcessedError()
 
                 siblings_result = await session.execute(
@@ -396,26 +421,15 @@ class ApprovalInstanceRepository:
                 sibling_tasks = list(siblings_result.scalars().all())
                 acted_at = datetime.utcnow()
                 approved = action == "approve"
-                task.status = (
-                    ApprovalTaskStatus.APPROVED
-                    if approved
-                    else ApprovalTaskStatus.REJECTED
-                )
+                task.status = ApprovalTaskStatus.APPROVED if approved else ApprovalTaskStatus.REJECTED
                 task.comment = comment
                 task.acted_at = acted_at
                 for sibling in sibling_tasks:
-                    if (
-                        sibling.id != task.id
-                        and sibling.status == ApprovalTaskStatus.PENDING
-                    ):
+                    if sibling.id != task.id and sibling.status == ApprovalTaskStatus.PENDING:
                         sibling.status = ApprovalTaskStatus.SKIPPED
                         sibling.acted_at = acted_at
 
-                instance.status = (
-                    ApprovalInstanceStatus.APPROVED
-                    if approved
-                    else ApprovalInstanceStatus.REJECTED
-                )
+                instance.status = ApprovalInstanceStatus.APPROVED if approved else ApprovalInstanceStatus.REJECTED
                 instance.current_node_name = None
                 instance.latest_approver_user_id = operator_user_id
 
@@ -435,11 +449,7 @@ class ApprovalInstanceRepository:
                         operator_id=operator_user_id,
                         operator_name=operator_user_name,
                         operator_tenant_id=operator_tenant_id,
-                        action=(
-                            "approval.task.approve"
-                            if approved
-                            else "approval.task.reject"
-                        ),
+                        action=("approval.task.approve" if approved else "approval.task.reject"),
                         target_type="approval_task",
                         target_id=str(task.id),
                         reason=comment,

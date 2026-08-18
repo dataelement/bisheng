@@ -24,10 +24,18 @@ from bisheng.database.models.audit_log import AuditLogDao
 class ApprovalScenarioAdminService:
     SYSTEM_SCENARIO_CODES = frozenset({"department_file_view_request"})
     FIXED_SCENARIO_CODES = frozenset()
+    # 流程管理不展示：业务自建流程，管理员不可配置。运行时仍走 registry / repository。
+    ADMIN_CONFIG_HIDDEN_SCENARIO_CODES = frozenset({"qa_question_publish"})
 
     @classmethod
     def _is_fixed_scenario(cls, scenario) -> bool:
         return bool(scenario and getattr(scenario, "scenario_code", None) in cls.FIXED_SCENARIO_CODES)
+
+    @classmethod
+    def _is_admin_config_hidden(cls, scenario) -> bool:
+        """流程管理是否隐藏该场景。可传 ORM 行或 scenario_code。"""
+        code = scenario if isinstance(scenario, str) else getattr(scenario, "scenario_code", None)
+        return code in cls.ADMIN_CONFIG_HIDDEN_SCENARIO_CODES
 
     @classmethod
     async def _assert_scenario_structure_mutable(
@@ -39,7 +47,7 @@ class ApprovalScenarioAdminService:
         scenario = await ApprovalScenarioRepository.get_scenario(scenario_id)
         if scenario is None or scenario.tenant_id != tenant_id:
             raise ValueError(f"scenario not found: {scenario_id}")
-        if cls._is_fixed_scenario(scenario):
+        if cls._is_fixed_scenario(scenario) or cls._is_admin_config_hidden(scenario):
             raise ApprovalFixedScenarioStructureLockedError()
         return scenario
 
@@ -77,7 +85,11 @@ class ApprovalScenarioAdminService:
 
     @classmethod
     async def list_presets(cls):
-        return [item.model_dump() for item in ApprovalRegistry.with_default_presets().list_presets()]
+        return [
+            item.model_dump()
+            for item in ApprovalRegistry.with_default_presets().list_presets()
+            if not cls._is_admin_config_hidden(item.scenario_code)
+        ]
 
     @classmethod
     async def list_scenarios(cls, *, tenant_id: int):
@@ -89,6 +101,7 @@ class ApprovalScenarioAdminService:
                 "structure_locked": cls._is_fixed_scenario(row),
             }
             for row in rows
+            if not cls._is_admin_config_hidden(row)
         ]
 
     @classmethod
@@ -101,7 +114,7 @@ class ApprovalScenarioAdminService:
         operator_user_name: str | None = None,
     ):
         scenario_code = str(payload["scenario_code"])
-        if scenario_code in cls.SYSTEM_SCENARIO_CODES:
+        if scenario_code in cls.SYSTEM_SCENARIO_CODES or cls._is_admin_config_hidden(scenario_code):
             raise ApprovalFixedScenarioStructureLockedError()
         existing = await ApprovalScenarioRepository.get_scenario_by_code(tenant_id, scenario_code)
         if existing:
@@ -142,6 +155,8 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_scenario(scenario_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f"scenario not found: {scenario_id}")
+        if cls._is_admin_config_hidden(row):
+            raise ApprovalFixedScenarioStructureLockedError()
         if cls._is_fixed_scenario(row):
             extra_fields = set(payload) - {"enabled", "toggle_reason"}
             if extra_fields:

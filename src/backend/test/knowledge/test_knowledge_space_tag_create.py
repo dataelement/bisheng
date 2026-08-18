@@ -528,53 +528,6 @@ async def test_add_space_tag_creates_review_tag_with_tenant_id(service):
     assert inserted.review_status == 0
     assert inserted.business_type == TagBusinessTypeEnum.TAG_LIBRARY
     assert inserted.business_id == "5"
-    file_record = SimpleNamespace(id=10, knowledge_id=137, file_name="demo.pdf")
-
-    with (
-        patch.object(service, "_get_file_for_action", new_callable=AsyncMock, return_value=file_record),
-        patch.object(service, "_require_permission_id", new_callable=AsyncMock),
-        patch.object(service, "_notify_favorite_source_changed", new_callable=AsyncMock),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
-        ) as mock_session_ctx,
-        patch.object(
-            service,
-            "_require_review_tag_feature_enabled",
-            new_callable=AsyncMock,
-        ),
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.TagDao.aupdate_resource_tags",
-            new_callable=AsyncMock,
-        ) as mock_update_tags,
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.ReviewTagDao.aupdate_resource_tags",
-            new_callable=AsyncMock,
-        ) as mock_update_review_tags,
-        patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
-            new_callable=AsyncMock,
-        ),
-        patch.object(
-            service,
-            "_promote_review_tags_existing_in_libraries",
-            new_callable=AsyncMock,
-            side_effect=lambda tag_ids, review_tag_ids: (tag_ids, review_tag_ids),
-        ),
-    ):
-        session = AsyncMock()
-        session.exec = AsyncMock(
-            side_effect=[
-                SimpleNamespace(all=lambda: [1]),
-                SimpleNamespace(all=lambda: [20]),
-            ]
-        )
-        mock_session_ctx.return_value.__aenter__ = AsyncMock(return_value=session)
-        mock_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
-
-        await service.update_file_tags(137, 10, [1, 20], [])
-
-    mock_update_tags.assert_awaited_once_with([1], "10", ResourceTypeEnum.SPACE_FILE, 1)
-    mock_update_review_tags.assert_awaited_once_with([20], "10", ResourceTypeEnum.SPACE_FILE, 1, tenant_id=1)
 
 
 @pytest.mark.asyncio

@@ -127,6 +127,7 @@ from bisheng.knowledge.domain.constants import (
     parse_shougang_file_encoding_codes,
 )
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.knowledge.domain import knowledge_fulltext_constants as fulltext_constants
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
@@ -183,6 +184,9 @@ from bisheng.knowledge.domain.schemas.favorite_notification_schema import (
 from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
     KnowledgeDocumentEntryCapabilities,
 )
+from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
+    KnowledgeFulltextAdvancedSearchQuery,
+)
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     GroupedKnowledgeSpacesResp,
     KnowledgeSpaceCreateOptionDepartment,
@@ -194,6 +198,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceInfoResp,
     RemoveSpaceMemberRequest,
     ShougangPortalAdvancedFileSearchReq,
+    ShougangPortalAdvancedUploaderItemResp,
+    ShougangPortalAdvancedUploaderSearchReq,
     ShougangPortalCategoryFileCountItem,
     ShougangPortalDomainBindableSpaceResp,
     ShougangPortalDomainFileCountItem,
@@ -232,6 +238,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationItemResp,
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
+    BatchAliasActionResult,
+    BatchAliasFailure,
 )
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessDecision,
@@ -344,6 +352,9 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
         KnowledgeFileSimilarityCandidateRepository,
     )
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
+        KnowledgeFileRepository,
+    )
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_space_scope_repository import (
         KnowledgeSpaceScopeRepository,
     )
@@ -354,7 +365,11 @@ if TYPE_CHECKING:
         KnowledgeDocumentDurableReferenceResolver,
         KnowledgeDocumentEntryResolver,
     )
+    from bisheng.knowledge.domain.services.knowledge_fulltext_search_service import (
+        KnowledgeFulltextSearchService,
+    )
     from bisheng.message.domain.services.message_service import MessageService
+    from bisheng.user.domain.repositories.interfaces.user_repository import UserRepository
 
 
 def _get_space_migrate_task() -> Any:
@@ -620,6 +635,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
         self.similar_candidate_repo: KnowledgeFileSimilarityCandidateRepository | None = None
+        self.knowledge_file_repo: KnowledgeFileRepository | None = None
+        self.user_repository: UserRepository | None = None
+        self.knowledge_fulltext_search_service: KnowledgeFulltextSearchService | None = None
         self.department_space_binding_repo: DepartmentSpaceBindingRepository | None = None
         self.knowledge_space_scope_repo: KnowledgeSpaceScopeRepository | None = None
         self._created_space_scope_by_id: dict[
@@ -6152,6 +6170,247 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         req: ShougangPortalAdvancedFileSearchReq,
     ) -> dict:
+        spaces, effective_discovery_scope, trusted_public_scope = (
+            await self._resolve_shougang_portal_advanced_search_spaces(req)
+        )
+        if not spaces:
+            return self._build_shougang_portal_cursor_response([], False, None)
+
+        space_ids = [int(space.id) for space in spaces]
+        if req.conditions is not None:
+            query = KnowledgeFulltextAdvancedSearchQuery(
+                version=req.version,
+                space_ids=space_ids,
+                conditions=req.conditions,
+                sort=req.sort,
+            )
+        else:
+            query = KnowledgeFulltextAdvancedSearchQuery(
+                space_ids=space_ids,
+                space_level=self._space_level_value(req.space_level),
+                business_domain_code=req.business_domain_code,
+                document_type=req.document_type,
+                file_subcategory_code=req.file_subcategory_code,
+                file_ext=req.file_ext,
+                tag=req.tag,
+                all_keywords=req.all_keywords,
+                exact_phrase=req.exact_phrase,
+                any_keywords=req.any_keywords,
+                exclude_keywords=req.exclude_keywords,
+                search_field=req.search_field,
+                original_uploader_id=req.original_uploader_id,
+                original_knowledge_id=req.original_knowledge_id,
+                preview_count_min=req.preview_count_min,
+                preview_count_max=req.preview_count_max,
+                download_count_min=req.download_count_min,
+                download_count_max=req.download_count_max,
+                updated_from=req.updated_from,
+                updated_to=req.updated_to,
+                sort=req.sort,
+            )
+        limit = min(max(int(req.limit or 20), 1), 100)
+        search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
+        session = await search_service.begin(query, cursor=req.cursor)
+        visible_files: list[tuple[KnowledgeFile, list[Any]]] = []
+        scanned_hits = 0
+        scanned_batches = 0
+        exhausted = False
+        started_at = time.monotonic()
+        close_pit = False
+        failure_stage = "search"
+        try:
+            while (
+                len(visible_files) <= limit
+                and scanned_hits < fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_MAX_SCAN_HITS
+            ):
+                batch_size = min(
+                    fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_BATCH_SIZE,
+                    fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_MAX_SCAN_HITS
+                    - scanned_hits,
+                )
+                batch = await search_service.fetch(query, session, size=batch_size)
+                scanned_batches += 1
+                scanned_hits += len(batch.hits)
+                failure_stage = "database_recheck"
+                raw_files = list(
+                    await file_repository.find_by_ids(
+                        [hit.file_id for hit in batch.hits]
+                    )
+                )
+                valid_files = self._restore_valid_fulltext_files(
+                    raw_files,
+                    hits=batch.hits,
+                    space_ids=set(space_ids),
+                )
+                failure_stage = "permission_filter"
+                if trusted_public_scope:
+                    visible_batch = self._accept_shougang_portal_public_files(valid_files)
+                else:
+                    visible_batch = await self._filter_shougang_portal_search_files(
+                        valid_files,
+                        spaces=spaces,
+                        defer_department_access=effective_discovery_scope
+                        == "public_and_department",
+                    )
+                visible_ids = {int(file.id) for file in visible_batch}
+                sort_by_file_id = {
+                    hit.file_id: list(hit.sort_values) for hit in batch.hits
+                }
+                for file in valid_files:
+                    file_id = int(file.id)
+                    if file_id not in visible_ids:
+                        continue
+                    visible_files.append((file, sort_by_file_id[file_id]))
+                    if len(visible_files) > limit:
+                        break
+                exhausted = batch.exhausted
+                if len(visible_files) > limit or exhausted:
+                    break
+                failure_stage = "search"
+
+            page_pairs = visible_files[:limit]
+            page_files = [file for file, _ in page_pairs]
+            if len(visible_files) > limit:
+                has_more = True
+                cursor_sort = page_pairs[-1][1]
+            elif exhausted:
+                has_more = False
+                cursor_sort = None
+                close_pit = True
+            else:
+                has_more = True
+                cursor_sort = list(session.search_after or [])
+
+            failure_stage = "response_mapping"
+            page_items = await self._map_shougang_portal_files_to_items(
+                files=page_files,
+                spaces=spaces,
+                file_ext=req.file_ext,
+                document_type=req.document_type,
+                file_subcategory_code=req.file_subcategory_code,
+                include_source_paths=True,
+            )
+            next_cursor = (
+                search_service.encode_next_cursor(session, sort_values=cursor_sort)
+                if has_more and cursor_sort
+                else None
+            )
+            logger.info(
+                "portal advanced fulltext search completed: field={} sort={} "
+                "has_keywords={} has_uploader_filter={} has_source_filter={} "
+                "has_count_filter={} scanned_hits={} visible_hits={} batches={} "
+                "duration_ms={}",
+                "conditions" if req.conditions is not None else req.search_field,
+                req.sort,
+                query.has_keywords,
+                req.original_uploader_id is not None,
+                req.original_knowledge_id is not None,
+                any(
+                    value is not None
+                    for value in (
+                        req.preview_count_min,
+                        req.preview_count_max,
+                        req.download_count_min,
+                        req.download_count_max,
+                    )
+                ),
+                scanned_hits,
+                len(page_files),
+                scanned_batches,
+                int((time.monotonic() - started_at) * 1000),
+            )
+            return self._build_shougang_portal_cursor_response(
+                page_items,
+                has_more,
+                next_cursor,
+            )
+        except Exception as exc:
+            close_pit = True
+            logger.warning(
+                "portal advanced fulltext search failed: field={} sort={} "
+                "stage={} exception_type={} scanned_hits={} batches={} duration_ms={}",
+                "conditions" if req.conditions is not None else req.search_field,
+                req.sort,
+                failure_stage,
+                type(exc).__name__,
+                scanned_hits,
+                scanned_batches,
+                int((time.monotonic() - started_at) * 1000),
+            )
+            raise
+        finally:
+            if close_pit:
+                await search_service.close(session)
+
+    async def search_shougang_portal_advanced_uploaders(
+        self,
+        req: ShougangPortalAdvancedUploaderSearchReq,
+    ) -> dict:
+        spaces, _, trusted_public_scope = (
+            await self._resolve_shougang_portal_advanced_search_spaces(req)
+        )
+        if not spaces:
+            return {"data": []}
+        search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
+        if self.user_repository is None:
+            raise RuntimeError("User repository is not initialized")
+
+        users = await self.user_repository.list_active_by_name(
+            req.q,
+            limit=fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_CANDIDATE_LIMIT,
+        )
+        if not users:
+            return {"data": []}
+        space_ids = [int(space.id) for space in spaces]
+        supports = await search_service.find_uploader_supports(
+            space_ids=space_ids,
+            uploader_ids=[int(user.user_id) for user in users],
+            per_uploader_limit=fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_SUPPORT_LIMIT,
+        )
+        support_file_ids = list(
+            dict.fromkeys(file_id for support in supports for file_id in support.file_ids)
+        )
+        files = list(await file_repository.find_by_ids(support_file_ids))
+        valid_files = self._restore_valid_fulltext_files(
+            files,
+            hits=None,
+            space_ids=set(space_ids),
+        )
+        if trusted_public_scope:
+            visible_files = self._accept_shougang_portal_public_files(valid_files)
+        else:
+            visible_files = await self._filter_shougang_portal_search_files(
+                valid_files,
+                spaces=spaces,
+                defer_department_access=False,
+            )
+        visible_ids = {int(file.id) for file in visible_files}
+        supported_user_ids = {
+            support.user_id
+            for support in supports
+            if visible_ids.intersection(support.file_ids)
+        }
+        candidates = [
+            ShougangPortalAdvancedUploaderItemResp(
+                user_id=int(user.user_id),
+                user_name=str(user.user_name),
+            )
+            for user in users
+            if int(user.user_id) in supported_user_ids
+        ]
+        candidates.sort(key=lambda item: (item.user_name.casefold(), item.user_id))
+        return {
+            "data": [
+                item.model_dump(mode="json")
+                for item in candidates[: min(req.limit, fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_RESULT_LIMIT)]
+            ]
+        }
+
+    async def _resolve_shougang_portal_advanced_search_spaces(
+        self,
+        req: ShougangPortalAdvancedFileSearchReq
+        | ShougangPortalAdvancedUploaderSearchReq,
+    ) -> tuple[list[Knowledge], str, bool]:
         effective_discovery_scope = "public" if req.public_only else req.discovery_scope
         trusted_public_scope = effective_discovery_scope == "public"
         if effective_discovery_scope != "legacy":
@@ -6168,99 +6427,34 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 req.space_ids,
                 req.space_level,
             )
-        if not spaces:
-            return self._build_shougang_portal_cursor_response([], False, None)
+        return spaces, effective_discovery_scope, trusted_public_scope
 
-        space_ids = [int(space.id) for space in spaces]
-        tag_ids = await self._get_shougang_portal_tag_ids_for_spaces(space_ids, req.tag)
-        if req.tag and not tag_ids:
-            return self._build_shougang_portal_cursor_response([], False, None)
+    def _require_shougang_portal_fulltext_dependencies(self):
+        if self.knowledge_fulltext_search_service is None:
+            raise RuntimeError("Knowledge fulltext search service is not initialized")
+        if self.knowledge_file_repo is None:
+            raise RuntimeError("Knowledge file repository is not initialized")
+        return self.knowledge_fulltext_search_service, self.knowledge_file_repo
 
-        from bisheng.common.cursor import CursorDecodeError, decode_cursor
-
-        cursor_context = self._shougang_portal_advanced_file_cursor_context(
-            req,
-            space_ids,
-        )
-        try:
-            batch_cursor = decode_cursor(
-                req.cursor,
-                expected_key_len=2,
-                expected_context=cursor_context,
-            )
-        except CursorDecodeError as exc:
-            raise KnowledgeInvalidCursorError(exception=exc)
-
-        limit = min(max(int(req.limit or 20), 1), 100)
-        order_sort = self._shougang_portal_order_sort(req.sort)
-        visible_files: list[KnowledgeFile] = []
-        fetch_limit = max(limit + 1, PORTAL_LIST_CURSOR_SCAN_BATCH_SIZE)
-        while True:
-            raw_files = await KnowledgeFileDao.asearch_portal_advanced_cursor(
-                knowledge_ids=space_ids,
-                status=[KnowledgeFileStatus.SUCCESS.value],
-                tag_ids=tag_ids,
-                file_ext=req.file_ext,
-                document_type=req.document_type,
-                file_subcategory_code=req.file_subcategory_code,
-                business_domain_code=req.business_domain_code,
-                all_keywords=req.all_keywords,
-                exact_phrase=req.exact_phrase,
-                any_keywords=req.any_keywords,
-                exclude_keywords=req.exclude_keywords,
-                search_field=req.search_field,
-                updated_from=req.updated_from,
-                updated_to=req.updated_to,
-                order_sort=order_sort,
-                cursor=batch_cursor,
-                limit=fetch_limit,
-            )
-            if not raw_files:
-                break
-
-            if trusted_public_scope:
-                visible_batch = self._accept_shougang_portal_public_files(raw_files)
-            else:
-                visible_batch = await self._filter_shougang_portal_search_files(
-                    raw_files,
-                    spaces=spaces,
-                    defer_department_access=effective_discovery_scope
-                    == "public_and_department",
-                )
-            visible_ids = {int(file.id) for file in visible_batch}
-            for file in raw_files:
-                if int(file.id) not in visible_ids:
-                    continue
-                visible_files.append(file)
-                if len(visible_files) > limit:
-                    break
-
-            if len(visible_files) > limit:
-                break
-            last_db_file = raw_files[-1]
-            batch_cursor = [last_db_file.update_time, last_db_file.id]
-            if len(raw_files) < fetch_limit:
-                break
-
-        has_more = len(visible_files) > limit
-        page_files = visible_files[:limit]
-        if not page_files:
-            return self._build_shougang_portal_cursor_response([], False, None)
-
-        page_items = await self._map_shougang_portal_files_to_items(
-            files=page_files,
-            spaces=spaces,
-            file_ext=req.file_ext,
-            document_type=req.document_type,
-            file_subcategory_code=req.file_subcategory_code,
-            include_source_paths=True,
-        )
-        next_cursor = self._encode_shougang_portal_file_cursor(page_files[-1], cursor_context) if has_more else None
-        return self._build_shougang_portal_cursor_response(
-            page_items,
-            has_more,
-            next_cursor,
-        )
+    @staticmethod
+    def _restore_valid_fulltext_files(
+        files: list[KnowledgeFile],
+        *,
+        hits: list[Any] | None,
+        space_ids: set[int],
+    ) -> list[KnowledgeFile]:
+        valid_by_id = {
+            int(file.id): file
+            for file in files
+            if file.id is not None
+            and int(file.knowledge_id) in space_ids
+            and int(file.file_type) == FileType.FILE.value
+            and int(file.status) == KnowledgeFileStatus.SUCCESS.value
+            and file.deleted_at is None
+        }
+        if hits is None:
+            return [file for file in files if int(file.id) in valid_by_id]
+        return [valid_by_id[hit.file_id] for hit in hits if hit.file_id in valid_by_id]
 
     async def record_shougang_portal_recommendation_behavior(
         self,
@@ -6446,6 +6640,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         discovery_scope: str,
     ) -> tuple[Knowledge, bool]:
+        """按当前 discovery_scope 取空间；不在可见集合里则拒绝展开目录。"""
         spaces = await self._get_shougang_portal_request_spaces(
             requested_space_ids=[space_id],
             space_level=None,
@@ -10922,7 +11117,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             id=file_id,
             space_id=space_id,
             title=Path(file_name).stem or file_name,
-            summary=(str(item.get("abstract") or "") if not safe_metadata_only else ""),
+            summary=str(item.get("abstract") or ""),
             source=str(item.get("knowledge_name") or item.get("space_name") or space_id),
             updated_at=self._serialize_datetime(item.get("update_time")),
             tag_infos=tag_infos,
@@ -13705,8 +13900,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             {
                 int(item.original_uploader_id)
                 for item in file_items
-                if item.entry_type in distributed_entry_types
-                and item.original_uploader_id is not None
+                if item.original_uploader_id is not None
             }
         )
         original_knowledge_ids = sorted(
@@ -13817,17 +14011,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 item_info["version_no"] = int(primary_version.version_no)
             if primary_file is not None:
                 item_info["file_size"] = int(primary_file.file_size or 0)
+            original_uploader_id = item.original_uploader_id
+            if original_uploader_id is not None:
+                item_info.update(
+                    {
+                        "original_uploader_id": int(original_uploader_id),
+                        "original_uploader_name": original_user_name_map.get(int(original_uploader_id)),
+                    }
+                )
             if entry_type in distributed_entry_types:
-                original_uploader_id = item.original_uploader_id
                 original_knowledge_id = item.original_knowledge_id
                 item_info.update(
                     {
-                        "original_uploader_id": original_uploader_id,
-                        "original_uploader_name": (
-                            original_user_name_map.get(int(original_uploader_id))
-                            if original_uploader_id is not None
-                            else None
-                        ),
                         "original_knowledge_id": original_knowledge_id,
                         "original_knowledge_name": (
                             original_space_name_map.get(int(original_knowledge_id))
@@ -16095,13 +16290,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         return updated_file
 
-    async def accept_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
-        """Accept the AI-generated alias: promote it to file_name and clear alias_name."""
-        from bisheng.worker.knowledge.rebuild_knowledge_worker import (
-            rebuild_knowledge_file_chunk,
-        )
-
-        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+    async def _ensure_alias_rename_permission(self, file_record: KnowledgeFile, file_id: int):
+        """Ensure the caller may rename the file for alias accept/reject."""
         resolved = await self._require_document_content_manager(file_record)
         if resolved is None:
             await self._require_permission_id(
@@ -16110,30 +16300,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "rename_file",
                 space_id=file_record.knowledge_id,
             )
+        return resolved
 
-        alias_name = file_record.alias_name
-        if not alias_name:
-            return file_record
-
-        space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
-        if not space:
-            raise SpaceNotFoundError()
-        self._ensure_space_async_task_tenant_consistency(space, "accept_alias_rename")
-
+    def _normalize_alias_target_name(self, file_record: KnowledgeFile, alias_name: str) -> str:
         if file_record.file_source == FileSource.WEB_LINK.value:
-            alias_name = self._normalize_web_link_file_name(alias_name)
+            return self._normalize_web_link_file_name(alias_name)
+        return alias_name
 
-        self._check_filename_sensitive_words(alias_name)
-        if (
-            resolved is None
-            and await SpaceFileDao.count_file_by_name(
-                file_record.knowledge_id,
-                alias_name,
-                exclude_id=file_id,
-            )
-            > 0
-        ):
-            raise SpaceFileNameDuplicateError()
+    async def _apply_accept_alias_rename(
+        self,
+        file_record: KnowledgeFile,
+        alias_name: str,
+        *,
+        resolved,
+        file_id: int,
+    ) -> KnowledgeFile:
+        from bisheng.worker.knowledge.rebuild_knowledge_worker import (
+            rebuild_knowledge_file_chunk,
+        )
 
         old_name = file_record.file_name
         file_record.file_name = alias_name
@@ -16169,7 +16353,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if updated_file.status == KnowledgeFileStatus.SUCCESS.value:
             rebuild_knowledge_file_chunk.delay(file_id=file_id)
         await self.update_folder_update_time(file_record.file_level_path)
-        await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
 
         if (old_name or "") != (updated_file.file_name or ""):
             await self._notify_favorite_source_changed(
@@ -16182,18 +16365,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         return updated_file
 
-    async def reject_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
-        """Reject the AI-generated alias: record it in remark and clear alias_name."""
-        file_record = await self._get_file_for_action(file_id, space_id=space_id)
-        resolved = await self._require_document_content_manager(file_record)
-        if resolved is None:
-            await self._require_permission_id(
-                "knowledge_file",
-                file_id,
-                "rename_file",
-                space_id=file_record.knowledge_id,
-            )
-
+    async def _apply_reject_alias_rename(
+        self,
+        file_record: KnowledgeFile,
+        *,
+        resolved,
+    ) -> KnowledgeFile:
         alias_name = file_record.alias_name
         if not alias_name:
             return file_record
@@ -16206,6 +16383,233 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if resolved is not None:
             await self._mark_document_content_changed(updated_file)
         return updated_file
+
+    async def accept_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
+        """Accept the AI-generated alias: promote it to file_name and clear alias_name."""
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        resolved = await self._ensure_alias_rename_permission(file_record, file_id)
+
+        alias_name = file_record.alias_name
+        if not alias_name:
+            return file_record
+
+        space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
+        if not space:
+            raise SpaceNotFoundError()
+        self._ensure_space_async_task_tenant_consistency(space, "accept_alias_rename")
+
+        alias_name = self._normalize_alias_target_name(file_record, alias_name)
+
+        self._check_filename_sensitive_words(alias_name)
+        if (
+            resolved is None
+            and await SpaceFileDao.count_file_by_name(
+                file_record.knowledge_id,
+                alias_name,
+                exclude_id=file_id,
+            )
+            > 0
+        ):
+            raise SpaceFileNameDuplicateError()
+
+        updated_file = await self._apply_accept_alias_rename(
+            file_record,
+            alias_name,
+            resolved=resolved,
+            file_id=file_id,
+        )
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(file_record.knowledge_id)
+        return updated_file
+
+    async def reject_alias_rename(self, space_id: int, file_id: int) -> KnowledgeFile:
+        """Reject the AI-generated alias: record it in remark and clear alias_name."""
+        file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        resolved = await self._ensure_alias_rename_permission(file_record, file_id)
+
+        alias_name = file_record.alias_name
+        if not alias_name:
+            return file_record
+
+        updated_file = await self._apply_reject_alias_rename(file_record, resolved=resolved)
+        return updated_file
+
+    async def batch_accept_alias_rename(
+        self,
+        space_id: int,
+        file_ids: list[int],
+    ) -> BatchAliasActionResult:
+        """Accept AI-generated aliases for multiple files with partial-success semantics."""
+        unique_file_ids = self._dedupe_ids(file_ids)
+        if not unique_file_ids:
+            return BatchAliasActionResult()
+
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space:
+            raise SpaceNotFoundError()
+        await self._require_read_permission(space_id)
+        self._ensure_space_async_task_tenant_consistency(space, "batch_accept_alias_rename")
+
+        file_records = await KnowledgeFileDao.aget_file_by_ids(unique_file_ids)
+        file_by_id = {int(file_record.id): file_record for file_record in file_records}
+
+        succeeded_ids: list[int] = []
+        skipped_ids: list[int] = []
+        failed: list[BatchAliasFailure] = []
+        pending_names: set[str] = set()
+        folder_paths: set[str] = set()
+
+        for file_id in unique_file_ids:
+            file_record = file_by_id.get(file_id)
+            if (
+                not file_record
+                or file_record.knowledge_id != space_id
+                or file_record.file_type == FileType.DIR.value
+            ):
+                skipped_ids.append(file_id)
+                continue
+            if not file_record.alias_name:
+                skipped_ids.append(file_id)
+                continue
+
+            try:
+                resolved = await self._ensure_alias_rename_permission(file_record, file_id)
+                alias_name = self._normalize_alias_target_name(file_record, file_record.alias_name)
+                self._check_filename_sensitive_words(alias_name)
+
+                if resolved is None and await SpaceFileDao.count_file_by_name(
+                    file_record.knowledge_id,
+                    alias_name,
+                    exclude_id=file_id,
+                ) > 0:
+                    raise SpaceFileNameDuplicateError()
+
+                if alias_name in pending_names:
+                    raise SpaceFileNameDuplicateError()
+
+                await self._apply_accept_alias_rename(
+                    file_record,
+                    alias_name,
+                    resolved=resolved,
+                    file_id=file_id,
+                )
+                pending_names.add(alias_name)
+                succeeded_ids.append(file_id)
+                if file_record.file_level_path:
+                    folder_paths.add(file_record.file_level_path)
+            except SpacePermissionDeniedError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="permission_denied",
+                        message=exc.Msg,
+                    )
+                )
+            except SpaceFileNameDuplicateError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="duplicate_name",
+                        message=exc.Msg,
+                    )
+                )
+            except SpaceFileNameSensitiveWordError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="sensitive_word",
+                        message=exc.Msg,
+                    )
+                )
+            except KnowledgeDocumentStateConflictError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="document_state_conflict",
+                        message=getattr(exc, "msg", None) or exc.Msg,
+                    )
+                )
+            except Exception as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="internal_error",
+                        message=str(exc),
+                    )
+                )
+
+        if succeeded_ids:
+            await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+            for folder_path in folder_paths:
+                await self.update_folder_update_time(folder_path)
+
+        return BatchAliasActionResult(
+            succeeded_ids=succeeded_ids,
+            skipped_ids=skipped_ids,
+            failed=failed,
+        )
+
+    async def batch_reject_alias_rename(
+        self,
+        space_id: int,
+        file_ids: list[int],
+    ) -> BatchAliasActionResult:
+        """Reject AI-generated aliases for multiple files with partial-success semantics."""
+        unique_file_ids = self._dedupe_ids(file_ids)
+        if not unique_file_ids:
+            return BatchAliasActionResult()
+
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space:
+            raise SpaceNotFoundError()
+        await self._require_read_permission(space_id)
+        self._ensure_space_async_task_tenant_consistency(space, "batch_reject_alias_rename")
+
+        file_records = await KnowledgeFileDao.aget_file_by_ids(unique_file_ids)
+        file_by_id = {int(file_record.id): file_record for file_record in file_records}
+
+        succeeded_ids: list[int] = []
+        skipped_ids: list[int] = []
+        failed: list[BatchAliasFailure] = []
+
+        for file_id in unique_file_ids:
+            file_record = file_by_id.get(file_id)
+            if (
+                not file_record
+                or file_record.knowledge_id != space_id
+                or file_record.file_type == FileType.DIR.value
+            ):
+                skipped_ids.append(file_id)
+                continue
+            if not file_record.alias_name:
+                skipped_ids.append(file_id)
+                continue
+
+            try:
+                resolved = await self._ensure_alias_rename_permission(file_record, file_id)
+                await self._apply_reject_alias_rename(file_record, resolved=resolved)
+                succeeded_ids.append(file_id)
+            except SpacePermissionDeniedError as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="permission_denied",
+                        message=exc.Msg,
+                    )
+                )
+            except Exception as exc:
+                failed.append(
+                    BatchAliasFailure(
+                        file_id=file_id,
+                        reason_code="internal_error",
+                        message=str(exc),
+                    )
+                )
+
+        return BatchAliasActionResult(
+            succeeded_ids=succeeded_ids,
+            skipped_ids=skipped_ids,
+            failed=failed,
+        )
 
     async def update_file_encoding(
         self,
@@ -16967,6 +17371,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return await self._build_tag_lookup_resp(space_id, tag)
 
     async def add_space_tag(self, space_id: int, tag_name: str) -> Tag | ReviewTag:
+        """新增空间标签：一律写入待审 ReviewTag。"""
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
         normalized = (tag_name or "").strip()

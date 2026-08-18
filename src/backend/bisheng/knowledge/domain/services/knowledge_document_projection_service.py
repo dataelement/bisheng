@@ -29,6 +29,12 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
     KnowledgeFileRepository,
 )
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    KnowledgeFulltextFileRef,
+    commit_tracked_fulltext_changes,
+    request_file_sync_intents,
+    track_fulltext_file_changes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +174,13 @@ class KnowledgeDocumentProjectionService:
         self.deleting_entry_finalizer = deleting_entry_finalizer
         self.lease_seconds = max(int(lease_seconds), 1)
         self.max_retry_seconds = max(int(max_retry_seconds), 1)
+        track_fulltext_file_changes(self.session)
+
+    async def _commit(self) -> None:
+        await commit_tracked_fulltext_changes(
+            self.session,
+            trigger_type="document_projection_updated",
+        )
 
     async def _resolve_source(
         self,
@@ -451,7 +464,7 @@ class KnowledgeDocumentProjectionService:
             entry_generation=int(claimed.desired_entry_generation),
         )
         retry_count = int(claimed.projection_retry_count or 0)
-        await self.session.commit()
+        await self._commit()
 
         try:
             if is_cleanup:
@@ -480,7 +493,19 @@ class KnowledgeDocumentProjectionService:
                 target_content_generation=target.content_generation,
                 target_entry_generation=target.entry_generation,
             )
-            await self.session.commit()
+            if applied:
+                await request_file_sync_intents(
+                    self.session,
+                    [
+                        KnowledgeFulltextFileRef(
+                            file_id=entry_id,
+                            knowledge_id=int(claimed.knowledge_id),
+                            tenant_id=tenant_id,
+                        )
+                    ],
+                    trigger_type="document_projection_applied",
+                )
+            await self._commit()
             if not applied:
                 logger.info(
                     "F059 projection result tenant_id=%s entry_id=%s "
@@ -552,7 +577,7 @@ class KnowledgeDocumentProjectionService:
                     tenant_id,
                     entry_id,
                 )
-            await self.session.commit()
+            await self._commit()
             logger.warning(
                 "F059 projection failed tenant_id=%s entry_id=%s "
                 "retry_count=%s error_type=%s duration_ms=%.2f",

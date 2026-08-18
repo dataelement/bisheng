@@ -62,11 +62,11 @@ async def test_leaderboard_empty_when_user_has_no_company():
 @pytest.mark.asyncio
 async def test_display_maps_uses_org_level_dept_not_leaf():
     """挂在班组叶子上时，展示名取向上最近的 org_level=dept，不回退叶子名。"""
-    leaf = SimpleNamespace(id=94, path="/1/54/55/58/67/94/", name="五级积分部门1-1", org_level="squad")
-    dept = SimpleNamespace(id=55, path="/1/54/55/", name="二级积分部门1", org_level="dept")
-    company = SimpleNamespace(id=54, path="/1/54/", name="测试积分部门", org_level="company")
-    office = SimpleNamespace(id=58, path="/1/54/55/58/", name="三级积分部门1", org_level="office")
-    squad = SimpleNamespace(id=67, path="/1/54/55/58/67/", name="四级积分部门1", org_level="squad")
+    leaf = SimpleNamespace(id=94, path="/1/54/55/58/67/94/", name="五级积分部门1-1", org_level="squad", short_name=None)
+    dept = SimpleNamespace(id=55, path="/1/54/55/", name="二级积分部门1", org_level="dept", short_name=None)
+    company = SimpleNamespace(id=54, path="/1/54/", name="测试积分部门", org_level="company", short_name=None)
+    office = SimpleNamespace(id=58, path="/1/54/55/58/", name="三级积分部门1", org_level="office", short_name=None)
+    squad = SimpleNamespace(id=67, path="/1/54/55/58/67/", name="四级积分部门1", org_level="squad", short_name=None)
 
     with (
         patch(
@@ -91,8 +91,8 @@ async def test_display_maps_uses_org_level_dept_not_leaf():
 @pytest.mark.asyncio
 async def test_display_maps_omits_dept_when_no_org_level_dept():
     """path 上没有 dept 标签时不回退叶子名，交给调用方展示 —。"""
-    leaf = SimpleNamespace(id=9, path="/1/9/", name="未打标叶子", org_level=None)
-    root = SimpleNamespace(id=1, path="/1/", name="默认组织", org_level=None)
+    leaf = SimpleNamespace(id=9, path="/1/9/", name="未打标叶子", org_level=None, short_name=None)
+    root = SimpleNamespace(id=1, path="/1/", name="默认组织", org_level=None, short_name=None)
 
     with (
         patch(
@@ -112,6 +112,32 @@ async def test_display_maps_omits_dept_when_no_org_level_dept():
 
     assert names[7] == "nobody"
     assert 7 not in depts
+
+
+@pytest.mark.asyncio
+async def test_display_maps_prefers_short_name_for_dept_bucket():
+    """有 dept 桶时展示名优先 short_name。"""
+    leaf = SimpleNamespace(id=94, path="/1/54/55/94/", name="叶子", org_level="squad", short_name=None)
+    dept = SimpleNamespace(id=55, path="/1/54/55/", name="二级积分部门1", org_level="dept", short_name="质量部")
+    company = SimpleNamespace(id=54, path="/1/54/", name="公司", org_level="company", short_name=None)
+
+    with (
+        patch(
+            "bisheng.user.domain.models.user.UserDao.aget_user_by_ids",
+            AsyncMock(return_value=[SimpleNamespace(user_id=423, user_name="gzx")]),
+        ),
+        patch(
+            "bisheng.database.models.department.UserDepartmentDao.get_primary_department_map_by_user_ids",
+            return_value={423: leaf},
+        ),
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_by_ids",
+            AsyncMock(return_value=[company, dept]),
+        ),
+    ):
+        _, depts = await PointsQueryService._leaderboard_display_maps([423])
+
+    assert depts[423] == "质量部"
 
 
 @pytest.mark.asyncio

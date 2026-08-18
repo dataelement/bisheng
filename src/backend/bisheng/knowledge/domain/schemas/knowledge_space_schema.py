@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from bisheng.common.models.space_channel_member import UserRoleEnum
+from bisheng.knowledge.domain import knowledge_fulltext_constants
 from bisheng.knowledge.domain.constants import normalize_business_domain_code, normalize_file_category_code
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
@@ -21,6 +22,9 @@ from bisheng.knowledge.domain.models.knowledge_space_scope import (
 )
 from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema import (
     KnowledgeDocumentEntryCapabilities,
+)
+from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
+    KnowledgeFulltextCondition,
 )
 from bisheng.knowledge.domain.schemas.portal_hot_search_schema import PortalHotSearchItem
 
@@ -539,23 +543,121 @@ class ShougangPortalFileSearchReq(ShougangPortalFileBrowseReq):
 
 
 class ShougangPortalAdvancedFileSearchReq(ShougangPortalFileBrowseReq):
+    model_config = ConfigDict(extra="forbid")
+
+    version: Literal[1] = 1
+    conditions: list[KnowledgeFulltextCondition] | None = Field(
+        default=None,
+        max_length=knowledge_fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_MAX_CONDITIONS,
+    )
     all_keywords: str | None = Field(default=None, max_length=200)
     exact_phrase: str | None = Field(default=None, max_length=200)
     any_keywords: str | None = Field(default=None, max_length=200)
     exclude_keywords: str | None = Field(default=None, max_length=200)
-    search_field: Literal["file_name", "summary", "tags"] = "file_name"
+    search_field: Literal["all", "file_name", "summary", "tags", "content"] = "all"
+    original_uploader_id: int | None = Field(default=None, gt=0)
+    original_knowledge_id: int | None = Field(default=None, gt=0)
+    preview_count_min: int | None = Field(default=None, ge=0)
+    preview_count_max: int | None = Field(default=None, ge=0)
+    download_count_min: int | None = Field(default=None, ge=0)
+    download_count_max: int | None = Field(default=None, ge=0)
     updated_from: date | None = None
     updated_to: date | None = None
-    sort: Literal["updated_at", "updated_at_desc", "updated_at_asc"] = Field(
-        default="updated_at_desc",
-        description="Sort mode: updated_at / updated_at_desc / updated_at_asc",
+    sort: Literal[
+        "relevance",
+        "updated_at",
+        "updated_at_desc",
+        "updated_at_asc",
+        "preview_count_desc",
+        "preview_count_asc",
+        "download_count_desc",
+        "download_count_asc",
+    ] = Field(
+        default="relevance",
+        description="Advanced fulltext sort mode",
     )
 
     @model_validator(mode="after")
-    def validate_updated_range(self):
+    def validate_advanced_ranges(self):
+        if any(space_id <= 0 for space_id in self.space_ids):
+            raise ValueError("space_ids must contain positive integers")
         if self.updated_from is not None and self.updated_to is not None and self.updated_from > self.updated_to:
             raise ValueError("updated_from must not be later than updated_to")
+        for name, lower, upper in (
+            ("preview_count", self.preview_count_min, self.preview_count_max),
+            ("download_count", self.download_count_min, self.download_count_max),
+        ):
+            if lower is not None and upper is not None and lower > upper:
+                raise ValueError(f"{name}_min must not be greater than {name}_max")
+        if self.conditions is not None:
+            legacy_fields = {
+                "space_level",
+                "business_domain_code",
+                "document_type",
+                "file_subcategory_code",
+                "file_ext",
+                "tag",
+                "all_keywords",
+                "exact_phrase",
+                "any_keywords",
+                "exclude_keywords",
+                "search_field",
+                "original_uploader_id",
+                "original_knowledge_id",
+                "preview_count_min",
+                "preview_count_max",
+                "download_count_min",
+                "download_count_max",
+                "updated_from",
+                "updated_to",
+            }
+            if self.model_fields_set.intersection(legacy_fields):
+                raise ValueError("conditions and legacy advanced-search fields are mutually exclusive")
+            if self.conditions:
+                self.conditions[0].relation = None
+                for condition in self.conditions[1:]:
+                    if condition.relation is None:
+                        raise ValueError("conditions after the first require relation")
         return self
+
+
+class ShougangPortalAdvancedUploaderSearchReq(BaseModel):
+    discovery_scope: Literal[
+        "legacy",
+        "public",
+        "public_and_department",
+        "portal_public",
+        "portal_configured",
+    ] = "legacy"
+    space_ids: list[int] = Field(default_factory=list)
+    space_level: KnowledgeSpaceLevelEnum | None = None
+    public_only: bool = False
+    q: str = Field(min_length=1, max_length=64)
+    limit: int = Field(default=20, ge=1, le=20)
+
+    @field_validator("q")
+    @classmethod
+    def normalize_query(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("q must not be empty")
+        return normalized
+
+    @field_validator("space_ids")
+    @classmethod
+    def validate_space_ids(cls, values: list[int]) -> list[int]:
+        if any(value <= 0 for value in values):
+            raise ValueError("space_ids must contain positive integers")
+        return list(dict.fromkeys(values))
+
+
+class ShougangPortalAdvancedUploaderItemResp(BaseModel):
+    user_id: int
+    user_name: str
+
+
+class ShougangPortalAdvancedUploaderSearchResp(BaseModel):
+    data: list[ShougangPortalAdvancedUploaderItemResp] = Field(default_factory=list)
 
 
 class ShougangPortalFileTagResp(BaseModel):
@@ -628,6 +730,7 @@ class ShougangPortalFileItemResp(BaseModel):
             "id",
             "space_id",
             "title",
+            "summary",
             "source",
             "updated_at",
             "tag_infos",
@@ -984,6 +1087,22 @@ class BatchMoveReq(BaseModel):
     file_ids: list[int] = Field(default_factory=list, description="List of file IDs to move")
     folder_ids: list[int] = Field(default_factory=list, description="List of folder IDs to move")
     target_folder_id: int | None = Field(default=None, description="Target folder ID; null means space root")
+
+
+class BatchAliasFailure(BaseModel):
+    file_id: int = Field(..., description="File ID that failed")
+    reason_code: str = Field(..., description="Machine-readable failure reason")
+    message: str = Field(..., description="Human-readable failure message")
+
+
+class BatchAliasActionReq(BaseModel):
+    file_ids: list[int] = Field(..., min_length=1, description="File IDs to accept or reject alias")
+
+
+class BatchAliasActionResult(BaseModel):
+    succeeded_ids: list[int] = Field(default_factory=list, description="File IDs processed successfully")
+    skipped_ids: list[int] = Field(default_factory=list, description="File IDs skipped (no alias, folder, etc.)")
+    failed: list[BatchAliasFailure] = Field(default_factory=list, description="Per-file failures")
 
 
 class ChatReq(BaseModel):

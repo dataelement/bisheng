@@ -139,6 +139,55 @@ describe("NotificationsDialog approval jump", () => {
     });
   });
 
+  it("opens my_tasks for in-progress QA publish notifications instead of approve/reject", async () => {
+    jest.mocked(getMessageListApi).mockResolvedValue({
+      total: 1,
+      data: [{
+        id: 702,
+        sender: 9,
+        sender_name: "Asker",
+        message_type: "notify",
+        action_code: "qa_publish_started",
+        status: "approved",
+        is_read: false,
+        create_time: "2026-08-16T10:00:00Z",
+        update_time: "2026-08-16T10:00:00Z",
+        content: [
+          { type: "user", content: "@Asker", metadata: { user_id: 9 } },
+          { type: "system_text", content: "qa_expert_publish_started" },
+          {
+            type: "business_url",
+            content: "--定向问题标题",
+            metadata: {
+              business_type: "approval_instance_id",
+              data: { approval_instance_id: "88", question_id: "12345", request_id: "7" },
+            },
+          },
+        ],
+      }],
+    });
+    jest.mocked(markMessageReadApi).mockResolvedValue({});
+    const openApprovalCenter = jest.fn();
+
+    render(<NotificationsDialog open onOpenApprovalCenter={openApprovalCenter} />);
+
+    expect(await screen.findByText("com_notifications_view_approval")).toBeInTheDocument();
+    expect(screen.queryByText("com_notifications_accept")).not.toBeInTheDocument();
+    expect(screen.queryByText("com_notifications_reject")).not.toBeInTheDocument();
+    expect(screen.queryByText("com_notifications_view_message")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("com_notifications_view_approval"));
+
+    await waitFor(() => {
+      expect(openApprovalCenter).toHaveBeenCalledWith({
+        tab: "my_tasks",
+        taskId: null,
+        instanceId: 88,
+      });
+    });
+    expect(mockParentPostMessage).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["qa_expert_invited", null, null],
     ["qa_expert_answered", "42", null],

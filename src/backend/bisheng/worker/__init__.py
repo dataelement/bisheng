@@ -1,16 +1,19 @@
 # ruff: noqa: F401
 # register tasks
-from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.open_endpoints.worker.filelib_sync_worker import (
     fanout_automotive_sheet_intro_sync,
     run_automotive_sheet_intro_sync,
 )
+from bisheng.worker.admin_scope.tasks import admin_scope_cleanup
 from bisheng.worker.approval.notification_tasks import (
     consume_approval_notification,
     dispatch_approval_notifications,
 )
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
+from bisheng.worker.knowledge.auto_publish_worker import (
+    auto_publish_file_celery,
+)
 from bisheng.worker.knowledge.document_projection import (
     fanout_document_projection_scan,
     process_document_projection,
@@ -32,6 +35,16 @@ from bisheng.worker.knowledge.file_worker import (
     parse_knowledge_file_celery,
     refresh_file_similarity_candidates_celery,
     retry_knowledge_file_celery,
+)
+from bisheng.worker.knowledge.fulltext_engagement import (
+    rebuild_knowledge_fulltext_engagement,
+    reconcile_knowledge_fulltext_engagement,
+    sync_knowledge_fulltext_engagement,
+)
+from bisheng.worker.knowledge.fulltext_index import (
+    consume_knowledge_fulltext_outbox,
+    dispatch_knowledge_fulltext_outbox,
+    repair_knowledge_fulltext_source,
 )
 from bisheng.worker.knowledge.pdf_artifact_worker import (
     generate_knowledge_file_pdf_celery,
@@ -83,6 +96,7 @@ from bisheng.worker.portal_course.tasks import (
     process_portal_course_media_cleanup,
     scan_portal_course_media_cleanup,
 )
+from bisheng.worker.qa_expert.tasks import expire_publish_requests
 from bisheng.worker.telemetry.derived_mid_table import (
     sync_mid_active_user,
     sync_mid_doc_parse_dtl,

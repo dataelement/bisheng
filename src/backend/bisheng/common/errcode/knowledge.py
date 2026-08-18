@@ -231,6 +231,16 @@ class KnowledgeShareCreationDisabledError(BaseErrorCode):
     Msg: str = '新建链接或邀请码分享已停用'
 
 
+class KnowledgeFulltextSearchUnavailableError(BaseErrorCode):
+    Code: int = 10996
+    Msg: str = '全文检索服务暂不可用，请稍后重试'
+
+
+class KnowledgeFulltextIndexIncompatibleError(BaseErrorCode):
+    Code: int = 10997
+    Msg: str = '全文检索索引配置不兼容，请联系管理员'
+
+
 class KnowledgeRecycleForbiddenError(BaseErrorCode):
     Code: int = 10941
     Msg: str = '无权限操作回收站'
@@ -284,4 +294,3 @@ class KnowledgeRecycleTaskError(BaseErrorCode):
 class KnowledgeRecycleOverwriteRequiredError(BaseErrorCode):
     Code: int = 10951
     Msg: str = '文件冲突，请确认是否覆盖'
-

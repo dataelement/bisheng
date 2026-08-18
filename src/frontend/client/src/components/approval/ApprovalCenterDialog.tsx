@@ -151,6 +151,8 @@ const KNOWLEDGE_SPACE_CREATE_SCENARIO = "knowledge_space_create_request";
 const FILE_PUBLISH_SCENARIO = "knowledge_space_file_publish_request";
 const FILE_SHARE_SCENARIO = "knowledge_space_file_share_request";
 const DEPARTMENT_FILE_VIEW_SCENARIO = "department_file_view_request";
+/** 定向问题转公开：业务禁止撤回，审批中心不展示撤回入口 */
+const QA_QUESTION_PUBLISH_SCENARIO = "qa_question_publish";
 
 type BusinessContentRow = [string, string];
 
@@ -174,6 +176,15 @@ function hasDisplayValue(value: unknown): boolean {
 
 function formatBusinessValue(value: unknown): string {
   return Array.isArray(value) ? value.join(", ") : String(value);
+}
+
+/** 审批业务快照中的 ISO 时间：去掉 T，统一为 `YYYY-MM-DD HH:mm:ss`。 */
+function formatBusinessDateTime(value: unknown): string {
+  const raw = formatBusinessValue(value).trim();
+  if (!raw) return raw;
+  const withSpace = raw.replace("T", " ");
+  const match = withSpace.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/);
+  return match ? match[1] : withSpace;
 }
 
 function localizeBooleanValue(value: unknown, localize: ReturnType<typeof useLocalize>): string {
@@ -293,6 +304,19 @@ function buildDepartmentFileViewRows(snapshot: Record<string, any>, localize: Re
   return rows;
 }
 
+function buildQaQuestionPublishRows(snapshot: Record<string, any>, localize: ReturnType<typeof useLocalize>): BusinessContentRow[] {
+  const rows: BusinessContentRow[] = [];
+  pushBusinessRow(rows, localize("com_approval_field_question_title" as any), snapshot.question_title);
+  pushBusinessRow(
+    rows,
+    localize("com_approval_field_expire_at" as any),
+    snapshot.expire_at,
+    formatBusinessDateTime,
+  );
+  pushBusinessRow(rows, localize("com_approval_field_duration_days" as any), snapshot.duration_days);
+  return rows;
+}
+
 function buildBusinessContentRows(
   scenarioCode: string | undefined,
   snapshot: Record<string, any> | null | undefined,
@@ -310,6 +334,9 @@ function buildBusinessContentRows(
   }
   if (scenarioCode === DEPARTMENT_FILE_VIEW_SCENARIO) {
     return buildDepartmentFileViewRows(data, localize);
+  }
+  if (scenarioCode === QA_QUESTION_PUBLISH_SCENARIO) {
+    return buildQaQuestionPublishRows(data, localize);
   }
   return buildDefaultBusinessContentRows(data, localize);
 }
@@ -400,7 +427,11 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
       const resp = await listMyApprovalTasksApi();
       setTaskItems(resp.data);
       const allIds = new Set(resp.data.map((t) => getId(t, "task")));
-      const validPreferred = preferredId && allIds.has(preferredId) ? preferredId : null;
+      const preferredByInstance = target?.instanceId
+        ? resp.data.find((t) => Number(t.instance_id) === Number(target.instanceId) && (taskFilter !== "pending_me" || t.status === "pending"))
+        : null;
+      const resolvedPreferred = preferredId ?? getId(preferredByInstance, "task");
+      const validPreferred = resolvedPreferred && allIds.has(resolvedPreferred) ? resolvedPreferred : null;
       const visibleItems = taskFilter === "pending_me"
         ? resp.data.filter((t) => t.status === "pending")
         : resp.data.filter((t) => t.status !== "pending");
@@ -440,7 +471,10 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   useEffect(() => {
     if (!open) return;
-    setActiveTab(target?.tab ?? "my_tasks");
+    const nextTab = target?.tab ?? "my_tasks";
+    setActiveTab(nextTab);
+    // 通知「查看审批」进入待我处理，避免停留在已处理筛选项里找不到这条待办。
+    if (nextTab === "my_tasks") setTaskFilter("pending_me");
     setSelectedTaskId(target?.taskId ?? null);
     setSelectedInstanceId(target?.instanceId ?? null);
     setSearchQuery("");
@@ -548,6 +582,9 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   const isTaskPending = activeTab === "my_tasks" && taskDetail?.status === "pending";
   const isInstancePending = activeTab === "my_requests" && requestDetail?.status === "pending";
+  const canWithdrawInstance =
+    isInstancePending &&
+    String(requestDetail?.scenario_code ?? "").toLowerCase() !== QA_QUESTION_PUBLISH_SCENARIO;
   // 只向当前任务审批人展示撤销入口；服务端会再次按实时部门绑定校验权限。
   const revokableScenario = String(taskDetail?.scenario_code ?? "").toLowerCase();
   const canRevoke =
@@ -711,7 +748,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
               </div>
 
               {/* Fixed footer buttons */}
-              {(isTaskPending || isInstancePending || canRevoke) && (
+              {(isTaskPending || canWithdrawInstance || canRevoke) && (
                 <div className="flex flex-col gap-3 border-t border-[#f2f3f5] px-6 py-4">
                   {isTaskPending && (
                     <div>
@@ -757,7 +794,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                       </button>
                     </>
                   )}
-                  {isInstancePending && (
+                  {canWithdrawInstance && (
                     <button type="button" disabled={actionLoading}
                       className="rounded-lg border border-[#165dff] px-4 py-2 text-[14px] text-[#165dff] hover:bg-[#f2f7ff] disabled:opacity-60"
                       onClick={runWithdraw}>

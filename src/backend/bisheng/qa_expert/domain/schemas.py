@@ -106,7 +106,7 @@ class ExpertCreateRequest(BaseModel):
     position: str | None = Field(None, description="所属岗位")
     job_family: str | None = Field(None, description="所属岗位族")
     job_category: str | None = Field(None, description="所属岗位分类")
-    wechat_user_id: str | None =  Field(None, description="绑定企业微信用户id")
+    wechat_user_id: str | None = Field(None, description="绑定企业微信用户id")
 
 
 class ExpertUpdateRequest(BaseModel):
@@ -119,7 +119,7 @@ class ExpertUpdateRequest(BaseModel):
     position: str | None = Field(None, description="所属岗位")
     job_family: str | None = Field(None, description="所属岗位族")
     job_category: str | None = Field(None, description="所属岗位分类")
-    wechat_user_id: str | None =  Field(None, description="绑定企业微信用户id")
+    wechat_user_id: str | None = Field(None, description="绑定企业微信用户id")
 
 
 class ExpertResponse(BaseModel):
@@ -143,6 +143,7 @@ class ExpertResponse(BaseModel):
     vote_count: int = 0
     expert_score: int = 0
     helpful_count: int = 0
+    status: int | None = Field(default=1, description="1有效 0停用")
     created_at: datetime
 
     class Config:
@@ -165,11 +166,19 @@ class QuestionCreateRequest(BaseModel):
 
     attachments: str | None = Field(default=None, description="附件列表")
     related_docs: str | None = Field(default=None, description="关联文档ID")
+    related_doc_ids: list[str] | None = Field(default=None, description="关联文档 `{spaceId}-{fileId}` 列表")
 
     invited_experts: str | None = Field(default=None, description="邀请专家ID，多个用分号;分割")
+    invited_expert_ids: list[int] | None = Field(default=None, description="邀请专家档案 ID 列表")
     experts_names: str | None = Field(default=None, description="邀请专家名称，多个用分号;分割")
+    question_type: str = Field(default="public", description="directed / public，缺省公开")
+    asker_anonymous: bool = Field(default=False, description="提问者是否匿名（公开/定向均可）")
+    asker_reveal_on_public: bool | None = Field(default=None, description="定向且匿名时：转公开后是否公开姓名")
 
-    image_url: str | None = Field(default=None, max_length=1024, schema_extra={"comment": "图片URL"})
+    image_url: str | None = Field(
+        default=None,
+        description="分号分隔的图片 URL, 最多 3 张. 请求阶段可为预签名 URL, 落库为永久 key",
+    )
     file_url: str | None = Field(default=None, max_length=1024, schema_extra={"comment": "文件URL"})
     file_name: str | None = Field(default=None, max_length=512, schema_extra={"comment": "文件名"})
 
@@ -204,7 +213,10 @@ class QuestionUpdateRequest(BaseModel):
     related_docs: str | None = Field(default=None, description="关联文档ID")
     invited_experts: str | None = Field(default=None, description="邀请专家ID，多个用分号;分割")
     experts_names: str | None = Field(default=None, description="邀请专家名称，多个用分号;分割")
-    image_url: str | None = Field(default=None, max_length=1024, description="图片URL")
+    image_url: str | None = Field(
+        default=None,
+        description="分号分隔的图片 URL, 最多 3 张. 请求阶段可为预签名 URL, 落库为永久 key",
+    )
     file_url: str | None = Field(default=None, max_length=1024, description="文件URL")
     file_name: str | None = Field(default=None, max_length=512, description="文件名")
     status: int | str | None = Field(default=None, description="状态: unsolved/solved/closed/pending")
@@ -277,9 +289,16 @@ class QuestionDetailResponse(BaseModel):
     business_domain: str
     status: str
     user_id: int
-    anonymous: bool
+    question_type: str | None = None
+    display_status: str | None = None
+    content_locked: int | bool | None = None
+    adopt_count: int | None = None
+    capabilities: dict | None = None
+    related_doc_views: list[dict] | None = None
+    asker: dict | None = None
+    anonymous: bool | None = None
     attachments: str | None = Field(default=None, description="分号分隔的附件URL或业务ID")
-    related_docs: str | None = None
+    related_docs: str | list[dict] | None = None
     invited_experts: str | None = None
     experts_names: str | None = Field(default=None, description="邀请专家名称，多个用分号;分割")
     adopted_answer_id: int | None
@@ -311,6 +330,8 @@ class AnswerCreateRequest(BaseModel):
     attachments: str | None = Field(default=None, description="附件列表")
     related_docs: str | None = Field(default=None, description="关联文档ID")
     images_url: str | None = Field(default=None, description="图片URL")
+    anonymous: bool = Field(default=False, description="专家回答是否匿名（公开/定向均可）")
+    reveal_on_public: bool | None = Field(default=None, description="定向且匿名时：转公开后是否公开姓名")
 
 
 class AnswerUpdateRequest(BaseModel):
@@ -359,6 +380,8 @@ class CommentCreateRequest(BaseModel):
     content: str = Field(..., description="评论内容")
     is_follow_up: bool = Field(default=False, description="是否为追问")
     question_id: int | None = Field(None, description="问题ID（仅追问时需要）")
+    anonymous: bool = Field(default=False, description="评论他人回答时是否匿名；追问/自评继承已有状态")
+    reveal_on_public: bool | None = Field(default=None, description="定向且匿名时：转公开后是否公开姓名")
 
 
 class GetCommentsRequest(BaseModel):
@@ -389,20 +412,33 @@ class CommentDetailResponse(BaseModel):
     is_follow_up: bool
     vote_count: int
     created_at: datetime
+    anonymous: bool = False
+    author: dict[str, Any] | None = None
 
     @classmethod
     def from_comment(cls, comment: Any) -> "CommentDetailResponse":
-        """Build a JSON-safe response DTO from a database comment entity."""
+        """把评论 ORM 转成 JSON；匿名时 user_name 用别名，不把真名写回表列。"""
+        author = getattr(comment, "author", None)
+        if not isinstance(author, dict):
+            author = None
+        user_name = _decode_db_text(getattr(comment, "user_name", None))
+        shown_anonymous = bool(getattr(comment, "anonymous", False))
+        if author is not None:
+            shown_anonymous = bool(author.get("anonymous"))
+            if shown_anonymous and "real_name" not in author:
+                user_name = author.get("display_name") or user_name
         return cls(
             id=_coerce_db_int(getattr(comment, "id", None)),
             answer_id=_coerce_db_int(getattr(comment, "answer_id", None)),
             question_id=_coerce_db_int(getattr(comment, "question_id", None)),
             user_id=_coerce_db_int(getattr(comment, "user_id", None)),
-            user_name=_decode_db_text(getattr(comment, "user_name", None)),
+            user_name=user_name,
             content=_decode_db_text(getattr(comment, "content", None)) or "",
             is_follow_up=_coerce_db_bool(getattr(comment, "is_follow_up", False)),
             vote_count=_coerce_db_int(getattr(comment, "vote_count", None)),
             created_at=comment.created_at,
+            anonymous=shown_anonymous,
+            author=author,
         )
 
     class Config:
@@ -435,6 +471,12 @@ class AdoptAnswerRequest(BaseModel):
     answer_id: int = Field(..., description="回答ID")
 
 
+class PublishCreateRequest(BaseModel):
+    """发起转公开 - 请求"""
+
+    duration_days: int = Field(..., description="有效期天数：1/3/7")
+
+
 # ==================== 通知 Schemas ====================
 
 
@@ -460,7 +502,10 @@ class QuestionListQuery(BaseModel):
     """问题列表查询条件"""
 
     domain: str | None = Field(None, description="业务域")
-    status: int | None = Field(0, description="状态: unsolved/solved/closed")
+    status: int | None = Field(None, description="兼容：3=我提问的 4=邀请我的，不得当待采纳")
+    filter: str | None = Field(default=None, description="mine | invited_me")
+    display_status: str | None = Field(default=None, description="unanswered | pending_adopt | solved | unresolved")
+    keyword: str | None = Field(default=None, description="标题关键字")
     sort_by: str = Field(default="latest", description="排序: latest/hottest/unanswered")
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
