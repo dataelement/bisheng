@@ -97,7 +97,11 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_scenario(scenario_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f'scenario not found: {scenario_id}')
-        if row.scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE:
+        if row.scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE and (
+            payload.get('scenario_name') or 'display_name' in payload
+        ):
+            # The system file-change scenario's identity and flow are fixed; only
+            # its enabled on/off switch may be toggled from the Approval Center.
             raise ValueError(cls._SYSTEM_SCENARIO_READ_ONLY_MESSAGE)
         before_enabled = row.enabled
         if payload.get('scenario_name'):

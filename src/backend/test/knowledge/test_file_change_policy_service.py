@@ -18,6 +18,7 @@ from bisheng.approval.domain.models.approval_scenario import (
     ApprovalRouteRule,
     ApprovalScenario,
 )
+from bisheng.approval.domain.services.approval_registry import SYSTEM_FILE_CHANGE_SCENARIO_CODE
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     ChannelRelationEnum,
@@ -114,6 +115,19 @@ async def _read_policy(engine, tenant_id: int) -> KnowledgeSpaceFileChangePolicy
         return (await session.exec(statement)).first()
 
 
+async def _set_file_change_scenario_enabled(engine, *, tenant_id: int, enabled: bool) -> None:
+    async with AsyncSession(bind=engine, expire_on_commit=False) as session:
+        async with session.begin():
+            session.add(
+                ApprovalScenario(
+                    tenant_id=tenant_id,
+                    scenario_code=SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+                    scenario_name="知识空间文件变更审批",
+                    enabled=enabled,
+                )
+            )
+
+
 async def _read_setting(engine, tenant_id: int, space_id: int) -> KnowledgeSpaceFileChangeSetting | None:
     async with AsyncSession(bind=engine) as session:
         statement = select(KnowledgeSpaceFileChangeSetting).where(
@@ -123,7 +137,7 @@ async def _read_setting(engine, tenant_id: int, space_id: int) -> KnowledgeSpace
         return (await session.exec(statement)).first()
 
 
-async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_space_requires_approval(policy_engine):
+async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_space_skips_approval(policy_engine):
     set_current_tenant_id(17)
     await _insert_space(policy_engine, tenant_id=17, space_id=101)
     service = _service(policy_engine)
@@ -132,7 +146,9 @@ async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_spa
 
     assert policy.enabled is True
     assert policy.scope == KnowledgeSpaceFileChangePolicyScope.PER_SPACE
-    assert await service.is_approval_required(space_id=101) is True
+    # Missing policy resolves to per_space, so an unconfigured space is not
+    # forced through approval — only explicitly enabled spaces require it.
+    assert await service.is_approval_required(space_id=101) is False
     assert await _read_policy(policy_engine, 17) is None
 
 
@@ -149,26 +165,47 @@ async def test_non_space_knowledge_row_cannot_receive_file_change_policy(policy_
         await _service(policy_engine).is_approval_required(space_id=101)
 
 
-async def test_all_spaces_ignores_saved_per_space_opt_out(policy_engine):
+async def test_all_spaces_honors_saved_per_space_opt_out(policy_engine):
     set_current_tenant_id(17)
     await _insert_space(policy_engine, tenant_id=17, space_id=101)
     service = _service(policy_engine)
     await service.save_space_setting(space_id=101, approval_required=False)
     await service.save_policy(enabled=True, scope=KnowledgeSpaceFileChangePolicyScope.ALL_SPACES)
 
-    assert await service.is_approval_required(space_id=101) is True
+    # Under scope=all_spaces an explicit per-space OFF is still honored: if either
+    # the scenario switch or the space's own switch is OFF, approval is skipped.
+    assert await service.is_approval_required(space_id=101) is False
 
 
-async def test_per_space_uses_saved_value_and_defaults_unconfigured_space_to_required(policy_engine):
+async def test_all_spaces_defaults_unconfigured_space_to_required(policy_engine):
     set_current_tenant_id(17)
     await _insert_space(policy_engine, tenant_id=17, space_id=101)
     await _insert_space(policy_engine, tenant_id=17, space_id=102)
     service = _service(policy_engine)
+    await service.save_space_setting(space_id=101, approval_required=True)
+    await service.save_policy(enabled=True, scope=KnowledgeSpaceFileChangePolicyScope.ALL_SPACES)
+
+    # An unconfigured space still defaults to requiring approval; a space kept ON
+    # requires approval too. Both switches ON => approval required.
+    assert await service.is_approval_required(space_id=101) is True
+    assert await service.is_approval_required(space_id=102) is True
+
+
+async def test_per_space_uses_saved_value_and_defaults_unconfigured_space_to_skip(policy_engine):
+    set_current_tenant_id(17)
+    await _insert_space(policy_engine, tenant_id=17, space_id=101)
+    await _insert_space(policy_engine, tenant_id=17, space_id=102)
+    await _insert_space(policy_engine, tenant_id=17, space_id=103)
+    service = _service(policy_engine)
     await service.save_space_setting(space_id=101, approval_required=False)
+    await service.save_space_setting(space_id=103, approval_required=True)
     await service.save_policy(enabled=True, scope=KnowledgeSpaceFileChangePolicyScope.PER_SPACE)
 
+    # Explicit OFF -> skip; explicit ON -> require; unconfigured -> skip (only
+    # explicitly enabled spaces require approval under per_space).
     assert await service.is_approval_required(space_id=101) is False
-    assert await service.is_approval_required(space_id=102) is True
+    assert await service.is_approval_required(space_id=102) is False
+    assert await service.is_approval_required(space_id=103) is True
 
 
 async def test_disabled_policy_bypasses_approval_and_reenable_preserves_space_setting(policy_engine):
@@ -185,6 +222,46 @@ async def test_disabled_policy_bypasses_approval_and_reenable_preserves_space_se
     assert await service.is_approval_required(space_id=101) is False
     setting = await _read_setting(policy_engine, 17, 101)
     assert setting is not None and setting.approval_required is False
+
+
+async def test_disabled_scenario_bypasses_approval_even_when_policy_and_space_on(policy_engine):
+    set_current_tenant_id(17)
+    await _insert_space(policy_engine, tenant_id=17, space_id=101)
+    # The Approval Center scenario master switch is turned OFF for this tenant.
+    await _set_file_change_scenario_enabled(policy_engine, tenant_id=17, enabled=False)
+    service = _service(policy_engine)
+    await service.save_space_setting(space_id=101, approval_required=True)
+    await service.save_policy(enabled=True, scope=KnowledgeSpaceFileChangePolicyScope.ALL_SPACES)
+
+    # Scenario OFF wins over policy.enabled and the per-space switch being ON.
+    assert await service.is_approval_required(space_id=101) is False
+
+
+async def test_enabled_scenario_with_policy_and_space_on_requires_approval(policy_engine):
+    set_current_tenant_id(17)
+    await _insert_space(policy_engine, tenant_id=17, space_id=101)
+    await _set_file_change_scenario_enabled(policy_engine, tenant_id=17, enabled=True)
+    service = _service(policy_engine)
+    await service.save_space_setting(space_id=101, approval_required=True)
+    await service.save_policy(enabled=True, scope=KnowledgeSpaceFileChangePolicyScope.PER_SPACE)
+
+    assert await service.is_approval_required(space_id=101) is True
+
+
+async def test_settings_page_effective_required_false_when_scenario_disabled(policy_engine):
+    set_current_tenant_id(17)
+    await _insert_space(policy_engine, tenant_id=17, space_id=101)
+    await _set_file_change_scenario_enabled(policy_engine, tenant_id=17, enabled=False)
+    service = _service(policy_engine)
+    await service.update_space_setting(space_id=101, approval_required=True)
+
+    page = await service.get_space_settings_page(keyword=None, page=1, page_size=20)
+
+    row = page.data[0]
+    # The per-space toggle still reflects the saved value, but the effective
+    # outcome is "no approval" because the scenario master switch is OFF.
+    assert row.approval_required is True
+    assert row.effective_required is False
 
 
 async def test_private_space_never_requires_approval(policy_engine):
@@ -224,9 +301,11 @@ async def test_settings_page_keeps_unconfigured_spaces_and_marks_department_spac
     )
 
     assert page.total == 2
+    # No policy saved resolves to per_space, so unconfigured spaces default to
+    # "no approval" in the projection.
     assert [(row.space_id, row.space_kind, row.approval_required) for row in page.data] == [
-        (101, "normal", True),
-        (102, "department", True),
+        (101, "normal", False),
+        (102, "department", False),
     ]
 
 
@@ -394,7 +473,9 @@ async def test_tenant_configuration_is_strictly_isolated_without_root_fallback(p
     tenant_policy = await service.get_policy()
     assert tenant_policy.enabled is True
     assert tenant_policy.scope == KnowledgeSpaceFileChangePolicyScope.PER_SPACE
-    assert await service.is_approval_required(space_id=201) is True
+    # Tenant 17 has no policy of its own: per_space default => unconfigured space
+    # skips approval (no cross-tenant fallback to tenant 1's all_spaces policy).
+    assert await service.is_approval_required(space_id=201) is False
     assert await _read_policy(policy_engine, 17) is None
 
     with pytest.raises(LookupError, match="knowledge space not found"):

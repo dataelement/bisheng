@@ -242,7 +242,9 @@ def _flow() -> ApprovalFlowDefinition:
 @pytest.mark.parametrize(
     ("method_name", "kwargs"),
     [
-        ("update_scenario", {"scenario_id": 1, "payload": {"enabled": False}}),
+        # The identity/flow of the fixed scenario stays read-only.
+        ("update_scenario", {"scenario_id": 1, "payload": {"scenario_name": "改名"}}),
+        ("update_scenario", {"scenario_id": 1, "payload": {"display_name": "别名"}}),
         ("delete_scenario", {"scenario_id": 1}),
         ("create_route", {"scenario_id": 1, "payload": {"route_name": "旁路", "route_type": "pass"}}),
         ("reorder_routes", {"scenario_id": 1, "ordered_route_ids": [2]}),
@@ -257,6 +259,31 @@ async def test_fixed_scenario_rejects_direct_admin_writes(monkeypatch, method_na
     method = getattr(ApprovalScenarioAdminService, method_name)
     with pytest.raises(ValueError, match="system fixed approval scenario is read-only"):
         await method(tenant_id=7, **kwargs)
+
+
+async def test_fixed_scenario_allows_enabled_toggle(monkeypatch):
+    row = _scenario()
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioRepository.get_scenario",
+        AsyncMock(return_value=row),
+    )
+
+    async def _persist(updated):
+        return updated
+
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.approval_scenario_admin_service.ApprovalScenarioRepository.update_scenario",
+        AsyncMock(side_effect=_persist),
+    )
+
+    # The enable/disable switch is the one mutation allowed on the fixed scenario.
+    result = await ApprovalScenarioAdminService.update_scenario(
+        tenant_id=7,
+        scenario_id=1,
+        payload={"enabled": False},
+    )
+
+    assert result["enabled"] is False
 
 
 @pytest.mark.parametrize(

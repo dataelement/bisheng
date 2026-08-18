@@ -156,8 +156,10 @@ export const FileChangeApprovalSettings = forwardRef<
       policyBaseline.scope !== policyDraft.scope),
   );
   const hasChanges = policyChanged || changedSpaceIds.length > 0;
-  const settingsVisible =
-    policyDraft?.enabled === true && policyDraft.scope === "per_space";
+  // The per-space toggles stay visible under both scopes: an explicit per-space
+  // OFF is always honored, so admins must be able to opt individual spaces out
+  // even when the scope defaults every space to "require approval".
+  const settingsVisible = policyDraft?.enabled === true;
 
   const handleScopeChange = (scope: string) => {
     setPolicyDraft((current) =>

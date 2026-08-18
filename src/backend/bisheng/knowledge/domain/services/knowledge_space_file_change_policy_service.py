@@ -202,6 +202,7 @@ class KnowledgeSpaceFileChangePolicyService:
                     session=session,
                 )
                 effective_policy = policy_row or KnowledgeSpaceFileChangePolicy(tenant_id=tenant_id)
+                scenario_enabled = await repository.is_file_change_scenario_enabled(tenant_id=tenant_id)
                 setting_rows = []
                 for item in normalized_settings:
                     row = await repository.get_space_setting_row(
@@ -210,7 +211,13 @@ class KnowledgeSpaceFileChangePolicyService:
                     )
                     if row is None:  # pragma: no cover - protected by locked space set
                         raise LookupError("knowledge space not found")
-                    setting_rows.append(self._setting_response(row=row, policy=effective_policy))
+                    setting_rows.append(
+                        self._setting_response(
+                            row=row,
+                            policy=effective_policy,
+                            scenario_enabled=scenario_enabled,
+                        )
+                    )
 
                 return KnowledgeSpaceFileChangeConfigurationResp(
                     policy=effective_policy,
@@ -270,6 +277,7 @@ class KnowledgeSpaceFileChangePolicyService:
         async with self.session_factory() as session:
             repository = KnowledgeSpaceFileChangeRepository(session)
             policy = await repository.get_policy(tenant_id=tenant_id)
+            scenario_enabled = await repository.is_file_change_scenario_enabled(tenant_id=tenant_id)
             rows, total = await repository.list_space_setting_rows(
                 tenant_id=tenant_id,
                 keyword=keyword,
@@ -277,7 +285,10 @@ class KnowledgeSpaceFileChangePolicyService:
                 page_size=page_size,
             )
         return KnowledgeSpaceFileChangeSettingsResp(
-            data=[self._setting_response(row=row, policy=policy) for row in rows],
+            data=[
+                self._setting_response(row=row, policy=policy, scenario_enabled=scenario_enabled)
+                for row in rows
+            ],
             total=total,
         )
 
@@ -306,25 +317,38 @@ class KnowledgeSpaceFileChangePolicyService:
                     space_id=space_id,
                 )
                 policy = await repository.get_policy(tenant_id=tenant_id)
+                scenario_enabled = await repository.is_file_change_scenario_enabled(tenant_id=tenant_id)
                 if row is None:  # pragma: no cover - protected by the locked space lookup above
                     raise LookupError(f"knowledge space not found: {space_id}")
-                return self._setting_response(row=row, policy=policy)
+                return self._setting_response(row=row, policy=policy, scenario_enabled=scenario_enabled)
 
     @staticmethod
     def _setting_response(
         *,
         row: KnowledgeSpaceFileChangeSettingRow,
         policy: KnowledgeSpaceFileChangePolicy | None,
+        scenario_enabled: bool = True,
     ) -> KnowledgeSpaceFileChangeSettingResp:
         auth_type = row.space.auth_type
         auth_type_value = auth_type.value if isinstance(auth_type, AuthTypeEnum) else str(auth_type)
-        approval_required = True if row.setting is None else bool(row.setting.approval_required)
+        # The scope selector decides the default for spaces without an explicit
+        # setting: under all_spaces they default to "require approval", under
+        # per_space they default to "no approval" (only explicitly enabled spaces
+        # go through approval). An explicit per-space value always wins.
+        scope = policy.scope if policy is not None else KnowledgeSpaceFileChangePolicyScope.PER_SPACE
+        scope_default_required = scope == KnowledgeSpaceFileChangePolicyScope.ALL_SPACES
+        approval_required = (
+            scope_default_required if row.setting is None else bool(row.setting.approval_required)
+        )
+        # The Approval Center scenario switch, the build-UI switch (policy.enabled)
+        # and the space's own switch must ALL be ON for approval to apply; if any
+        # is OFF the change bypasses approval.
         if auth_type_value == AuthTypeEnum.PRIVATE.value:
+            effective_required = False
+        elif not scenario_enabled:
             effective_required = False
         elif policy is not None and not bool(policy.enabled):
             effective_required = False
-        elif policy is not None and policy.scope == KnowledgeSpaceFileChangePolicyScope.ALL_SPACES:
-            effective_required = True
         else:
             effective_required = approval_required
         return KnowledgeSpaceFileChangeSettingResp(
@@ -351,22 +375,27 @@ class KnowledgeSpaceFileChangePolicyService:
         if space.auth_type == AuthTypeEnum.PRIVATE:
             return False
 
+        # Approval is required only when ALL of these are ON; if any is OFF the
+        # change bypasses approval entirely (executes directly):
+        #   1. the Approval Center scenario switch (ApprovalScenario.enabled),
+        #   2. the build-UI "enable file change approval" switch (policy.enabled),
+        #   3. the space's own switch (per-space setting / scope default).
+        if not await repository.is_file_change_scenario_enabled(tenant_id=tenant_id):
+            return False
+
         policy = await repository.get_policy(tenant_id=tenant_id)
-        if policy is None:
-            enabled = True
-            scope = KnowledgeSpaceFileChangePolicyScope.PER_SPACE
-        else:
-            enabled = bool(policy.enabled)
-            scope = policy.scope
+        enabled = True if policy is None else bool(policy.enabled)
         if not enabled:
             return False
-        if scope == KnowledgeSpaceFileChangePolicyScope.ALL_SPACES:
-            return True
-        if scope != KnowledgeSpaceFileChangePolicyScope.PER_SPACE:
-            raise RuntimeError(f"invalid persisted file change policy scope: {scope}")
 
         setting = await repository.get_setting(tenant_id=tenant_id, space_id=space_id)
-        return True if setting is None else bool(setting.approval_required)
+        if setting is not None:
+            return bool(setting.approval_required)
+        # No explicit per-space setting: fall back to the scope default. Under
+        # all_spaces every space requires approval by default; under per_space
+        # only explicitly enabled spaces do, so unconfigured spaces are skipped.
+        scope = policy.scope if policy is not None else KnowledgeSpaceFileChangePolicyScope.PER_SPACE
+        return scope == KnowledgeSpaceFileChangePolicyScope.ALL_SPACES
 
     @staticmethod
     async def _require_space(

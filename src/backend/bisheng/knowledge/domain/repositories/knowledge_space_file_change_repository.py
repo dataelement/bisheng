@@ -8,6 +8,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.approval.domain.models.approval_scenario import ApprovalScenario
+from bisheng.approval.domain.services.approval_registry import SYSTEM_FILE_CHANGE_SCENARIO_CODE
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_file_change_policy import (
@@ -44,6 +46,20 @@ class KnowledgeSpaceFileChangeRepository:
     ) -> KnowledgeSpaceFileChangePolicy | None:
         statement = self.build_policy_statement(tenant_id=tenant_id, for_update=for_update)
         return (await self.session.exec(statement)).first()
+
+    async def is_file_change_scenario_enabled(self, *, tenant_id: int) -> bool:
+        """Read the tenant's file-change approval scenario master switch.
+
+        The scenario is auto-provisioned enabled per tenant; an administrator can
+        turn it off in the Approval Center. A missing row is treated as "not
+        disabled" (enabled) so behaviour only changes when explicitly toggled off.
+        """
+        statement = select(ApprovalScenario.enabled).where(
+            ApprovalScenario.tenant_id == int(tenant_id),
+            ApprovalScenario.scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+        )
+        enabled = (await self.session.exec(statement)).first()
+        return enabled is None or bool(enabled)
 
     async def ensure_policy_row(
         self,
