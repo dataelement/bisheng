@@ -282,6 +282,26 @@ async def _sync_after_create(request, question, initiator, approvers: list[Any])
     return instance
 
 
+async def refresh_expire_snapshot(request) -> None:
+    """会签截止延后后，把审批实例快照里的 expire_at 对齐 qa_publish_request。"""
+    try:
+        instance = await _get_instance(request)
+        if instance is None:
+            return
+        expire_iso = to_beijing_iso(getattr(request, "expire_at", None))
+        payload = dict(instance.payload_snapshot or {})
+        detail = dict(instance.detail_snapshot or {})
+        if payload.get("expire_at") == expire_iso and detail.get("expire_at") == expire_iso:
+            return
+        payload["expire_at"] = expire_iso
+        detail["expire_at"] = expire_iso
+        instance.payload_snapshot = payload
+        instance.detail_snapshot = detail
+        await ApprovalInstanceRepository.update_instance(instance)
+    except Exception:
+        logger.exception("qa.publish.bridge.refresh_expire_failed request_id={}", getattr(request, "id", None))
+
+
 async def add_pending_task(request, question, user_id: int) -> ApprovalTask | None:
     """中途新增回答专家：补一条 pending 待办。"""
     try:
