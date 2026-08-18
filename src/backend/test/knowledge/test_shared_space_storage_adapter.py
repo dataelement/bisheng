@@ -1,0 +1,332 @@
+"""F1 shared-space storage adapter tests (naming / routing / fingerprint /
+filter rendering / create+delete routing guards / reader).
+
+No live Milvus/ES: pymilvus Collection and es clients are fakes/mocks. The
+switch-off invariant ("enabled=False or no routing row -> zero behaviour
+change") is asserted throughout.
+"""
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+
+from bisheng.core.config.settings import KnowledgeSpaceSharedStorageConf
+from bisheng.knowledge.domain.contracts.errors import (
+    SharedStorageContractError,
+    SharedStorageErrorCode,
+)
+from bisheng.knowledge.domain.contracts.retrieval_scope import BackendQueryFilter
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
+    KnowledgeSpaceSharedStorageRouting,
+)
+from bisheng.knowledge.rag import shared_space_storage as sss
+from bisheng.knowledge.rag.shared_space_storage import (
+    SharedSpaceStorageReader,
+    TenantRoutingSnapshot,
+    build_milvus_membership_expr,
+    build_shared_es_filter,
+    resolve_space_shared_routing,
+    shared_collection_name,
+    shared_index_name,
+)
+
+
+def _conf(**overrides) -> KnowledgeSpaceSharedStorageConf:
+    return KnowledgeSpaceSharedStorageConf(enabled=True, **overrides)
+
+
+def _snapshot(
+    tenant_id: int = 1,
+    *,
+    shared_enabled: bool = True,
+    routing_version: int = 3,
+    write_frozen: bool = False,
+    index_name: str | None = "idx_space_shared_1",
+) -> TenantRoutingSnapshot:
+    return TenantRoutingSnapshot(
+        tenant_id=tenant_id,
+        shared_enabled=shared_enabled,
+        routing_version=routing_version,
+        write_frozen=write_frozen,
+        collection_name="col_space_shared_1",
+        index_name=index_name,
+        embedding_model_id=7,
+        schema_fingerprint="fp",
+        migration_state="",
+    )
+
+
+class TestNaming:
+    def test_shared_names_use_prefix_and_tenant(self):
+        conf = _conf(collection_prefix="col_x", index_prefix="idx_x")
+        assert shared_collection_name(42, conf) == "col_x_42"
+        assert shared_index_name(42, conf) == "idx_x_42"
+
+
+class TestResolveRouting:
+    def test_switch_off_returns_none(self):
+        provider = lambda tenant_id: _snapshot()  # noqa: E731
+        assert (
+            resolve_space_shared_routing(
+                1, KnowledgeTypeEnum.SPACE.value, conf=KnowledgeSpaceSharedStorageConf(),
+                routing_provider=provider,
+            )
+            is None
+        )
+
+    def test_non_space_type_returns_none(self):
+        assert (
+            resolve_space_shared_routing(
+                1, KnowledgeTypeEnum.NORMAL.value, conf=_conf(), routing_provider=lambda t: _snapshot()
+            )
+            is None
+        )
+
+    def test_no_routing_row_returns_none(self):
+        assert resolve_space_shared_routing(1, KnowledgeTypeEnum.SPACE.value, conf=_conf(), routing_provider=lambda t: None) is None
+
+    def test_space_tenant_enabled_returns_snapshot(self):
+        snapshot = resolve_space_shared_routing(
+            1, KnowledgeTypeEnum.SPACE.value, conf=_conf(), routing_provider=lambda t: _snapshot()
+        )
+        assert snapshot is not None and snapshot.routing_version == 3
+
+    def test_snapshot_from_row_roundtrip(self):
+        row = KnowledgeSpaceSharedStorageRouting(
+            tenant_id=5, shared_enabled=True, routing_version=9, write_frozen=True
+        )
+        snap = TenantRoutingSnapshot.from_row(row)
+        assert (snap.tenant_id, snap.shared_enabled, snap.routing_version, snap.write_frozen) == (5, True, 9, True)
+
+
+class TestMembershipFilter:
+    def test_single_space_uses_array_contains(self):
+        expr = build_milvus_membership_expr(1, [11])
+        assert expr == "tenant_id == 1 and ARRAY_CONTAINS(knowledge_ids, 11)"
+
+    def test_multi_space_uses_array_contains_any(self):
+        expr = build_milvus_membership_expr(1, [11, 12, 13])
+        assert expr == (
+            "tenant_id == 1 and ARRAY_CONTAINS_ANY(knowledge_ids, [11, 12, 13])"
+        )
+
+    def test_empty_spaces_rejected(self):
+        with pytest.raises(ValueError):
+            build_milvus_membership_expr(1, [])
+
+    def test_es_filter_terms(self):
+        filter_ = BackendQueryFilter(
+            tenant_id=1, requested_space_ids=(11, 12), routing_version=1
+        )
+        clauses = build_shared_es_filter(filter_)
+        assert {"term": {"metadata.tenant_id": 1}} in clauses
+        assert {"terms": {"metadata.knowledge_ids": [11, 12]}} in clauses
+
+
+class _FakeEntity:
+    def __init__(self, data):
+        self._data = data
+
+    def get(self, key, default=None):
+        return self._data.get(key, default)
+
+
+class _FakeHit:
+    def __init__(self, data, score):
+        self.entity = _FakeEntity(data)
+        self.distance = score
+
+
+class TestSharedSpaceStorageReader:
+    def _reader(self, *, routing_version: int = 3, enabled: bool = True):
+        conf = _conf() if enabled else KnowledgeSpaceSharedStorageConf()
+        collection = SimpleNamespace(
+            search=lambda **kw: [[_FakeHit(
+                {
+                    "canonical_document_id": 10,
+                    "canonical_version_id": 100,
+                    "chunk_index": 0,
+                    "text": "hello",
+                },
+                0.42,
+            )]]
+        )
+        es_client = SimpleNamespace(
+            search=lambda **kw: {
+                "hits": {
+                    "hits": [
+                        {
+                            "_score": 1.5,
+                            "_source": {
+                                "text": "hello",
+                                "metadata": {
+                                    "canonical_document_id": 10,
+                                    "canonical_version_id": 100,
+                                    "chunk_index": 0,
+                                },
+                            },
+                        }
+                    ]
+                }
+            }
+        )
+        return SharedSpaceStorageReader(
+            tenant_id=1,
+            collection=collection,
+            es_client=es_client,
+            expected_routing_version=routing_version,
+            conf=conf,
+            routing_provider=lambda t: _snapshot(),
+        )
+
+    async def test_milvus_search_renders_membership_expr(self):
+        reader = self._reader()
+        filter_ = BackendQueryFilter(
+            tenant_id=1, requested_space_ids=(11,), routing_version=3
+        )
+        hits = await reader.search_milvus(filter_, vector=[0.1] * 4, limit=5)
+        assert len(hits) == 1
+        assert hits[0].canonical_document_id == 10
+        assert hits[0].score == pytest.approx(0.42)
+
+    async def test_es_search_returns_canonical_hits(self):
+        reader = self._reader()
+        filter_ = BackendQueryFilter(
+            tenant_id=1, requested_space_ids=(11, 12), routing_version=3
+        )
+        hits = await reader.search_es(filter_, query_text="hello", limit=5)
+        assert hits[0].canonical_version_id == 100
+        assert hits[0].score == pytest.approx(1.5)
+
+    async def test_routing_version_mismatch_fails_closed(self):
+        reader = self._reader(routing_version=2)
+        filter_ = BackendQueryFilter(
+            tenant_id=1, requested_space_ids=(11,), routing_version=3
+        )
+        with pytest.raises(SharedStorageContractError) as exc:
+            await reader.search_milvus(filter_, vector=[0.1] * 4, limit=5)
+        assert exc.value.code == SharedStorageErrorCode.ROUTING_VERSION_MISMATCH
+
+    async def test_reads_available_during_write_freeze(self):
+        conf = _conf()
+        reader = SharedSpaceStorageReader(
+            tenant_id=1,
+            collection=SimpleNamespace(search=lambda **kw: []),
+            es_client=SimpleNamespace(),
+            expected_routing_version=3,
+            conf=conf,
+            routing_provider=lambda t: _snapshot(write_frozen=True),
+        )
+        filter_ = BackendQueryFilter(tenant_id=1, requested_space_ids=(11,), routing_version=3)
+        assert await reader.search_milvus(filter_, vector=[0.1] * 4, limit=5) == []
+
+    def test_full_expr_adds_canonical_narrowing(self):
+        filter_ = BackendQueryFilter(
+            tenant_id=1,
+            requested_space_ids=(11,),
+            routing_version=3,
+            canonical_document_ids=(10, 11),
+        )
+        expr = SharedSpaceStorageReader._full_expr(filter_)
+        assert "ARRAY_CONTAINS(knowledge_ids, 11)" in expr
+        assert "canonical_document_id in [10, 11]" in expr
+
+
+class TestSchemaFingerprint:
+    def test_fingerprint_stable_for_same_spec(self):
+        spec_a = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=1024,
+            metric_type="L2",
+            index_params={"index_type": "HNSW"},
+            knowledge_ids_max_capacity=4096,
+        )
+        spec_b = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=1024,
+            metric_type="L2",
+            index_params={"index_type": "HNSW"},
+            knowledge_ids_max_capacity=4096,
+        )
+        assert spec_a.fingerprint() == spec_b.fingerprint()
+
+    def test_fingerprint_changes_on_dimension(self):
+        base = dict(embedding_model_id=7, dimension=1024, metric_type="L2",
+                    index_params={"index_type": "HNSW"}, knowledge_ids_max_capacity=4096)
+        other = sss.SharedStoreSchemaSpec(dimension=768, **{k: v for k, v in base.items() if k != "dimension"})
+        assert sss.SharedStoreSchemaSpec(**base).fingerprint() != other.fingerprint()
+
+
+class TestCreateDeleteRoutingGuards:
+    def test_create_space_uses_shared_names_when_routed(self):
+        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+        knowledge = SimpleNamespace(
+            type=KnowledgeTypeEnum.SPACE.value,
+            index_name=None,
+            collection_name=None,
+            tenant_id=1,
+        )
+        login_user = SimpleNamespace(user_id="u1", tenant_id=1)
+        with patch(
+            "bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf",
+            return_value=_conf(),
+        ), patch(
+            "bisheng.knowledge.rag.shared_space_storage.load_tenant_routing_snapshot",
+            return_value=_snapshot(),
+        ), patch(
+            "bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao"
+        ) as dao_cls, patch.object(KnowledgeService, "create_knowledge_hook"):
+            dao_cls.insert_one.return_value = knowledge
+            KnowledgeService.create_knowledge_base(None, login_user, knowledge, skip_hook=True)
+        assert knowledge.collection_name == "col_space_shared_1"
+        assert knowledge.index_name == "idx_space_shared_1"
+
+    def test_create_space_keeps_legacy_names_when_switch_off(self):
+        from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+
+        knowledge = SimpleNamespace(
+            type=KnowledgeTypeEnum.SPACE.value,
+            index_name=None,
+            collection_name=None,
+            tenant_id=1,
+        )
+        login_user = SimpleNamespace(user_id="u1", tenant_id=1)
+        with patch(
+            "bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf",
+            return_value=KnowledgeSpaceSharedStorageConf(),
+        ), patch.object(KnowledgeService, "create_knowledge_hook"):
+            with patch("bisheng.knowledge.domain.services.knowledge_service.KnowledgeDao") as dao:
+                KnowledgeService.create_knowledge_base(None, login_user, knowledge, skip_hook=True)
+        assert knowledge.collection_name is not None
+        assert knowledge.collection_name != "col_space_shared_1"
+
+    def test_delete_skips_shared_store_when_routed(self):
+        from bisheng.api.services import knowledge_imp
+
+        knowledge = SimpleNamespace(
+            id=33,
+            type=KnowledgeTypeEnum.SPACE.value,
+            tenant_id=1,
+            collection_name="col_space_shared_1",
+            index_name="idx_space_shared_1",
+        )
+        with patch(
+            "bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf",
+            return_value=_conf(),
+        ), patch(
+            "bisheng.knowledge.rag.shared_space_storage.load_tenant_routing_snapshot",
+            return_value=_snapshot(),
+        ), patch.object(knowledge_imp, "KnowledgeRag") as rag:
+            knowledge_imp.delete_vector_files([1, 2], knowledge)
+            rag.init_knowledge_milvus_vectorstore_sync.assert_not_called()
+
+        with patch(
+            "bisheng.knowledge.rag.shared_space_storage.get_shared_storage_conf",
+            return_value=KnowledgeSpaceSharedStorageConf(),
+        ), patch.object(knowledge_imp, "KnowledgeRag") as rag:
+            knowledge_imp.delete_vector_files([1, 2], knowledge)
+            rag.init_knowledge_milvus_vectorstore_sync.assert_called_once()

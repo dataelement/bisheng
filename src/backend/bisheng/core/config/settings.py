@@ -727,6 +727,57 @@ class KnowledgeConf(BaseModel):
         return False
 
 
+class KnowledgeSpaceSharedStorageConf(BaseModel):
+    """知识空间统一共享存储（SPACE shared storage）配置。
+
+    总开关语义（重构方案 §7.4 镜像级回退前提）：``enabled=False`` 时所有
+    共享存储新逻辑（租户路由、共享 collection/index bootstrap、共享写
+    入/检索、删库保护）完全不生效，行为与旧版本一致。租户级灰度由
+    ``knowledge_space_shared_storage_routing`` 路由表的 ``shared_enabled``
+    单行原子切换控制（方案 §6.2：租户路由状态以 SQL 路由表为单一真相源）。
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="共享存储总开关；False 时所有新逻辑零行为变化",
+    )
+    collection_prefix: str = Field(
+        default="col_space_shared",
+        description="租户共享 Milvus collection 前缀，实际名称为 {prefix}_{tenant_id}",
+    )
+    index_prefix: str = Field(
+        default="idx_space_shared",
+        description="租户共享 ES index 前缀，实际名称为 {prefix}_{tenant_id}",
+    )
+    tenant_embedding_model_id: int | None = Field(
+        default=None,
+        description="租户统一目标 embedding 模型 ID；修改视为全租户重建（方案 §6.2）",
+    )
+    knowledge_ids_max_capacity: int = Field(
+        default=4096,
+        ge=1,
+        le=4096,
+        description="Milvus ARRAY 硬上限；collection 创建后不可热改（Milvus 2.5 限制 1-4096）",
+    )
+    knowledge_ids_soft_limit: int = Field(
+        default=512,
+        description="knowledge_ids 业务告警阈值；达到后仅告警与容量评审，不拒绝写入",
+    )
+    es_routing_enabled: bool = Field(
+        default=False,
+        description="共享 ES index 是否启用 routing（tenant/document 路由键）；由 PoC 结论决定",
+    )
+    migration_write_block_enabled: bool = Field(
+        default=True,
+        description="迁移写冻结开关打开时，路由表中 write_frozen 的租户 SPACE 写入失败关闭",
+    )
+    old_store_retention_days: int = Field(
+        default=30,
+        ge=1,
+        description="旧库只读 quarantine 保留天数（LEGACY_PURGED 前不得物理删除）",
+    )
+
+
 class IntelligenceCenterConf(BaseModel):
     """Intelligence Center Configure"""
 
@@ -1012,6 +1063,10 @@ class Settings(BaseModel):
     database_pool: DatabasePoolConf = Field(default_factory=DatabasePoolConf)
     portal_hot_search: PortalHotSearchConf = Field(default_factory=PortalHotSearchConf)
     points: PointsConf = Field(default_factory=PointsConf)
+    knowledge_space_shared_storage: KnowledgeSpaceSharedStorageConf = Field(
+        default_factory=KnowledgeSpaceSharedStorageConf,
+        description="知识空间统一共享存储（F1）；enabled=False 时零行为变化",
+    )
 
     @field_validator("database_url")
     @classmethod
