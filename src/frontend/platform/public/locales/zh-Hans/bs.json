@@ -1314,8 +1314,8 @@
       "appPublish": "托管应用上线",
       "appPublishPending": "托管应用待上线（资源不足）",
       "appManualPublish": "托管应用手动上线",
-      "appStop": "托管应用停运",
-      "appResume": "托管应用重新启用",
+      "appStop": "托管应用下线",
+      "appResume": "托管应用上线",
       "appDelete": "托管应用删除",
       "appDeleteHookFailed": "托管应用删除后置处理失败",
       "appMetaUpdate": "托管应用元信息更新",
@@ -2111,7 +2111,7 @@
       "draft": "草稿",
       "online": "已上线",
       "pendingCapacity": "待上线（资源不足）",
-      "stopped": "已停运",
+      "stopped": "已下线",
       "deleted": "已删除"
     },
     "phase": {
@@ -2123,10 +2123,6 @@
       "stopped": "已停止",
       "failed": "已失败"
     },
-    "switch": {
-      "on": "已上线",
-      "off": "已停运"
-    },
     "version": {
       "placeholder": "版本",
       "loading": "加载中…",
@@ -2137,24 +2133,24 @@
       "readonlyTip": "版本仅供查看，托管应用不支持在此切换版本"
     },
     "actions": {
-      "stopTitle": "确认停运应用",
-      "stopDesc": "停运「{{name}}」后，应用入口与应用广场都将呈现「已停用」，正在使用的人会被中断。",
-      "stopOk": "停运",
-      "resumeTitle": "确认重新启用应用",
-      "resumeDesc": "重新启用「{{name}}」会先做运行环境容量准入，通过后拉起当前版本并恢复访问。",
-      "resumeOk": "重新启用",
+      "stopTitle": "确认下线应用",
+      "stopDesc": "下线「{{name}}」后，应用入口与应用广场都将呈现「已下线」，正在使用的人会被中断。",
+      "stopOk": "下线",
+      "resumeTitle": "确认上线应用",
+      "resumeDesc": "上线「{{name}}」会先做运行环境容量准入，通过后拉起当前版本并恢复访问。",
+      "resumeOk": "上线",
       "manualPublishTitle": "确认手动上线",
       "manualPublishDesc": "将再次尝试为「{{name}}」分配运行资源并上线，无需重新审批。",
       "manualPublishOk": "手动上线",
       "deleteTitle": "确认删除应用",
       "deleteDesc": "删除「{{name}}」将一并删除应用代码、对话历史与应用生产数据，且无法恢复。",
       "deleteOk": "删除",
-      "deleteBlockedHint": "请先停运",
+      "deleteBlockedHint": "请先下线",
       "capacityShortage": "运行环境容量不足，应用已置为「待上线（资源不足）」",
       "failed": "操作失败",
       "done": {
-        "stop": "已停运",
-        "resume": "已重新启用",
+        "stop": "已下线",
+        "resume": "已上线",
         "manualPublish": "已上线",
         "delete": "已删除"
       }
@@ -2178,8 +2174,8 @@
       "copied": "链接已复制",
       "open": "打开",
       "entryInactive": "应用当前未在运行，访问入口会呈现对应的提示页。",
-      "stop": "停运",
-      "resume": "重新启用",
+      "stop": "下线",
+      "resume": "上线",
       "manualPublish": "手动上线",
       "instanceTitle": "运行实例",
       "instancePhase": "实例状态",

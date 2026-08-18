@@ -166,8 +166,8 @@ def test_empty_lines_names_the_state_when_the_server_sends_it(
     would be a worse answer than the one we have.
     """
     for state, expected, unexpected in (
-        ("draft", "还是草稿", "已停运"),
-        ("stopped", "已停运", "还是草稿"),
+        ("draft", "还是草稿", "已下线"),
+        ("stopped", "已下线", "还是草稿"),
         ("online", "还没有输出任何日志", "没有运行实例"),
     ):
         mock = PlatformMock().get(LOGS, logs_response([], app_state=state))

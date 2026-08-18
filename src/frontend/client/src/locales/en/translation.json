@@ -68,7 +68,7 @@
   "com_app_search_by_name": "Search apps by name",
   "com_app_search_placeholder": "Search apps...",
   "com_app_share_app": "Share app",
-  "com_app_state_stopped": "Stopped",
+  "com_app_state_stopped": "Offline",
   "com_app_pin_tooltip": "Pin app",
   "com_app_unpin_tooltip": "Unpin",
   "com_app_switcher_no_apps_tooltip": "No other apps to switch to",

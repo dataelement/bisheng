@@ -63,7 +63,7 @@
   "com_app_search_by_name": "アプリ名で検索",
   "com_app_search_placeholder": "アプリを検索…",
   "com_app_share_app": "アプリを共有",
-  "com_app_state_stopped": "停止中",
+  "com_app_state_stopped": "オフライン",
   "com_app_pin_tooltip": "アプリをピン留め",
   "com_app_unpin_tooltip": "ピン留めを解除",
   "com_app_switcher_no_apps_tooltip": "切り替え可能なアプリがありません",

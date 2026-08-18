@@ -81,6 +81,17 @@ export function isOnline(state: string | undefined | null): boolean {
   return state === "online"
 }
 
+/**
+ * True for the two states the on/off switch already says out loud.
+ *
+ * `draft` and `pending_capacity` both project to "switch off" in the list, but
+ * neither is reachable by flipping it, so a surface that shows the switch still
+ * has to name those two some other way.
+ */
+export function isStateShownBySwitch(state: string | undefined | null): boolean {
+  return state === "online" || state === "stopped"
+}
+
 /** Minimal identity a state action needs; both the card row and the detail payload provide it. */
 export interface HostedAppRef {
   appId: string

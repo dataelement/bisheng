@@ -19,11 +19,13 @@ import { userContext } from "@/contexts/userContext";
 import { changeAssistantStatusApi, deleteAssistantApi } from "@/controllers/API/assistant";
 import { createAssistantsApi, getAssistantDetailApi, saveAssistanttApi } from "@/controllers/API/assistant";
 import { deleteFlowFromDatabase, getAppsApi, getFlowApi } from "@/controllers/API/flow";
+import type { HostedAppActionResult } from "@/controllers/API/hostedApp";
 import { copyReportTemplate, createWorkflowApi, onlineWorkflow } from "@/controllers/API/workflow";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { AppNumType, AppType } from "@/types/app";
 import { locationContext } from "@/contexts/locationContext";
 import { HostedAppCard } from "./HostedAppCard";
+import type { HostedAppActionKind } from "./useHostedAppActions";
 import { HOSTED_APP_STATES, stateI18nKey } from "./hostedApp/types";
 import { FlowType } from "@/types/flow";
 import { useInfiniteCursorTable } from "@/util/hook";
@@ -295,6 +297,22 @@ export default function Apps() {
         }
     }
 
+    // A hosted-app action answers with the state it left the app in. Patch the
+    // row from that answer *before* refetching: taking one offline waits on
+    // `docker stop` (~10s), and the list request that follows is another round
+    // trip on top — long enough for the card to look like nothing happened.
+    // Failures re-sync too (`result` is null): a rejected action is usually one
+    // that already landed, which is exactly the case that used to need F5.
+    const handleHostedAppChanged = (kind: HostedAppActionKind, result: HostedAppActionResult | null) => {
+        if (kind !== 'delete' && result?.app_id && result.state) {
+            refreshData(
+                (row) => String(row.id) === String(result.app_id),
+                { status: result.state === 'online' ? 2 : 1, app_state: result.state } as Partial<FlowType>,
+            )
+        }
+        reload()
+    }
+
     const typeCnNames = {
         5: t('build.assistant'),
         10: t('build.workflow'),
@@ -414,7 +432,7 @@ export default function Apps() {
                                     canSwitch={item.status === 2 ? canUnpublish(item.id) : canPublish(item.id)}
                                     canManagePermission={canManage(item.id)}
                                     onPermission={handleOpenPermission}
-                                    onChanged={reload}
+                                    onChanged={handleHostedAppChanged}
                                     labelPannel={
                                         <LabelShow
                                             data={item}

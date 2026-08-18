@@ -3,10 +3,10 @@
  * — together with their confirmation copy.
  *
  * The card and the detail page's publish tab both call this hook rather than
- * writing their own dialogs: the copy is part of the contract (the stop dialog
- * has to say the entry and the square will show "stopped"; the delete dialog
- * has to say code, conversation history and production data all go), and two
- * copies of it drift within one release.
+ * writing their own dialogs: the copy is part of the contract (the offline
+ * dialog has to say the entry and the square will show "offline"; the delete
+ * dialog has to say code, conversation history and production data all go), and
+ * two copies of it drift within one release.
  *
  * Each action resolves to `true` only when the state actually changed, so a
  * caller can drive an optimistic switch off the return value. A user who
@@ -26,11 +26,21 @@ import { useCallback } from "react"
 import { useTranslation } from "react-i18next"
 import type { HostedAppRef } from "./hostedApp/types"
 
-type ActionKind = "stop" | "resume" | "manualPublish" | "delete"
+export type HostedAppActionKind = "stop" | "resume" | "manualPublish" | "delete"
+
+type ActionKind = HostedAppActionKind
 
 interface UseHostedAppActionsOptions {
-  /** Called after an action that changed the application's state. */
-  onChanged?: (kind: ActionKind, result: HostedAppActionResult) => void
+  /**
+   * Called after every attempt, successful or not, with the server's own
+   * verdict — `null` when the call failed.
+   *
+   * A failure is reported too because the most common one *is* a state change:
+   * the action already landed and this second attempt lost the race (16102).
+   * Staying silent there is what leaves the card showing a state the server
+   * abandoned until the user reloads the page by hand.
+   */
+  onChanged?: (kind: ActionKind, result: HostedAppActionResult | null) => void
 }
 
 interface ConfirmSpec {
@@ -98,6 +108,7 @@ export function useHostedAppActions(options: UseHostedAppActionsOptions = {}) {
           description:
             getHostedAppErrorMessage(error) || t("hostedApp.actions.failed"),
         })
+        onChanged?.(kind, null)
         return false
       }
     },

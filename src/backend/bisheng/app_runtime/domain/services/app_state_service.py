@@ -175,7 +175,7 @@ class AppStateService:
         app = await cls._load(app_id)
         await cls._require_operator(app, actor)
         if not is_transition_allowed(app.state, AppState.STOPPED.value):
-            raise AppStateConflictError(msg="当前状态不支持停运", app_id=app_id, state=app.state)
+            raise AppStateConflictError(msg="当前状态不支持下线", app_id=app_id, state=app.state)
 
         won = await cls._transition(app_id, to_state=AppState.STOPPED, from_states=(app.state,))
         if not won:

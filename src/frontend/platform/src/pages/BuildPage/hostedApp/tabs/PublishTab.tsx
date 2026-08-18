@@ -18,9 +18,13 @@ import type {
   HostedAppInstance,
 } from "@/controllers/API/hostedApp"
 import { copyText } from "@/utils"
-import { Copy, ExternalLink } from "lucide-react"
+import { Copy, ExternalLink, Loader2 } from "lucide-react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useHostedAppActions } from "../../useHostedAppActions"
+import {
+  useHostedAppActions,
+  type HostedAppActionKind,
+} from "../../useHostedAppActions"
 import { phaseI18nKey, stateBadgeClass, stateI18nKey } from "../types"
 
 interface PublishTabProps {
@@ -70,6 +74,23 @@ export function PublishTab({
   const stopped = app.state === "stopped"
   const parked = app.state === "pending_capacity"
 
+  // These calls wait on the orchestrator — taking an app offline sits through
+  // `docker stop`'s 10s SIGTERM grace. Without a busy button the wait reads as
+  // a dead click, and the second click loses the state race (16102).
+  const [pending, setPending] = useState<HostedAppActionKind | null>(null)
+  const runAction = async (
+    kind: HostedAppActionKind,
+    action: (ref: typeof appRef) => Promise<boolean>,
+  ) => {
+    if (pending) return
+    setPending(kind)
+    try {
+      await action(appRef)
+    } finally {
+      setPending(null)
+    }
+  }
+
   const handleCopy = async () => {
     await copyText(app.entry_url)
     toast({
@@ -89,12 +110,28 @@ export function PublishTab({
             {t(stateI18nKey(app.state))}
           </span>
           {online && (
-            <Button variant="outline" size="sm" onClick={() => stopApp(appRef)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending !== null}
+              onClick={() => runAction("stop", stopApp)}
+            >
+              {pending === "stop" && (
+                <Loader2 className="mr-1 size-3.5 animate-spin" />
+              )}
               {t("hostedApp.publish.stop")}
             </Button>
           )}
           {stopped && (
-            <Button variant="outline" size="sm" onClick={() => resumeApp(appRef)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending !== null}
+              onClick={() => runAction("resume", resumeApp)}
+            >
+              {pending === "resume" && (
+                <Loader2 className="mr-1 size-3.5 animate-spin" />
+              )}
               {t("hostedApp.publish.resume")}
             </Button>
           )}
@@ -102,8 +139,12 @@ export function PublishTab({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => manualPublishApp(appRef)}
+              disabled={pending !== null}
+              onClick={() => runAction("manualPublish", manualPublishApp)}
             >
+              {pending === "manualPublish" && (
+                <Loader2 className="mr-1 size-3.5 animate-spin" />
+              )}
               {t("hostedApp.publish.manualPublish")}
             </Button>
           )}

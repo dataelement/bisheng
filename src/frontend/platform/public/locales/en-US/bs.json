@@ -1331,8 +1331,8 @@
       "appPublish": "Hosted app published",
       "appPublishPending": "Hosted app pending (insufficient capacity)",
       "appManualPublish": "Hosted app published manually",
-      "appStop": "Hosted app stopped",
-      "appResume": "Hosted app resumed",
+      "appStop": "Hosted app taken offline",
+      "appResume": "Hosted app brought online",
       "appDelete": "Hosted app deleted",
       "appDeleteHookFailed": "Hosted app post-delete hook failed",
       "appMetaUpdate": "Hosted app metadata updated",
@@ -2166,7 +2166,7 @@
       "draft": "Draft",
       "online": "Online",
       "pendingCapacity": "Pending (insufficient resources)",
-      "stopped": "Stopped",
+      "stopped": "Offline",
       "deleted": "Deleted"
     },
     "phase": {
@@ -2178,10 +2178,6 @@
       "stopped": "Stopped",
       "failed": "Failed"
     },
-    "switch": {
-      "on": "Online",
-      "off": "Stopped"
-    },
     "version": {
       "placeholder": "Version",
       "loading": "Loading…",
@@ -2192,24 +2188,24 @@
       "readonlyTip": "Versions are read-only; a hosted app cannot be switched here"
     },
     "actions": {
-      "stopTitle": "Stop this application?",
-      "stopDesc": "After stopping \"{{name}}\", both its entry and the app square will show \"stopped\", and anyone using it right now will be cut off.",
-      "stopOk": "Stop",
-      "resumeTitle": "Re-enable this application?",
-      "resumeDesc": "Re-enabling \"{{name}}\" first runs capacity admission; once it passes, the current version is started and access is restored.",
-      "resumeOk": "Re-enable",
+      "stopTitle": "Take this application offline?",
+      "stopDesc": "After taking \"{{name}}\" offline, both its entry and the app square will show \"Offline\", and anyone using it right now will be cut off.",
+      "stopOk": "Take offline",
+      "resumeTitle": "Bring this application online?",
+      "resumeDesc": "Bringing \"{{name}}\" online first runs capacity admission; once it passes, the current version is started and access is restored.",
+      "resumeOk": "Bring online",
       "manualPublishTitle": "Bring online manually?",
       "manualPublishDesc": "This retries allocating runtime resources for \"{{name}}\" and brings it online. No second approval is required.",
       "manualPublishOk": "Bring online",
       "deleteTitle": "Delete this application?",
       "deleteDesc": "Deleting \"{{name}}\" also deletes its code, conversation history and production data. This cannot be undone.",
       "deleteOk": "Delete",
-      "deleteBlockedHint": "Stop it first",
+      "deleteBlockedHint": "Take it offline first",
       "capacityShortage": "Not enough runtime capacity; the application is now \"Pending (insufficient resources)\".",
       "failed": "Action failed",
       "done": {
-        "stop": "Stopped",
-        "resume": "Re-enabled",
+        "stop": "Taken offline",
+        "resume": "Brought online",
         "manualPublish": "Brought online",
         "delete": "Deleted"
       }
@@ -2233,8 +2229,8 @@
       "copied": "Link copied",
       "open": "Open",
       "entryInactive": "The application is not running, so the entry shows the matching notice page.",
-      "stop": "Stop",
-      "resume": "Re-enable",
+      "stop": "Take offline",
+      "resume": "Bring online",
       "manualPublish": "Bring online",
       "instanceTitle": "Runtime instance",
       "instancePhase": "Phase",

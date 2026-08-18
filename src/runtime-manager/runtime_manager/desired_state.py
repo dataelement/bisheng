@@ -201,7 +201,7 @@ class InstanceRecord:
             health=health,
             # A managed container that is *not* running under ``unless-stopped``
             # was stopped on purpose: the daemon would have brought it back
-            # otherwise. Inferring "stopped" here is what keeps AC-41 (停运)
+            # otherwise. Inferring "stopped" here is what keeps AC-41 (下线)
             # surviving a state-file loss instead of silently resurrecting.
             desired=DESIRED_RUNNING if running else DESIRED_STOPPED,
             generation=_as_int(labels.get(LABEL_GENERATION), 1),

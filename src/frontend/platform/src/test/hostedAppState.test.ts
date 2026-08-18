@@ -3,6 +3,7 @@ import {
   HOSTED_APP_STATES,
   isDeleteBlockedByState,
   isOnline,
+  isStateShownBySwitch,
   phaseI18nKey,
   stateI18nKey,
 } from "@/pages/BuildPage/hostedApp/types"
@@ -45,6 +46,19 @@ describe("hosted application vocabulary", () => {
     }
     expect(isOnline("online")).toBe(true)
     expect(isOnline("stopped")).toBe(false)
+  })
+
+  it("leaves only the two states the switch cannot express to a badge", () => {
+    // The build-page card dropped its corner state badge because it repeated
+    // what the on/off switch already said. `draft` and `pending_capacity` both
+    // sit on the "off" side of that switch yet neither is reachable by
+    // flipping it, so hiding those two would hide the fact that an app is
+    // parked waiting for capacity and needs an explicit retry.
+    expect(isStateShownBySwitch("online")).toBe(true)
+    expect(isStateShownBySwitch("stopped")).toBe(true)
+    expect(isStateShownBySwitch("draft")).toBe(false)
+    expect(isStateShownBySwitch("pending_capacity")).toBe(false)
+    expect(isStateShownBySwitch(undefined)).toBe(false)
   })
 })
 

@@ -27,6 +27,7 @@ import {
 } from "@/components/bs-ui/select"
 import {
   getHostedAppVersionsApi,
+  type HostedAppActionResult,
   type HostedAppVersion,
 } from "@/controllers/API/hostedApp"
 import { AppType } from "@/types/app"
@@ -36,10 +37,11 @@ import { useNavigate } from "react-router-dom"
 import {
   isDeleteBlockedByState,
   isOnline,
+  isStateShownBySwitch,
   stateBadgeClass,
   stateI18nKey,
 } from "./hostedApp/types"
-import { useHostedAppActions } from "./useHostedAppActions"
+import { useHostedAppActions, type HostedAppActionKind } from "./useHostedAppActions"
 
 /** The row shape the app list yields for a hosted application (flow_type 35). */
 export interface HostedAppListItem {
@@ -145,7 +147,14 @@ interface HostedAppCardProps {
   canManagePermission: boolean
   labelPannel?: React.ReactNode
   onPermission: (item: HostedAppListItem) => void
-  onChanged: () => void
+  /**
+   * Called after every action attempt, successful or not. `result` carries the
+   * server's own verdict (`state`) so the list can be corrected from it
+   * without waiting for a refetch; it is null when the call failed, which is
+   * itself a reason to re-sync — a rejected "stop" is usually a stop that
+   * already happened.
+   */
+  onChanged: (kind: HostedAppActionKind, result: HostedAppActionResult | null) => void
 }
 
 export function HostedAppCard({
@@ -162,7 +171,7 @@ export function HostedAppCard({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { stopApp, resumeApp, deleteApp } = useHostedAppActions({
-    onChanged: () => onChanged(),
+    onChanged,
   })
 
   // The list projection carries `status` (2/1) for the shared switch. The real
@@ -212,15 +221,15 @@ export function HostedAppCard({
       }
       showSwitch={canSwitch}
       canSwitch={canSwitch}
-      switchTexts={{
-        on: t("hostedApp.switch.on"),
-        off: t("hostedApp.switch.off"),
-      }}
       headSelecter={<HostedAppVersionSelect appId={String(item.id)} />}
       labelPannel={labelPannel}
       footer={
         <div className="absolute right-0 bottom-0 flex items-center gap-1">
-          {state && (
+          {/* Online / offline is what the head switch already says; a second
+              copy of it down here was noise. `draft` and `pending_capacity`
+              are not on that axis — no flip of the switch reaches either — so
+              those two keep their badge. */}
+          {state && !isStateShownBySwitch(state) && (
             <span
               className={`py-0 px-1 rounded-sm text-xs ${stateBadgeClass(state)}`}
             >

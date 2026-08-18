@@ -1314,8 +1314,8 @@
       "appPublish": "ホスト型アプリを公開",
       "appPublishPending": "ホスト型アプリ公開待ち（容量不足）",
       "appManualPublish": "ホスト型アプリを手動公開",
-      "appStop": "ホスト型アプリを停止",
-      "appResume": "ホスト型アプリを再開",
+      "appStop": "ホスト型アプリをオフライン化",
+      "appResume": "ホスト型アプリをオンライン化",
       "appDelete": "ホスト型アプリを削除",
       "appDeleteHookFailed": "ホスト型アプリ削除後処理の失敗",
       "appMetaUpdate": "ホスト型アプリのメタ情報を更新",
@@ -2111,7 +2111,7 @@
       "draft": "下書き",
       "online": "公開中",
       "pendingCapacity": "公開待ち（リソース不足）",
-      "stopped": "停止中",
+      "stopped": "オフライン",
       "deleted": "削除済み"
     },
     "phase": {
@@ -2123,10 +2123,6 @@
       "stopped": "停止",
       "failed": "失敗"
     },
-    "switch": {
-      "on": "公開中",
-      "off": "停止中"
-    },
     "version": {
       "placeholder": "バージョン",
       "loading": "読み込み中…",
@@ -2137,24 +2133,24 @@
       "readonlyTip": "バージョンは閲覧のみです。ホスティングアプリはここで切り替えできません"
     },
     "actions": {
-      "stopTitle": "アプリを停止しますか？",
-      "stopDesc": "「{{name}}」を停止すると、アクセス入口とアプリ広場の両方が「停止中」と表示され、利用中のユーザーは中断されます。",
-      "stopOk": "停止",
-      "resumeTitle": "アプリを再開しますか？",
-      "resumeDesc": "「{{name}}」の再開ではまず実行環境の容量審査を行い、通過後に現行バージョンを起動してアクセスを復旧します。",
-      "resumeOk": "再開",
+      "stopTitle": "アプリをオフラインにしますか？",
+      "stopDesc": "「{{name}}」をオフラインにすると、アクセス入口とアプリ広場の両方が「オフライン」と表示され、利用中のユーザーは中断されます。",
+      "stopOk": "オフラインにする",
+      "resumeTitle": "アプリをオンラインにしますか？",
+      "resumeDesc": "「{{name}}」のオンライン化ではまず実行環境の容量審査を行い、通過後に現行バージョンを起動してアクセスを復旧します。",
+      "resumeOk": "オンラインにする",
       "manualPublishTitle": "手動で公開しますか？",
       "manualPublishDesc": "「{{name}}」に実行リソースを再度割り当てて公開します。再承認は不要です。",
       "manualPublishOk": "手動公開",
       "deleteTitle": "アプリを削除しますか？",
       "deleteDesc": "「{{name}}」を削除すると、アプリのコード・会話履歴・本番データもあわせて削除され、復元できません。",
       "deleteOk": "削除",
-      "deleteBlockedHint": "先に停止してください",
+      "deleteBlockedHint": "先にオフラインにしてください",
       "capacityShortage": "実行環境の容量が不足しているため、アプリは「公開待ち（リソース不足）」になりました",
       "failed": "操作に失敗しました",
       "done": {
-        "stop": "停止しました",
-        "resume": "再開しました",
+        "stop": "オフラインにしました",
+        "resume": "オンラインにしました",
         "manualPublish": "公開しました",
         "delete": "削除しました"
       }
@@ -2178,8 +2174,8 @@
       "copied": "リンクをコピーしました",
       "open": "開く",
       "entryInactive": "アプリは現在稼働していないため、入口には対応する案内ページが表示されます。",
-      "stop": "停止",
-      "resume": "再開",
+      "stop": "オフラインにする",
+      "resume": "オンラインにする",
       "manualPublish": "手動公開",
       "instanceTitle": "実行インスタンス",
       "instancePhase": "インスタンス状態",

@@ -2,7 +2,7 @@
 import { cname } from "@/components/bs-ui/utils";
 import { AppNumType, AppType } from "@/types/app";
 import { Copy, FilePlus, Settings, Shield, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { SkillIcon } from "../../bs-icons";
 import { GoIcon } from "../../bs-icons/go";
@@ -53,12 +53,6 @@ interface IProps<T> {
    * form ("stop it first"), and "not there" would fail that acceptance.
    */
   deleteDisabledHint?: string,
-  /**
-   * Overrides the on/off switch labels. Index semantics follow the Switch
-   * itself: `on` shows while checked, `off` while unchecked. Default keeps
-   * `t('skills.online') / t('skills.offline')`.
-   */
-  switchTexts?: { on: string; off: string },
 }
 
 export const gradients = [
@@ -118,19 +112,34 @@ export default function CardComponent<T>({
   showCopy = false,
   onCopy,
   deleteDisabledHint,
-  switchTexts,
 }: IProps<T>) {
 
   const [_checked, setChecked] = useState(checked)
+  const [switching, setSwitching] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
   const { t, i18n } = useTranslation()
 
+  // The row can also change from outside this card — the list reloads after a
+  // state action, another tab acts on the same app. Without this, the copy
+  // taken at mount keeps showing the pre-action state until a page refresh.
+  useEffect(() => { setChecked(checked) }, [checked])
+
   const handleCheckedChange = async (bln) => {
-    if (!canSwitch || !onCheckedChange) return false
-    const res = await onCheckedChange(bln, data)
-    if (res === false) return
-    setChecked(bln)
+    if (!canSwitch || !onCheckedChange || switching) return false
+    // Hold the switch for the whole round trip. Taking a hosted application
+    // offline waits on `docker stop` (a 10s SIGTERM grace), long enough that
+    // the silence reads as "nothing happened" and gets clicked again — and the
+    // second call loses the state race and comes back as a conflict, leaving
+    // the card stuck on a state the server no longer has.
+    setSwitching(true)
+    try {
+      const res = await onCheckedChange(bln, data)
+      if (res === false) return
+      setChecked(bln)
+    } finally {
+      setSwitching(false)
+    }
   }
   const showDeleteItem = Boolean(onDelete && !checked)
   const showDisabledDeleteItem = Boolean(onDelete && checked && deleteDisabledHint)
@@ -204,9 +213,10 @@ export default function CardComponent<T>({
           {headSelecter}
           {showSwitch && <Switch
             checked={_checked}
+            disabled={switching}
             className={i18next.language === 'ja' ? 'w-20' : 'w-12'}
             // @ts-ignore
-            texts={switchTexts ? [switchTexts.on, switchTexts.off] : [t('skills.online'), t('skills.offline')]}
+            texts={[t('skills.online'), t('skills.offline')]}
             onCheckedChange={handleCheckedChange}
             onClick={e => { e.stopPropagation(); onSwitchClick?.() }}
           ></Switch>}

@@ -132,7 +132,7 @@ def run(args: Any, emitter: Emitter) -> int:
 _NOT_RUNNING_STATES: dict[str, str] = {
     "draft": "应用还是草稿，尚未上线，因此没有运行日志。",
     "pending_capacity": "应用处于待上线（资源不足），没有在运行的实例，因此没有运行日志。",
-    "stopped": "应用已停运，没有在运行的实例，因此没有运行日志。",
+    "stopped": "应用已下线，没有在运行的实例，因此没有运行日志。",
     "deleted": "应用已被删除。",
 }
 
@@ -159,4 +159,4 @@ def _explain_empty(emitter: Emitter, args: Any, runtime_state: dict[str, Any]) -
         return
     # An older platform that does not send the field, or a state we do not know:
     # naming the candidates still beats printing nothing.
-    emitter.info("未取到日志：应用可能没有运行实例（草稿 / 待上线 / 已停运），请在应用详情页确认应用态。")
+    emitter.info("未取到日志：应用可能没有运行实例（草稿 / 待上线 / 已下线），请在应用详情页确认应用态。")

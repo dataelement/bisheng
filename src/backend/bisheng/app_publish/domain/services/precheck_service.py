@@ -278,7 +278,7 @@ def _as_build_failure(exc: BaseErrorCode, message: str) -> BaseErrorCode:
         return AppCapacityInsufficientError(
             msg="运行环境容量不足, 暂时无法构建",
             details={"reason": "capacity_exhausted", "upstream_code": upstream, "upstream_message": str(exc)},
-            hints=["稍后重试, 或请管理员停运暂时不用的应用释放资源", "也可以先选更低的资源档位再发布"],
+            hints=["稍后重试, 或请管理员下线暂时不用的应用释放资源", "也可以先选更低的资源档位再发布"],
         )
     if upstream == UPSTREAM_UNSUPPORTED_RUNTIME:
         return AppRuntimeUnsupportedError(
