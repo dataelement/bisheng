@@ -141,3 +141,61 @@ async def test_non_personal_space_admin_still_uses_space_read(monkeypatch):
     admin = SimpleNamespace(user_id=1, is_admin=lambda: True)
     assert await related_docs_access.check_related_doc_access(admin, 8, 15) is True
     space_read.assert_awaited_once()
+
+
+async def test_resolve_favorite_reference_to_source(monkeypatch):
+    fav = SimpleNamespace(
+        id=77,
+        knowledge_id=5,
+        file_source="favorite_reference",
+        user_metadata={"favorite_reference": {"source_space_id": 90, "source_file_id": 12}},
+    )
+    src = SimpleNamespace(id=12, knowledge_id=90, file_source="upload", user_metadata={})
+
+    async def load(space_id, file_id):
+        if (space_id, file_id) == (5, 77):
+            return fav
+        if (space_id, file_id) == (90, 12):
+            return src
+        return None
+
+    monkeypatch.setattr(related_docs_access, "_load_related_doc_file", load)
+    assert await related_docs_access.resolve_related_doc_target(5, 77) == (90, 12)
+
+
+async def test_resolve_plain_file_unchanged(monkeypatch):
+    row = SimpleNamespace(id=15, knowledge_id=8, file_source="upload", user_metadata={})
+    monkeypatch.setattr(related_docs_access, "_load_related_doc_file", AsyncMock(return_value=row))
+    assert await related_docs_access.resolve_related_doc_target(8, 15) == (8, 15)
+
+
+async def test_resolve_missing_file_keeps_original_pair(monkeypatch):
+    monkeypatch.setattr(related_docs_access, "_load_related_doc_file", AsyncMock(return_value=None))
+    assert await related_docs_access.resolve_related_doc_target(8, 404) == (8, 404)
+
+
+async def test_resolve_dangling_favorite_is_none(monkeypatch):
+    fav = SimpleNamespace(
+        id=77,
+        knowledge_id=5,
+        file_source="favorite_reference",
+        user_metadata={"favorite_reference": {"source_space_id": 90, "source_file_id": 12}},
+    )
+
+    async def load(space_id, file_id):
+        if (space_id, file_id) == (5, 77):
+            return fav
+        return None
+
+    monkeypatch.setattr(related_docs_access, "_load_related_doc_file", load)
+    assert await related_docs_access.resolve_related_doc_target(5, 77) is None
+
+
+async def test_canonicalize_rewrites_favorite_token(monkeypatch):
+    async def resolve(space_id, file_id):
+        if (space_id, file_id) == (5, 77):
+            return (90, 12)
+        return space_id, file_id
+
+    monkeypatch.setattr(related_docs_access, "resolve_related_doc_target", resolve)
+    assert await related_docs_access.canonicalize_related_docs("5-77") == "90-12"
