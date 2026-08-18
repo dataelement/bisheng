@@ -212,10 +212,21 @@ class F048ResourcePermissionApi:
             actor,
             "visible",
         )
-        await self._require_visible(actor, target)
+        can_manage = await self._can_manage(actor, target)
+        if not can_manage:
+            # A manager -- the owner, a granted manager, or an admin via the
+            # identity short-circuit in check_action -- may always load the
+            # permission context to render the management dialog. Everyone
+            # else must be able to SEE the resource, which keeps the
+            # read-only view for viewers. Gating on visibility ALONE wrongly
+            # excluded admins: `visible` is deliberately not expanded for
+            # super / tenant admins (see check_visible), so an admin who did
+            # not own the resource got 19000 opening its authorization dialog
+            # -- the sibling list_grants already gates on manage_permission,
+            # not visibility. (F048 hosted-app authorization via the UI.)
+            await self._require_visible(actor, target)
         mode = await self._runtime.current_mode(target)
         catalog = await self._runtime.current_catalog()
-        can_manage = await self._can_manage(actor, target)
         return {
             "mode": mode.mode,
             "parent_type": target.parent_type,
