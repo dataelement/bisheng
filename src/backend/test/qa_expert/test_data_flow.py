@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
@@ -22,8 +24,10 @@ from bisheng.database.models.qa_expert import (
     Question,
     QuestionInvite,
 )
+from bisheng.qa_expert.domain.services import CommentService
 
 PREFIX = "/api/v1/qa_experts"
+_REAL_SEND_COMMENT_NOTIFICATION = CommentService._send_comment_notification
 
 
 def _ok(resp) -> dict:
@@ -187,6 +191,76 @@ async def test_df04_related_docs_persisted_as_space_file_id(flow_env):
         assert views[0].get("unavailable_reason") == "forbidden"
         assert views[0].get("unavailable_reason") != "not_found"
     assert "正文仍在" in str(data)
+
+
+async def test_df04b_related_docs_follow_space_read_not_asker(flow_env, monkeypatch):
+    """落库 related_docs 后，可点链接跟知识空间 can_read，不跟提问者身份。"""
+    from bisheng.qa_expert.domain import related_docs_access as related_docs_access_mod
+
+    env = flow_env
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df04b权限切开",
+            "description": "正文仍在",
+            "business_domain": "steel",
+            "question_type": "public",
+            "related_doc_ids": ["8-15", "8-16"],
+        },
+    )
+    stored = await env.reload_row(Question, id=qid)
+    assert stored.related_docs
+    assert "8-15" in stored.related_docs
+
+    monkeypatch.setattr(related_docs_access_mod, "_file_belongs_to_space", AsyncMock(return_value=True))
+
+    async def fake_check(*, user_id, relation, object_type, object_id, login_user=None):
+        assert relation == "can_read"
+        assert object_type == "knowledge_space"
+        assert object_id == "8"
+        return int(user_id) == int(env.stranger.user_id)
+
+    monkeypatch.setattr(
+        "bisheng.permission.domain.services.permission_service.PermissionService.check",
+        fake_check,
+    )
+
+    async def live_check(user, space_id, file_id, *, space_cache=None):
+        if not await related_docs_access_mod._file_belongs_to_space(int(space_id), int(file_id)):
+            return None
+        cache_key = int(space_id)
+        if space_cache is not None and cache_key in space_cache:
+            return space_cache[cache_key]
+        allowed = await related_docs_access_mod._space_can_read(user, cache_key)
+        if space_cache is not None:
+            space_cache[cache_key] = allowed
+        return allowed
+
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.related_docs_access.check_related_doc_access",
+        live_check,
+    )
+
+    asker_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert asker_detail["status_code"] == 200
+    asker_views = (asker_detail.get("data") or {}).get("related_doc_views") or []
+    assert asker_views
+    assert all(item.get("accessible") is False for item in asker_views)
+    assert all(item.get("unavailable_reason") == "forbidden" for item in asker_views)
+
+    env.as_user(env.stranger)
+    stranger_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert stranger_detail["status_code"] == 200
+    stranger_views = (stranger_detail.get("data") or {}).get("related_doc_views") or []
+    assert len(stranger_views) == 2
+    assert all(item.get("accessible") is True for item in stranger_views)
+    again = await env.reload_row(Question, id=qid)
+    assert "8-15" in again.related_docs
+    env.as_user(env.asker)
+    asker_again = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    asker_views_again = (asker_again.get("data") or {}).get("related_doc_views") or []
+    assert all(item.get("accessible") is False for item in asker_views_again)
 
 
 async def test_df05_first_answer_locks_content(flow_env):
@@ -1000,3 +1074,217 @@ async def test_df13_reject_keeps_viewer_decision_on_latest(flow_env):
     assert asker_latest.get("status") == "rejected"
     assert asker_latest.get("viewer_decision") == "approved"
     assert (asker_detail.get("data") or {}).get("capabilities", {}).get("can_start_publish") is True
+
+
+def _commented_rows(rows: list[dict]) -> list[dict]:
+    return [row for row in rows if row.get("action_code") == "qa_answer_commented"]
+
+
+async def test_df23_comment_notifies_asker_and_answerer(flow_env, monkeypatch):
+    """第三人评回答：提问者与回答者都进 inbox_message；自评不再通知自己；拒绝评论不写脏行。"""
+    monkeypatch.setattr(CommentService, "_send_comment_notification", _REAL_SEND_COMMENT_NOTIFICATION)
+    env = flow_env
+    await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df23评论通知提问者",
+            "description": "公开题",
+            "business_domain": "steel",
+            "question_type": "public",
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    aid = await _create_answer(env, qid, "甲先答")
+    title = env.t("df23评论通知提问者")
+    before_inbox = await _inbox_rows(env, title)
+    env.as_user(env.stranger)
+    created = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={"answer_id": aid, "content": "第三人来评"},
+        )
+    )
+    assert created["status_code"] == 200
+    comments = await env.reload_all(Comment, question_id=qid)
+    assert len(comments) == 1
+    assert comments[0].content == "第三人来评"
+    first_inbox = _commented_rows(await _inbox_rows(env, title))
+    assert len(first_inbox) == len(_commented_rows(before_inbox)) + 1
+    receivers = _receiver_ids(first_inbox[-1]["receiver"])
+    assert env.asker.user_id in receivers
+    assert env.uid(201) in receivers
+    assert env.stranger.user_id not in receivers
+
+    env.as_user(env.asker)
+    self_comment = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={"answer_id": aid, "content": "提问者自评"},
+        )
+    )
+    assert self_comment["status_code"] == 200
+    assert len(await env.reload_all(Comment, question_id=qid)) == 2
+    after_self = _commented_rows(await _inbox_rows(env, title))
+    assert len(after_self) == len(first_inbox) + 1
+    self_receivers = _receiver_ids(after_self[-1]["receiver"])
+    assert env.uid(201) in self_receivers
+    assert env.asker.user_id not in self_receivers
+
+    env.as_user(env.stranger)
+    denied = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={"answer_id": 9_999_999_001, "content": "回答不存在"},
+        )
+    )
+    assert denied["status_code"] != 200
+    assert len(await env.reload_all(Comment, question_id=qid)) == 2
+    assert len(_commented_rows(await _inbox_rows(env, title))) == len(after_self)
+
+
+async def test_df24_author_delete_answer_rules(flow_env):
+    """未采纳可删并级联评论；已采纳拒绝；转公开 pending 拒绝未采纳删答；拒绝后可删。"""
+    env = flow_env
+    first = await env.seed_expert(user_id=201, name="专家甲")
+    second = await env.seed_expert(user_id=202, name="专家乙")
+    env.as_user(env.asker)
+    public_id = await _create_question(
+        env,
+        {"title": "df24公开删答", "description": "公开", "business_domain": "steel", "question_type": "public"},
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    public_aid = await _create_answer(env, public_id, "可删答")
+    env.as_user(env.stranger)
+    commented = _ok(
+        await env.client.post(
+            f"{PREFIX}/comments",
+            json={"answer_id": public_aid, "content": "随答删除"},
+        )
+    )
+    assert commented["status_code"] == 200
+    assert len(await env.reload_all(Comment, question_id=public_id)) == 1
+    env.as_user(env.user(201, name="专家甲"))
+    listed = _ok(await env.client.get(f"{PREFIX}/answers/{public_id}"))
+    answers = (listed.get("data") or {}).get("answers") or listed.get("data") or []
+    if isinstance(answers, dict):
+        answers = answers.get("answers") or []
+    hit = next((item for item in answers if int(item.get("id")) == public_aid), None)
+    assert hit is not None
+    assert hit.get("can_delete") is True
+    deleted = _ok(await env.client.delete(f"{PREFIX}/answers/{public_aid}"))
+    assert deleted["status_code"] == 200
+    stored = await env.reload_row(Answer, id=public_aid)
+    assert int(stored.status) == 3
+    assert len(await env.reload_all(Comment, question_id=public_id)) == 0
+    after = _ok(await env.client.get(f"{PREFIX}/answers/{public_id}"))
+    after_answers = (after.get("data") or {}).get("answers") or after.get("data") or []
+    if isinstance(after_answers, dict):
+        after_answers = after_answers.get("answers") or []
+    assert all(int(item.get("id")) != public_aid for item in after_answers)
+
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df24转公开锁删",
+            "description": "定向",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [first.id, second.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    adopted_aid = await _create_answer(env, qid, "将被采纳")
+    env.as_user(env.user(202, name="专家乙"))
+    other_aid = await _create_answer(env, qid, "未采纳")
+    env.as_user(env.asker)
+    _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": adopted_aid}))
+    env.as_user(env.user(201, name="专家甲"))
+    adopted_denied = _ok(await env.client.delete(f"{PREFIX}/answers/{adopted_aid}"))
+    assert adopted_denied["status_code"] == 18312
+    still_adopted = await env.reload_row(Answer, id=adopted_aid)
+    assert int(still_adopted.status) != 3
+    assert bool(still_adopted.adopted)
+
+    env.as_user(env.asker)
+    started = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/publish-requests", json={"duration_days": 3}))
+    assert started["status_code"] == 200
+    env.as_user(env.user(202, name="专家乙"))
+    pending_denied = _ok(await env.client.delete(f"{PREFIX}/answers/{other_aid}"))
+    assert pending_denied["status_code"] == 18312
+    still_other = await env.reload_row(Answer, id=other_aid)
+    assert int(still_other.status) != 3
+
+    request = await env.reload_row(PublishRequest, question_id=qid)
+    env.as_user(env.user(201, name="专家甲"))
+    rejected = _ok(await env.client.post(f"{PREFIX}/publish-requests/{int(request.id)}/reject"))
+    assert rejected["status_code"] == 200
+    env.as_user(env.user(202, name="专家乙"))
+    after_reject = _ok(await env.client.delete(f"{PREFIX}/answers/{other_aid}"))
+    assert after_reject["status_code"] == 200
+    gone = await env.reload_row(Answer, id=other_aid)
+    assert int(gone.status) == 3
+
+    env.as_user(env.stranger)
+    hidden = _ok(await env.client.post(f"{PREFIX}/allcomments", json={"answer_id": adopted_aid, "question_id": qid}))
+    assert hidden["status_code"] == 18301
+
+
+async def test_df25_expired_publish_allows_unadopted_delete(flow_env):
+    """转公开 pending 但 expire_at 已过：删答应惰性过期申请，并允许删除未采纳回答。"""
+    env = flow_env
+    first = await env.seed_expert(user_id=201, name="专家甲")
+    second = await env.seed_expert(user_id=202, name="专家乙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df25过期后可删",
+            "description": "定向",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [first.id, second.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    adopted_aid = await _create_answer(env, qid, "已采纳")
+    env.as_user(env.user(202, name="专家乙"))
+    other_aid = await _create_answer(env, qid, "未采纳待删")
+    env.as_user(env.asker)
+    _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": adopted_aid}))
+    started = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/publish-requests", json={"duration_days": 1}))
+    assert started["status_code"] == 200
+    env.as_user(env.user(202, name="专家乙"))
+    still_blocked = _ok(await env.client.delete(f"{PREFIX}/answers/{other_aid}"))
+    assert still_blocked["status_code"] == 18312
+    async with AsyncSession(env.engine, expire_on_commit=False) as session:
+        await session.execute(
+            text("UPDATE qa_publish_request SET expire_at = :expired WHERE question_id = :qid"),
+            {"expired": datetime.utcnow() - timedelta(minutes=1), "qid": qid},
+        )
+        await session.commit()
+    listed = _ok(await env.client.get(f"{PREFIX}/answers/{qid}"))
+    answers = (listed.get("data") or {}).get("answers") or listed.get("data") or []
+    if isinstance(answers, dict):
+        answers = answers.get("answers") or []
+    hit = next((item for item in answers if int(item.get("id")) == other_aid), None)
+    assert hit is not None
+    assert hit.get("can_delete") is True
+    deleted = _ok(await env.client.delete(f"{PREFIX}/answers/{other_aid}"))
+    assert deleted["status_code"] == 200
+    gone = await env.reload_row(Answer, id=other_aid)
+    assert int(gone.status) == 3
+    request = await env.reload_row(PublishRequest, question_id=qid)
+    assert str(request.status) == "expired"
+    adopted = await env.reload_row(Answer, id=adopted_aid)
+    assert int(adopted.status) != 3
+    env.as_user(env.user(202, name="专家乙"))
+    listed_again = _ok(await env.client.get(f"{PREFIX}/answers/{qid}"))
+    again = (listed_again.get("data") or {}).get("answers") or listed_again.get("data") or []
+    if isinstance(again, dict):
+        again = again.get("answers") or []
+    assert all(int(item.get("id")) != other_aid for item in again)

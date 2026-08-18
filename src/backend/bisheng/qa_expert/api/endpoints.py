@@ -414,6 +414,12 @@ def answer_payload(answer) -> dict:
         payload["author"] = author
     if isinstance(author, dict) and author.get("anonymous") and "real_name" not in author:
         payload["expert_name"] = author.get("display_name")
+    can_delete = getattr(answer, "can_delete", payload.get("can_delete"))
+    if can_delete is not None:
+        payload["can_delete"] = bool(can_delete)
+    related_doc_views = getattr(answer, "related_doc_views", payload.get("related_doc_views"))
+    if related_doc_views is not None:
+        payload["related_doc_views"] = related_doc_views
     return payload
 
 
@@ -567,8 +573,9 @@ async def delete_answer(
     """删除回答"""
     try:
         success = await service.delete_answer(answer_id, user.user_id)
-
         return resp_200(data={"success": success})
+    except BaseErrorCode as exc:
+        return exc.return_resp_instance()
     except Exception as e:
         return resp_500(code=500, message=str(e))
 
