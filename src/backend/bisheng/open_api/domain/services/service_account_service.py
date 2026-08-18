@@ -17,9 +17,13 @@ What makes this different from "create a user":
   ``user.delete`` is a same-transaction write-through projection so that the
   ordinary ``delete == 0`` people filters hide the account; readers here never
   consult it (design D1 "读侧口径统一").
-* **The tenant comes from the acting admin's scope**, never from the request
-  body (AC-23) — with F019 admin-scope active, ``get_current_tenant_id()`` is
-  the management view a super admin switched into (pit 23).
+* **The account and its owner live in one tenant, decided by the operator, not
+  the request body** (AC-23). A tenant / child admin, or a super who switched
+  the F019 ScopeBar, creates in that one scope. An **unscoped global super
+  derives the tenant from the chosen owner** — so a super (who has no
+  tenant-admin role) can make a sub-tenant person the owner without first
+  switching the ScopeBar, and still sees and manages the result, because an
+  unscoped super's read/write scope is *all* tenants (:meth:`_scope_tenant_id`).
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.audit_log import AuditLogDao
-from bisheng.database.models.tenant import UserTenantDao
+from bisheng.database.models.tenant import TenantDao, UserTenantDao
 from bisheng.open_api.domain.models.api_credential import (
     REVOKE_REASON_SUBJECT_DELETED,
     REVOKE_REASON_SUBJECT_DISABLED,
@@ -107,7 +111,7 @@ class ServiceAccountService:
     @classmethod
     async def get_detail(cls, operator: UserPayload, user_id: int) -> ServiceAccountDetail:
         """Detail view scoped to the acting admin's tenant (26020 for anything else)."""
-        row = await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
+        row = await cls.get_row(user_id, tenant_id=await cls._scope_tenant_id(operator))
         items = await cls._hydrate([row])
         item = items[0]
         return ServiceAccountDetail(**item.model_dump(), tenant_id=row.tenant_id)
@@ -125,7 +129,7 @@ class ServiceAccountService:
         user_ids: list[int] | None = None
         if keyword:
             user_ids = await cls._search_principal_ids(keyword)
-        tenant_id = cls._acting_tenant_id(operator)
+        tenant_id = await cls._scope_tenant_id(operator)
         async with get_async_db_session() as session:
             rows, total = await ServiceAccountDao.alist_page(
                 session,
@@ -146,9 +150,26 @@ class ServiceAccountService:
 
     @classmethod
     async def create(cls, operator: UserPayload, data: ServiceAccountCreate) -> ServiceAccount:
-        """D1 create unit — principal + companion + active tenant row in one commit (AC-19)."""
-        tenant_id = cls._acting_tenant_id(operator)
-        await cls._assert_owner(data.resource_owner_user_id, tenant_id)
+        """D1 create unit — principal + companion + active tenant row in one commit (AC-19).
+
+        The account and its resource owner always live in **one** tenant, but who
+        decides which tenant depends on the operator (AC-23):
+
+        * An **unscoped global super admin** derives it from the chosen owner —
+          pick a sub-tenant person and the account is born in that sub-tenant.
+          A super has no tenant-admin role, so this is what lets them assign a
+          child-tenant owner without first switching the ScopeBar.
+        * A **scoped super, or a tenant / child admin**, creates in their one
+          scope, and the owner must belong to it.
+        """
+        scope = await cls._scope_tenant_id(operator)
+        _owner, owner_tenant = await cls._resolve_owner(data.resource_owner_user_id)
+        if scope is None:
+            tenant_id = owner_tenant
+        else:
+            tenant_id = scope
+            if owner_tenant != tenant_id:
+                raise ServiceAccountOwnerInvalidError()
 
         principal = User(
             user_name=data.name,
@@ -184,7 +205,7 @@ class ServiceAccountService:
     @classmethod
     async def update(cls, operator: UserPayload, user_id: int, data: ServiceAccountUpdate) -> ServiceAccount:
         """Edit name / description / resource owner. Owner changes are **not** retroactive (AC-27)."""
-        row = await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
+        row = await cls.get_row(user_id, tenant_id=await cls._scope_tenant_id(operator))
         if data.resource_owner_user_id is not None:
             await cls._assert_owner(data.resource_owner_user_id, row.tenant_id)
 
@@ -221,7 +242,7 @@ class ServiceAccountService:
     @classmethod
     async def disable(cls, operator: UserPayload, user_id: int) -> ServiceAccount:
         """Stop the account without losing anything: keys, grants and config stay (AC-21 / AC-47)."""
-        await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
+        await cls.get_row(user_id, tenant_id=await cls._scope_tenant_id(operator))
         row = await cls._set_lifecycle(user_id, disabled_at=datetime.now(), user_delete=1)
         await CredentialService.invalidate_subject_cache(
             operator,
@@ -235,7 +256,7 @@ class ServiceAccountService:
     @classmethod
     async def enable(cls, operator: UserPayload, user_id: int) -> ServiceAccount:
         """Restore a disabled account exactly as it was (AC-47)."""
-        await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
+        await cls.get_row(user_id, tenant_id=await cls._scope_tenant_id(operator))
         row = await cls._set_lifecycle(user_id, disabled_at=None, user_delete=0)
         await cls._audit(operator, AUDIT_ACTION_ENABLE, row)
         return row
@@ -247,7 +268,7 @@ class ServiceAccountService:
         T065 inserts the grant reverse-lookup + REMOVE step ahead of this body;
         the row itself is never physically deleted (audit + FK RESTRICT).
         """
-        await cls.get_row(user_id, tenant_id=cls._acting_tenant_id(operator))
+        await cls.get_row(user_id, tenant_id=await cls._scope_tenant_id(operator))
         await CredentialService.revoke_by_subject(
             operator,
             SUBJECT_KIND_SERVICE_ACCOUNT,
@@ -264,16 +285,71 @@ class ServiceAccountService:
 
     @classmethod
     def _acting_tenant_id(cls, operator: UserPayload) -> int:
+        """The operator's own acting tenant (never None) — for audit rows only.
+
+        Reads and writes use :meth:`_scope_tenant_id`, which returns None for an
+        unscoped global super. This one coerces that to the operator's home
+        tenant, which is the right value to stamp on an audit record: it records
+        *who* acted and from which tenant, not which tenant the write landed in.
+        """
         return get_current_tenant_id() or operator.tenant_id or DEFAULT_TENANT_ID
 
     @classmethod
-    async def _assert_owner(cls, owner_user_id: int, tenant_id: int) -> User:
-        """The resource owner must be an enabled natural person of this tenant (26021, AC-23)."""
+    async def _scope_tenant_id(cls, operator: UserPayload) -> int | None:
+        """The tenant this admin's reads/writes are pinned to, or None for all tenants.
+
+        A **global super admin who has not switched into a specific management
+        view** (F019 ScopeBar) manages service accounts across every tenant —
+        the same "no filter" scope ``get_current_tenant_id()`` already returns
+        for them. A super who *has* switched, and every tenant / child admin, is
+        pinned to exactly one tenant. Deciding this once here is what lets a
+        super create an account owned by a sub-tenant person, and then still see
+        and manage it, without ever touching the ScopeBar.
+        """
+        scope = get_current_tenant_id()
+        if scope is not None:
+            return int(scope)
+        # Local import mirrors user_deps: avoids a module-level cycle through
+        # http_middleware.
+        from bisheng.utils.http_middleware import _check_is_global_super
+
+        if await _check_is_global_super(operator.user_id):
+            return None
+        return operator.tenant_id or DEFAULT_TENANT_ID
+
+    @classmethod
+    async def _resolve_owner(cls, owner_user_id: int) -> tuple[User, int]:
+        """Validate the owner and return ``(user, tenant_id)`` — its live leaf tenant.
+
+        The owner must be an enabled natural person with an active membership,
+        and that membership's tenant must itself be active: a service account
+        (and everything it will come to own) may not be born into an archived
+        tenant. Raises 26021 for any of these.
+        """
         owner = await UserDao.aget_user(owner_user_id)
         if owner is None or owner.delete != 0 or owner.user_type != USER_TYPE_HUMAN:
             raise ServiceAccountOwnerInvalidError()
         active = await UserTenantDao.aget_active_user_tenant(owner_user_id)
-        if active is None or int(active.tenant_id) != int(tenant_id) or active.status != "active":
+        if active is None or active.status != "active":
+            raise ServiceAccountOwnerInvalidError()
+        # Guard against deriving into an *archived* tenant. Only rejects when the
+        # tenant row is present and not active — an absent row falls back to the
+        # membership's own ``status`` (Root has no explicit tenant row).
+        tenant = await TenantDao.aget_by_id(int(active.tenant_id))
+        if tenant is not None and tenant.status != "active":
+            raise ServiceAccountOwnerInvalidError()
+        return owner, int(active.tenant_id)
+
+    @classmethod
+    async def _assert_owner(cls, owner_user_id: int, tenant_id: int) -> User:
+        """The resource owner must be an enabled natural person of ``tenant_id`` (26021, AC-23).
+
+        Used where the tenant is already fixed (editing an account cannot move it
+        to another tenant). Creation instead *derives* the tenant from the owner
+        for an unscoped super — see :meth:`create`.
+        """
+        owner, owner_tenant = await cls._resolve_owner(owner_user_id)
+        if owner_tenant != int(tenant_id):
             raise ServiceAccountOwnerInvalidError()
         return owner
 

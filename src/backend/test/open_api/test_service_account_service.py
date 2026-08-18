@@ -178,6 +178,85 @@ async def test_tenant_taken_from_admin_context_not_from_body(oapi_db, sub_tenant
     assert row.tenant_id == sub_tenant.tenant_id
 
 
+async def test_unscoped_super_derives_account_tenant_from_owner(oapi_db, sub_tenant, tenant_admin_payload, monkeypatch):
+    """A global super with no ScopeBar view creates the account in the OWNER's tenant.
+
+    That is what lets a super — who has no tenant-admin role — make a sub-tenant
+    person the owner without first switching the management view, and still see
+    and manage the result (an unscoped super's read scope is all tenants).
+    """
+    import bisheng.utils.http_middleware as hm
+    from bisheng.core.context.tenant import set_admin_scope_tenant_id
+
+    # Unscoped: the autouse fixture already left current_tenant_id None; make sure
+    # no admin-scope view is active either, and stand in as a global super.
+    set_admin_scope_tenant_id(None)
+
+    async def _is_super(user_id, **_kwargs):
+        return True
+
+    monkeypatch.setattr(hm, "_check_is_global_super", _is_super)
+
+    account = await ServiceAccountService.create(
+        tenant_admin_payload,
+        ServiceAccountCreate(name="cross-bot", resource_owner_user_id=sub_tenant.admin_user_id),
+    )
+    assert account.tenant_id == sub_tenant.tenant_id
+    assert account.resource_owner_user_id == sub_tenant.admin_user_id
+    async with oapi_db() as session:
+        row = (await session.exec(select(UserTenant).where(UserTenant.user_id == account.user_id))).first()
+    assert row.tenant_id == sub_tenant.tenant_id
+
+    # The super can read it back with no scope set — management spans all tenants.
+    detail = await ServiceAccountService.get_detail(tenant_admin_payload, account.user_id)
+    assert detail.tenant_id == sub_tenant.tenant_id
+
+
+async def test_unscoped_super_still_rejects_owner_in_archived_tenant(oapi_db, tenant_admin_payload, monkeypatch):
+    """Deriving the tenant from the owner must not birth an account into an archived tenant."""
+    import bisheng.utils.http_middleware as hm
+    from bisheng.core.context.tenant import set_admin_scope_tenant_id
+    from bisheng.database.models.tenant import Tenant
+
+    archived_tid = 9077
+    async with oapi_db() as session:
+        session.add(
+            Tenant(
+                id=archived_tid,
+                tenant_code="oapi-archived",
+                tenant_name="Archived tenant",
+                status="archived",
+                parent_tenant_id=ROOT_TENANT_ID,
+            )
+        )
+        session.add(
+            User(
+                user_id=90031,
+                user_name="archived-owner",
+                password=SEED_PASSWORD_PLACEHOLDER,
+                user_type=USER_TYPE_HUMAN,
+                delete=0,
+            )
+        )
+        await session.flush()
+        session.add(UserTenant(user_id=90031, tenant_id=archived_tid, status="active", is_active=1))
+        await session.commit()
+
+    set_admin_scope_tenant_id(None)
+
+    async def _is_super(user_id, **_kwargs):
+        return True
+
+    monkeypatch.setattr(hm, "_check_is_global_super", _is_super)
+
+    with pytest.raises(ServiceAccountOwnerInvalidError) as excinfo:
+        await ServiceAccountService.create(
+            tenant_admin_payload,
+            ServiceAccountCreate(name="arch-bot", resource_owner_user_id=90031),
+        )
+    assert excinfo.value.code == 26021
+
+
 async def test_created_account_is_grantable_immediately(oapi_db, service_account_factory):
     """AC-19 / pit 8: F048 subject validation needs ``status='active' AND is_active=1`` — both must be there."""
     account = await service_account_factory("grantable")
