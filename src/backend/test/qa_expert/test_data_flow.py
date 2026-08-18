@@ -1011,7 +1011,7 @@ def _receiver_ids(raw) -> set[int]:
 
 
 async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
-    """转公开先通知相关人，待我处理有 pending task；后回答的受邀专家加入会签。"""
+    """转公开先通知相关人，待我处理有 pending task；后回答的受邀专家加入会签并把截止延后 1 天。"""
     from bisheng.approval.domain.models.approval_instance import ApprovalInstance, ApprovalTask
     from bisheng.qa_expert.domain.publish_service import PublishService
 
@@ -1076,6 +1076,17 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     assert env.uid(202) in pending_after
     still_pending = await env.reload_row(PublishRequest, id=request.id)
     assert still_pending.status == "pending"
+    assert int(still_pending.extension_days or 0) == int(request.extension_days or 0) + 1
+    assert still_pending.expire_at - request.expire_at == timedelta(days=1)
+    instance_after = await env.reload_row(ApprovalInstance, id=instance.id)
+    assert instance_after is not None
+    expected_iso = still_pending.expire_at.strftime("%Y-%m-%dT%H:%M:%S") + "+08:00"
+    assert (instance_after.payload_snapshot or {}).get("expire_at") == expected_iso
+    assert (instance_after.detail_snapshot or {}).get("expire_at") == expected_iso
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    latest = (detail.get("data") or {}).get("latest_publish_request") or {}
+    assert str(latest.get("expire_at") or "") == expected_iso
+    assert int(latest.get("extension_days") or 0) == int(still_pending.extension_days)
     added_msgs = [row for row in await _inbox_rows(env, title) if "approver_added" in str(row.get("action_code") or "")]
     assert added_msgs
     assert env.uid(202) in _receiver_ids(added_msgs[-1]["receiver"])

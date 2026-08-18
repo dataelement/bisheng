@@ -254,3 +254,13 @@ async def test_extend_one_day_capped_at_three():
     svc.request_repo.get_by_id = AsyncMock(return_value=_request(extension_days=3))
     with pytest.raises(QaExpertPublishDurationInvalidError):
         await svc.extend_one_day(7, _user(user_id=1), now=now)
+
+
+async def test_try_extend_for_late_answerer_skips_at_cap():
+    """第四名中途会签人仍可加人，但截止不再 +1。"""
+    svc = _service()
+    expire = datetime(2026, 8, 18, 12, 0, 0)
+    out = await svc._try_extend_for_late_answerer(_request(extension_days=3, expire_at=expire))
+    assert out.extension_days == 3
+    assert out.expire_at == expire
+    svc.request_repo.update.assert_not_called()

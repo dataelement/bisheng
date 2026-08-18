@@ -240,15 +240,29 @@ class PublishService:
             raise QaExpertPublishNotAllowedError()
         if int(request.extension_days or 0) >= MAX_EXTENSION_DAYS:
             raise QaExpertPublishDurationInvalidError()
+        return await self._bump_expire_one_day(request)
+
+    async def _bump_expire_one_day(self, request: PublishRequest) -> PublishRequest:
+        """把 expire_at 往后推 1 天并记 extension_days；调用方已保证未达上限。"""
         new_ext = int(request.extension_days or 0) + 1
-        new_expire = request.expire_at + timedelta(days=1)
+        expire_at = request.expire_at
+        if expire_at is None:
+            return request
         updated = await self.request_repo.update(
             int(request.id),
             extension_days=new_ext,
-            expire_at=new_expire,
+            expire_at=expire_at + timedelta(days=1),
             version=int(request.version or 0) + 1,
         )
         return updated or request
+
+    async def _try_extend_for_late_answerer(self, request: PublishRequest) -> PublishRequest:
+        """中途新会签人：截止 +1 天，累计不超过 3 天；已满则只加人、不改时间。"""
+        if str(request.status) != PUBLISH_PENDING:
+            return request
+        if int(request.extension_days or 0) >= MAX_EXTENSION_DAYS:
+            return request
+        return await self._bump_expire_one_day(request)
 
     async def expire_pending(self, *, now: datetime | None = None, tenant_id: int | None = None) -> int:
         """把到期 pending 标为 expired，并通知。tenant_id 仅记录上下文。"""
@@ -404,9 +418,11 @@ class PublishService:
             if created is not None and str(created.decision) == DECISION_PENDING:
                 await self.approver_repo.delete(int(created.id))
             return
-        from bisheng.qa_expert.domain.publish_approval_bridge import add_pending_task
+        refreshed = await self._try_extend_for_late_answerer(refreshed)
+        from bisheng.qa_expert.domain.publish_approval_bridge import add_pending_task, refresh_expire_snapshot
 
         await add_pending_task(refreshed, question, int(user_id))
+        await refresh_expire_snapshot(refreshed)
         await self._notify(
             "publish_approver_added",
             question,
