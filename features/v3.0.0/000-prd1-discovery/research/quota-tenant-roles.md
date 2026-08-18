@@ -48,7 +48,7 @@
 ## gaps
 - 资源档位（Tier）实体：全仓无任何服务器资源档位/CPU/内存规格概念——需新表（名称/CPU/内存/适用说明/启用状态，平台级无 tenant_id）+ CRUD service/endpoints + 「使用中应用数」统计（依赖应用实例表 join）+ 档位停用只拦新选择的规则层
 - 系统管理页「资源档位」tab：SystemPage/index.tsx 新 TabsTrigger + 新组件（超管可见 && 工场运行时层已部署双条件）；单租户形态下 tab 内还要嵌「实例配额区」子块（多租户走 TenantQuotaDialog，单租户此处）——同一配额两个写入口需统一写语义
-- 应用实例数计数源：_RESOURCE_COUNT_TEMPLATES 需新条目，但被计数的应用实例表本身属 PRD-1 其它调研线的新建物；计数 SQL 须排除审批期临时预览实例（RT-03 不计入）与已停用实例——状态字段设计要预留
+- 应用实例数计数源：_RESOURCE_COUNT_TEMPLATES 需新条目，但被计数的应用实例表本身属 PRD-1 其它调研线的新建物；计数 SQL 须排除审批期临时预览实例（RT-03 不计入）与已下线实例——状态字段设计要预留
 - 「待上线（配额不足）」状态机分支 + 终检失败通知：审批单保持通过、应用转待上线态、站内消息提示 owner 与租户管理员（可复用 notification/ 站内信模块与 approval outbox 模式，但接线是新活）；配额释放后 owner 手动上线免重新审批的路径
 - 工场运行时层/开放能力层两个部署 flag：settings 新 section + /env 字段 + 前端 appConfig gating + 未部署时统一引导页（RT-01）+ API key 管理入口整体隐藏（GOV-08 联动）——flag 本身是新建，模式可抄
 - CLI 首发 deploy 的「新建应用」权限点校验：v2 开放 API（SAK 鉴权，见开放 API PRD）此前无 web_menu 校验先例——需要把 SAK 解析出的用户身份接到角色 web_menu 检查（assert_effective_web_menu_contains 的 v2 变体），且区分首发 deploy（校验）与迭代 deploy（放行）

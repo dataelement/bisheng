@@ -192,7 +192,7 @@
   - B. **直接打端点，把 403 / 16205 / 16254 翻成人话**（选定）
 - **选定**：**B**。`GET /api/v2/apps/{app_id}/logs?tail=&since=&keyword=` → `{lines[]}`。**owner-only 由服务端判**（F055 tasks T039：读 `OpenApiPrincipal.resource_owner_user_id`，**不是** `subject_user_id`）；即使密钥属于租户管理员名下的服务账号也照拒（AC-42），CLI 对此零逻辑。
 - **`--follow` 的实现**：无流式接口（服务端链路是 `GET /api/v2/.../logs` → F054 `GET /api/v1/apps/{id}/logs` → runtime-manager `docker logs`，全是一次性响应），所以只能**携 `since` 短轮询**（3 s）。⚠️ **必须做去重**：docker 时间戳是秒级，同一秒的多行在下一轮 `since` 里会重复返回（同类坑在本仓咬过：memory `project_chat_history_sameSecond_order`「create_time 秒级打平」）→ 保留上一轮最后 N 行的内容哈希集合，命中则跳过。
-- **AC-43（无运行实例时提示应用态）目前落不全**：F055 的 logs 返回**只有 `{lines[]}`**，没有 `app_state`。→ 已登记为**跨 Feature 回写项 2**（§6.2），建议 F055 把返回补成 `{lines[], app_state, pending_reason}`。**在补上之前的降级行为**：`lines` 为空时输出"未取到日志：应用可能没有运行实例（草稿 / 待上线 / 已停运），请在应用详情页确认应用态"——**明确提示而不是空白**，满足 AC-43 的精神但不满足其字面（tasks 里对应任务标 `[受阻于 F055 回写]`）。
+- **AC-43（无运行实例时提示应用态）目前落不全**：F055 的 logs 返回**只有 `{lines[]}`**，没有 `app_state`。→ 已登记为**跨 Feature 回写项 2**（§6.2），建议 F055 把返回补成 `{lines[], app_state, pending_reason}`。**在补上之前的降级行为**：`lines` 为空时输出"未取到日志：应用可能没有运行实例（草稿 / 待上线 / 已下线），请在应用详情页确认应用态"——**明确提示而不是空白**，满足 AC-43 的精神但不满足其字面（tasks 里对应任务标 `[受阻于 F055 回写]`）。
 - **日志保留期不做承诺**：runtime-manager 侧是 docker 日志轮转窗口（30 MB/应用，F054 design `:334`）——CLI 对 `--since` 取到空结果只说"该时间段无日志或已轮转"，不说"没有发生过"。
 - **何时该重新考虑**：runtime-manager 实现了**流式** logs（其 `GET /v1/apps/{id}/logs` 已由批 4 落码〔commit `d693feeb3`〕，但只回 `{lines:[...]}` 快照、非流式）→ `--follow` 可换 chunked 流，但仍要保留短轮询回落（nginx 300 s 上限对流式同样成立）。
 

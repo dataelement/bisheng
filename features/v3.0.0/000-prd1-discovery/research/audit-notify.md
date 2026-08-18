@@ -60,7 +60,7 @@
 - 审计页前端增量：租户筛选器 + 租户列（仅平台超管视角）+ /api/v1/audit 接口透传 tenant 参数；操作日志导出（后端无导出端点，前端无按钮——会话导出不覆盖操作日志）
 - 按 key 用量账单（最大块新建）：① API key/应用 token 体系本身未实现（无 ApiKey 表，v2 零鉴权——硬前置依赖 companion 开放 API PRD 落地）；② llm_token_log/llm_call_log 加 key_id（credential 归属）与 actor/subject 维度列；③ 聚合查询 API（按 key/时间段/模型拆分的 token 用量+调用次数）；④ platform『API key 管理页』行内用量入口 UI（该管理页本身也属新建）；⑤ client 工作台『我的 API key』本人用量自查 UI
 - 访问记录（RT-01 谁在用）与运行期能力调用审计：高频写入场景，audit_log 现无异步/批量写入与归档能力——需要决定是否进 audit_log 或单独访问日志表
-- ~8 条事件通知的新 action_code 全链路：后端常量 + 各业务调用点（配额不足通知 owner+租户管理员、停运/重新启用/代调可见范围、应用 token 强制吊销等）+ client NotificationsDialog 的 label/跳转映射 + 三语 i18n；跳转落点（发布面/应用管理列表）本身是 PRD-2/RT 的新页面
+- ~8 条事件通知的新 action_code 全链路：后端常量 + 各业务调用点（配额不足通知 owner+租户管理员、下线/重新上线/代调可见范围、应用 token 强制吊销等）+ client NotificationsDialog 的 label/跳转映射 + 三语 i18n；跳转落点（发布面/应用管理列表）本身是 PRD-2/RT 的新页面
 - 『租户管理员』收件人解析服务：现有先例只解析 global super_admin，需按租户解析 tenant_admin 用户列表的通用 helper
 
 ## risks

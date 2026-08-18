@@ -110,7 +110,7 @@
   - B. **只靠 docker healthcheck** — **不成立**：docker 单机的 healthcheck 与 restart policy 无联动，容器 unhealthy 会一直 unhealthy 地活着（K3）
   - C. **docker restart policy + reconciler 补洞**（选定）
 - **选定**：**C**。
-  - 容器创建时带 `--restart unless-stopped`（**不用 `always`**：停运动作是显式 `docker stop`，`unless-stopped` 语义正好是"显式停了就别自愈"，避免停运与自愈打架）+ `HEALTHCHECK`（`interval=10s`、`timeout=3s`、`retries=3`、`start_period` 按档位 20–60s）。
+  - 容器创建时带 `--restart unless-stopped`（**不用 `always`**：下线动作是显式 `docker stop`，`unless-stopped` 语义正好是"显式停了就别自愈"，避免下线与自愈打架）+ `HEALTHCHECK`（`interval=10s`、`timeout=3s`、`retries=3`、`start_period` 按档位 20–60s）。
   - reconciler：manager 内 **15 秒**一轮，比对期望态 vs `docker ps` 实际态，三类动作——缺失即拉起、`unhealthy` 连续 2 轮即**重建**（stop → rm → run，卷不动）、孤儿容器（无期望态）即回收。
   - **5 分钟预算分解**（AC-20 / NFR-6）：进程退出 → docker 自身退避重启 ≤ 60s；存活但不健康 → healthcheck 判 unhealthy ≤ 30s + reconcile 感知 ≤ 30s（2 轮）+ 重建拉起并探活 ≤ 90s（镜像已在本地）= **≤ 2.5 分钟**，余量给 114 的 IO 抖动。
   - **切流量（AC-21）**：Dokku CHECKS 语义——先以新版本镜像起**新容器**（容器名带 version 后缀，与旧容器并存）→ 通过启动探活 → 更新路由（`app_instance.current_version_id` + manager 侧路由表条目原子替换、`generation+1`）→ 旧容器**宽限 30 秒**后 stop + rm。**路由表怎么被 app-proxy 看到、30 秒这个数字为什么是 30 秒 → 见 D5.1**（app-proxy 经 `GET /v1/apps/{app_id}/route` 取 upstream、缓存 3s；宽限期必须 ≫ 缓存 TTL + 在途请求，否则切换窗口出 502）。切换窗口内 app-proxy 对入口访问渲染「发布中」过渡页（**后置 Wave**，MVP 期窗口内表现为短暂 502 → 由 app-proxy 统一转成兜底页而非报错页，见 D7）。
@@ -163,9 +163,9 @@
 - **判定顺序**（严格按 spec §3「入口判定顺序与信息泄漏口径」，任一步失败即短路）：
   1. 工场层是否部署（`settings.app_runtime.enabled`）→ 否则「未启用」引导页；
   2. **登录态**：复用 backend 中间件同一函数集——解 cookie（`_extract_http_access_token` `http_middleware.py:60-73`）→ `token_version` 比对（`:124-142`）→ 账号禁用（`:263-279`）→ 租户禁用黑名单（`:325-349`）；无 token → 登录交接页（D7）；
-  3. **应用是否存在且曾上线**：`app` 行存在 ∧ `state ∈ {已上线, 已停运}`（草稿 / 待上线 / 已删除 / 不存在**一视同仁**返回「不存在或未上线」页，AC-29）；
+  3. **应用是否存在且曾上线**：`app` 行存在 ∧ `state ∈ {已上线, 已下线}`（草稿 / 待上线 / 已删除 / 不存在**一视同仁**返回「不存在或未上线」页，AC-29）；
   4. **可见范围**：`check_business_action("app", app_id, actor, "use")`（D9）→ 否则「无权限」页（可带应用名与 owner，PRD 明示的引导信息）；
-  5. **应用态**：已停运 → 「已停用」页（**只对可见范围内用户呈现**）；
+  5. **应用态**：已下线 → 「已下线」页（**只对可见范围内用户呈现**）；
   6. 转发。
   - **权限引擎不可用 → 拒绝**（AC-12，INV-19/INV-30 同向）：内部端点对 `PermissionServiceUnavailableError` / `PermissionBackendUnavailableError` 一律返回 deny + 明确错误页，**绝不放行**；app-proxy 侧对内部端点超时 / 5xx 同样 fail-closed。
 - **注入头集合**（AC-31，主体类型必须在内）：`X-BiSheng-User-Id` / `X-BiSheng-User-Name` / `X-BiSheng-Tenant-Id` / `X-BiSheng-Dept-Id`（`Department.dept_id` 业务键 `BS@xxx`，**不是自增 id**）/ `X-BiSheng-Dept-Name` / `X-BiSheng-Dept-Path` / `X-BiSheng-Subject-Kind`（`human` \| `service_account`）/ `X-BiSheng-App-Id` / `X-BiSheng-Access-Token`（OBO）/ `X-BiSheng-Request-Id`。**含非 ASCII 的三个头（User-Name / Dept-Name / Dept-Path）一律 UTF-8 percent-encoding 后再放头**——HTTP 头是 latin-1，直接塞中文姓名会被 uvicorn/h11 拒或乱码（§5 坑 9）。头名以 F053 `bisheng dev` 迷你代理注入的**同一套**为准（PRD DEV-05 / INV-32），本文定名、F053 消费。
@@ -174,8 +174,8 @@
 - **WS 三不变量落地程度**：
   - MVP-核心期 **只反代 HTTP**（`mvp-114-path.md` §6 F054 行明写）；
   - 后置 Wave 落 **不变量①**：握手时一次性定死连接授权有效期 = `min(OBO 剩余寿命, app_runtime.ws_max_lifetime_seconds〔默认 8h〕)` + 随机抖动，到期主动 `close(4001)`；
-  - **不变量②**（吊销 / 停运事件主动断连，app-proxy 维护 connection → (user, app) 索引）与**不变量③**（前端把"断开 → 重握手"做成常态）随 §8 后续；**②正是自研 app-proxy 的核心理由**（反代生态无先例，《调研》§2.9），不要因为"先只做①"就把它忘了。
-- **原因**：C 让「谁能进」这一判定**只有一份实现**（backend 的 F048 链路），app-proxy 退化为"问一次 + 缓存 + 剥离 + 注入 + 反代"；A 的三项漏检与 INV-30 直接冲突；B 的双份真相在 F048 这种高变更面上必然漂移。3 秒缓存的代价是「可见范围撤销 / 停运生效」有 ≤3 秒延迟，与 AC-10「自下一次请求起生效」的口径相容（下一次请求 = 缓存过期后的下一次）。
+  - **不变量②**（吊销 / 下线事件主动断连，app-proxy 维护 connection → (user, app) 索引）与**不变量③**（前端把"断开 → 重握手"做成常态）随 §8 后续；**②正是自研 app-proxy 的核心理由**（反代生态无先例，《调研》§2.9），不要因为"先只做①"就把它忘了。
+- **原因**：C 让「谁能进」这一判定**只有一份实现**（backend 的 F048 链路），app-proxy 退化为"问一次 + 缓存 + 剥离 + 注入 + 反代"；A 的三项漏检与 INV-30 直接冲突；B 的双份真相在 F048 这种高变更面上必然漂移。3 秒缓存的代价是「可见范围撤销 / 下线生效」有 ≤3 秒延迟，与 AC-10「自下一次请求起生效」的口径相容（下一次请求 = 缓存过期后的下一次）。
 - **何时该重新考虑**：内部端点成为热点（每次导航一次 RPC）→ 把判定结果按 `(user, app, 权限版本)` 缓存进 Redis 由两端共享；F050 / F055 需要 OBO 可离线校验或跨进程持久 → 按决议-4，升格为领域对象并补 INV。
 
 ### D7：兜底页与过渡态渲染归属 = app-proxy 自渲染（A′），登录回跳靠内联 JS 页
@@ -188,7 +188,7 @@
 - **登录回跳（AC-27，含 query 与 hash）**：**服务端 302 做不到**——① hash 永远不上送服务器；② platform 登录页**只消费 `localStorage.LOGIN_PATHNAME` + `LOGIN_PATHNAME_AT`**（`platform/src/utils/loginReturnTo.ts:35-70`，一次性 + 10 分钟时效 + 同源校验），**不认任何 `?redirect=` query**（`login.tsx:375-390` 只读 `status_code`）。→ app-proxy 对未登录的**导航请求**返回一段**内联 JS 交接页**：写这两个 key（值 = `location.href`，天然含 query+hash）后 `location.replace('/admin')`。`/admin` 未登录即 platform `LoginPage`；配了 SSO 时它自己跳 IdP（`login.tsx:71-86`），回来后 `App.tsx:154-160` 或 `login.tsx:168-172` 消费同一 key 回跳。**这两个 key 名 / 同源校验 / 10 分钟时效是跨 SPA 契约，app-proxy 复刻时必须原样。**
 - **非导航请求分流**（两条路都必须做）：仅当 `Sec-Fetch-Mode: navigate`（或 `Sec-Fetch-Dest: document`，回落 `Accept: text/html`）时返回页面 / 交接页；XHR / fetch 返回 **JSON + 真实 HTTP 状态**（401/403/404/503）；WS 升级请求直接以关闭码拒绝。否则应用内的 XHR 会拿到一坨 HTML，前端解析崩。
 - **过渡态**（AC-36 / AC-48，**后置 Wave**）：「发布中」「应用恢复中」由 app-proxy 自渲染 + `meta http-equiv=refresh`（或内联 JS 定时 `location.reload()`）自动重试，就绪后自动进入应用、用户无需手动刷新；两者与四类兜底页**互斥**。MVP-核心期这两个窗口内表现为短暂不可达 → app-proxy 统一渲染「应用恢复中」的**静态版**（不自动重试），不落报错页。
-- **原因**：A′ 与 E2 §2.6 (b)、E3 §2.3 建议、`mvp-114-path.md` §2 F054 首波「无权限 / 已停用 / 不存在 / 未部署四类页」口径一致；B 的坑①是**竞态型**缺陷（表现为"登录后落回 gate 页"），排查成本远高于在 Python 侧写一套极简样式。
+- **原因**：A′ 与 E2 §2.6 (b)、E3 §2.3 建议、`mvp-114-path.md` §2 F054 首波「无权限 / 已下线 / 不存在 / 未部署四类页」口径一致；B 的坑①是**竞态型**缺陷（表现为"登录后落回 gate 页"），排查成本远高于在 Python 侧写一套极简样式。
 - **何时该重新考虑**：产品要求兜底页与 client 品牌主题 / 三语机制完全同构 → 改 B，并按 E3 §2.3 处理坑①②；或平台登录页增加 `?return_to=` 同源校验入口（改 `login.tsx` + `App.tsx` 两处）→ 那时交接页可退化为纯 302。
 
 ### D8：领域模型与表设计 = 三张新表 + 显式状态列 + 快照体走 MinIO 引用；UNION 第三支投影出 `flow_type=35`
@@ -208,14 +208,14 @@
   - `app`（`bisheng/database/models/app.py`）：`id`(str, PK) / `slug`(str, **全局唯一 `UniqueConstraint`**，跨租户唯一，AC-08) / `name` / `description` / `logo` / `owner_user_id`(int) / `tenant_id`(int) / `state`(VARCHAR16 显式列) / `current_version_id`(str, nullable) / **`pending_version_id`(str, nullable)** / `create_time` / `update_time`。**主键用 str**——`Flow.id`（`flow.py:99`）与 `Assistant.id`（`assistant.py:21`）都是 str，UNION 三支列类型必须一致（K5）。
   - `app_version`：`id` / `app_id` / `version_no`(int) / `kind`(`initial`\|`iteration`) / `terminal_state`(`online`\|`rejected`\|`withdrawn`\|null) / `code_object_key`(str，MinIO) / `manifest`(JsonType) / `capabilities`(JsonType) / `injections`(JsonType) / `tier_id`(显式列) / `runtime`(显式列) / `image_ref` / `submitted_at`。**四者（代码快照 · 能力声明 · 注入配置 · 资源档位）同属一条记录**，任何写入方（F055）不得只改其一（AC-02）——落地手段 = **本表只 INSERT、不提供 UPDATE 方法**（`terminal_state` 是唯一例外，由 F055 的终态标注单列更新）。**本表无 `tenant_id`**（隔离经 `app_id` 借道 `app` 行，K5 ②）：一切按 `version_id` 起手的读写必须先取 `app` 行校验归属，禁止直接 `select(AppVersion).where(id=...)` 后就用。
   - **「已审批待运行版本」怎么表达（AC-04 / AC-05，原设计的空白）**：`terminal_state` 的四个取值（`online` / `rejected` / `withdrawn` / null）表达的是**审批终态**，表达不了"审批已通过、但还没生效"这一格。补 **`app.pending_version_id`** 一列承担它：
-    - F055 审批通过后调 **`AppStateService.stage_version(app_id, version_id)`**（§4.2 ②）写 `pending_version_id`，**不改应用态**——这正是 AC-04「已停运态允许 F055 落新的待运行版本但不自动重新启用」；已上线态下 F055 紧接着调 `publish` 直接切，`stage_version` 只是同一事务里的前一步。
-    - `resume`（重新启用）取 **`pending_version_id ?? current_version_id`** 拉起——AC-04「重新启用后新版本生效」由此成立；`publish` / `manual_publish` 同此取版规则。
+    - F055 审批通过后调 **`AppStateService.stage_version(app_id, version_id)`**（§4.2 ②）写 `pending_version_id`，**不改应用态**——这正是 AC-04「已下线态允许 F055 落新的待运行版本但不自动重新上线」；已上线态下 F055 紧接着调 `publish` 直接切，`stage_version` 只是同一事务里的前一步。
+    - `resume`（重新上线）取 **`pending_version_id ?? current_version_id`** 拉起——AC-04「重新上线后新版本生效」由此成立；`publish` / `manual_publish` 同此取版规则。
     - 任何一次拉起成功后：`current_version_id = 本次生效版本`、`pending_version_id = NULL`、该版本 `terminal_state='online'`。
     - 被驳回 / 撤回**不写** `pending_version_id`（只标 `terminal_state`），故 AC-05「迭代被驳回不改变已上线态、当前版本继续运行」天然成立。
     - `pending_version_id` **不是应用态**，但它的写入同样只在 `AppStateService` 内（决议-8 的精神一致：F055 只调不直写）。
   - `app_instance`：`id` / `app_id` / `tenant_id` / `version_id` / `phase` / `health` / `exec_ref`（执行体引用，compose 形态是容器名——**这是唯一允许出现形态特有值的字段，且只对内**）/ `started_at` / `restart_count` / `last_probe_at`。
   - `app_access_log`（AC-38，**后置 Wave**）：`tenant_id` / `user_id` / `app_id` / `created_at`，索引 `(app_id, created_at)`。
-- **状态机落库与并发**：`app.state` 单列 + 五个状态动作集中在 `AppStateService`（**应用态唯一写入方**，决议-8；F055 只调不直写）。每个动作的落库是**带前态断言的单行 UPDATE**（`WHERE id=:id AND state IN (:允许前态)`），受影响行数为 0 → 抛 `AppStateConflictError`（16102）。这样并发的「停运」与「上线终检」不会互相覆盖，也不需要行锁。**不建独立状态机 / 状态历史表**——每次动作已计审计（`app.*` 命名空间，D14），审计就是历史。
+- **状态机落库与并发**：`app.state` 单列 + 五个状态动作集中在 `AppStateService`（**应用态唯一写入方**，决议-8；F055 只调不直写）。每个动作的落库是**带前态断言的单行 UPDATE**（`WHERE id=:id AND state IN (:允许前态)`），受影响行数为 0 → 抛 `AppStateConflictError`（16102）。这样并发的「下线」与「上线终检」不会互相覆盖，也不需要行锁。**不建独立状态机 / 状态历史表**——每次动作已计审计（`app.*` 命名空间，D14），审计就是历史。
 - **UNION 第三支**：`database/models/flow.py:660-702 _build_apps_subquery` 加第三支 `SELECT`，把 `app` 表投影成同一列集 `(id, name, description, flow_type, logo, user_id, status, create_time, update_time)`——其中 `flow_type` 投影为**常量 35**（`FlowType` 新枚举值，避开已占的 5/10/15/20/25/30，`flow.py:33-39`），`user_id` 投影 `owner_user_id`，`status` 投影为 **2（已上线）/ 1（其余四态）** 供既有 `status` 过滤与卡片开关复用；**应用态五值另经新查询参数 `app_state` 过滤**（不塞 `status` 列，见坑 12）。第三支的 `tenant_id` 条款**手工** `build_tenant_filter_clause(App.tenant_id)`——照 `flow_clause`（:695）/ `assistant_clause`（:698）两支的写法自己加，**今天没有第三支范例**（K5 ③）。
 - **但 UNION 第三支只是"第三类型接入"的一半——后端另有 6 组硬闸**（E1 §3.2 / E4 §0-7 已逐条列出；行号会漂，按符号名定位。**只加 UNION 第三支的话，前端选「托管应用」得到的是恒空列表，AC-51 / AC-57 直接不成立**）：
   1. **`api/services/workflow.py:76 SUPPORTED_APP_TYPES`**（今天 = `{WORKFLOW, ASSISTANT}`）加 `FlowType.HOSTED_APP.value`（35）。**三处 `flow_type not in SUPPORTED_APP_TYPES` 直接 `return [], False`**：`:198`（构建页列表）· `:514`（广场在线列表，F056 消费）· `:592`（cursor 分页）——这是第三类型撞上的**第一道闸**，且失败现象是"空列表"而非报错，极易被当成"权限没配好"排查半天。
@@ -236,7 +236,7 @@
   - B. **新增专属 action code**（如 `app:enter`）— 缺点：新 code = 模型 relation 面变化 + Catalog 全表变更 + `INITIAL_ACTION_LEVELS` + 前端 catalog 文案，且存量环境需要新 Catalog release 才能生效；收益为零
   - C. **走 `MIGRATED_RESOURCE_TYPES` 全适配器路线 + 复用既有 action code**（选定）
 - **选定**：**C**。
-- **动作集合（不新增 code）**：`use`(L1) = 可见范围 / 入口访问 / 广场可见；`edit`(L2) = 元信息更新；`manage_permission`(L3)；`delete`(L4)；`publish` / `unpublish`(L3) = 重新启用 / 停运。**入口访问判定用 `check_business_action(..., "use")` 而非 `runtime.check_visible`**——前者与 PermissionDialog 授的档位语义一致（viewer 档即含 `use`），后者对"授了 editor 但没 use"的自定义模型更宽、会让可见范围口径与弹窗显示不一致。
+- **动作集合（不新增 code）**：`use`(L1) = 可见范围 / 入口访问 / 广场可见；`edit`(L2) = 元信息更新；`manage_permission`(L3)；`delete`(L4)；`publish` / `unpublish`(L3) = 重新上线 / 下线。**入口访问判定用 `check_business_action(..., "use")` 而非 `runtime.check_visible`**——前者与 PermissionDialog 授的档位语义一致（viewer 档即含 `use`），后者对"授了 editor 但没 use"的自定义模型更宽、会让可见范围口径与弹窗显示不一致。
 - **后端必改 8 处**（E1 §1.2 / E4 §A3 核实；行号会漂，按符号名定位）：
   1. `core/openfga/authorization_model_f048.py:32-42 MIGRATED_RESOURCE_TYPES` 加 `"app"`（**不是** :44 的 OWNER_PROJECTION 档）；顺带 `MODEL_VERSION` 升 `f048-v2` 便于运维辨识。
   2. 同文件 `:55-78 RESOURCE_ACTION_SCOPES` 的 `publish` / `unpublish` / `use` / `edit` 加 `"app"`（该常量**全仓无消费者、是死常量**，为可读性同步即可，别在评审里当锚点）。**只需手工加这 4 个**：`manage_permission` 与 `delete` 的取值直接写作 `frozenset(MIGRATED_RESOURCE_TYPES)`，第 1 项加完就自动带上——手工再加一次是写重复值。第 4 项（`catalog_policy.ACTION_RESOURCE_SCOPES`）同理。
@@ -293,7 +293,7 @@
   - 返回体带**判定快照**（`mem_available_mb / committed_mb / total_mb / cpu`），供 F055 把"待上线（资源不足）"的成因如实展示（AC-65）、供超管的运行环境状态接口（AC-23）复用。
 - **档位限额映射（GOV-03 落地）**：`ResourceTier` 实体归 **F055**（release-contract 表 1），F054 **只读**。MVP-核心期 F055 的表可能尚未落 → F054 内置**兜底常量表** `DEFAULT_TIERS`（轻量 0.5 vCPU / 512 MiB、标准 1 / 1024、增强 2 / 2048），**表存在时以表为准**；
   - **与 F055 seed 的对账口径（不定死就会两套数值打架）**：`DEFAULT_TIERS` 是**三档出厂规格的唯一代码来源**，**F055 的 `ResourceTier` seed 从这张常量表读取落库**（登记为 §6.1 Outgoing 契约），所以"表未落"与"表刚 seed 完"两个时刻的规格恒等；超管调整后以表为准（AC-64）。**AC-63「实例限额与档位规格一致」的核验基准恒是"该实例所属版本快照里 `tier_id` 当时解析出的规格"**（拉起时固化进容器，`docker inspect` 的 `NanoCpus` / `Memory`），**不是**"当下的常量表"也**不是**"当下的 `ResourceTier` 表"——否则超管调完规格，运行中实例会被判成不一致（而 AC-64 恰恰要求运行中实例不受影响）。
-  - **何时该重新考虑**：**「支持删档」这条已被 F055 关掉**——`ResourceTierDao` 不提供删除，退役只有 `enabled=False`，且停用只拦新选择、存量 `tier_id` 照常解析规格（F055 design D11 / AC-47）。**「`tier_id` 永远解析得出」因此是 F054 可以依赖的不变量**，不需要为"版本快照引用了已删档位"准备兜底。真正该重新考虑的是反向情形：若日后产品要求物理删档，先改 F055 AC-47，F054 才轮到改成按快照冻结的规格值拉起。档位 → `--cpus` / `--memory`（AC-63 可在运行环境中核验：`docker inspect` 的 `NanoCpus` / `Memory`）。档位规格调整**自下一次发布或重新启用生效**、运行中实例不受影响（AC-64）——落地手段 = 限额在**创建容器时**固化，不做在线 update。
+  - **何时该重新考虑**：**「支持删档」这条已被 F055 关掉**——`ResourceTierDao` 不提供删除，退役只有 `enabled=False`，且停用只拦新选择、存量 `tier_id` 照常解析规格（F055 design D11 / AC-47）。**「`tier_id` 永远解析得出」因此是 F054 可以依赖的不变量**，不需要为"版本快照引用了已删档位"准备兜底。真正该重新考虑的是反向情形：若日后产品要求物理删档，先改 F055 AC-47，F054 才轮到改成按快照冻结的规格值拉起。档位 → `--cpus` / `--memory`（AC-63 可在运行环境中核验：`docker inspect` 的 `NanoCpus` / `Memory`）。档位规格调整**自下一次发布或重新上线生效**、运行中实例不受影响（AC-64）——落地手段 = 限额在**创建容器时**固化，不做在线 update。
 - **原因**：spec §3「容量准入是硬闸门 …… 判定与档位限额同源」；两个闸各自能被现实证伪（A 被"连拉 N 个"证伪，B 被 114 的 0.9G 证伪），取与是最省的正确解。
 - **何时该重新考虑**：多机 / k8s（判定改为问调度器，本接口语义不变——这是 INV-33 的一次检验）；cgroup v2 能给出更精确的"实际可分配"统计。
 
@@ -315,9 +315,9 @@
   - B. **`MainLayout` 子路由 `build/apps/:appId` + `permission: 'build'`**（照 `filelib/:id`）（选定）— **零新增菜单 / 权限点**（AC-58 / GOV-07）
   - C. 新开一个 `web_menu` 键 — 违反 AC-58
 - **选定**：**B**。副作用：顶部「应用 / 工具 / 工作台配置」子 tab 在详情页会消失（`layout/HeaderMenu.tsx:24` 只在**精确等于**三个路径时渲染），与知识库详情页同行为，可接受。
-- **构建页扩展点（14 处，**仅 platform 前端**；**后端的 6 组硬闸 + UNION 第三支在 D8**，两处必须一起改，只改本条会得到"筛选项有、列表恒空"）（E1 §3.1 / E3 §1.2 逐行核实）**：`SelectAppStatus`（应用态五值，见坑 12）· `SelectType`（加「托管应用」，**且必须加条件 prop**——该组件被模板页 `appTemps.tsx:82` 复用）· `TypeNames` · `APP_ACTIONS` · 第三桶 `useResourceActions('app', …)` · `handleOpenPermission` 的 `typeMap`（默认回落 `'workflow'`，见坑 7）· `handleCheckedChange`（第三支 = 停运 / 重新启用 + 二次确认）· `typeCnNames`（角标）· `handleDelete`（第三支 + 三条红底文案）· `handleSetting`（→ 详情页）· 卡片 props（`onAddTemp=undefined` / `showCopy=false` 即隐藏"创建模板 / 复制"，**零改共享组件**）· `AppAvator` 图标 · `getAppsApi` 的 `type` 联合类型与 map · `LabelSelect` 的 `ResourceTypeEnum` 映射。
-- **`CardComponent` 唯一的共享组件改动**：AC-42 要求已上线时删除项**置灰 + 提示「请先停运」**，而现状是 `!checked && onDelete` **整项不渲染**（`cardComponent/index.tsx:239-244`）→ 新增 `deleteDisabledHint?: string` prop（`DropdownMenuItem disabled` + Tooltip），**保持 workflow / assistant 现行为不变**（回归验证由 F056 承接 GOV-01 验收 6）。上下线 Switch 文案固定 `t('skills.online/offline')` → 加 `switchTexts` prop 表达"停运 / 重新启用"。
-- **≤600 行硬规与技术债**：`apps.tsx` 已 **426 行** + `// @ts-strict-ignore` + 至少 1 处硬编码中文（`:269 '无编辑权限'`，frozen violation）→ **同 PR 抽出** `HostedAppCard.tsx` 与 `useHostedAppActions.ts`（停运 / 重新启用 / 删除三动作 + 确认文案，**卡片与详情页共用**，避免两份文案漂移），并按"谁触碰谁还债"把该文件的中文抽键。
+- **构建页扩展点（14 处，**仅 platform 前端**；**后端的 6 组硬闸 + UNION 第三支在 D8**，两处必须一起改，只改本条会得到"筛选项有、列表恒空"）（E1 §3.1 / E3 §1.2 逐行核实）**：`SelectAppStatus`（应用态五值，见坑 12）· `SelectType`（加「托管应用」，**且必须加条件 prop**——该组件被模板页 `appTemps.tsx:82` 复用）· `TypeNames` · `APP_ACTIONS` · 第三桶 `useResourceActions('app', …)` · `handleOpenPermission` 的 `typeMap`（默认回落 `'workflow'`，见坑 7）· `handleCheckedChange`（第三支 = 下线 / 重新上线 + 二次确认）· `typeCnNames`（角标）· `handleDelete`（第三支 + 三条红底文案）· `handleSetting`（→ 详情页）· 卡片 props（`onAddTemp=undefined` / `showCopy=false` 即隐藏"创建模板 / 复制"，**零改共享组件**）· `AppAvator` 图标 · `getAppsApi` 的 `type` 联合类型与 map · `LabelSelect` 的 `ResourceTypeEnum` 映射。
+- **`CardComponent` 唯一的共享组件改动**：AC-42 要求已上线时删除项**置灰 + 提示「请先下线」**，而现状是 `!checked && onDelete` **整项不渲染**（`cardComponent/index.tsx:239-244`）→ 新增 `deleteDisabledHint?: string` prop（`DropdownMenuItem disabled` + Tooltip），**保持 workflow / assistant 现行为不变**（回归验证由 F056 承接 GOV-01 验收 6）。上下线 Switch 文案固定 `t('skills.online/offline')` → 加 `switchTexts` prop 表达"下线 / 重新上线"。**（2026-08-18 推翻：`switchTexts` 已删，卡片与工作流共用 `t('skills.online/offline')` = 「上线 / 下线」；动作口径两字放得进 `w-12`，见 tasks T065 补记。）**
+- **≤600 行硬规与技术债**：`apps.tsx` 已 **426 行** + `// @ts-strict-ignore` + 至少 1 处硬编码中文（`:269 '无编辑权限'`，frozen violation）→ **同 PR 抽出** `HostedAppCard.tsx` 与 `useHostedAppActions.ts`（下线 / 重新上线 / 删除三动作 + 确认文案，**卡片与详情页共用**，避免两份文案漂移），并按"谁触碰谁还债"把该文件的中文抽键。
 - **详情页目录**（E3 §1.11）：`platform/src/pages/BuildPage/hostedApp/{index.tsx, Header.tsx, tabs/{PublishTab,DataTab,LogsTab,VersionsTab}.tsx, hooks/useHostedApp.ts, types.ts}`；四 tab 用 `bs-ui/tabs`（范式 `pages/SystemPage/index.tsx:54-118`）；**发布 tab 用 slot / children 给 F055（管线 / 能力 / 档位 / 危险操作）与 F056（可见范围区）留位**，避免三个 Feature 改同一文件冲突（决议-6）。
 - **两个自建件**（platform 无先例，E3 §1.8 / §1.9）：运行日志 tab = 筛选栏（`DatePicker`×2 + 关键字 + 刷新）+ `<pre>` 等宽块 + 空态 + `setInterval` 轮询（无 `usePolling` hook）；数据 tab = `bs-ui/table` + `useResizableColumns` + `AutoPagination` + `Dialog` 表单行编辑（保存前 `bsConfirm`），导出**走后端产文件 + `downloadFile`**（别新用已被 lint 冻结的 `xlsx`）。**数据 tab 属后置 Wave**。
 - **两条不能踩的前端红线**：① **react-query v3 在 platform 已被 lint 冻结**（`eslint.config.mjs:45,51`），新代码用 `useTable` / `useInfiniteCursorTable` / 裸 `useState+useEffect`；② 详情页 / 日志 / 数据接口对非 owner **不能返回 `status_code 403/404`**——platform 拦截器对 GET 会**整页跳 `/403` 或 `/404`**（`controllers/request.ts:160-166`），要用业务码 161xx 或加 `silent: true`。
@@ -346,7 +346,7 @@
 - **备选**：
   - A. 按 spec 65 条 AC 全量交付 — 与用户定调的预算受限冲突
   - B. **按 `mvp-114-path.md` §6 F054 行逐项裁剪**（选定）
-  - C. 自行再裁（例如连详情页壳也砍）— 缺点：剧本步 8「owner 看日志、停运」就跑不通，纵切不闭环
+  - C. 自行再裁（例如连详情页壳也砍）— 缺点：剧本步 8「owner 看日志、下线」就跑不通，纵切不闭环
 - **选定**：**B**。逐项对照如下（tasks.md 以 `[MVP-核心]` 标记首波，其余排后但**不删**）：
 
 | 分组 | `[MVP-核心]` 首波 | 后置 Wave（release 仍必做） |
@@ -354,8 +354,8 @@
 | 领域与状态机 | AC-01～AC-08（五个状态动作 + 审计 AC-65） | — |
 | 权限注册 | AC-09～AC-13（含 114 存量生效脚本） | — |
 | 运行时编排 | **AC-14 编排特权（backend 零编排依赖 + 新增 arch-guard RULE-10 使"部署检查可核验"，K1）** · AC-15（**仅 `python3.11`**）· AC-17（限额 / 只读 rootfs / no-new-privileges / 注入变量）· AC-18 探活 · AC-19 容量准入 · AC-20 崩溃自愈 · AC-22 · AC-23 状态与日志只读接口 · AC-24 单实例 · AC-63 档位限额 | AC-15 的 `node20`/`static` 模板 · **AC-16 出站白名单**（D12）· AC-21 切流量的「发布中」过渡态 · AC-50 对齐窗口的自动化验收 · AC-49 双形态用例形式化 |
-| 入口与注入 | AC-25 入口地址 · AC-26 免登录 · AC-27 登录回跳 · AC-28 无权限页 · AC-29 已停用 / 不存在页 · AC-30 未部署引导页 · AC-31 注入身份 · AC-32 归一化剥离 · AC-33 不可绕过 · AC-34 OBO 注入（只签发） | AC-35 WS 三不变量 · AC-36 / AC-48 两个过渡态页 · AC-37 预览入口 · AC-38 访问记录留痕 |
-| 资产与生命周期 | AC-39 / AC-40 / AC-41 停运与重新启用 · AC-42 删除前置状态闸 · AC-43 显式删除 · AC-44 非 owner 拒绝 · AC-45 的**每应用数据库**部分 | AC-45 的**附件存储**与**备份手册**部分 |
+| 入口与注入 | AC-25 入口地址 · AC-26 免登录 · AC-27 登录回跳 · AC-28 无权限页 · AC-29 已下线 / 不存在页 · AC-30 未部署引导页 · AC-31 注入身份 · AC-32 归一化剥离 · AC-33 不可绕过 · AC-34 OBO 注入（只签发） | AC-35 WS 三不变量 · AC-36 / AC-48 两个过渡态页 · AC-37 预览入口 · AC-38 访问记录留痕 |
+| 资产与生命周期 | AC-39 / AC-40 / AC-41 下线与重新上线 · AC-42 删除前置状态闸 · AC-43 显式删除 · AC-44 非 owner 拒绝 · AC-45 的**每应用数据库**部分 | AC-45 的**附件存储**与**备份手册**部分 |
 | 稳定性 | AC-46 / AC-47（手动验证） | AC-49 用例的 k8s 可移植性形式化（随 F059） |
 | 构建页与详情页 | AC-51 类型筛选与卡片 · AC-52 只读版本下拉 · AC-53 ⚙️ 裁剪 · AC-54 四 tab 壳（发布 tab = 应用态 + 入口链接 + 运营动作；日志 tab）· AC-55 运行日志 · AC-57 归属过滤 · AC-58 零新增菜单 | AC-54 的二维码 · **AC-56 数据 tab（WB-06）** |
 | 部署开关 | AC-59～AC-62 | — |
@@ -407,18 +407,18 @@ F055 管线（快照已入 MinIO）
              连接失败 → 作废该条路由缓存重取一次 → 仍失败 → 「应用恢复中」页
 ```
 
-**C. 停运 / 重新启用 / 删除（AC-41～AC-44）**
+**C. 下线 / 重新上线 / 删除（AC-41～AC-44）**
 
 ```
 platform 卡片开关 或 详情页运营动作
   → POST /api/v1/apps/{id}/actions/{stop|resume}
-      → 业务规则前置拦截（删除仅 owner；停运 owner ∪ 租户管理员 ∪ 超管代行）
+      → 业务规则前置拦截（删除仅 owner；下线 owner ∪ 租户管理员 ∪ 超管代行）
       → 带前态断言的单行 UPDATE（冲突 → 16102）
       → orchestrator_client.stop / (admission → deploy 取 pending_version_id ?? current_version_id)   # AC-04
       → 审计 app.stop / app.resume（超管代行记超管本人）
 
 DELETE /api/v1/apps/{id}                                            # AC-42~44
-      → 前置状态闸（已上线 → 16104「请先停运」）+ 仅 owner（16105）
+      → 前置状态闸（已上线 → 16104「请先下线」）+ 仅 owner（16105）
       → 带前态断言的单行 UPDATE → state=已删除
       → orchestrator_client.destroy(purge_volume=true)
       → 资产回收（MinIO 代码快照 / 库快照前缀）
@@ -448,8 +448,8 @@ runtime-manager reconcile 循环（15s）
 |---|---|---|---|
 | `POST /v1/intents/build` | `app_id, version_id, runtime, code_object_key, build_args{index_url}` | `{build_id, status}` | F055 托管预检 / 上线 |
 | `GET /v1/builds/{build_id}` | — | `{status: building\|succeeded\|failed, stage, message, tail, image_ref}` | 同上（AC-15 失败原因与阶段） |
-| `POST /v1/intents/deploy` | `app_id, slug, version_id, image_ref, tier{cpu,mem}, env{}, volumes[], port, health{path,interval,timeout,retries,start_period}` | `{instance_id, phase}` | 上线 / 重新启用 / 手动上线 |
-| `POST /v1/intents/stop` | `app_id` | `{phase}` | 停运 |
+| `POST /v1/intents/deploy` | `app_id, slug, version_id, image_ref, tier{cpu,mem}, env{}, volumes[], port, health{path,interval,timeout,retries,start_period}` | `{instance_id, phase}` | 上线 / 重新上线 / 手动上线 |
+| `POST /v1/intents/stop` | `app_id` | `{phase}` | 下线 |
 | `POST /v1/intents/destroy` | `app_id, purge_volume: bool` | `{}` | 删除（`purge_volume=true`） |
 | `POST /v1/intents/probe` | `app_id` \| `{image_ref, env, port, health}`（临时） | `{ready: bool, reason}` | AC-18；F055 预检 / 预览实例 |
 | `POST /v1/admission` | `tier{cpu,mem}, purpose: run\|build` | `{admitted, reason, snapshot{mem_available_mb, committed_mb, total_mb, cpu}}` | AC-19 / AC-65 |
@@ -467,8 +467,8 @@ runtime-manager reconcile 循环（15s）
 |---|---|---|
 | `POST /api/v1/apps/{app_id}/actions/publish` | 上线（容量准入 → 拉起 → 切流量；不足 → 待上线） | F055 上线终检（AC-65） |
 | `POST /api/v1/apps/{app_id}/actions/manual-publish` | 手动上线（无需重审） | F055 发布面（AC-32 of F055） |
-| `POST /api/v1/apps/{app_id}/actions/stop` | 停运（二次确认在前端） | 卡片开关 / 详情页 |
-| `POST /api/v1/apps/{app_id}/actions/resume` | 重新启用（叠加容量准入） | 卡片开关 / 详情页 |
+| `POST /api/v1/apps/{app_id}/actions/stop` | 下线（二次确认在前端） | 卡片开关 / 详情页 |
+| `POST /api/v1/apps/{app_id}/actions/resume` | 重新上线（叠加容量准入） | 卡片开关 / 详情页 |
 | `DELETE /api/v1/apps/{app_id}` | 显式删除（前置状态闸 + 仅 owner；末尾触发 `on_app_deleted` 钩子 → F055 取消在途审批单，AC-43） | 卡片 ⚙️ / 详情页危险操作区 |
 | `PATCH /api/v1/apps/{app_id}` | **元信息更新**（名称 / 描述 / 图标）：**不改应用态、不产生版本记录、计审计 `app.meta_update`**（AC-06） | platform 详情页 · **F055**（release-contract「元信息随 deploy 更新」= 管线调同一方法，不另写一份） |
 | Python：`AppProvisionService.create_draft(name, slug, description, owner_user_id, tenant_id) -> app_id` | **建应用**（落 `app` 行 `state=draft` + F048 owner 投影）——首发的唯一入口 | F055 首发（决议-8：F055 不直写 `app` 表）|
@@ -516,9 +516,9 @@ runtime-manager reconcile 循环（15s）
 
 | 段 | 用途 | 示例 |
 |---|---|---|
-| 16100–16119 | 领域 / 状态机 | `16101` 应用不存在 · `16102` 状态冲突（前态不符）· `16103` slug 冲突 · `16104` 已上线不可删除（请先停运）· `16105` **仅** owner 可执行（删除 / 数据 tab，租户管理员也拒）· `16106` owner ∪ 租户管理员 ∪ 超管之外（停运 / 重新启用 / 改元信息 / 运行环境状态）——两者不可合并，否则会告诉一个**有权限**的租户管理员「只有负责人能做」 |
+| 16100–16119 | 领域 / 状态机 | `16101` 应用不存在 · `16102` 状态冲突（前态不符）· `16103` slug 冲突 · `16104` 已上线不可删除（请先下线）· `16105` **仅** owner 可执行（删除 / 数据 tab，租户管理员也拒）· `16106` owner ∪ 租户管理员 ∪ 超管之外（下线 / 重新上线 / 改元信息 / 运行环境状态）——两者不可合并，否则会告诉一个**有权限**的租户管理员「只有负责人能做」 |
 | 16120–16139 | 运行时 / 编排 | `16121` 编排器不可用 · `16122` 构建失败 · `16123` `runtime` 取值不支持 · `16124` 启动探活失败 · `16125` 运行环境容量不足 |
-| 16140–16159 | 入口 / 注入 | `16141` 未登录 · `16142` 无访问权限 · `16143` 应用已停用 · `16144` 应用不存在或未上线 · `16145` 工场未启用 · `16146` 权限引擎不可用（fail-closed） |
+| 16140–16159 | 入口 / 注入 | `16141` 未登录 · `16142` 无访问权限 · `16143` 应用已下线 · `16144` 应用不存在或未上线 · `16145` 工场未启用 · `16146` 权限引擎不可用（fail-closed） |
 | 16160–16179 | 数据面 / 日志 | `16161` 无权查看日志 · `16162` 无权访问应用数据（后置） |
 | 16180–16199 | 部署开关 / 运维 | `16181` 工场运行时层未部署 |
 
@@ -532,7 +532,7 @@ runtime-manager reconcile 循环（15s）
 |---|---|---|
 | `bisheng/database/models/{app,app_version,app_instance,app_access_log}.py` | 三张表 + 访问记录表的 SQLModel 定义与 DAO | **不放 `app_runtime/domain/models/`**——UNION 第三支要在 `database/models/flow.py` 里 import 它，放 domain 即触 arch-guard **RULE-2**（论证与被否方案见 D8「模型落点」）；不含业务逻辑；**四个模块路径必须登记进 `core/database/tenant_filter.py:39`**（`app_version` 无 `tenant_id`、登记后仍不受自动过滤，K5 ②） |
 | `bisheng/app_runtime/domain/services/app_provision_service.py` | **建应用**：slug 解析（声明冲突拒 16103 / 生成的加后缀）+ 落 `app` 行 + F048 owner 投影（AC-11） | 不碰应用态（创建不是迁移，故不在 `AppStateService` 内）；不写版本记录 |
-| `bisheng/app_runtime/domain/services/app_state_service.py` | **五个状态动作的唯一实现**（上线 / 手动上线 / 停运 / 重新启用 / 删除）+ `stage_version`（待运行版本，AC-04）+ 前态断言 + 审计 | 不直连 docker；不做审批（F055）；不做可见范围授权（F056 交互，本模块只经 F048 runtime） |
+| `bisheng/app_runtime/domain/services/app_state_service.py` | **五个状态动作的唯一实现**（上线 / 手动上线 / 下线 / 重新上线 / 删除）+ `stage_version`（待运行版本，AC-04）+ 前态断言 + 审计 | 不直连 docker；不做审批（F055）；不做可见范围授权（F056 交互，本模块只经 F048 runtime） |
 | `bisheng/app_runtime/domain/services/app_meta_service.py` | **AC-06 元信息更新的唯一实现**（名称 / 描述 / 图标 → 不改态、不产版本、计审计 `app.meta_update`） | 不碰应用态；不产生 `app_version` 行；F055 的「元信息随 deploy 更新」调它而非自己写库 |
 | `bisheng/app_runtime/domain/services/app_data_service.py` | AC-56 数据面的 backend 侧唯一服务方（owner 收窄 + 审计 + 转发给 manager 数据面 RPC）——**后置 Wave** | 不直接打开宿主库文件（K1 / 多节点，D10） |
 | `bisheng/app_runtime/domain/services/lifecycle_hooks.py` | 删除事件钩子注册表（`register_app_deleted_hook` / `on_app_deleted`），F055 在组合根注册取消在途审批单 | 不 import F055（依赖方向是 F055 → F054） |
@@ -546,7 +546,7 @@ runtime-manager reconcile 循环（15s）
 | `src/app-proxy/`（**独立包**，仓根） | 归一化剥离 → 问 backend 判定（缓存 3s）→ **问 manager 取 upstream（另一把 3s 缓存，D5.1）** → 剥 `/apps/{slug}` 前缀并重写 `X-Forwarded-*`（D5.2）→ 注入 → 反代；自渲染兜底页与登录交接页 | **不 import `bisheng` 包**；不做权限判定（问 backend）；不签 OBO（backend 签）；不自己发现容器（问 manager） |
 | `src/backend/scripts/upgrade_f048_authorization_model.py` | 存量环境 `app` 类型生效三件套（dry-run / `--apply` / `verify`） | 不做 legacy→F048 迁移（那是 `migrate_f048_permission_data.py`） |
 | `platform/src/pages/BuildPage/apps.tsx` | 列表骨架 + 三类型分派 | 托管应用卡片装配与动作**抽走**（600 行硬规） |
-| `platform/src/pages/BuildPage/HostedAppCard.tsx` · `useHostedAppActions.ts` | 卡片 props 装配；停运 / 重新启用 / 删除三动作 + 确认文案 | 卡片与详情页**共用**，不许两份文案 |
+| `platform/src/pages/BuildPage/HostedAppCard.tsx` · `useHostedAppActions.ts` | 卡片 props 装配；下线 / 重新上线 / 删除三动作 + 确认文案 | 卡片与详情页**共用**，不许两份文案 |
 | `platform/src/pages/BuildPage/hostedApp/**` | 详情页四 tab 壳（发布 / 数据 / 运行日志 / 版本） | 发布 tab 内容归 F055、可见范围区归 F056（slot 留位） |
 | `platform/src/controllers/API/hostedApp.ts` | 全部 HTTP 封装 | 不 import axios（C7） |
 
@@ -563,7 +563,7 @@ runtime-manager reconcile 循环（15s）
 | 3 | **`force_write_model=true` 不能当升级手段**：只写 OpenFGA 不写 SQL、`_resolve_model` 在 force 模式**不查重**（每次重启多写一个重复 model）、生产环境直接禁用；且 `_refresh_catalog_runtime` 仍会因 SQL pin 不匹配判 `catalog_pin_mismatch` | 以为"打开开关重启就行"，结果 store 被灌满重复 model 且权限运行时仍 not-ready | D9 的升级脚本；脚本以 **checksum** 定位模型而非"取最新" |
 | 4 | **SQL 三件套改完必须全进程重启**（API / celery×3 / beat / linsight worker）：心跳每 15s 复核、TTL 45s，旧进程会在 ≤15s 内自行 fail-closed | 只重启 API，后台任务里的 `check_business_action` 全抛 `PermissionPublishNotReadyError` —— 表现为"工具执行 / 技能静默失败"（既有教训） | 升级说明（AC-13）；114 用 `bash /opt/bisheng-ops/deploy.sh` 全量重启 |
 | 5 | **`permission_schema.VALID_RESOURCE_TYPES`、`authorization_model_f048.RESOURCE_ACTION_SCOPES`、`core/openfga/authorization_model.py` 全是死代码**（零消费者 / 只被 test 引用） | 把工时花在它们上；更糟的是在评审里拿它们当"已改完"的锚点 | D9 明确「不改」清单 |
-| 6 | **CardComponent 的"删除"是 `!checked && onDelete` 整项不渲染**（`cardComponent/index.tsx:239-244`），不是置灰 | AC-42「已上线置灰 + 提示请先停运」照现状实现会变成"看不见"，验收不过 | D13 新增 `deleteDisabledHint` prop，**保持 workflow/assistant 现行为** |
+| 6 | **CardComponent 的"删除"是 `!checked && onDelete` 整项不渲染**（`cardComponent/index.tsx:239-244`），不是置灰 | AC-42「已上线置灰 + 提示请先下线」照现状实现会变成"看不见"，验收不过 | D13 新增 `deleteDisabledHint` prop，**保持 workflow/assistant 现行为** |
 | 7 | **`handleOpenPermission` 的 `typeMap = {5:'assistant',10:'workflow'}` 默认回落 `'workflow'`**（`apps.tsx:215-219`） | 不补映射 → 托管应用卡片对着 **workflow 类型**开授权弹窗，registry 校验 record 类型不符 → 19003，且现象是"弹窗打开但一片红" | D13 扩展点第 6 项 |
 | 8 | **`getAppsApi` 只放行 `status ∈ {1,2}`**（`controllers/API/flow.ts:204`）+ 后端 `sub_query.c.status == status`（`flow.py:568`） | 把应用态五值硬塞进 `status` 会与工作流"上线/下线"撞语义，且前端第一道就把值滤掉 | D8：`status` 投影为 2/1 复用既有开关；五值走**新参数 `app_state`** |
 | 9 | **HTTP 头是 latin-1**：中文姓名 / 部门名直接放头会被 uvicorn/h11 拒或乱码 | 应用侧读到乱码或 app-proxy 转发时 500 —— 而且只在有中文名的用户身上复现，测试账号常是英文名，**极易漏测** | D6：三个头 UTF-8 percent-encoding；§7 必须用中文名账号验一遍 |
@@ -600,7 +600,7 @@ runtime-manager reconcile 循环（15s）
 | 契约 | 形式 | 谁在用 |
 |---|---|---|
 | `AppStateService.{publish, manual_publish, stop, resume, delete}` + 对应 `POST /api/v1/apps/{id}/actions/*` | 内部 Python API + HTTP | **F055**（管线在审批通过 / 手动上线时调用；决议-8：只调不直写）· platform 卡片与详情页 |
-| `AppStateService.stage_version(app_id, version_id)`（落已审批待运行版本，写 `app.pending_version_id`、不改应用态；`resume` / `publish` 取 `pending ?? current`） | 内部 Python API | **F055**（审批通过节点；AC-04「已停运态可落新版本但不自动启用」的唯一落点） |
+| `AppStateService.stage_version(app_id, version_id)`（落已审批待运行版本，写 `app.pending_version_id`、不改应用态；`resume` / `publish` 取 `pending ?? current`） | 内部 Python API | **F055**（审批通过节点；AC-04「已下线态可落新版本但不自动启用」的唯一落点） |
 | `AppMetaService.update_meta` + `PATCH /api/v1/apps/{app_id}`（不改态 / 不产版本 / 计审计 `app.meta_update`，AC-06） | 内部 Python API + HTTP | **F055**（release-contract「元信息随 deploy 更新」调它，**不另写一份**）· platform 详情页 |
 | **删除事件钩子** `lifecycle_hooks.register_app_deleted_hook(fn)` → 删除动作末尾同步 `on_app_deleted(app_id, actor, tenant_id)`（AC-43） | 内部 Python 回调（**F055 在组合根注册**） | **F055**（收到即取消在途审批单 → 已取消 + 通知审批人，F055 AC-35）。**钩子失败不回滚删除**（写 `app.delete_hook_failed` 审计）→ **F055 侧必须自带防御**：审批单读侧对"应用已删除"独立判定并按已取消呈现 |
 | `DEFAULT_TIERS` 三档出厂规格常量（轻量 **1C/2G** · 标准 **2C/4G** · 性能 **4C/8G**；数值与第三档名以 F055 spec AC-44 为准，2026-08-17 由 F055 T015 回写，坑 27） | 内部 Python 常量 | **F055** 的 `ResourceTier` seed **从本常量读取落库**（保证"表未落"与"表刚 seed"两个时刻规格恒等，D11 对账口径）；超管调整后以表为准 |
@@ -642,7 +642,7 @@ runtime-manager reconcile 循环（15s）
 - **单元**（`test/app_runtime/`，`asyncio_mode=auto`）：状态机——五个动作 × 前态矩阵（含**非法跃迁**：已上线 → 已删除必须被拒，AC-03）与并发前态断言（模拟两次 UPDATE、第二次影响 0 行 → 16102）；`slug` 全局唯一与生成规则（AC-08）；**头归一化剥离**——`X_BiSheng_User_Id` / `x-bisheng-user-id` / `X-BISHENG-USER-ID` / 混合下划线连字符全部被丢弃（坑 10）；中文姓名的 percent-encoding 往返（坑 9）；入口五步判定顺序与信息泄漏口径（草稿 / 待上线 / 已删除 / 不存在**返回同一页**）；容量准入双闸的边界（闸①过闸②不过、反之）；Dockerfile 模板渲染的确定性；`SUPPORTED_RUNTIMES` 外取值被拒且错误里列出支持值；**前缀剥离与重写**（`/apps/foo`、`/apps/foo/`、`/apps/foo/x?y=1#…` 三种形态 → 上游 `/`、`/`、`/x?y=1`，且 `X-Forwarded-Prefix` 恒为 `/apps/foo`、客户端伪造的 `X-Forwarded-*` 被丢弃，D5.2）；**取版规则**（`resume` / `publish` 取 `pending_version_id ?? current_version_id`，生效后 `pending` 置空、`terminal_state='online'`，AC-04）。
 - **集成**（pytest + httpx，连 test 中间件 MySQL / Redis / OpenFGA）：`app` 资源类型全链路——非管理员用户建应用 → `my-permissions` 有动作 → 授予某用户 `use` → 该用户入口判定 allow、未授予者 deny → 权限引擎不可用时 **deny（不是放行）**；UNION 第三支的**租户隔离**（子租户账号列不出别租户应用，坑 21）+ **第三类型端到端可见**（`flow_type=35` 走完 `SUPPORTED_APP_TYPES` → UNION → `_application_action_map` 分桶 → `add_extra_field`，断言"列表非空且带 `write` / `tags`"——只加 UNION 会在这里挂，坑 28）；**按 `version_id` 起手的读接口跨租户被拒**（坑 31）；**删除钩子**（注册一个假 hook，`DELETE` 后断言被调用；hook 抛异常时删除仍成功且落 `app.delete_hook_failed`，AC-43）；状态动作的审计落行 + UI 白名单可见；升级脚本的 dry-run / apply / verify 三态（在一个干净 store 上模拟 M1 → M2）。
 - **编排层**（需要 docker 的环境，CI 上打标跳过 / 114 上真跑）：build → deploy → probe → logs → stop → destroy 全链路；`docker inspect` 断言 `NanoCpus` / `Memory` 与档位一致（AC-63）、`ReadonlyRootfs=true`、`no-new-privileges`、**无 published port**（AC-33）；`docker kill` 后 ≤5 分钟自愈（AC-20 第一类）；把健康端点改成 500 后 ≤5 分钟重建（第二类）；`systemctl restart bisheng-runtime-manager` 期间应用**持续可访问**（AC-22）。
-- **E2E**（`/e2e-test`，AC 全覆盖 + 页面手动清单）：构建页三类型筛选 / 状态筛选五值 / ⚙️ 菜单只两项 / 已上线删除置灰；详情页四 tab；停运 → 入口呈已停用 → 重新启用恢复。
+- **E2E**（`/e2e-test`，AC 全覆盖 + 页面手动清单）：构建页三类型筛选 / 状态筛选五值 / ⚙️ 菜单只两项 / 已上线删除置灰；详情页四 tab；下线 → 入口呈已下线 → 重新上线恢复。
 
 **114 手动验证**（对应 `mvp-114-path.md` §1 **步 4–8**；前置：`bash /opt/bisheng-ops/deploy.sh` 部署 + **先发代码再往 `config.yaml` 加 `app_runtime: enabled: true`** + 跑升级脚本 `--apply` + 全量重启）：
 
@@ -651,7 +651,7 @@ runtime-manager reconcile 循环（15s）
 2. **步 5（可见范围）**：owner 在构建 → 应用 → 卡片 ⚙️「管理权限」授予全员（根部门或全员用户组）→ 弹窗能搜到主体（验证坑 2）。
 3. **步 6（普通用户使用）**：**用非管理员账号**（admin 短路 ReBAC，坑 26）浏览器访问 `https://114:4101/apps/{slug}` → 免二次登录进入 → 页面顶部显示"当前访问者：{姓名} · {部门}"（**账号姓名必须是中文**，验证坑 9）→ 提交问卷 → 再次进入能看到刚提交的数据（验证 SQLite 卷持久）。
 4. **步 7（未登录 / 无权限）**：无痕窗口访问 `https://114:4101/apps/{slug}?a=1#b` → 跳登录页 → 登录后**回到带 `?a=1#b` 的原地址**（验证坑 11）；用未授权账号访问 → 「无权限」页含应用名与 owner、有「返回广场」；访问 `/apps/__nonexistent__` → 「应用不存在或未上线」页（**不是 502 / 404**）。
-5. **步 8（owner 运维）**：详情页运行日志 tab 能看到应用 stdout（`curl` 触发几条）、关键字筛选生效；点上下线开关 → 二次确认 → 停运后入口呈「已停用」页、`docker ps` 无该容器、卷仍在；重新启用 → 恢复访问；伪造头验证：`curl -H "X_BiSheng_User_Id: 1" -H "x-bisheng-user-name: root" .../apps/{slug}/whoami` → 应用读到的仍是**真实访问者**（AC-32）。
+5. **步 8（owner 运维）**：详情页运行日志 tab 能看到应用 stdout（`curl` 触发几条）、关键字筛选生效；点上下线开关 → 二次确认 → 下线后入口呈「已下线」页、`docker ps` 无该容器、卷仍在；重新上线 → 恢复访问；伪造头验证：`curl -H "X_BiSheng_User_Id: 1" -H "x-bisheng-user-name: root" .../apps/{slug}/whoami` → 应用读到的仍是**真实访问者**（AC-32）。
 6. **稳定性抽测**：`docker kill` 该容器 → 计时 ≤5 分钟自动恢复且平台其它功能无感（AC-20 / AC-46）；`systemctl restart bisheng-runtime-manager` 期间持续 `curl` 应用入口 → **零中断**（AC-22）。
 
 **关键日志 / 指标**：
@@ -667,7 +667,7 @@ runtime-manager reconcile 循环（15s）
 - **紧随 MVP-核心（按此优先级补齐，release 必做）**：
   1. **D12 出站白名单双层 + UDP 封禁**（spec 决议-3 明确不得裁掉；**任何非 114 环境部署前是硬前置**）；
   2. **D2-B docker-socket-proxy 端点白名单**；
-  3. **WS 反代 + 不变量①**（握手定死有效期），随后**不变量②**（吊销 / 停运事件主动断连，app-proxy 维护 connection → (user, app) 索引——**这才是自研 app-proxy 的核心理由**）与**③**（前端把重握手做成常态）；
+  3. **WS 反代 + 不变量①**（握手定死有效期），随后**不变量②**（吊销 / 下线事件主动断连，app-proxy 维护 connection → (user, app) 索引——**这才是自研 app-proxy 的核心理由**）与**③**（前端把重握手做成常态）；
   4. **两个过渡态页**（「发布中」/「应用恢复中」+ 自动重试，AC-36 / AC-48）；
   5. **附件存储句柄**（AC-45）与**数据面 WB-06**（AC-56，含 F052 MCP 数据工具复用）——**落点已定、只是排后**：manager 数据面 RPC + backend `AppDataService`（owner 收窄 + 审计），见 **D10**；
   6. **访问记录留痕**（AC-38，D14-B）与**审批期预览入口**（AC-37，配合 F055）；

@@ -47,7 +47,7 @@
 - 可见范围过滤复用：ReBAC 两段式过滤（PermissionService.list_accessible_ids 预过滤 + ApplicationPermissionService.get_app_permission_map_async 细过滤 + F027 cursor 补扫 _scan_visible_flows_cursor）对新类型是通用机制，新增 FGA object type 后即可套用（authorization_model.py _standard_resource_type 模式）
 - 打标交互组件复用：platform LabelSelect/LabelShow（controllers/API/label.ts createLinkApi/deleteLinkApi）可直接作为 GOV-09 行操作「标签设置」的弹层
 - 管理表格模式复用：SystemPage/components/Users.tsx 与 LogPage/useAppLog/index.tsx 的 useTable+bs-ui Table+SearchInput+AutoPagination 组合即 GOV-09 表格骨架；审计入口可链 LogPage/audit（audit_log 模型已存在）
-- 上线/下线状态与权限位复用：FlowStatus ONLINE/OFFLINE + publish_app/unpublish_app→can_manage 映射（services/workflow.py:59）可作 RT-07 停运/启用的权限基础
+- 上线/下线状态与权限位复用：FlowStatus ONLINE/OFFLINE + publish_app/unpublish_app→can_manage 映射（services/workflow.py:59）可作 RT-07 下线/启用的权限基础
 - 版本快照存储 pattern 可参考：flow_version 的 data-JSON 快照 + original_version_id 溯源字段是「版本=内容快照」的既有先例（但仅作蓝本，语义需重做，见 gaps）
 - 菜单可见性机制复用：web_menu key + MainLayout isMenu/showAdminNav + routes permission 字段，新增『应用工场』只是加一个 key（GOV-07 一份控制的现成载体）
 
@@ -59,7 +59,7 @@
 - 应用实例数配额用量条（GOV-03）：v2.5 配额收窄后只剩 storage_gb，应用实例数配额的模型、校验与 UI 全新
 - 打标权限收口改造：现 check_tag_link_permission 允许 owner/写权限者自助打标且 resource_type 白名单只有 ASSISTANT/WORK_FLOW；PRD 要求工场应用打标仅租户管理员且入口唯一在 GOV-09——需要按资源类型分派不同打标权限规则（工作流/助手保持现状 vs 工场应用 admin-only）
 - 广场卡片展示 owner：AgentCard 现不渲染 owner（后端 /workflow/list 的 add_extra_field 已附 user_name，/chat/online 返回是否带 user_name 未逐行核实）——小改造但涉及与既有工作流/助手卡片的一致性决策
-- 发布/停运接审批：现 update_flow_status 直改 status 不经 F025 审批中心；PRD 的发布审批（RT-03/GOV-02）与状态机（§3.2）需在新类型上新建（且不应改动存量工作流/助手的直接上线行为）
+- 发布/下线接审批：现 update_flow_status 直改 status 不经 F025 审批中心；PRD 的发布审批（RT-03/GOV-02）与状态机（§3.2）需在新类型上新建（且不应改动存量工作流/助手的直接上线行为）
 
 ## risks
 - C4 风险：新 FGA object type 必须改 core/openfga/authorization_model.py 并对存量环境做授权模型迁移——记忆中 F048 迁移在存量环境被 permissions_explicit 缺省值拦截的教训直接适用，迁移设计需前置演练

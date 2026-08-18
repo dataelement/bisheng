@@ -20,12 +20,12 @@
 
 ## 1. 目标与非目标
 
-- **目标**：把 F054 立起来的「托管应用」接到**用户看得见的两个面**上——① client 应用广场把已上线 / 已停运的托管应用与工作流 / 助手**并列**成同构卡片、按可见范围过滤、点击整页跳 `/apps/{slug}`；② 用平台既有的 `PermissionDialog` 在**两个入口**（构建页卡片 ⚙️「管理权限」、应用详情页 · 发布「可见范围区」）设可见范围，并把「可见范围变更」这一类事件写进审计。一句话：**让同事能找到它、让 owner 能放行它、让管理员能查到谁放行了它**。
+- **目标**：把 F054 立起来的「托管应用」接到**用户看得见的两个面**上——① client 应用广场把已上线 / 已下线的托管应用与工作流 / 助手**并列**成同构卡片、按可见范围过滤、点击整页跳 `/apps/{slug}`；② 用平台既有的 `PermissionDialog` 在**两个入口**（构建页卡片 ⚙️「管理权限」、应用详情页 · 发布「可见范围区」）设可见范围，并把「可见范围变更」这一类事件写进审计。一句话：**让同事能找到它、让 owner 能放行它、让管理员能查到谁放行了它**。
 
 - **非目标**（防后人误扩范围；按 `mvp-114-path.md` §6 MVP-核心裁剪，**顺延项属本 Feature 范围、不得被裁掉**，落点方向逐项给出）：
   - **审计查询面扩展与导出**（AC-28 / AC-29 / AC-32 新增「对象应用」筛选 + 导出按钮）——顺延。落点方向：后端 `GET /api/v1/audit`（`api/v1/audit.py:13-27`）与 `AuditLogDao.get_audit_logs`（`database/models/audit_log.py:288-374`）今天**完全没有 target_type / target_id 维度**，要新增两个查询参数 + 一个按名称检索应用的选择器端点；导出照会话数据面既有形态（`platform/controllers/API/log.ts:287-314 exportCsvApi` → `/api/v1/audit/session/export*`）另加一个系统操作面的导出端点。**这是从零新增，不是改配置**。
   - **平台超管租户筛选与租户列**（AC-30 / AC-31）——顺延。落点方向：审计租户边界今天在 `AuditLogDao._visible_for_tenant` + `AuditLogService._get_audit_tenant_scope`，超管跨租户是加一个 `tenant_id` 查询参数 + 列表增列，不动写入侧。
-  - **§3.0.3 事件触达全表接线**（AC-39–AC-45，含本 Feature 唯一自有的「租户管理员停运 / 重新启用 → owner」AC-43）——顺延。落点方向：挂在 F054 `AppStateService.stop/resume` 的后置钩子上，复用平台既有站内消息能力（与审批中心同一通道），**发送失败只记日志不回滚**。
+  - **§3.0.3 事件触达全表接线**（AC-39–AC-45，含本 Feature 唯一自有的「租户管理员下线 / 重新上线 → owner」AC-43）——顺延。落点方向：挂在 F054 `AppStateService.stop/resume` 的后置钩子上，复用平台既有站内消息能力（与审批中心同一通道），**发送失败只记日志不回滚**。
   - **GOV-07 界面通道验收**（AC-35–AC-38）——顺延。它是**零改动的回归验收**（`create_app` 权限点与菜单模型平台既有），本轮不产出代码。
   - **标签接入验收**（AC-08 的标签体系部分）与 **⚙️ 菜单裁剪回归验证**（AC-16）——顺延，实现分别归 F054 T060 / T064 / T065。
   - **`app` 资源类型注册本身**（后端 catalog / FGA 模型 / 前端三处 `ResourceType` union / 存量环境生效脚本）——**F054 已落地**，本 Feature 只消费、不重写。
@@ -47,7 +47,7 @@
 | **K5** | **广场卡片跳的地址不在 client 的路由空间里**：`/apps/{slug}` 由 nginx `location /apps/` 直达 app-proxy（F054 交付），**不是** client SPA 路由；而 client 的 vite `base` = `/workspace`（`client/vite.config.ts:127`），react-router 的 `navigate()` 会自动前置 basename。**任何用 `navigate()` 或拼 `__APP_ENV__.BASE_URL` 的写法都会得到 `/workspace/apps/{slug}` → 404** | `mvp-114-path.md` §3；F054 design D5 |
 | **K6** | **`share` 动作对 `app` 类型不存在**：`permission/domain/services/catalog_policy.py:71` 的 `"share": frozenset({"knowledge_space","knowledge_file","workflow","assistant"})` **不含 `app`**；而请求 `share` 的地方有 **5 处**：广场列表无条件请求 `("visible"/"use", "edit", "share")` 三个动作（`api/services/workflow.py:425`），以及 `aenrich_apps_can_share:133` 的 `("share",)` 及其 **4 个调用方**（`workstation/apps.py:53` / `:150` / `chat.py:83` / `workflow.py:962`）。这不是"可以顺手加个 share"——托管应用没有 share-token 免登录通道（决议-6），**加 share 就是造一个不存在的能力** | `catalog_policy.py:60-75`；spec 决议-6 |
 | **K7** | **广场的可见性判定必须与入口判定同源**：F054 入口用 `check_business_action("app", app_id, actor, "use")`（F054 design `:239` 明写「不用 `runtime.check_visible`——后者对『授了 editor 但没 use』的自定义模型更宽」），而广场今天默认传 `action='visible'`（`client/src/api/apps.ts:429` 前端默认值 + `explore.tsx:62` 不传该参数 → 落到默认 `'visible'`；未分类 tab 更是 `workflow.py:1010` 硬编码 `"visible"`）。`visible` 与 `can_use` 在 FGA 模型里是**两条不同关系**（`permission_action_service.py:272-322 batch_check_visible` vs `:223-270 batch_check_actions`；`_normalize_action:366-370` 明确把 `"visible"` 排除在 `REGISTERED_ACTION_CODES` 外）。不统一 = AC-06 明令禁止的「广场看得见、点进去无权限」稳态 | spec AC-06；F054 design D8 动作集合 |
-| **K8** | **应用态五值与列表 `status` 两值是两套语义**：`getAppsApi` 只放行 `status ∈ {1,2}`（`platform/controllers/API/flow.ts:204`）、后端 `flow.py:582 sub_query.c.status == status`；F054 第三支把「已上线」投 `2`、其余四态投 `1`，五值另走**独立的应用态条件**（F054 给构建页开了 `app_state` 查询参数；广场不复用它，见 D9）。而广场硬传 `FlowStatus.ONLINE.value`（`api/v1/chat.py:63`）→ **已停运应用天然进不了广场**，与 AC-03 / 决议-5 正面冲突。这是本 Feature 必须解的口径问题（D9） | `api/v1/chat.py:63`；F054 design D8 |
+| **K8** | **应用态五值与列表 `status` 两值是两套语义**：`getAppsApi` 只放行 `status ∈ {1,2}`（`platform/controllers/API/flow.ts:204`）、后端 `flow.py:582 sub_query.c.status == status`；F054 第三支把「已上线」投 `2`、其余四态投 `1`，五值另走**独立的应用态条件**（F054 给构建页开了 `app_state` 查询参数；广场不复用它，见 D9）。而广场硬传 `FlowStatus.ONLINE.value`（`api/v1/chat.py:63`）→ **已下线应用天然进不了广场**，与 AC-03 / 决议-5 正面冲突。这是本 Feature 必须解的口径问题（D9） | `api/v1/chat.py:63`；F054 design D8 |
 | **K9** | **审计写入自带事务与租户旁路，且非全局管理员可能永远查不到**：`AuditLogDao.ainsert_v2`（`database/models/audit_log.py:428`）自带 `bypass_tenant_filter()` + 独立 async session + commit（`:494-500`），调用方**不要再包事务**；同时 `ainsert_v2` **从不填 `group_ids`**，而 `api/services/audit_log.py:78-101 get_audit_log` 对非 `is_admin()` 且无「日志菜单」权限的用户会把 `groups` 填成其管理的用户组，DAO 随即施加 `json_array_contains(AuditLog.group_ids, ...)`（`audit_log.py:337-342`）→ **这类用户查不到任何 v2 结构化事件**（`app.*` 与 `open_api.*` 同病）。114 验收账号必须是 `is_admin()` 或持日志菜单权限者，否则会误判成"事件没写" | `database/models/audit_log.py`；`api/services/audit_log.py:78-101` |
 | **K10** | **MVP-核心边界与 114 形态**：本轮只做「广场接入 + 两入口授权 + 可见范围变更审计三类事件可查」（`mvp-114-path.md` §6 F056 行）。114 上 `/apps/` location 在 `/etc/nginx/conf.d/bisheng-lilu.conf`（F054 加，外网另有 `bisheng-external-13000.conf` 静态快照需手动重建）；广场验证必须用**非管理员账号**（K2） | `mvp-114-path.md` §3 / §6 |
 | **K11** | **错误码段 163**（`app_factory` · F056 段，`release-contract.md:100`）。**本轮 MVP-核心不落任何新错误码**——广场列表复用既有响应、授权走 F048 既有错误码（`permission_error_response`）、审计写失败被吞。顺延的审计查询面若需要（如「对象应用不存在」）再从 `16301` 起，落码时须在同一次改动内回写 `docs/constitution.md` C5 登记表 + `packages/locales/src/api_errors/{zh-Hans,en,ja}.json` 三语（生成物勿手改，CI `pnpm check-i18n` 校验） | C5；release-contract 错误码表 |
@@ -86,7 +86,7 @@
   - C. **`window.location.assign('/apps/{slug}')`**（选定）
   - D. 后端返回完整 `entry_url` 由前端直接跳 — 优点：不用前端拼路径；缺点：广场列表是 UNION 出来的通用载荷，为一种类型塞一个完整 URL 字段会让另两类的载荷形状变得不对称；且 F054 详情页已有 `entry_url`（`GET /api/v1/apps/{id}`），广场再要一份是重复真相
 - **选定**：**C**，跳转前不写 `sessionStorage` 的 `app-flow-origin` / `app-last-origin`（`explore.tsx:18-19,136-137` 是对话页返回用的，托管应用离开 SPA 后不回来）。`slug` 由 **F056 补进广场列表载荷**——`_build_apps_subquery` 的列集是固定九列 `(id, name, description, flow_type, logo, user_id, status, create_time, update_time)`，**没有 `slug`**，所以要么加进 UNION 列集（三支都得投一列，另两支投 NULL），要么在 `add_extra_field`（`workflow.py:87-127`）里按 `flow_type==35` 的 id 批量回查 `app.slug` 补上。**选后者**：UNION 列集是 4 个调用方共享的，为广场一个消费者加列会波及构建页与商业版增量同步（`scripts/sync_increment_table.py:53`）；而按 id 批量回查一次 `app` 表与既有做法同构（`add_extra_field` 本来就在批量拉 `UserDao.get_user_by_ids:103` 与 `FlowVersionDao.get_list_by_flow_ids:107`）。
-  - **⚠️ 补入点不是 `add_extra_field`，是 `_scan_visible_apps_page`（`workflow.py:401-478`）**：广场两个入口只有后者是共同下游。`get_online_flows_page` 末尾确实调 `add_extra_field`（`:548`），但**未分类 tab 的 `get_uncategorized_flows` 从不调它**——它只做 `one["logo"] = get_logo_share_link(...)` 后直接 `_apply_page_can_share` 返回（`:1012-1016`）。把补入写进 `add_extra_field`，未分类 tab 的托管应用卡片就**没有 `slug`（点击落 `/apps/undefined`）、也没有 `app_state`（AC-03「已停用」角标不出现），且不报错**——而 §7 恰恰把未分类 tab 指定为唯一正确的验收面（坑 8）。故：在 `_scan_visible_apps_page` 返回整页之前，对 `flow_type==35` 的行**批量一次**回查补字段（`WorkFlowService._attach_hosted_app_entry_fields` → `AppDao.alist_slug_state_by_ids`）；`get_uncategorized_flows` 与 `get_online_flows_page` 都经过它，两个入口一次到位。**落地订正（2026-08-18）**：实际只需补 `slug` —— F054 第三支已把 `App.state` 投成 UNION 第 10 列、并由 `FlowDao._app_row_to_dict` 只对托管行落 `app_state` 键，所以 `app_state` 是白拿的；回查里仍带上 `state`，但只在该键缺失时兜底填入（投影若改，这里不至于静默变空）。
+  - **⚠️ 补入点不是 `add_extra_field`，是 `_scan_visible_apps_page`（`workflow.py:401-478`）**：广场两个入口只有后者是共同下游。`get_online_flows_page` 末尾确实调 `add_extra_field`（`:548`），但**未分类 tab 的 `get_uncategorized_flows` 从不调它**——它只做 `one["logo"] = get_logo_share_link(...)` 后直接 `_apply_page_can_share` 返回（`:1012-1016`）。把补入写进 `add_extra_field`，未分类 tab 的托管应用卡片就**没有 `slug`（点击落 `/apps/undefined`）、也没有 `app_state`（AC-03「已下线」角标不出现），且不报错**——而 §7 恰恰把未分类 tab 指定为唯一正确的验收面（坑 8）。故：在 `_scan_visible_apps_page` 返回整页之前，对 `flow_type==35` 的行**批量一次**回查补字段（`WorkFlowService._attach_hosted_app_entry_fields` → `AppDao.alist_slug_state_by_ids`）；`get_uncategorized_flows` 与 `get_online_flows_page` 都经过它，两个入口一次到位。**落地订正（2026-08-18）**：实际只需补 `slug` —— F054 第三支已把 `App.state` 投成 UNION 第 10 列、并由 `FlowDao._app_row_to_dict` 只对托管行落 `app_state` 键，所以 `app_state` 是白拿的；回查里仍带上 `state`，但只在该键缺失时兜底填入（投影若改，这里不至于静默变空）。
 - **原因**：C 是唯一同时满足「同窗口（决议-6）+ 跨出 client base + 不改另两类载荷形状」的写法。**现成反例必须点名**：`client/src/pages/apps/appUtils.ts:67-71 getAppShareUrl` 用的是 `window.location.origin + __APP_ENV__.BASE_URL + '/share/...'`——照抄它就会把 `/workspace` 加回去，**托管应用恰恰不能加 `BASE_URL`**。
 - **何时该重新考虑**：产品要求广场卡片支持"新标签打开"（那时是 A/B 之外的第三态：按住 Ctrl 的原生行为——那需要卡片改成真 `<a href>`，是一次组件改造，不是一行 navigate）。
 
@@ -191,11 +191,11 @@
 - **原因**：把"有没有这类应用"交给数据、把"有没有这类文案"交给开关，是唯一不制造第二处真相的分法。给后端再加一道 `if not enabled: exclude 35` 的闸看似更保险，实际是同一事实的第二处判断——开关与数据一旦不一致（比如关开关但库里有历史应用），两处会给出不同答案，而**正确答案应该是"数据说了算"**（历史应用的卡片消失比它带着一个点不开的入口更糟？不——F054 的 `/apps/{slug}` 在未部署时会渲染引导页，卡片留着反而能解释"这台机器没装"）。
 - **何时该重新考虑**：产品要求"关开关即对用户完全隐身（含历史应用）"——那时后端加闸，且要同步 F054 的入口页行为，两处一起改。
 
-### D9：已停运应用进广场 = 广场请求对第三类型**豁免 `status` 条件**并按应用态收窄（服务端写死 `{online, stopped}`），不改 F054 的 status 投影
+### D9：已下线应用进广场 = 广场请求对第三类型**豁免 `status` 条件**并按应用态收窄（服务端写死 `{online, stopped}`），不改 F054 的 status 投影
 
-- **背景（K8）**：`api/v1/chat.py:63` 硬传 `FlowStatus.ONLINE.value`（2），F054 第三支把「已上线」投 2、其余四态投 1 → **已停运托管应用不会出现在广场**，与 AC-03 / 决议-5 冲突（决议-5 要求"保留卡片 + 标『已停用』"，因为隐藏会让用户误判为被移出可见范围）。
+- **背景（K8）**：`api/v1/chat.py:63` 硬传 `FlowStatus.ONLINE.value`（2），F054 第三支把「已上线」投 2、其余四态投 1 → **已下线托管应用不会出现在广场**，与 AC-03 / 决议-5 冲突（决议-5 要求"保留卡片 + 标『已下线』"，因为隐藏会让用户误判为被移出可见范围）。
 - **备选**：
-  - A. **改 F054 第三支投影**：「已上线 ∪ 已停运」都投 2 — 优点：广场一行不改；缺点：**打坏构建页**——构建页按 `status ∈ {1,2}` 筛"已上线 / 已下线"（`platform/controllers/API/flow.ts:204`），已停运投 2 后就再也筛不出来了；而且这是修改 F054 已定稿的契约
+  - A. **改 F054 第三支投影**：「已上线 ∪ 已下线」都投 2 — 优点：广场一行不改；缺点：**打坏构建页**——构建页按 `status ∈ {1,2}` 筛"已上线 / 已下线"（`platform/controllers/API/flow.ts:204`），已下线投 2 后就再也筛不出来了；而且这是修改 F054 已定稿的契约
   - B. **广场按类型分支状态条件**（外层 SQL 写成 `(flow_type = 35) OR (status = :status)` 之类）（选定）
   - C. **两条查询分别取再合并** — 同 D1-A 的分页撕裂问题
   - D. 广场对托管应用干脆不过滤状态，让草稿 / 待上线也进来再由前端滤 — **违反 AC-03**，且草稿进广场是产品明令禁区
@@ -206,7 +206,7 @@
 - **⚠️ 参数串联的落点归属（审查发现，必须写死）**：广场链路上 `app_state` **没有现成的落点**——`api/v1/chat.py:17-57`（无该 Query）→ `get_online_flows_page:544`（签名无该参数）→ `_scan_visible_apps_page:401`（签名无该参数）→ `aget_all_apps:508`；未分类链路 `workstation/api/endpoints/apps.py:86` → `get_uncategorized_flows:977` 同理。而 F054 T060 交付的 `app_state` 是**构建页的用户可传查询参数**（`api/services/workflow.py` 的构建页函数 + platform `controllers/API/flow.ts:177 getAppsApi`），与广场不是同一条链。结论：
   - **广场侧的串联归 F056**：`_scan_visible_apps_page` 增内部参数（默认 `None` = 既有行为）并透传到 `aget_all_apps`；两个入口函数（`get_online_flows_page` / `get_uncategorized_flows`）在调用处**写死** `status_exempt_flow_types={35}` + `app_state_in={"online","stopped"}`，**不从 HTTP 层接收**（广场没有让用户筛应用态的产品需求，开成 query 参数等于把 AC-03 的 SQL 闸交给调用方）。
   - **DAO 两个参数归谁写**：`flow.py` 的 `aget_all_apps` / `_build_apps_subquery` 正被 F054 T059 并发编辑。**F056 落地前先与 F054 owner 对一次**：若 T059/T060 已顺手加了等价参数则复用其命名、本文同步改；否则由 F056 加（只增可选参数、缺省不改行为），并在 tasks 里标注"同文件并发，最后合并者负责 rebase 而非覆盖"。
-- **原因**：B 是唯一"单条 SQL、单套分页、既有语义零改"的解；A 打坏上游、C 撕裂分页、D 违反 AC。把状态收窄写死在服务端而不是接成 HTTP 参数，是因为 AC-03 的两个方向（已停运必须出现、草稿必须不出现）都是**产品硬规则**，不是用户可选项。
+- **原因**：B 是唯一"单条 SQL、单套分页、既有语义零改"的解；A 打坏上游、C 撕裂分页、D 违反 AC。把状态收窄写死在服务端而不是接成 HTTP 参数，是因为 AC-03 的两个方向（已下线必须出现、草稿必须不出现）都是**产品硬规则**，不是用户可选项。
 - **何时该重新考虑**：产品要在广场提供"按应用态筛选"的控件（那时 `app_state_in` 才升级为 HTTP query 参数，且要同步想清楚它与 `status` 两值的叠加语义）；或 F054 把 `App.state` 的取值集合改了（`{online, stopped}` 这个白名单要跟着改，且**没有编译期报错会提醒你**）。
 
 ### D10：广场搜索按名称，不为托管应用单独打开 `search_description`
@@ -256,7 +256,7 @@ client 广场页 pages/apps/explore.tsx:60-62
 ```
 
 **② 广场列表（未分类 tab）**：`getUncategorized`（`client/src/api/apps.ts:403`）→ `GET /api/v1/workstation/app/uncategorized`（`workstation/api/endpoints/apps.py:86-93`）→ `WorkFlowService.get_uncategorized_flows`（`workflow.py:977-1016`，**`action="visible"` 硬编码于 `:1010`**）→ 汇入同一条 `_scan_visible_apps_page`（`:1003`）。**两个入口都要改，漏一个就是"标签 tab 里能看到、未分类里看不到"**。
-  **两条链的关键不对称**：`get_online_flows_page` 末尾调 `add_extra_field`（`:548`）+ `_apply_page_can_share`；`get_uncategorized_flows` **只做 `one["logo"] = get_logo_share_link(...)` 后直接 `_apply_page_can_share` 返回（`:1012-1016`），从不调 `add_extra_field`**。所以任何"给列表补字段"的改动（`slug` / `app_state`）**必须落在两条链的共同下游 `_scan_visible_apps_page` 里**，落在 `add_extra_field` 就只对标签 tab 生效——而 §7 指定的验收面恰恰是未分类 tab（坑 8），现象是"点击落 `/apps/undefined`、没有已停用角标"且不报错。
+  **两条链的关键不对称**：`get_online_flows_page` 末尾调 `add_extra_field`（`:548`）+ `_apply_page_can_share`；`get_uncategorized_flows` **只做 `one["logo"] = get_logo_share_link(...)` 后直接 `_apply_page_can_share` 返回（`:1012-1016`），从不调 `add_extra_field`**。所以任何"给列表补字段"的改动（`slug` / `app_state`）**必须落在两条链的共同下游 `_scan_visible_apps_page` 里**，落在 `add_extra_field` 就只对标签 tab 生效——而 §7 指定的验收面恰恰是未分类 tab（坑 8），现象是"点击落 `/apps/undefined`、没有已下线角标"且不报错。
 
 **③ 卡片点击**：`AgentCard onClick`（`:76`）→ `explore.tsx handleCardClick:132-146` → **托管应用分支**：`window.location.assign('/apps/' + agent.slug)`（D2）→ 离开 SPA → nginx `location /apps/` → app-proxy（F054）。其余类型走原有 `navigate('/app/...')` 不变。
 
@@ -286,7 +286,7 @@ client 广场页 pages/apps/explore.tsx:60-62
 |---|---|---|---|
 | 广场列表项 `flow_type` | `number`，托管应用 = **35** | F054 `FlowType.HOSTED_APP`；client `@types/app.ts:2-15` 注释与 `components/Avator/index.tsx:30-43` 图标 map 需同步加第三支（**client 侧，与 F054 改的 platform `avatar.tsx` 不是同一文件**） | client 广场卡片 / 图标 |
 | 广场列表项 `slug` | `string`，仅 `flow_type=35` 非空 | **F056 新增**，在 `_scan_visible_apps_page` 出口批量回查 `app.slug` 补入（D2；**不能放 `add_extra_field`——未分类 tab 不经过它**）；跳转地址 = `/apps/{slug}`（**不带 `/workspace`**） | client 广场卡片点击 |
-| 广场列表项 `app_state` | `string`，取值 `online` / `stopped`（本期广场只可能出现这两值） | **F054 交付**（UNION 第三支第 10 列 → `_app_row_to_dict` 只对托管行落键）；F056 只在缺失时兜底。卡片据此渲染「已停用」角标（AC-03 / 决议-5） | client 广场卡片 |
+| 广场列表项 `app_state` | `string`，取值 `online` / `stopped`（本期广场只可能出现这两值） | **F054 交付**（UNION 第三支第 10 列 → `_app_row_to_dict` 只对托管行落键）；F056 只在缺失时兜底。卡片据此渲染「已下线」角标（AC-03 / 决议-5） | client 广场卡片 |
 | 广场列表项 `can_share` | `boolean`，托管应用**恒 `false`** | 由 `_apply_page_can_share`（`workflow.py:485`）产出；`AgentCard.tsx:44-55/127-136` 的分享按钮闸门，置 false 即零改组件隐藏（AC-07） | client 广场卡片 |
 | 广场列表项 `user_name` | `string` | owner 显示名，与工作流 / 助手同取值（`add_extra_field:103 UserDao.get_user_by_ids`）；第三支把 `owner_user_id` 投成 `user_id` 后天然可用（决议-3） | client 广场卡片 |
 | `GET /api/v1/chat/online` 查询参数 | 既有 `page/keyword/tag_id/flow_type/limit/sort_by/search_description/action`，**F056 不新增任何 query 参数** | `action` 参数保留（另两类仍用），托管应用桶在服务端强制走 `use`（D3）；`status` 对 `flow_type=35` 豁免、应用态收窄为 `{online,stopped}` 均在服务端写死（D9） | client 广场 |
@@ -338,7 +338,7 @@ client 广场页 pages/apps/explore.tsx:60-62
 | 18 | **`add_extra_field` 会给每行拉版本列表**（`workflow.py:107 FlowVersionDao.get_list_by_flow_ids`），而托管应用在 `flow_version` 表里**没有行** | `version_list` 恒空——不是 bug，别去"修"它（托管应用的版本在 `app_version` 表，归 F054 / F055 的详情页版本 tab） | §4.1；F054 design 坑 13 已记 |
 | 19 | **`AppAuditAction` 枚举文件（`app_runtime/domain/constants.py:82`）正被另一 agent 并发编辑** | 直接改会撞掉对方的改动，或造出重复成员 | D6：改前协调；若不便共改，F056 可在自己的常量位置定义该 action，但 **`_UI_VISIBLE_V2_ACTIONS` 白名单仍必须加**（否则写了查不到） |
 | 20 | **审计事件的 i18n key 由代码推导、不能自己起名**：`actionToI18nKey`（`systemLog/index.tsx:43-47`）按 `split(/[._]/)` + 驼峰化 → `app.visibility_change` 只能是 `appVisibilityChange` | key 起成 `appVisibility` 或 `app_visibility_change` → 审计页事件类型列显示英文原串（有 defaultValue 兜底不炸），三语文件里那三条永远用不上 | §4.2 契约表 |
-| 21 | **广场两个入口的后处理不对称**：`get_online_flows_page` 调 `add_extra_field`（`workflow.py:548`），**`get_uncategorized_flows` 不调**（`:1012-1016` 只补 `logo` 就返回） | 把 `slug` / `app_state` 补在 `add_extra_field` 里 → 未分类 tab 的托管应用**点击落 `/apps/undefined`、没有「已停用」角标**，且不报错；而未分类 tab 正是 §7 指定的验收面（坑 8），两个坑叠加会让人以为是 F054 的 slug 没生成 | D2 / §4.1 ②：补字段落在两条链的共同下游 `_scan_visible_apps_page`；§7 对两个入口各断言一次 |
+| 21 | **广场两个入口的后处理不对称**：`get_online_flows_page` 调 `add_extra_field`（`workflow.py:548`），**`get_uncategorized_flows` 不调**（`:1012-1016` 只补 `logo` 就返回） | 把 `slug` / `app_state` 补在 `add_extra_field` 里 → 未分类 tab 的托管应用**点击落 `/apps/undefined`、没有「已下线」角标**，且不报错；而未分类 tab 正是 §7 指定的验收面（坑 8），两个坑叠加会让人以为是 F054 的 slug 没生成 | D2 / §4.1 ②：补字段落在两条链的共同下游 `_scan_visible_apps_page`；§7 对两个入口各断言一次 |
 
 ---
 
@@ -391,7 +391,7 @@ client 广场页 pages/apps/explore.tsx:60-62
 - **后端集成测试**（pytest + httpx，连 test 中间件 MySQL / Redis / OpenFGA）：
   - **必须用非管理员用户**跑 `GET /api/v1/chat/online`：授权前 0 条托管应用、授权后 1 条、撤销后 0 条（AC-04 / AC-05 的"下一次请求生效"）。
   - 同一非管理员对同一应用调 F054 入口判定（`check_business_action("app", id, actor, "use")`）→ 与广场结果**同真同假**（AC-06 的机器化断言）。
-  - 已停运应用在广场**仍出现**且 `app_state='stopped'`；草稿 / 待上线 / 已删除**不出现**（AC-03）。
+  - 已下线应用在广场**仍出现**且 `app_state='stopped'`；草稿 / 待上线 / 已删除**不出现**（AC-03）。
   - 授权变更后审计表恰好 1 条 `app.visibility_change`；**重放同一 `idempotency_key` 不新增记录**（坑 12）。
   - **撤销场景的 `removed` 必须含主体身份**（坑 11 的机器化断言）：ADD 一个用户组 → REMOVE 它 → 断言 `metadata.removed[0]` 是 `{type: "group", id: ...}` 而**不是** `{assignee_id: ...}`；再断言"没有 REMOVE/MOVE 的纯 ADD 请求**不触发**名册预读"（用调用计数或 mock 断言，防止把成本加在最常见的路径上）。
   - **回调注册**：起一个最小 app 上下文调 `mutate_grants`，断言注册表里有 `app` 项（防"没注册 = 静默不写、无报错"，D6）。
@@ -410,9 +410,9 @@ client 广场页 pages/apps/explore.tsx:60-62
    - 按名称搜索能搜到（描述搜索不在本轮，D10）；
    - **AC-09 抽验**：owner 侧改一次应用名称 / 描述（CLI deploy 或 F054 的元信息更新），普通账号**刷新广场**即见新值（不需要重登、不需要清缓存）；
    - 点击 → 浏览器地址栏变成 `http://<host>/apps/<slug>`（**没有 `/workspace`**，坑 3）→ 应用页面正常渲染。
-4. owner 停运该应用 → 普通账号刷新广场 → 卡片**仍在**且带「已停用」标识（AC-03 / 决议-5），点击落 F054 的「已停用」页；重新启用后标识消失。
+4. owner 下线该应用 → 普通账号刷新广场 → 卡片**仍在**且带「已下线」标识（AC-03 / 决议-5），点击落 F054 的「已下线」页；重新上线后标识消失。
 5. owner 撤销该普通账号的可见范围 → 普通账号**下一次请求**（刷新广场）即看不到，无需重新登录（AC-05）。
-6. **管理员账号**（`is_admin()` 或持日志菜单权限——否则查不到任何 v2 事件，坑 15）→ platform 系统操作日志 → 模块选「应用工场」→ 事件类型选「可见范围变更」→ 能查到步 1 / 步 5 两条记录，操作人 = 变更人本人、对象 = 应用名；同一筛选下也能查到 F054 / F055 写的上线 / 停运事件（AC-27 的人工抽验）。
+6. **管理员账号**（`is_admin()` 或持日志菜单权限——否则查不到任何 v2 事件，坑 15）→ platform 系统操作日志 → 模块选「应用工场」→ 事件类型选「可见范围变更」→ 能查到步 1 / 步 5 两条记录，操作人 = 变更人本人、对象 = 应用名；同一筛选下也能查到 F054 / F055 写的上线 / 下线事件（AC-27 的人工抽验）。
 
 **关键日志 / 指标**：广场侧无新增指标（复用既有 `flow_fetch_start` 耗时打点，`api/v1/chat.py:58-70`）；审计回调失败只打 warning（不影响授权），日志字段建议 `resource_type / resource_id / operator_id / reason`——**这条 warning 是"审计静默丢失"的唯一信号**，114 验收若查不到事件，先 `grep app.visibility_change` 后端日志再怀疑写入逻辑。
 
@@ -421,7 +421,7 @@ client 广场页 pages/apps/explore.tsx:60-62
 ## 8. 后续改进 / 不打算做的事
 
 - **审计查询面「对象应用」筛选 + 导出 + 超管租户筛选**（AC-28–AC-32）：顺延。做的顺序是「对象应用筛选 → 租户筛选 → 导出」——没有第一件，"按应用追溯"这句产品语言不成立；导出必须复用查询的同一套过滤（决议-8：导出范围 ≠ 查询范围就是旁路）。同时**顺手修坑 15**（`group_ids` 恒 NULL 让部分管理员查不到 v2 事件）。
-- **事件触达接线**（AC-43「租户管理员停运 / 重新启用 → owner」）：顺延。挂 F054 `AppStateService.stop/resume` 后置钩子，owner 本人执行时不发；失败只记日志（AC-45）。
+- **事件触达接线**（AC-43「租户管理员下线 / 重新上线 → owner」）：顺延。挂 F054 `AppStateService.stop/resume` 后置钩子，owner 本人执行时不发；失败只记日志（AC-45）。
 - **模式切换（INHERIT↔CUSTOM）计入可见范围变更审计**：本期不接（托管应用恒 CUSTOM，无触发源）；将来若 F048 给 app 开放继承模式，`mode-drafts/apply`（`grant.py:159-176`）要接同一个回调注册表。
 - **广场"上新推送"**：PRD-1 §3.0.3 明示本版不做，owner 自行转发入口链接。**不要因为"消息通道现成"就顺手加**——它会给全租户用户发广播。
 - **广场按描述搜索**：D10 记为已知偏差；若要做，正确形态是为**全部类型**打开 `search_description`（一次广场级行为变更），不是给 `app` 开小灶。

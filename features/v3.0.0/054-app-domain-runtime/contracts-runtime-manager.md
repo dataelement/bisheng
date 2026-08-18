@@ -14,13 +14,13 @@
 
 | 端点 | 返回 | 消费方 |
 |---|---|---|
-| `POST /v1/admission` | `{admitted, reason, message, stage, required_mb, required_cpu, snapshot{mem_available_mb, committed_mb, total_mb, cpu, committed_cpu, reserve_mb, overcommit_ratio}}` | F055 上线终检 / F054 重新启用 |
+| `POST /v1/admission` | `{admitted, reason, message, stage, required_mb, required_cpu, snapshot{mem_available_mb, committed_mb, total_mb, cpu, committed_cpu, reserve_mb, overcommit_ratio}}` | F055 上线终检 / F054 重新上线 |
 | `POST /v1/intents/build` | `{build_id, status}` | F055 预检 |
 | `GET /v1/builds/{build_id}` | `{build_id, status, stage, message, tail[], image_ref}` | F055 预检轮询 |
 | `POST /v1/intents/deploy` | `{instance_id, phase, generation}` | F054 上线动作 |
-| `POST /v1/intents/stop` / `destroy` | `{phase}` / `{}` | F054 停运 / 删除 |
+| `POST /v1/intents/stop` / `destroy` | `{phase}` / `{}` | F054 下线 / 删除 |
 | `POST /v1/intents/probe` | `{ready, reason}`（入参 `app_id` 或 `{image_ref, env, port, health}` 二选一，都不给 → 400） | F055 预检 / 终检 |
-| `GET /v1/apps/{app_id}/route` | `{upstream, version_id, generation}`；**404 = 无实例 / 已停运 → 直接渲染停用页，不要重试** | **app-proxy** |
+| `GET /v1/apps/{app_id}/route` | `{upstream, version_id, generation}`；**404 = 无实例 / 已下线 → 直接渲染停用页，不要重试** | **app-proxy** |
 | `GET /v1/apps/{app_id}/status` | `{instance_id, phase, health, current_version_id, started_at, restart_count, last_probe_at}`；`phase ∈ pending\|building\|starting\|running\|unhealthy\|stopped\|failed`；**404 = 无实例**（`detail.code=not_found`） | F054 详情页 / `app_instance` 对账 · **F052** MCP 应用状态工具 |
 | `GET /v1/apps/{app_id}/logs?tail=&since=&keyword=` | `{lines: [...]}`（无日志即 `[]`） | 详情页运行日志 tab · **F053** CLI `logs` · **F052** MCP 日志工具 |
 | `GET /v1/runtime/status` | `{backend_available, supported_runtimes[], capacity{...}, preflight[{name, ok, detail}]}` | 超管运行环境状态（AC-23）· F055 预检前置自检 |
@@ -81,12 +81,12 @@ reconciler 每 **15s** 一轮，`RTM_RECONCILE_ENABLED` 关不掉的产品语义
 | 期望 running、执行体**不存在** | 按期望态重建并探活（卷不动） | — |
 | 期望 running、执行体**已退出** | 只 `start`，**不重建** | 进程退出归 docker `unless-stopped` 的指数退避；重建会丢掉退避，还让崩溃循环每 15s 换一个新实例 id 藏起来 |
 | 期望 running、**存活但 unhealthy 连续 2 轮** | stop → rm → run（同名同卷）、`generation+1`、再探活 | **docker 单机 healthcheck 与 restart policy 无联动**（坑 17），这一类故障没人管；这是薄 reconciler 存在的核心理由 |
-| 期望 stopped、执行体在跑 | stop | 停运是显式动作，reconciler 不与运维打架 |
+| 期望 stopped、执行体在跑 | stop | 下线是显式动作，reconciler 不与运维打架 |
 | 带 `bisheng.managed=true` 标签、**无任何期望态声明** | 回收（stop + rm，**不删卷**） | — |
 
 **不误杀边界（backend 不必处理，但排障时要知道）**：只有 manager 自己打了 `bisheng.managed=true` 的容器才可能被回收；同机其它容器（onlyoffice / rabbitmq…）、探活临时实例（`bisheng.managed=probe`）、以及处于 30s 宽限期内的旧版本实例一律不动。
 
-**恢复口径（AC-22 / AC-50）**：容器存活依赖 dockerd 而非 manager；manager 重启只影响 reconcile 时效。启动第一件事是**先从容器 label 恢复期望态、再做孤儿回收**（顺序反了 = 状态文件一丢就清空全站）。状态文件 `{data_root}/state/desired-state.json` 是缓存，**容器 label 才是灾备真相**；label 恢复时"存在但没在跑"判为**已停运**（`unless-stopped` 下 dockerd 会把非显式停运的拉回来）。
+**恢复口径（AC-22 / AC-50）**：容器存活依赖 dockerd 而非 manager；manager 重启只影响 reconcile 时效。启动第一件事是**先从容器 label 恢复期望态、再做孤儿回收**（顺序反了 = 状态文件一丢就清空全站）。状态文件 `{data_root}/state/desired-state.json` 是缓存，**容器 label 才是灾备真相**；label 恢复时"存在但没在跑"判为**已下线**（`unless-stopped` 下 dockerd 会把非显式下线的拉回来）。
 
 **5 分钟自愈预算（AC-20）**：healthcheck 判定 30s + reconcile 感知 2×15s + 重建探活 ≤90s = **≤150s**；`recovery_budget_seconds(config)` 用配置算出该值并被用例断言 ≤300s，所以调大 `RTM_RECONCILE_INTERVAL_SECONDS` / `RTM_PROBE_TIMEOUT_SECONDS` 会先让测试红，而不是先让客户超时。
 

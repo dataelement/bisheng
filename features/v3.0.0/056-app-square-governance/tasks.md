@@ -65,7 +65,7 @@
 | T009 | `database/models/app.py` 的 `AppDao`（**F054 领域模型**，可能并发编辑） | 只**新增一个只读**批量方法 `alist_slug_state_by_ids`（不改既有方法、不加列、无 DDL）；`AppDao` 刻意不暴露通用 UPDATE（`app.py:101-107` docstring），本任务不破这条戒律 |
 | T013 | `permission/application/resource_api.py`（**F048 领域**的 application 门面，类名 `F048ResourcePermissionApi:99`，构造 `__init__:102-111`）+ `api/services/f048_permission_runtime.py:236` 的构造处（多传一个可选依赖） | 只加「按资源类型注册的回调」扩展点，本期只注册 `app` 一个类型；**其余资源类型行为逐字节不变**（知识库 / 工作流的授权今天完全不写审计，不顺手加）；注册表照既有 `ResourceAuthorizationRegistry`（`permission/application/resource_authorization.py:37-53`）形态**实例化 + 组合根注入**，不用模块级全局 dict |
 | T014 | `api/services/f048_permission_runtime.py`（`initialize_f048_api_runtime:214` 内 `F048ResourcePermissionApi(...)` 的构造处 `:236-240`，与既有 `registry.register("app", hosted_app):210` 同一处组合根；该文件已 import `app_runtime`，`:17`） | 只加一次显式注入；**不得依赖模块 import 副作用**；**不动 `main.py`**（见 T014 正文「注册落点」——放这里正好与 `mutate_grants` 同生共死，openfga 关闭时二者一起不存在，不构成静默失败） |
-| T018 | `client/src/pages/apps/components/AgentCard.tsx`（**广场与「应用中心」共用组件**，`explore.tsx` + `index.tsx` 两个页面）+ `client/src/locales/{zh-Hans,en,ja}/translation.json`（三语视为一组） | 只加「已停用」角标（由数据字段 `app_state` 驱动）；分享按钮**不加类型判断**（靠后端 `can_share=false` 数据闸，零改组件达成 AC-07）；新增文案只加 key 不改既有 key |
+| T018 | `client/src/pages/apps/components/AgentCard.tsx`（**广场与「应用中心」共用组件**，`explore.tsx` + `index.tsx` 两个页面）+ `client/src/locales/{zh-Hans,en,ja}/translation.json`（三语视为一组） | 只加「已下线」角标（由数据字段 `app_state` 驱动）；分享按钮**不加类型判断**（靠后端 `can_share=false` 数据闸，零改组件达成 AC-07）；新增文案只加 key 不改既有 key |
 | T011 | `api/services/workflow.py` 的 `filter_apps_by_action:663`（3 个生产调用方）+ `workstation/api/endpoints/apps.py`（工作台推荐位 `:41` / 常用列表 `:119` 两处调用处） | 只在「应用中心 / 最近使用」路径显式排除 `flow_type=35`（design 坑 10）；新参数有默认值 → 不传即行为不变；不改另两类行为、**不动 `FlowDao`** |
 
 **上游勘误（本 Feature 不代改，见 T003）**：① F054 design `:339` 访问记录 TTL 300s → **1800s**（design D7 / spec 决议-2）；② F054 T060 文件清单补 tag 预过滤第 4 处 `workflow.py:517-528`；③ `flow.py` 两个内部参数的命名与 F054 T059 对齐。
@@ -135,7 +135,7 @@
 - [x] **T007**: `[MVP-核心]` `FlowDao.aget_all_apps` / `_build_apps_subquery` 两个内部参数实现
   **文件**: `src/backend/bisheng/database/models/flow.py`（`aget_all_apps:508` + `_build_apps_subquery:660-702`）
   **逻辑**: 加 `status_exempt_flow_types: set[int] | None = None`（外层 status 条件由 `sub_query.c.status == status` 改为「`status == :status` **或** `flow_type ∈ 豁免集合`」）与 `app_state_in: set[str] | None = None`（第三支子查询侧的 `App.state` 收窄）。**两个参数缺省 `None` = 行为逐字节不变**，构建页与另 3 个调用方不传（design D9）。
-  **⚠️ 为什么不改 F054 的 status 投影**：把「已停运」也投成 2 会**打坏构建页**（`platform/controllers/API/flow.ts:204` 按 `status ∈ {1,2}` 筛「已上线 / 已下线」），且是修改 F054 已定稿的契约（design D9 备选 A 已否）。
+  **⚠️ 为什么不改 F054 的 status 投影**：把「已下线」也投成 2 会**打坏构建页**（`platform/controllers/API/flow.ts:204` 按 `status ∈ {1,2}` 筛「已上线 / 已下线」），且是修改 F054 已定稿的契约（design D9 备选 A 已否）。
   **⚠️ 同文件并发**: `flow.py` 正被 F054 T059 编辑——落地前先完成 T003 ③；**合并时 rebase 而非覆盖**；第三支的手工 `build_tenant_filter_clause`（`:695` / `:698` 形态，docstring `:661-671` 明写「`.subquery()` 一包租户自动过滤即失效」）**归 F054 T059**，本任务不得删改（漏写 = 四条路径一起跨租户泄漏，design K1 / 坑 4）。
   **回滚**: 纯可选参数增补，无 DDL；回滚 = 删两参数与其条件分支。
   **测试**: T006 全部通过；另跑既有 `src/backend/test/workflow/test_flow_dao_tenant_isolation.py` 回归（K1 的四方法覆盖）。
@@ -158,7 +158,7 @@
   **文件**: `src/backend/bisheng/api/services/workflow.py`（`_scan_visible_apps_page:401-478` + 两个入口函数 `get_online_flows_page:500` / `get_uncategorized_flows:977` 的调用处）
   **逻辑**: 三件事一次改完（同一函数 + 其两个调用处，避免与 T005 重复修改同一段）：
   1. **口径切换**：`requested_actions:425` 由「一个全局元组」改为「按桶取值」，经 T005 的 `actions_by_type` 传 `{"app": ("use","edit")}`；`kept:450-455` 按行 `flow_type` 取该桶的可见性 action。
-  2. **载荷补字段**：返回整页之前，对 `flow_type==35` 的行批量一次回查 `app.slug` / `app.state` 补成 `slug` / `app_state` 两个载荷字段（**不能放 `add_extra_field:87-127`**——未分类 tab 不经过它，现象是点击落 `/apps/undefined`、没有「已停用」角标且不报错，坑 21）。
+  2. **载荷补字段**：返回整页之前，对 `flow_type==35` 的行批量一次回查 `app.slug` / `app.state` 补成 `slug` / `app_state` 两个载荷字段（**不能放 `add_extra_field:87-127`**——未分类 tab 不经过它，现象是点击落 `/apps/undefined`、没有「已下线」角标且不报错，坑 21）。
   3. **状态收窄**：两个入口函数在调用 `aget_all_apps` 时**写死** `status_exempt_flow_types={35}` + `app_state_in={"online","stopped"}`（`api/v1/chat.py:63` 硬传 `FlowStatus.ONLINE(2)` 保持不变，草稿 / 待上线 / 已删除靠 `app_state_in` 挡在 SQL 层，**不必额外写权限收窄**，AC-03 的「不因用户是 owner 或管理员而例外」由此成立）。
   **⚠️ 不在广场前端做任何数据过滤**：`hasMore = pageData.length >= pageSize`（`client/pages/apps/explore.tsx:74`），后端不返回 total——扫描外层再加过滤会造成「返回不足一页 → 前端判定没有更多 → 后面的应用永远刷不出来」（坑 9）。
   **测试**: T008 全部通过。
@@ -227,7 +227,7 @@
   **逻辑**: 用**非管理员、非 owner 的普通用户**跑 `GET /api/v1/chat/online` 与 `GET /api/v1/workstation/app/uncategorized`：
   - `test_grant_then_revoke_visibility` → 授权前 0 条托管应用、授权后 1 条、撤销后 0 条，且生效发生在**下一次请求**（无需重新登录、不依赖任何缓存到期，AC-05）；
   - `test_square_and_entry_same_source` → 同一普通用户对同一应用调 F054 入口判定 `check_business_action("app", app_id, actor, "use")` → 与广场结果**同真同假**（AC-06 的机器化断言，禁止「广场看得见、点进去无权限」稳态）；
-  - `test_state_filter` → 已停运应用**仍出现**且 `app_state='stopped'`；草稿 / 待上线 / 已删除**不出现**，且不因用户是 owner 或管理员而例外（AC-02 / AC-03）；
+  - `test_state_filter` → 已下线应用**仍出现**且 `app_state='stopped'`；草稿 / 待上线 / 已删除**不出现**，且不因用户是 owner 或管理员而例外（AC-02 / AC-03）；
   - `test_payload_shape` → 托管应用行带 `slug`、`user_name`（owner 显示名，决议-3）、`can_share=False`，另两类载荷形状不变（新字段为 null / 既有值）；
   - `test_tenant_isolation` → A 租户用户查不到 B 租户的托管应用（坑 4 回归；**测试若只用超管跑永远发现不了**）；
   - `test_manage_dialog_denied_for_grantee` → 仅被授予可见范围的用户调 `GET/POST /api/v1/permissions/resources/app/{id}/grants*` → 403（AC-15：被授予可见范围只获得广场可见与入口访问，不获得任何管理入口）。
@@ -244,17 +244,17 @@
   **覆盖 AC**: AC-01
   **依赖**: 无（跨 Feature 前置：F054 T059 的 `FlowType.HOSTED_APP=35`）
 
-- [x] **T018**: `[MVP-核心]` Client · 广场卡片跳转分流 + 「已停用」角标 + 未部署形态文案闸
-  **文件**: `src/frontend/client/src/pages/apps/explore.tsx`（`handleCardClick:132-146` 分流 + 未部署 guard）, `src/frontend/client/src/pages/apps/components/AgentCard.tsx`（`app_state==='stopped'` 时渲染「已停用」标识）
+- [x] **T018**: `[MVP-核心]` Client · 广场卡片跳转分流 + 「已下线」角标 + 未部署形态文案闸
+  **文件**: `src/frontend/client/src/pages/apps/explore.tsx`（`handleCardClick:132-146` 分流 + 未部署 guard）, `src/frontend/client/src/pages/apps/components/AgentCard.tsx`（`app_state==='stopped'` 时渲染「已下线」标识）
   **逻辑**:
   1. **跳转分流**：`flow_type===35` 时走 `window.location.assign('/apps/' + agent.slug)`（整页跳、**当前窗口**、**不带 base**），且**不写** `sessionStorage` 的 `appFlowOriginKey` / `appLastOriginKey`（那是对话页返回用的，托管应用离开 SPA 后不回来）；其余类型走原有 `navigate('/app/...')` 一行不改。
   **⚠️ 三个必错写法**：`navigate('/apps/…')` 会自动前置 basename → `/workspace/apps/{slug}` **404**（client vite `base = /workspace`，`client/vite.config.ts:127`）；拼 `__APP_ENV__.BASE_URL` 同样 404；**同目录的 `appUtils.ts:67-71 getAppShareUrl` 恰恰是反例**（它主动拼 `BASE_URL`），照抄它就会把 `/workspace` 加回去，且因为「抄的是仓内既有写法」而更难被质疑（坑 3）。
-  2. **「已停用」角标**：由数据字段 `app_state` 驱动（AC-03 / 决议-5：保留卡片并标注，隐藏会让用户误判为被移出可见范围）。`AgentCard` 是**广场与「应用中心」共用组件**，改它要同时想两个页面；**分享按钮不加类型判断**（靠后端 `can_share=false` 数据闸，零改组件达成 AC-07，坑 7）。
+  2. **「已下线」角标**：由数据字段 `app_state` 驱动（AC-03 / 决议-5：保留卡片并标注，隐藏会让用户误判为被移出可见范围）。`AgentCard` 是**广场与「应用中心」共用组件**，改它要同时想两个页面；**分享按钮不加类型判断**（靠后端 `can_share=false` 数据闸，零改组件达成 AC-07，坑 7）。
   3. **未部署形态**：消费 F054 T071 的 `useAppRuntimeEnabled`（react-query v4 hook；**不得 `useRecoilValue`**——client 的 recoil 已被 lint 冻结，`client/eslint.config.mjs:47`，坑 17）仅用于隐藏与托管应用相关的**文案 / 空态提示**；**前端不做任何数据过滤**（开关关时后端天然无 `app` 行，双保险的数据侧；前端过滤会撞上「不足一页 → 判定没有更多」的无限滚动缺陷，坑 9）。
   **手动验证**（用**非管理员、非 owner 普通账号**，见 T021 步 3–4）:
   - client 广场「未分类」tab 看到该托管应用卡片 → 点击 → 浏览器地址栏变成 `http://<host>/apps/<slug>`（**没有 `/workspace`**）→ 应用页面正常渲染；
   - 卡片上**没有分享按钮**；
-  - owner 停运后刷新广场 → 卡片**仍在**且带「已停用」标识，点击落 F054 的「已停用」页；重新启用后标识消失；
+  - owner 下线后刷新广场 → 卡片**仍在**且带「已下线」标识，点击落 F054 的「已下线」页；重新上线后标识消失；
   - `app_runtime_enabled=false` 的环境（或临时改 `/api/v1/env` 返回）下广场无任何托管应用卡片与相关文案，**广场其余行为零变化**。
   **覆盖 AC**: AC-01, AC-03, AC-07, AC-10
   **依赖**: T009, T017
@@ -299,11 +299,11 @@
   | 3 | **⚠️ 非管理员、非 owner 普通账号** · client 应用广场 | 进**「未分类」tab**（AC-08 的正确验收面——广场默认 tab 是首个首页标签、不是未分类，`AgentNavigation.tsx:59`；无标签的卡片会显示硬编码的「精选」标签，坑 8） | 看到该应用卡片；图标**不是助手图标**；卡片上**没有分享按钮**；按**名称**搜索能搜到（描述搜索本轮不做，design D10 已知偏差） | AC-01, AC-04, AC-07, AC-08 |
   | 4 | 同上 | 点击卡片 | 地址栏变成 `http://<host>/apps/<slug>`（**没有 `/workspace`**）→ 应用页面正常渲染，当前窗口、不新开标签 | AC-07 |
   | 5 | owner 改一次应用名称 / 描述（CLI deploy 或 F054 元信息更新）→ 普通账号**刷新广场** | 观察卡片 | 即见新值，不需重登、不需清缓存（**零代码**，广场直读表行、无缓存层） | AC-09 |
-  | 6 | owner 停运 → 普通账号刷新广场；再重新启用 | 观察卡片 | 停运后卡片**仍在**且带「已停用」标识，点击落「已停用」页；重新启用后标识消失 | AC-03 |
+  | 6 | owner 下线 → 普通账号刷新广场；再重新上线 | 观察卡片 | 下线后卡片**仍在**且带「已下线」标识，点击落「已下线」页；重新上线后标识消失 | AC-03 |
   | 7 | owner 撤销该普通账号的可见范围 | 普通账号刷新广场 | **下一次请求**即看不到，无需重新登录 | AC-05 |
   | 8 | 普通账号 | 直接调 `GET /api/v1/permissions/resources/app/{id}/grants` | 403；界面上无任何管理入口 | AC-15 |
   | 9 | **管理员账号**（`is_admin()` 或持日志菜单权限——否则查不到任何 v2 事件，坑 15）· platform 系统操作日志 | 模块选「应用工场」→ 事件类型选「可见范围变更」 | 查到步 1 / 步 7 两条记录：操作人 = 变更人本人、对象 = 应用名；三语切换文案不为空、不显示 `app.visibility_change` 原始串 | AC-14, AC-22, AC-27 |
-  | 10 | 同上 | 同一筛选面下查「上线」「停运」事件（F054 / F055 写入） | 能查到（MVP-核心承诺的三类事件可查；机器化护栏见 T015） | AC-19, AC-20, AC-27 |
+  | 10 | 同上 | 同一筛选面下查「上线」「下线」事件（F054 / F055 写入） | 能查到（MVP-核心承诺的三类事件可查；机器化护栏见 T015） | AC-19, AC-20, AC-27 |
   | 11 | **租户管理员**（非超管）· platform 构建 → 应用 → 某他人 owner 的托管应用卡片 ⚙️ | 「管理权限」→ 调整可见范围 | 可查看并调整（既有身份短路，非本 Feature 新增）；审计中变更人 = 该管理员本人 | AC-14 |
 
   > 记录（部署时填）：部署时间 = ；commit = ；逐条结果 = 。
@@ -340,7 +340,7 @@
   **文件**: `src/backend/test/audit/test_audit_scope_and_roles.py`（新）, `src/backend/bisheng/api/services/audit_log.py`
   **覆盖 AC**: AC-33, AC-34
 
-- [ ] **T028**: 各写入方事件的可查性验收（CLI 首发导入 / 发布类含审批单四终态 / 停运 · 重新启用 / 删除后仍可查 / 元信息修改 / 访问记录 / 密钥事件 / 运行期凭据与能力声明 / 生产数据行编辑 / 模型调用逐条；并验证记录与响应不含密钥明文）
+- [ ] **T028**: 各写入方事件的可查性验收（CLI 首发导入 / 发布类含审批单四终态 / 下线 · 重新上线 / 删除后仍可查 / 元信息修改 / 访问记录 / 密钥事件 / 运行期凭据与能力声明 / 生产数据行编辑 / 模型调用逐条；并验证记录与响应不含密钥明文）
   **文件**: `src/backend/test/audit/test_hosted_app_event_queryability.py`（新）
   **覆盖 AC**: AC-18, AC-19, AC-20, AC-21, AC-23, AC-24, AC-25, AC-26
 
@@ -358,7 +358,7 @@
   **文件**: 无代码产出（回归验收，本 Feature 零改动）
   **覆盖 AC**: AC-35, AC-36, AC-37, AC-38
 
-- [ ] **T032**: 事件触达接线——租户管理员（或超管代行）停运 / 重新启用 → owner 站内消息（owner 本人执行时不发；挂 F054 `AppStateService.stop/resume` 后置钩子，复用平台既有消息通知能力；**发送失败只记日志、不回滚业务动作**）
+- [ ] **T032**: 事件触达接线——租户管理员（或超管代行）下线 / 重新上线 → owner 站内消息（owner 本人执行时不发；挂 F054 `AppStateService.stop/resume` 后置钩子，复用平台既有消息通知能力；**发送失败只记日志、不回滚业务动作**）
   **文件**: `src/backend/bisheng/app_runtime/domain/services/`（新增触达钩子）, `src/backend/test/app_runtime/test_state_change_notify.py`（新）
   **覆盖 AC**: AC-43, AC-45
   **跨 Feature**: 挂在 F054 交付的状态动作上；审批类 / 待上线 / 因删除取消的触达归 F055 AC-31 / AC-35 / AC-64，**不得重复接线**（会产生双份消息）
@@ -438,7 +438,7 @@
 | T014 | `metadata` 增 `moved`（MOVE 的主体身份 + 目标 model_key） | §4.2 审计 metadata 形状 | MOVE 的主体身份与 REMOVE 一样事后不可还原；只记 added/removed 会让「某人从 viewer 升为 editor」在审计里彻底消失 |
 | T015 | 拆成两个参数化用例：`AppAuditAction` 硬断言 + `app.release.*` 走 `xfail(strict=True)` | §7 登记断言测试 | F055 尚未补 `log.ts` / 三语 `bs.json`，直接断言会让本 Feature 的新测试为别的 Feature 挂红；`strict=True` 保证 F055 落地当天该用例 XPASS 报错、强制删除待办项 |
 | T011 | 连带修 `test/workstation/test_workstation_apps_rebac.py`（2 处断言）与 `test_f040_workbench_cursor.py`（1 处 mock 签名） | 无（tasks 跨 Feature 副作用表已认账该文件） | `filter_apps_by_action` 增参数是有意的签名变更，桩与断言须同步 |
-| T018 | 第 3 件「未部署形态文案闸」未实现 | D8 / §6.2 F054 T071 行 | 上游 `client/src/hooks/useAppRuntimeEnabled.ts`（F054 T071）尚未落地；且广场今天**没有**任何托管应用专属文案可隐藏（唯一的托管 UI 是按行数据驱动的「已停用」角标），开关关时后端天然无 `app` 行 → AC-10 由数据侧独立成立 |
+| T018 | 第 3 件「未部署形态文案闸」未实现 | D8 / §6.2 F054 T071 行 | 上游 `client/src/hooks/useAppRuntimeEnabled.ts`（F054 T071）尚未落地；且广场今天**没有**任何托管应用专属文案可隐藏（唯一的托管 UI 是按行数据驱动的「已下线」角标），开关关时后端天然无 `app` 行 → AC-10 由数据侧独立成立 |
 | T003 | 勘误 ② 已由 F054 落实（`get_online_flows_page` 的 tag 预过滤第 4 处已含 `ResourceTypeEnum.HOSTED_APP`）；③ 经核查 F054 未加等价参数，故由 T007 新增并沿用本文命名；① TTL 300s→1800s **仍未回写**（F054 访问记录尚未实现，`app_access` 全仓仅一处 TODO 注释） | 无 | 三条勘误逐条落地确认，①待上游 |
 | 测试基建 | `test/app_runtime/conftest.py` 增两个 session patch 目标（`bisheng.api.services.workflow`、`bisheng.app_runtime.domain.services.visibility_audit`） | 无 | 二者各自按名字绑定 `get_async_db_session`；不加则测试打到真 MySQL |
 

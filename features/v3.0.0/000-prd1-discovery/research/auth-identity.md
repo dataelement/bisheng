@@ -46,7 +46,7 @@
 - 个人 API key 全套后端：新表（key hash、bs-pat- 前缀、scope JSON、过期、吊销态、持有人、最近调用）+ DAO + 签发/吊销/scope 调整服务——注意新表须注册 tenant-aware（_TENANT_AWARE_MODEL_MODULES）
 - PAT 鉴权 FastAPI dependency：解析 Authorization: Bearer bs-pat-* → hash 查表 → 校验状态/过期/scope → 查 user.delete(fail-closed) → UserPayload+set_current_tenant_id；含吊销缓存（主动失效，5s 上界）
 - 三个消费面全部新建：MCP Server 面（仓内只有出站 MCP client，无 inbound server）、OpenAI/Anthropic 双协议兼容端点（无 /v1/chat/completions 类路由）、CLI（bisheng login/dev/deploy/logs，凭据存本地用户目录）
-- /apps/{id} 统一入口路由 + 四类兜底页（无权限/未部署引导/已停用/不存在）——client routes 只有 /apps 广场与 /share/app 跳转，无按应用标识的入口页
+- /apps/{id} 统一入口路由 + 四类兜底页（无权限/未部署引导/已下线/不存在）——client routes 只有 /apps 广场与 /share/app 跳转，无按应用标识的入口页
 - 回跳机制补强：LOGIN_PATHNAME 只存 pathname 丢 query/hash；platform 自身 401 不记回跳地址；SSO 自动跳 IdP 部署下的回原应用链路需打通（网关 redirect 配置）
 - 管理后台 API key 管理页（platform 三类 key 同页 GOV-08）+ 工作台『我的 API key』弹窗（AccountSettings 新 DropdownMenuItem）+ 一次性展示/掩码组件
 - 账号禁用→名下 key 自动失效联动 + 事件审计（现有 ainvalidate 只 bump token_version，不涉及任何 key 概念）

@@ -257,7 +257,7 @@
   2. `AppStateService.stage_version(app_id, version_id)`（F054 §6.1，写 `app.pending_version_id`、**不改应用态**）。
   3. 分派：
      - 应用态 ∈ {草稿, 已上线, 待上线} → `AppStateService.publish(app_id, version_id)`；
-     - 应用态 == **已停运** → **只 stage、不 publish**（AC-36 / F054 AC-04：审批通过仅落为待运行版本、不自动重新启用；owner 重新启用时 F054 取 `pending ?? current`）；
+     - 应用态 == **已下线** → **只 stage、不 publish**（AC-36 / F054 AC-04：审批通过仅落为待运行版本、不自动重新上线；owner 重新上线时 F054 取 `pending ?? current`）；
      - 应用态 == 已删除 → 同步骤 1。
   4. `publish` 的三种结果（F054 D11 / AC-65）：
      - **`online`** → `VersionService.mark_terminal_state(version_id, 'online')` + 审计 `app.release.online` + 通知 owner；
@@ -291,7 +291,7 @@
   - 列：`id`(PK) · `code`(唯一，`light` / `standard` / `performance`) · `name` · `cpu_millicores`(int) · `memory_mb`(int) · `description` · `enabled`(bool) · `sort_order` · `create_time` / `update_time`。**用整数毫核与 MB**，不用浮点 vCPU（浮点在 DM8 与 JSON 往返里会给出 `0.30000000000000004` 这种值）。
   - **平台级 = 无 `tenant_id` 列**（AC-44 跨租户共享）；登记进 `_TENANT_AWARE_MODEL_MODULES` 只为保证 metadata 被 import（K6），不受自动过滤。
   - **模型文件落 `database/models/resource_tier.py`，不落 `app_publish/domain/models/`**：`ResourceTier` 实体归 F055、**F054 只读**（F054 design D11），放在 `app_publish` 里会逼 `app_runtime` 反向 import，双向依赖当场成立且**没有任何 arch-guard 规则会拦**（C1 / D16 的订正）。业务逻辑仍全在 `ResourceTierService`。
-  - **只可停用、不可删除**（管理 tab 不提供删除入口）：`app_version.tier_id` 是历史快照的引用，档位被删 → 老版本重新启用时解析不出规格。F054 D11 的"何时重新考虑"里假设了"F055 支持删档"这一情形——**本设计明确不支持**，从而 `tier_id` 永远可解析；已回写为 §6.1 的 Outgoing 契约行。
+  - **只可停用、不可删除**（管理 tab 不提供删除入口）：`app_version.tier_id` 是历史快照的引用，档位被删 → 老版本重新上线时解析不出规格。F054 D11 的"何时重新考虑"里假设了"F055 支持删档"这一情形——**本设计明确不支持**，从而 `tier_id` 永远可解析；已回写为 §6.1 的 Outgoing 契约行。
 - **三档 seed 与数值裁定（F054 与本 spec 的直接冲突，必须裁一套）**：
   - F054 design:294 `DEFAULT_TIERS` = 轻量 0.5 vCPU/512 MiB · 标准 1/1024 · **增强** 2/2048；本 spec **AC-44** = 轻量 **1C/2G** · 标准 **2C/4G** · **性能** **4C/8G**。
   - → **以本 spec 的产品口径为准**（AC-44 是写进 PRD 与 ui-demo 的产品承诺，F054 的数值是实现期临时值），**回写 F054 的 `DEFAULT_TIERS` 常量与第三档名称**（"增强" → "性能"）。
@@ -299,7 +299,7 @@
   - **规格初始默认值是部署配置项**（AC-44）：优先级 = `settings.app_runtime.default_tiers`（K10）> `DEFAULT_TIERS` 常量。⚠️ **114 上必须用这个覆盖**：114 曾长期 available ~0.9G（F054 K2），1C/2G 的轻量档会在容量准入闸上直接被拒 → 演示前把 114 的 `light` 下调到 0.5C/512M（坑 27）。
   - seed 时机：`init_default_data` 内（与审批场景 seed 同批），**幂等按 `code` 判存在即跳过**（超管调过的规格不被升级重置，与 AC-19 同判据）。
 - **选档与停用**（AC-46 / AC-47）：CLI 取 manifest `tier`、未声明取 `light`；声明了不存在或 `enabled=False` 的档 → 预检拒（16223）。停用**只拦新选择**：存量应用照常运行、迭代发布沿用原档位（迭代若在 manifest 里仍写着已停用的档 → 拒，owner 需改声明；**这是有意的**：停用的语义就是"新发布不可再选"）。
-- **写入快照**：`app_version.tier_id`（F054 已定的显式列）记**档位标识**，规格取运行时当前值（AC-48）→ 规格调整自下一次发布 / 重新启用生效（F054 AC-64 由此成立）。
+- **写入快照**：`app_version.tier_id`（F054 已定的显式列）记**档位标识**，规格取运行时当前值（AC-48）→ 规格调整自下一次发布 / 重新上线生效（F054 AC-64 由此成立）。
 - **管理 tab（AC-45）本轮后置**，落点方向：platform `pages/SystemPage` 加一个 tab（**仅平台超管可见**，与 F054 的 `app_runtime_enabled` 开关联动、未部署不出现）；表用 `bs-ui/table` + `bs-ui/pagination`，**平台无表单库**（无 react-hook-form / formik / zod）→ 行内编辑用手写 `useState` + `bs-ui/input`，保存前 `bsConfirm`；"使用中应用数" = `SELECT COUNT(DISTINCT app_id) FROM app_version WHERE tier_id=? AND terminal_state='online'`。
 - **何时该重新考虑**：出现自定义规格诉求（PRD 明确不做，重议前先回 GOV-03）；或多形态下同一档位在 compose 与 k8s 需要不同映射（那时 `resource_tier` 加 `runtime_profile` 列而不是分两张表，INV-33）。
 
@@ -323,7 +323,7 @@
 
 - **运行期凭据主体**（决议-4）：F049 底座已备好第二类主体——`PRINCIPAL_KIND_HOSTED_APP = "hosted_app"`（`open_api/domain/context.py:23`）与 `SUBJECT_KIND_HOSTED_APP`（`api_credential.py:46`，`CREDENTIAL_SUBJECT_KINDS` 已含它）。**只差 F049 design D2 说的 `SUBJECT_RESOLVERS['hosted_app']` 解析器**（F049 明确"随 F055 定义并注册"，未注册前该 kind 在 `/api/v2` 上按 `26002` 拒绝）。
   - **方向**：`subject_user_id = app.owner_user_id`（能力按 owner 权限的边界由能力声明白名单收窄，不是由主体放大）、`tenant_id = app.tenant_id`、`scopes` 由能力声明派生（声明模型 → `model:invoke`；声明知识库 → 检索位）。**审计双归属（AC-55）与执行身份是两件事**：执行身份是应用，审计 actor = 应用、subject = 当前访问用户（由 F054 AC-34 注入的 OBO 令牌确立）。
-  - 签发 / 重签在**审批通过、拉起新容器之前**（新凭据随环境变量 `BISHENG_APP_TOKEN` 注入新容器）；旧凭据**撤销**即 5 秒内失效（INV-28；F049 凭据缓存 TTL 3s < 5s 上界，天然满足）。停运 → 主体停用语义（**不新增状态枚举**）；删除 → 撤销。全程无管理界面、不进服务账号列表（AC-59）。
+  - 签发 / 重签在**审批通过、拉起新容器之前**（新凭据随环境变量 `BISHENG_APP_TOKEN` 注入新容器）；旧凭据**撤销**即 5 秒内失效（INV-28；F049 凭据缓存 TTL 3s < 5s 上界，天然满足）。下线 → 主体停用语义（**不新增状态枚举**）；删除 → 撤销。全程无管理界面、不进服务账号列表（AC-59）。
 - **模型注入**：经 F051 的平台 OpenAI 兼容面；应用侧用**行业标准客户端**（`openai` SDK）+ 平台注入的 `BISHENG_PLATFORM_API_BASE` + `BISHENG_APP_TOKEN`，平台不做薄封装（PRD-1 DEV-07 已定"模型调用与应用数据库刻意不进 SDK"）。
 - **知识库注入**：**白名单由平台侧按该应用当前生效版本的 `capabilities` 确定**（AC-50「应用不可自报白名单」）；运行期可及范围 = 白名单 ∩ 当前访问用户可见范围（文件级、fail-closed，经 F052 统一检索门面，INV-36）。无访问用户上下文 → **拒绝检索**（AC-52），**仅模型调用**允许以应用自身发起并把 subject 显式标为「应用自身」（AC-55）。
 - **能力收回（AC-53）不做轮询检测**：调用期由能力总线入口判定"声明里有、平台侧已不存在或已收回" → 返回**带能力名与 `revoked` 原因的错误码**（162 段 `16273`），可与普通失败区分、不回退旧值、应用整体可用。owner 侧的「已失效 + 原因」标记由发布面读接口**按需计算**（`declared ∖ 当前可解析`），**不落库、不起定时任务**——落库就会有状态漂移，而这个信息只在 owner 打开发布面时才需要。
@@ -359,8 +359,8 @@
 - **区块落点**：新建子目录 `hostedApp/publish/`，每块一个文件（避免与 F054 的 `PublishTab.tsx` 抢同一文件，600 行硬规同样适用）：
   - `ApprovalStatusCard.tsx`（**MVP**：待审 / 通过 / 驳回 / 已撤回 / 待上线成因 + **驳回理由全文** + 结构变更提示位 + 在途时「撤回」按钮）
   - `VersionListCard.tsx`（**MVP**：只读列表，与版本 tab 同数据源）
-  - `OpsActionsCard.tsx`（**MVP**：停运 / 重新启用 / 待上线态出现「手动上线」——**复用 F054 抽出的 `useHostedAppActions`**，不另写一套确认文案，F054 D13）
-  - `DangerZoneCard.tsx`（**MVP**：显式删除调 F054，仅 owner；已上线态置灰「请先停运」）
+  - `OpsActionsCard.tsx`（**MVP**：下线 / 重新上线 / 待上线态出现「手动上线」——**复用 F054 抽出的 `useHostedAppActions`**，不另写一套确认文案，F054 D13）
+  - `DangerZoneCard.tsx`（**MVP**：显式删除调 F054，仅 owner；已上线态置灰「请先下线」）
   - `CapabilityListCard.tsx` / `TierSelectCard.tsx` / `SchemaChangeNotice.tsx`（**后置**）
   - **可见范围区是 F056 的槽位**，F055 只留位、不写内容。
 - **数据拉取**：K11 ① → 版本列表用 `util/hook.ts:215 useTable`（要求接口返回 `{data,total}`，否则 `:238` 直接 console.error），状态卡用裸 `useState + useEffect`。
@@ -454,7 +454,7 @@ CLI: POST /api/v2/apps/deploy  (multipart: package.tar.gz + app_id? + confirm_sc
   → build_runtime_handler('app_publish_request')  ← 工厂分支漏加则永远走不到这里（K1 ③）
   → AppPublishScenarioHandler.on_approved:
        ├ AppStateService.stage_version(app_id, version_id)            # 写 pending_version_id
-       ├ 应用态==已停运 → 到此为止（AC-36），正常返回
+       ├ 应用态==已下线 → 到此为止（AC-36），正常返回
        └ AppStateService.publish(app_id, version_id)
             ├ online          → mark_terminal_state('online') + 通知 owner + 审计
             ├ 容量不足        → 应用态待上线(资源不足)；审批单保持通过；通知 owner+租户管理员
@@ -725,7 +725,7 @@ platform 发布面 / F052 MCP 应用状态工具
   - **密钥扫描规则集遍历**（AC-10 的直接承载）：每条规则一个正样本必命中、一个反样本必不命中，且断言输出的 JSON 序列化结果**不含样本密钥子串**；另测二进制跳过、大文件 `skipped` 可见、`bs-sak-` 规则随 `KEY_PREFIX` 常量变化。
   - **解包安全闸**：绝对路径 / `..` 穿越 / 符号链接 / 硬链接 / 设备文件 / FIFO 六类恶意条目全部被拒（坑 15）；条目数闸与解包大小闸。
   - **审批人解析**：seed 后首次 Gate 返回 PENDING 且 approvers 非空（坑 9）· 申请人在候选中被过滤（AC-17）· 仅一名管理员且无其他候选时保留本人 + `self_approval` 标注（**并发两单：一自审一非自审 → 审计里 `self_approval` 恰一条且挂对 deployment**，验证 handler 未被复用，D7）· owner 无主部门时落到租户管理员（AC-14）· **Root 租户回退超管**（AC-15）· 两来源皆空 → `decision=EXCEPTION`（AC-18，**断言不抛异常**）。
-  - **`on_approved` 三分支**：online / 容量不足 / 上线失败三种 `publish` 返回值下 **均正常返回**；编排器不可达 **抛异常**（K3 / D9 的判据）；已停运态只 stage 不 publish（AC-36）。
+  - **`on_approved` 三分支**：online / 容量不足 / 上线失败三种 `publish` 返回值下 **均正常返回**；编排器不可达 **抛异常**（K3 / D9 的判据）；已下线态只 stage 不 publish（AC-36）。
   - **版本记录**：`先 Gate 后 INSERT` 的补偿路径（Gate 成功 + INSERT 失败 → 审批单被取消）· `terminal_state` 四态标注 · 「待上线」是派生显示不是列值（D6）· `UNIQUE(app_id, version_no)` 并发兜底。
   - **档位**：seed 幂等（跑两次不重复）· 停用只拦新选择（存量版本仍可解析规格）· manifest 未声明取 `light`（AC-46）· 不提供删除（AC-47 的前提）。
 - **集成**（pytest + httpx，连 test 中间件 MySQL / Redis / MinIO / OpenFGA）：
@@ -784,8 +784,8 @@ platform 发布面 / F052 MCP 应用状态工具
   - **孤儿快照清理挂在下一次 deploy 上**（不起 Beat，D2）：一个再也不 deploy 的应用，其失败快照会永久留在 MinIO。存储量级（≤50MiB × 失败次数）可接受，等有第二个清理诉求时一起做定时任务。
   - **`app.release.*` 的审计 UI 可见性仍是手工白名单**（坑 21）：第三次新增事件族时才值得把可见性做成 action 的声明属性。
 - **明确不做**：
-  - **平台侧回滚**（RT-05 顺延；等价手段 = 本地 `git checkout` 后重新 deploy；应急止血始终是停运）· **迭代审批单变更摘要** · **应用标签设置** · **租户级实例数配额** · **审批单催办 / 超时提醒 / 升级机制** · **任何免审配置项**（INV-34）。
-  - **应用运行期凭据的产品化**：管理入口 / 强制吊销 tab / 会话 key 已取消（PRD-1 §5.2）；应急处置只有停运一条路（AC-59）。
+  - **平台侧回滚**（RT-05 顺延；等价手段 = 本地 `git checkout` 后重新 deploy；应急止血始终是下线）· **迭代审批单变更摘要** · **应用标签设置** · **租户级实例数配额** · **审批单催办 / 超时提醒 / 升级机制** · **任何免审配置项**（INV-34）。
+  - **应用运行期凭据的产品化**：管理入口 / 强制吊销 tab / 会话 key 已取消（PRD-1 §5.2）；应急处置只有下线一条路（AC-59）。
   - **密钥引用**（GOV-05 第三项）：本册不做（Discovery N4），声明中出现即预检拒（16230）。
   - **发布期 CVE 扫描 / SBOM**：v3.1。
   - **平台内造应用的发布面提交入口**：随 PRD-2（决议-2）；DEV-06 改码权交接落地后对已交接应用开放。

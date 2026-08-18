@@ -63,7 +63,7 @@ T001–T007（Wave 1，可并行）
 - **T023**（`worker/__init__.py` 顶部 `# register tasks` 显式 import 块追加一行）—— celery app 是 `Celery("bisheng", include=["bisheng.worker"])`（`worker/main.py:22`），**所有任务靠该 import 块注册**（审批 outbox 亦然）；漏登记 = `apply_async` 后 worker `NotRegistered`，表现为「deploy 返回成功、状态永远卡在 `received`」。
 - **T006 / T045**（`database/models/audit_log.py` 两处白名单 + platform `controllers/API/log.ts` + `bs.json` 三语）—— 审计可见性四处 lockstep，**审计对象的查询面归 F056、写入归本 Feature**（坑 21）。
 - **T015**（回写 F054 `app_runtime/domain/constants.py` 的 `DEFAULT_TIERS` 数值与第三档名称）—— F054 领域常量，档位实体归 F055（表 1），数值以本 spec AC-44 为准（坑 27）。
-- **T044b**（platform `BuildPage/hostedApp/tabs/PublishTab.tsx` 填 slot）—— **F054 T067 已交付的应用态徽标 / 入口链接 / 停运 / 重新启用 / 手动上线三按钮一律不重做**，F055 只填 slot 内容并把 `can.manual_publish` 等条件经 props 下传（design D15）。
+- **T044b**（platform `BuildPage/hostedApp/tabs/PublishTab.tsx` 填 slot）—— **F054 T067 已交付的应用态徽标 / 入口链接 / 下线 / 重新上线 / 手动上线三按钮一律不重做**，F055 只填 slot 内容并把 `can.manual_publish` 等条件经 props 下传（design D15）。
 - **T002**（`database/models/resource_tier.py` 落共享层）—— 与 F054 只读契约相关：模型放共享层就是为了不让 `app_runtime` 反向 import `app_publish`（C1 / D16）；**arch-guard 不管 domain 层跨模块方向，靠 review 维持**。
 - **T050**（回写 F053 spec AC-32 / F054 design + tasks；同 PR 更新 `.claude/skills/approval-module/SKILL.md`）。
 
@@ -83,7 +83,7 @@ T001–T007（Wave 1，可并行）
 
 - [x] **T002**: `[MVP-核心]` ORM `resource_tier` 模型（**落共享层**）+ DAO
   **文件**: `src/backend/bisheng/database/models/resource_tier.py`（新）, `src/backend/bisheng/core/database/tenant_filter.py`（登记 `bisheng.database.models.resource_tier`，并在登记处写一行注释「无 `tenant_id` 列，登记只为 metadata import、不受自动过滤」）
-  **逻辑**: 列：`id`(PK) · `code`(unique，`light` / `standard` / `performance`) · `name` · `cpu_millicores`(int) · `memory_mb`(int) · `description` · `enabled`(bool) · `sort_order` · `create_time` / `update_time`。**用整数毫核与 MB，不用浮点 vCPU**（DM8 与 JSON 往返会给出 `0.30000000000000004`，D11）。**平台级、无 `tenant_id` 列**（AC-44 跨租户共享，K6 ②）。DAO `ResourceTierDao.{alist, aget_by_code, acreate, aupdate_row}`——**不提供 delete**（AC-47 的前提：`app_version.tier_id` 是历史快照引用，删档会让老版本重新启用时解析不出规格，D11）。
+  **逻辑**: 列：`id`(PK) · `code`(unique，`light` / `standard` / `performance`) · `name` · `cpu_millicores`(int) · `memory_mb`(int) · `description` · `enabled`(bool) · `sort_order` · `create_time` / `update_time`。**用整数毫核与 MB，不用浮点 vCPU**（DM8 与 JSON 往返会给出 `0.30000000000000004`，D11）。**平台级、无 `tenant_id` 列**（AC-44 跨租户共享，K6 ②）。DAO `ResourceTierDao.{alist, aget_by_code, acreate, aupdate_row}`——**不提供 delete**（AC-47 的前提：`app_version.tier_id` 是历史快照引用，删档会让老版本重新上线时解析不出规格，D11）。
   **⚠️ 为什么不落 `app_publish/domain/models/`**：`ResourceTier` 归 F055、**F054 只读**（release-contract 表 1 / F054 design D11），放进 `app_publish` 会逼 `app_runtime` 反向 import，双向依赖当场成立且**没有任何 arch-guard 规则会拦**（design C1 / D16 的订正）。业务逻辑仍全在 T015 的 `ResourceTierService`。
   **回滚**: 同 T001（DDL 在 T003）。
   **依赖**: 无
@@ -167,7 +167,7 @@ T001–T007（Wave 1，可并行）
 - [x] **T014**: `[MVP-核心]` `ResourceTierService` 测试（seed / 选档 / 停用 / 无删除）
   **文件**: `src/backend/test/app_publish/test_resource_tier_service.py`（新）
   **逻辑**: 断言三档 seed 的幂等与数值来源、选档解析、停用语义与"不可删"不变量。
-  **测试**: `test_seed_creates_three_platform_level_tiers`（轻量 1C/2G · 标准 2C/4G · 性能 4C/8G；**无 `tenant_id` 列、跨租户共享**）→ AC-44 / `test_seed_values_come_from_f054_default_tiers_constant`（seed 从 F054 `DEFAULT_TIERS` 读取落库，保证"表未落"与"表刚 seed 完"两个时刻规格恒等）→ AC-44 / `test_settings_default_tiers_overrides_constant`（`settings.app_runtime.default_tiers` > 常量；**114 必须用它把 `light` 下调**，坑 27）→ AC-44 / `test_seed_idempotent_by_code_does_not_reset_admin_edits`（跑两次不重复；超管改过的规格不被升级重置，与 AC-19 同判据）→ AC-44 / `test_manifest_without_tier_resolves_light` → AC-46 / `test_unknown_tier_rejected_16223_reason_not_found` → AC-46 / `test_disabled_tier_rejected_16223_reason_disabled` → AC-46, AC-47 / `test_disabled_tier_existing_apps_keep_running_and_resolve_spec`（停用**只拦新选择**，存量版本仍可解析规格）→ AC-47 / `test_dao_has_no_delete_method`（**不可删是 F054 可依赖的不变量**：`tier_id` 永远可解析）→ AC-47 / `test_tier_code_written_into_version_snapshot_spec_read_at_runtime`（快照记**档位标识**、规格取运行时当前值 → 规格调整自下一次发布 / 重新启用生效）→ AC-48 / `test_tier_in_use_app_count_counts_online_versions_only`（**仅为 Wave 7 的 T065 预置计数口径，不计入本任务的 `覆盖 AC`**；AC-45 的承载任务是 T065 / T066，追溯表以那两条为准）
+  **测试**: `test_seed_creates_three_platform_level_tiers`（轻量 1C/2G · 标准 2C/4G · 性能 4C/8G；**无 `tenant_id` 列、跨租户共享**）→ AC-44 / `test_seed_values_come_from_f054_default_tiers_constant`（seed 从 F054 `DEFAULT_TIERS` 读取落库，保证"表未落"与"表刚 seed 完"两个时刻规格恒等）→ AC-44 / `test_settings_default_tiers_overrides_constant`（`settings.app_runtime.default_tiers` > 常量；**114 必须用它把 `light` 下调**，坑 27）→ AC-44 / `test_seed_idempotent_by_code_does_not_reset_admin_edits`（跑两次不重复；超管改过的规格不被升级重置，与 AC-19 同判据）→ AC-44 / `test_manifest_without_tier_resolves_light` → AC-46 / `test_unknown_tier_rejected_16223_reason_not_found` → AC-46 / `test_disabled_tier_rejected_16223_reason_disabled` → AC-46, AC-47 / `test_disabled_tier_existing_apps_keep_running_and_resolve_spec`（停用**只拦新选择**，存量版本仍可解析规格）→ AC-47 / `test_dao_has_no_delete_method`（**不可删是 F054 可依赖的不变量**：`tier_id` 永远可解析）→ AC-47 / `test_tier_code_written_into_version_snapshot_spec_read_at_runtime`（快照记**档位标识**、规格取运行时当前值 → 规格调整自下一次发布 / 重新上线生效）→ AC-48 / `test_tier_in_use_app_count_counts_online_versions_only`（**仅为 Wave 7 的 T065 预置计数口径，不计入本任务的 `覆盖 AC`**；AC-45 的承载任务是 T065 / T066，追溯表以那两条为准）
   **覆盖 AC**: AC-44, AC-46, AC-47, AC-48
   **依赖**: T007, T002
 
@@ -324,13 +324,13 @@ T001–T007（Wave 1，可并行）
 - [x] **T032**: `[MVP-核心]` `on_approved` 三分支测试（待上线不是失败）
   **文件**: `src/backend/test/app_publish/test_on_approved.py`（新）
   **逻辑**: 断言 outbox 语义边界——**产品定义的终态必须正常返回、系统性失败必须抛**。
-  **测试**: `test_online_marks_terminal_online_and_notifies_owner` → AC-31 / `test_capacity_shortage_returns_normally_and_sets_pending_capacity`（**必须"正常返回"而不是 raise**——raise 会让 instance 变 `execute_failed` + 建异常 + 通知管理员，产品上是"审批失败了"，与 AC-31 直接矛盾，K3 / 坑 10）→ AC-31 / `test_deploy_failure_returns_normally_and_sets_pending_deploy_failed`（决议-8 的第二种成因）→ AC-31 / `test_approval_instance_stays_approved_in_both_pending_cases` → AC-31 / `test_orchestrator_unreachable_raises`（判据写死为一句：**"应用最终会不会自己好起来"——会就返回，不会就抛**）→ AC-31 / `test_version_not_found_raises_16253` → AC-31 / `test_stopped_app_only_stages_not_publishes`（审批通过仅落为待运行版本、不自动重新启用；重新启用后新版本生效）→ AC-36 / `test_deleted_app_returns_normally_as_race_defense`（删除时已取消审批单，这是竞态兜底）→ AC-35 / `test_stage_version_called_before_publish`（写 `pending_version_id`、不改应用态）→ AC-31 / `test_pending_online_notifies_owner_and_tenant_admin_root_falls_to_super_admin`（**此处是通知不是审批人解析** → 可直接复用 `_get_admin_recipient_ids` 的无条件 union，与 T025 的条件回退是两码事、别混用）→ AC-31, AC-64
+  **测试**: `test_online_marks_terminal_online_and_notifies_owner` → AC-31 / `test_capacity_shortage_returns_normally_and_sets_pending_capacity`（**必须"正常返回"而不是 raise**——raise 会让 instance 变 `execute_failed` + 建异常 + 通知管理员，产品上是"审批失败了"，与 AC-31 直接矛盾，K3 / 坑 10）→ AC-31 / `test_deploy_failure_returns_normally_and_sets_pending_deploy_failed`（决议-8 的第二种成因）→ AC-31 / `test_approval_instance_stays_approved_in_both_pending_cases` → AC-31 / `test_orchestrator_unreachable_raises`（判据写死为一句：**"应用最终会不会自己好起来"——会就返回，不会就抛**）→ AC-31 / `test_version_not_found_raises_16253` → AC-31 / `test_stopped_app_only_stages_not_publishes`（审批通过仅落为待运行版本、不自动重新上线；重新上线后新版本生效）→ AC-36 / `test_deleted_app_returns_normally_as_race_defense`（删除时已取消审批单，这是竞态兜底）→ AC-35 / `test_stage_version_called_before_publish`（写 `pending_version_id`、不改应用态）→ AC-31 / `test_pending_online_notifies_owner_and_tenant_admin_root_falls_to_super_admin`（**此处是通知不是审批人解析** → 可直接复用 `_get_admin_recipient_ids` 的无条件 union，与 T025 的条件回退是两码事、别混用）→ AC-31, AC-64
   **覆盖 AC**: AC-31, AC-35, AC-36, AC-64
   **依赖**: T029, T017
 
 - [x] **T033**: `[MVP-核心]` `on_approved` 实现（调 F054 状态动作）
   **文件**: `src/backend/bisheng/app_publish/domain/services/app_publish_scenario_handler.py`（**增量**加 `on_approved`，不改 T029 已落方法）
-  **逻辑**: 编排见 design D9：① 取 `app` 与 `app_version`（**按 `version_id` 起手必须先借道 `app` 行校验归属**，坑 19）；应用已删 → 正常返回。② F054 `AppStateService.stage_version(app_id, version_id)`。③ 分派：应用态 ∈ {草稿, 已上线, 待上线} → `publish(app_id, version_id)`；**已停运 → 只 stage 不 publish**（AC-36）；已删除 → 同①。④ `publish` 三结果：`online` → `mark_terminal_state('online')` + 审计 `app.release.online` + 通知 owner；容量不足 → 应用态「待上线（资源不足）」+ 审批单保持通过 + `terminal_state` 保持 `NULL`（派生显示「待上线」）+ 通知 owner + 租户管理员（Root → 平台超管）；拉起 / 探活非容量失败 → 「待上线（上线失败）」+ 同上、成因文案区分。**后两者正常返回**（K3 / 坑 10）。**应用态一律经 F054，F055 不直写**（决议-8）。
+  **逻辑**: 编排见 design D9：① 取 `app` 与 `app_version`（**按 `version_id` 起手必须先借道 `app` 行校验归属**，坑 19）；应用已删 → 正常返回。② F054 `AppStateService.stage_version(app_id, version_id)`。③ 分派：应用态 ∈ {草稿, 已上线, 待上线} → `publish(app_id, version_id)`；**已下线 → 只 stage 不 publish**（AC-36）；已删除 → 同①。④ `publish` 三结果：`online` → `mark_terminal_state('online')` + 审计 `app.release.online` + 通知 owner；容量不足 → 应用态「待上线（资源不足）」+ 审批单保持通过 + `terminal_state` 保持 `NULL`（派生显示「待上线」）+ 通知 owner + 租户管理员（Root → 平台超管）；拉起 / 探活非容量失败 → 「待上线（上线失败）」+ 同上、成因文案区分。**后两者正常返回**（K3 / 坑 10）。**应用态一律经 F054，F055 不直写**（决议-8）。
   **测试**: T032 全部通过。
   **覆盖 AC**: AC-31, AC-35, AC-36, AC-64
   **依赖**: T032
@@ -431,10 +431,10 @@ T001–T007（Wave 1，可并行）
   **文件**: `src/frontend/platform/src/pages/BuildPage/hostedApp/publish/{VersionListCard,DangerZoneCard}.tsx`（新，**每块一个文件**，避开 F054 `PublishTab.tsx` 与 600 行硬规）, `src/frontend/platform/src/pages/BuildPage/hostedApp/tabs/PublishTab.tsx`（**只填 slot**，不重写壳）, `src/frontend/platform/public/locales/{zh-Hans,en,ja}/bs.json`（三语一组：本批新增 key；同 T044a / T045 一组）
   **逻辑**:
   - `VersionListCard`：只读列表（版本号 / 类型 / 提交时间 / 终态标注；待上线版本显示「待上线」），**不提供回滚入口**。⚠️ **绝不复用 `CardSelectVersion`**（`BuildPage/CardSelectVersion.tsx`）——它**切换即写库**（`handleChange :25-31` 调 `changeCurrentVersion`），且 `version_list` 对托管应用**恒空**（坑 29）。数据拉取用 `util/hook.ts:215 useTable`（**要求接口返回 `{data,total}`**，否则 `:238` 直接 console.error）。
-  - `DangerZoneCard`：显式删除调 F054 动作，仅 owner；已上线态置灰并提示「请先停运」。
+  - `DangerZoneCard`：显式删除调 F054 动作，仅 owner；已上线态置灰并提示「请先下线」。
   - **AC-06**：CLI 导入应用的「提交发布」按钮**不可用并提示以 `bisheng deploy` 提交**（本册 CLI 应用无草稿工作区，决议-2）。
-  - **填 slot**：把 T044a 的 `ApprovalStatusCard` 与本任务两卡装进 `PublishTab.tsx` 的 slot。**不重做 F054 T067 已交付的**应用态徽标 / 入口链接 / 停运 / 重新启用 / 手动上线三按钮；F055 只把 `can.manual_publish` / `pending_reason` 经 props 下传，让「手动上线」按待上线态出现。**可见范围区是 F056 的槽位**，只留位不写内容。
-  **手动验证**: 同一「发布」tab —— ① 版本列表只读、无任何切换 / 回滚控件；② 手动上线成功后版本列表该行终态由「待上线」变「已上线」且**不多出一行**；③ 「提交发布」置灰并提示走 `bisheng deploy`；④ 已上线态下删除按钮置灰并提示「请先停运」；⑤ F056 的可见范围槽位为空时布局不塌；⑥ 三卡同屏布局正常、无横向滚动。
+  - **填 slot**：把 T044a 的 `ApprovalStatusCard` 与本任务两卡装进 `PublishTab.tsx` 的 slot。**不重做 F054 T067 已交付的**应用态徽标 / 入口链接 / 下线 / 重新上线 / 手动上线三按钮；F055 只把 `can.manual_publish` / `pending_reason` 经 props 下传，让「手动上线」按待上线态出现。**可见范围区是 F056 的槽位**，只留位不写内容。
+  **手动验证**: 同一「发布」tab —— ① 版本列表只读、无任何切换 / 回滚控件；② 手动上线成功后版本列表该行终态由「待上线」变「已上线」且**不多出一行**；③ 「提交发布」置灰并提示走 `bisheng deploy`；④ 已上线态下删除按钮置灰并提示「请先下线」；⑤ F056 的可见范围槽位为空时布局不塌；⑥ 三卡同屏布局正常、无横向滚动。
   **覆盖 AC**: AC-06, AC-39, AC-61
   **依赖**: T044a
 
@@ -542,7 +542,7 @@ T001–T007（Wave 1，可并行）
 
 ### Wave 5 · 能力总线与应用运行期凭据（release 必做，本轮顺延）
 
-- [ ] **T055**: `hosted_app` 主体解析器注册与凭据生命周期（签发 / 重签 / 5 秒失效 / 停运拒绝 / 删除撤销 / 无任何管理入口 / 不进服务账号列表）
+- [ ] **T055**: `hosted_app` 主体解析器注册与凭据生命周期（签发 / 重签 / 5 秒失效 / 下线拒绝 / 删除撤销 / 无任何管理入口 / 不进服务账号列表）
   **文件**: `src/backend/bisheng/app_publish/domain/services/app_credential_service.py`, `src/backend/bisheng/open_api/domain/subject_resolvers.py`（注册 `SUBJECT_RESOLVERS['hosted_app']`）, `src/backend/test/app_publish/test_app_credential.py`
   **覆盖 AC**: AC-57, AC-58, AC-59, AC-60
 

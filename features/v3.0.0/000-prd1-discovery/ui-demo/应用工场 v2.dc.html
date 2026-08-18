@@ -285,7 +285,7 @@ input,button,select,textarea{font-family:inherit}
 
                   <div style="border:1px solid #FBD7D3;border-radius:10px;padding:18px 20px">
                     <div style="font-size:14px;font-weight:500;color:#212121;margin-bottom:6px">危险操作</div>
-                    <p style="margin:0 0 12px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">删除会一并带走<span style="color:#ef4444">代码、对话历史与应用生产数据</span>，不可恢复；在途审批单自动取消并通知审批人。仅 owner 可删除（租户管理员的兜底手段是停运）。已上线态入口置灰——须先停运。</p>
+                    <p style="margin:0 0 12px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">删除会一并带走<span style="color:#ef4444">代码、对话历史与应用生产数据</span>，不可恢复；在途审批单自动取消并通知审批人。仅 owner 可删除（租户管理员的兜底手段是下线）。已上线态入口置灰——须先下线。</p>
                     <button onClick="{{ openDelete }}" style="{{ deleteEntryStyle }}">{{ deleteEntryText }}</button>
                   </div>
                 </div>
@@ -326,7 +326,7 @@ input,button,select,textarea{font-family:inherit}
                       <button onClick="{{ toggleRunBtn }}" style="height:32px;padding:0 14px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13px;color:#212121;cursor:pointer" style-hover="background:#f4f5f8">{{ app.runBtn }}</button>
                       <button onClick="{{ openRun }}" style="height:32px;padding:0 14px;border:1px solid #E5E6EB;background:#fff;border-radius:7px;font-size:13px;color:#212121;cursor:pointer" style-hover="background:#f4f5f8">打开应用</button>
                     </div>
-                    <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">停运即时止血、无需审批，资产不受影响；重新启用叠加运行环境容量校验。owner 与租户管理员均可操作、均计审计。</div>
+                    <div style="font-size:12px;color:#86909C;margin-top:10px;line-height:18px">下线即时止血、无需审批，资产不受影响；重新上线叠加运行环境容量校验。owner 与租户管理员均可操作、均计审计。</div>
                   </div>
 
                   <div style="border:1px solid #E5E6EB;border-radius:10px;padding:18px 20px">
@@ -405,7 +405,7 @@ input,button,select,textarea{font-family:inherit}
                     </div>
                   </sc-for>
                 </div>
-                <div style="border:1px dashed #E5E6EB;border-radius:10px;padding:14px 16px;margin-top:14px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">本版不做平台侧回滚：本地有完整 git 历史，等价手段是 <span style="font-family:ui-monospace,Menlo,monospace">git checkout</span> 旧版本后重新 <span style="font-family:ui-monospace,Menlo,monospace">bisheng deploy</span>，走同一条审批管线。应急止血始终是<span style="color:#212121">停运</span>。版本快照的四要素（代码 / 能力声明 / 注入配置 / 资源档位）已按同一快照存储，将来补回滚可统一回退。</div>
+                <div style="border:1px dashed #E5E6EB;border-radius:10px;padding:14px 16px;margin-top:14px;font-size:12.5px;line-height:20px;color:#4E5969;text-wrap:pretty">本版不做平台侧回滚：本地有完整 git 历史，等价手段是 <span style="font-family:ui-monospace,Menlo,monospace">git checkout</span> 旧版本后重新 <span style="font-family:ui-monospace,Menlo,monospace">bisheng deploy</span>，走同一条审批管线。应急止血始终是<span style="color:#212121">下线</span>。版本快照的四要素（代码 / 能力声明 / 注入配置 / 资源档位）已按同一快照存储，将来补回滚可统一回退。</div>
               </div>
             </sc-if>
           </div>
@@ -1092,7 +1092,7 @@ const STATUS = {
   draft: ["草稿", "#F2F3F5", "#86909C"],
   online: ["已上线", "#E8F6EE", "#00873D"],
   pending_res: ["待上线（资源不足）", "#FFF4E5", "#B54708"],
-  stopped: ["已停运", "#F2F3F5", "#86909C"]
+  stopped: ["已下线", "#F2F3F5", "#86909C"]
 };
 const VSTATE = { online: ["已上线", "#E8F6EE", "#00873D"], was: ["曾上线", "#F2F3F5", "#4E5969"], rejected: ["被驳回", "#FEF2F2", "#ef4444"], pending: ["待审", "#FFF4E5", "#B54708"], approved: ["已通过 · 待上线", "#E6EDFC", "#024DE3"], withdrawn: ["已撤回", "#F2F3F5", "#86909C"] };
 const ICONS = {
@@ -1172,8 +1172,8 @@ class Component extends DCLogic {
   patchApp(id, fn) { this.setState(s => ({ apps: s.apps.map(a => a.id === id ? fn({ ...a }) : a) })); }
   me() { const p = this.state.persona; return p === "admin" ? "王敏" : p === "approver" ? "周颖" : p === "super" ? "平台超管" : "李工"; }
   toggleRun(a) {
-    if (a.status === "stopped") { this.patchApp(a.id, x => ({ ...x, status: "online" })); this.flash("已重新启用 · 代码、对话历史与生产数据完整无损；重新启用叠加运行环境容量校验"); }
-    else if (a.status === "online") { this.patchApp(a.id, x => ({ ...x, status: "stopped" })); this.flash("已停运 · 入口与广场呈「已停用」页，资产不受影响；停运即时生效、无需审批"); }
+    if (a.status === "stopped") { this.patchApp(a.id, x => ({ ...x, status: "online" })); this.flash("已重新上线 · 代码、对话历史与生产数据完整无损；重新上线叠加运行环境容量校验"); }
+    else if (a.status === "online") { this.patchApp(a.id, x => ({ ...x, status: "stopped" })); this.flash("已下线 · 入口与广场呈「已下线」页，资产不受影响；下线即时生效、无需审批"); }
     else this.flash("当前状态不可直接上下线：" + STATUS[a.status][0]);
   }
 
@@ -1234,13 +1234,13 @@ class Component extends DCLogic {
         openMenu: (e) => { e.stopPropagation(); this.setState({ menuApp: s.menuApp === a.id ? null : a.id }); },
         menuOpen: s.menuApp === a.id,
         manageAuth: (e) => { e.stopPropagation(); this.setState({ modal: "auth", appId: a.id, authDraft: [...a.vis], menuApp: null }); },
-        delSuffix: canDel ? "" : "（请先停运）",
+        delSuffix: canDel ? "" : "（请先下线）",
         delStyle: "height:32px;display:flex;align-items:center;padding:0 10px;border-radius:6px;font-size:13px;" +
           (canDel ? "color:#ef4444;cursor:pointer" : "color:#C9CDD4;cursor:not-allowed"),
         del: (e) => {
           e.stopPropagation();
-          if (!canDel) { this.flash("已上线态删除入口置灰 —— 请先停运（RT-07 前置状态闸）"); return; }
-          if (a.owner !== me) { this.flash("仅 owner 可删除应用；管理侧兜底手段 = 停运"); this.setState({ menuApp: null }); return; }
+          if (!canDel) { this.flash("已上线态删除入口置灰 —— 请先下线（RT-07 前置状态闸）"); return; }
+          if (a.owner !== me) { this.flash("仅 owner 可删除应用；管理侧兜底手段 = 下线"); this.setState({ menuApp: null }); return; }
           this.setState({ modal: "delete", appId: a.id, menuApp: null });
         }
       };
@@ -1248,7 +1248,7 @@ class Component extends DCLogic {
 
     const selects = [
       { value: s.typeFilter, w: 132, cycle: () => this.setState({ typeFilter: s.typeFilter === "托管应用" ? "全部应用类型" : s.typeFilter === "全部应用类型" ? "工作流" : s.typeFilter === "工作流" ? "助手" : "托管应用" }), hi: s.typeFilter === "托管应用" },
-      { value: s.statusFilter, w: 168, cycle: () => { const o = ["全部状态", "已上线", "待上线（资源不足）", "已停运", "草稿"]; this.setState({ statusFilter: o[(o.indexOf(s.statusFilter) + 1) % o.length] }); }, hi: s.statusFilter !== "全部状态" },
+      { value: s.statusFilter, w: 168, cycle: () => { const o = ["全部状态", "已上线", "待上线（资源不足）", "已下线", "草稿"]; this.setState({ statusFilter: o[(o.indexOf(s.statusFilter) + 1) % o.length] }); }, hi: s.statusFilter !== "全部状态" },
       { value: s.tagFilter, w: 124, cycle: () => this.flash("本版不做应用标签设置（顺延）——未设标签的应用在广场默认分类中正常可见"), hi: false }
     ];
 
@@ -1335,7 +1335,7 @@ class Component extends DCLogic {
       { time: "2026-08-15 16:58", actor: "王敏", type: "key 权限位调整", object: "服务账号：中粮 · 李工开发者", detail: "新增 app:manage · 即时生效、无需重签（不含密钥值）" },
       { time: "2026-08-15 16:20", actor: "系统", type: "运行期凭据自动重签", object: "合同台账助手", detail: "随发布自动签发与回收 · 无管理入口、owner 全程零感知" },
       { time: "2026-08-11 20:31", actor: "王敏", type: "审批驳回", object: "供应商比价 v2", detail: "驳回理由全文已回传 owner；应用保持已上线态" },
-      { time: "2026-08-11 09:04", actor: "王敏", type: "停运", object: "供应商比价", detail: "租户管理员操作 · 资产不受影响" }
+      { time: "2026-08-11 09:04", actor: "王敏", type: "下线", object: "供应商比价", detail: "租户管理员操作 · 资产不受影响" }
     ];
     const aa = s.auditActor.trim(), ao = s.auditObject.trim();
     const auditRows = AUDIT.filter(r => (s.auditType === "全部" || r.type === s.auditType) && (!aa || r.actor.indexOf(aa) >= 0) && (!ao || r.object.indexOf(ao) >= 0));
@@ -1346,7 +1346,7 @@ class Component extends DCLogic {
     };
     const FB = {
       noperm: ["无访问权限", "应用「合同台账助手」· owner 李工。你不在该应用的可见范围内，请联系应用 owner 或租户管理员开通权限。本版不含在线申请入口。", "返回广场"],
-      stopped: ["应用已停用", "该应用已停运，暂不可访问。请联系应用 owner 或租户管理员。", "返回广场"],
+      stopped: ["应用已下线", "该应用已下线，暂不可访问。请联系应用 owner 或租户管理员。", "返回广场"],
       gone: ["应用不存在或未上线", "该入口链接指向的应用已被删除，或从未上线（草稿 / 待上线态）。", "返回广场"],
       nofactory: ["本环境未启用应用工场", "本环境未部署应用工场运行时层，应用托管与广场入口不可用。请联系平台超管开启。", "知道了"],
       login: ["跳转平台登录页", "检测到无登录态（含手机扫码访问）→ 重定向到平台登录页，含已配置的账号密码与企业微信 / 钉钉 SSO 扫码。登录成功后回跳原地址，应用侧零登录代码。", "模拟登录并回跳"],
@@ -1496,7 +1496,7 @@ class Component extends DCLogic {
         open: () => this.setState({ runtime: { kind: "ok", app: a.name } })
       })),
       squareEmpty: s.apps.filter(a => a.status === "online" && visibleTo(a)).length === 0,
-      fallbackBtns: [["login", "无登录态 / 扫码"], ["noperm", "无权限"], ["stopped", "已停用"], ["gone", "已删除入口"], ["deploying", "发布中"], ["recovering", "崩溃恢复中"], ["nofactory", "未部署工场"]].map(([k, l]) => ({
+      fallbackBtns: [["login", "无登录态 / 扫码"], ["noperm", "无权限"], ["stopped", "已下线"], ["gone", "已删除入口"], ["deploying", "发布中"], ["recovering", "崩溃恢复中"], ["nofactory", "未部署工场"]].map(([k, l]) => ({
         label: l, pick: () => this.setState({ runtime: { kind: k } }), style: chipStyle(false)
       })),
       runtimeOpen: !!s.runtime, runtimeOk: fbKind === "ok", runtimeFallback: !!s.runtime && fbKind !== "ok",
@@ -1551,7 +1551,7 @@ class Component extends DCLogic {
         { title: "审批单生成 · 客服知识速查（迭代）", time: "11:02", body: "已进入审批中心待办 —— 部门管理员 ∪ 租户管理员，或签。", dot: "#024DE3" },
         { title: "上线终检容量不足 · 报销单核对", time: "09:12", body: "应用入「待上线（资源不足）」态，资源释放后由 owner 在详情页 · 发布手动上线。", dot: "#B54708" },
         { title: "审批驳回 · 供应商比价 v2", time: "昨天", body: "驳回理由全文可在详情页 · 发布或 MCP 应用状态工具查看。", dot: "#ef4444" },
-        { title: "租户管理员停运 · 供应商比价", time: "昨天", body: "停运会通知 owner，并在发布面状态与审计记录中可查。", dot: "#86909C" }
+        { title: "租户管理员下线 · 供应商比价", time: "昨天", body: "下线会通知 owner，并在发布面状态与审计记录中可查。", dot: "#86909C" }
       ].map(m => ({ ...m, dotStyle: "width:7px;height:7px;border-radius:50%;flex-shrink:0;background:" + m.dot })),
 
       isTodo: s.nav === "approval" && s.approvalTab === "todo" && !s.view,
@@ -1654,7 +1654,7 @@ class Component extends DCLogic {
         visChips: (app.vis.length ? app.vis.map(v => ({ name: (AUTH_OPTS.find(o => o.id === v) || { name: v }).name, style: "font-size:12.5px;background:#E6EDFC;color:#024DE3;border-radius:5px;padding:3px 9px" }))
           : [{ name: "仅 owner 可见", style: "font-size:12.5px;background:#FFF4E5;color:#B54708;border-radius:5px;padding:3px 9px" }]),
         url: "https://bisheng.cofco.com/apps/" + app.id,
-        runBtn: app.status === "stopped" ? "重新启用" : "停运"
+        runBtn: app.status === "stopped" ? "重新上线" : "下线"
       },
       detailTabs: [["publish", "发布"], ["data", "数据"], ["logs", "运行日志"], ["version", "版本"]].map(([id, label]) => ({
         label, go: () => this.setState({ detailTab: id }),
@@ -1664,7 +1664,7 @@ class Component extends DCLogic {
       dtPublish: s.detailTab === "publish", dtData: s.detailTab === "data", dtLogs: s.detailTab === "logs", dtVersion: s.detailTab === "version",
       tierOptions: s.tiers.map(t => ({
         name: t.name, spec: t.spec, desc: t.enabled ? t.desc : "该档位已停用，新发布不可再选",
-        pick: () => { if (!t.enabled) { this.flash("该档位已停用，新发布不可再选；存量应用沿用原档位继续运行"); return; } this.patchApp(app.id, a => ({ ...a, tier: t.id })); this.flash("已选「" + t.name + "」档 · 规格自下一次发布或重新启用生效"); },
+        pick: () => { if (!t.enabled) { this.flash("该档位已停用，新发布不可再选；存量应用沿用原档位继续运行"); return; } this.patchApp(app.id, a => ({ ...a, tier: t.id })); this.flash("已选「" + t.name + "」档 · 规格自下一次发布或重新上线生效"); },
         style: "flex:1;min-width:172px;border-radius:9px;padding:12px 14px;cursor:pointer;transition:border-color .15s ease;border:1px solid " +
           (app.tier === t.id ? "#024DE3;background:#F5F8FF" : "#E5E6EB;background:#fff") + (t.enabled ? "" : ";opacity:.5"),
         radioStyle: "width:14px;height:14px;border-radius:50%;flex-shrink:0;border:" + (app.tier === t.id ? "4px solid #024DE3" : "1px solid #C9CDD4")
@@ -1703,12 +1703,12 @@ class Component extends DCLogic {
       openRun: () => this.setState({ runtime: { kind: app.status === "online" ? "ok" : app.status === "stopped" ? "stopped" : "gone", app: app.name } }),
       copyUrl: () => this.flash("已复制入口链接 · 已登录同事点开即用，免二次登录"),
       openAuth: () => this.setState({ modal: "auth", authDraft: [...app.vis] }),
-      deleteEntryText: app.status === "online" ? "删除应用（请先停运）" : "删除应用",
+      deleteEntryText: app.status === "online" ? "删除应用（请先下线）" : "删除应用",
       deleteEntryStyle: "height:32px;padding:0 14px;border-radius:7px;font-size:13px;border:1px solid " +
         (canDelHere ? "#FBD7D3;background:#fff;color:#ef4444;cursor:pointer" : "#F2F3F5;background:#FBFBFB;color:#C9CDD4;cursor:not-allowed"),
       openDelete: () => {
-        if (app.status === "online") { this.flash("已上线态删除入口置灰 —— 须先停运（前置状态闸比强确认更稳）"); return; }
-        if (app.owner !== me) { this.flash("仅 owner 可删除应用；管理侧兜底手段 = 停运"); return; }
+        if (app.status === "online") { this.flash("已上线态删除入口置灰 —— 须先下线（前置状态闸比强确认更稳）"); return; }
+        if (app.owner !== me) { this.flash("仅 owner 可删除应用；管理侧兜底手段 = 下线"); return; }
         this.setState({ modal: "delete" });
       },
       meName: me, meInitial: me.slice(0, 1),

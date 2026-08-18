@@ -39,8 +39,8 @@ MCP 方向上仓内只有完备的 MCP client 基建（mcp_manage/ + 工具体�
 - 模型双协议直连面（OpenAI/Anthropic 兼容 endpoint + 流式 + key 计量）：现有 llm 模块只做平台内调用，无对外协议兼容层
 - 应用托管运行时=完整绿地：per-app 实例编排器（拉起/停止/1-4 核限额/崩溃检测/<=5min 自动重启/发布切换与回滚）、实例注册表、健康探测、端口分配——仓内无 docker SDK、无 supervisor、无 cgroup 操作、无任何按需进程管理代码；最近参照 linsight worker 也只是固定常驻进程
 - /apps/{slug} 动态路由层：现 nginx 纯静态 conf 无法按 slug 动态转发到 per-app 实例；需三选一新建——backend FastAPI 反代（含 WebSocket 透传）、openresty/模板 render+reload、或专职 ingress 组件；商业版还需 Java gateway 侧同步适配（本仓外）
-- 四类兜底页（无权限/未部署工场/已停用/不存在）+ 发布中/恢复中 holding page 及其状态机驱动切换：全新（含路由层在实例不可达时返回 holding page 而非 502 的机制）
-- 应用领域模型：app 表、发布版本快照表、行级归属、状态机（草稿/待上线/运行/停运/已删除）、GOV-03 实例配额——全新表（须注册 _TENANT_AWARE_MODEL_MODULES）
+- 四类兜底页（无权限/未部署工场/已下线/不存在）+ 发布中/恢复中 holding page 及其状态机驱动切换：全新（含路由层在实例不可达时返回 holding page 而非 502 的机制）
+- 应用领域模型：app 表、发布版本快照表、行级归属、状态机（草稿/待上线/运行/下线/已删除）、GOV-03 实例配额——全新表（须注册 _TENANT_AWARE_MODEL_MODULES）
 - MCP 工具面第 5 项『应用数据表结构与数据查询』：平台无 per-app 数据库/schema 概念，从存储选型到工具全新
 - MCP 工具面第 6 项『应用状态/日志自查』：无 per-app 日志采集通道（现日志=loguru 落容器 stdout），需新建日志捕获/留存/按 owner 过滤查询
 - GOV-07『整层不装』的条件注册模式：bisheng/api/router.py 现无条件注册所有路由，需引入按部署配置裁剪路由+前端入口的机制
