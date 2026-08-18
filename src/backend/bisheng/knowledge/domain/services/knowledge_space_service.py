@@ -2352,10 +2352,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         Pin state lives in the decoupled ``knowledge_space_user_pin`` table, not
         on the membership row — a user may pin a space reachable only via ReBAC /
-        department authorization (no membership row). We gate on ``view_space``
-        first so a pin can only be written for a space the user can actually see.
+        department authorization (no membership row). Pinning is a pure personal
+        UI preference and is not permission-gated: we only validate the space
+        exists (and is a SPACE), so a pin is never written for an invalid id.
+        Stale pins stay inert because every space listing re-checks ``view_space``
+        on read.
         """
-        await self._require_read_permission(space_id)
+        await self._get_space_or_raise(space_id)
         if is_pinned:
             await KnowledgeSpaceUserPinDao.pin(user_id=self.login_user.user_id, space_id=space_id)
         else:
