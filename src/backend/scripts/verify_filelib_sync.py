@@ -42,7 +42,8 @@ if _BACKEND_ROOT not in sys.path:
 
 import httpx  # noqa: E402
 
-DEFAULT_BASE_URL = "http://10.171.0.50:7860"
+# DEFAULT_BASE_URL = "http://10.171.0.50:7860"
+DEFAULT_BASE_URL = "http://127.0.0.1:7860"
 SYNC_PATH = "/api/v2/filelib/file/sync"
 
 

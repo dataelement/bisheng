@@ -13900,8 +13900,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             {
                 int(item.original_uploader_id)
                 for item in file_items
-                if item.entry_type in distributed_entry_types
-                and item.original_uploader_id is not None
+                if item.original_uploader_id is not None
             }
         )
         original_knowledge_ids = sorted(
@@ -14012,17 +14011,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 item_info["version_no"] = int(primary_version.version_no)
             if primary_file is not None:
                 item_info["file_size"] = int(primary_file.file_size or 0)
+            original_uploader_id = item.original_uploader_id
+            if original_uploader_id is not None:
+                item_info.update(
+                    {
+                        "original_uploader_id": int(original_uploader_id),
+                        "original_uploader_name": original_user_name_map.get(int(original_uploader_id)),
+                    }
+                )
             if entry_type in distributed_entry_types:
-                original_uploader_id = item.original_uploader_id
                 original_knowledge_id = item.original_knowledge_id
                 item_info.update(
                     {
-                        "original_uploader_id": original_uploader_id,
-                        "original_uploader_name": (
-                            original_user_name_map.get(int(original_uploader_id))
-                            if original_uploader_id is not None
-                            else None
-                        ),
                         "original_knowledge_id": original_knowledge_id,
                         "original_knowledge_name": (
                             original_space_name_map.get(int(original_knowledge_id))
