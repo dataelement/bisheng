@@ -490,29 +490,46 @@ class PublishService:
             logger.exception("qa.publish.notify_failed event={}", event)
 
     async def _send_inbox(self, event: str, question, extra: dict[str, Any]) -> None:
-        """转公开站内信：相关人通知；待办入口靠 approval_instance_id。"""
+        """转公开站内信：相关人通知；待办入口靠 approval_instance_id。
+
+        终态（通过/拒绝/过期/结束）若无操作人，用系统发件，保证提问者也能收到。
+        """
         from bisheng.approval.domain.repositories.approval_instance_repository import (
             ApprovalInstanceRepository,
         )
         from bisheng.qa_expert.domain.inbox_notice import display_name_for_trigger, send_qa_inbox
         from bisheng.qa_expert.domain.publish_approval_bridge import business_key_for
 
+        todo_events = {"publish_started", "publish_approver_added"}
+        result_events = {
+            "publish_approved",
+            "publish_rejected",
+            "publish_expired",
+            "publish_ended",
+            "publish_default_approved",
+        }
         sender = extra.get("user")
         sender_id = int(getattr(sender, "user_id", 0) or 0) if sender is not None else 0
-        if sender_id <= 0:
+        # 终态是系统结果，没有操作人。若把提问者填成发件人，send_qa_inbox 会把他从收件人剔除。
+        use_system_sender = event in result_events and sender_id <= 0
+        if sender_id <= 0 and not use_system_sender:
             sender_id = int(question.user_id)
-        real_name = extra.get("sender_name") or getattr(sender, "user_name", "") or ""
-        asker_anonymous = bool(int(getattr(question, "asker_anonymous", 0) or 0))
-        anonymous = bool(asker_anonymous) if sender_id == int(question.user_id) else bool(extra.get("anonymous"))
-        display, masked = await display_name_for_trigger(
-            question,
-            user_id=sender_id,
-            real_name=real_name,
-            anonymous=anonymous,
-            reveal_on_public=getattr(question, "asker_reveal_on_public", None)
-            if sender_id == int(question.user_id)
-            else extra.get("reveal_on_public"),
-        )
+        if use_system_sender:
+            display, masked = "系统", True
+            sender_id = 0
+        else:
+            real_name = extra.get("sender_name") or getattr(sender, "user_name", "") or ""
+            asker_anonymous = bool(int(getattr(question, "asker_anonymous", 0) or 0))
+            anonymous = bool(asker_anonymous) if sender_id == int(question.user_id) else bool(extra.get("anonymous"))
+            display, masked = await display_name_for_trigger(
+                question,
+                user_id=sender_id,
+                real_name=real_name,
+                anonymous=anonymous,
+                reveal_on_public=getattr(question, "asker_reveal_on_public", None)
+                if sender_id == int(question.user_id)
+                else extra.get("reveal_on_public"),
+            )
         receivers: list[int] = []
         request_id = extra.get("request_id")
         if request_id:
@@ -531,14 +548,6 @@ class PublishService:
             )
             if inst is not None:
                 instance_id = int(inst.id)
-        todo_events = {"publish_started", "publish_approver_added"}
-        result_events = {
-            "publish_approved",
-            "publish_rejected",
-            "publish_expired",
-            "publish_ended",
-            "publish_default_approved",
-        }
         business_type = "approval_instance_id" if event in todo_events and instance_id else "qa_question"
         await send_qa_inbox(
             action_code=f"qa_{event}",
