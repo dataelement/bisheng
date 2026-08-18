@@ -86,6 +86,23 @@ def register_f048_permission_runtime_context(
             raise PermissionPublishNotReadyError(
                 msg=str(readiness.get("error") or "Permission data migration is required")
             )
+        # Fresh install has no legacy data and never runs the forward-only data
+        # migration, so nothing else would create the initial CURRENT Catalog.
+        # Seed it here (idempotent no-op once present). Reaching this point means
+        # migration is not required, so this only ever fires on a brand-new
+        # deployment; an upgrade raised above until the operator migrates.
+        from bisheng.common.services.config_service import settings
+        from bisheng.permission.application.catalog_bootstrap import (
+            seed_initial_permission_catalog,
+        )
+
+        await seed_initial_permission_catalog(
+            client,
+            store_id=str(readiness.get("store_id") or ""),
+            model_id=str(readiness.get("model_id") or ""),
+            model_checksum=str(readiness.get("model_checksum") or ""),
+            environment=settings.environment,
+        )
         try:
             runtime = await initializer(client)
         except (
