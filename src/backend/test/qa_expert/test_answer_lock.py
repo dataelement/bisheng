@@ -44,6 +44,11 @@ def _answer_service() -> AnswerService:
     svc.invite_repo.list_user_ids_by_question_ids = AsyncMock(return_value={})
     svc.expert_repo.increment_answer_count = AsyncMock()
     svc.expert_repo.get_by_id = AsyncMock(return_value=_expert())
+    svc.comment_repo = MagicMock()
+    svc.comment_repo.delete_by_answer_id = AsyncMock(return_value=0)
+    svc.publish_request_repo = MagicMock()
+    svc.publish_request_repo.get_pending_by_question = AsyncMock(return_value=None)
+    svc.publish_refresher = AsyncMock()
     svc._send_answer_notification = AsyncMock()
     svc._resolve_answer = AsyncMock(side_effect=lambda answer: answer)
     return svc

@@ -20,6 +20,7 @@ def _service() -> QuestionService:
     svc.eligibility_repo.list_user_ids = AsyncMock(return_value=set())
     svc.publish_request_repo = MagicMock()
     svc.publish_request_repo.get_pending_by_question = AsyncMock(return_value=None)
+    svc.publish_request_repo.get_latest_by_question = AsyncMock(return_value=None)
     svc.publish_approver_repo = MagicMock()
     svc.publish_approver_repo.list_by_request = AsyncMock(return_value=[])
     svc._resolve_question = AsyncMock(side_effect=lambda q: q)
@@ -34,7 +35,11 @@ def _service() -> QuestionService:
     return svc
 
 
-async def test_detail_always_returns_question_body_when_doc_forbidden():
+async def test_detail_always_returns_question_body_when_doc_forbidden(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.publish_service.PublishService.refresh_latest_for_question",
+        AsyncMock(return_value=None),
+    )
     svc = _service()
     question = SimpleNamespace(
         id=3,
@@ -82,8 +87,8 @@ async def test_accessible_doc_keeps_durable_id():
     assert views[0]["unavailable_reason"] is None
 
 
-async def test_non_owner_existing_file_is_forbidden_not_openfga():
-    """路人即使文件存在也记 forbidden，避免详情去打 OpenFGA。"""
+async def test_non_owner_with_permission_is_accessible():
+    """有库权限的路人可点链接，不再因不是提问者一律 forbidden。"""
     svc = _service()
 
     async def checker(_user, _s, _f):
@@ -93,6 +98,23 @@ async def test_non_owner_existing_file_is_forbidden_not_openfga():
     views = await svc.hydrate_related_docs(
         "8-15",
         user=SimpleNamespace(user_id=2),
+        owner_user_id=1,
+    )
+    assert views[0]["accessible"] is True
+    assert views[0]["unavailable_reason"] is None
+
+
+async def test_owner_without_permission_is_forbidden():
+    """提问者无知识库权限时不可点，不再因是作者特判放行。"""
+    svc = _service()
+
+    async def checker(_user, _s, _f):
+        return False
+
+    svc.related_docs_access_checker = checker
+    views = await svc.hydrate_related_docs(
+        "8-15",
+        user=SimpleNamespace(user_id=1),
         owner_user_id=1,
     )
     assert views[0]["accessible"] is False

@@ -68,3 +68,9 @@ class QaExpertAnonymousRevealRequiredError(BaseErrorCode):
     """定向且勾选匿名时，必须预选转公开后是否公开姓名。"""
 
     Code, Msg = 18311, "定向匿名须选择转公开后是否公开姓名"
+
+
+class QaExpertAnswerDeleteNotAllowedError(BaseErrorCode):
+    """作者删答：已采纳，或存在有效转公开申请。"""
+
+    Code, Msg = 18312, "当前不可删除该回答"

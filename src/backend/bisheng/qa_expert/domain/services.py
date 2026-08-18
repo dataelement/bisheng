@@ -19,6 +19,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.qa_expert import (
     QaExpertAdminRequiredError,
     QaExpertAdoptLimitError,
+    QaExpertAnswerDeleteNotAllowedError,
     QaExpertAnswerNotAllowedError,
     QaExpertCommentNotAllowedError,
     QaExpertContentLockedError,
@@ -29,6 +30,7 @@ from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.qa_expert import (
+    ANSWER_STATUS_DELETED,
     EXPERT_STATUS_ACTIVE,
     EXPERT_STATUS_DISABLED,
     Answer,
@@ -773,19 +775,21 @@ class QuestionService:
     async def hydrate_related_docs(
         self, related_docs: str | None, user=None, owner_user_id: int | None = None
     ) -> list[dict]:
-        """解析关联文档串；无权用 forbidden，禁止用 not_found 表示无权限。
+        """解析关联文档串。问答可见不等于文档可读；无权 forbidden，缺失 not_found。
 
-        不调 OpenFGA：提问者视为有权，其他浏览者一律 forbidden。避免 LoginUser
-        缺 get_visible_tenants 时 list_accessible_ids 卡住整道详情。
+        owner_user_id 仅为兼容旧调用方，不再按提问者特判。
         """
+        del owner_user_id
         views: list[dict] = []
-        checker = getattr(self, "related_docs_access_checker", None)
-        if checker is None:
+        injected = getattr(self, "related_docs_access_checker", None)
+        space_cache: dict[int, bool] = {}
+
+        async def _default_checker(_user, space_id: int, file_id: int):
             from bisheng.qa_expert.domain.related_docs_access import check_related_doc_access
 
-            checker = check_related_doc_access
-        viewer_id = getattr(user, "user_id", None) if user is not None else None
-        is_owner = owner_user_id is not None and viewer_id is not None and int(viewer_id) == int(owner_user_id)
+            return await check_related_doc_access(_user, space_id, file_id, space_cache=space_cache)
+
+        checker = injected if callable(injected) else _default_checker
         for token in parse_related_doc_tokens(related_docs):
             parsed = parse_related_doc_ref(token)
             if parsed is None:
@@ -802,31 +806,27 @@ class QuestionService:
                 continue
             space_id, file_id = parsed
             doc_id = f"{space_id}-{file_id}"
-            accessible = True
-            reason = None
-            if callable(checker):
-                access = checker(user, space_id, file_id)
-                if inspect.isawaitable(access):
-                    try:
-                        from bisheng.qa_expert.domain.related_docs_access import (
-                            RELATED_DOC_ACCESS_TIMEOUT_SEC,
-                        )
+            accessible = False
+            reason = "forbidden"
+            access = checker(user, space_id, file_id)
+            if inspect.isawaitable(access):
+                try:
+                    from bisheng.qa_expert.domain.related_docs_access import (
+                        RELATED_DOC_ACCESS_TIMEOUT_SEC,
+                    )
 
-                        access = await asyncio.wait_for(access, timeout=RELATED_DOC_ACCESS_TIMEOUT_SEC)
-                    except Exception:
-                        access = False
-                if access is None:
-                    accessible = False
-                    reason = "not_found"
-                elif access is False:
-                    accessible = False
-                    reason = "forbidden"
-                elif is_owner or owner_user_id is None:
-                    accessible = True
-                    reason = None
-                else:
-                    accessible = False
-                    reason = "forbidden"
+                    access = await asyncio.wait_for(access, timeout=RELATED_DOC_ACCESS_TIMEOUT_SEC)
+                except Exception:
+                    access = False
+            if access is None:
+                accessible = False
+                reason = "not_found"
+            elif access is False:
+                accessible = False
+                reason = "forbidden"
+            else:
+                accessible = True
+                reason = None
             views.append(
                 {
                     "id": doc_id,
@@ -1306,6 +1306,8 @@ class AnswerService:
         self.invite_repo = QuestionInviteRepository()
         self.eligibility_repo = AnswerEligibilityRepository()
         self.notification_repo = NotificationRepository()
+        self.comment_repo = CommentRepository()
+        self.publish_request_repo = PublishRequestRepository()
         self.asset_service = asset_service
         self.capability_resolver = CapabilityResolver()
         self.identity_service = None
@@ -1361,6 +1363,53 @@ class AnswerService:
         if question is None:
             return answer
         return await self._attach_answer_author(viewer, answer, question)
+
+    @staticmethod
+    def _is_adopted_answer(answer) -> bool:
+        """已采纳：认 qa_answer.adopted，兼容旧 status=2。"""
+        if bool(getattr(answer, "adopted", False)):
+            return True
+        return int(getattr(answer, "status", 1) or 0) == 2
+
+    async def _answer_author_id(self, answer) -> int | None:
+        """解析回答作者用户 ID：优先 qa_answer.user_id，否则专家档案。"""
+        if getattr(answer, "user_id", None):
+            return int(answer.user_id)
+        if getattr(answer, "expert_id", None) is not None:
+            expert = await self.expert_repo.get_by_id(answer.expert_id)
+            if expert is not None and getattr(expert, "user_id", None) is not None:
+                return int(expert.user_id)
+        return None
+
+    async def _assert_question_visible(self, question, user) -> None:
+        """回答/评论读路径与问题详情同一套定向可见性。"""
+        if question is None:
+            raise QuestionNotFoundError()
+        viewer = user or SimpleNamespace(user_id=0, is_admin=lambda: False, role=None)
+        invite_map = await self.invite_repo.list_user_ids_by_question_ids([int(question.id)])
+        invited = invite_map.get(int(question.id), set())
+        snapshot = CapabilitySnapshot(invited_user_ids=frozenset(invited))
+        if not self.capability_resolver.resolve(viewer, question, snapshot).capabilities.visible:
+            raise QaExpertQuestionAccessDeniedError()
+
+    async def _can_author_delete(self, answer, operator_id: int, *, pending_publish: bool) -> bool:
+        """作者可删：本人、未采纳、无进行中转公开、未软删。"""
+        if int(getattr(answer, "status", 0) or 0) == ANSWER_STATUS_DELETED:
+            return False
+        if self._is_adopted_answer(answer) or pending_publish:
+            return False
+        author_id = await self._answer_author_id(answer)
+        return author_id is not None and int(author_id) == int(operator_id)
+
+    async def _pending_publish_after_lazy_expire(self, question_id: int):
+        """列答/删答前复用转公开详情的惰性过期，避免到期后仍按 pending 拦删除。"""
+        from bisheng.qa_expert.domain.publish_service import PublishService
+
+        refresher = getattr(self, "publish_refresher", None)
+        if refresher is None:
+            refresher = PublishService().refresh_latest_for_question
+        await refresher(int(question_id))
+        return await self.publish_request_repo.get_pending_by_question(int(question_id))
 
     async def _resolve_answer(self, answer: Answer) -> Answer:
         values = {"images_url": answer.images_url, "attachments": answer.attachments}
@@ -1480,13 +1529,25 @@ class AnswerService:
     ) -> tuple[list[Answer], int]:
         """获取问题的回答列表；匿名回答者 expert_name 在 JSON 层改成别名。"""
         question = await self.question_repo.get_by_id(question_id)
+        await self._assert_question_visible(question, user)
         answers, total = await self.repository.get_by_question_id(question_id, skip=skip, limit=limit, sort_by=sort_by)
         viewer = user or SimpleNamespace(user_id=0, is_admin=lambda: False, role=None)
+        viewer_id = int(getattr(viewer, "user_id", 0) or 0)
+        pending = await self._pending_publish_after_lazy_expire(int(question.id))
+        pending_publish = pending is not None
+        question_svc = QuestionService()
+        question_svc.related_docs_access_checker = getattr(self, "related_docs_access_checker", None)
         resolved: list[Answer] = []
         for answer in answers:
             item = await self._resolve_answer(answer)
-            if question is not None:
-                item = await self._attach_answer_author(viewer, item, question)
+            item = await self._attach_answer_author(viewer, item, question)
+            can_delete = await self._can_author_delete(item, viewer_id, pending_publish=pending_publish)
+            related_doc_views = await question_svc.hydrate_related_docs(
+                getattr(item, "related_docs", None),
+                user=viewer,
+                owner_user_id=int(getattr(question, "user_id", 0) or 0),
+            )
+            self._annotate(item, can_delete=can_delete, related_doc_views=related_doc_views)
             resolved.append(item)
         return resolved, total
 
@@ -1563,25 +1624,29 @@ class AnswerService:
         return await self._resolve_answer(updated)
 
     async def delete_answer(self, answer_id: int, operator_id: int) -> bool:
-        """删除回答：有效回答数可回 0，content_locked 不解除。"""
+        """作者删除未采纳回答：软删回答、硬删其下评论；有效转公开申请进行中时拒绝。"""
         answer = await self.repository.get_by_id(answer_id)
-        if not answer:
+        if not answer or int(getattr(answer, "status", 0) or 0) == ANSWER_STATUS_DELETED:
             raise AnswerNotFoundError()
 
-        author_id = getattr(answer, "user_id", None)
-        if author_id is None and getattr(answer, "expert_id", None) is not None:
-            expert = await self.expert_repo.get_by_id(answer.expert_id)
-            author_id = getattr(expert, "user_id", None) if expert is not None else None
-        if author_id != operator_id:
-            raise PermissionDeniedError(message="Only answer author can delete")
+        author_id = await self._answer_author_id(answer)
+        if author_id is None or int(author_id) != int(operator_id):
+            raise PermissionDeniedError(msg="Only answer author can delete")
+        if self._is_adopted_answer(answer):
+            raise QaExpertAnswerDeleteNotAllowedError(msg="已采纳的回答不可删除")
+        pending = await self._pending_publish_after_lazy_expire(int(answer.question_id))
+        if pending is not None:
+            raise QaExpertAnswerDeleteNotAllowedError(msg="转公开申请进行中，暂不可删除回答")
 
         deleted = await self.repository.delete(answer_id)
-        if deleted:
-            question = await self.question_repo.get_by_id(answer.question_id)
-            if question is not None:
-                new_count = max(int(getattr(question, "answer_count", 0) or 0) - 1, 0)
-                await self.question_repo.update(answer.question_id, answer_count=new_count)
-        return deleted
+        if not deleted:
+            raise AnswerNotFoundError()
+        await self.comment_repo.delete_by_answer_id(answer_id)
+        question = await self.question_repo.get_by_id(answer.question_id)
+        if question is not None:
+            new_count = max(int(getattr(question, "answer_count", 0) or 0) - 1, 0)
+            await self.question_repo.update(answer.question_id, answer_count=new_count)
+        return True
 
     async def _send_answer_notification(self, question: Question, answer: Answer):
         """每次提交回答通知提问者；匿名专家用同题别名。"""
@@ -1790,25 +1855,31 @@ class CommentService:
         limit: int = 100,
         user=None,
     ) -> tuple[list[Comment], int]:
-        """获取回答的评论；匿名评论 user_name 在 JSON 层改成别名。"""
+        """获取回答的评论；可见性跟随问题，匿名评论 user_name 在 JSON 层改成别名。"""
+        question = None
+        if answer_id:
+            answer = await self.answer_repo.get_by_id(answer_id)
+            qid = int(getattr(answer, "question_id", 0) or 0) if answer is not None else int(question_id or 0)
+            if not qid:
+                raise AnswerNotFoundError()
+            question = await self.question_repo.get_by_id(qid)
+        elif question_id:
+            question = await self.question_repo.get_by_id(question_id)
+        if question is None:
+            raise QuestionNotFoundError()
+        viewer = user or SimpleNamespace(user_id=0, is_admin=lambda: False, role=None)
+        invite_map = await self.invite_repo.list_user_ids_by_question_ids([int(question.id)])
+        invited = invite_map.get(int(question.id), set())
+        snapshot = CapabilitySnapshot(invited_user_ids=frozenset(invited))
+        if not self.capability_resolver.resolve(viewer, question, snapshot).capabilities.visible:
+            raise QaExpertQuestionAccessDeniedError()
         comments, total = await self.repository.get_by_answer_id(
-            answer_id, question_id=question_id, skip=skip, limit=limit
+            answer_id, question_id=question_id or int(question.id), skip=skip, limit=limit
         )
         if not comments:
             return comments, total
-        question_ids = {
-            int(comment.question_id) for comment in comments if getattr(comment, "question_id", None) is not None
-        }
-        questions: dict[int, Question] = {}
-        for qid in question_ids:
-            row = await self.question_repo.get_by_id(qid)
-            if row is not None:
-                questions[qid] = row
-        viewer = user or SimpleNamespace(user_id=0, is_admin=lambda: False, role=None)
         for comment in comments:
-            question = questions.get(int(getattr(comment, "question_id", 0) or 0))
-            if question is not None:
-                await self._attach_comment_author(viewer, comment, question)
+            await self._attach_comment_author(viewer, comment, question)
         return comments, total
 
     async def _send_comment_notification(
@@ -1816,14 +1887,16 @@ class CommentService:
         answer: Answer,
         comment: Comment,
     ):
-        """评论通知回答作者；匿名评论用同题别名。"""
+        """评论通知回答作者和提问者；匿名评论用同题别名。发件人由 send_qa_inbox 排除。"""
         if not answer or not comment:
             return
         question = await self.question_repo.get_by_id(answer.question_id)
         if not question:
             return
-        receiver = int(getattr(answer, "user_id", 0) or 0)
-        if receiver <= 0:
+        answerer = int(getattr(answer, "user_id", 0) or 0)
+        asker = int(getattr(question, "user_id", 0) or 0)
+        receivers = list(dict.fromkeys(uid for uid in (answerer, asker) if uid > 0))
+        if not receivers:
             return
         from bisheng.qa_expert.domain.inbox_notice import display_name_for_trigger, send_qa_inbox
 
@@ -1838,7 +1911,7 @@ class CommentService:
             action_code="qa_answer_commented",
             system_text="qa_answer_commented",
             question=question,
-            receivers=[receiver],
+            receivers=receivers,
             sender_user_id=int(comment.user_id),
             sender_display=display,
             sender_anonymous=masked,
