@@ -922,6 +922,23 @@ export function KnowledgeSpaceContent({
             showToast({ message: localize("com_approval_toast_failed"), status: "error" });
         }
     };
+    // Row-level withdraw for the applicant's own 审核中 upload (mirrors the
+    // approver's row-level 同意/拒绝). Withdraw is applicant-only, single-request,
+    // via the cleanup API; drop the row from the selection so a stale id doesn't
+    // linger after the async refresh removes it.
+    const handleWithdrawPendingUpload = async (requestId: number) => {
+        try {
+            await fileChangeApproval.cleanup(requestId);
+            setSelectedFiles((prev) => {
+                const next = new Set(prev);
+                next.delete(`pending-upload:${requestId}`);
+                return next;
+            });
+            showToast({ message: localize("com_approval_toast_success"), status: "success" });
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
     /** Request ids of the selected pending uploads this user may decide. */
     const getPendingSelectionRequestIds = () =>
         displayFiles
@@ -1716,7 +1733,9 @@ export function KnowledgeSpaceContent({
                                             onOpenApprovalDetail={fileChangeApproval.openDetail}
                                             onPreviewPendingUpload={handleFileChangePreview}
                                             onDecidePendingUpload={handlePendingUploadDecision}
-                                            pendingUploadDeciding={fileChangeApproval.deciding}
+                                            onWithdrawPendingUpload={handleWithdrawPendingUpload}
+                                            pendingUploadDeciding={fileChangeApproval.deciding || fileChangeApproval.cleaning}
+                                            currentUserId={user?.id}
                                         />
                                     </div>
                                 ))}
@@ -1761,7 +1780,9 @@ export function KnowledgeSpaceContent({
                                     onOpenApprovalDetail={fileChangeApproval.openDetail}
                                     onPreviewPendingUpload={handleFileChangePreview}
                                     onDecidePendingUpload={handlePendingUploadDecision}
-                                    pendingUploadDeciding={fileChangeApproval.deciding}
+                                    onWithdrawPendingUpload={handleWithdrawPendingUpload}
+                                    pendingUploadDeciding={fileChangeApproval.deciding || fileChangeApproval.cleaning}
+                                    currentUserId={user?.id}
                             />
                         </div>
                     )}

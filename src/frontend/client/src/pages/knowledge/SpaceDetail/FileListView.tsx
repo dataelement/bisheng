@@ -61,7 +61,9 @@ interface FileListViewProps {
     onOpenApprovalDetail?: (requestId: number) => void;
     onPreviewPendingUpload?: (requestId: number) => void;
     onDecidePendingUpload?: (requestId: number, action: "approve" | "reject") => void;
+    onWithdrawPendingUpload?: (requestId: number) => void;
     pendingUploadDeciding?: boolean;
+    currentUserId?: string | number;
 }
 
 export function FileListView({
@@ -100,7 +102,9 @@ export function FileListView({
     onOpenApprovalDetail,
     onPreviewPendingUpload,
     onDecidePendingUpload,
+    onWithdrawPendingUpload,
     pendingUploadDeciding = false,
+    currentUserId,
 }: FileListViewProps) {
     const localize = useLocalize();
     const { showToast } = useToastContext();
@@ -204,7 +208,9 @@ export function FileListView({
                         onOpenApprovalDetail={onOpenApprovalDetail}
                         onPreviewPendingUpload={onPreviewPendingUpload}
                         onDecidePendingUpload={onDecidePendingUpload}
+                        onWithdrawPendingUpload={onWithdrawPendingUpload}
                         pendingUploadDeciding={pendingUploadDeciding}
+                        currentUserId={currentUserId}
                     />
                 ))}
                 {bottomSpacing > 0 && <div style={{ height: bottomSpacing }} aria-hidden />}

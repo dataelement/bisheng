@@ -8,7 +8,7 @@ import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
-import { canDecidePendingUpload, getFileChangeLockState, isPendingUploadSelectable } from "../hooks/useFileChangeApproval";
+import { canDecidePendingUpload, canWithdrawPendingUpload, getFileChangeLockState, isPendingUploadSelectable } from "../hooks/useFileChangeApproval";
 import { useInlineRename } from "../hooks/useInlineRename";
 import {
     formatTimeCard,
@@ -237,7 +237,11 @@ export interface FileListRowProps {
     onOpenApprovalDetail?: (requestId: number) => void;
     onPreviewPendingUpload?: (requestId: number) => void;
     onDecidePendingUpload?: (requestId: number, action: "approve" | "reject") => void;
+    /** Row-level withdraw for the applicant's own pending upload. */
+    onWithdrawPendingUpload?: (requestId: number) => void;
     pendingUploadDeciding?: boolean;
+    /** Current viewer id, to tell whether a pending row is the viewer's to withdraw. */
+    currentUserId?: string | number;
 }
 
 export function FileListRow({
@@ -280,7 +284,9 @@ export function FileListRow({
     onOpenApprovalDetail,
     onPreviewPendingUpload,
     onDecidePendingUpload,
+    onWithdrawPendingUpload,
     pendingUploadDeciding = false,
+    currentUserId,
 }: FileListRowProps) {
     const localize = useLocalize();
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
@@ -291,6 +297,7 @@ export function FileListRow({
     const isCreating = !!file.isCreating;
     const pendingUpload = file.pendingUploadApproval;
     const canDecidePending = canDecidePendingUpload(pendingUpload);
+    const canWithdrawPending = canWithdrawPendingUpload(pendingUpload, currentUserId);
     const isUploading = isKnowledgeItemUploading(file);
     const fileChangeLock = getFileChangeLockState(file);
     // A folder still uploading its batch: faded, not clickable, checkbox greyed out.
@@ -581,11 +588,12 @@ export function FileListRow({
                 none, so status pills line up down the column. 73px = two 32px
                 action buttons + the 9px divider between them. */}
             <div className="flex min-w-[73px] shrink-0 items-center justify-end">
-                {pendingUpload && canDecidePending && (
+                {pendingUpload && (canDecidePending || canWithdrawPending) && (
                     <PendingUploadApprovalActions
                         requestId={pendingUpload.requestId}
                         disabled={pendingUploadDeciding}
-                        onDecide={onDecidePendingUpload}
+                        onDecide={canDecidePending ? onDecidePendingUpload : undefined}
+                        onWithdraw={canWithdrawPending ? onWithdrawPendingUpload : undefined}
                     />
                 )}
                 {canDownload && (

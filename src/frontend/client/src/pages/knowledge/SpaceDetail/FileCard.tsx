@@ -19,7 +19,7 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { canDecidePendingUpload, getFileChangeLockState, isPendingUploadSelectable } from "../hooks/useFileChangeApproval";
+import { canDecidePendingUpload, canWithdrawPendingUpload, getFileChangeLockState, isPendingUploadSelectable } from "../hooks/useFileChangeApproval";
 import { PendingUploadApprovalActions } from "./PendingUploadApprovalActions";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -89,7 +89,11 @@ interface FileCardProps {
     onOpenApprovalDetail?: (requestId: number) => void;
     onPreviewPendingUpload?: (requestId: number) => void;
     onDecidePendingUpload?: (requestId: number, action: "approve" | "reject") => void;
+    /** Row-level withdraw for the applicant's own pending upload. */
+    onWithdrawPendingUpload?: (requestId: number) => void;
     pendingUploadDeciding?: boolean;
+    /** Current viewer id, to tell whether a pending row is the viewer's to withdraw. */
+    currentUserId?: string | number;
 }
 
 export function FileCard({
@@ -132,7 +136,9 @@ export function FileCard({
     onOpenApprovalDetail,
     onPreviewPendingUpload,
     onDecidePendingUpload,
+    onWithdrawPendingUpload,
     pendingUploadDeciding = false,
+    currentUserId,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -142,6 +148,7 @@ export function FileCard({
     const isCreating = !!file.isCreating;
     const pendingUpload = file.pendingUploadApproval;
     const canDecidePending = canDecidePendingUpload(pendingUpload);
+    const canWithdrawPending = canWithdrawPendingUpload(pendingUpload, currentUserId);
     // Uploading placeholder cards have no backend identity yet — not movable.
     const isUploading = isKnowledgeItemUploading(file);
     const fileChangeLock = getFileChangeLockState(file);
@@ -626,11 +633,12 @@ export function FileCard({
                     </div>
                 </div>
 
-                {pendingUpload && canDecidePending && (
+                {pendingUpload && (canDecidePending || canWithdrawPending) && (
                     <PendingUploadApprovalActions
                         requestId={pendingUpload.requestId}
                         disabled={pendingUploadDeciding}
-                        onDecide={onDecidePendingUpload}
+                        onDecide={canDecidePending ? onDecidePendingUpload : undefined}
+                        onWithdraw={canWithdrawPending ? onWithdrawPendingUpload : undefined}
                     />
                 )}
 
@@ -786,11 +794,12 @@ export function FileCard({
                                     : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                             )}
                         >
-                            {pendingUpload && canDecidePending && (
+                            {pendingUpload && (canDecidePending || canWithdrawPending) && (
                                 <PendingUploadApprovalActions
                                     requestId={pendingUpload.requestId}
                                     disabled={pendingUploadDeciding}
-                                    onDecide={onDecidePendingUpload}
+                                    onDecide={canDecidePending ? onDecidePendingUpload : undefined}
+                                    onWithdraw={canWithdrawPending ? onWithdrawPendingUpload : undefined}
                                 />
                             )}
                             {showInlineDownloadButton && (
