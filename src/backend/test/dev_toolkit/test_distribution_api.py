@@ -298,3 +298,53 @@ def test_skills_route_absent_when_open_platform_off(client_factory):
 
     assert response.status_code == 404
     assert _route(client.app, SKILLS_TEMPLATE) is None
+
+
+# ---- F053: AI-agent install guide (仿飞书「复制提示词给 AI 安装」) --------------
+
+INSTALL_GUIDE_PATH = "/api/v1/dev-toolkit/install-guide.md"
+
+
+def test_install_guide_reachable_without_any_credential(staged_artifacts, client_factory):
+    """The tutorial's copy-paste prompt points an AI agent here before it holds any key."""
+    client = client_factory()
+
+    response = client.get(INSTALL_GUIDE_PATH)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    # It is prose an agent executes: it must name the download endpoint and the
+    # login command, and warn about the -OJ filename trap.
+    body = response.text
+    assert "/api/v1/dev-toolkit/cli/download" in body
+    assert "bisheng login" in body
+    assert "-OJ" in body
+
+
+def test_install_guide_carries_no_auth_dependency(staged_artifacts, client_factory):
+    client = client_factory()
+    route = _route(client.app, INSTALL_GUIDE_PATH)
+    assert route is not None
+    assert _dependency_names(route.dependant) == set()
+
+
+def test_install_guide_missing_degrades_to_404_not_500(staged_artifacts, client_factory, monkeypatch):
+    """A release that shipped no guide answers a readable 404, never a traceback."""
+    from bisheng.dev_toolkit.api.endpoints import distribution
+
+    monkeypatch.setattr(distribution.artifact_service, "read_install_guide", lambda: None)
+    client = client_factory()
+
+    response = client.get(INSTALL_GUIDE_PATH)
+
+    assert response.status_code == 404
+    assert response.json()["status_code"] == 404
+
+
+def test_install_guide_route_absent_when_open_platform_off(client_factory):
+    client = client_factory(open_platform_enabled=False)
+
+    response = client.get(INSTALL_GUIDE_PATH)
+
+    assert response.status_code == 404
+    assert _route(client.app, INSTALL_GUIDE_PATH) is None

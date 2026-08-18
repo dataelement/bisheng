@@ -3,196 +3,212 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>从本地到毕昇 · 托管应用部署</title>
+<title>说三句话，做出全公司的应用 · 托管应用部署</title>
 <style>
   :root{
-    --paper:#EEF2F7;
-    --paper-2:#E4EAF2;
-    --ink:#0B1B2B;
-    --ink-2:#334357;
-    --slate:#64748B;
-    --line:#2B57E6;         /* route line / brand */
-    --line-soft:#DBE3F5;
-    --amber:#E4922B;        /* arrival / live */
-    --amber-soft:#FBEBD3;
-    --hair:#CBD6E2;
-    --term:#0E1B2E;         /* terminal panel */
-    --term-ink:#CBE0FF;
-    --term-dim:#5E7CA8;
-    --term-green:#5FD08B;
-    --ok:#1E9E63;
+    --paper:#FFFFFF;
+    --mist:#F3F6FC;
+    --mist-2:#EAF0FB;
+    --ink:#0C1626;
+    --ink-2:#47596F;
+    --ink-3:#7688A0;
+    --brand:#2E5CF6;
+    --brand-ink:#1F42C4;
+    --brand-soft:#E7EDFE;
+    --amber:#EF8F22;
+    --amber-soft:#FCEBD3;
+    --ok:#17A66B;
+    --line:#E4EAF3;
+    --line-2:#D3DCEC;
+    --term:#0E1A2E;
+    --term-2:#16233B;
+    --term-ink:#D7E5FF;
+    --term-dim:#5D7BA6;
+    --term-green:#6BE0A0;
+    --term-blue:#7FB0FF;
     --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
     --cjk: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
   }
-
   *{box-sizing:border-box}
-  html{-webkit-text-size-adjust:100%}
+  html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
   body{
-    margin:0;
-    background:
-      radial-gradient(120% 90% at 100% -10%, rgba(43,87,230,.06), transparent 60%),
-      var(--paper);
-    color:var(--ink);
-    font-family:var(--cjk);
-    font-size:16px;
-    line-height:1.7;
-    -webkit-font-smoothing:antialiased;
-    letter-spacing:.01em;
+    margin:0;background:var(--paper);color:var(--ink);
+    font-family:var(--cjk);font-size:16px;line-height:1.72;
+    -webkit-font-smoothing:antialiased;letter-spacing:.005em;
   }
-  a{color:inherit}
-  ::selection{background:rgba(43,87,230,.18)}
+  a{color:var(--brand-ink);text-decoration:none}
+  a:hover{text-decoration:underline}
+  ::selection{background:rgba(46,92,246,.16)}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
 
-  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  /* ---- top bar ---- */
+  .topbar{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(255,255,255,.94);z-index:20}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:58px;gap:16px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.01em;font-size:16px}
+  .brand .mark{width:26px;height:26px;flex:0 0 26px}
+  .topmeta{font-size:13px;color:var(--ink-3);font-weight:500}
 
-  /* ---------- top bar ---------- */
-  .topbar{border-bottom:1px solid var(--hair)}
-  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:56px;gap:16px}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.02em}
-  .brand .dot{width:11px;height:11px;border-radius:3px;background:var(--line);box-shadow:0 0 0 4px rgba(43,87,230,.14)}
-  .topmeta{font-size:13px;color:var(--slate)}
+  /* ---- hero ---- */
+  .hero{text-align:center;padding:64px 0 8px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--brand);font-weight:600;
+    background:var(--brand-soft);border-radius:999px;padding:6px 14px;margin:0 0 22px}
+  h1{font-size:clamp(32px,5.6vw,58px);line-height:1.08;letter-spacing:-.02em;font-weight:800;
+    margin:0 auto 20px;max-width:16ch}
+  h1 .u{position:relative;white-space:nowrap}
+  h1 .u:after{content:"";position:absolute;left:-.04em;right:-.04em;bottom:.06em;height:.34em;
+    background:var(--amber-soft);z-index:-1;border-radius:3px}
+  .lede{font-size:clamp(16px,2.1vw,19px);color:var(--ink-2);max-width:40ch;margin:0 auto}
 
-  /* ---------- hero ---------- */
-  .hero{padding:64px 0 28px}
-  .eyebrow{
-    font-family:var(--mono);font-size:12.5px;letter-spacing:.28em;text-transform:uppercase;
-    color:var(--line);font-weight:600;margin:0 0 18px
-  }
-  h1{
-    font-size:clamp(34px,6.2vw,60px);
-    line-height:1.06;
-    letter-spacing:-.01em;
-    font-weight:800;
-    margin:0 0 20px;
-    max-width:15ch;
-  }
-  h1 .u{
-    background:linear-gradient(180deg,transparent 62%, var(--amber-soft) 62%);
-    padding:0 .06em;
-  }
-  .lede{font-size:clamp(16px,2.2vw,19px);color:var(--ink-2);max-width:48ch;margin:0}
-  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
-  .chip{
-    font-size:13.5px;color:var(--ink-2);
-    background:#fff;border:1px solid var(--hair);border-radius:999px;padding:6px 14px;
-    display:inline-flex;align-items:center;gap:7px
-  }
-  .chip b{color:var(--line);font-weight:700}
+  /* ---- role strip ---- */
+  .roles{display:flex;justify-content:center;flex-wrap:wrap;gap:10px;margin:28px 0 6px}
+  .role{display:inline-flex;align-items:center;gap:9px;background:var(--paper);border:1px solid var(--line);
+    border-radius:999px;padding:8px 15px;font-size:13.5px;color:var(--ink-2)}
+  .role b{color:var(--ink);font-weight:700}
+  .role .who{font-family:var(--mono);font-size:11px;letter-spacing:.04em;color:var(--brand);
+    background:var(--brand-soft);border-radius:5px;padding:2px 7px;font-weight:600}
+  .role.live .who{color:var(--amber);background:var(--amber-soft)}
 
-  /* ---------- route strip (signature) ---------- */
-  .routewrap{margin:40px 0 8px;overflow-x:auto;scrollbar-width:none}
-  .routewrap::-webkit-scrollbar{display:none}
-  .route{min-width:660px}
-  .route .lbls{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;color:var(--slate);margin-bottom:8px}
-  .route .lbls .a{color:var(--ink);font-weight:600}
-  .route .lbls .b{color:var(--amber);font-weight:600}
-  .route svg{display:block;width:100%;height:44px}
-  .stations{display:flex;justify-content:space-between;font-size:12px;color:var(--slate);margin-top:6px;letter-spacing:.02em}
-  .stations span{width:16.6%;text-align:center}
+  /* ---- install module (feishu-style) ---- */
+  .install{margin:38px 0 8px}
+  .tabs{display:flex;justify-content:center;gap:6px;margin-bottom:18px}
+  .tab{font-size:15px;font-weight:600;color:var(--ink-3);background:transparent;border:0;cursor:pointer;
+    padding:9px 18px;border-radius:10px;position:relative;font-family:inherit;transition:.15s}
+  .tab[aria-selected="true"]{color:var(--brand-ink);background:var(--brand-soft)}
+  .tab:hover{color:var(--brand-ink)}
+  .panel{display:none}
+  .panel.on{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 
-  /* ---------- prep ---------- */
-  section{padding:14px 0}
-  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--slate);margin:44px 0 14px;font-weight:600}
-  .prep{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-  .prepcard{background:#fff;border:1px solid var(--hair);border-radius:14px;padding:18px}
-  .prepcard .n{font-family:var(--mono);font-size:12px;color:var(--line);font-weight:600}
-  .prepcard h4{margin:8px 0 6px;font-size:16px}
-  .prepcard p{margin:0;font-size:13.5px;color:var(--slate);line-height:1.6}
-  .prepcard code{font-family:var(--mono);color:var(--line);font-size:12.5px}
+  .promptcard{background:var(--mist);border:1px solid var(--line);border-radius:18px;
+    padding:20px;max-width:760px;margin:0 auto}
+  .promptcard .lead{font-size:14.5px;color:var(--ink-2);margin:0 0 14px;text-align:center}
+  .promptcard .lead b{color:var(--ink);font-weight:700}
 
-  /* ---------- steps / stations ---------- */
-  .steps{position:relative;margin:16px 0 0;padding-left:60px}
-  .steps:before{
-    content:"";position:absolute;left:19px;top:14px;bottom:56px;width:3px;
-    background:linear-gradient(180deg,var(--line),var(--line) 82%, var(--amber));border-radius:2px
-  }
-  .step{position:relative;padding:0 0 44px}
-  .step .node{
-    position:absolute;left:-60px;top:-2px;width:40px;height:40px;border-radius:50%;
-    background:#fff;border:3px solid var(--line);
-    display:flex;align-items:center;justify-content:center;
-    font-family:var(--mono);font-weight:700;font-size:15px;color:var(--line);
-    box-shadow:0 3px 0 rgba(43,87,230,.12)
-  }
-  .step.arrive .node{border-color:var(--amber);color:var(--amber);box-shadow:0 3px 0 rgba(228,146,43,.18)}
-  .step h3{margin:2px 0 6px;font-size:clamp(20px,3vw,24px);letter-spacing:-.01em}
-  .step .say{margin:0 0 14px;color:var(--ink-2);max-width:58ch}
+  .term{background:var(--term);border-radius:13px;overflow:hidden;border:1px solid #10203a;text-align:left;
+    box-shadow:0 18px 40px -24px rgba(12,22,38,.55)}
+  .term .bar{display:flex;align-items:center;gap:7px;padding:11px 15px;border-bottom:1px solid var(--term-2)}
+  .term .bar i{width:10px;height:10px;border-radius:50%;background:#2a3c58;display:inline-block}
+  .term .bar .name{margin-left:8px;font-family:var(--mono);font-size:11.5px;color:var(--term-dim);letter-spacing:.04em}
+  .term .bar .copy{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);
+    font-size:11.5px;color:var(--term-blue);background:rgba(127,176,255,.1);border:1px solid #24406a;
+    border-radius:7px;padding:5px 11px;cursor:pointer;transition:.15s}
+  .term .bar .copy:hover{background:rgba(127,176,255,.2);color:#fff}
+  .term pre{margin:0;padding:17px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;
+    line-height:1.85;color:var(--term-ink);tab-size:2;white-space:pre-wrap;word-break:break-word}
+  .term pre::-webkit-scrollbar{height:8px}
+  .term pre::-webkit-scrollbar-thumb{background:#26405f;border-radius:8px}
+  .tok-c{color:var(--term-dim)}
+  .tok-p{color:var(--term-green)}
+  .tok-k{color:var(--amber)}
+  .tok-a{color:#A9C7FF}
+
+  .fillnote{font-size:12.5px;color:var(--ink-3);margin:12px 2px 0;text-align:center}
+  .fillnote b{color:var(--brand-ink)}
+  .restart{display:flex;align-items:center;justify-content:center;gap:9px;margin:16px auto 0;
+    font-size:13.5px;color:var(--ink-2);max-width:760px}
+  .restart .ok{color:var(--ok);font-weight:700}
+  .warn{display:flex;gap:11px;max-width:760px;margin:14px auto 0;background:var(--amber-soft);
+    border:1px solid #F1D3A6;border-radius:11px;padding:11px 14px;font-size:13px;color:#7a4c12}
+  .warn b{color:#5f3a0c}
+
+  /* ---- agents grid ---- */
+  .band{background:var(--mist);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:52px}
+  .band .wrap{padding:44px 24px}
+  .band h2{text-align:center;font-size:clamp(19px,3vw,24px);margin:0 0 6px;letter-spacing:-.01em}
+  .band .sub{text-align:center;color:var(--ink-2);font-size:14px;margin:0 auto 30px;max-width:52ch}
+  .band .sub b{color:var(--ink)}
+  .agents{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;max-width:760px;margin:0 auto}
+  .agent{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .agent .tile{width:62px;height:62px;border-radius:16px;background:var(--paper);border:1px solid var(--line-2);
+    display:flex;align-items:center;justify-content:center;transition:.16s}
+  .agent .tile svg{width:30px;height:30px}
+  .agent:hover .tile{transform:translateY(-3px);border-color:var(--brand);box-shadow:0 10px 22px -14px rgba(46,92,246,.5)}
+  .agent .nm{font-size:12.5px;color:var(--ink-2);font-weight:500}
+  .agent .badge{font-family:var(--mono);font-size:9.5px;letter-spacing:.03em;color:var(--brand);font-weight:600}
+  .agent .badge.soft{color:var(--ink-3)}
+
+  /* ---- journey ---- */
+  .steps-h{text-align:center;padding:52px 0 4px}
+  .steps-h .k{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--brand);font-weight:600;margin:0 0 10px}
+  .steps-h h2{font-size:clamp(22px,3.4vw,30px);margin:0;letter-spacing:-.01em}
+  .steps-h p{color:var(--ink-2);margin:10px auto 0;max-width:44ch;font-size:15px}
+
+  .steps{position:relative;margin:34px auto 0;padding-left:62px;max-width:760px}
+  .steps:before{content:"";position:absolute;left:19px;top:12px;bottom:38px;width:2.5px;
+    background:linear-gradient(180deg,var(--brand),var(--brand) 80%,var(--amber));border-radius:2px}
+  .step{position:relative;padding:0 0 34px}
+  .step .node{position:absolute;left:-62px;top:-2px;width:40px;height:40px;border-radius:50%;
+    background:var(--paper);border:2.5px solid var(--brand);display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-weight:700;font-size:15px;color:var(--brand)}
+  .step.arrive .node{border-color:var(--amber);color:var(--amber)}
+  .step .hd{display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin:3px 0 8px}
+  .step h3{margin:0;font-size:clamp(19px,2.6vw,23px);letter-spacing:-.01em}
+  .who-chip{font-family:var(--mono);font-size:10.5px;letter-spacing:.03em;font-weight:600;
+    padding:3px 9px;border-radius:6px;color:var(--brand);background:var(--brand-soft)}
+  .who-chip.mgr{color:#8a5a12;background:var(--amber-soft)}
+  .who-chip.peer{color:var(--ok);background:#DBF3E8}
+  .step .say{margin:0;color:var(--ink-2);font-size:15px}
   .step .say b{color:var(--ink);font-weight:600}
-  .step .say code{font-family:var(--mono);color:var(--line);font-size:.92em;background:rgba(43,87,230,.06);padding:1px 6px;border-radius:5px}
+  .step .say code{font-family:var(--mono);font-size:.9em;color:var(--brand-ink);background:var(--brand-soft);
+    padding:1px 6px;border-radius:5px}
 
-  /* code / terminal */
-  .code{
-    background:var(--term);border-radius:12px;overflow:hidden;border:1px solid #16283f;
-    box-shadow:0 14px 30px -18px rgba(11,27,43,.5)
-  }
-  .code .bar{display:flex;align-items:center;gap:7px;padding:10px 14px;border-bottom:1px solid #17293f}
-  .code .bar i{width:10px;height:10px;border-radius:50%;background:#25374f;display:inline-block}
-  .code .bar .name{margin-left:8px;font-family:var(--mono);font-size:12px;color:var(--term-dim);letter-spacing:.03em}
-  .code .bar .copy{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--term-dim);
-    background:transparent;border:1px solid #223650;border-radius:6px;padding:3px 9px;cursor:pointer;transition:.15s}
-  .code .bar .copy:hover{color:var(--term-ink);border-color:#2f4a6e}
-  .code pre{margin:0;padding:16px 18px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.75;color:var(--term-ink);tab-size:2}
-  .code pre::-webkit-scrollbar{height:8px}
-  .code pre::-webkit-scrollbar-thumb{background:#243b57;border-radius:8px}
-  .tok-c{color:var(--term-dim)}       /* comment */
-  .tok-p{color:var(--term-green)}     /* prompt $ */
-  .tok-f{color:#9FE8C0}               /* flag / value */
+  .quote{margin:12px 0 0;border-left:3px solid var(--brand);background:var(--mist);border-radius:0 10px 10px 0;
+    padding:11px 15px;font-size:14px;color:var(--ink);display:flex;flex-direction:column;gap:8px}
+  .quote .q{position:relative}
+  .quote .q:before{content:"“";color:var(--brand);font-weight:800;margin-right:2px}
+  .quote .q:after{content:"”";color:var(--brand);font-weight:800;margin-left:1px}
+  .hint{display:flex;gap:9px;margin-top:11px;font-size:13px;color:var(--ink-2)}
+  .hint .t{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--amber);
+    font-weight:700;padding-top:2px;white-space:nowrap}
+  .hint b{color:var(--ink)}
 
-  /* tip */
-  .tip{
-    display:flex;gap:12px;margin-top:14px;background:#fff;border:1px solid var(--hair);
-    border-left:3px solid var(--amber);border-radius:10px;padding:13px 15px
-  }
-  .tip .t{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--amber);font-weight:700;text-transform:uppercase;padding-top:2px;white-space:nowrap}
-  .tip p{margin:0;font-size:14px;color:var(--ink-2);line-height:1.6}
-  .tip b{color:var(--ink)}
-  .tip code{font-family:var(--mono);color:var(--line);font-size:.92em}
+  .stub{background:var(--paper);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin-top:12px}
+  .stub .head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
+    background:linear-gradient(90deg,var(--amber-soft),transparent)}
+  .stub .head .l{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;color:#8a5a12;font-weight:600}
+  .stub .head .stamp{font-family:var(--mono);font-size:10.5px;color:var(--amber);border:1.5px solid var(--amber);
+    border-radius:6px;padding:2px 8px;letter-spacing:.14em;font-weight:700}
+  .stub .r{display:flex;justify-content:space-between;gap:16px;padding:9px 16px;border-top:1px dashed var(--line-2);font-size:13.5px}
+  .stub .r .kk{color:var(--ink-3)}
+  .stub .r .vv{color:var(--ink);font-weight:600;text-align:right}
 
-  /* boarding-pass stub */
-  .stub{background:#fff;border:1px solid var(--hair);border-radius:14px;overflow:hidden;margin-top:14px}
-  .stub .head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(90deg,rgba(43,87,230,.06),transparent)}
-  .stub .head .l{font-family:var(--mono);font-size:12px;letter-spacing:.14em;color:var(--line);font-weight:600}
-  .stub .head .stamp{font-family:var(--mono);font-size:11px;color:var(--amber);border:1.5px solid var(--amber);border-radius:6px;padding:2px 8px;transform:rotate(-3deg);letter-spacing:.1em;font-weight:700}
-  .stub .rows{padding:6px 18px 16px}
-  .stub .r{display:flex;justify-content:space-between;gap:16px;padding:8px 0;border-bottom:1px dashed var(--line-soft);font-size:13.5px}
-  .stub .r:last-child{border-bottom:0}
-  .stub .r .k{color:var(--slate)}
-  .stub .r .v{color:var(--ink);font-weight:600;text-align:right}
+  /* ---- help ---- */
+  .help{background:var(--ink);color:#E6ECF4;border-radius:22px;padding:34px clamp(22px,4vw,46px);margin:50px 0 0}
+  .help h2{margin:0 0 10px;font-size:clamp(20px,3vw,26px);color:#fff;letter-spacing:-.01em}
+  .help p{margin:0 0 12px;color:#BDCADC;font-size:14.5px;line-height:1.75}
+  .help p:last-child{margin-bottom:0}
+  .help b{color:#fff}
+  .help code{font-family:var(--mono);color:var(--term-green);font-size:.9em}
 
-  /* ---------- help card (replaces pitfalls) ---------- */
-  .help{background:var(--ink);color:#E6ECF4;border-radius:20px;padding:32px clamp(20px,4vw,44px);margin:34px 0}
-  .help h2{margin:0 0 8px;font-size:clamp(20px,3vw,25px);letter-spacing:-.01em;color:#fff}
-  .help p{margin:0;color:#C4D0E0;font-size:14.5px;line-height:1.7;max-width:60ch}
-  .help p b{color:#fff}
-  .help code{font-family:var(--mono);color:var(--term-green);font-size:.92em}
-
-  /* ---------- outro ---------- */
-  .outro{text-align:center;padding:56px 0 20px}
-  .outro .big{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-.01em;margin:0 0 10px}
+  /* ---- outro / footer ---- */
+  .outro{text-align:center;padding:56px 0 24px}
+  .outro .big{font-size:clamp(24px,3.6vw,34px);font-weight:800;letter-spacing:-.01em;margin:0 0 12px}
   .outro p{color:var(--ink-2);margin:0 auto 26px;max-width:46ch}
-  .cta{display:inline-flex;align-items:center;gap:10px;background:var(--line);color:#fff;text-decoration:none;
-    font-weight:600;padding:13px 22px;border-radius:12px;transition:.18s;box-shadow:0 10px 22px -12px rgba(43,87,230,.7)}
-  .cta:hover{transform:translateY(-2px)}
+  .cta{display:inline-flex;align-items:center;gap:9px;background:var(--brand);color:#fff;
+    font-weight:600;padding:13px 24px;border-radius:12px;transition:.16s;
+    box-shadow:0 12px 26px -12px rgba(46,92,246,.65)}
+  .cta:hover{transform:translateY(-2px);text-decoration:none}
+  .foot{border-top:1px solid var(--line)}
+  .foot .wrap{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between;
+    padding:22px 24px;font-size:13px;color:var(--ink-3)}
+  .foot code{font-family:var(--mono);color:var(--brand-ink);font-size:12.5px;background:var(--brand-soft);
+    padding:2px 8px;border-radius:6px}
 
-  .foot{border-top:1px solid var(--hair);margin-top:40px}
-  .foot .wrap{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;justify-content:space-between;padding:22px 24px;font-size:13px;color:var(--slate)}
-  .foot .dev{display:inline-flex;align-items:center;gap:8px}
-  .foot .dev code{font-family:var(--mono);color:var(--line);font-size:12.5px;background:rgba(43,87,230,.06);padding:2px 8px;border-radius:6px}
+  :focus-visible{outline:3px solid rgba(46,92,246,.5);outline-offset:3px;border-radius:6px}
 
-  :focus-visible{outline:3px solid rgba(43,87,230,.5);outline-offset:3px;border-radius:6px}
-
-  /* traveling dot */
-  @keyframes travel{to{offset-distance:100%}}
-  #pod{offset-path:path("M2 22 H658");animation:travel 3.4s cubic-bezier(.65,0,.35,1) infinite}
-
-  @media (max-width:720px){
-    .prep{grid-template-columns:1fr}
-    .steps{padding-left:48px}
-    .step .node{left:-48px;width:34px;height:34px;font-size:13px}
+  @media (max-width:760px){
+    .agents{grid-template-columns:repeat(3,1fr);gap:18px 10px}
+    .roles{gap:8px}
+    .steps{padding-left:50px}
+    .step .node{left:-50px;width:34px;height:34px;font-size:13px}
     .steps:before{left:16px}
   }
   @media (prefers-reduced-motion:reduce){
-    #pod{animation:none;offset-distance:50%}
-    .cta:hover{transform:none}
+    html{scroll-behavior:auto}
+    .panel.on{animation:none}
+    .cta:hover,.agent:hover .tile{transform:none}
   }
 </style>
 </head>
@@ -200,187 +216,243 @@
 
   <div class="topbar">
     <div class="wrap">
-      <div class="brand"><span class="dot"></span>毕昇 · 应用工场</div>
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <rect x="2" y="2" width="28" height="28" rx="8" fill="#2E5CF6"/>
+          <path d="M10 22V10h5.2a3.4 3.4 0 0 1 .3 6.8H10" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="21.4" cy="20.4" r="2.1" fill="#EF8F22"/>
+        </svg>
+        毕昇 · 应用工场
+      </div>
       <div class="topmeta">托管应用 · 上手手册</div>
     </div>
   </div>
 
   <header class="hero">
     <div class="wrap">
-      <p class="eyebrow">托管应用 · 从本地到平台</p>
-      <h1>把你电脑上的<br><span class="u">小应用</span>,搬进毕昇</h1>
-      <p class="lede">不用改造成工作流,也不用自己会写代码——把想法交给 AI,顺着下面这条线走几步,全公司就能在应用广场里点开用它。</p>
+      <span class="eyebrow">◆ 托管应用 · 从想法到全公司</span>
+      <h1>说三句话，<br>把想法变成<span class="u">全公司能用</span>的应用</h1>
+      <p class="lede">代码和命令全交给 AI —— 你只负责复制提示词、描述想法，在界面点两下。</p>
 
-      <div class="chips">
-        <span class="chip"><b>≈10</b> 分钟</span>
-        <span class="chip">代码<b>交给 AI</b> 写</span>
-        <span class="chip">全公司<b>点开就能用</b></span>
-      </div>
-
-      <div class="routewrap" aria-hidden="true">
-        <div class="route">
-          <div class="lbls"><span class="a">◐ 你的电脑</span><span class="b">应用广场 ●</span></div>
-          <svg viewBox="0 0 660 44" preserveAspectRatio="none">
-            <line x1="2" y1="22" x2="658" y2="22" stroke="var(--line-soft)" stroke-width="3"/>
-            <line x1="2" y1="22" x2="658" y2="22" stroke="var(--line)" stroke-width="3" stroke-dasharray="4 8" stroke-linecap="round"/>
-            <g>
-              <circle cx="2" cy="22" r="6" fill="var(--line)"/>
-              <circle cx="133" cy="22" r="4.5" fill="#fff" stroke="var(--line)" stroke-width="2.5"/>
-              <circle cx="264" cy="22" r="4.5" fill="#fff" stroke="var(--line)" stroke-width="2.5"/>
-              <circle cx="395" cy="22" r="4.5" fill="#fff" stroke="var(--line)" stroke-width="2.5"/>
-              <circle cx="526" cy="22" r="4.5" fill="#fff" stroke="var(--line)" stroke-width="2.5"/>
-              <circle cx="658" cy="22" r="7" fill="var(--amber)"/>
-            </g>
-            <circle id="pod" r="5.5" fill="var(--ink)" stroke="#fff" stroke-width="2"/>
-          </svg>
-          <div class="stations">
-            <span>登录</span><span>让 AI 做</span><span>部署</span><span>审批</span><span>授权</span><span>用起来</span>
-          </div>
-        </div>
+      <div class="roles">
+        <span class="role"><span class="who">你</span>说三句话 <b>+</b> 界面点两下</span>
+        <span class="role"><span class="who">AI</span>写代码、跑命令、去部署</span>
+        <span class="role live"><span class="who">同事</span>应用广场里 <b>点开就用</b></span>
       </div>
     </div>
   </header>
 
-  <main>
-    <section class="wrap">
-      <p class="kicker">出发前 · 备三样东西</p>
-      <div class="prep">
-        <div class="prepcard">
-          <div class="n">01</div>
-          <h4>一个 AI 编程工具</h4>
-          <p>会用 Cursor、Claude Code、通义灵码之类的 AI 编程工具就行——应用的代码交给它写,你只描述想要什么。</p>
+  <!-- ===== install module (第 1 句) ===== -->
+  <section class="wrap install">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-tab="ai">通过 AI 助手安装</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="manual">手动安装</button>
+    </div>
+
+    <!-- AI panel -->
+    <div class="panel on" data-panel="ai">
+      <div class="promptcard">
+        <p class="lead">把下面这段<b>复制</b>给你的 AI 助手（Claude Code、Codex、Cursor、Trae…），<b>把密钥换成管理员给你的</b>，回车即可 —— 它会替你装好命令行、登录、接好平台规矩。</p>
+        <div class="term">
+          <div class="bar"><i></i><i></i><i></i><span class="name">提示词 · 复制给 AI</span>
+            <button class="copy" data-copy="prompt">▢ 复制提示词</button></div>
+<pre id="ai-prompt">帮我安装并登录 bisheng 命令行。安装与登录指引见：
+<span class="tok-a js-guide-url">http://你的毕昇地址/api/v1/dev-toolkit/install-guide.md</span>
+登录地址用同一个 <span class="tok-a js-platform-addr">http://你的毕昇地址</span>，我的密钥是 <span class="tok-k">bs-sak-把这里换成你的密钥</span>
+装好后确认 bisheng --help 能运行，并告诉我接入了哪些 AI 工具。</pre>
         </div>
-        <div class="prepcard">
-          <div class="n">02</div>
-          <h4>bisheng 命令行</h4>
-          <p>从<b>你们自己的平台</b>下载安装,不用连公网。装好后运行 <code>bisheng&nbsp;--help</code> 能看到 login / deploy。装法见第 1 站。</p>
-        </div>
-        <div class="prepcard">
-          <div class="n">03</div>
-          <h4>一把服务账号密钥</h4>
-          <p><b>找管理员领一把</b> <code>bs-sak-…</code> 密钥(只有管理员能发放,只显示一次记得存好)。应用会归在管理员指定的人名下。</p>
-        </div>
+        <p class="fillnote">提示词里的<b>平台地址已自动填好</b>为你当前打开本页的地址，你只需把最后那把 <b>bs-sak-…</b> 换成自己的密钥。</p>
       </div>
-    </section>
+      <div class="warn"><span>⚠️</span><p><b>密钥只粘进你自己本机的 AI 助手</b>，别贴到任何共享文档、聊天群或公开页面。</p></div>
+      <p class="restart"><span class="ok">✓</span> 装好后<b style="margin:0 4px">重启一下 AI 助手</b>，让它读到刚接上的《部署纳管》技能，就可以进入第 2 句了。</p>
+    </div>
 
-    <section class="wrap">
-      <p class="kicker">这条线 · 6 站到达</p>
-      <div class="steps">
-
-        <!-- 1 -->
-        <div class="step">
-          <div class="node">1</div>
-          <h3>装好命令行,登录平台</h3>
-          <p class="say">先从平台下载命令行装上,再用管理员给你的密钥登录一次。凭据会记在你本机,后面不用再输。登录后平台还会<b>自动把《部署纳管》技能装好,并接到你的 AI 编程工具上</b>(Claude Code、Codex)——AI 靠它才知道平台的规矩。登录的最后几行会写清楚接进了哪些工具,<b>如果显示一个都没接上,先照提示处理再往下做</b>,否则 AI 是"盲写"。</p>
-          <div class="code">
-            <div class="bar"><i></i><i></i><i></i><span class="name">终端</span><button class="copy" data-copy>复制</button></div>
-<pre><span class="tok-c"># 1. 从你们自己的平台下载并安装命令行(不连公网)</span>
-<span class="tok-c">#    -OJ 让 curl 用平台给的正确文件名(pip 认这个名字)</span>
+    <!-- manual panel -->
+    <div class="panel" data-panel="manual">
+      <div class="promptcard">
+        <p class="lead">更喜欢自己动手？在终端里依次执行（<b>命令行从你们自己的平台下载，不连公网</b>）：</p>
+        <div class="term">
+          <div class="bar"><i></i><i></i><i></i><span class="name">终端</span>
+            <button class="copy" data-copy="manual">▢ 复制命令</button></div>
+<pre id="manual-cmds"><span class="tok-c"># 下载安装件（-OJ 让 curl 用平台给的正确文件名，pip 只认这个名字）</span>
 <span class="tok-p">$</span> curl -OJ <span class="js-platform-addr">http://你的毕昇地址</span>/api/v1/dev-toolkit/cli/download
 <span class="tok-p">$</span> pip install ./bisheng_cli-*.whl
-
-<span class="tok-c"># 2. 用管理员给的密钥登录(应用会归到指定的资源归属人名下)</span>
-<span class="tok-p">$</span> bisheng login <span class="js-platform-addr">http://你的毕昇地址</span> <span class="tok-f">--api-key bs-sak-…</span></pre>
-          </div>
+<span class="tok-c"># 用管理员给的密钥登录一次（凭据存本机，以后不用再输）</span>
+<span class="tok-p">$</span> bisheng login <span class="js-platform-addr">http://你的毕昇地址</span> <span class="tok-k">--api-key bs-sak-…</span></pre>
         </div>
-
-        <!-- 2 -->
-        <div class="step">
-          <div class="node">2</div>
-          <h3>让 AI 做出你的应用</h3>
-          <p class="say">上一步接好技能之后,<b>新开一个 AI 会话</b>(已经开着的要重开,它读不到新装的技能),然后<b>用大白话说你要什么</b>——"做个部门费用报销的小工具""做个数据看板""做个满意度问卷"。AI 会照着平台的规矩,把应用和配置一起写好。<b>部署前让 AI 对照技能自检一遍</b>,它会自己把不合规矩的地方改好。</p>
-          <div class="tip"><span class="t">技能</span><p>用 Claude Code 或 Codex 的,登录时已自动接好,重开会话即可;想手动更新,运行 <code>bisheng skills sync</code>。用 Cursor、Cline 等其它工具的,首次 <code>bisheng deploy</code> 会在项目里写一个 <code>AGENTS.md</code> 指明技能位置,让 AI 读它就行。平台的规矩、清单怎么写、常见问题都在技能里,你不用懂,AI 懂就够了。</p></div>
-        </div>
-
-        <!-- 3 -->
-        <div class="step">
-          <div class="node">3</div>
-          <h3>一键部署</h3>
-          <p class="say">在应用目录里跑一条命令。平台会自动帮你<b>打包 → 构建 → 启动检查</b>,最后生成一张<b>发布审批单</b>。中间那些活儿你都不用管。</p>
-          <div class="code">
-            <div class="bar"><i></i><i></i><i></i><span class="name">终端</span><button class="copy" data-copy>复制</button></div>
-<pre><span class="tok-p">$</span> bisheng deploy
-<span class="tok-c">  打包 → 上传 → 构建 → 启动检查</span>
-<span class="tok-c">  ✓ 平台已接收   审批单已生成:等待管理员通过</span></pre>
-          </div>
-        </div>
-
-        <!-- 4 -->
-        <div class="step">
-          <div class="node">4</div>
-          <h3>等管理员审批</h3>
-          <p class="say">发布要过一道审批。管理员在<b>审批中心 → 待我审批</b>里点「通过」,你的应用就会自动上线。想看进度,回「构建 → 应用」,卡片上会显示<b>「已上线」</b>。</p>
-        </div>
-
-        <!-- 5 -->
-        <div class="step">
-          <div class="node">5</div>
-          <h3>授权给大家</h3>
-          <p class="say"><b>上线 ≠ 公开。</b>刚上线时只有你自己能进。到「构建 → 应用」找到它,点卡片上的齿轮 → <b>管理权限</b> → 添加权限,把「查看者」授权给需要的人:选<b>部门 / 用户组</b>,想全员就勾顶层部门 +「包含子部门」。</p>
-          <div class="tip"><span class="t">别走捷径</span><p>授权就在这个界面点几下完成,一步到位——不用找后台、也不用改配置。</p></div>
-        </div>
-
-        <!-- 6 -->
-        <div class="step arrive">
-          <div class="node">6</div>
-          <h3>抵达 · 大家用起来</h3>
-          <p class="say">被授权的人打开<b>应用中心</b>,就能在「探索更多应用」里看到你的应用,点<b>「进入应用」</b>在新标签打开。用过一次,它还会自动出现在每个人的「最近使用」里。</p>
-          <div class="stub">
-            <div class="head"><span class="l">你的应用 · 应用广场</span><span class="stamp">LIVE</span></div>
-            <div class="rows">
-              <div class="r"><span class="k">入口</span><span class="v">应用中心 → 进入应用</span></div>
-              <div class="r"><span class="k">谁能看到</span><span class="v">你授权过的部门 / 用户组</span></div>
-              <div class="r"><span class="k">下次更新</span><span class="v">改完再 bisheng deploy 发一版</span></div>
-            </div>
-          </div>
-        </div>
-
+        <p class="fillnote">装完 <b>bisheng --help</b> 能看到 login / deploy 就对了；登录会自动接好《部署纳管》技能。</p>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="wrap">
-      <div class="help">
-        <h2>卡住了怎么办?</h2>
-        <p>本地跑得好、平台上起不来,几乎都是没照平台的规矩来。这些规矩和常见问题<b>都写在《部署纳管》技能里</b>——把报错贴给你的 AI,让它<b>对照技能排查</b>,通常一两轮就好。你不需要自己读懂它。技能没接上或想更新,运行 <code>bisheng skills sync</code>——它会重新下载并接进本机的 AI 编程工具,最后一行写明接进了哪些。</p>
+  <!-- ===== agents grid ===== -->
+  <section class="band">
+    <div class="wrap">
+      <h2>你手上的 AI 工具，基本都支持</h2>
+      <p class="sub"><b>安装</b>这一步，任意能跑命令的 AI 助手都行；平台规矩的<b>自动接线</b>目前对 Claude Code、Codex 最顺，其它工具靠首次部署写入项目的 <code style="font-family:var(--mono);font-size:.86em">AGENTS.md</code> 兜底。</p>
+      <div class="agents">
+        <div class="agent">
+          <div class="tile"><svg viewBox="0 0 32 32" aria-hidden="true"><g stroke="#D97706" stroke-width="2" stroke-linecap="round"><path d="M16 5v22M5 16h22M8.2 8.2l15.6 15.6M23.8 8.2 8.2 23.8"/></g></svg></div>
+          <span class="nm">Claude Code</span><span class="badge">自动接线</span>
+        </div>
+        <div class="agent">
+          <div class="tile"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="9.5" stroke="#0C1626" stroke-width="2"/><path d="M16 6.5v19M6.5 16h19" stroke="#0C1626" stroke-width="1.4" opacity=".55"/></svg></div>
+          <span class="nm">Codex</span><span class="badge">自动接线</span>
+        </div>
+        <div class="agent">
+          <div class="tile"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M16 4 27 10v12L16 28 5 22V10z" stroke="#0C1626" stroke-width="2" stroke-linejoin="round"/><path d="M16 16 27 10M16 16v12M16 16 5 10" stroke="#0C1626" stroke-width="1.4" opacity=".5"/></svg></div>
+          <span class="nm">Cursor</span><span class="badge soft">AGENTS.md</span>
+        </div>
+        <div class="agent">
+          <div class="tile"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="6" y="6" width="20" height="20" rx="6" stroke="#0C1626" stroke-width="2"/><path d="M12 13h8M12 19h5" stroke="#0C1626" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <span class="nm">Trae</span><span class="badge soft">AGENTS.md</span>
+        </div>
+        <div class="agent">
+          <div class="tile"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="5" y="12" width="22" height="12" rx="6" stroke="#0C1626" stroke-width="2"/><circle cx="12" cy="18" r="2" fill="#0C1626"/><circle cx="20" cy="18" r="2" fill="#0C1626"/><path d="M11 12c0-3 2-5 5-5s5 2 5 5" stroke="#0C1626" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <span class="nm">Copilot</span><span class="badge soft">AGENTS.md</span>
+        </div>
+        <div class="agent">
+          <div class="tile"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 12c3 0 3 3 6 3s3-3 6-3 3 3 6 3 3-3 6-3M4 20c3 0 3 3 6 3s3-3 6-3 3 3 6 3 3-3 6-3" stroke="#0891B2" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <span class="nm">Windsurf</span><span class="badge soft">AGENTS.md</span>
+        </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="outro wrap">
-      <p class="big">就这么多。你已经会部署了。</p>
-      <p>从一个想法,到全公司都能点开用的应用——写代码交给 AI,打包、构建、上线交给平台。你只管说你想要什么。</p>
-      <a class="cta" href="#top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ 回到起点,开始第 1 站</a>
-    </section>
-  </main>
+  <!-- ===== journey ===== -->
+  <div class="steps-h wrap">
+    <p class="k">接下来 · 两句话 + 界面两下</p>
+    <h2>剩下的路，一样简单</h2>
+    <p>命令行装好了，下面每一步你要做的，几乎就是再对 AI 说句话。</p>
+  </div>
+
+  <section class="wrap">
+    <div class="steps">
+
+      <!-- step 2 -->
+      <div class="step">
+        <div class="node">2</div>
+        <div class="hd"><h3>让 AI 做出你的应用</h3><span class="who-chip">你 → AI</span></div>
+        <p class="say"><b>新开一个 AI 会话</b>（重启后的新会话才读得到技能），用大白话说你要什么。它会照平台规矩，把<b>应用代码</b>和一个叫 <code>bisheng-app.yaml</code> 的小配置一起写好。</p>
+        <div class="quote">
+          <span class="q">帮我做一个部门费用报销小工具：填写人、金额、事由、日期，提交后存下来，我能看到一张汇总表。</span>
+          <span class="q">做一个满意度问卷：5 道单选题，提交后按选项统计比例，给我一个结果页。</span>
+        </div>
+        <div class="hint"><span class="t">建议</span><p><b>让 AI 先在本地跑给你看</b>，你点一点确认样子对了再往下——不满意就继续说「按钮改蓝色」「加一列备注」，这一步不花平台任何资源，尽管改。</p></div>
+      </div>
+
+      <!-- step 3 -->
+      <div class="step">
+        <div class="node">3</div>
+        <div class="hd"><h3>让 AI 部署上去</h3><span class="who-chip">你 → AI</span></div>
+        <p class="say">满意了，再对 AI 说一句。平台会自动<b>打包 → 密钥扫描 → 构建镜像 → 启动检查</b>，最后生成一张<b>发布审批单</b>——中间那些活儿你都不用管。</p>
+        <div class="quote"><span class="q">帮我把这个应用部署到毕昇平台。</span></div>
+        <div class="hint"><span class="t">注意</span><p>部署成功 <b>不等于上线</b>——要等管理员审批通过，应用才真正上线。</p></div>
+      </div>
+
+      <!-- step 4 -->
+      <div class="step">
+        <div class="node">4</div>
+        <div class="hd"><h3>等管理员审批</h3><span class="who-chip mgr">管理员</span></div>
+        <p class="say">发布要过一道人工审批（可能跨天，属正常）。管理员在<b>审批中心 → 待我审批</b>点「通过」，你的应用就会<b>自动上线</b>。你不用守着——AI 会跟踪审批结果告诉你；回「构建 → 应用」看到卡片显示 <b>「已上线」</b> 就成了。</p>
+        <div class="hint"><span class="t">若被驳回</span><p>会给出驳回理由，让 AI 改完再部署一版即可。<b>小团队里你自己就是管理员时</b>，可自审自批（会记审计）。</p></div>
+      </div>
+
+      <!-- step 5 -->
+      <div class="step">
+        <div class="node">5</div>
+        <div class="hd"><h3>把应用授权给部门</h3><span class="who-chip">你</span></div>
+        <p class="say"><b>上线 ≠ 公开</b>，刚上线时只有你自己能进。到「构建 → 应用」找到它，点卡片齿轮 → <b>管理权限 → 添加权限</b>，把「查看者」授权给<b>部门 / 用户组</b>；想全员就勾顶层部门并「包含子部门」。</p>
+        <div class="hint"><span class="t">一步到位</span><p>授权就在这个界面点几下完成，<b>不用找后台、不用改配置</b>。</p></div>
+      </div>
+
+      <!-- step 6 -->
+      <div class="step arrive">
+        <div class="node">6</div>
+        <div class="hd"><h3>大家用起来</h3><span class="who-chip peer">同事</span></div>
+        <p class="say">被授权的同事打开<b>应用中心</b>，在「探索更多应用」里就能看到你的应用，点<b>「进入应用」</b>在新标签打开。用过一次，它会自动出现在每个人的「最近使用」里。</p>
+        <div class="stub">
+          <div class="head"><span class="l">你的应用 · 应用广场</span><span class="stamp">LIVE</span></div>
+          <div class="r"><span class="kk">入口</span><span class="vv">应用中心 → 进入应用</span></div>
+          <div class="r"><span class="kk">谁能看到</span><span class="vv">你授权过的部门 / 用户组</span></div>
+          <div class="r"><span class="kk">以后要改</span><span class="vv">让 AI 改完再发一版，数据不丢</span></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===== help ===== -->
+  <section class="wrap">
+    <div class="help">
+      <h2>卡住了怎么办？</h2>
+      <p><b>本地跑得好、平台上起不来</b> —— 几乎都是没照平台规矩来。这些规矩和常见错误<b>都写在《部署纳管》技能里</b>，你不用自己读懂：<b>把报错原样贴给 AI，让它「对照技能排查」</b>，通常一两轮就好。</p>
+      <p><b>登录说「未接入任何 AI 编程工具」</b> —— 本机没检测到 Claude Code / Codex。用这两个的，让 AI 再跑一次 <code>bisheng skills sync</code>；用 Cursor / Trae 等的，首次部署会写 <code>AGENTS.md</code> 指明技能位置，AI 读它即可。</p>
+      <p><b>平台升级后想更新规矩</b> —— 让 AI 跑一次 <code>bisheng skills sync</code> 重新同步并接入，最后一行会写明接进了哪些工具。</p>
+    </div>
+  </section>
+
+  <!-- ===== outro ===== -->
+  <section class="outro wrap">
+    <p class="big">就这么多。</p>
+    <p>从一个想法，到全公司都能点开用的应用——你说三句话，写代码、打包、构建、上线，AI 和平台替你干完。</p>
+    <a class="cta" href="#top" onclick="window.scrollTo({top:0,behavior:'smooth'});return false;">↑ 回到顶部，复制第 1 句</a>
+  </section>
 
   <div class="foot">
     <div class="wrap">
       <span>毕昇 · 应用工场 · 托管应用上手手册</span>
-      <span class="dev">开发者:<code>bisheng skills sync</code> 获取并接入《部署纳管》技能</span>
+      <span>开发者也可让 AI 跑 <code>bisheng skills sync</code> 获取《部署纳管》技能</span>
     </div>
   </div>
 
 <script>
-  // Show the real platform address this page is served from, in place of the
-  // "http://你的毕昇地址" placeholder — the tutorial is served by the platform
-  // itself, so its own origin is the address the developer should log in to.
+  // Inject the real platform address (this page is served by the platform, so
+  // its own origin is the address the developer logs in to) in place of every
+  // "http://你的毕昇地址" placeholder — including inside the copy-paste prompt.
   (function(){
     try{
       var origin = window.location.origin;
       if(origin && /^https?:/.test(origin)){
         document.querySelectorAll('.js-platform-addr').forEach(function(el){ el.textContent = origin; });
+        document.querySelectorAll('.js-guide-url').forEach(function(el){
+          el.textContent = origin + '/api/v1/dev-toolkit/install-guide.md';
+        });
       }
     }catch(e){/* leave the placeholder */}
   })();
 
-  // Copy-to-clipboard for terminal blocks (strips prompts and comments).
+  // Tab switch.
+  document.querySelectorAll('.tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      var name = tab.getAttribute('data-tab');
+      document.querySelectorAll('.tab').forEach(function(t){
+        t.setAttribute('aria-selected', String(t === tab));
+      });
+      document.querySelectorAll('.panel').forEach(function(p){
+        p.classList.toggle('on', p.getAttribute('data-panel') === name);
+      });
+    });
+  });
+
+  // Copy. The AI prompt copies verbatim (it is prose for the agent); the manual
+  // block strips the leading "$ " prompts and "# " comments so it pastes clean.
   document.querySelectorAll('[data-copy]').forEach(function(btn){
     btn.addEventListener('click', function(){
-      var pre = btn.closest('.code').querySelector('pre');
-      var text = pre.innerText.replace(/^\s*\$\s?/gm,'').replace(/^\s*#.*$/gm,'').replace(/\n{2,}/g,'\n').trim();
-      navigator.clipboard && navigator.clipboard.writeText(text).then(function(){
-        var old = btn.textContent; btn.textContent = '已复制 ✓';
-        setTimeout(function(){ btn.textContent = old; }, 1400);
-      });
+      var kind = btn.getAttribute('data-copy');
+      var text;
+      if(kind === 'prompt'){
+        text = document.getElementById('ai-prompt').innerText.trim();
+      }else{
+        text = document.getElementById('manual-cmds').innerText
+          .replace(/^\s*\$\s?/gm,'').replace(/^\s*#.*$/gm,'').replace(/\n{2,}/g,'\n').trim();
+      }
+      if(navigator.clipboard){
+        navigator.clipboard.writeText(text).then(function(){
+          var old = btn.textContent; btn.textContent = '已复制 ✓';
+          setTimeout(function(){ btn.textContent = old; }, 1500);
+        });
+      }
     });
   });
 </script>

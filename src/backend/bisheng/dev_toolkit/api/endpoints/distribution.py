@@ -45,6 +45,11 @@ SKILL_PACK_MISSING_MESSAGE = "技能包不存在或未随本次部署发布，�
 # user-facing string; swapping it for an ASCII comma would be a typo.
 ARTIFACT_MISSING_MESSAGE = "CLI 安装件未随本次部署发布，请联系平台管理员"  # noqa: RUF001
 
+# Read by an AI agent (or a human) that fetched the install guide URL from the
+# tutorial's copy-paste prompt on a platform that ships no guide. Names the cause
+# and the next step for the same reason the wheel's message does.
+INSTALL_GUIDE_MISSING_MESSAGE = "安装指引未随本次部署发布，请联系平台管理员"  # noqa: RUF001
+
 
 @router.get("/versions")
 def get_dev_toolkit_versions():
@@ -107,6 +112,28 @@ def download_cli_installer():
         filename=snapshot.cli.filename,
         media_type="application/octet-stream",
     )
+
+
+@router.get("/install-guide.md")
+def get_install_guide():
+    """Serve the CLI install-and-login guide as markdown for an AI agent to follow.
+
+    Anonymous like its siblings: the tutorial's copy-paste prompt points an AI
+    coding tool (Claude Code / Codex / Cursor / …) at this URL, and the agent
+    fetches it *before* anyone has a working CLI or key — auth here would defeat
+    the whole "one prompt, any agent installs it" flow. The ``.md`` suffix and
+    ``text/markdown`` type tell the agent it is prose to execute, not JSON. A
+    missing guide is a real 404 (not the 200-plus-envelope ``/api/v1`` habit) so
+    a fetcher can tell "no guide shipped" apart from a transport error.
+    """
+    content = artifact_service.read_install_guide()
+    if content is None:
+        return JSONResponse(
+            status_code=404,
+            content=resp_500(code=404, message=INSTALL_GUIDE_MISSING_MESSAGE).model_dump(),
+        )
+
+    return Response(content=content, media_type="text/markdown; charset=utf-8")
 
 
 @router.get("/skills/{pack}")

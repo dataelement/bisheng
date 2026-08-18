@@ -48,6 +48,18 @@ MANIFEST_NAME = "manifest.json"
 # sync`` — a **single source** shared with any in-platform consumer (AC-15).
 SKILLS_DIR = Path(__file__).resolve().parents[2] / "skills"
 
+# ``bisheng/dev_toolkit/guides/`` — plain-text markdown guides an AI coding tool
+# fetches and executes (F053 DEV-03, "复制提示词给 AI" flow). Same in-package
+# pattern as the skills: committed source under a normal dir name, so it rides
+# every deployment shape with no packing step. Served over HTTP by
+# ``read_install_guide`` for the tutorial's copy-paste install prompt.
+GUIDES_DIR = Path(__file__).resolve().parents[2] / "guides"
+
+# The one guide shipped today: how an AI agent installs and logs in the CLI. A
+# fixed name (not a path param) because there is exactly one, and an unknown
+# name must not become a filesystem lookup.
+INSTALL_GUIDE_NAME = "install-guide.md"
+
 # A pack name is a URL path segment that becomes a filesystem lookup, so it is
 # validated the same way F055 validates a manifest ``slug`` before it ever
 # touches the disk — no dots, no slashes, nothing that could climb out of
@@ -216,3 +228,21 @@ def read_skill_pack(pack: str) -> SkillPackArchive | None:
     manifest = _read_manifest() or {}
     version = (manifest.get("platform") or {}).get("version")
     return SkillPackArchive(pack=pack, version=version, filename=f"{pack}.tar.gz", content=buffer.getvalue())
+
+
+def read_install_guide() -> str | None:
+    """The CLI install-and-login guide an AI agent fetches, or ``None`` if absent.
+
+    Missing reads like every other artifact here: ``None`` so the endpoint can
+    degrade to a readable 404 instead of a traceback. The name is fixed, so
+    there is no path-traversal surface to guard — unlike the skill packs, no
+    caller-supplied segment reaches the disk.
+    """
+    path = GUIDES_DIR / INSTALL_GUIDE_NAME
+    if not path.is_file():
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError:
+        logger.exception("dev_toolkit install guide at {} is unreadable; serving the degraded 404", path)
+        return None
