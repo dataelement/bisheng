@@ -196,6 +196,18 @@ async def sync_after_create(request, question, initiator, approvers: list[Any]) 
         return None
 
 
+async def _initiator_display(question, initiator) -> str:
+    """发起人写入审批实例的展示名：匿名则为同题别名。"""
+    from bisheng.qa_expert.domain.publish_approval_identity import display_name_for_publish_user
+
+    identity = await display_name_for_publish_user(
+        question,
+        user_id=int(initiator.user_id),
+        real_name=str(getattr(initiator, "user_name", "") or ""),
+    )
+    return identity.display_name
+
+
 async def _sync_after_create(request, question, initiator, approvers: list[Any]) -> ApprovalInstance | None:
     pending_ids = [int(row.user_id) for row in approvers if str(row.decision) == DECISION_PENDING]
     tenant_id = int(getattr(question, "tenant_id", 1) or 1)
@@ -209,6 +221,7 @@ async def _sync_after_create(request, question, initiator, approvers: list[Any])
     }
     instance = await _get_instance(request)
     if instance is None:
+        applicant_display_name = await _initiator_display(question, initiator)
         instance = await ApprovalInstanceRepository.create_instance(
             ApprovalInstance(
                 tenant_id=tenant_id,
@@ -220,7 +233,7 @@ async def _sync_after_create(request, question, initiator, approvers: list[Any])
                 business_resource_id=str(question.id),
                 business_name=str(question.title or ""),
                 applicant_user_id=int(initiator.user_id),
-                applicant_user_name=str(getattr(initiator, "user_name", "") or ""),
+                applicant_user_name=applicant_display_name,
                 flow_version_id=contract.flow_version_id,
                 route_rule_id=contract.route_rule_id,
                 status=ApprovalInstanceStatus.PENDING,
@@ -239,7 +252,7 @@ async def _sync_after_create(request, question, initiator, approvers: list[Any])
                 instance_id=int(instance.id),
                 action="submitted",
                 operator_user_id=int(initiator.user_id),
-                operator_user_name=str(getattr(initiator, "user_name", "") or ""),
+                operator_user_name=applicant_display_name,
                 detail={"request_id": int(request.id)},
             )
         )
