@@ -150,6 +150,7 @@ vi.mock("@/controllers/API/user", () => ({
 }));
 
 vi.mock("@/controllers/API/approval", () => ({
+  isAdminHiddenApprovalScenario: (code?: string | null) => code === "qa_question_publish",
   listApprovalScenarioPresetsApi: (...a: any[]) => listApprovalScenarioPresetsApi(...a),
   listApprovalScenariosApi: (...a: any[]) => listApprovalScenariosApi(...a),
   listApprovalExceptionsApi: (...a: any[]) => listApprovalExceptionsApi(...a),
@@ -308,6 +309,38 @@ describe("ApprovalPage", () => {
     expect(listApprovalRoutesApi).toHaveBeenCalledWith(1);
     expect(listApprovalFlowsApi).toHaveBeenCalledWith(1);
     expect(listApprovalNodesApi).toHaveBeenCalledWith(12);
+  });
+
+  it("hides expert QA publish scenario from flow list and add dialog", async () => {
+    const user = userEvent.setup();
+    listApprovalScenarioPresetsApi.mockResolvedValue([
+      PRESET,
+      {
+        scenario_code: "qa_question_publish",
+        scenario_name: "专家问答转公开",
+        handler_key: "qa_question_publish",
+        condition_fields: ["applicant_role"],
+        approver_source_types: ["direct_user"],
+      },
+    ]);
+    listApprovalScenariosApi.mockResolvedValue([
+      SCENARIO,
+      {
+        id: 88,
+        scenario_code: "qa_question_publish",
+        scenario_name: "专家问答转公开",
+        enabled: true,
+      },
+    ]);
+
+    render(<ApprovalPage />);
+
+    expect((await screen.findAllByText("菜单权限申请")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("专家问答转公开")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "新增" }));
+    expect(await screen.findByText("新增审批场景")).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "专家问答转公开" })).not.toBeInTheDocument();
   });
 
   it("shows applicant department route condition with department name", async () => {

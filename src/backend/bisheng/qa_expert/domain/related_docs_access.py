@@ -53,6 +53,36 @@ async def load_related_doc_title(space_id: int, file_id: int) -> str | None:
     return related_doc_display_title(row)
 
 
+async def _personal_space_owner_id(space_id: int) -> int | None:
+    """个人知识库返回 owner 的 user_id；部门/公开等返回 None。"""
+    try:
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        from bisheng.knowledge.domain.models.knowledge_space_scope import (
+            KnowledgeSpaceLevelEnum,
+            KnowledgeSpaceScopeDao,
+        )
+
+        scope = await KnowledgeSpaceScopeDao.aget_by_space_id(int(space_id))
+        if scope is not None:
+            level = getattr(scope.level, "value", scope.level)
+            if level != KnowledgeSpaceLevelEnum.PERSONAL.value:
+                return None
+            owner_id = int(getattr(scope, "owner_id", 0) or 0)
+            if owner_id:
+                return owner_id
+        space = await KnowledgeDao.aquery_by_id(int(space_id))
+        if space is None:
+            return None
+        if scope is None:
+            # 无 scope 行时与知识空间列表一致：按个人库 + knowledge.user_id 推断
+            owner_id = int(getattr(space, "user_id", 0) or 0)
+            return owner_id if owner_id else None
+        owner_id = int(getattr(space, "user_id", 0) or 0)
+        return owner_id if owner_id else None
+    except Exception:
+        return None
+
+
 async def _space_can_read(user: Any, space_id: int) -> bool:
     """单点 PermissionService.check，禁止 list_accessible_ids。"""
     user_id = getattr(user, "user_id", None) if user is not None else None
@@ -88,6 +118,19 @@ async def check_related_doc_access(
     if not await _file_belongs_to_space(int(space_id), int(file_id)):
         return None
     cache_key = int(space_id)
+    viewer_id = getattr(user, "user_id", None) if user is not None else None
+    is_admin = bool(callable(getattr(user, "is_admin", None)) and user.is_admin())
+    personal_owner_id = await _personal_space_owner_id(cache_key)
+    if (
+        not is_admin
+        and personal_owner_id is not None
+        and viewer_id is not None
+        and int(personal_owner_id) != int(viewer_id)
+    ):
+        # 非管理员看他人个人库：不走 can_read（避免误共享）；系统管理员仍走下方鉴权。
+        if space_cache is not None:
+            space_cache[cache_key] = False
+        return False
     if space_cache is not None and cache_key in space_cache:
         return space_cache[cache_key]
     allowed = await _space_can_read(user, cache_key)

@@ -99,3 +99,45 @@ async def test_load_related_doc_title_returns_file_name(monkeypatch):
         AsyncMock(return_value=SimpleNamespace(file_name="工艺说明.docx", alias_name=None)),
     )
     assert await related_docs_access.load_related_doc_title(8, 15) == "工艺说明.docx"
+
+
+async def test_other_user_personal_space_allowed_for_admin(monkeypatch):
+    """他人个人库：系统管理员仍走 can_read，与全局数据可见一致。"""
+    monkeypatch.setattr(related_docs_access, "_file_belongs_to_space", AsyncMock(return_value=True))
+    monkeypatch.setattr(related_docs_access, "_personal_space_owner_id", AsyncMock(return_value=100))
+    space_read = AsyncMock(return_value=True)
+    monkeypatch.setattr(related_docs_access, "_space_can_read", space_read)
+    admin = SimpleNamespace(user_id=1, is_admin=lambda: True)
+    assert await related_docs_access.check_related_doc_access(admin, 8, 15) is True
+    space_read.assert_awaited_once()
+
+
+async def test_other_user_personal_space_denied_for_non_admin(monkeypatch):
+    """他人个人库：普通用户不调用 can_read，直接 forbidden。"""
+    monkeypatch.setattr(related_docs_access, "_file_belongs_to_space", AsyncMock(return_value=True))
+    monkeypatch.setattr(related_docs_access, "_personal_space_owner_id", AsyncMock(return_value=100))
+    space_read = AsyncMock(return_value=True)
+    monkeypatch.setattr(related_docs_access, "_space_can_read", space_read)
+    stranger = SimpleNamespace(user_id=2, is_admin=lambda: False)
+    assert await related_docs_access.check_related_doc_access(stranger, 8, 15) is False
+    space_read.assert_not_awaited()
+
+
+async def test_owner_personal_space_still_uses_space_read(monkeypatch):
+    monkeypatch.setattr(related_docs_access, "_file_belongs_to_space", AsyncMock(return_value=True))
+    monkeypatch.setattr(related_docs_access, "_personal_space_owner_id", AsyncMock(return_value=100))
+    space_read = AsyncMock(return_value=True)
+    monkeypatch.setattr(related_docs_access, "_space_can_read", space_read)
+    owner = SimpleNamespace(user_id=100, is_admin=lambda: False)
+    assert await related_docs_access.check_related_doc_access(owner, 8, 15) is True
+    space_read.assert_awaited_once()
+
+
+async def test_non_personal_space_admin_still_uses_space_read(monkeypatch):
+    monkeypatch.setattr(related_docs_access, "_file_belongs_to_space", AsyncMock(return_value=True))
+    monkeypatch.setattr(related_docs_access, "_personal_space_owner_id", AsyncMock(return_value=None))
+    space_read = AsyncMock(return_value=True)
+    monkeypatch.setattr(related_docs_access, "_space_can_read", space_read)
+    admin = SimpleNamespace(user_id=1, is_admin=lambda: True)
+    assert await related_docs_access.check_related_doc_access(admin, 8, 15) is True
+    space_read.assert_awaited_once()
