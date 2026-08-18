@@ -196,16 +196,28 @@ async def sync_after_create(request, question, initiator, approvers: list[Any]) 
         return None
 
 
-async def _initiator_display(question, initiator) -> str:
-    """发起人写入审批实例的展示名：匿名则为同题别名。"""
+async def _initiator_identity(question, initiator):
+    """发起人展示身份：匿名用同题别名。"""
     from bisheng.qa_expert.domain.publish_approval_identity import display_name_for_publish_user
 
-    identity = await display_name_for_publish_user(
+    return await display_name_for_publish_user(
         question,
         user_id=int(initiator.user_id),
         real_name=str(getattr(initiator, "user_name", "") or ""),
     )
-    return identity.display_name
+
+
+async def applicant_department_id_for_initiator(*, anonymous: bool, user_id: int) -> int | None:
+    """非匿名发起人写入主部门；匿名为空，避免审批列表拼出身份。"""
+    if anonymous or int(user_id) <= 0:
+        return None
+    from bisheng.database.models.department import UserDepartmentDao
+
+    row = await UserDepartmentDao.aget_user_primary_department(int(user_id))
+    raw = getattr(row, "department_id", None) if row is not None else None
+    if raw in (None, 0, "0"):
+        return None
+    return int(raw)
 
 
 async def _sync_after_create(request, question, initiator, approvers: list[Any]) -> ApprovalInstance | None:
@@ -221,7 +233,12 @@ async def _sync_after_create(request, question, initiator, approvers: list[Any])
     }
     instance = await _get_instance(request)
     if instance is None:
-        applicant_display_name = await _initiator_display(question, initiator)
+        identity = await _initiator_identity(question, initiator)
+        applicant_display_name = identity.display_name
+        applicant_department_id = await applicant_department_id_for_initiator(
+            anonymous=identity.anonymous,
+            user_id=int(initiator.user_id),
+        )
         instance = await ApprovalInstanceRepository.create_instance(
             ApprovalInstance(
                 tenant_id=tenant_id,
@@ -234,6 +251,7 @@ async def _sync_after_create(request, question, initiator, approvers: list[Any])
                 business_name=str(question.title or ""),
                 applicant_user_id=int(initiator.user_id),
                 applicant_user_name=applicant_display_name,
+                applicant_department_id=applicant_department_id,
                 flow_version_id=contract.flow_version_id,
                 route_rule_id=contract.route_rule_id,
                 status=ApprovalInstanceStatus.PENDING,

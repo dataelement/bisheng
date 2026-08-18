@@ -1094,7 +1094,7 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     assert {int(row.approver_user_id) for row in still_tasks if row.status == "pending"} == pending_after
 
 
-async def test_df22_publish_approval_masks_anonymous_names_and_department(flow_env):
+async def test_df22_publish_approval_masks_anonymous_names_and_department(flow_env, monkeypatch):
     """定向转公开：匿名提问者/专家在审批实例与详情接口不露真名和部门。"""
     from bisheng.approval.domain.models.approval_instance import ApprovalActionLog, ApprovalInstance, ApprovalTask
 
@@ -1119,6 +1119,10 @@ async def test_df22_publish_approval_masks_anonymous_names_and_department(flow_e
     aid = await _create_answer_anonymous(env, qid, "匿名有效答", reveal_on_public=False)
     env.as_user(env.asker)
     _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": aid}))
+    monkeypatch.setattr(
+        "bisheng.database.models.department.UserDepartmentDao.aget_user_primary_department",
+        AsyncMock(return_value=SimpleNamespace(department_id=101)),
+    )
     created = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/publish-requests", json={"duration_days": 3}))
     assert created["status_code"] == 200
 
@@ -1193,6 +1197,79 @@ async def test_df22_publish_approval_masks_anonymous_names_and_department(flow_e
     stored = await env.reload_row(ApprovalInstance, id=instance.id)
     assert stored.applicant_user_name == instance.applicant_user_name
     assert stored.applicant_user_name in alias_labels or str(stored.applicant_user_name).startswith("匿名同事")
+
+
+async def test_df24_named_directed_publish_shows_applicant_department(flow_env, monkeypatch):
+    """定向非匿名提问转公开：审批实例与待办接口展示申请人主部门。"""
+    from bisheng.approval.domain.models.approval_instance import ApprovalInstance, ApprovalTask
+
+    env = flow_env
+    invited = await env.seed_expert(user_id=201, name="专家甲")
+    dept_id = 101
+    dept_name = "炼铁厂"
+    monkeypatch.setattr(
+        "bisheng.database.models.department.UserDepartmentDao.aget_user_primary_department",
+        AsyncMock(return_value=SimpleNamespace(department_id=dept_id)),
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.approval_center_service.DepartmentDao.aget_by_ids",
+        AsyncMock(return_value=[SimpleNamespace(id=dept_id, name=dept_name, short_name="炼铁")]),
+    )
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df24转公开实名部门",
+            "description": "定向非匿名",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [invited.id],
+            "asker_anonymous": False,
+        },
+    )
+    env.as_user(env.user(201, name="专家甲"))
+    aid = await _create_answer(env, qid, "甲实名答")
+    env.as_user(env.asker)
+    _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": aid}))
+    created = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/publish-requests", json={"duration_days": 3}))
+    assert created["status_code"] == 200
+
+    instance = await env.reload_row(
+        ApprovalInstance,
+        business_resource_id=str(qid),
+        scenario_code="qa_question_publish",
+    )
+    assert instance is not None
+    assert int(instance.applicant_user_id) == int(env.asker.user_id)
+    assert instance.applicant_user_name == env.asker.user_name
+    assert int(instance.applicant_department_id) == dept_id
+
+    tasks = await env.reload_all(ApprovalTask, instance_id=instance.id)
+    expert_task = next((row for row in tasks if int(row.approver_user_id) == env.uid(201)), None)
+    assert expert_task is not None
+    env.as_user(env.user(201, name="专家甲"))
+    listed = _ok(await env.client.get("/api/v1/approval/my-tasks"))
+    hit = next(
+        (
+            item
+            for item in ((listed.get("data") or {}).get("data") or [])
+            if int(item.get("task_id") or 0) == int(expert_task.id)
+        ),
+        None,
+    )
+    assert hit is not None
+    assert int(hit.get("applicant_department_id") or 0) == dept_id
+    shown = str(hit.get("applicant_department_display_name") or hit.get("applicant_department_name") or "")
+    assert dept_name
+    assert shown
+    assert dept_name in shown or shown in dept_name
+    detail = _ok(await env.client.get(f"/api/v1/approval/my-tasks/{expert_task.id}"))
+    data = detail.get("data") or {}
+    assert int(data.get("applicant_department_id") or 0) == dept_id
+    again = _ok(await env.client.get(f"/api/v1/approval/my-tasks/{expert_task.id}"))
+    assert int((again.get("data") or {}).get("applicant_department_id") or 0) == dept_id
+    stored = await env.reload_row(ApprovalInstance, id=instance.id)
+    assert int(stored.applicant_department_id) == dept_id
 
 
 async def test_df13_reject_keeps_viewer_decision_on_latest(flow_env):
