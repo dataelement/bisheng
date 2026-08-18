@@ -13,10 +13,11 @@
 安装件由平台分发，不需要连公网 registry：
 
 ```bash
-# 下载到一个带 .whl 后缀的文件名，再装（-o 指定文件名，别用 -sO：
-# 那会按 URL 最后一段存成 download，装不上）
-curl -o bisheng_cli-3.0.0-py3-none-any.whl http://<平台地址>/api/v1/dev-toolkit/cli/download
-pip install ./bisheng_cli-3.0.0-py3-none-any.whl
+# -OJ 让 curl 用平台在 Content-Disposition 里给的真实文件名
+# （bisheng_cli-<版本>-py3-none-any.whl）——pip 只认这种五段式 wheel 名。
+# 别用 -o bisheng.whl 或 -sO：前者存成 pip 拒收的短名，后者按 URL 末段存成 download。
+curl -OJ http://<平台地址>/api/v1/dev-toolkit/cli/download
+pip install ./bisheng_cli-*.whl
 
 bisheng --version
 ```

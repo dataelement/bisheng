@@ -275,8 +275,9 @@
           <div class="code">
             <div class="bar"><i></i><i></i><i></i><span class="name">终端</span><button class="copy" data-copy>复制</button></div>
 <pre><span class="tok-c"># 1. 从你们自己的平台下载并安装命令行(不连公网)</span>
-<span class="tok-p">$</span> curl -o bisheng.whl <span class="js-platform-addr">http://你的毕昇地址</span>/api/v1/dev-toolkit/cli/download
-<span class="tok-p">$</span> pip install ./bisheng.whl
+<span class="tok-c">#    -OJ 让 curl 用平台给的正确文件名(pip 认这个名字)</span>
+<span class="tok-p">$</span> curl -OJ <span class="js-platform-addr">http://你的毕昇地址</span>/api/v1/dev-toolkit/cli/download
+<span class="tok-p">$</span> pip install ./bisheng_cli-*.whl
 
 <span class="tok-c"># 2. 用管理员给的密钥登录(应用会归到指定的资源归属人名下)</span>
 <span class="tok-p">$</span> bisheng login <span class="js-platform-addr">http://你的毕昇地址</span> <span class="tok-f">--api-key bs-sak-…</span></pre>
