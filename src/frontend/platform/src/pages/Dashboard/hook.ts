@@ -4,7 +4,7 @@ import { publishDashboard } from "@/controllers/API/dashboard";
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission";
 import { userContext } from "@/contexts/userContext";
 import { useEditorDashboardStore } from "@/store/dashboardStore";
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "react-query";
 
@@ -101,6 +101,57 @@ export function useDashboardPermissions(resourceIds: string[]): {
     }, [idsKey, userId, privileged])
 
     return { permissions, loading, privileged }
+}
+
+/**
+ * Lazily resolve what the current user may do on a single dashboard.
+ *
+ * The dashboard list already decides visibility on the server, so the list no
+ * longer front-loads a `my-permissions` request per row. This hook fetches the
+ * per-resource action list on demand — call `ensureLoaded` the moment the user
+ * reaches for an action (e.g. opens the item menu or double-clicks to rename).
+ *
+ * `privileged` short-circuits admins: the backend waves them through on identity
+ * alone, so they hold no grant rows and their action list would read empty.
+ * In-flight requests are de-duplicated across callers by `getDashboardPermission
+ * Actions`, so hovering then opening the same item issues at most one request.
+ */
+export function useLazyDashboardPermission(resourceId: string): {
+    actions: string[]
+    loaded: boolean
+    loading: boolean
+    privileged: boolean
+    ensureLoaded: () => void
+} {
+    const { user } = useContext(userContext)
+    const userId = user?.user_id == null ? "" : String(user.user_id)
+    const privileged = user?.role === "admin"
+    const [actions, setActions] = useState<string[]>([])
+    const [loaded, setLoaded] = useState(false)
+    const [loading, setLoading] = useState(false)
+
+    // A fresh dashboard id invalidates any previously resolved actions.
+    useEffect(() => {
+        setActions([])
+        setLoaded(false)
+        setLoading(false)
+    }, [resourceId, userId])
+
+    const ensureLoaded = useCallback(() => {
+        if (privileged || loaded || loading || !resourceId) return
+        setLoading(true)
+        getDashboardPermissionActions(userId, String(resourceId))
+            .then((resolved) => setActions(resolved))
+            // A rejected my-permissions request means "no extra actions"; the
+            // row is already visible because the server returned it.
+            .catch(() => setActions([]))
+            .finally(() => {
+                setLoaded(true)
+                setLoading(false)
+            })
+    }, [privileged, loaded, loading, userId, resourceId])
+
+    return { actions, loaded, loading, privileged, ensureLoaded }
 }
 
 export const usePublishDashboard = () => {
