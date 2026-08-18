@@ -6,7 +6,21 @@ from enum import Enum
 from typing import Union
 
 from pydantic import field_validator
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, and_, case, cast, false, func, null, or_, text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Integer,
+    String,
+    and_,
+    case,
+    false,
+    func,
+    null,
+    or_,
+    text,
+    type_coerce,
+)
 from sqlmodel import Field, col, select, update
 
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
@@ -749,7 +763,7 @@ class FlowDao(FlowBase):
             Flow.status,
             Flow.create_time,
             Flow.update_time,
-            cast(null(), String(16)).label("app_state"),
+            type_coerce(null(), String(16)).label("app_state"),
         )
         assistant_select = select(
             Assistant.id,
@@ -761,7 +775,7 @@ class FlowDao(FlowBase):
             Assistant.status,
             Assistant.create_time,
             Assistant.update_time,
-            cast(null(), String(16)).label("app_state"),
+            type_coerce(null(), String(16)).label("app_state"),
         ).where(Assistant.is_delete == 0)
         app_select = select(
             App.id,
