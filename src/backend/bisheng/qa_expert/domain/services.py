@@ -21,6 +21,7 @@ from bisheng.common.errcode.qa_expert import (
     QaExpertAdoptLimitError,
     QaExpertAnswerDeleteNotAllowedError,
     QaExpertAnswerNotAllowedError,
+    QaExpertAssetInvalidError,
     QaExpertCommentNotAllowedError,
     QaExpertContentLockedError,
     QaExpertDisabledError,
@@ -47,7 +48,13 @@ from bisheng.department.domain.services.department_display_service import (
 from bisheng.dictionary.domain.repositories.implementations.system_dictionary_repository_impl import (
     SystemDictionaryRepositoryImpl,
 )
-from bisheng.qa_expert.domain.asset_service import QaAssetService, new_owner_stable_id
+from bisheng.qa_expert.domain.asset_service import (
+    PromotionResult,
+    QaAssetError,
+    QaAssetService,
+    new_owner_stable_id,
+    qa_asset_user_message,
+)
 from bisheng.qa_expert.domain.capability import (
     CapabilityResolver,
     CapabilitySnapshot,
@@ -147,6 +154,14 @@ class AdoptLimitExceededError(QaExpertAdoptLimitError):
 MAX_ADOPTED_ANSWERS_PER_QUESTION = 3
 ELIGIBILITY_SOURCE_INVITED = "invited"
 ELIGIBILITY_SOURCE_PRE_ADOPT_ANSWER = "pre_adopt_answer"
+
+
+async def _promote_asset_fields(assets: QaAssetService, **kwargs) -> PromotionResult:
+    """转正临时资源；校验失败转成 18313，避免冒成 HTTP 500。"""
+    try:
+        return await assets.promote_fields(**kwargs)
+    except QaAssetError as exc:
+        raise QaExpertAssetInvalidError(msg=qa_asset_user_message(exc)) from exc
 
 
 class QAExpertStatsService:
@@ -550,7 +565,8 @@ class QuestionService:
         }
         promotion = None
         if any(asset_values.values()):
-            promotion = await (await self._assets()).promote_fields(
+            promotion = await _promote_asset_fields(
+                await self._assets(),
                 tenant_id=tenant_id,
                 entity_type="question",
                 owner_stable_id=new_owner_stable_id(),
@@ -1240,7 +1256,8 @@ class QuestionService:
         requested_assets = {name: update_data[name] for name in asset_fields if name in update_data}
         promotion = None
         if any(value for value in requested_assets.values()):
-            promotion = await (await self._assets()).promote_fields(
+            promotion = await _promote_asset_fields(
+                await self._assets(),
                 tenant_id=tenant_id,
                 entity_type="question",
                 owner_stable_id=str(question_id),
@@ -1546,7 +1563,8 @@ class AnswerService:
         asset_values = {"attachments": request.attachments, "images_url": request.images_url}
         promotion = None
         if any(asset_values.values()):
-            promotion = await (await self._assets()).promote_fields(
+            promotion = await _promote_asset_fields(
+                await self._assets(),
                 tenant_id=tenant_id,
                 entity_type="answer",
                 owner_stable_id=new_owner_stable_id(),
@@ -1679,7 +1697,8 @@ class AnswerService:
             requested_assets["images_url"] = images_url
         promotion = None
         if any(value for value in requested_assets.values()):
-            promotion = await (await self._assets()).promote_fields(
+            promotion = await _promote_asset_fields(
+                await self._assets(),
                 tenant_id=tenant_id,
                 entity_type="answer",
                 owner_stable_id=str(answer_id),

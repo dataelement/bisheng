@@ -26,7 +26,13 @@ ATTACHMENT_FIELDS = {
     ("question", "attachments"),
     ("answer", "attachments"),
 }
-FIELD_LIMITS = {("question", "image_url"): 1, ("answer", "images_url"): 3}
+# 与门户提问/回答页一致: 最多 3 张. 列名虽是单数 image_url, 实际按分号拼接多值.
+QUESTION_IMAGE_LIMIT = 3
+ANSWER_IMAGE_LIMIT = 3
+FIELD_LIMITS = {
+    ("question", "image_url"): QUESTION_IMAGE_LIMIT,
+    ("answer", "images_url"): ANSWER_IMAGE_LIMIT,
+}
 ALLOWED_IMAGE_FORMATS = {"JPEG", "PNG", "WEBP"}
 GENERIC_CONTENT_TYPES = {"", "application/octet-stream", "binary/octet-stream"}
 ACTIVE_CONTENT_TYPES = {"image/svg+xml", "text/html"}
@@ -84,6 +90,16 @@ def inline_response_headers(object_name: str) -> dict[str, str]:
 
 class QaAssetError(ValueError):
     """QA 资源引用不可信、不可用或不符合字段策略。"""
+
+
+def qa_asset_user_message(exc: QaAssetError) -> str:
+    """把内部校验失败转成可返回前端的中文说明。"""
+    text = str(exc)
+    if "too many QA images for question" in text:
+        return f"提问最多上传 {QUESTION_IMAGE_LIMIT} 张图片"
+    if "too many QA images for answer" in text:
+        return f"回答最多上传 {ANSWER_IMAGE_LIMIT} 张图片"
+    return "问答图片或附件不合法"
 
 
 class AssetKind(str, Enum):

@@ -175,7 +175,10 @@ class QuestionCreateRequest(BaseModel):
     asker_anonymous: bool = Field(default=False, description="提问者是否匿名（公开/定向均可）")
     asker_reveal_on_public: bool | None = Field(default=None, description="定向且匿名时：转公开后是否公开姓名")
 
-    image_url: str | None = Field(default=None, max_length=1024, schema_extra={"comment": "图片URL"})
+    image_url: str | None = Field(
+        default=None,
+        description="分号分隔的图片 URL, 最多 3 张. 请求阶段可为预签名 URL, 落库为永久 key",
+    )
     file_url: str | None = Field(default=None, max_length=1024, schema_extra={"comment": "文件URL"})
     file_name: str | None = Field(default=None, max_length=512, schema_extra={"comment": "文件名"})
 
@@ -210,7 +213,10 @@ class QuestionUpdateRequest(BaseModel):
     related_docs: str | None = Field(default=None, description="关联文档ID")
     invited_experts: str | None = Field(default=None, description="邀请专家ID，多个用分号;分割")
     experts_names: str | None = Field(default=None, description="邀请专家名称，多个用分号;分割")
-    image_url: str | None = Field(default=None, max_length=1024, description="图片URL")
+    image_url: str | None = Field(
+        default=None,
+        description="分号分隔的图片 URL, 最多 3 张. 请求阶段可为预签名 URL, 落库为永久 key",
+    )
     file_url: str | None = Field(default=None, max_length=1024, description="文件URL")
     file_name: str | None = Field(default=None, max_length=512, description="文件名")
     status: int | str | None = Field(default=None, description="状态: unsolved/solved/closed/pending")

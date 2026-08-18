@@ -1502,3 +1502,38 @@ async def test_df25_admin_sees_anonymous_answer_expert_meta(flow_env):
     answer_row = await env.reload_row(Answer, id=aid)
     assert int(answer_row.anonymous) == 1
     assert answer_row.expert_name == expert.expert_name
+
+
+async def test_df_question_too_many_images_rejected_no_dirty_row(flow_env, monkeypatch):
+    """提问超过 3 张图返回 18313, qa_question 无脏行."""
+    env = flow_env
+    stub_storage = SimpleNamespace(
+        tmp_bucket="tmp-dir",
+        bucket="bisheng",
+        minio_config=SimpleNamespace(endpoint="minio:9000", sharepoint="minio:9000"),
+    )
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.services.get_minio_storage",
+        AsyncMock(return_value=stub_storage),
+    )
+    title = env.t("df图片超限")
+    before = await env.reload_row(Question, title=title)
+    assert before is None
+    env.as_user(env.asker)
+    payload = {
+        "title": title,
+        "description": "四张图应被拒绝",
+        "business_domain": "营销",
+        "question_type": "public",
+        "image_url": ";".join(f"tmp-dir/{index}.png" for index in range(4)),
+    }
+    resp = await env.client.post(f"{PREFIX}/questions", json=payload)
+    body = _ok(resp)
+    assert body["status_code"] == 18313
+    assert "提问最多上传 3 张图片" in str(body.get("status_message") or "")
+    after = await env.reload_row(Question, title=title)
+    assert after is None
+    again = await env.client.post(f"{PREFIX}/questions", json=payload)
+    again_body = _ok(again)
+    assert again_body["status_code"] == 18313
+    assert await env.reload_row(Question, title=title) is None

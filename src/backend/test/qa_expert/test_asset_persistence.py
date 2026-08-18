@@ -13,6 +13,7 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
 
+from bisheng.common.errcode.qa_expert import QaExpertAssetInvalidError
 from bisheng.core.storage.base import ObjectMetadata
 from bisheng.core.storage.minio.minio_storage import MinioStorage
 from bisheng.database.models.qa_expert import Answer, Expert, Question
@@ -393,6 +394,56 @@ async def test_image_count_is_rejected_before_object_io() -> None:
     assert storage.copy_calls == []
 
 
+async def test_question_image_count_allows_three_and_rejects_four() -> None:
+    """提问图片上限与门户一致为 3. 第 4 张在对象 IO 前拒绝."""
+    storage = FakeStorage()
+    for index in range(3):
+        storage.objects[("tmp-dir", f"{index}.png")] = (_png_bytes(), "image/png")
+    service = QaAssetService(storage)  # type: ignore[arg-type]
+
+    result = await service.promote_fields(
+        tenant_id=1,
+        entity_type="question",
+        owner_stable_id="owner",
+        values={"image_url": ";".join(f"tmp-dir/{index}.png" for index in range(3))},
+    )
+    assert result.values["image_url"]
+    assert len(result.values["image_url"].split(";")) == 3
+    assert len(storage.copy_calls) == 3
+
+    with pytest.raises(QaAssetError, match="too many"):
+        await service.promote_fields(
+            tenant_id=1,
+            entity_type="question",
+            owner_stable_id="owner",
+            values={"image_url": ";".join(f"tmp-dir/{index}.png" for index in range(4))},
+        )
+
+
+def test_question_create_request_accepts_three_presigned_image_urls() -> None:
+    """创建请求不再用 1024 截断三张预签名 URL。"""
+    urls = [
+        (
+            "http://minio:9000/tmp-dir/"
+            f"{index:032x}.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+            "&X-Amz-Credential=minioadmin%2F20260818%2Fus-east-1%2Fs3%2Faws4_request"
+            "&X-Amz-Date=20260818T085017Z&X-Amz-Expires=604800"
+            "&X-Amz-SignedHeaders=host"
+            "&X-Amz-Signature=" + ("ab" * 64)
+        )
+        for index in range(3)
+    ]
+    joined = ";".join(urls)
+    assert len(joined) > 1024
+    request = QuestionCreateRequest(
+        title="t",
+        description="d",
+        business_domain="营销",
+        image_url=joined,
+    )
+    assert request.image_url == joined
+
+
 async def test_temporary_cleanup_failure_does_not_fail_committed_business_result() -> None:
     storage = FakeStorage()
     storage.fail_remove = True
@@ -518,6 +569,29 @@ async def test_question_create_persists_keys_cleans_tmp_and_returns_fresh_urls(m
     assert persisted.attachments.endswith(";file-9")
     assert response.image_url.endswith("?fresh")
     asset_service.cleanup_sources.assert_awaited_once_with(promotion)
+
+
+async def test_question_create_too_many_images_raises_18313_without_insert() -> None:
+    """超过 3 张提问图返回 18313, 不写 qa_question."""
+    service = QuestionService(asset_service=QaAssetService(FakeStorage()))  # type: ignore[arg-type]
+    service.repository = AsyncMock()
+
+    with pytest.raises(QaExpertAssetInvalidError) as exc_info:
+        await service.create_question(
+            8,
+            QuestionCreateRequest(
+                title="question",
+                description="description",
+                business_domain="domain",
+                image_url=";".join(f"tmp-dir/{index}.png" for index in range(4)),
+            ),
+            "user",
+            tenant_id=1,
+        )
+
+    assert exc_info.value.Code == 18313
+    assert "提问最多上传 3 张图片" in exc_info.value.message
+    service.repository.create.assert_not_awaited()
 
 
 async def test_question_update_promotes_only_explicit_asset_fields_and_resolves_copy() -> None:

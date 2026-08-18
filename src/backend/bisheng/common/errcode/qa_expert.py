@@ -74,3 +74,9 @@ class QaExpertAnswerDeleteNotAllowedError(BaseErrorCode):
     """作者删答：已采纳，或存在有效转公开申请。"""
 
     Code, Msg = 18312, "当前不可删除该回答"
+
+
+class QaExpertAssetInvalidError(BaseErrorCode):
+    """提问/回答图片或附件引用不合法（数量、格式、路径等）。"""
+
+    Code, Msg = 18313, "问答图片或附件不合法"
