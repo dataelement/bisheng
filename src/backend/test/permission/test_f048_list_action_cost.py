@@ -34,6 +34,10 @@ class _AllowAllRuntime:
         del actor, action
         return [True] * len(targets)
 
+    async def check_action(self, actor, target, action):
+        del actor, target, action
+        return True
+
 
 @pytest.fixture
 def counted(monkeypatch):
@@ -120,6 +124,47 @@ async def test_an_ordinary_user_still_goes_through_resolution(monkeypatch, count
     )
 
     assert counted.resolutions == 3
+
+
+async def test_super_admin_single_check_resolves_nothing(monkeypatch, counted) -> None:
+    """Single-resource checks (detail, delete, ...) must short-circuit too.
+
+    Resolution runs business data-validity guards that do not exempt super
+    admins, so resolving a legitimate-but-imperfect record (e.g. a system-owned
+    custom dashboard with a null owner) would raise before the decision layer
+    ever allowed the super admin. Mirror the batch path and resolve nothing.
+    """
+
+    _actor_resolver(
+        monkeypatch,
+        PermissionActor(user_id=1, current_tenant_id=1, super_admin=True),
+    )
+
+    allowed = await business_authorization.check_business_action(
+        object(),
+        resource_type="dashboard",
+        resource_id="156",
+        action="visible",
+    )
+
+    assert allowed is True
+    assert counted.resolutions == 0
+
+
+async def test_ordinary_user_single_check_still_resolves(monkeypatch, counted) -> None:
+    """The shortcut keys off the identity, never off the call shape."""
+
+    _actor_resolver(monkeypatch, PermissionActor(user_id=7, current_tenant_id=1))
+
+    allowed = await business_authorization.check_business_action(
+        object(),
+        resource_type="dashboard",
+        resource_id="156",
+        action="visible",
+    )
+
+    assert allowed is True
+    assert counted.resolutions == 1
 
 
 @pytest.mark.parametrize(
