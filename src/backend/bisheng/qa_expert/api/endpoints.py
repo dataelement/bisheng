@@ -414,6 +414,11 @@ def answer_payload(answer) -> dict:
         payload["author"] = author
     if isinstance(author, dict) and author.get("anonymous") and "real_name" not in author:
         payload["expert_name"] = author.get("display_name")
+    expert = payload.get("expert") if isinstance(answer, dict) else getattr(answer, "expert", payload.get("expert"))
+    if expert is not None:
+        payload["expert"] = expert
+    else:
+        payload.pop("expert", None)
     can_delete = getattr(answer, "can_delete", payload.get("can_delete"))
     if can_delete is not None:
         payload["can_delete"] = bool(can_delete)
