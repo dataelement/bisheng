@@ -534,6 +534,12 @@ class QuestionService:
         response_data.update(resolved)
         return Question(**response_data)
 
+    async def _canonicalize_related_docs(self, raw: str | None) -> str | None:
+        """收藏引用改写成源文件 token；解析失败时保留原串，不阻断提问。"""
+        from bisheng.qa_expert.domain.related_docs_access import safe_canonicalize_related_docs
+
+        return await safe_canonicalize_related_docs(raw)
+
     async def create_question(
         self,
         user_id: int,
@@ -554,6 +560,7 @@ class QuestionService:
             getattr(request, "related_doc_ids", None),
             request.related_docs,
         )
+        related_docs = await self._canonicalize_related_docs(related_docs)
         asker_anonymous = 1 if bool(getattr(request, "asker_anonymous", False)) else 0
         reveal = getattr(request, "asker_reveal_on_public", None)
         # 未匿名时转公开姓名选项无意义，不落库，避免旧客户端误带 true/false。
@@ -824,6 +831,29 @@ class QuestionService:
                 )
                 continue
             space_id, file_id = parsed
+            # 注入 checker 的单测不打库；线上把「我的收藏」指针解析成可预览的源文件。
+            if not callable(injected):
+                try:
+                    from bisheng.qa_expert.domain.related_docs_access import (
+                        resolve_related_doc_target,
+                    )
+
+                    resolved = await resolve_related_doc_target(space_id, file_id)
+                except Exception:
+                    resolved = (space_id, file_id)
+                if resolved is None:
+                    views.append(
+                        {
+                            "id": f"{space_id}-{file_id}",
+                            "space_id": space_id,
+                            "file_id": file_id,
+                            "title": None,
+                            "accessible": False,
+                            "unavailable_reason": "not_found",
+                        }
+                    )
+                    continue
+                space_id, file_id = resolved
             doc_id = f"{space_id}-{file_id}"
             accessible = False
             reason = "forbidden"
@@ -1253,6 +1283,8 @@ class QuestionService:
         update_data = request.model_dump(exclude_unset=True)
         if update_data.get("status") == 2:
             update_data.pop("status", None)
+        if "related_docs" in update_data:
+            update_data["related_docs"] = await self._canonicalize_related_docs(update_data.get("related_docs"))
         asset_fields = {"image_url", "file_url", "attachments"}
         requested_assets = {name: update_data[name] for name in asset_fields if name in update_data}
         promotion = None
@@ -1575,13 +1607,18 @@ class AnswerService:
             )
             asset_values.update(promotion.values)
 
+        from bisheng.qa_expert.domain.related_docs_access import safe_canonicalize_related_docs
+
+        related_docs = request.related_docs
+        if isinstance(related_docs, str):
+            related_docs = await safe_canonicalize_related_docs(related_docs)
         answer = Answer(
             question_id=request.question_id,
             expert_id=expert.id,
             user_id=user_id,
             content=request.content,
             attachments=asset_values["attachments"],
-            related_docs=request.related_docs,
+            related_docs=related_docs,
             images_url=asset_values["images_url"],
             expert_name=expert.expert_name,
             tenant_id=tenant_id or getattr(question, "tenant_id", 1) or 1,
@@ -1690,7 +1727,11 @@ class AnswerService:
         if attachments is not None:
             update_data["attachments"] = attachments
         if related_docs is not None:
-            update_data["related_docs"] = related_docs
+            from bisheng.qa_expert.domain.related_docs_access import safe_canonicalize_related_docs
+
+            update_data["related_docs"] = (
+                await safe_canonicalize_related_docs(related_docs) if isinstance(related_docs, str) else related_docs
+            )
         if images_url is not None:
             update_data["images_url"] = images_url
         requested_assets = {}

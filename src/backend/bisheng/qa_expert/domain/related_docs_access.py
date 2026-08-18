@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from loguru import logger
+
 RELATED_DOC_ACCESS_TIMEOUT_SEC = 3.0
 
 
@@ -15,6 +17,28 @@ def related_doc_display_title(row: Any | None) -> str | None:
     name = str(getattr(row, "file_name", None) or "").strip()
     alias = str(getattr(row, "alias_name", None) or "").strip()
     return name or alias or None
+
+
+def favorite_source_ref(row: Any | None) -> tuple[int, int] | None:
+    """收藏引用解析为源空间/源文件；非引用或元数据残缺返回 None。"""
+    if row is None:
+        return None
+    if str(getattr(row, "file_source", "") or "") != "favorite_reference":
+        return None
+    meta = getattr(row, "user_metadata", None) or {}
+    if not isinstance(meta, dict):
+        return None
+    ref = meta.get("favorite_reference") or {}
+    if not isinstance(ref, dict):
+        return None
+    try:
+        src_space = int(ref.get("source_space_id") or 0)
+        src_file = int(ref.get("source_file_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    if src_space <= 0 or src_file <= 0:
+        return None
+    return src_space, src_file
 
 
 async def _load_related_doc_file(space_id: int, file_id: int) -> Any | None:
@@ -37,6 +61,62 @@ async def _load_related_doc_file(space_id: int, file_id: int) -> Any | None:
     if knowledge_id and knowledge_id != int(space_id):
         return None
     return row
+
+
+async def resolve_related_doc_target(space_id: int, file_id: int) -> tuple[int, int] | None:
+    """解析应对齐预览的 space/file。
+
+    普通缺失文件返回原 pair，交给 checker 标 not_found/forbidden。
+    收藏引用且源存在则返回源 pair；收藏指针在但源已删返回 None。
+    """
+    row = await _load_related_doc_file(int(space_id), int(file_id))
+    if row is None:
+        return int(space_id), int(file_id)
+    source = favorite_source_ref(row)
+    if source is None:
+        return int(space_id), int(file_id)
+    src_row = await _load_related_doc_file(source[0], source[1])
+    if src_row is None:
+        return None
+    return source
+
+
+async def canonicalize_related_docs(raw: str | None) -> str | None:
+    """把 related_docs 串里的收藏引用改写成源 space-file，避免详情链到空指针。"""
+    from bisheng.qa_expert.domain.question_query import parse_related_doc_ref, parse_related_doc_tokens
+
+    tokens = parse_related_doc_tokens(raw)
+    if not tokens:
+        return None
+    out: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        parsed = parse_related_doc_ref(token)
+        if parsed is None:
+            if token not in seen:
+                seen.add(token)
+                out.append(token)
+            continue
+        resolved = await resolve_related_doc_target(*parsed)
+        pair = resolved if resolved is not None else parsed
+        canonical = f"{pair[0]}-{pair[1]}"
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        out.append(canonical)
+    return ";".join(out) if out else None
+
+
+async def safe_canonicalize_related_docs(raw: str | None) -> str | None:
+    """canonicalize 的容错包装：解析失败保留原串，不阻断提问/回答。"""
+    if not raw:
+        return raw
+    try:
+        canonical = await canonicalize_related_docs(raw)
+    except Exception:
+        logger.exception("canonicalize related_docs failed")
+        return raw
+    return canonical if canonical is not None else raw
 
 
 async def _file_belongs_to_space(space_id: int, file_id: int) -> bool:
