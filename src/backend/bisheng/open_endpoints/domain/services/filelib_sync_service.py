@@ -466,14 +466,26 @@ class FilelibSyncService:
             params.department_id,
         )
         if mapping is None:
-            raise FilelibSyncNotFoundError(msg="external department mapping does not exist")
+            logger.warning(
+                "filelib sync department_id={} mapping missing; fallback to uploader primary department_id={}",
+                params.department_id,
+                default_department.id,
+            )
+            return default_department
 
         department = await self.repository.find_department_by_external_id(
             mapping.org_code,
             tenant_id=int(self.login_user.tenant_id),
         )
         if department is None:
-            raise FilelibSyncNotFoundError(msg="department does not exist")
+            logger.warning(
+                "filelib sync department_id={} org_code={} department missing; "
+                "fallback to uploader primary department_id={}",
+                params.department_id,
+                mapping.org_code,
+                default_department.id,
+            )
+            return default_department
         return department
 
     async def _resolve_unique_primary_department(
