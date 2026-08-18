@@ -166,6 +166,52 @@ class KnowledgeVersionService:
             raise SpacePermissionDeniedError()
         return resolved
 
+    async def _shared_space_projection_enabled(self) -> bool:
+        """Defensively resolve the shared-storage switch (F1 config block).
+
+        Missing block / config error => False => legacy behaviour unchanged.
+        """
+        try:
+            from bisheng.knowledge.domain.services.shared_space_projection_support import (
+                resolve_shared_space_storage_enabled,
+            )
+
+            return await resolve_shared_space_storage_enabled()
+        except Exception:
+            logger.exception("shared-space projection switch resolution failed")
+            return False
+
+    async def _bump_shared_content_generation_for_primary_switch(
+        self,
+        *,
+        document_id: int,
+    ) -> None:
+        """F2.8 primary-switch inheritance for the shared store.
+
+        Bumps ``content_generation`` so the projection worker rewrites the
+        content projection from the new primary version; the new primary
+        chunk set inherits the canonical document's aggregated
+        ``knowledge_ids`` (re-aggregated from SQL active entries at
+        projection time), and the old version exits default retrieval because
+        the shared store only ever holds the primary version's chunks.
+        """
+        new_generation = await self.doc_repo.increment_content_generation(
+            int(document_id)
+        )
+        marked = (
+            await self.knowledge_file_repo.mark_document_entries_content_generation(
+                int(document_id),
+                int(new_generation),
+            )
+        )
+        logger.info(
+            "shared-space primary switch content_generation bump: "
+            "document_id={} new_generation={} marked_entries={}",
+            document_id,
+            new_generation,
+            marked,
+        )
+
     async def _enqueue_document_distribution_projection(
         self,
         *,
@@ -734,6 +780,18 @@ class KnowledgeVersionService:
             await KnowledgeSpaceContentStat.enqueue_file_stat_async(
                 [target_kf.id, current_manager.id]
             )
+
+            # F2.8: shared-store primary switch only when the new routing
+            # switch is on - content_generation +1, entries re-project so the
+            # new primary chunks inherit the canonical knowledge_ids.
+            if await self._shared_space_projection_enabled():
+                await self._bump_shared_content_generation_for_primary_switch(
+                    document_id=int(document.id),
+                )
+                await self._enqueue_document_distribution_projection(
+                    tenant_id=int(self.login_user.tenant_id),
+                    entry_ids=None,
+                )
 
         KnowledgeAuditTelemetryService.audit_set_primary_version(
             self.login_user,

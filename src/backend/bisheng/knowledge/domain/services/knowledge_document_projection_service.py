@@ -5,12 +5,25 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.knowledge.domain.contracts.identifiers import (
+    CanonicalDocumentId,
+    CanonicalVersionId,
+    ContentFileId,
+    TenantId,
+)
+from bisheng.knowledge.domain.contracts.shared_space_storage import (
+    ContentDeleteRequest,
+    ContentProjectionIdentity,
+    ContentUpsertRequest,
+    MembershipUpdateRequest,
+    SharedSpaceStorageWriter,
+)
 from bisheng.knowledge.domain.models.knowledge_document import (
     KnowledgeDocumentLifecycleStatus,
 )
@@ -28,6 +41,12 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version
 )
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
     KnowledgeFileRepository,
+)
+from bisheng.knowledge.domain.services.shared_space_projection_support import (
+    MEMBERSHIP_ENTRY_TYPES,
+    SharedContentChunkLoader,
+    aggregate_active_knowledge_ids,
+    normalise_membership_ids,
 )
 
 logger = logging.getLogger(__name__)
@@ -156,6 +175,9 @@ class KnowledgeDocumentProjectionService:
         deleting_entry_finalizer: DeletingEntryFinalizer = (
             _noop_deleting_entry_finalizer
         ),
+        shared_storage_writer: SharedSpaceStorageWriter | None = None,
+        shared_storage_enabled: bool = False,
+        shared_content_chunk_loader: SharedContentChunkLoader | None = None,
         lease_seconds: int = 120,
         max_retry_seconds: int = 300,
     ):
@@ -166,8 +188,22 @@ class KnowledgeDocumentProjectionService:
         self.projection_writer = projection_writer
         self.projection_cleaner = projection_cleaner
         self.deleting_entry_finalizer = deleting_entry_finalizer
+        self.shared_storage_writer = shared_storage_writer
+        self.shared_storage_enabled = bool(shared_storage_enabled)
+        self.shared_content_chunk_loader = shared_content_chunk_loader
         self.lease_seconds = max(int(lease_seconds), 1)
         self.max_retry_seconds = max(int(max_retry_seconds), 1)
+
+    @property
+    def _use_shared_projection(self) -> bool:
+        """Shared dual-projection mode gate (spec 3.7).
+
+        Off (default): legacy per-entry projection with copy_vector. On: the
+        primary content is written once via ``upsert_content`` and entry moves
+        only rewrite ``knowledge_ids`` via ``update_membership`` - non-local
+        entries never call ``copy_vector`` (F2.5).
+        """
+        return self.shared_storage_enabled and self.shared_storage_writer is not None
 
     async def _resolve_source(
         self,
@@ -371,6 +407,223 @@ class KnowledgeDocumentProjectionService:
                 "destination manager projection is not ready for cleanup"
             )
 
+    async def _resolve_shared_document_entries(
+        self,
+        document_id: int,
+    ) -> list[KnowledgeFile]:
+        return list(
+            await self.file_repository.find_distribution_entries_by_document_id(
+                document_id,
+            )
+        )
+
+    async def _shared_tombstone(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+    ) -> None:
+        """Empty aggregation short-circuit (spec 3.4 / F2.3).
+
+        The last active entry is gone: delete the whole content projection.
+        Never writes an empty ``knowledge_ids`` array and never retries - the
+        write is a plain delete, so the lease/CAS apply below can converge.
+        """
+        assert self.shared_storage_writer is not None
+        await self.shared_storage_writer.delete_content(
+            ContentDeleteRequest(
+                tenant_id=TenantId(int(tenant_id)),
+                canonical_document_id=CanonicalDocumentId(int(document_id)),
+            )
+        )
+
+    async def _shared_upsert_content(
+        self,
+        *,
+        entry: KnowledgeFile,
+        target: ProjectionTarget,
+        knowledge_ids: tuple[int, ...],
+    ) -> None:
+        """Content projection (spec 3.7-A).
+
+        Dimension: tenant + canonical_version + content_generation. Only the
+        primary physical content is written, once per generation. Embeddings
+        come from the injected chunk loader; nothing is re-embedded here.
+        """
+        assert self.shared_storage_writer is not None
+        if (
+            self.document_repository is None
+            or self.version_repository is None
+        ):
+            raise KnowledgeDocumentProjectionError(
+                "shared content projection requires document and version "
+                "repositories"
+            )
+        document = await self.document_repository.find_by_id(
+            int(target.document_id)
+        )
+        if (
+            document is None
+            or document.primary_version_id is None
+            or int(document.tenant_id or 0) != int(target.tenant_id)
+        ):
+            raise KnowledgeDocumentProjectionError(
+                "shared content projection canonical document is unavailable"
+            )
+        version = await self.version_repository.find_by_id(
+            int(document.primary_version_id)
+        )
+        if version is None or int(version.document_id) != int(document.id):
+            raise KnowledgeDocumentProjectionError(
+                "shared content projection canonical version is unavailable"
+            )
+        content_file = await self.file_repository.find_by_id(
+            int(version.knowledge_file_id)
+        )
+        if content_file is None:
+            raise KnowledgeDocumentProjectionError(
+                "shared content projection content file is unavailable"
+            )
+        if self.shared_content_chunk_loader is None:
+            raise KnowledgeDocumentProjectionError(
+                "shared content chunk loader is unavailable"
+            )
+        chunks = await self.shared_content_chunk_loader(content_file)
+        if not chunks:
+            raise KnowledgeDocumentProjectionError(
+                "shared content projection received no chunks"
+            )
+        await self.shared_storage_writer.upsert_content(
+            ContentUpsertRequest(
+                identity=ContentProjectionIdentity(
+                    tenant_id=TenantId(int(target.tenant_id)),
+                    canonical_document_id=CanonicalDocumentId(
+                        int(target.document_id)
+                    ),
+                    canonical_version_id=CanonicalVersionId(int(version.id)),
+                    content_file_id=ContentFileId(int(content_file.id or 0)),
+                    content_generation=int(target.content_generation),
+                ),
+                knowledge_ids=knowledge_ids,
+                chunks=chunks,
+            )
+        )
+
+    async def _shared_membership_rewrite(
+        self,
+        *,
+        target: ProjectionTarget,
+        entries: Sequence[KnowledgeFile],
+        knowledge_ids: tuple[int, ...],
+    ) -> None:
+        """Membership projection (spec 3.7-B): metadata-only rewrite.
+
+        Rewrites ``knowledge_ids`` on the already-projected chunks without
+        touching text/vector payload (no re-embedding, no copy_vector). The
+        membership generation is a document-level monotonic counter: the max
+        of the document content generation and every active entry's desired
+        entry generation, so concurrent per-entry convergence can never
+        regress below a snapshot the writer already applied.
+        """
+        assert self.shared_storage_writer is not None
+        membership_generation = int(target.content_generation)
+        for candidate in entries:
+            if (
+                candidate.entry_status
+                == KnowledgeFileEntryStatus.ACTIVE.value
+                and candidate.entry_type in MEMBERSHIP_ENTRY_TYPES
+            ):
+                membership_generation = max(
+                    membership_generation,
+                    int(candidate.desired_entry_generation),
+                )
+        await self.shared_storage_writer.update_membership(
+            MembershipUpdateRequest(
+                tenant_id=TenantId(int(target.tenant_id)),
+                canonical_document_id=CanonicalDocumentId(
+                    int(target.document_id)
+                ),
+                knowledge_ids=normalise_membership_ids(knowledge_ids),
+                membership_generation=membership_generation,
+                content_generation=int(target.content_generation),
+            )
+        )
+
+    @staticmethod
+    def _shared_content_converged(
+        entries: Sequence[KnowledgeFile],
+        content_generation: int,
+    ) -> bool:
+        """True when some active entry already applied this content generation.
+
+        Keeps the single-copy invariant: only the first converging entry of a
+        generation performs the content upsert; later entries (and pure
+        membership moves) rewrite metadata only.
+        """
+        return any(
+            candidate.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+            and candidate.projection_status
+            == KnowledgeFileProjectionStatus.READY.value
+            and int(candidate.applied_content_generation)
+            >= int(content_generation)
+            for candidate in entries
+        )
+
+    async def _process_shared_projection(
+        self,
+        entry: KnowledgeFile,
+        target: ProjectionTarget,
+    ) -> None:
+        """Shared-store dual projection for a live entry (F2.1-F2.4)."""
+        document_id = int(target.document_id)
+        entries = await self._resolve_shared_document_entries(document_id)
+        knowledge_ids = aggregate_active_knowledge_ids(entries)
+        if not knowledge_ids:
+            await self._shared_tombstone(
+                tenant_id=target.tenant_id,
+                document_id=document_id,
+            )
+            return
+        knowledge_ids = normalise_membership_ids(knowledge_ids)
+        if not self._shared_content_converged(
+            entries, target.content_generation
+        ):
+            await self._shared_upsert_content(
+                entry=entry,
+                target=target,
+                knowledge_ids=knowledge_ids,
+            )
+        await self._shared_membership_rewrite(
+            target=target,
+            entries=entries,
+            knowledge_ids=knowledge_ids,
+        )
+
+    async def _process_shared_cleanup(
+        self,
+        entry: KnowledgeFile,
+        target: ProjectionTarget,
+    ) -> None:
+        """Shared-store membership convergence for a deleting entry.
+
+        Re-aggregates the remaining active entries: empty => tombstone the
+        whole content projection, otherwise shrink ``knowledge_ids`` only.
+        """
+        document_id = int(target.document_id)
+        entries = await self._resolve_shared_document_entries(document_id)
+        knowledge_ids = aggregate_active_knowledge_ids(entries)
+        if not knowledge_ids:
+            await self._shared_tombstone(
+                tenant_id=target.tenant_id,
+                document_id=document_id,
+            )
+            return
+        await self._shared_membership_rewrite(
+            target=target,
+            entries=entries,
+            knowledge_ids=normalise_membership_ids(knowledge_ids),
+        )
+
     async def process_entry(
         self,
         *,
@@ -458,16 +711,24 @@ class KnowledgeDocumentProjectionService:
                 await self._require_destination_manager_ready_for_cleanup(
                     claimed
                 )
-                await self.projection_cleaner(
-                    int(claimed.knowledge_id),
-                    self._cleanup_file_ids(claimed),
-                )
+                if self._use_shared_projection:
+                    await self._process_shared_cleanup(claimed, target)
+                else:
+                    await self.projection_cleaner(
+                        int(claimed.knowledge_id),
+                        self._cleanup_file_ids(claimed),
+                    )
                 if claimed.entry_status == KnowledgeFileEntryStatus.INVALID.value:
                     # 权限清理必须在 CAS 完成前成功，否则保留失败态供扫描重试。
                     await self.deleting_entry_finalizer(claimed)
             else:
-                source = await self._resolve_source(claimed)
-                await self.projection_writer(source, claimed, target)
+                if self._use_shared_projection:
+                    # 共享库双投影：primary 内容单份写入 + knowledge_ids
+                    # metadata 重写；非本地 entry 不再 copy_vector（F2.5）。
+                    await self._process_shared_projection(claimed, target)
+                else:
+                    source = await self._resolve_source(claimed)
+                    await self.projection_writer(source, claimed, target)
                 if claimed.projection_previous_file_id is not None:
                     await self.projection_cleaner(
                         int(claimed.knowledge_id),
