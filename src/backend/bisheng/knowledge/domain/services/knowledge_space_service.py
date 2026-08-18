@@ -1440,6 +1440,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if member_relation is not None:
                 allowed_unbound.add(("knowledge_space", str(space_id), member_relation.value))
 
+        # A file/folder's own creator holds a direct ``owner`` tuple on the
+        # resource itself (written when they uploaded/created it). That grant is
+        # exactly what admits their rename/delete/move request at submission time
+        # (the non-strict ``_get_effective_permission_ids`` honours it), so the
+        # approved execution must honour it too. Without this, an approved change
+        # to one's own file fails the strict re-check and the request is stuck in
+        # ``queued`` forever. Trust it only when the DB projection confirms the
+        # login user still owns that exact resource in this space.
+        if object_type in ("knowledge_file", "folder"):
+            resource = await KnowledgeFileDao.query_by_id(int(object_id))
+            if (
+                resource is not None
+                and resource.user_id is not None
+                and int(resource.user_id) == int(self.login_user.user_id)
+                and int(resource.knowledge_id) == int(space_id)
+            ):
+                allowed_unbound.add((object_type, str(object_id), "owner"))
+
         return await FineGrainedPermissionService.has_effective_permission_id_strict(
             self.login_user,
             object_type,
