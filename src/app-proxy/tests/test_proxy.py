@@ -75,7 +75,9 @@ class TestRouteResolution:
         assert upstream_transport.attempts == [DEFAULT_UPSTREAM]
         assert "127.0.0.1" not in DEFAULT_UPSTREAM and "localhost" not in DEFAULT_UPSTREAM
 
-    def test_entry_stable_across_version_switch(self, logged_in, fake_manager, upstream_transport, echo_upstream, frozen_clock):
+    def test_entry_stable_across_version_switch(
+        self, logged_in, fake_manager, upstream_transport, echo_upstream, frozen_clock
+    ):
         """AC-21 / AC-25: same URL before, during and after a release.
 
         During the switch window the cached (old) address is still served by the
@@ -192,3 +194,40 @@ class TestForwarding:
 
         assert "access_token_cookie" not in cookie
         assert "theme=dark" in cookie
+
+
+# ---- bare app root gets a trailing slash --------------------------------
+#
+# `/apps/foo` and `/apps/foo/` reach the same page but are different bases for
+# relative URLs. A bundle that emits `./assets/index-x.js` — the normal way to be
+# prefix-agnostic, and what the skill pack sanctions — resolves it against
+# `/apps/` under the slash-less URL and asks for `/apps/assets/index-x.js`, i.e.
+# another slug. Every asset 404s and the user sees a white page with nothing in
+# the server log to explain it. Found on 114 with a real Vite app (steel-diorama).
+
+
+class TestTrailingSlashRedirect:
+    def test_bare_root_redirects_with_slash(self, logged_in) -> None:
+        response = logged_in.get("/apps/foo", follow_redirects=False)
+        assert response.status_code == 308
+        assert response.headers["location"] == "/apps/foo/"
+
+    def test_query_survives_the_redirect(self, logged_in) -> None:
+        response = logged_in.get("/apps/foo?a=1&b=2", follow_redirects=False)
+        assert response.status_code == 308
+        assert response.headers["location"] == "/apps/foo/?a=1&b=2"
+
+    def test_slashed_root_is_served_not_redirected(self, logged_in) -> None:
+        # The whole point is to land here; bouncing again would be a loop.
+        response = logged_in.get("/apps/foo/", follow_redirects=False)
+        assert response.status_code != 308
+
+    def test_deep_path_is_never_redirected(self, logged_in) -> None:
+        response = logged_in.get("/apps/foo/assets/index-x.js", follow_redirects=False)
+        assert response.status_code != 308
+
+    def test_non_get_is_not_redirected(self, logged_in) -> None:
+        # An API POST to the app root resolves no relative URLs; redirecting it
+        # would only cost a hop.
+        response = logged_in.post("/apps/foo", follow_redirects=False)
+        assert response.status_code != 308

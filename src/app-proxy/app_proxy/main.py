@@ -24,7 +24,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.websockets import WebSocket
 
 from app_proxy import clients
@@ -45,6 +45,7 @@ from app_proxy.login_handoff import (
     ws_close_code,
 )
 from app_proxy.pages import PAGE_HTTP_STATUS, error_payload, json_status, render_page
+from app_proxy.routing import entry_prefix_for
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,28 @@ def render_verdict_response(
     return HTMLResponse(html, status_code=PAGE_HTTP_STATUS)
 
 
+def _needs_trailing_slash(request: Request, slug: str) -> bool:
+    """Is this a browser navigation to the bare app root, without the slash?
+
+    ``/apps/foo`` and ``/apps/foo/`` reach the same page, but they are NOT the
+    same base for relative URLs: a document at ``/apps/foo`` resolves
+    ``./assets/x.js`` against ``/apps/`` and asks for ``/apps/assets/x.js``,
+    which is a different app's slug and 404s. The app is not at fault — the skill
+    pack explicitly sanctions relative paths ("要么用 url() 前缀，要么用相对路径")
+    and a bundler emitting ``./assets/…`` is the normal way to be prefix-agnostic.
+    Serving that document under a slash-less URL is what breaks it, so the fix
+    belongs on the platform side rather than in every app's bundler config.
+
+    Only GET/HEAD. Those are the navigations whose relative references matter;
+    redirecting an API call would add a hop to a request that never resolves a
+    relative URL against anything.
+    """
+    if request.method not in ("GET", "HEAD"):
+        return False
+    prefix = entry_prefix_for(slug, get_config().entry_prefix)
+    return request.url.path == prefix
+
+
 async def handle_entry(request: Request) -> Response:
     started = time.monotonic()
     slug = request.path_params.get("slug", "")
@@ -124,6 +147,17 @@ async def handle_entry(request: Request) -> Response:
             (time.monotonic() - started) * 1000,
         )
         return render_verdict_response(request, verdict.decision, verdict=verdict, request_id=request_id)
+
+    if _needs_trailing_slash(request, slug):
+        # After authorize(), so the non-allow branches keep their exact behaviour:
+        # the login hand-off, 404, stopped and recovering pages are platform HTML
+        # that resolves no relative URLs, and redirecting them would buy a hop and
+        # a changed return address for nothing. Only the document that is actually
+        # the app's own needs its base corrected.
+        location = f"{request.url.path}/"
+        if request.url.query:
+            location = f"{location}?{request.url.query}"
+        return RedirectResponse(location, status_code=308)
 
     # Imported here, not at module scope: the proxy pulls in the upstream
     # transport machinery, and keeping it out of the import graph of the page
