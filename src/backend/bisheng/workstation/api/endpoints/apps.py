@@ -150,6 +150,11 @@ async def get_used_apps(login_user=LoginUserDep, page: int = 1, limit: int = 20)
     start_index = (page - 1) * limit
     page_items = apps[start_index : start_index + limit]
 
+    # Hosted-app rows carry no ``slug`` from the union; fill it (same enrichment the
+    # app square uses) so the client can re-enter ``/apps/{slug}`` from "recently
+    # used" instead of falling through to the conversation route they have none of.
+    await WorkFlowService._attach_hosted_app_entry_fields(page_items)
+
     page_flow_ids = [app["id"] for app in page_items]
     resource_tag_dict = TagDao.get_tags_by_resource(None, page_flow_ids)
     result = []
