@@ -11,6 +11,9 @@ from bisheng.worker.approval.notification_tasks import (
 )
 from bisheng.worker.approval.tasks import execute_approval_outbox, retry_approval_outbox
 from bisheng.worker.information.article import sync_information_article
+from bisheng.worker.knowledge.auto_publish_worker import (
+    auto_publish_file_celery,
+)
 from bisheng.worker.knowledge.document_projection import (
     fanout_document_projection_scan,
     process_document_projection,

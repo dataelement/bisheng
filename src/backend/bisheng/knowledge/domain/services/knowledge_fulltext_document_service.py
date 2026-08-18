@@ -43,7 +43,7 @@ class KnowledgeFulltextDocumentService:
         if snapshot.entry_status != "active" or not snapshot.is_primary_version:
             return KnowledgeFulltextProjectionAction.DELETE
         if snapshot.projection_status != "ready":
-            return KnowledgeFulltextProjectionAction.RETRY
+            return KnowledgeFulltextProjectionAction.KEEP
         return KnowledgeFulltextProjectionAction.UPSERT
 
     def build(
