@@ -35,7 +35,16 @@ logger = logging.getLogger(__name__)
 #: next one. ``content-length`` and ``content-encoding`` are deliberately kept:
 #: we forward raw bytes, so the body is exactly what the upstream produced.
 _RESPONSE_HOP_BY_HOP = frozenset(
-    {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"}
+    {
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
 )
 
 _transport: httpx.AsyncBaseTransport | None = None
@@ -190,11 +199,21 @@ async def forward(
             url = url.copy_with(query=query.encode("ascii"))
 
         try:
+            # Only forward a request body when the request actually has one.
+            # For a bodyless request (GET/HEAD/most navigations) httpx would
+            # still read the ASGI receive channel to drain ``request.stream()``,
+            # and that read races Starlette's own disconnect-watcher on the SAME
+            # receive channel. The race intermittently delivers a spurious
+            # ``http.disconnect`` that cancels ``stream_response`` mid-body, so a
+            # large upstream response is silently truncated — a 10 MB hosted-app
+            # page dropped its tail on roughly a third of requests. Passing no
+            # content leaves the receive channel to the disconnect-watcher alone.
+            has_body = bool(request.headers.get("content-length") or request.headers.get("transfer-encoding"))
             outbound = client.build_request(
                 request.method,
                 url,
                 headers=headers,
-                content=request.stream(),
+                content=request.stream() if has_body else None,
             )
             response = await client.send(outbound, stream=True)
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
