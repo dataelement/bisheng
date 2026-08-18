@@ -373,8 +373,28 @@ async def _coordinate_execution_async(
         MutationExecutionCompleted,
     )
 
+    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+
     coordinator = _build_execution_coordinator()
-    prepared = await _build_mutation_executor().prepare_execution(request_id=int(request_id))
+    executor = _build_mutation_executor()
+    try:
+        prepared = await executor.prepare_execution(request_id=int(request_id))
+    except SpacePermissionDeniedError as exc:
+        # Permanent authorization failure: the approved applicant no longer holds
+        # the strict permission required to apply this change. Retrying can never
+        # succeed, and leaving the request in `queued` hides the failure forever
+        # (nothing re-drives a queued request). Fail it terminally so the error
+        # surfaces and the client stops showing 等待执行.
+        transitioned = await executor.fail_unstarted_request(
+            request_id=int(request_id),
+            failure_reason=f"permission denied for approved file change: {exc}",
+        )
+        logger.warning(
+            "F046 coordinate permanently failed (permission denied): request_id={} transitioned_to_failed={}",
+            request_id,
+            transitioned,
+        )
+        return {"status": "failed", "reason": "permission_denied"}
     if isinstance(prepared, MutationExecutionCompleted):
         return {"status": "completed"}
     if execution_token and str(execution_token) != str(prepared.execution_token):

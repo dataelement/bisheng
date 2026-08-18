@@ -275,6 +275,43 @@ class KnowledgeSpaceMutationExecutor:
             )
         raise NotImplementedError(f"F046 executor does not yet support action={request.action}")
 
+    async def fail_unstarted_request(self, *, request_id: int, failure_reason: str) -> bool:
+        """Terminally fail a request that never began applying.
+
+        Used when coordination hits a *permanent* error (e.g. the approved
+        applicant no longer holds the strict permission required to apply the
+        change) before any step ran. Without this the request would sit in
+        ``queued`` forever: the one-shot coordinate dispatch merely exhausts its
+        retries, and neither the watchdog nor the compensation scan re-drive a
+        ``queued`` request (both only look at ``applying``/``compensating`` rows
+        that already have step records). Moving it to ``failed`` surfaces the
+        error and lets the client stop showing 等待执行. Only ``not_started`` /
+        ``queued`` rows are affected; an already in-flight request is left to its
+        own token-bound recovery path.
+        """
+        tenant_id = self._tenant_id()
+        async with self.session_factory() as session:
+            async with session.begin():
+                request_repository = KnowledgeSpaceFileChangeRequestRepository(session)
+                request = await request_repository.get_by_id(
+                    tenant_id=tenant_id,
+                    request_id=int(request_id),
+                    for_update=True,
+                )
+                if request is None:
+                    return False
+                if request.execution_state not in {
+                    KnowledgeSpaceFileChangeExecutionState.NOT_STARTED,
+                    KnowledgeSpaceFileChangeExecutionState.QUEUED,
+                }:
+                    return False
+                checkpoint = dict(request.execution_checkpoint or {})
+                checkpoint["failure_reason"] = str(failure_reason)[:1000]
+                request.execution_checkpoint = checkpoint
+                request.execution_state = KnowledgeSpaceFileChangeExecutionState.FAILED
+                await request_repository.save(request)
+        return True
+
     async def _execute_upload(
         self,
         *,
