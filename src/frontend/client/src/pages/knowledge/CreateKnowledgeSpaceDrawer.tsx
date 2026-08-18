@@ -922,7 +922,7 @@ export function CreateKnowledgeSpaceDrawer({
                                             </button>
                                         </PopoverTrigger>
                                         <PopoverContent
-                                            className="w-[520px] max-w-[calc(100vw-32px)] bg-white p-0"
+                                            className="w-[var(--radix-popover-trigger-width)] min-w-[320px] max-w-[calc(100vw-32px)] bg-white p-0"
                                             align="start"
                                         >
                                             <div className="h-[320px] p-3">
