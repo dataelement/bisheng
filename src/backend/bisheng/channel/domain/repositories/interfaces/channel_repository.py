@@ -14,6 +14,11 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
         pass
 
     @abstractmethod
+    async def find_channels_by_user_id(self, user_id: int) -> list[Channel]:
+        """Find all channels created by the given user (tenant auto-scoped)."""
+        pass
+
+    @abstractmethod
     async def find_by_creation_request(
         self,
         *,

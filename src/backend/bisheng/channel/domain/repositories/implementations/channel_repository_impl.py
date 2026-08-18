@@ -61,6 +61,12 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         result = await self.session.exec(query)
         return list(result.all())
 
+    async def find_channels_by_user_id(self, user_id: int) -> list[Channel]:
+        """Find all channels created by the given user (tenant auto-scoped)."""
+        query = select(Channel).where(Channel.user_id == user_id)
+        result = await self.session.exec(query)
+        return list(result.all())
+
     async def find_permission_candidates(
         self,
         *,
