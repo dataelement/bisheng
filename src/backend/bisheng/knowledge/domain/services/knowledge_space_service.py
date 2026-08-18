@@ -1954,6 +1954,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_ids=[space_id],
                 tenant_id=self.login_user.tenant_id,
             )
+            # F045: retract still-pending share invitations so the "同意加入"
+            # approval task is withdrawn from the invitee's inbox rather than
+            # silently granting access to the now-private space. Runs after the
+            # space is persisted as PRIVATE so the accept-side guard is the
+            # effective backstop for any concurrent acceptance.
+            await self._withdraw_pending_invites_for_private(space_id)
             final_removed_user_ids = []
             for user_id in removed_user_ids:
                 if not await self._user_can_read_space(user_id, space_id):
@@ -1982,6 +1988,65 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
 
         return space
+
+    async def _withdraw_pending_invites_for_private(self, space_id: int) -> None:
+        """Withdraw still-pending F045 share invitations when a space goes PRIVATE.
+
+        Only ``AWAITING_APPROVAL`` invites still own a PENDING approval instance
+        that can be withdrawn; ``QUEUED``/``APPLYING``/``FAILED`` rows mean the
+        invitee already decided, and those are handled by the accept-side PRIVATE
+        guard in ``ResourceAuthorizationService._validate_confirmed_grant_command``.
+
+        Withdrawal is performed on behalf of each invite's applicant (the
+        inviter) — the only operator ``withdraw_instance`` accepts — and is
+        best-effort: a concurrent acceptance may terminalise the instance first,
+        raising here, in which case the accept-side guard blocks the grant.
+        """
+        from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
+        from bisheng.permission.domain.models.resource_user_invite_request import (
+            ResourceUserInviteExecutionState,
+        )
+        from bisheng.permission.domain.services.resource_user_invite_application_service import (
+            build_runtime_resource_user_invite_application_service,
+        )
+
+        tenant_id = self.login_user.tenant_id
+        try:
+            invite_service = build_runtime_resource_user_invite_application_service()
+            pending = await invite_service.list_pending_invites(
+                tenant_id=tenant_id,
+                resource_type="knowledge_space",
+                resource_id=str(space_id),
+            )
+        except Exception as error:  # pragma: no cover - defensive
+            logger.warning(
+                "failed to list pending invites while making space {} private: {}",
+                space_id,
+                error,
+            )
+            return
+
+        for invite in pending:
+            if invite.execution_state != ResourceUserInviteExecutionState.AWAITING_APPROVAL:
+                continue
+            approval_instance_id = getattr(invite, "approval_instance_id", None)
+            if approval_instance_id is None:
+                continue
+            try:
+                await ApprovalCenterService.withdraw_instance(
+                    instance_id=int(approval_instance_id),
+                    operator_user_id=int(invite.inviter_user_id),
+                    reason="知识空间已转为私密, 邀请自动撤回",
+                )
+            except Exception as error:
+                # A concurrent accept (or an already-terminal instance) raises
+                # here; the accept-side PRIVATE guard is the backstop for it.
+                logger.warning(
+                    "failed to withdraw pending invite instance {} for space {}: {}",
+                    approval_instance_id,
+                    space_id,
+                    error,
+                )
 
     # ──────────────────────────── Listings ────────────────────────────────────
 

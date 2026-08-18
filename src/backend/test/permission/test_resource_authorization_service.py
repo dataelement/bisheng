@@ -580,3 +580,59 @@ async def test_confirmed_grant_precommits_binding_and_uses_caller_recovery():
             current_tenant_id.reset(tenant_token)
 
     assert events == ["fga_write", "binding_commit"]
+
+
+async def test_confirmed_grant_rejects_private_space():
+    """Accepting a stale share invite must fail once the space is PRIVATE.
+
+    Regression for the bug where a knowledge space shared to a user, then
+    converted to private, could still be joined when the user accepted the
+    pending invitation. The accept-side guard reads auth_type and refuses.
+    """
+    from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+
+    role = {
+        "id": "viewer",
+        "name": "Viewer",
+        "relation": "viewer",
+        "permissions": [],
+        "permissions_explicit": False,
+        "is_system": True,
+        "grant_tier": "usage",
+    }
+    service = ResourceAuthorizationService(get_relation_models=AsyncMock(return_value=[role]))
+    fingerprint = service._role_snapshot_fingerprint(role)
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id",
+            new=AsyncMock(
+                return_value=SimpleNamespace(id=11, tenant_id=1, auth_type=AuthTypeEnum.PRIVATE),
+            ),
+        ),
+        patch(
+            "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
+            new_callable=AsyncMock,
+        ) as authorize,
+    ):
+        from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
+
+        tenant_token = set_current_tenant_id(1)
+        try:
+            with pytest.raises(PermissionDeniedError):
+                await service.apply_confirmed_personal_user_grant(
+                    tenant_id=1,
+                    resource_id="11",
+                    inviter_user_id=7,
+                    target_user_id=42,
+                    relation="viewer",
+                    model_id="viewer",
+                    role_snapshot=role,
+                    role_fingerprint=fingerprint,
+                    include_children=False,
+                    approval_instance_id=88,
+                )
+        finally:
+            current_tenant_id.reset(tenant_token)
+
+    authorize.assert_not_awaited()

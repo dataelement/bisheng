@@ -872,7 +872,7 @@ class ResourceAuthorizationService:
         command: ResourceGrantCommand,
     ) -> AuthorizeGrantItem:
         from bisheng.core.context.tenant import get_current_tenant_id
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeDao
         from bisheng.permission.domain.services.fine_grained_permission_service import (
             FineGrainedPermissionService,
         )
@@ -893,6 +893,12 @@ class ResourceAuthorizationService:
         resource_tenant_id = getattr(resource, "tenant_id", None)
         if resource_tenant_id is not None and int(resource_tenant_id) != command.tenant_id:
             raise PermissionDeniedError()
+        # Backstop for the race window where the space is flipped to PRIVATE at the
+        # same moment an invitee accepts a share invite (F045). The make-private
+        # path withdraws pending invites, but an accept already in flight must not
+        # be allowed to add the user to a now-private space.
+        if getattr(resource, "auth_type", None) == AuthTypeEnum.PRIVATE:
+            raise PermissionDeniedError(msg="知识空间已转为私密, 邀请已失效")
         if command.inviter_user_id == command.target_user_id:
             raise PermissionDeniedError(msg="不能修改自己的权限")
 
