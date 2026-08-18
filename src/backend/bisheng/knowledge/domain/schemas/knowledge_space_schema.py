@@ -730,6 +730,7 @@ class ShougangPortalFileItemResp(BaseModel):
             "id",
             "space_id",
             "title",
+            "summary",
             "source",
             "updated_at",
             "tag_infos",

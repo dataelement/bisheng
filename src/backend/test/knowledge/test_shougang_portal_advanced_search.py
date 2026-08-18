@@ -278,10 +278,13 @@ def test_unauthorized_portal_item_serializes_only_safe_allowlist():
         capabilities={"can_view": True},
     )
 
-    assert set(item.model_dump(mode="json")) == {
+    payload = item.model_dump(mode="json")
+    assert payload["summary"] == "SECRET"
+    assert set(payload) == {
         "id",
         "space_id",
         "title",
+        "summary",
         "source",
         "updated_at",
         "tag_infos",

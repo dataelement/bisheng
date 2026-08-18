@@ -1016,7 +1016,7 @@ def test_safe_projection_only_redacts_discoverable_space_without_explicit_permis
     )
     authorized = service._map_shougang_portal_file_item(20, item)
 
-    assert redacted.summary == ""
+    assert redacted.summary == "完整摘要"
     assert redacted.file_size == ""
     assert redacted.file_encoding == ""
     assert redacted.source_path == ""
@@ -1024,3 +1024,9 @@ def test_safe_projection_only_redacts_discoverable_space_without_explicit_permis
     assert authorized.file_size == "1024"
     assert authorized.file_encoding == "GF-STD-PM-001"
     assert authorized.source_path == "设备部/检修方案.pdf"
+
+    redacted_payload = redacted.model_dump(mode="json")
+    assert redacted_payload["summary"] == "完整摘要"
+    assert "file_size" not in redacted_payload
+    assert "file_encoding" not in redacted_payload
+    assert "source_path" not in redacted_payload

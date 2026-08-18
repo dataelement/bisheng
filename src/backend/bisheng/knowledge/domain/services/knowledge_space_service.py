@@ -11117,7 +11117,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             id=file_id,
             space_id=space_id,
             title=Path(file_name).stem or file_name,
-            summary=(str(item.get("abstract") or "") if not safe_metadata_only else ""),
+            summary=str(item.get("abstract") or ""),
             source=str(item.get("knowledge_name") or item.get("space_name") or space_id),
             updated_at=self._serialize_datetime(item.get("update_time")),
             tag_infos=tag_infos,
