@@ -1593,7 +1593,6 @@ export function KnowledgeSpaceContent({
                     statusFilter={statusFilter}
                     onFilterStatus={handleStatusFilter}
                     showFilter={space.role !== SpaceRole.MEMBER}
-                    showPendingReviewFilter={pendingUploadFiles.length > 0 || statusFilter.includes(PENDING_REVIEW_FILTER)}
                     sortBy={sortBy}
                     sortDirection={sortDirection}
                     onSort={handleSort}

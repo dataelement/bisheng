@@ -62,8 +62,6 @@ interface FileListToolbarProps {
     onFilterStatus: (status: FileStatusFilter, checked: boolean) => void;
     /** Members don't get the status filter (they only ever see parsed files). */
     showFilter?: boolean;
-    /** Only spaces with upload approval enabled can have pending-review rows. */
-    showPendingReviewFilter?: boolean;
     sortBy: SortType | undefined;
     sortDirection: SortDirection | undefined;
     onSort: (sortBy: SortType) => void;
@@ -83,7 +81,6 @@ export function FileListToolbar({
     statusFilter,
     onFilterStatus,
     showFilter = true,
-    showPendingReviewFilter = false,
     sortBy,
     sortDirection,
     onSort,
@@ -97,9 +94,9 @@ export function FileListToolbar({
 }: FileListToolbarProps) {
     const localize = useLocalize();
     const filterActive = statusFilter.length > 0;
-    const statusOptions = showPendingReviewFilter
-        ? STATUS_FILTER_OPTIONS
-        : STATUS_FILTER_OPTIONS.filter((option) => option.value !== PENDING_REVIEW_FILTER);
+    // 待审核 is a permanent status-filter option so reviewers can always narrow
+    // to pending-approval uploads, even when none are currently loaded in view.
+    const statusOptions = STATUS_FILTER_OPTIONS;
 
     return (
         <div
