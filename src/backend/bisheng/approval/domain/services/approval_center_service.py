@@ -89,6 +89,108 @@ class ApprovalCenterService:
             result["department_short_name"] = projection.short_name
         return result
 
+    @staticmethod
+    def _clear_applicant_department(payload: dict) -> None:
+        """匿名申请人: 审批接口不下发部门, 避免列表拼出姓名与部门。"""
+        payload["applicant_department_id"] = None
+        payload["applicant_department_name"] = None
+        payload["applicant_department_short_name"] = None
+        payload["applicant_department_display_name"] = None
+
+    @classmethod
+    def _apply_qa_publish_identity_to_payload(
+        cls,
+        payload: dict,
+        *,
+        applicant_user_id: int | None,
+        identities: dict,
+        pending_approver_ids: list[int] | None = None,
+        fallback_names: dict[int, str] | None = None,
+    ) -> None:
+        """把 qa_question_publish 响应里的真名/部门换成展示身份。"""
+        fallback_names = fallback_names or {}
+        applicant_id = int(applicant_user_id or 0)
+        applicant = identities.get(applicant_id) if applicant_id else None
+        if applicant is not None and applicant.anonymous:
+            payload["applicant_user_name"] = applicant.display_name
+            cls._clear_applicant_department(payload)
+        for task in payload.get("tasks") or []:
+            uid = int(task.get("approver_user_id") or 0)
+            view = identities.get(uid)
+            if view is not None and view.anonymous:
+                task["approver_user_name"] = view.display_name
+        for node in payload.get("flow_nodes") or []:
+            for approver in node.get("approvers") or []:
+                uid = int(approver.get("user_id") or 0)
+                view = identities.get(uid)
+                if view is not None and view.anonymous:
+                    approver["user_name"] = view.display_name
+        for log in payload.get("action_logs") or []:
+            uid = int(log.get("operator_user_id") or 0)
+            view = identities.get(uid)
+            if view is not None and view.anonymous:
+                log["operator_user_name"] = view.display_name
+        if pending_approver_ids is None:
+            return
+        names: list[str] = []
+        for uid in pending_approver_ids:
+            view = identities.get(int(uid))
+            if view is not None and view.anonymous:
+                names.append(view.display_name)
+            else:
+                fallback = fallback_names.get(int(uid))
+                if fallback:
+                    names.append(fallback)
+        if names:
+            payload["current_approver_names"] = "、".join(names)
+
+    @classmethod
+    async def _overlay_qa_publish_identities(
+        cls,
+        *,
+        instances: list,
+        payloads: list[dict],
+        extra_user_ids_by_instance: dict[int, list[int]] | None = None,
+        pending_approver_ids_by_instance: dict[int, list[int]] | None = None,
+        fallback_names: dict[int, str] | None = None,
+    ) -> None:
+        """仅处理转公开场景, 其它审批 payload 原样返回。"""
+        extra_user_ids_by_instance = extra_user_ids_by_instance or {}
+        pending_approver_ids_by_instance = pending_approver_ids_by_instance or {}
+        fallback_names = fallback_names or {}
+        qa_instances = [
+            inst
+            for inst in instances
+            if inst is not None and getattr(inst, "scenario_code", None) == _QA_QUESTION_PUBLISH_SCENARIO
+        ]
+        if not qa_instances:
+            return
+        from bisheng.qa_expert.domain.publish_approval_identity import load_identities_for_instances
+
+        merged_extra: dict[int, list[int]] = {
+            int(inst.id): list(extra_user_ids_by_instance.get(int(inst.id), [])) for inst in qa_instances
+        }
+        for inst in qa_instances:
+            merged_extra[int(inst.id)].extend(pending_approver_ids_by_instance.get(int(inst.id), []))
+        identities_by_instance = await load_identities_for_instances(
+            qa_instances,
+            extra_user_ids_by_instance=merged_extra,
+            real_name_map=fallback_names,
+        )
+        instance_by_id = {int(inst.id): inst for inst in qa_instances}
+        for payload in payloads:
+            instance_id = int(payload.get("instance_id") or 0)
+            instance = instance_by_id.get(instance_id)
+            if instance is None:
+                continue
+            cls._apply_qa_publish_identity_to_payload(
+                payload,
+                applicant_user_id=instance.applicant_user_id,
+                identities=identities_by_instance.get(instance_id, {}),
+                pending_approver_ids=pending_approver_ids_by_instance.get(instance_id),
+                fallback_names=fallback_names,
+            )
+
     @classmethod
     async def list_my_tasks(cls, *, tenant_id: int, approver_user_id: int):
         tasks = await ApprovalQueryRepository.list_tasks_by_approver(tenant_id, approver_user_id)
@@ -145,6 +247,13 @@ class ApprovalCenterService:
                     "update_time": task.update_time,
                 }
             )
+        await cls._overlay_qa_publish_identities(
+            instances=list(instance_map.values()),
+            payloads=data,
+            fallback_names={
+                int(inst.applicant_user_id): str(inst.applicant_user_name or "") for inst in instance_map.values()
+            },
+        )
         return {"data": data, "total": len(data)}
 
     @classmethod
@@ -280,8 +389,6 @@ class ApprovalCenterService:
         all_task_uids = list({t.approver_user_id for t in all_tasks})
         task_user_name_map: dict[int, str] = {}
         if all_task_uids:
-            from bisheng.user.domain.models.user import UserDao
-
             task_users = await UserDao.aget_user_by_ids(all_task_uids)
             task_user_name_map = {u.user_id: u.user_name for u in (task_users or [])}
 
@@ -300,7 +407,15 @@ class ApprovalCenterService:
         elif instance.scenario_code == "department_file_view_request":
             grant_revoked = any(log.action == "revoke_grant" for log in action_logs)
 
-        return {
+        extra_user_ids = list(all_task_uids)
+        extra_user_ids.extend(int(log.operator_user_id) for log in action_logs if log.operator_user_id)
+        extra_user_ids.extend(
+            int(approver.get("user_id") or 0) for node in flow_nodes for approver in (node.get("approvers") or [])
+        )
+        pending_approver_ids = [
+            int(t.approver_user_id) for t in all_tasks if str(t.status) == ApprovalTaskStatus.PENDING
+        ]
+        payload = {
             "task_id": task.id,
             "instance_id": task.instance_id,
             "scenario_code": instance.scenario_code,
@@ -354,6 +469,17 @@ class ApprovalCenterService:
                 for log in action_logs
             ],
         }
+        await cls._overlay_qa_publish_identities(
+            instances=[instance],
+            payloads=[payload],
+            extra_user_ids_by_instance={int(instance.id): extra_user_ids},
+            pending_approver_ids_by_instance={int(instance.id): pending_approver_ids},
+            fallback_names={
+                **task_user_name_map,
+                int(instance.applicant_user_id): str(instance.applicant_user_name or ""),
+            },
+        )
+        return payload
 
     @classmethod
     async def decide_task_api(
@@ -394,14 +520,12 @@ class ApprovalCenterService:
         cls,
         instance_ids: list[int],
         dept_ids: list[int],
-    ) -> tuple[dict[int, str], dict[int, DepartmentNameProjection]]:
-        """Returns (approver_names_map, department_map).
+    ) -> tuple[dict[int, str], dict[int, DepartmentNameProjection], dict[int, list[int]]]:
+        """Returns (approver_names_map, department_map, pending_approver_ids_by_instance).
 
         approver_names_map: {instance_id -> comma-separated approver names}
         department_map: {dept_id -> department display projection}
         """
-        from bisheng.user.domain.models.user import UserDao
-
         pending_tasks = await ApprovalQueryRepository.list_pending_tasks_for_instances(instance_ids)
         inst_approver_map: dict[int, list[int]] = {}
         for task in pending_tasks:
@@ -420,7 +544,7 @@ class ApprovalCenterService:
                 approver_names_map[inst_id] = "、".join(names)
 
         department_map = await cls._load_department_projection_map(dept_ids)
-        return approver_names_map, department_map
+        return approver_names_map, department_map, inst_approver_map
 
     @classmethod
     async def list_my_requests(cls, *, tenant_id: int, applicant_user_id: int):
@@ -430,7 +554,9 @@ class ApprovalCenterService:
 
         instance_ids = [r.id for r in rows]
         dept_ids = [r.applicant_department_id for r in rows if r.applicant_department_id]
-        approver_names_map, department_map = await cls._enrich_with_approver_and_dept(instance_ids, dept_ids)
+        approver_names_map, department_map, pending_by_instance = await cls._enrich_with_approver_and_dept(
+            instance_ids, dept_ids
+        )
 
         # Batch-check which menu_access instances have had their grant revoked
         from bisheng.approval.domain.repositories.user_menu_access_repository import UserMenuAccessRepository
@@ -467,6 +593,17 @@ class ApprovalCenterService:
                     "update_time": row.update_time,
                 }
             )
+        fallback_names: dict[int, str] = {}
+        for row in rows:
+            fallback_names[int(row.applicant_user_id)] = str(row.applicant_user_name or "")
+        extra_user_ids = {int(inst_id): list(uids) for inst_id, uids in pending_by_instance.items()}
+        await cls._overlay_qa_publish_identities(
+            instances=list(rows),
+            payloads=data,
+            extra_user_ids_by_instance=extra_user_ids,
+            pending_approver_ids_by_instance=extra_user_ids,
+            fallback_names=fallback_names,
+        )
         return {"data": data, "total": len(data)}
 
     @classmethod
@@ -497,8 +634,6 @@ class ApprovalCenterService:
         task_user_name_map: dict[int, str] = {}
         current_approver_names: str | None = None
         if all_task_uids:
-            from bisheng.user.domain.models.user import UserDao
-
             task_users = await UserDao.aget_user_by_ids(all_task_uids)
             task_user_name_map = {u.user_id: u.user_name for u in (task_users or [])}
             pending_names = [
@@ -525,7 +660,15 @@ class ApprovalCenterService:
             revoked_ids = await UserMenuAccessRepository.get_revoked_instance_ids([instance.id])
             grant_revoked = instance.id in revoked_ids
 
-        return {
+        extra_user_ids = list(all_task_uids)
+        extra_user_ids.extend(int(log.operator_user_id) for log in action_logs if log.operator_user_id)
+        extra_user_ids.extend(
+            int(approver.get("user_id") or 0) for node in flow_nodes for approver in (node.get("approvers") or [])
+        )
+        pending_approver_ids = [
+            int(task.approver_user_id) for task in tasks if str(task.status) == ApprovalTaskStatus.PENDING
+        ]
+        payload = {
             "instance_id": instance.id,
             "scenario_code": instance.scenario_code,
             "scenario_name": instance.scenario_name,
@@ -577,6 +720,17 @@ class ApprovalCenterService:
                 for log in action_logs
             ],
         }
+        await cls._overlay_qa_publish_identities(
+            instances=[instance],
+            payloads=[payload],
+            extra_user_ids_by_instance={int(instance.id): extra_user_ids},
+            pending_approver_ids_by_instance={int(instance.id): pending_approver_ids},
+            fallback_names={
+                **task_user_name_map,
+                int(instance.applicant_user_id): str(instance.applicant_user_name or ""),
+            },
+        )
+        return payload
 
     @classmethod
     async def withdraw_instance(

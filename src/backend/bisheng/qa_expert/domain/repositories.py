@@ -300,6 +300,15 @@ class QuestionRepository:
             result = await session.exec(stmt)
             return result.first()
 
+    async def get_by_ids(self, question_ids: list[int]) -> list[Question]:
+        """按问题 ID 批量读取，供转公开审批展示名一次加载。"""
+        if not question_ids:
+            return []
+        async with get_async_db_session() as session:
+            stmt = select(Question).where(Question.id.in_(question_ids))
+            result = await session.exec(stmt)
+            return list(result.all())
+
     async def get_by_id_for_update(self, question_id: int) -> Question | None:
         """读取问题行。方法返回即结束事务，行锁不会保留；真正持锁写槽位用 apply_adopt_count_locked。"""
         async with get_async_db_session() as session:
@@ -667,6 +676,15 @@ class AnswerRepository:
         """列出该题全部回答（含软删），供公开题首次采纳写资格快照。"""
         async with get_async_db_session() as session:
             stmt = select(Answer).where(Answer.question_id == question_id)
+            result = await session.exec(stmt)
+            return list(result.all())
+
+    async def list_all_by_question_ids(self, question_ids: list[int]) -> list[Answer]:
+        """批量列出若干题的全部回答（含软删），供转公开审批展示名一次加载。"""
+        if not question_ids:
+            return []
+        async with get_async_db_session() as session:
+            stmt = select(Answer).where(Answer.question_id.in_(question_ids))
             result = await session.exec(stmt)
             return list(result.all())
 

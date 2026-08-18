@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.approval.api.endpoints.approval_user import router as approval_user_router
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.core.context.tenant import set_current_tenant_id
@@ -87,6 +88,7 @@ def _flow_app(auth: dict):
         )
 
     app.include_router(router, prefix="/api/v1")
+    app.include_router(approval_user_router, prefix="/api/v1")
     app.dependency_overrides[UserPayload.get_login_user] = lambda: auth["user"]
     return app
 
@@ -200,6 +202,14 @@ async def flow_env(monkeypatch):
     monkeypatch.setattr(
         "bisheng.approval.domain.repositories.approval_scenario_repository.get_async_db_session",
         patched_session,
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.repositories.approval_query_repository.get_async_db_session",
+        patched_session,
+    )
+    monkeypatch.setattr(
+        "bisheng.approval.domain.services.approval_center_service.UserDao.aget_user_by_ids",
+        AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(QuestionService, "_send_expert_invitation_inbox_notice", AsyncMock())
     monkeypatch.setattr(QuestionService, "_send_adoption_notification", AsyncMock())

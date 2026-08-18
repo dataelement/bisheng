@@ -66,11 +66,11 @@ async def _create_answer(env, question_id: int, content: str) -> int:
     return int(max(rows, key=lambda r: r.id).id)
 
 
-async def _create_answer_anonymous(env, question_id: int, content: str) -> int:
-    resp = await env.client.post(
-        f"{PREFIX}/answers",
-        json={"question_id": question_id, "content": content, "anonymous": True},
-    )
+async def _create_answer_anonymous(env, question_id: int, content: str, *, reveal_on_public: bool | None = None) -> int:
+    payload: dict = {"question_id": question_id, "content": content, "anonymous": True}
+    if reveal_on_public is not None:
+        payload["reveal_on_public"] = reveal_on_public
+    resp = await env.client.post(f"{PREFIX}/answers", json=payload)
     body = _ok(resp)
     assert body.get("status_code") == 200, body
     data = body.get("data") or {}
@@ -1079,6 +1079,107 @@ async def test_df21_publish_todo_and_late_answerer_joins(flow_env, monkeypatch):
     assert env.uid(202) in _receiver_ids(added_msgs[-1]["receiver"])
     still_tasks = await env.reload_all(ApprovalTask, instance_id=instance.id)
     assert {int(row.approver_user_id) for row in still_tasks if row.status == "pending"} == pending_after
+
+
+async def test_df22_publish_approval_masks_anonymous_names_and_department(flow_env):
+    """定向转公开：匿名提问者/专家在审批实例与详情接口不露真名和部门。"""
+    from bisheng.approval.domain.models.approval_instance import ApprovalActionLog, ApprovalInstance, ApprovalTask
+
+    env = flow_env
+    invited = await env.seed_expert(user_id=201, name="专家甲")
+    asker_real_name = env.asker.user_name
+    expert_real_name = "专家甲"
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df22转公开匿名",
+            "description": "定向匿名",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [invited.id],
+            "asker_anonymous": True,
+            "asker_reveal_on_public": False,
+        },
+    )
+    env.as_user(env.user(201, name=expert_real_name))
+    aid = await _create_answer_anonymous(env, qid, "匿名有效答", reveal_on_public=False)
+    env.as_user(env.asker)
+    _ok(await env.client.post(f"{PREFIX}/questions/{qid}/adopt", json={"answer_id": aid}))
+    created = _ok(await env.client.post(f"{PREFIX}/questions/{qid}/publish-requests", json={"duration_days": 3}))
+    assert created["status_code"] == 200
+
+    instance = await env.reload_row(
+        ApprovalInstance,
+        business_resource_id=str(qid),
+        scenario_code="qa_question_publish",
+    )
+    assert instance is not None
+    assert int(instance.applicant_user_id) == int(env.asker.user_id)
+    assert str(instance.applicant_user_name).startswith("匿名同事")
+    assert instance.applicant_user_name != asker_real_name
+    assert instance.applicant_department_id is None
+
+    logs = await env.reload_all(ApprovalActionLog, instance_id=instance.id)
+    submitted = next((row for row in logs if row.action == "submitted"), None)
+    assert submitted is not None
+    assert str(submitted.operator_user_name).startswith("匿名同事")
+    assert submitted.operator_user_name != asker_real_name
+    assert int(submitted.operator_user_id) == int(env.asker.user_id)
+
+    aliases = await env.reload_all(AnonymousAlias, question_id=qid)
+    assert aliases
+    alias_labels = {str(row.alias_label) for row in aliases}
+
+    tasks = await env.reload_all(ApprovalTask, instance_id=instance.id)
+    expert_task = next((row for row in tasks if int(row.approver_user_id) == env.uid(201)), None)
+    assert expert_task is not None
+
+    env.as_user(env.user(201, name=expert_real_name))
+    listed = _ok(await env.client.get("/api/v1/approval/my-tasks"))
+    assert listed["status_code"] == 200
+    task_rows = (listed.get("data") or {}).get("data") or []
+    hit = next((item for item in task_rows if int(item.get("task_id") or 0) == int(expert_task.id)), None)
+    assert hit is not None
+    assert str(hit.get("applicant_user_name") or "").startswith("匿名同事")
+    assert hit.get("applicant_user_name") != asker_real_name
+    assert hit.get("applicant_department_id") is None
+    assert hit.get("applicant_department_name") is None
+    assert hit.get("applicant_department_display_name") is None
+
+    detail = _ok(await env.client.get(f"/api/v1/approval/my-tasks/{expert_task.id}"))
+    assert detail["status_code"] == 200
+    data = detail.get("data") or {}
+    assert str(data.get("applicant_user_name") or "").startswith("匿名同事")
+    assert data.get("applicant_user_name") != asker_real_name
+    assert data.get("applicant_department_id") is None
+    assert data.get("applicant_department_name") is None
+    assert data.get("applicant_department_display_name") is None
+    task_payload = next(
+        (item for item in (data.get("tasks") or []) if int(item.get("approver_user_id") or 0) == env.uid(201)),
+        None,
+    )
+    assert task_payload is not None
+    assert str(task_payload.get("approver_user_name") or "").startswith("匿名同事")
+    assert task_payload.get("approver_user_name") != expert_real_name
+    assert int(task_payload.get("approver_user_id")) == env.uid(201)
+    submitted_log = next((item for item in (data.get("action_logs") or []) if item.get("action") == "submitted"), None)
+    assert submitted_log is not None
+    assert str(submitted_log.get("operator_user_name") or "").startswith("匿名同事")
+    assert int(submitted_log.get("operator_user_id")) == int(env.asker.user_id)
+
+    again = _ok(await env.client.get(f"/api/v1/approval/my-tasks/{expert_task.id}"))
+    again_data = again.get("data") or {}
+    assert again_data.get("applicant_user_name") == data.get("applicant_user_name")
+    again_task = next(
+        (item for item in (again_data.get("tasks") or []) if int(item.get("approver_user_id") or 0) == env.uid(201)),
+        None,
+    )
+    assert again_task is not None
+    assert again_task.get("approver_user_name") == task_payload.get("approver_user_name")
+    stored = await env.reload_row(ApprovalInstance, id=instance.id)
+    assert stored.applicant_user_name == instance.applicant_user_name
+    assert stored.applicant_user_name in alias_labels or str(stored.applicant_user_name).startswith("匿名同事")
 
 
 async def test_df13_reject_keeps_viewer_decision_on_latest(flow_env):
