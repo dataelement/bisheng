@@ -152,14 +152,6 @@ class SpaceChannelMemberRepositoryImpl(BaseRepositoryImpl[SpaceChannelMember, in
         highest_active = self._highest_membership([row for row in rows if row.status == MembershipStatusEnum.ACTIVE])
         return highest_active, highest_any
 
-    async def update_pin_status(self, member_id: int, is_pinned: bool) -> SpaceChannelMember | None:
-        """Update the pin status of a channel membership."""
-        member = await self.find_by_id(member_id)
-        if member:
-            member.is_pinned = is_pinned
-            member = await self.update(member)
-        return member
-
     async def find_channel_members_paginated(
         self, channel_id: str, user_ids: list[int] | None = None, page: int = 1, page_size: int = 20
     ) -> list[SpaceChannelMember]:

@@ -118,8 +118,12 @@ def upgrade() -> None:
 
     api_url = cfg.api_url.rstrip('/')
     timeout = float(getattr(cfg, 'timeout', 5))
-    store_id = cfg.store_id
-    model_id = cfg.model_id
+    # OpenFGAConf does not define store_id/model_id; these are only known at
+    # runtime after OpenFGAManager.bootstrap (which the alembic process never
+    # runs). Use getattr so a missing attribute falls through to HTTP discovery
+    # below instead of raising AttributeError and aborting `alembic upgrade`.
+    store_id = getattr(cfg, 'store_id', None)
+    model_id = getattr(cfg, 'model_id', None)
     if not store_id or not model_id:
         # Settings only carry these after OpenFGAManager.bootstrap, which the
         # alembic process never runs. Discover via the FGA HTTP API instead.
