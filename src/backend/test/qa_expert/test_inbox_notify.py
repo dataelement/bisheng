@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from bisheng.qa_expert.domain.identity import IdentityService
 from bisheng.qa_expert.domain.publish_service import PublishService
-from bisheng.qa_expert.domain.services import AnswerService, QuestionService
+from bisheng.qa_expert.domain.services import AnswerService, CommentService, QuestionService
 
 
 async def test_invite_answer_adopt_publish_send_inbox():
@@ -34,6 +34,36 @@ async def test_invite_answer_adopt_publish_send_inbox():
     asvc._send_answer_notification.assert_awaited()
     qsvc._send_adoption_notification.assert_awaited()
     pub.notify.assert_awaited()
+
+
+async def test_comment_inbox_notifies_asker_and_answerer(monkeypatch):
+    captured: dict = {}
+
+    async def fake_display(*_args, **_kwargs):
+        return "评者", False
+
+    async def fake_send(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("bisheng.qa_expert.domain.inbox_notice.display_name_for_trigger", fake_display)
+    monkeypatch.setattr("bisheng.qa_expert.domain.inbox_notice.send_qa_inbox", fake_send)
+    svc = CommentService()
+    svc.question_repo = MagicMock()
+    svc.question_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id=1, user_id=101, title="题", tenant_id=1))
+    await svc._send_comment_notification(
+        SimpleNamespace(id=2, question_id=1, user_id=201),
+        SimpleNamespace(
+            id=9,
+            user_id=301,
+            user_name="评者",
+            anonymous=0,
+            reveal_on_public=None,
+            content="评",
+        ),
+    )
+    assert captured["action_code"] == "qa_answer_commented"
+    assert captured["receivers"] == [201, 101]
+    assert captured["sender_user_id"] == 301
 
 
 async def test_anonymous_sender_uses_alias_not_real_name():

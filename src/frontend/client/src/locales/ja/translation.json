@@ -2164,7 +2164,7 @@
   "com_approval_field_duration_days": "有効期間（日）",
   "com_notifications_action_qa_expert_invited": "専門家Q&A「{{target}}」への回答に招待されました",
   "com_notifications_action_qa_expert_answered": "専門家Q&A「{{target}}」に回答しました",
-  "com_notifications_action_qa_answer_commented": "専門家Q&A「{{target}}」のあなたの回答にコメントしました",
+  "com_notifications_action_qa_answer_commented": "専門家Q&A「{{target}}」の回答にコメントしました",
   "com_notifications_action_qa_answer_accepted": "専門家Q&A「{{target}}」のあなたの回答を採用しました",
   "com_notifications_action_qa_expert_publish_started": "専門家Q&A「{{target}}」の公開申請を開始しました。承認管理の未処理から対応してください",
   "com_notifications_action_qa_expert_publish_approver_added": "専門家Q&A「{{target}}」の公開承認者が更新されました",
