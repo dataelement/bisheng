@@ -15,7 +15,7 @@
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（待写）· [release-contract.md](../release-contract.md)（表 1 App / AppVersion / AppInstance；INV-32 / INV-33 / INV-35）· [mvp-114-path.md](../mvp-114-path.md)（**§6 MVP-核心是本轮裁剪基准**、§3 114 环境事实）· 姊妹 [F055](../055-app-publish-pipeline/spec.md) / [F053](../053-dev-cli-skills/spec.md) / [F056](../056-app-square-governance/spec.md) · [F049 design](../049-openapi-auth-baseline/design.md)（凭据底座与开放能力层开关的兄弟键形态）
 **技术路线依据**: `docs/product/3.0 附录：纳管应用技术路线与架构选型调研.md`（下称《调研》）· `docs/product/3.0 应用工场 产品方案.md` §4.1 / §4.5 / §4.8
 **版本**: v3.0.0
-**最后更新**: 2026-08-17（初版 → 同日按独立审查 16 条发现修订，见修订历史）
+**最后更新**: 2026-08-18（D5.2 补第 4 条「裸应用根路径先补尾斜杠再呈现」——114 实测白屏；此前：2026-08-17 初版 → 同日按独立审查 16 条发现修订，见修订历史）
 
 ---
 
@@ -142,9 +142,11 @@
   - **问题**：托管的是平台模板给出的 FastAPI / Streamlit 类应用。若原样带前缀转发，应用要自己认得 `/apps/{slug}`；若剥掉前缀不告诉它，应用生成的绝对 URL（`/static/*`、`/docs`、表单 `action="/submit"`、重定向 `Location: /`）在浏览器侧会打到 `/static/*` 而**不是** `/apps/{slug}/static/*`，一律 404。同一份代码在 F053 `bisheng dev` 下又跑在根路径（INV-32 要求两处注入同构），口径必须一次定死。
   - **备选**：A. 不剥前缀，让应用自己解析（把平台的 URL 布局泄进应用代码，且本地 dev 跑不了同一份代码）· B. 剥前缀但不告知（上面那批绝对路径全 404）· C. **剥前缀 + 告知 base path**（选定）· D. 给每个应用一个子域名（要泛域名证书与 DNS，114 与私有化客户都不成立；且 K7 的 cookie 是 **host-only**，换域名即丢免登录）
   - **选定**：**C**。三件事同时做：
-    1. app-proxy 转发时**剥掉 `/apps/{slug}` 前缀**（`/apps/foo/x?y=1` → 上游 `/x?y=1`；`/apps/foo` 与 `/apps/foo/` 都 → `/`）；
+    1. app-proxy 转发时**剥掉 `/apps/{slug}` 前缀**（`/apps/foo/x?y=1` → 上游 `/x?y=1`；`/apps/foo` 与 `/apps/foo/` 都 → `/`）——转发层面等同处理是对的，但**呈现层面不是**，见下面第 4 条；
     2. 同时下发 `X-Forwarded-Prefix: /apps/{slug}`（并按既有反代惯例给 `X-Forwarded-Proto` / `X-Forwarded-Host`）——**这三个 `X-Forwarded-*` 头不在 `x-bisheng-` 剥离等价类里，但同样必须先剥客户端伪造值再由 app-proxy 重写**（AC-32 只管 `x-bisheng-*`，这三个要单独写一句，否则应用会信任伪造的 Host 生成外链）；
     3. 注入环境变量 **`BISHENG_APP_BASE_PATH`**（线上 = `/apps/{slug}`；F053 `bisheng dev` 注入**同名变量、值为空串**——INV-32 的"同构"是**变量名与语义同构**，不是取值相同），`python3.11` 模板的入口 wrapper 读它并接到框架的 base path（FastAPI `root_path=` / Streamlit `--server.baseUrlPath=`），使框架自动生成带前缀的绝对 URL。
+    4. **先把裸应用根路径重定向到带尾斜杠，再呈现应用文档**（2026-08-18 补，实测于 114）：对 GET / HEAD 的 `/apps/{slug}`，在鉴权 allow 之后、转发之前返回 **308** 到 `/apps/{slug}/`（query 原样带上）。前三条只覆盖了「框架在运行时生成绝对 URL」这一条路径——`X-Forwarded-Prefix` 与 `root_path` 对**纯静态产物无效**：一个 Vite 打包的 SPA 把 `./assets/index-x.js` 写死在 HTML 里，没有任何框架会在运行时重写它，解析完全由浏览器按文档 URL 做。文档挂在 `/apps/foo` 时基准是 `/apps/`，`./assets/x.js` 解析成 `/apps/assets/x.js`（另一个 slug），全部 404、页面白屏；挂在 `/apps/foo/` 才解析成 `/apps/foo/assets/x.js`。**位置两处都是有意的**：放在 allow 之后，是因为登录交接 / 无权限 / 已下线 / 不存在 / 恢复中五张页面都是平台自己的 HTML、不解析任何相对 URL，重定向它们只会多一跳并改掉登录后的返回地址（AC-27 的回跳地址）；只对 GET / HEAD，是因为 API 调用不按相对 URL 解析任何东西。
+  - **这条为什么会被漏掉（值得记）**：失败在服务端**完全不可见**——两种形式都被归一成 `/` 转发，应用规规矩矩返回 200，日志一片干净，唯一线索在浏览器 console 的资源 404。D5.2 原文写「`/apps/foo` 与 `/apps/foo/` 都 → `/`」时，把"到达同一个页面"当成了"两者等价"，而它们作为**相对 URL 基准**并不等价。
   - **如实登记的残余约束**：应用**手写**的根绝对路径（`<img src="/logo.png">`、`fetch('/api/x')`）仍会 404——平台不做 HTML 重写（要解析 / 改写全部响应体，代价与破坏面都不可接受）。这条写进 **DEV-04 托管运行契约**（"用相对路径或框架 base path，别硬编码根绝对路径"）并由模板的 README 与示例应用示范；F055 的托管预检**不校验**它（静态分析判不准）。
   - **何时该重新考虑**：产品接受给应用发子域名（那时 cookie 要从 host-only 改 `domain=`，K7 的免登录前提整条重估）；出现大量存量应用无法改绝对路径（那时才谈响应体重写，且只对 `text/html` 做，代价照实评估）。
 - **未部署引导页（AC-30）两层**：
