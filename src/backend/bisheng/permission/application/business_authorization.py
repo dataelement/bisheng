@@ -34,6 +34,15 @@ async def check_business_action(
     """Check one business-verified resource through the sole F048 facade."""
 
     actor = await resolve_permission_actor(login_user)
+    if actor.super_admin:
+        # The decision layer allows a super admin unconditionally, but only after
+        # the target is resolved. Resolution runs business data-validity guards
+        # (e.g. owner/tenant/status checks in the F048 resource adapter) that do
+        # not exempt super admins, so a legitimate-but-imperfect record would
+        # raise before the decision is ever reached. The batch path already
+        # short-circuits super admins for the same reason; mirror it here so the
+        # single-resource path (detail, delete, etc.) stays consistent.
+        return True
     registry = await get_f048_resource_registry()
     target = await registry.resolve(
         resource_type=resource_type,
