@@ -217,7 +217,7 @@ async def test_department_group_and_existing_user_changes_stay_direct() -> None:
     assert result.direct_applied_count == 3
 
 
-async def test_mixed_request_guard_failure_happens_before_any_direct_write() -> None:
+async def test_mixed_request_disabled_scenario_degrades_to_direct() -> None:
     @asynccontextmanager
     async def disabled_guard(*, tenant_id: int):
         assert tenant_id == TENANT_ID
@@ -253,16 +253,19 @@ async def test_mixed_request_guard_failure_happens_before_any_direct_write() -> 
         ),
         patch.object(service, "_authorize_direct", new=AsyncMock()) as direct,
     ):
-        with pytest.raises(ApprovalScenarioDisabledError):
-            await service.authorize(
-                "knowledge_space",
-                RESOURCE_ID,
-                request,
-                _login_user(),
-            )
+        result = await service.authorize(
+            "knowledge_space",
+            RESOURCE_ID,
+            request,
+            _login_user(),
+        )
 
-    direct.assert_not_awaited()
+    # 审批场景关闭 -> 降级为直接授权：所有 grant（含新增个人用户）直接写入，不创建本人确认审批。
+    direct.assert_awaited_once()
+    direct_request = direct.await_args.args[2]
+    assert direct_request.grants == request.grants
     invite_application_service.request_invite.assert_not_awaited()
+    assert result.direct_applied_count == 2
 
 
 async def test_personal_user_removal_stays_direct() -> None:

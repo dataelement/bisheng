@@ -338,9 +338,17 @@ class ResourceAuthorizationService:
 
         async with AsyncExitStack() as stack:
             if invite_grants and not scenario_guarded:
-                await stack.enter_async_context(
-                    self._invite_scenario_guard(tenant_id=int(invite_tenant_id)),
-                )
+                from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+
+                try:
+                    await stack.enter_async_context(
+                        self._invite_scenario_guard(tenant_id=int(invite_tenant_id)),
+                    )
+                except ApprovalScenarioDisabledError:
+                    # 「知识空间用户邀请确认」审批场景关闭时，个人用户授权降级为直接授权：
+                    # 不再创建本人确认审批，直接对新增个人用户授权成功。
+                    direct_grants = list(request.grants)
+                    invite_grants = []
             if invite_grants:
                 await self._validate_invite_request_access(
                     resource_type=resource_type,

@@ -304,11 +304,13 @@ async def test_new_knowledge_space_user_becomes_invite():
     assert result.results[0].approval_instance_id == 88
 
 
-async def test_disabled_scenario_has_zero_direct_side_effect():
+async def test_disabled_scenario_degrades_to_direct_authorization():
+    """审批场景关闭时，新增个人用户授权降级为直接授权，不报错、不创建本人确认审批。"""
     from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 
     invite_service = SimpleNamespace(
         ensure_scenario_available=AsyncMock(side_effect=ApprovalScenarioDisabledError()),
+        request_invite=AsyncMock(),
     )
     service = ResourceAuthorizationService(invite_service=invite_service)
     request = AuthorizeRequest(
@@ -324,14 +326,19 @@ async def test_disabled_scenario_has_zero_direct_side_effect():
             new=AsyncMock(return_value=[]),
         ),
         patch(
-            "bisheng.permission.domain.services.permission_service.PermissionService.authorize",
-            new=AsyncMock(),
-        ) as direct_authorize,
+            "bisheng.permission.domain.services.permission_service.PermissionService._resolve_resource_tenant",
+            new=AsyncMock(return_value=1),
+        ),
+        patch.object(service, "_authorize_direct", new=AsyncMock()) as direct_authorize,
     ):
-        with pytest.raises(ApprovalScenarioDisabledError):
-            await service.authorize("knowledge_space", "11", request, _user())
+        result = await service.authorize("knowledge_space", "11", request, _user())
 
-    direct_authorize.assert_not_awaited()
+    direct_authorize.assert_awaited_once()
+    direct_request = direct_authorize.await_args.args[2]
+    assert direct_request.grants == request.grants
+    invite_service.request_invite.assert_not_awaited()
+    assert result.direct_applied_count == 2
+    assert result.invite_created_count == 0
 
 
 async def test_mixed_authorization_keeps_invalid_invite_failure_per_item():
