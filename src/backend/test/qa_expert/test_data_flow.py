@@ -5,13 +5,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.common.utils.beijing_time import now_beijing
 from bisheng.database.models.qa_expert import (
     AnonymousAlias,
     Answer,
@@ -1418,7 +1420,7 @@ async def test_df25_expired_publish_allows_unadopted_delete(flow_env):
     async with AsyncSession(env.engine, expire_on_commit=False) as session:
         await session.execute(
             text("UPDATE qa_publish_request SET expire_at = :expired WHERE question_id = :qid"),
-            {"expired": datetime.utcnow() - timedelta(minutes=1), "qid": qid},
+            {"expired": now_beijing() - timedelta(minutes=1), "qid": qid},
         )
         await session.commit()
     listed = _ok(await env.client.get(f"{PREFIX}/answers/{qid}"))
@@ -1537,3 +1539,37 @@ async def test_df_question_too_many_images_rejected_no_dirty_row(flow_env, monke
     again_body = _ok(again)
     assert again_body["status_code"] == 18313
     assert await env.reload_row(Question, title=title) is None
+
+
+async def test_df_question_created_at_is_beijing_wall_clock(flow_env):
+    """新写入 qa_question.created_at 为东八墙钟；接口带 +08:00，与落库一致。"""
+    env = flow_env
+    env.as_user(env.asker)
+    before = now_beijing()
+    qid = await _create_question(
+        env,
+        {
+            "title": "df时区东八",
+            "description": "校验墙钟",
+            "business_domain": "steel",
+            "question_type": "public",
+        },
+    )
+    after = now_beijing()
+    row = await env.reload_row(Question, id=qid)
+    assert row is not None
+    assert row.created_at.tzinfo is None
+    assert before - timedelta(seconds=5) <= row.created_at <= after + timedelta(seconds=5)
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    created_at = (detail.get("data") or {}).get("created_at")
+    assert isinstance(created_at, str)
+    assert created_at.endswith("+08:00")
+    wall = row.created_at.strftime("%Y-%m-%dT%H:%M")
+    assert created_at.startswith(wall)
+    again = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert (again.get("data") or {}).get("created_at") == created_at
+    listed = _ok(await env.client.get(f"{PREFIX}/questions", params={"page": 1, "page_size": 20}))
+    questions = (listed.get("data") or {}).get("questions") or []
+    hit = next((item for item in questions if int(item.get("id")) == qid), None)
+    assert hit is not None
+    assert str(hit.get("created_at") or "").endswith("+08:00")
