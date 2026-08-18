@@ -1,4 +1,4 @@
-# ruff: noqa: RUF002
+# ruff: noqa: RUF002, RUF003
 """
 Expert QA API Endpoints - HTTP 路由处理层
 """
@@ -13,6 +13,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.http_error import ServerError
 from bisheng.common.schemas.api import resp_200, resp_500
+from bisheng.common.utils.beijing_time import dump_qa_datetimes
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -151,7 +152,7 @@ async def create_expert(
     """创建专家（专家库管理员）"""
     try:
         expert = await service.create_expert(request, user=user)
-        return resp_200(data=expert)
+        return resp_200(data=_jsonable(expert))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
     except Exception as e:
@@ -168,7 +169,7 @@ async def update_expert(
     """更新专家信息"""
     try:
         expert = await service.update_expert(expert_id, request, user=user)
-        return resp_200(data=expert)
+        return resp_200(data=_jsonable(expert))
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
     except Exception as e:
@@ -234,7 +235,7 @@ async def expertsinfo(
     """获取专家"""
 
     experinfo = await service.get_expertinfo(expert_name)
-    return resp_200(data=experinfo)
+    return resp_200(data=dump_qa_datetimes(experinfo))
 
 
 @router.get("/experts/userid/{user_id}")
@@ -246,7 +247,7 @@ async def expertsinfo_id(
     """获取专家"""
 
     experinfo = await service.get_expertinfobyid(user_id)
-    return resp_200(data=experinfo)
+    return resp_200(data=dump_qa_datetimes(experinfo))
 
 
 # ==================== 问题管理 Endpoints ====================
@@ -296,7 +297,7 @@ async def create_question(
         user.user_name,
         tenant_id=user.tenant_id,
     )
-    return resp_200(data=question)
+    return resp_200(data=question_detail_payload(question))
 
 
 @router.get("/questions", response_model=QuestionPageData)
@@ -353,7 +354,7 @@ async def update_question(
         )
 
     question = await service.update_question(question_id, request, tenant_id=user.tenant_id)
-    return resp_200(data=question)
+    return resp_200(data=question_detail_payload(question))
 
 
 def question_detail_payload(question) -> dict:
@@ -393,7 +394,7 @@ def question_detail_payload(question) -> dict:
     asker = payload.get("asker")
     if isinstance(asker, dict) and asker.get("anonymous") and "real_name" not in asker:
         payload["created_by"] = asker.get("display_name")
-    return payload
+    return dump_qa_datetimes(payload)
 
 
 def answer_payload(answer) -> dict:
@@ -403,7 +404,7 @@ def answer_payload(answer) -> dict:
         author = payload.get("author")
     elif hasattr(answer, "model_dump"):
         try:
-            payload = answer.model_dump(mode="json")
+            payload = answer.model_dump()
         except TypeError:
             payload = answer.model_dump()
         author = getattr(answer, "author", payload.get("author"))
@@ -425,14 +426,14 @@ def answer_payload(answer) -> dict:
     related_doc_views = getattr(answer, "related_doc_views", payload.get("related_doc_views"))
     if related_doc_views is not None:
         payload["related_doc_views"] = related_doc_views
-    return payload
+    return dump_qa_datetimes(payload)
 
 
 def comment_payload(comment) -> dict:
     """评论 JSON：走 CommentDetailResponse，匿名时 user_name 为别名。"""
     if isinstance(comment, dict):
-        return dict(comment)
-    return CommentDetailResponse.from_comment(comment).model_dump(mode="json")
+        return dump_qa_datetimes(dict(comment))
+    return dump_qa_datetimes(CommentDetailResponse.from_comment(comment).model_dump())
 
 
 @router.get("/questions/{question_id}", response_model=QuestionDetailResponse)
@@ -473,7 +474,7 @@ async def adopt_answer(
     """采纳最佳回答"""
 
     question = await service.adopt_answer(question_id, request.answer_id, user.user_id)
-    return resp_200(data=question)
+    return resp_200(data=question_detail_payload(question))
 
 
 @router.delete("/questions/{question_id}")
@@ -564,7 +565,7 @@ async def update_answer(
             tenant_id=user.tenant_id,
         )
 
-        return resp_200(data=answer)
+        return resp_200(data=answer_payload(answer))
     except Exception as e:
         return resp_500(code=500, message=str(e))
 
@@ -661,7 +662,7 @@ async def get_allcomments(
         comments=[CommentDetailResponse.from_comment(comment) for comment in comments],
         total=total,
     )
-    return resp_200(data=page_data.model_dump(mode="json"))
+    return resp_200(data=dump_qa_datetimes(page_data.model_dump()))
 
 
 # ==================== 投票 Endpoints ====================
@@ -718,7 +719,7 @@ async def get_notifications(
         user.user_id, unread_only=unread_only, skip=skip, limit=limit
     )
 
-    return resp_200(data={"notifications": notifications, "total": total})
+    return resp_200(data={"notifications": [_jsonable(item) for item in notifications], "total": total})
 
 
 @router.post("/notifications/{notification_id}/read")
@@ -780,14 +781,15 @@ async def get_publish_service():
 
 
 def _jsonable(row):
-    """把 SQLModel/Pydantic 转成可进 UnifiedResponse 的 dict。"""
+    """把 SQLModel/Pydantic 转成可进 UnifiedResponse 的 dict，时间带 +08:00。"""
     dump = getattr(row, "model_dump", None)
     if callable(dump):
         try:
-            return dump(mode="json")
+            payload = dump()
         except TypeError:
-            return dump()
-    return row
+            payload = dump()
+        return dump_qa_datetimes(payload)
+    return dump_qa_datetimes(row)
 
 
 @router.post("/questions/{question_id}/publish-requests")

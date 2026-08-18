@@ -1,12 +1,12 @@
 # ruff: noqa: RUF001, RUF002, RUF003
 """Expert QA Repositories - 数据访问层"""
 
-from datetime import datetime
 from types import SimpleNamespace
 
 from sqlalchemy import Integer, cast, desc, func, update
 from sqlmodel import and_, or_, select
 
+from bisheng.common.utils.beijing_time import now_beijing
 from bisheng.core.database import get_async_db_session  # 确保导入了异步方法
 from bisheng.database.models.department import Department
 from bisheng.database.models.qa_expert import (
@@ -369,7 +369,7 @@ class QuestionRepository:
             question.status = 1
             question.adopt_count = current + 1
             if is_first:
-                question.resolved_at = datetime.utcnow()
+                question.resolved_at = now_beijing()
             session.add(question)
             answer.status = 1
             answer.adopted = True
@@ -1009,6 +1009,8 @@ class PublishRequestRepository:
             for key, value in kwargs.items():
                 if hasattr(row, key):
                     setattr(row, key, value)
+            if "updated_at" not in kwargs:
+                row.updated_at = now_beijing()
             session.add(row)
             await session.commit()
             await session.refresh(row)

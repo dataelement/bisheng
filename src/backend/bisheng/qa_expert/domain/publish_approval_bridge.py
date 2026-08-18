@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -26,6 +25,7 @@ from bisheng.approval.domain.models.approval_scenario import (
 )
 from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
+from bisheng.common.utils.beijing_time import now_beijing, to_beijing_iso
 
 # 与 publish_service 状态字面量对齐；本模块不反向 import，避免循环。
 DECISION_APPROVED = "approved"
@@ -216,7 +216,7 @@ async def _sync_after_create(request, question, initiator, approvers: list[Any])
     payload = {
         "request_id": int(request.id),
         "question_id": int(question.id),
-        "expire_at": expire_at.isoformat() if expire_at else None,
+        "expire_at": to_beijing_iso(expire_at) if expire_at else None,
         "duration_days": int(getattr(request, "duration_days", 0) or 0),
     }
     instance = await _get_instance(request)
@@ -342,7 +342,7 @@ async def _sync_from_publish_request(request, approvers: list[Any] | None) -> No
         approvers = await PublishApproverRepository().list_by_request(int(request.id))
     decision_by_user = {int(row.user_id): str(row.decision) for row in approvers}
     tasks = await ApprovalInstanceRepository.list_tasks(int(instance.id))
-    now = datetime.utcnow()
+    now = now_beijing()
     publish_status = str(request.status)
     for task in tasks:
         wanted = _task_status_for(decision_by_user.get(int(task.approver_user_id), DECISION_PENDING))

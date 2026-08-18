@@ -7,10 +7,11 @@ Expert QA Database Models - SQLModel ORM
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, UniqueConstraint
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Column, Field, SQLModel
 
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, LargeText
+from bisheng.common.utils.beijing_time import now_beijing
+from bisheng.core.database.dialect_helpers import LargeText
 
 # ==================== 专家表 ====================
 
@@ -39,8 +40,8 @@ class Expert(SQLModel, table=True):
     status: int = Field(default=1, description="专家状态：1有效 0停用")
 
     # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_beijing, index=True)
+    updated_at: datetime = Field(default_factory=now_beijing)
 
 
 # ==================== 问题表 ====================
@@ -85,8 +86,8 @@ class Question(SQLModel, table=True):
     view_count: int = Field(default=0)
     comment_count: int = Field(default=0)
     # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_beijing, index=True)
+    updated_at: datetime = Field(default_factory=now_beijing)
     created_by: str | None = Field(default=None, description="创建人")
 
 
@@ -121,8 +122,8 @@ class Answer(SQLModel, table=True):
     comment_count: int = Field(default=0)
     adopted: bool | None = Field(default=False, index=True)  # 是否被采纳
     # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_beijing, index=True)
+    updated_at: datetime = Field(default_factory=now_beijing)
 
 
 # ==================== 评论/追问表 ====================
@@ -146,7 +147,7 @@ class Comment(SQLModel, table=True):
     # 统计字段
     vote_count: int = Field(default=0)
     # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=now_beijing, index=True)
 
 
 # ==================== F083 正规化表（邀请 / 采纳 / 匿名 / 资格 / 转公开） ====================
@@ -172,7 +173,7 @@ class QuestionInvite(SQLModel, table=True):
     question_id: int = Field(index=True, description="问题ID")
     expert_id: int = Field(description="专家档案ID（qa_expert.id）")
     user_id: int = Field(index=True, description="专家对应用户ID")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="创建时间")
+    created_at: datetime = Field(default_factory=now_beijing, description="创建时间")
 
 
 class AnswerAdopt(SQLModel, table=True):
@@ -190,7 +191,7 @@ class AnswerAdopt(SQLModel, table=True):
     answer_id: int = Field(description="回答ID")
     expert_user_id: int = Field(description="被采纳回答者用户ID")
     adopted_by: int = Field(description="提问者用户ID")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="创建时间")
+    created_at: datetime = Field(default_factory=now_beijing, description="创建时间")
 
 
 class AnonymousAlias(SQLModel, table=True):
@@ -208,7 +209,7 @@ class AnonymousAlias(SQLModel, table=True):
     user_id: int = Field(description="用户ID")
     alias_ord: int = Field(description="分配序号（从1起，不回收）")
     alias_label: str = Field(max_length=32, description="匿名展示名，如匿名同事A")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="创建时间")
+    created_at: datetime = Field(default_factory=now_beijing, description="创建时间")
 
 
 class AnswerEligibility(SQLModel, table=True):
@@ -222,7 +223,7 @@ class AnswerEligibility(SQLModel, table=True):
     question_id: int = Field(index=True, description="问题ID")
     user_id: int = Field(description="有资格专家用户ID")
     source: str = Field(max_length=32, description="资格来源：invited / pre_adopt_answer")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="创建时间")
+    created_at: datetime = Field(default_factory=now_beijing, description="创建时间")
 
 
 class PublishRequest(SQLModel, table=True):
@@ -239,12 +240,8 @@ class PublishRequest(SQLModel, table=True):
     expire_at: datetime = Field(description="到期时间")
     extension_days: int = Field(default=0, description="已累计延期天数（≤3）")
     version: int = Field(default=0, description="乐观锁版本")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="创建时间")
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT),
-        description="更新时间",
-    )
+    created_at: datetime = Field(default_factory=now_beijing, description="创建时间")
+    updated_at: datetime = Field(default_factory=now_beijing, description="更新时间")
 
 
 class PublishApprover(SQLModel, table=True):
@@ -260,7 +257,7 @@ class PublishApprover(SQLModel, table=True):
     role_in_request: str = Field(max_length=16, description="asker / answerer")
     decision: str = Field(max_length=32, description="pending/approved/rejected/default_approved")
     decided_at: datetime | None = Field(default=None, description="决策时间")
-    created_at: datetime = Field(default_factory=datetime.utcnow, description="创建时间")
+    created_at: datetime = Field(default_factory=now_beijing, description="创建时间")
 
 
 # ==================== 投票表 ====================
@@ -276,7 +273,7 @@ class QuestionVote(SQLModel, table=True):
     question_id: int = Field(index=True)
 
     # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_beijing)
 
 
 class AnswerVote(SQLModel, table=True):
@@ -289,7 +286,7 @@ class AnswerVote(SQLModel, table=True):
     answer_id: int = Field(index=True)
     vote_type: str = Field(default="helpful")  # helpful 有用，support 支持
     # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_beijing)
 
 
 class CommentVote(SQLModel, table=True):
@@ -302,7 +299,7 @@ class CommentVote(SQLModel, table=True):
     comment_id: int = Field(index=True)
 
     # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=now_beijing)
 
 
 # ==================== 通知表 ====================
@@ -326,4 +323,4 @@ class QANotification(SQLModel, table=True):
     tenant_id: int = Field(default=1, index=True)
 
     # 时间戳
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=now_beijing, index=True)

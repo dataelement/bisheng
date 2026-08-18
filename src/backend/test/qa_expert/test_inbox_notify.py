@@ -1,4 +1,4 @@
-# ruff: noqa: RUF002
+# ruff: noqa: RUF002, RUF003
 """T021：邀请/回答/采纳/转公开走 inbox；匿名触发人用别名。"""
 
 from types import SimpleNamespace
@@ -83,6 +83,79 @@ async def test_anonymous_sender_uses_alias_not_real_name():
     )
     assert view.display_name == "匿名同事A"
     assert "李专家" not in view.display_name
+
+
+async def test_publish_approved_inbox_keeps_asker_as_receiver(monkeypatch):
+    """转公开通过是系统终态：提问者不能因默认发件人被从收件人剔除。"""
+    captured: dict = {}
+
+    async def fake_send(**kwargs):
+        captured.update(kwargs)
+
+    pub = PublishService()
+    pub.approver_repo = MagicMock()
+    pub.approver_repo.list_by_request = AsyncMock(
+        return_value=[SimpleNamespace(user_id=101), SimpleNamespace(user_id=201)]
+    )
+    monkeypatch.setattr("bisheng.qa_expert.domain.inbox_notice.send_qa_inbox", fake_send)
+    monkeypatch.setattr(
+        "bisheng.approval.domain.repositories.approval_instance_repository.ApprovalInstanceRepository.find_latest_by_business_key",
+        AsyncMock(return_value=None),
+    )
+    question = SimpleNamespace(
+        id=1,
+        title="t",
+        user_id=101,
+        tenant_id=1,
+        asker_anonymous=0,
+        asker_reveal_on_public=None,
+    )
+    await pub._send_inbox("publish_approved", question, {"request_id": 9})
+    assert captured["action_code"] == "qa_publish_approved"
+    assert captured["sender_user_id"] == 0
+    assert 101 in captured["receivers"]
+    assert 201 in captured["receivers"]
+
+
+async def test_publish_started_inbox_still_excludes_initiator(monkeypatch):
+    """发起转公开仍排除操作人，避免提问者收到自己刚提交的待办。"""
+    captured: dict = {}
+
+    async def fake_display(*_args, **_kwargs):
+        return "提问者", False
+
+    async def fake_send(**kwargs):
+        captured.update(kwargs)
+
+    pub = PublishService()
+    pub.approver_repo = MagicMock()
+    pub.approver_repo.list_by_request = AsyncMock(
+        return_value=[SimpleNamespace(user_id=101), SimpleNamespace(user_id=201)]
+    )
+    monkeypatch.setattr("bisheng.qa_expert.domain.inbox_notice.display_name_for_trigger", fake_display)
+    monkeypatch.setattr("bisheng.qa_expert.domain.inbox_notice.send_qa_inbox", fake_send)
+    monkeypatch.setattr(
+        "bisheng.approval.domain.repositories.approval_instance_repository.ApprovalInstanceRepository.find_latest_by_business_key",
+        AsyncMock(return_value=None),
+    )
+    question = SimpleNamespace(
+        id=1,
+        title="t",
+        user_id=101,
+        tenant_id=1,
+        asker_anonymous=0,
+        asker_reveal_on_public=None,
+    )
+    await pub._send_inbox(
+        "publish_started",
+        question,
+        {"request_id": 9, "user": SimpleNamespace(user_id=101, user_name="提问者")},
+    )
+    assert captured["sender_user_id"] == 101
+    # send_qa_inbox 会排除发件人；发起人仍是提问者时，提问者收不到待办。
+    filtered = [uid for uid in captured["receivers"] if uid and int(uid) != int(captured["sender_user_id"])]
+    assert 101 not in filtered
+    assert 201 in filtered
 
 
 async def test_stale_publish_decision_rejected_after_ended():

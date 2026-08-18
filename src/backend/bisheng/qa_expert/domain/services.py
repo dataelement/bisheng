@@ -27,6 +27,7 @@ from bisheng.common.errcode.qa_expert import (
     QaExpertDisabledError,
     QaExpertQuestionAccessDeniedError,
 )
+from bisheng.common.utils.beijing_time import beijing_epoch_seconds, dump_qa_datetimes, to_beijing_iso
 from bisheng.core.database import get_async_db_session
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import DepartmentDao
@@ -451,7 +452,7 @@ class ExpertService:
             )
             expert_dict["wechat_user_id"] = wechat_user_ids.get(expert.user_id)
             experts_all.append(expert_dict)
-        return experts_all
+        return dump_qa_datetimes(experts_all)
 
     async def disable_expert(self, expert_id: int, user) -> Expert:
         """停用专家：status=0；回调转公开默认同意。"""
@@ -625,7 +626,7 @@ class QuestionService:
                 scene="expert_question",
                 source_app="expert_qa",
                 business_domain_code=request.business_domain,
-                timestamp=int(question.created_at.timestamp()),
+                timestamp=beijing_epoch_seconds(question.created_at),
             )
         except Exception:
             logger.exception(
@@ -1372,8 +1373,10 @@ class AnswerService:
         profile = ExpertService._with_department_projection(expert, department)
         for key in ("created_at", "updated_at"):
             value = profile.get(key)
-            if hasattr(value, "isoformat"):
-                profile[key] = value.isoformat()
+            if isinstance(value, datetime):
+                profile[key] = to_beijing_iso(value)
+            elif hasattr(value, "isoformat"):
+                profile[key] = to_beijing_iso(value)
         display = str(profile.get("department_display_name") or profile.get("depart_ment") or "").strip()
         if not display:
             raw_text = str(raw).strip() if raw not in (None, "") else ""

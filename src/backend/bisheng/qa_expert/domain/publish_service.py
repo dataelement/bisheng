@@ -14,6 +14,7 @@ from bisheng.common.errcode.qa_expert import (
     QaExpertPublishNotAllowedError,
     QaExpertQuestionAccessDeniedError,
 )
+from bisheng.common.utils.beijing_time import now_beijing, to_beijing_iso
 from bisheng.database.models.qa_expert import (
     QUESTION_TYPE_PUBLIC,
     AnswerEligibility,
@@ -67,7 +68,7 @@ def serialize_publish_request(
         "id": int(row.id),
         "status": str(row.status),
         "duration_days": int(getattr(row, "duration_days", 0) or 0),
-        "expire_at": expire_at.isoformat() if expire_at is not None else None,
+        "expire_at": to_beijing_iso(expire_at) if expire_at is not None else None,
         "extension_days": int(getattr(row, "extension_days", 0) or 0),
         "viewer_decision": viewer_decision,
     }
@@ -100,7 +101,7 @@ class PublishService:
             raise QaExpertPublishDurationInvalidError()
         if user is None or getattr(user, "user_id", None) is None:
             raise QaExpertQuestionAccessDeniedError()
-        now = now or datetime.utcnow()
+        now = now or now_beijing()
         question = await self.question_repo.get_by_id_for_update(question_id)
         if not question:
             from bisheng.qa_expert.domain.services import QuestionNotFoundError
@@ -146,7 +147,7 @@ class PublishService:
         now: datetime | None = None,
     ) -> PublishRequest:
         """同意或拒绝；已决策不可改口。"""
-        now = now or datetime.utcnow()
+        now = now or now_beijing()
         if user is None or getattr(user, "user_id", None) is None:
             raise QaExpertQuestionAccessDeniedError()
         request = await self._get_live_request(request_id, now=now)
@@ -178,7 +179,7 @@ class PublishService:
 
     async def on_expert_disabled(self, user_id: int, *, now: datetime | None = None) -> list[int]:
         """停用专家：pending 审批改 default_approved，立即重判；不加入已结束申请。"""
-        now = now or datetime.utcnow()
+        now = now or now_beijing()
         passed: list[int] = []
         # 通过仓储列出该用户仍 pending 的审批行：由调用方注入 list_pending_for_user
         list_pending = getattr(self.approver_repo, "list_pending_for_user", None)
@@ -208,7 +209,7 @@ class PublishService:
 
     async def on_asker_disabled(self, question_id: int, *, now: datetime | None = None) -> PublishRequest | None:
         """提问者账号停用：进行中的申请 ended。"""
-        now = now or datetime.utcnow()
+        now = now or now_beijing()
         request = await self.request_repo.get_pending_by_question(int(question_id))
         if request is None:
             return None
@@ -225,7 +226,7 @@ class PublishService:
         self, question_id: int, *, now: datetime | None = None
     ) -> PublishRequest | None:
         """读详情前惰性过期，再返回同题最近一条申请。"""
-        now = now or datetime.utcnow()
+        now = now or now_beijing()
         pending = await self.request_repo.get_pending_by_question(int(question_id))
         if pending is not None and pending.expire_at is not None and pending.expire_at <= now:
             await self._get_live_request(int(pending.id), now=now)
@@ -233,7 +234,7 @@ class PublishService:
 
     async def extend_one_day(self, request_id: int, user, *, now: datetime | None = None) -> PublishRequest:
         """+1 天延期，累计不超过 3 天。"""
-        now = now or datetime.utcnow()
+        now = now or now_beijing()
         request = await self._get_live_request(request_id, now=now)
         if request.status != PUBLISH_PENDING:
             raise QaExpertPublishNotAllowedError()
@@ -251,7 +252,7 @@ class PublishService:
 
     async def expire_pending(self, *, now: datetime | None = None, tenant_id: int | None = None) -> int:
         """把到期 pending 标为 expired，并通知。tenant_id 仅记录上下文。"""
-        now = now or datetime.utcnow()
+        now = now or now_beijing()
         rows = await self.request_repo.list_expired_pending(now)
         count = 0
         for request in rows:
@@ -269,7 +270,7 @@ class PublishService:
 
     async def get_request(self, request_id: int, user, *, now: datetime | None = None) -> PublishRequest:
         """读取申请；读路径顺带惰性过期。"""
-        return await self._get_live_request(request_id, now=now or datetime.utcnow())
+        return await self._get_live_request(request_id, now=now or now_beijing())
 
     async def _get_live_request(self, request_id: int, *, now: datetime) -> PublishRequest:
         request = await self.request_repo.get_by_id(int(request_id))
@@ -489,29 +490,46 @@ class PublishService:
             logger.exception("qa.publish.notify_failed event={}", event)
 
     async def _send_inbox(self, event: str, question, extra: dict[str, Any]) -> None:
-        """转公开站内信：相关人通知；待办入口靠 approval_instance_id。"""
+        """转公开站内信：相关人通知；待办入口靠 approval_instance_id。
+
+        终态（通过/拒绝/过期/结束）若无操作人，用系统发件，保证提问者也能收到。
+        """
         from bisheng.approval.domain.repositories.approval_instance_repository import (
             ApprovalInstanceRepository,
         )
         from bisheng.qa_expert.domain.inbox_notice import display_name_for_trigger, send_qa_inbox
         from bisheng.qa_expert.domain.publish_approval_bridge import business_key_for
 
+        todo_events = {"publish_started", "publish_approver_added"}
+        result_events = {
+            "publish_approved",
+            "publish_rejected",
+            "publish_expired",
+            "publish_ended",
+            "publish_default_approved",
+        }
         sender = extra.get("user")
         sender_id = int(getattr(sender, "user_id", 0) or 0) if sender is not None else 0
-        if sender_id <= 0:
+        # 终态是系统结果，没有操作人。若把提问者填成发件人，send_qa_inbox 会把他从收件人剔除。
+        use_system_sender = event in result_events and sender_id <= 0
+        if sender_id <= 0 and not use_system_sender:
             sender_id = int(question.user_id)
-        real_name = extra.get("sender_name") or getattr(sender, "user_name", "") or ""
-        asker_anonymous = bool(int(getattr(question, "asker_anonymous", 0) or 0))
-        anonymous = bool(asker_anonymous) if sender_id == int(question.user_id) else bool(extra.get("anonymous"))
-        display, masked = await display_name_for_trigger(
-            question,
-            user_id=sender_id,
-            real_name=real_name,
-            anonymous=anonymous,
-            reveal_on_public=getattr(question, "asker_reveal_on_public", None)
-            if sender_id == int(question.user_id)
-            else extra.get("reveal_on_public"),
-        )
+        if use_system_sender:
+            display, masked = "系统", True
+            sender_id = 0
+        else:
+            real_name = extra.get("sender_name") or getattr(sender, "user_name", "") or ""
+            asker_anonymous = bool(int(getattr(question, "asker_anonymous", 0) or 0))
+            anonymous = bool(asker_anonymous) if sender_id == int(question.user_id) else bool(extra.get("anonymous"))
+            display, masked = await display_name_for_trigger(
+                question,
+                user_id=sender_id,
+                real_name=real_name,
+                anonymous=anonymous,
+                reveal_on_public=getattr(question, "asker_reveal_on_public", None)
+                if sender_id == int(question.user_id)
+                else extra.get("reveal_on_public"),
+            )
         receivers: list[int] = []
         request_id = extra.get("request_id")
         if request_id:
@@ -530,14 +548,6 @@ class PublishService:
             )
             if inst is not None:
                 instance_id = int(inst.id)
-        todo_events = {"publish_started", "publish_approver_added"}
-        result_events = {
-            "publish_approved",
-            "publish_rejected",
-            "publish_expired",
-            "publish_ended",
-            "publish_default_approved",
-        }
         business_type = "approval_instance_id" if event in todo_events and instance_id else "qa_question"
         await send_qa_inbox(
             action_code=f"qa_{event}",
