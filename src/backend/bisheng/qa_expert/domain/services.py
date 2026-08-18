@@ -1337,13 +1337,69 @@ class AnswerService:
             object.__setattr__(row, name, value)
         return row
 
-    async def _attach_answer_author(self, viewer, answer: Answer, question: Question) -> Answer:
-        """列表/详情挂脱敏后的回答者身份；不改表列 expert_name，避免别名被写回库。"""
+    @staticmethod
+    def _expert_card(expert: Expert) -> dict:
+        """回答卡用的专家档案：部门展示名 + 回答/采纳数。不改 qa_expert 表。"""
+        raw = getattr(expert, "depart_ment", None)
+        department = None
+        if raw not in (None, ""):
+            try:
+                try:
+                    department = DepartmentDao.get_by_id(int(raw))
+                except (TypeError, ValueError):
+                    department = DepartmentDao.get_by_dept_id(str(raw))
+            except Exception:
+                # 展示用部门名；反查失败回退档案原文，不能让回答列表 500。
+                logger.warning("qa.answer.department_lookup_failed expert_id={}", getattr(expert, "id", None))
+                department = None
+        profile = ExpertService._with_department_projection(expert, department)
+        for key in ("created_at", "updated_at"):
+            value = profile.get(key)
+            if hasattr(value, "isoformat"):
+                profile[key] = value.isoformat()
+        display = str(profile.get("department_display_name") or profile.get("depart_ment") or "").strip()
+        if not display:
+            raw_text = str(raw).strip() if raw not in (None, "") else ""
+            # 部门表未命中且档案里是名称（非纯数字 ID）时，仍给管理员展示，避免「未知」。
+            if raw_text and not raw_text.isdigit():
+                display = raw_text
+        if display:
+            profile["depart_ment"] = display
+        return profile
+
+    async def _resolve_answer_expert(self, answer: Answer, experts: dict[int, Expert] | None = None) -> Expert | None:
+        """优先用本页批量结果，缺则按 expert_id / user_id 回表。"""
+        expert_id = getattr(answer, "expert_id", None)
+        if expert_id not in (None, ""):
+            eid = int(expert_id)
+            if experts is not None and eid in experts:
+                return experts[eid]
+            found = await self.expert_repo.get_by_id(eid)
+            if found is not None:
+                return found
+        user_id = getattr(answer, "user_id", None)
+        if user_id not in (None, ""):
+            return await self.expert_repo.get_by_user_id(int(user_id))
+        return None
+
+    async def _attach_answer_author(
+        self,
+        viewer,
+        answer: Answer,
+        question: Question,
+        experts: dict[int, Expert] | None = None,
+    ) -> Answer:
+        """列表/详情挂脱敏后的回答者身份；管理员另挂专家档案。不改表列 expert_name。"""
         identity = await self._identity()
         real_name = str(getattr(answer, "expert_name", "") or "")
         anonymous = bool(int(getattr(answer, "anonymous", 0) or 0))
         user_id = int(getattr(answer, "user_id", 0) or 0)
         can_view_real = is_expert_library_admin(viewer)
+        expert = await self._resolve_answer_expert(answer, experts)
+        expert_payload = self._expert_card(expert) if expert is not None else None
+        department_name = None
+        if isinstance(expert_payload, dict):
+            department_name = str(expert_payload.get("depart_ment") or "").strip() or None
         if anonymous and user_id:
             view = await identity.mask_identity(
                 viewer,
@@ -1354,6 +1410,7 @@ class AnswerService:
                 question_type=str(getattr(question, "question_type", "") or QUESTION_TYPE_PUBLIC),
                 reveal_on_public=getattr(answer, "reveal_on_public", None),
                 tenant_id=int(getattr(question, "tenant_id", 1) or 1),
+                department=department_name,
             )
             payload = view.to_dict(can_view_real_identity=can_view_real)
         else:
@@ -1362,7 +1419,14 @@ class AnswerService:
                 "avatar_url": None,
                 "anonymous": False,
             }
-        return self._annotate(answer, author=payload)
+            if department_name:
+                payload["department"] = department_name
+        shown_anonymous = bool(payload.get("anonymous"))
+        # 仍匿名且非管理员：不挂 expert，避免部门/回答数反推真人。
+        attach_expert = (
+            expert_payload if expert_payload is not None and (not shown_anonymous or can_view_real) else None
+        )
+        return self._annotate(answer, author=payload, expert=attach_expert)
 
     async def attach_author(self, answer: Answer, viewer) -> Answer:
         """写接口返回前挂 author；缺题则原样返回。"""
@@ -1544,10 +1608,14 @@ class AnswerService:
         pending_publish = pending is not None
         question_svc = QuestionService()
         question_svc.related_docs_access_checker = getattr(self, "related_docs_access_checker", None)
+        expert_ids = [int(item.expert_id) for item in answers if getattr(item, "expert_id", None) not in (None, "")]
+        expert_map = {
+            int(row.id): row for row in await self.expert_repo.get_by_ids(expert_ids) if getattr(row, "id", None)
+        }
         resolved: list[Answer] = []
         for answer in answers:
             item = await self._resolve_answer(answer)
-            item = await self._attach_answer_author(viewer, item, question)
+            item = await self._attach_answer_author(viewer, item, question, experts=expert_map)
             can_delete = await self._can_author_delete(item, viewer_id, pending_publish=pending_publish)
             related_doc_views = await question_svc.hydrate_related_docs(
                 getattr(item, "related_docs", None),

@@ -685,6 +685,57 @@ async def test_df16_list_hides_anonymous_asker_name(flow_env):
     assert stored_again.created_by == "asker"
 
 
+async def test_df26_admin_list_shows_anonymous_asker_real_name(flow_env):
+    """管理员看问题列表：asker.real_name 为库内真名；路人仍无 real_name。无 DDL。"""
+    env = flow_env
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df26列表破匿名",
+            "description": "匿名正文",
+            "business_domain": "营销",
+            "question_type": "public",
+            "asker_anonymous": True,
+        },
+    )
+    stored = await env.reload_row(Question, id=qid)
+    assert int(stored.asker_anonymous) == 1
+    assert stored.created_by == "asker"
+
+    env.as_user(env.stranger)
+    stranger_body = _ok(
+        await env.client.get(
+            f"{PREFIX}/questions",
+            params={"page": 1, "page_size": 50, "keyword": env.t("df26列表破匿名")},
+        )
+    )
+    stranger_items = (stranger_body.get("data") or {}).get("questions") or []
+    stranger_hit = next((item for item in stranger_items if int(item.get("id")) == qid), None)
+    assert stranger_hit is not None
+    stranger_asker = stranger_hit.get("asker") or {}
+    assert stranger_asker.get("anonymous") is True
+    assert "real_name" not in stranger_asker
+    assert str(stranger_asker.get("display_name") or "").startswith("匿名同事")
+
+    env.as_user(env.portal_admin)
+    admin_body = _ok(
+        await env.client.get(
+            f"{PREFIX}/questions",
+            params={"page": 1, "page_size": 50, "keyword": env.t("df26列表破匿名")},
+        )
+    )
+    admin_items = (admin_body.get("data") or {}).get("questions") or []
+    admin_hit = next((item for item in admin_items if int(item.get("id")) == qid), None)
+    assert admin_hit is not None
+    admin_asker = admin_hit.get("asker") or {}
+    assert admin_asker.get("anonymous") is True
+    assert admin_asker.get("display_name", "").startswith("匿名同事")
+    assert admin_asker.get("real_name") == "asker"
+    stored_again = await env.reload_row(Question, id=qid)
+    assert stored_again.created_by == "asker"
+
+
 async def test_df17_directed_anonymous_masks_invited_viewer(flow_env):
     """定向匿名：库内仍是真名；受邀专家详情只见别名，且须预存转公开选项。"""
     env = flow_env
@@ -851,6 +902,8 @@ async def test_df19_followup_and_comment_anonymous_inheritance(flow_env):
     assert str(ans_hit.get("expert_name") or "").startswith("匿名同事")
     assert ans_hit.get("expert_name") != expert.expert_name
     assert (ans_hit.get("author") or {}).get("anonymous") is True
+    assert "real_name" not in (ans_hit.get("author") or {})
+    assert not ans_hit.get("expert")
     answer_again = await env.reload_row(Answer, id=aid)
     assert answer_again.expert_name == expert.expert_name
 
@@ -1288,3 +1341,63 @@ async def test_df25_expired_publish_allows_unadopted_delete(flow_env):
     if isinstance(again, dict):
         again = again.get("answers") or []
     assert all(int(item.get("id")) != other_aid for item in again)
+
+
+async def test_df25_admin_sees_anonymous_answer_expert_meta(flow_env):
+    """管理员看匿名回答：接口给真名+部门+计数；路人仍无档案。qa_expert 只读后写计数，无 DDL。"""
+    env = flow_env
+    expert = await env.seed_expert(user_id=201, name="专家甲")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df25匿名答档案",
+            "description": "公开",
+            "business_domain": "steel",
+            "question_type": "public",
+        },
+    )
+    env.as_user(env.user(201, name=expert.expert_name))
+    aid = await _create_answer_anonymous(env, qid, "匿名首答")
+    async with AsyncSession(env.engine, expire_on_commit=False) as session:
+        await session.execute(
+            text("UPDATE qa_expert SET answer_count = :ac, adoption_count = :ad, depart_ment = :d WHERE id = :id"),
+            {"ac": 109, "ad": 53, "d": "测试2-2设备", "id": int(expert.id)},
+        )
+        await session.commit()
+    stored = await env.reload_row(Expert, id=int(expert.id))
+    assert int(stored.answer_count) == 109
+    assert int(stored.adoption_count) == 53
+    assert stored.depart_ment == "测试2-2设备"
+
+    env.as_user(env.stranger)
+    stranger_body = _ok(await env.client.get(f"{PREFIX}/answers/{qid}"))
+    assert stranger_body["status_code"] == 200
+    stranger_answers = (stranger_body.get("data") or {}).get("answers") or []
+    stranger_hit = next((item for item in stranger_answers if int(item.get("id")) == aid), None)
+    assert stranger_hit is not None
+    stranger_author = stranger_hit.get("author") or {}
+    assert stranger_author.get("anonymous") is True
+    assert "real_name" not in stranger_author
+    assert "department" not in stranger_author
+    assert not stranger_hit.get("expert")
+    stored_again = await env.reload_row(Expert, id=int(expert.id))
+    assert int(stored_again.answer_count) == 109
+
+    env.as_user(env.portal_admin)
+    admin_body = _ok(await env.client.get(f"{PREFIX}/answers/{qid}"))
+    assert admin_body["status_code"] == 200
+    admin_answers = (admin_body.get("data") or {}).get("answers") or []
+    admin_hit = next((item for item in admin_answers if int(item.get("id")) == aid), None)
+    assert admin_hit is not None
+    admin_author = admin_hit.get("author") or {}
+    assert admin_author.get("anonymous") is True
+    assert admin_author.get("real_name") == expert.expert_name
+    assert admin_author.get("department") == "测试2-2设备"
+    admin_expert = admin_hit.get("expert") or {}
+    assert int(admin_expert.get("answer_count") or 0) == 109
+    assert int(admin_expert.get("adoption_count") or 0) == 53
+    assert admin_expert.get("depart_ment") == "测试2-2设备"
+    answer_row = await env.reload_row(Answer, id=aid)
+    assert int(answer_row.anonymous) == 1
+    assert answer_row.expert_name == expert.expert_name
