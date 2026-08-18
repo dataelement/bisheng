@@ -8,24 +8,49 @@ from typing import Any
 RELATED_DOC_ACCESS_TIMEOUT_SEC = 3.0
 
 
-async def _file_belongs_to_space(space_id: int, file_id: int) -> bool:
-    """knowledgefile 是否存在且归属该知识空间。"""
+def related_doc_display_title(row: Any | None) -> str | None:
+    """展示名与提问选择器一致：优先 file_name，没有再退 alias_name。"""
+    if row is None:
+        return None
+    name = str(getattr(row, "file_name", None) or "").strip()
+    alias = str(getattr(row, "alias_name", None) or "").strip()
+    return name or alias or None
+
+
+async def _load_related_doc_file(space_id: int, file_id: int) -> Any | None:
+    """取出 knowledgefile；无记录或空间不匹配则 None。"""
     try:
         from sqlmodel import select
 
         from bisheng.core.database import get_async_db_session
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
     except Exception:
-        return False
+        return None
 
     async with get_async_db_session() as session:
         stmt = select(KnowledgeFile).where(KnowledgeFile.id == int(file_id))
         result = await session.exec(stmt)
         row = result.first()
     if row is None:
-        return False
+        return None
     knowledge_id = int(getattr(row, "knowledge_id", 0) or 0)
-    return (not knowledge_id) or knowledge_id == int(space_id)
+    if knowledge_id and knowledge_id != int(space_id):
+        return None
+    return row
+
+
+async def _file_belongs_to_space(space_id: int, file_id: int) -> bool:
+    """knowledgefile 是否存在且归属该知识空间。"""
+    return await _load_related_doc_file(space_id, file_id) is not None
+
+
+async def load_related_doc_title(space_id: int, file_id: int) -> str | None:
+    """读取 knowledgefile 展示名；找不到则 None。不鉴权，由 hydrate 决定是否下发。"""
+    try:
+        row = await _load_related_doc_file(int(space_id), int(file_id))
+    except Exception:
+        return None
+    return related_doc_display_title(row)
 
 
 async def _space_can_read(user: Any, space_id: int) -> bool:

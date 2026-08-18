@@ -166,3 +166,23 @@ async def test_hung_access_check_is_forbidden_not_500(monkeypatch):
     views = await svc.hydrate_related_docs("8-15")
     assert views[0]["accessible"] is False
     assert views[0]["unavailable_reason"] == "forbidden"
+
+
+async def test_hydrate_fills_title_from_knowledge_file(monkeypatch):
+    """关联文档展示名走 knowledgefile.file_name，不能只回 space-file id。"""
+    from bisheng.qa_expert.domain import related_docs_access
+
+    monkeypatch.setattr(
+        related_docs_access,
+        "load_related_doc_title",
+        AsyncMock(return_value="炼钢规程.pdf"),
+    )
+    svc = _service()
+
+    async def checker(_user, _s, _f):
+        return True
+
+    svc.related_docs_access_checker = checker
+    views = await svc.hydrate_related_docs("8-15")
+    assert views[0]["id"] == "8-15"
+    assert views[0]["title"] == "炼钢规程.pdf"

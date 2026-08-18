@@ -80,3 +80,22 @@ async def test_space_can_read_uses_permission_check_not_list(monkeypatch):
         }
     ]
     assert not any("list_accessible" in str(item) for item in calls)
+
+
+def test_related_doc_display_title_prefers_file_name():
+    row = SimpleNamespace(file_name="炼钢规程.pdf", alias_name="规范名称.pdf")
+    assert related_docs_access.related_doc_display_title(row) == "炼钢规程.pdf"
+    assert (
+        related_docs_access.related_doc_display_title(SimpleNamespace(file_name="", alias_name="规范名称.pdf"))
+        == "规范名称.pdf"
+    )
+    assert related_docs_access.related_doc_display_title(None) is None
+
+
+async def test_load_related_doc_title_returns_file_name(monkeypatch):
+    monkeypatch.setattr(
+        related_docs_access,
+        "_load_related_doc_file",
+        AsyncMock(return_value=SimpleNamespace(file_name="工艺说明.docx", alias_name=None)),
+    )
+    assert await related_docs_access.load_related_doc_title(8, 15) == "工艺说明.docx"

@@ -790,6 +790,8 @@ class QuestionService:
             return await check_related_doc_access(_user, space_id, file_id, space_cache=space_cache)
 
         checker = injected if callable(injected) else _default_checker
+        from bisheng.qa_expert.domain.related_docs_access import load_related_doc_title
+
         for token in parse_related_doc_tokens(related_docs):
             parsed = parse_related_doc_ref(token)
             if parsed is None:
@@ -827,12 +829,17 @@ class QuestionService:
             else:
                 accessible = True
                 reason = None
+            title = None
+            try:
+                title = await load_related_doc_title(space_id, file_id)
+            except Exception:
+                title = None
             views.append(
                 {
                     "id": doc_id,
                     "space_id": space_id,
                     "file_id": file_id,
-                    "title": None,
+                    "title": title,
                     "accessible": accessible,
                     "unavailable_reason": reason,
                 }
