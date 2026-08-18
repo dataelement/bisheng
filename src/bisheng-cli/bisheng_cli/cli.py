@@ -97,6 +97,12 @@ def build_parser() -> argparse.ArgumentParser:
     deploy.add_argument("--confirm-schema-change", action="store_true", help="确认本次发布包含应用数据表结构变更")
     deploy.add_argument("--yes", action="store_true", help="跳过目标应用确认（非交互环境必须显式带上）")
     deploy.add_argument("--dry-run", action="store_true", help="只打包与本地校验，打印体量统计，不上传")
+    deploy.add_argument(
+        "--no-agents-note",
+        dest="no_agents_note",
+        action="store_true",
+        help="不要在项目 AGENTS.md 里写入技能包位置说明",
+    )
 
     logs = subparsers.add_parser("logs", help="查看自己名下应用的运行日志")
     logs.add_argument("--app-id", dest="app_id", default=None, help="显式指定应用标识（覆盖 .bisheng/app.json）")
@@ -108,9 +114,9 @@ def build_parser() -> argparse.ArgumentParser:
     # `skills` is the first two-token command: a plain subparser whose own
     # subparsers carry the verb. Dispatch (main.py) keys off the top-level
     # `command`, so `commands/skills.py` owns the `sync`-vs-missing branch.
-    skills = subparsers.add_parser("skills", help="同步平台的开发者技能包到本地用户目录")
+    skills = subparsers.add_parser("skills", help="同步平台的开发者技能包并接入本机 AI 编程工具")
     skills_sub = skills.add_subparsers(dest="skills_command", metavar="{sync}")
-    sync = skills_sub.add_parser("sync", help="拉取平台当前版本的技能包到 ~/.bisheng/skills/（幂等，单向覆盖）")
+    sync = skills_sub.add_parser("sync", help="拉取平台当前版本的技能包并接入本机 AI 编程工具（幂等，单向覆盖）")
 
     # Every leaf that can receive a flag needs the mirror, or `--json` after it
     # is "unrecognized arguments". `sync` is where `bisheng skills sync --json`

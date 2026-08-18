@@ -30,9 +30,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, BinaryIO
 
-from bisheng_cli import credentials, packaging, project
+from bisheng_cli import agent_skills, credentials, packaging, project
 from bisheng_cli import ignore as ignore_rules
 from bisheng_cli.cli import confirm
+from bisheng_cli.commands import skills
 from bisheng_cli.errors import (
     EXIT_APPROVAL_EXCEPTION,
     EXIT_CANCELLED,
@@ -210,12 +211,49 @@ def run(args: Any, emitter: Emitter) -> int:
                 accepted = _upload(client, emitter, args, package_path, package_stat, target_app_id)
                 package_path.unlink(missing_ok=True)
                 _accept(emitter, root, base_url, accepted, state)
+                _ensure_agents_pointer(args, emitter, root, base_url)
                 return _follow(client, emitter, args, state)
         except CliError as exc:
             failure = getattr(exc, "server_failure", None) or exc.as_failure(stage=state["stage"])
             _print_scan_hits(emitter, failure)
             emitter.result(COMMAND, ok=False, exit_code=exc.exit_code, data=state, failure=failure)
             raise
+
+
+def _ensure_agents_pointer(args: Any, emitter: Emitter, root: Path, base_url: str) -> None:
+    """Leave a pointer to the skill packs in the project's AGENTS.md (best effort).
+
+    Deploy is the right moment for two reasons: the project certainly exists by
+    now (login often runs before there is one), and a project that deploys is a
+    project whose next editor — a teammate, a different AI tool, the same
+    developer in six weeks — needs to know the hosting contract exists.
+
+    Placed *after* the platform accepts the upload, not before it. "This project
+    deploys to this platform" is the fact the pointer asserts, and until the
+    platform has taken the package that fact is still a guess — a failed deploy
+    must leave the developer's tree exactly as it found it.
+
+    Best effort in the strict sense: this touches the developer's repository, so
+    it appends and never rewrites, it is skippable with --no-agents-note, and any
+    failure is a debug line. Nothing here may stand between a valid project and
+    its deploy.
+    """
+    if getattr(args, "no_agents_note", False) or getattr(args, "dry_run", False):
+        # --dry-run promises "nothing was created"; that has to include the
+        # developer's own working tree, not just the platform.
+        return
+    try:
+        outcome = agent_skills.ensure_project_pointer(root, skills.skills_root(base_url), list(skills.DEFAULT_PACKS))
+    except Exception as exc:  # deliberately broad: a note must never block a deploy
+        emitter.debug(f"AGENTS.md 指针未写入：{exc.__class__.__name__}")
+        return
+    status = outcome.get("status")
+    if status == "created":
+        emitter.info(f"已创建 {agent_skills.POINTER_FILE}，写明技能包位置（供其它 AI 工具查阅，建议提交到仓库）")
+    elif status == "appended":
+        emitter.info(f"已在 {agent_skills.POINTER_FILE} 追加技能包位置说明（建议提交到仓库）")
+    elif status == "failed":
+        emitter.debug(f"AGENTS.md 指针未写入：{outcome.get('reason')}")
 
 
 def _check_size(client: PlatformClient, emitter: Emitter, package_stat: packaging.PackageStat) -> None:

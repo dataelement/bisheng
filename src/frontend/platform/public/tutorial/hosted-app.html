@@ -271,7 +271,7 @@
         <div class="step">
           <div class="node">1</div>
           <h3>装好命令行,登录平台</h3>
-          <p class="say">先从平台下载命令行装上,再用管理员给你的密钥登录一次。凭据会记在你本机,后面不用再输。登录后平台还会<b>自动把《部署纳管》技能装到你机器上</b>——AI 靠它才知道平台的规矩。</p>
+          <p class="say">先从平台下载命令行装上,再用管理员给你的密钥登录一次。凭据会记在你本机,后面不用再输。登录后平台还会<b>自动把《部署纳管》技能装好,并接到你的 AI 编程工具上</b>(Claude Code、Codex)——AI 靠它才知道平台的规矩。登录的最后几行会写清楚接进了哪些工具,<b>如果显示一个都没接上,先照提示处理再往下做</b>,否则 AI 是"盲写"。</p>
           <div class="code">
             <div class="bar"><i></i><i></i><i></i><span class="name">终端</span><button class="copy" data-copy>复制</button></div>
 <pre><span class="tok-c"># 1. 从你们自己的平台下载并安装命令行(不连公网)</span>
@@ -288,8 +288,8 @@
         <div class="step">
           <div class="node">2</div>
           <h3>让 AI 做出你的应用</h3>
-          <p class="say">把《部署纳管》技能交给你的 AI 编程工具,然后<b>用大白话说你要什么</b>——"做个部门费用报销的小工具""做个数据看板""做个满意度问卷"。AI 会照着平台的规矩,把应用和配置一起写好。<b>部署前让 AI 对照技能自检一遍</b>,它会自己把不合规矩的地方改好。</p>
-          <div class="tip"><span class="t">技能</span><p>《部署纳管》技能登录时已自动装好;想手动更新,运行 <code>bisheng skills sync</code>。平台的规矩、清单怎么写、常见问题都在里面,你不用懂,AI 懂就够了。</p></div>
+          <p class="say">上一步接好技能之后,<b>新开一个 AI 会话</b>(已经开着的要重开,它读不到新装的技能),然后<b>用大白话说你要什么</b>——"做个部门费用报销的小工具""做个数据看板""做个满意度问卷"。AI 会照着平台的规矩,把应用和配置一起写好。<b>部署前让 AI 对照技能自检一遍</b>,它会自己把不合规矩的地方改好。</p>
+          <div class="tip"><span class="t">技能</span><p>用 Claude Code 或 Codex 的,登录时已自动接好,重开会话即可;想手动更新,运行 <code>bisheng skills sync</code>。用 Cursor、Cline 等其它工具的,首次 <code>bisheng deploy</code> 会在项目里写一个 <code>AGENTS.md</code> 指明技能位置,让 AI 读它就行。平台的规矩、清单怎么写、常见问题都在技能里,你不用懂,AI 懂就够了。</p></div>
         </div>
 
         <!-- 3 -->
@@ -341,7 +341,7 @@
     <section class="wrap">
       <div class="help">
         <h2>卡住了怎么办?</h2>
-        <p>本地跑得好、平台上起不来,几乎都是没照平台的规矩来。这些规矩和常见问题<b>都写在《部署纳管》技能里</b>——把报错贴给你的 AI,让它<b>对照技能排查</b>,通常一两轮就好。你不需要自己读懂它。技能没装或想更新,运行 <code>bisheng skills sync</code>。</p>
+        <p>本地跑得好、平台上起不来,几乎都是没照平台的规矩来。这些规矩和常见问题<b>都写在《部署纳管》技能里</b>——把报错贴给你的 AI,让它<b>对照技能排查</b>,通常一两轮就好。你不需要自己读懂它。技能没接上或想更新,运行 <code>bisheng skills sync</code>——它会重新下载并接进本机的 AI 编程工具,最后一行写明接进了哪些。</p>
       </div>
     </section>
 
@@ -355,7 +355,7 @@
   <div class="foot">
     <div class="wrap">
       <span>毕昇 · 应用工场 · 托管应用上手手册</span>
-      <span class="dev">开发者:<code>bisheng skills sync</code> 获取《部署纳管》技能</span>
+      <span class="dev">开发者:<code>bisheng skills sync</code> 获取并接入《部署纳管》技能</span>
     </div>
   </div>
 

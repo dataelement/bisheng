@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 13 项就地修订，55 条有效 AC 定稿（决议 1–12） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 12 条修订（D1–D14 / 21 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；**50 任务 / 5 Wave / 35 条 `[MVP-核心]`**；55 条 AC 全覆盖（AC-39 为墓碑、AC-48 / AC-50 为跨 Feature 旅程引用，见追溯表）；**+ 同日 `/sdd-review tasks` 14 条修订**（2 high：F054 `logs` 链路事实回正〔runtime-manager 端点已落码〕· 依赖上界与 wheel 安装冒烟〔app-proxy 生产事故同型敞口〕；9 medium：161 段错误码登记 · 未登记码按 HTTP 状态兜底 · `26002` 三成因不可分 · `data.required` 是字符串 · base_url 归一化 · T022/T026 伪依赖 · T002 拆 T002a · 产物缺失时端点行为 · F055 扫描顺序偏离进依赖表；3 low：偏离计数补第三处 · CI 改 `--frozen` · T031 落点改独立 workflow 文件） |
-| 实现 | 🚧 进行中 | **39 / 50 完成**（2026-08-18 增补：**Wave 3「部署纳管」技能包切片 T035/T036/T037/T039/T040/T049 已实现并在 114 端到端验证**——CLI 全量 219 passed、`skills sync` 在 114 上装 wheel→sync→写入 `~/.bisheng/skills/deploy-hosting/`→selfcheck 通过、端点 `GET /skills/deploy-hosting` 返 200 gzip、未知/越界 slug 404、教程新内容 nginx 200；T038「平台能力接线」仍随 F057 顺延；决策增补见 design.md 顶部 2026-08-18 块）。**33 / 50 完成**（前序）。Wave 1 全部（T001–T018 含 T002a）+ **Wave 2 的 CLI 侧全部**（T019–T026 三条命令、T030 打包脚本、T031 CI、T032 README）+ **Wave 2 的平台侧全部**（T027–T029 分发端点、集成测试、租户豁免）。CLI：`cd src/bisheng-cli && uv run pytest` **203 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿、`uv lock --check` 无漂移、wheel 构建 + 干净 venv 安装冒烟（`import bisheng_cli.main` / `bisheng --version` / 三条命令 `--help`）通过。平台侧（2026-08-18）：`cd src/backend && uv run pytest test/dev_toolkit test/open_api -q` **111 passed / 0 failed**（其中 dev_toolkit 8 条）、`ruff check` + `ruff format --check` 全绿、`arch-guard.sh` 六个文件零输出、`from bisheng.main import app` 可起（624 路由）。**未完成**：T033（114 手验，依赖平台侧上线）· T034（上游回写）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **41 / 52 完成**（2026-08-18 缺陷修订：**T054 / T055 已实现**——`sync` 现把技能包接入本机 AI 编程工具并如实报告、技能包按平台分目录、`deploy` 在项目 `AGENTS.md` 留位置指针；起因是「同步成功但 AI 读不到」的现场失败，详见 design.md 顶部 2026-08-18 缺陷修订块与 spec §2.10。CLI 全量 **247 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿，并在 114 真机验证 `login` / `skills sync` 输出与软链重指向）。**39 / 50 完成**（2026-08-18 增补：**Wave 3「部署纳管」技能包切片 T035/T036/T037/T039/T040/T049 已实现并在 114 端到端验证**——CLI 全量 219 passed、`skills sync` 在 114 上装 wheel→sync→写入 `~/.bisheng/skills/deploy-hosting/`→selfcheck 通过、端点 `GET /skills/deploy-hosting` 返 200 gzip、未知/越界 slug 404、教程新内容 nginx 200；T038「平台能力接线」仍随 F057 顺延；决策增补见 design.md 顶部 2026-08-18 块）。**33 / 50 完成**（前序）。Wave 1 全部（T001–T018 含 T002a）+ **Wave 2 的 CLI 侧全部**（T019–T026 三条命令、T030 打包脚本、T031 CI、T032 README）+ **Wave 2 的平台侧全部**（T027–T029 分发端点、集成测试、租户豁免）。CLI：`cd src/bisheng-cli && uv run pytest` **203 passed / 0 failed**、`ruff check` + `ruff format --check` 全绿、`uv lock --check` 无漂移、wheel 构建 + 干净 venv 安装冒烟（`import bisheng_cli.main` / `bisheng --version` / 三条命令 `--help`）通过。平台侧（2026-08-18）：`cd src/backend && uv run pytest test/dev_toolkit test/open_api -q` **111 passed / 0 failed**（其中 dev_toolkit 8 条）、`ruff check` + `ruff format --check` 全绿、`arch-guard.sh` 六个文件零输出、`from bisheng.main import app` 可起（624 路由）。**未完成**：T033（114 手验，依赖平台侧上线）· T034（上游回写）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -446,6 +446,17 @@
   **文件**: `src/bisheng-cli/bisheng_cli/commands/skills.py`（增量）, `src/backend/bisheng/dev_toolkit/skills/README.md`
   **测试载体**: `src/bisheng-cli/tests/test_command_skills.py`（增量）
   **覆盖 AC**: AC-20
+  **2026-08-18 订正**: 本任务原实现的指引文案是错的——断言「Claude Code 自动发现 SKILL.md，无需配置」（无任何工具扫描 `~/.bisheng/skills/`）并指向不随包分发的 `README.md`。真正的缺口不是"指引怎么写"而是"根本没人接入"，由 T054 补齐
+
+- [x] **T054**: `skills sync` 落盘后**接入本机 AI 编程工具**并如实报告（探测 `~/.claude` / `~/.codex` → 建软链；一个都没接上时 `warn`；Windows 降级复制 + `.bisheng-managed` 标记；开发者自有技能占位报 conflict 不动它）+ 技能包**按平台分目录**（`profile_slug` = netloc + sha256[:8]，旧扁平落点自动清理）+ `login` 路径改为必打落点与接入结果
+  **文件**: `src/bisheng-cli/bisheng_cli/agent_skills.py`（新建）, `src/bisheng-cli/bisheng_cli/commands/skills.py`（增量）, `src/bisheng-cli/bisheng_cli/cli.py`（增量）, `src/backend/bisheng/dev_toolkit/skills/README.md`（订正）, `src/frontend/platform/public/tutorial/hosted-app.html`（订正步 1 / 步 2 / 排障段）
+  **测试载体**: `src/bisheng-cli/tests/test_agent_skills.py`（新建 16 条）, `src/bisheng-cli/tests/test_command_skills.py`（增量 6 条）, `src/bisheng-cli/tests/test_command_login.py`（增量）
+  **覆盖 AC**: AC-54 / AC-55（修订 AC-08 / AC-14 / AC-20）
+
+- [x] **T055**: `deploy` 在项目 `AGENTS.md` 写入技能包**位置指针**（幂等、只追加不改写、`~/` 相对路径、平台接收上传后才写、`--dry-run` / `--no-agents-note` 不写）
+  **文件**: `src/bisheng-cli/bisheng_cli/agent_skills.py`（增量）, `src/bisheng-cli/bisheng_cli/commands/deploy.py`（增量）, `src/bisheng-cli/bisheng_cli/cli.py`（增量 `--no-agents-note`）
+  **测试载体**: `src/bisheng-cli/tests/test_agent_skills.py`（增量）, `src/bisheng-cli/tests/test_command_deploy_sync.py`（增量 6 条）
+  **覆盖 AC**: AC-56
 
 > **不做、且被提议过不止一次的四项**（design §8 / spec §范围边界与决议-2 / 决议-12，**不要再提回**）：CLI 侧复制一份密钥扫描规则集做本地预扫（同一规则集分两处必漂移，扫描只在 F055 服务端做一次）· `init` / 工程骨架生成 · `logout` / `whoami` 子命令（登出 = 删凭据文件或重新 `login` 覆盖）· CLI 生成二维码（去应用详情页 · 发布取）。单文件二进制是 v3.1 备选（决议-1），下载端点届时按 `?platform=&arch=` 分发、`versions` 载荷加 `assets[]`（形状已留位）。
 

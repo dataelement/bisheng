@@ -21,16 +21,30 @@ The pack ships next to the CLI wheel behind the same anonymous, conditionally
 registered router, so a 404 here means the same thing it means for the wheel: the
 open-capability layer is not on (or the platform predates skill packs). The
 command reports that as its own exit code rather than as a mysterious empty sync.
+
+Two things sync does beyond unpacking, both of them corrections to a version that
+merely wrote files and called it success:
+
+* **Packs are stored per platform.** ``~/.bisheng/skills/<platform>/<pack>/``. One
+  machine logging into a test platform and a production one used to have the
+  second login silently overwrite the first's contract, leaving the developer's
+  agent reading the wrong platform's rules with nothing on screen to suggest it.
+* **Sync wires the pack into the local agents.** Writing into ``~/.bisheng`` alone
+  reaches nobody — see ``agent_skills`` for why an unwired pack is the expensive
+  failure mode and why every detected agent gets one.
 """
 
 from __future__ import annotations
 
+import hashlib
 import io
+import re
 import tarfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
-from bisheng_cli import credentials
+from bisheng_cli import agent_skills, credentials
 from bisheng_cli.errors import EXIT_LOCAL_INVALID, EXIT_NOT_ENABLED, EXIT_OK, EXIT_USAGE, CliError
 from bisheng_cli.http import PlatformClient
 from bisheng_cli.output import Emitter
@@ -51,8 +65,51 @@ PACK_VERSION_HEADER = "x-bisheng-pack-version"
 SKILLS_DIR_NAME = "skills"
 
 
-def _skills_root() -> Path:
+def _skills_base() -> Path:
     return credentials.credentials_path().parent / SKILLS_DIR_NAME
+
+
+def profile_slug(base_url: str) -> str:
+    """Directory name for one platform's packs: readable host + disambiguating hash.
+
+    The host alone is not enough (`http://x` and `https://x` are two platforms with
+    two contracts), and a bare hash is unreadable in the path line the CLI prints. So
+    both: the netloc for a human, eight hex for uniqueness. Derived from the
+    normalised URL, i.e. the same key the credential store profiles by — anything
+    else would let two spellings of one platform own two pack copies.
+    """
+    key = credentials.normalise_base_url(base_url)
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
+    readable = re.sub(r"[^a-z0-9.-]+", "-", (urlsplit(key).netloc or "platform").lower()).strip("-")
+    return f"{readable or 'platform'}.{digest}"
+
+
+def skills_root(base_url: str) -> Path:
+    """Where this platform's packs live. Public: `deploy` cites it in AGENTS.md."""
+    return _skills_base() / profile_slug(base_url)
+
+
+# Internal call sites kept short; same function, one implementation.
+_skills_root = skills_root
+
+
+def _migrate_flat_layout(emitter: Emitter) -> None:
+    """Drop pre-profile packs sitting directly under ``~/.bisheng/skills/``.
+
+    Only ever removes a directory whose name is a pack we ship — a slug always
+    carries a ``.`` + hash, so the two namespaces cannot collide. Left in place the
+    old copy is a decoy: nothing updates it, and a developer who finds it has no
+    way to tell it from the live one.
+    """
+    base = _skills_base()
+    for pack in DEFAULT_PACKS:
+        stale = base / pack
+        if stale.is_dir() and not stale.is_symlink():
+            try:
+                _rmtree(stale)
+                emitter.debug(f"已清理旧版落点 {stale}")
+            except OSError:
+                emitter.debug(f"旧版落点 {stale} 清理失败，可手动删除")
 
 
 def run(args: Any, emitter: Emitter) -> int:
@@ -72,10 +129,15 @@ def run(args: Any, emitter: Emitter) -> int:
         emitter=emitter,
     )
     with client:
-        packs = sync_packs(client, emitter)
+        packs = sync_packs(client, profile.base_url, emitter)
 
-    _print_reference_guide(emitter)
-    emitter.result(COMMAND, ok=True, exit_code=EXIT_OK, data={"skills_dir": str(_skills_root()), "packs": packs})
+    _print_reference_guide(profile.base_url, packs, emitter)
+    emitter.result(
+        COMMAND,
+        ok=True,
+        exit_code=EXIT_OK,
+        data={"skills_dir": str(_skills_root(profile.base_url)), "packs": packs},
+    )
     return EXIT_OK
 
 
@@ -85,8 +147,12 @@ def run_after_login(profile: credentials.Profile, args: Any, emitter: Emitter) -
     Login has already succeeded and its own ``result`` event is what the command
     reports, so this must never raise and must never emit a ``result`` — a
     failure here downgrades to a warning that tells the developer to re-run
-    ``skills sync`` by hand. Same reason it does not print the reference guide:
-    the login output already ended.
+    ``skills sync`` by hand.
+
+    It *does* print where the pack went and which agents took it. The earlier
+    version stayed silent to keep the login output short, and that silence was the
+    whole bug this round fixes: "5 个文件已同步" told the developer a sync had
+    happened while leaving them no way to learn that nothing could read it.
     """
     try:
         client = PlatformClient(
@@ -97,7 +163,8 @@ def run_after_login(profile: credentials.Profile, args: Any, emitter: Emitter) -
             emitter=emitter,
         )
         with client:
-            sync_packs(client, emitter)
+            packs = sync_packs(client, profile.base_url, emitter)
+        _print_reference_guide(profile.base_url, packs, emitter)
     except CliError as exc:
         emitter.warn(f"技能包自动同步未完成：{exc.message}")
         emitter.info("  可稍后手动执行 bisheng skills sync 重试。")
@@ -106,13 +173,35 @@ def run_after_login(profile: credentials.Profile, args: Any, emitter: Emitter) -
         emitter.info("  可稍后手动执行 bisheng skills sync 重试。")
 
 
-def sync_packs(client: PlatformClient, emitter: Emitter) -> list[dict[str, Any]]:
-    """Fetch and unpack each shipped pack. Prints one line per pack; may raise."""
-    root = _skills_root()
+def sync_packs(client: PlatformClient, base_url: str, emitter: Emitter) -> list[dict[str, Any]]:
+    """Fetch, unpack and wire each shipped pack. One line per pack; may raise."""
+    root = _skills_root(base_url)
+    targets = agent_skills.detect()
     results: list[dict[str, Any]] = []
     for pack in DEFAULT_PACKS:
-        results.append(_sync_one(client, pack, root, emitter))
+        result = _sync_one(client, pack, root, emitter)
+        # Wiring runs per pack and after its files are on disk, so a pack that
+        # failed to download never gets linked to a half-written directory.
+        result["agents"] = agent_skills.install(root / pack, pack, targets)
+        _report_agents(result, emitter)
+        results.append(result)
+    _migrate_flat_layout(emitter)
     return results
+
+
+def _report_agents(result: dict[str, Any], emitter: Emitter) -> None:
+    """Say which agents took the pack — and be loud when none did.
+
+    "No agent found" is not a footnote: it means the sync that just reported
+    success cannot affect anything the developer's AI does.
+    """
+    linked, problems = agent_skills.summarise(result.get("agents") or [])
+    if linked:
+        emitter.info(f"  已接入 {'、'.join(linked)}")
+    else:
+        emitter.warn("技能包已下载，但本机未接入任何 AI 编程工具——AI 读不到平台规矩。")
+    for problem in problems:
+        emitter.warn(f"{problem.get('label')} 未接入：{problem.get('reason') or problem.get('status')}")
 
 
 def _sync_one(client: PlatformClient, pack: str, root: Path, emitter: Emitter) -> dict[str, Any]:
@@ -229,11 +318,22 @@ def _rmtree(path: Path) -> None:
     path.rmdir()
 
 
-def _print_reference_guide(emitter: Emitter) -> None:
-    """After sync, tell the developer how to point their AI tool at the packs (AC-20)."""
-    root = _skills_root()
+def _print_reference_guide(base_url: str, packs: list[dict[str, Any]], emitter: Emitter) -> None:
+    """After sync, say where the packs went and how anything else reaches them (AC-20).
+
+    The previous wording claimed "Claude Code：自动发现 SKILL.md，无需配置" and pointed
+    at a ``README.md`` the pack does not contain. Both were wrong in the same
+    direction — they told the developer there was nothing left to do. No agent
+    scans ``~/.bisheng/skills/``; that is what ``agent_skills`` exists to fix, and
+    what this guide now reports instead of promising.
+    """
+    root = _skills_root(base_url)
+    linked = sorted({r["label"] for pack in packs for r in (pack.get("agents") or []) if r.get("status") == "linked"})
     emitter.info("")
-    emitter.info(f"技能包已同步到 {root}")
-    emitter.info("  · Claude Code：自动发现 SKILL.md，无需配置。")
-    emitter.info(f"  · 其它 AI 编程工具：在项目里放一个 AGENTS.md 指向 {root}/<包名>/SKILL.md。")
-    emitter.info(f"  · 详见 {root}/README.md。")
+    emitter.info(f"技能包落点：{root}（按平台分目录，切换平台不会互相覆盖）")
+    if linked:
+        emitter.info(f"  · 已自动接入：{'、'.join(linked)}——新开一个会话即可生效。")
+    else:
+        emitter.info("  · 本机未发现 Claude Code / Codex；技能包只是下载了，还没有任何工具能读到。")
+    emitter.info("  · 其它 AI 编程工具（Cursor、Cline 等）：在项目 AGENTS.md 里指向")
+    emitter.info(f"    {root}/<包名>/SKILL.md；bisheng deploy 会自动写好这一行。")

@@ -309,3 +309,71 @@ def test_sync_error_never_enters_polling_loop(monkeypatch: pytest.MonkeyPatch, l
     code, _, _ = _run(["deploy", str(sample_project)], monkeypatch=monkeypatch, mock=mock)
     assert code == 10
     assert not [path for path in mock.paths_called() if "deployments" in path]
+
+
+# ---- AGENTS.md pointer ----------------------------------------------------
+#
+# The pack itself must never be committed (its version follows the platform, so
+# git would freeze it at whatever the contract was that week). A *pointer* is the
+# opposite: it survives being committed, it reaches tools that have no skills
+# directory at all, and a path does not go stale the way a copied contract does.
+
+
+def _deploy_ok(project: Path, monkeypatch: pytest.MonkeyPatch, *extra: str) -> tuple[int, str, str]:
+    mock = _mock().post(DEPLOY, deploy_accept()).get("/api/v2/apps/deployments/dep-1", _waiting_seq())
+    return _run(["deploy", str(project), "--yes", *extra], monkeypatch=monkeypatch, mock=mock)
+
+
+def test_deploy_leaves_a_pointer_to_the_skill_pack(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    code, _, err = _deploy_ok(sample_project, monkeypatch)
+    assert code == EXIT_OK
+    text = (sample_project / "AGENTS.md").read_text(encoding="utf-8")
+    assert "deploy-hosting/SKILL.md" in text
+    assert "不要拷贝进本仓库" in text
+    assert "AGENTS.md" in err
+
+
+def test_pointer_is_written_once(monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path) -> None:
+    _deploy_ok(sample_project, monkeypatch)
+    first = (sample_project / "AGENTS.md").read_text(encoding="utf-8")
+    _deploy_ok(sample_project, monkeypatch)
+    assert (sample_project / "AGENTS.md").read_text(encoding="utf-8") == first
+
+
+def test_no_agents_note_opts_out(monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path) -> None:
+    code, _, _ = _deploy_ok(sample_project, monkeypatch, "--no-agents-note")
+    assert code == EXIT_OK
+    assert not (sample_project / "AGENTS.md").exists()
+
+
+def test_dry_run_writes_nothing_into_the_working_tree(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    # "未上传，平台上什么都没有创建" has to include the developer's own tree.
+    code, _, _ = _run(["deploy", str(sample_project), "--dry-run"], monkeypatch=monkeypatch, mock=_mock())
+    assert code == EXIT_OK
+    assert not (sample_project / "AGENTS.md").exists()
+
+
+def test_failed_deploy_leaves_the_tree_untouched(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    # The pointer asserts "this project deploys to this platform"; until the
+    # platform accepts the package that is still a guess.
+    mock = _mock().post(DEPLOY, deploy_sync_err(16203, "包根不对", http_status=400))
+    code, _, _ = _run(["deploy", str(sample_project), "--yes"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_LOCAL_INVALID
+    assert not (sample_project / "AGENTS.md").exists()
+
+
+def test_existing_agents_md_is_appended_never_rewritten(
+    monkeypatch: pytest.MonkeyPatch, logged_in, sample_project: Path
+) -> None:
+    original = "# 我的项目\n\n本地约定若干。\n"
+    (sample_project / "AGENTS.md").write_text(original, encoding="utf-8")
+    _deploy_ok(sample_project, monkeypatch)
+    text = (sample_project / "AGENTS.md").read_text(encoding="utf-8")
+    assert text.startswith(original)
+    assert "deploy-hosting/SKILL.md" in text

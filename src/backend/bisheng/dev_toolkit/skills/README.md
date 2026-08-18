@@ -1,32 +1,47 @@
 # 开发者技能包 —— 怎么让 AI 用上
 
-`bisheng skills sync` 会把平台当前版本的技能包拉到本机:
+`bisheng skills sync`(以及 `bisheng login` 触发的那次自动同步)做两件事:把平台当前版本的技能包
+拉到本机,再**把它接到本机的 AI 编程工具上**。第二件事不是可选步骤——`~/.bisheng/skills/` 是平台
+自己的目录,**没有任何编程工具会扫描它**,只下载不接入等于没装。
 
 ```
 ~/.bisheng/skills/
-  deploy-hosting/          部署纳管:把本地应用部署到企业应用平台
-    SKILL.md               技能正文(AI 读这个)
-    example/               可运行样例,改造它比从零写更稳
-    selfcheck.py           部署前连通自检
+  <平台地址>.<哈希>/         按平台分目录:一台机器登录多个平台,各自的规矩互不覆盖
+    deploy-hosting/          部署纳管:把本地应用部署到企业应用平台
+      SKILL.md               技能正文(AI 读这个)
+      example/               可运行样例,改造它比从零写更稳
+      selfcheck.py           部署前连通自检
 ```
 
-技能包是平台发布物,`skills sync` **单向覆盖**本地内容(不合并、不保留本地改动)——平台升级后重跑即更新到新版本。
+技能包是平台发布物,`skills sync` **单向覆盖**本地内容(不合并、不保留本地改动)——平台升级后重跑即
+更新到新版本。
 
 ## 让你的 AI 编程工具用上它
 
-- **Claude Code**:自动发现 `~/.bisheng/skills/*/SKILL.md`,识别到部署意图时会自行参考,无需额外配置。
-- **Cursor / 通义灵码 / 其它引擎**:在你的项目根放一个 `AGENTS.md`(或该工具约定的规则文件),指向同一目录即可:
+- **Claude Code / Codex**:`sync` 已自动接入(在 `~/.claude/skills/`、`~/.codex/skills/` 下建软链
+  指向上面的落点),**新开一个会话**即可生效——已经开着的会话读不到新装的技能。同步的最后一行会写明
+  接进了哪些工具;如果写的是「未接入任何 AI 编程工具」,那就是这台机器上没装这两个工具,按下一条走。
+- **Cursor / Cline / 通义灵码 / 其它引擎**:这类工具没有技能目录约定,靠项目里的 `AGENTS.md`。首次
+  `bisheng deploy` 会自动在项目根写好指针(幂等、只追加不改写,`--no-agents-note` 可关),形如:
 
   ```markdown
-  # AGENTS.md
-  把本地应用部署到公司应用平台时,先读并遵循:
-  ~/.bisheng/skills/deploy-hosting/SKILL.md
-  参考可运行样例:~/.bisheng/skills/deploy-hosting/example/
+  <!-- bisheng-skills -->
+  ## BiSheng 应用平台
+  改动本项目前请先读:`~/.bisheng/skills/<平台地址>.<哈希>/deploy-hosting/SKILL.md`
   ```
 
-- **手动**:直接把 `~/.bisheng/skills/deploy-hosting/SKILL.md` 的内容贴给 AI,告诉它「照这个把应用部署到平台」。
+- **手动**:直接把 `SKILL.md` 的内容贴给 AI,告诉它「照这个把应用部署到平台」。
 
 ## 想扩展/定制?
 
 技能目录随时会被 `skills sync` 覆盖,**不要**直接改里面的文件。要补充团队自己的约定,写在你项目的
 `AGENTS.md` 里、放在技能目录**之外**。
+
+同理:**不要把技能包拷进你的项目仓库**。包的版本跟随平台,一旦进了 git 就被冻结在当时那版,而平台的
+规矩会继续变——AI 照着过期契约自信地写下去,比压根没读到更难排查。项目里该有的是指向技能包的**路径**,
+不是它的**内容**。
+
+## 这个 README 本身
+
+它在平台源码里做说明,**不随技能包分发**(分发端点只打包 `<pack>/` 目录)。给 CLI 用户看的说明在
+`bisheng skills sync` 的输出里。

@@ -2,7 +2,7 @@
 
 > **本文档定位 — 现状快照（Why this How）**
 >
-> - `spec.md` 回答 **做什么**（55 条有效 AC、边界、12 条决议）
+> - `spec.md` 回答 **做什么**（58 条有效 AC、边界、12 条决议）
 > - `design.md`（本文）回答 **为什么这么实现**：关键决策（含被否决的备选）、运行时不直观的事实、对外契约
 > - `tasks.md` 是 **流水账**：拆了哪些任务、做了什么改动
 >
@@ -14,12 +14,20 @@
 >
 > **裁剪基准 = [`mvp-114-path.md`](../mvp-114-path.md) §6 MVP-核心**：本 Feature 本轮只做「CLI 包工程（wheel + 平台下载端点）+ `login` + `deploy` + `logs` 简版」；`skills sync` / 两包技能包 / `dev` / 接入信息区 / 多平台凭据 / 版本兼容校验**全部顺延**（release 仍必做，落点方向见 §1 非目标与 §8）。
 >
-> **2026-08-18 增补 — 技能包切片拉入 MVP（用户拍板）**：为让开发者"一条命令拿到技能、AI 照着开发部署"，把 DEV-03 中**「部署纳管」包 + 其分发/同步链路**从顺延项提前实现：**T035**（`skills sync`）· **T036**（分发端点 `GET /api/v1/dev-toolkit/skills/{pack}`）· **T037**（「部署纳管」包三件套）· **T039**（`login` 后自动 sync）· **T040**（触发评测 AC-22①）· **T049**（AGENTS.md 引用指引）。**T038「平台能力接线」包仍顺延**——其模型/应用库接法依赖 F051/F052 已集成、SDK 三件套章节与 AC-22② 随 F057。两处此前未定的对外合同在此定死：**① `skills sync` 落地路径 = `~/.bisheng/skills/<pack>/`**（与 `credentials.json` 同处一个 0700 目录，D3 风格）；**② 分发端点响应格式 = 按包 gzip tarball**，由 `artifact_service.read_skill_pack` 从**单一源目录** `bisheng/dev_toolkit/skills/<pack>/` 实时打包（成员 mtime/owner 归零 → 字节确定、re-sync 无 churn），包版本走响应头 `X-Bisheng-Pack-Version`（正文是 tar 不是信封）；匿名口径与条件注册闸沿用 D10（open 层关 → 路由天然 404）。实现落于 `3.0-vibe`，CLI 全量 `pytest` 219 passed。
+> **2026-08-18 增补 — 技能包切片拉入 MVP（用户拍板）**：为让开发者"一条命令拿到技能、AI 照着开发部署"，把 DEV-03 中**「部署纳管」包 + 其分发/同步链路**从顺延项提前实现：**T035**（`skills sync`）· **T036**（分发端点 `GET /api/v1/dev-toolkit/skills/{pack}`）· **T037**（「部署纳管」包三件套）· **T039**（`login` 后自动 sync）· **T040**（触发评测 AC-22①）· **T049**（AGENTS.md 引用指引）。**T038「平台能力接线」包仍顺延**——其模型/应用库接法依赖 F051/F052 已集成、SDK 三件套章节与 AC-22② 随 F057。两处此前未定的对外合同在此定死：**① `skills sync` 落地路径 = `~/.bisheng/skills/<pack>/`**（与 `credentials.json` 同处一个 0700 目录，D3 风格）〔**已于 2026-08-18 修订为按平台分目录，见下一块**〕；**② 分发端点响应格式 = 按包 gzip tarball**，由 `artifact_service.read_skill_pack` 从**单一源目录** `bisheng/dev_toolkit/skills/<pack>/` 实时打包（成员 mtime/owner 归零 → 字节确定、re-sync 无 churn），包版本走响应头 `X-Bisheng-Pack-Version`（正文是 tar 不是信封）；匿名口径与条件注册闸沿用 D10（open 层关 → 路由天然 404）。实现落于 `3.0-vibe`，CLI 全量 `pytest` 219 passed。
+
+> **2026-08-18 缺陷修订 — 「同步成功」不等于「AI 读得到」（AC-54 / AC-55 / AC-56）**：现场暴露的失败是 `login` 打出「✓ deploy-hosting（版本 3.0.0）：5 个文件已同步」而开发者的 AI 完全不知道有技能——文件确实写在 `~/.bisheng/skills/deploy-hosting/`，但**没有任何编程工具扫描该目录**（Claude Code 只扫 `~/.claude/skills/`，Codex 只扫 `~/.codex/skills/`）。设计原本把「文件落盘」当成了交付完成，这是本 Feature 最贵的失败形态：AI 照常写代码、只是不知道平台规矩，直到 `deploy` 起不来才暴露，而报错不指向技能缺失。三处对外合同随之改定：
+>
+> - **落点改为按平台分目录**：`~/.bisheng/skills/<netloc>.<sha256[:8]>/<pack>/`（slug 由 `commands/skills.py::profile_slug` 从归一化后的 base_url 派生，与凭据 profile 同键）。**取代**上一块的 `~/.bisheng/skills/<pack>/`：扁平落点让「先登 test 再登 prod」的第二次 sync 静默覆盖第一份契约，现场无任何迹象。旧扁平目录由 `_migrate_flat_layout` 在 sync 时清掉（留着就是无人更新的诱饵）。
+> - **sync 负责接入本机 AI 工具**（新模块 `bisheng_cli/agent_skills.py`）：探测到 `~/.claude` / `~/.codex` 即在其 `skills/` 下建软链指向当前平台的包，**探测到几个接几个、不询问不择一**（多接一个 = 一个软链；漏接一个 = 静默失败，代价不对称）。Windows 无 Developer Mode 时降级为复制并打 `.bisheng-managed` 标记（复制跟不了后续 sync，故每次 sync 重做且如实报告 mode）。目标路径已被**开发者自己的**技能占用时报 conflict 并原样不动——为了让摘要好看而删掉别人的技能，是比不接入更坏的结果。`login` 路径此前刻意不打印引导（怕输出太长），那份沉默正是本次缺陷的直接成因，现已改为必打落点与接入结果；一个都没接上时是 `warn` 而非 `info`。
+> - **`deploy` 在项目 `AGENTS.md` 留位置指针**（`agent_skills.ensure_project_pointer`）：覆盖 Cursor / Cline 这类没有技能目录约定的工具。写的是**路径不是内容**——包的版本跟随平台，拷进 git 会冻结在旧版本而平台规矩继续变；路径用 `~/` 相对形式以便提交后对同事同样成立。时机在**平台接收上传之后**（此前该事实还只是猜测，失败的 deploy 不得改动开发者工作树），`--dry-run` 与 `--no-agents-note` 不写。
+>
+> 文案侧同步订正：`_print_reference_guide` 原本断言「Claude Code：自动发现 SKILL.md，无需配置」并指向包内根本不存在的 `README.md`（该 README 只在平台源码 `bisheng/dev_toolkit/skills/README.md`，不随 tar 分发），两句都朝「你不用再做什么」的方向误导；教程 `hosted-app.html` 步 1/2 与排障段同改。**`logout` 仍然不做**（§8 四不做项）——软链在每次 sync 时按当前平台重建，切平台自然重指向，不需要一个专门的清理命令。
 
 **关联**: [spec.md](./spec.md) · [tasks.md](./tasks.md)（待写）· [release-contract.md](../release-contract.md)（表 1 **AppManifest 归 F055**、表 3 F053 行；INV-27 / INV-31 / INV-32）· [mvp-114-path.md](../mvp-114-path.md)（**§6 MVP-核心是本轮裁剪基准**、§3 114 环境事实、§1 演示剧本步 2–3）
 **上游 / 姊妹**: [F055 design §4.2 ①③ / §4.2 ⑧](../055-app-publish-pipeline/design.md)（`deploy` / `logs` 端点、AppManifest 形态、失败五元组、162 段错误码——**冲突时一律以 F055 为准**）· [F055 tasks T039](../055-app-publish-pipeline/tasks.md)（端点鉴权顺序与归属判定字段）· [F054 contracts-runtime-manager.md §5](../054-app-domain-runtime/contracts-runtime-manager.md)（注入应用的环境变量清单——`bisheng dev` 顺延，但清单来源在此定死）· [F049 design](../049-openapi-auth-baseline/design.md)（`whoami` / `open_api_subject` / 260 段错误码）
 **版本**: v3.0.0
-**最后更新**: 2026-08-17
+**最后更新**: 2026-08-18
 
 ---
 

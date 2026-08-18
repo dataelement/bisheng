@@ -233,10 +233,14 @@ def test_login_auto_syncs_skill_packs(monkeypatch: pytest.MonkeyPatch, home_dir)
     # AC-08 (T039): a successful login pulls the skill packs so a first-time
     # developer never has to know `skills sync` exists.
     mock = _mock(whoami_ok())
-    code, _, _ = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
+    code, _, err = _run(["login", BASE, "--api-key", FAKE_KEY], monkeypatch=monkeypatch, mock=mock)
     assert code == EXIT_OK
     assert [path for path in mock.paths_called() if "skills" in path] == [skills_path()]
-    assert (home_dir / ".bisheng" / "skills" / "deploy-hosting" / "SKILL.md").is_file()
+    slug = skills_mod.profile_slug(BASE)
+    assert (home_dir / ".bisheng" / "skills" / slug / "deploy-hosting" / "SKILL.md").is_file()
+    # Where it landed must be on screen. Login used to sync in silence, which is
+    # how "5 个文件已同步" could be true while nothing could read them.
+    assert "技能包落点" in err
 
 
 def test_login_still_succeeds_when_auto_sync_fails(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:

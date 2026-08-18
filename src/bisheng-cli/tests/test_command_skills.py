@@ -72,8 +72,9 @@ def _run(argv: list[str], *, monkeypatch: pytest.MonkeyPatch, mock: PlatformMock
     return code, out.getvalue(), err.getvalue()
 
 
-def _skills_dir(home: Path) -> Path:
-    return home / ".bisheng" / "skills"
+def _skills_dir(home: Path, base: str = BASE) -> Path:
+    """Packs live under a per-platform slug now — see `skills.profile_slug`."""
+    return home / ".bisheng" / "skills" / skills_mod.profile_slug(base)
 
 
 # ---- not logged in / usage ------------------------------------------------
@@ -182,3 +183,86 @@ def test_run_after_login_syncs_on_success(monkeypatch: pytest.MonkeyPatch, logge
     args = SimpleNamespace(no_proxy=False, timeout=None)
     skills_mod.run_after_login(profile, args, emitter)
     assert (_skills_dir(home_dir) / PACK / "SKILL.md").is_file()
+
+
+# ---- per-platform isolation + wiring (this round) -------------------------
+
+
+OTHER = "http://other-platform.test"
+
+
+def test_two_platforms_do_not_overwrite_each_other(monkeypatch: pytest.MonkeyPatch, home_dir) -> None:
+    """Logging into a second platform must not silently replace the first's contract.
+
+    Before packs were stored per platform, the second sync overwrote the first in
+    place: the developer's agent then read platform B's rules while working on a
+    platform A project, with nothing on screen to suggest it.
+    """
+    first = {"SKILL.md": "# 平台 A 的规矩\n"}
+    second = {"SKILL.md": "# 平台 B 的规矩\n"}
+
+    credentials.save_profile(BASE, {"api_key": FAKE_KEY})
+    _run(["skills", "sync"], monkeypatch=monkeypatch, mock=PlatformMock().get(SKILLS_PATH, _pack_response(first)))
+    credentials.save_profile(OTHER, {"api_key": FAKE_KEY})
+    _run(["skills", "sync"], monkeypatch=monkeypatch, mock=PlatformMock().get(SKILLS_PATH, _pack_response(second)))
+
+    assert (_skills_dir(home_dir, BASE) / PACK / "SKILL.md").read_text(encoding="utf-8") == first["SKILL.md"]
+    assert (_skills_dir(home_dir, OTHER) / PACK / "SKILL.md").read_text(encoding="utf-8") == second["SKILL.md"]
+
+
+def test_sync_links_the_pack_into_installed_agents(monkeypatch: pytest.MonkeyPatch, logged_in, home_dir) -> None:
+    # The pack landing on disk is not the deliverable; an agent being able to read
+    # it is. `~/.bisheng/skills/` is scanned by nobody.
+    (home_dir / ".claude").mkdir()
+    (home_dir / ".codex").mkdir()
+    mock = PlatformMock().get(SKILLS_PATH, _pack_response(SAMPLE))
+
+    code, _, err = _run(["skills", "sync"], monkeypatch=monkeypatch, mock=mock)
+
+    assert code == EXIT_OK
+    for agent in (".claude", ".codex"):
+        assert (home_dir / agent / "skills" / PACK / "SKILL.md").is_file()
+    assert "Claude Code" in err and "Codex" in err
+
+
+def test_sync_warns_when_no_agent_can_read_the_pack(monkeypatch: pytest.MonkeyPatch, logged_in, home_dir) -> None:
+    mock = PlatformMock().get(SKILLS_PATH, _pack_response(SAMPLE))
+    code, _, err = _run(["skills", "sync"], monkeypatch=monkeypatch, mock=mock)
+    assert code == EXIT_OK  # downloading worked; the warning is about reachability
+    assert "警告" in err
+    assert "未接入" in err
+
+
+def test_guide_no_longer_claims_claude_code_needs_no_setup(
+    monkeypatch: pytest.MonkeyPatch, logged_in, home_dir
+) -> None:
+    """Two wrong claims are gone: auto-discovery, and a README the pack lacks.
+
+    Both told the developer there was nothing left to do, which is how a pack
+    nothing could read still read as success.
+    """
+    mock = PlatformMock().get(SKILLS_PATH, _pack_response(SAMPLE))
+    _, _, err = _run(["skills", "sync"], monkeypatch=monkeypatch, mock=mock)
+    assert "无需配置" not in err
+    assert "README.md" not in err
+
+
+def test_sync_clears_the_pre_profile_layout(monkeypatch: pytest.MonkeyPatch, logged_in, home_dir) -> None:
+    # A pack left at the old flat path is a decoy: nothing updates it, and it is
+    # indistinguishable from the live one.
+    stale = home_dir / ".bisheng" / "skills" / PACK
+    stale.mkdir(parents=True)
+    (stale / "SKILL.md").write_text("# 旧版落点\n", encoding="utf-8")
+    mock = PlatformMock().get(SKILLS_PATH, _pack_response(SAMPLE))
+
+    code, _, _ = _run(["skills", "sync"], monkeypatch=monkeypatch, mock=mock)
+
+    assert code == EXIT_OK
+    assert not stale.exists()
+    assert (_skills_dir(home_dir) / PACK / "SKILL.md").is_file()
+
+
+def test_profile_slug_separates_schemes_and_is_stable() -> None:
+    assert skills_mod.profile_slug("http://a.test") == skills_mod.profile_slug("http://a.test/")
+    assert skills_mod.profile_slug("http://a.test") != skills_mod.profile_slug("https://a.test")
+    assert skills_mod.profile_slug("http://192.168.106.114:4101").startswith("192.168.106.114-4101.")
