@@ -61,17 +61,16 @@ export function useAppCenter() {
   /** Navigate into an app — always create a new conversation */
   const continueChat = useCallback(
     (app: AppItem) => {
-      // Hosted applications (flow_type 35) are web surfaces, not conversations.
-      // From the "recently used" list they must re-enter `/apps/{slug}` (served
-      // outside this SPA), not the chat route they have none of — and re-record
-      // the open so they stay near the top. Navigate on settle so a slow / failed
-      // record never blocks entry.
+      // Hosted applications (flow_type 35) are web surfaces, not conversations:
+      // they must open `/apps/{slug}` (served outside this SPA), not the chat route
+      // they have none of. Open in a NEW tab so the app center stays put — a
+      // same-tab navigation left no way back — and re-record the open so they stay
+      // near the top. Open FIRST, synchronously in the click gesture, or the popup
+      // is blocked; the record is then fire-and-forget (this tab does not navigate).
+      // `noopener`: the app may run arbitrary code and must not reach this tab.
       if (app.flow_type === 35 && app.slug) {
-        recordUsedAppApi(String(app.id))
-          .catch(() => {})
-          .finally(() => {
-            window.location.assign(`/apps/${app.slug}`);
-          });
+        window.open(`/apps/${app.slug}`, '_blank', 'noopener');
+        recordUsedAppApi(String(app.id)).catch(() => {});
         return;
       }
       const chatId = generateUUID(32);

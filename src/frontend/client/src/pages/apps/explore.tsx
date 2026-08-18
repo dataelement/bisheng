@@ -135,25 +135,22 @@ export default function ExplorePlaza() {
         const flowId = agent.id
         const flowType = agent.flow_type || agent.type
         if (flowType === HOSTED_APP_FLOW_TYPE) {
-            // Leaves the SPA entirely: `/apps/{slug}` is served by the app
-            // proxy, not by any route in here.
+            // Hosted apps live outside this SPA at `/apps/{slug}` (served by the
+            // app proxy). Open them in a NEW tab so the app square stays put and
+            // the user can return to it — a same-tab navigation left them with no
+            // way back.
             //
-            // Three ways to get this wrong, all of which 404: `navigate()`
-            // prefixes the router basename, and both `__APP_ENV__.BASE_URL` and
-            // the neighbouring `getAppShareUrl` helper prepend `/workspace`
-            // explicitly. A hosted application entry must carry none of them.
+            // The URL must be the bare origin-absolute path: no router basename,
+            // no `__APP_ENV__.BASE_URL`, no `/workspace` prefix (each of those
+            // 404s). `noopener` stops the app from reaching back into this tab via
+            // `window.opener` — it may run arbitrary code.
             //
-            // The origin keys below are not written either — they exist so the
-            // conversation page can find its way back, and this navigation does
-            // not come back.
-            // Record the open so this app lands in "recently used" (hosted apps
-            // have no MessageSession to infer usage from), then leave. Navigate on
-            // settle so a slow / failed record never blocks entry.
-            recordUsedAppApi(String(flowId))
-                .catch(() => {})
-                .finally(() => {
-                    window.location.assign(`/apps/${agent.slug}`);
-                });
+            // Open FIRST, synchronously inside the click gesture, or the popup is
+            // blocked. Then record the open for "recently used" as fire-and-forget:
+            // this tab does not navigate, so the request is not cancelled and need
+            // not be awaited (hosted apps have no MessageSession to infer use from).
+            window.open(`/apps/${agent.slug}`, '_blank', 'noopener');
+            recordUsedAppApi(String(flowId)).catch(() => {});
             return;
         }
         try {
