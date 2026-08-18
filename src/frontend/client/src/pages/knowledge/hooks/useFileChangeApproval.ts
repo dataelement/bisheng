@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
@@ -11,6 +11,7 @@ import {
     getFileChangeDetailApi,
     listPendingUploadFileChangesApi,
     retryFileChangeIngestApi,
+    type FileChangeApprovalStatus,
     type FileChangeDetail,
     type KnowledgeFile,
     type PendingUploadFileChange,
@@ -75,6 +76,32 @@ export function selectVisiblePendingUploads(
     items: PendingUploadFileChange[],
 ): PendingUploadFileChange[] {
     return items.filter((item) => item.status !== "applied" && item.status !== "closed");
+}
+
+/**
+ * Execution states a decided upload passes through before its formal file
+ * exists. The backend advances these on its own (queued → applying → applied),
+ * so the pending list must be polled while any row sits here — otherwise an
+ * approved upload stays visually stuck on 等待执行 / 处理中 until a manual refresh.
+ */
+export const FILE_CHANGE_IN_FLIGHT_STATUSES: FileChangeApprovalStatus[] = [
+    "queued",
+    "applying",
+    "compensating",
+];
+
+/** Poll cadence (ms) for refreshing in-flight pending-upload rows. */
+export const PENDING_UPLOAD_POLL_INTERVAL_MS = 5000;
+
+/**
+ * True while a decided upload is still executing (queued / applying /
+ * compensating). Undecided rows (approvalStatus === "pending") are excluded:
+ * their `status` only becomes meaningful after a decision and they never move
+ * without a human action, so polling them would spin forever.
+ */
+export function isPendingUploadInFlight(item: PendingUploadFileChange): boolean {
+    return item.approvalStatus !== "pending"
+        && FILE_CHANGE_IN_FLIGHT_STATUSES.includes(item.status);
 }
 
 export function canDecidePendingUpload(item?: PendingUploadFileChange): boolean {
@@ -195,12 +222,50 @@ export function useFileChangeApproval({
         }),
         getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.nextCursor : undefined,
         enabled: enabled && Boolean(spaceId),
+        // Auto-refresh while any decided upload is still executing (等待执行 /
+        // 处理中). The backend advances these states asynchronously with no push
+        // channel, so without polling the row would freeze until a manual
+        // reload. Reads live query data (not a render-time closure) so the
+        // interval turns itself off the moment every row reaches a terminal
+        // state.
+        refetchInterval: (data) => {
+            const items = data?.pages.flatMap((page) => page.data) ?? [];
+            return items.some(isPendingUploadInFlight) ? PENDING_UPLOAD_POLL_INTERVAL_MS : false;
+        },
     });
     const detailQuery = useQuery({
         queryKey: ["knowledge-file-change-detail", spaceId, detailRequestId],
         queryFn: () => getFileChangeDetailApi(spaceId!, detailRequestId!),
         enabled: enabled && Boolean(spaceId) && detailRequestId != null,
     });
+
+    const pendingItems = pendingQuery.data?.pages.flatMap((page) => page.data) ?? [];
+
+    // When a polled row transitions into the terminal "applied" state its formal
+    // file has just been created, and the pending projection stops rendering it
+    // (selectVisiblePendingUploads drops "applied"). Pull the real file list so
+    // the file reappears as a formal row instead of vanishing from the view.
+    const seenStatusRef = useRef<Map<number, FileChangeApprovalStatus>>(new Map());
+    const initializedRef = useRef(false);
+    useEffect(() => {
+        const previous = seenStatusRef.current;
+        const next = new Map<number, FileChangeApprovalStatus>();
+        let sawCompletion = false;
+        for (const item of pendingItems) {
+            next.set(item.requestId, item.status);
+            const before = previous.get(item.requestId);
+            if (before && before !== "applied" && item.status === "applied") {
+                sawCompletion = true;
+            }
+        }
+        seenStatusRef.current = next;
+        // Skip the first snapshot: pre-existing applied rows are history, not a
+        // transition we just observed.
+        if (initializedRef.current && sawCompletion) {
+            void onFormalFilesRefresh?.();
+        }
+        initializedRef.current = true;
+    }, [pendingItems, onFormalFilesRefresh]);
 
     const refreshAll = useCallback(async () => {
         await queryClient.invalidateQueries({ queryKey: ["knowledge-file-change-uploads", spaceId] });
@@ -252,7 +317,7 @@ export function useFileChangeApproval({
     }, [spaceId]);
 
     return {
-        pendingItems: pendingQuery.data?.pages.flatMap((page) => page.data) ?? [],
+        pendingItems,
         pendingLoading: pendingQuery.isLoading,
         pendingHasMore: pendingQuery.hasNextPage,
         pendingFetchingMore: pendingQuery.isFetchingNextPage,
