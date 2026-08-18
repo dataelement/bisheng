@@ -6,13 +6,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
 BEIJING_TZ = ZoneInfo("Asia/Shanghai")
-BEIJING_UTC_OFFSET = timedelta(hours=8)
-_OFFSET_MARKERS = ("+", "-")
 
 
 def now_beijing() -> datetime:
@@ -47,43 +45,3 @@ def dump_qa_datetimes(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [dump_qa_datetimes(item) for item in value]
     return value
-
-
-def _has_explicit_offset(text: str) -> bool:
-    stripped = text.strip()
-    if stripped.endswith("Z") or stripped.endswith("z"):
-        return True
-    if "T" in stripped:
-        tail = stripped.split("T", 1)[1]
-        return any(mark in tail for mark in _OFFSET_MARKERS)
-    return False
-
-
-def shift_stored_iso(value: str, *, hours: int = 8) -> str:
-    """把历史 UTC naive / Z 串改成东八墙钟并带 +08:00。
-
-    已是 +08:00 的串不平移，避免重复迁移。
-    """
-    if not isinstance(value, str):
-        return value
-    stripped = value.strip()
-    if not stripped:
-        return value
-    try:
-        if stripped.endswith("Z") or stripped.endswith("z"):
-            parsed = datetime.fromisoformat(stripped[:-1]).replace(tzinfo=timezone.utc)
-        elif _has_explicit_offset(stripped):
-            parsed = datetime.fromisoformat(stripped)
-        else:
-            parsed = datetime.fromisoformat(stripped.replace(" ", "T"))
-    except ValueError:
-        return value
-    if parsed.tzinfo is not None:
-        if parsed.utcoffset() == BEIJING_UTC_OFFSET and hours < 0:
-            utc_naive = parsed.astimezone(timezone.utc).replace(tzinfo=None)
-            return utc_naive.isoformat(timespec="seconds")
-        return to_beijing_iso(parsed) or stripped
-    shifted = parsed + timedelta(hours=hours)
-    if hours < 0:
-        return shifted.isoformat(timespec="seconds")
-    return to_beijing_iso(shifted) or stripped

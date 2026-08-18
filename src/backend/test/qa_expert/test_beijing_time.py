@@ -1,20 +1,11 @@
-"""东八区时钟与存量平移辅助。"""
+"""东八区时钟与 Alembic 列定义。"""
 
 from datetime import datetime, timezone
 
-from sqlalchemy import create_engine, text
-
-from bisheng.common.utils.beijing_time import (
-    dump_qa_datetimes,
-    now_beijing,
-    shift_stored_iso,
-    to_beijing_iso,
-)
+from bisheng.common.utils.beijing_time import dump_qa_datetimes, now_beijing, to_beijing_iso
 from bisheng.core.database.alembic.versions.v2_6_0_f091_qa_expert_beijing_datetime import (
-    add_hours_sql,
     down_revision,
     revision,
-    shift_table_datetimes,
 )
 
 
@@ -38,33 +29,6 @@ def test_dump_qa_datetimes_walks_nested_payload() -> None:
     assert payload["nested"][0]["t"] == "2026-08-18T12:00:00+08:00"
 
 
-def test_shift_stored_iso_adds_eight_for_naive_utc() -> None:
-    assert shift_stored_iso("2026-08-18T03:00:00") == "2026-08-18T11:00:00+08:00"
-    assert shift_stored_iso("2026-08-18T03:00:00Z") == "2026-08-18T11:00:00+08:00"
-    assert shift_stored_iso("2026-08-18T11:00:00+08:00") == "2026-08-18T11:00:00+08:00"
-
-
-def test_shift_stored_iso_negative_hours_for_downgrade() -> None:
-    assert shift_stored_iso("2026-08-18T11:00:00", hours=-8) == "2026-08-18T03:00:00"
-    assert shift_stored_iso("2026-08-18T11:00:00+08:00", hours=-8) == "2026-08-18T03:00:00"
-
-
-def test_add_hours_sql_mysql_and_dm() -> None:
-    assert add_hours_sql("created_at", "mysql", 8) == "DATE_ADD(`created_at`, INTERVAL 8 HOUR)"
-    assert add_hours_sql("created_at", "mysql", -8) == "DATE_SUB(`created_at`, INTERVAL 8 HOUR)"
-    assert "+ (8/24.0)" in add_hours_sql("created_at", "dm", 8)
-
-
 def test_alembic_revision_follows_f090_merge() -> None:
     assert revision == "f091_qa_expert_beijing_datetime"
     assert down_revision == "f090_merge_f083_f087_f089"
-
-
-def test_shift_table_datetimes_sqlite() -> None:
-    engine = create_engine("sqlite://")
-    with engine.begin() as conn:
-        conn.execute(text("CREATE TABLE qa_comment (id INTEGER PRIMARY KEY, created_at DATETIME)"))
-        conn.execute(text("INSERT INTO qa_comment (id, created_at) VALUES (1, '2026-08-18 03:00:00')"))
-        shift_table_datetimes(conn, "qa_comment", ("created_at",), hours=8)
-        value = conn.execute(text("SELECT created_at FROM qa_comment WHERE id = 1")).scalar()
-    assert "11:00:00" in str(value)
