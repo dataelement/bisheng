@@ -83,6 +83,27 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
     );
 }
 
+/**
+ * True when the item is awaiting an approval decision (待审核), regardless of the
+ * change kind:
+ *  - a staged upload still pending review (`pendingUploadApproval`),
+ *  - a formal file/folder locked by a pending rename / delete / move change
+ *    request (`fileChangeApproval.status === "pending"`),
+ *  - a synthesized pending-review row (`approvalStatus === "pending_review"`).
+ * Post-decision execution states (executing / approved / failed) are NOT 待审核.
+ * Used to client-side filter the list when the 待审核 status filter is active,
+ * since the backend `file_status` filter cannot express "awaiting review".
+ */
+export function isKnowledgeItemUnderReview(file: KnowledgeFile): boolean {
+    if (file.pendingUploadApproval) {
+        return file.pendingUploadApproval.approvalStatus === "pending";
+    }
+    if (file.approvalStatus === "pending_review") {
+        return true;
+    }
+    return file.fileChangeApproval?.status === "pending";
+}
+
 // ─── File upload constants ──────────────────────────────────────────
 export const AUDIO_FILE_EXTENSIONS = ["mp3", "wav", "m4a", "aac", "flac", "ogg"] as const;
 export const VIDEO_FILE_EXTENSIONS = ["mp4", "mov", "avi", "mkv", "webm"] as const;

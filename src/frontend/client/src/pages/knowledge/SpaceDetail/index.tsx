@@ -35,6 +35,7 @@ import {
     getFileInputAccept,
     getMaxFileSizeBytesForFile,
     getMaxFileSizeMBForFile,
+    isKnowledgeItemUnderReview,
     isKnowledgeItemUploading,
     PENDING_REVIEW_FILTER,
     resolveUploadSizeLimits,
@@ -217,6 +218,18 @@ export function KnowledgeSpaceContent({
         searchQuery.trim().length === 0
         && searchTagIds.length === 0
         && (statusFilter.length === 0 || statusFilter.includes(PENDING_REVIEW_FILTER));
+    // 待审核 is the only active filter. The backend cannot express "awaiting
+    // review" as a file_status (a rename/delete/move lock rides on top of the
+    // file's real status), so the formal list comes back unfiltered — restrict
+    // it client-side to items actually pending a decision (staged uploads plus
+    // rename/delete/move change locks). Mixed selections keep the backend result.
+    const pendingReviewOnly =
+        statusFilter.includes(PENDING_REVIEW_FILTER)
+        && toBackendStatusFilter(statusFilter).length === 0;
+    const visiblePendingUploads = pendingReviewOnly
+        ? pendingUploadFiles.filter(isKnowledgeItemUnderReview)
+        : pendingUploadFiles;
+    const formalFiles = pendingReviewOnly ? files.filter(isKnowledgeItemUnderReview) : files;
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         // In-progress folder upload: show its placeholder card (keyed to the space +
@@ -237,8 +250,8 @@ export function KnowledgeSpaceContent({
                 String(f.spaceId) === String(space.id) &&
                 String(f.parentId ?? "") === String(currentFolderId ?? ""),
         ),
-        ...(showPendingUploads ? pendingUploadFiles : []),
-        ...files
+        ...(showPendingUploads ? visiblePendingUploads : []),
+        ...formalFiles
     ];
 
     /**
