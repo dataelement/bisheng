@@ -1255,7 +1255,13 @@ function FileRow({
     const canEditTags = canEditEncoding && !isFolder && !isReadonlyDistributionEntry;
     const canRenameContent = canRename && !isReadonlyDistributionEntry;
     const canRetry = isAdmin && hasRetryOption && file.entryStatus !== "invalid";
-    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder && !isReadonlyDistributionEntry;
+    const showPublish = (
+        file.status === FileStatus.SUCCESS
+        && canPublish
+        && Boolean(onPublishFile)
+        && !isFolder
+        && !isReadonlyDistributionEntry
+    );
     const showShare = canShare && Boolean(onShareFile) && !isFolder && file.entryType !== "share";
     const showMoreMenu = showPublish || showShare || canEditTags || canRenameContent || canRetry || canDelete || canMove || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);

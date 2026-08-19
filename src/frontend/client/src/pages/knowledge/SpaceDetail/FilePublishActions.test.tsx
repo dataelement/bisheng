@@ -186,6 +186,41 @@ describe("普通知识空间文件发布入口", () => {
         expect(mockOnPublishFile).toHaveBeenCalledWith(baseFile);
     });
 
+    test("失败文件即使具有发布 capability 也不展示表格发布入口", () => {
+        const failedFile = {
+            ...baseFile,
+            status: FileStatus.FAILED,
+            capabilities: { canPublish: true },
+        } as KnowledgeFile;
+
+        render(
+            <FileTable
+                files={[failedFile]}
+                selectedFiles={new Set()}
+                handleSelectAll={jest.fn()}
+                handleSelectFile={jest.fn()}
+                isAdmin
+                currentUserRole={SpaceRole.ADMIN}
+                onDownload={jest.fn()}
+                onEditTags={jest.fn()}
+                onRename={jest.fn()}
+                onDelete={jest.fn()}
+                onRetry={jest.fn()}
+                onNavigateFolder={jest.fn()}
+                onPreview={jest.fn()}
+                onValidateName={() => null}
+                sortBy={SortType.UPDATE_TIME}
+                sortDirection={SortDirection.DESC}
+                onSort={jest.fn()}
+                publishEntryIds={new Set([failedFile.id])}
+                onPublishFile={mockOnPublishFile}
+            />
+        );
+
+        fireEvent.mouseEnter(screen.getByText(failedFile.name).closest("tr")!);
+        expect(screen.queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
+    });
+
     test("表格展示上传人和更新人", () => {
         const folder = {
             ...baseFile,
@@ -312,10 +347,10 @@ describe("普通知识空间文件发布入口", () => {
         expect(mockOnPublishFile).toHaveBeenCalledWith(baseFile);
     });
 
-    test("不可发布文件不展示发布入口", () => {
+    test("失败文件即使 canPublish 为真也不展示卡片发布入口", () => {
         render(
             <FileCard
-                file={{ ...baseFile, status: FileStatus.PROCESSING }}
+                file={{ ...baseFile, status: FileStatus.FAILED }}
                 userRole={SpaceRole.MEMBER}
                 isSelected={false}
                 onSelect={jest.fn()}
@@ -326,7 +361,7 @@ describe("普通知识空间文件发布入口", () => {
                 onRetry={jest.fn()}
                 onNavigateFolder={jest.fn()}
                 onPreview={jest.fn()}
-                canPublish={false}
+                canPublish
                 onPublishFile={mockOnPublishFile}
             />
         );

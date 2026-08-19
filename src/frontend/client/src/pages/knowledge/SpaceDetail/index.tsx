@@ -469,6 +469,9 @@ export function KnowledgeSpaceContent({
                 ) {
                     return false;
                 }
+                if (capability === "canPublish" && file.status !== FileStatus.SUCCESS) {
+                    return false;
+                }
                 if (file.type === FileType.FOLDER || !file.capabilities) {
                     return base.has(file.id);
                 }

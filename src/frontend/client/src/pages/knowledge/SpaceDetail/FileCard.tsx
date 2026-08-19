@@ -339,7 +339,13 @@ export function FileCard({
     const canEditTags = isAdmin && !isFolder && !isReadonlyDistributionEntry;
     const canRenameContent = canRename && !isReadonlyDistributionEntry;
     const canRetry = isAdmin && hasRetryOption && file.entryStatus !== "invalid";
-    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder && !isReadonlyDistributionEntry;
+    const showPublish = (
+        file.status === FileStatus.SUCCESS
+        && canPublish
+        && Boolean(onPublishFile)
+        && !isFolder
+        && !isReadonlyDistributionEntry
+    );
     const showShare = canShare && Boolean(onShareFile) && !isFolder && file.entryType !== "share";
     const showMoreMenu = showPublish || showShare || canEditTags || canRenameContent || canRetry || canDelete || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
