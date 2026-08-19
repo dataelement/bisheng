@@ -753,32 +753,47 @@ class FilelibSyncService:
             return str(identity.caller_department.name or "")
         raise FilelibSyncInvalidParamsError(msg="invalid folder dynamic source in token rule")
 
-    @staticmethod
-    def _target_space_kind_for_dynamic_source(dynamic_source: str) -> DepartmentSpaceTargetKind:
-        if dynamic_source == "responsible_person_id":
-            return DepartmentSpaceTargetKind.CLINIC
-        if dynamic_source == "department_id":
-            return DepartmentSpaceTargetKind.DEPARTMENT
-        raise FilelibSyncInvalidParamsError(msg="invalid dynamic source in token rule")
-
-    @staticmethod
-    def _target_department_ids(
-        department: Department,
-        kind: DepartmentSpaceTargetKind,
-    ) -> list[int]:
-        """Department libraries walk up the org tree; clinic spaces match self only."""
-        if kind == DepartmentSpaceTargetKind.CLINIC:
-            return [int(department.id)]
-        return FilelibSyncService._department_chain(department)
-
     async def _find_department_space(
         self,
         department: Department,
         *,
         dynamic_source: str = "department_id",
     ) -> Knowledge:
-        kind = self._target_space_kind_for_dynamic_source(dynamic_source)
-        department_ids = self._target_department_ids(department, kind)
+        if dynamic_source == "responsible_person_id":
+            return await self._find_responsible_person_target_space(department)
+        return await self._resolve_bound_space(
+            department,
+            department_ids=self._department_chain(department),
+            kind=DepartmentSpaceTargetKind.DEPARTMENT,
+        )
+
+    async def _find_responsible_person_target_space(self, department: Department) -> Knowledge:
+        """Clinic library on the responsible person's department, then nearest department library."""
+        clinic_space = await self._resolve_bound_space(
+            department,
+            department_ids=[int(department.id)],
+            kind=DepartmentSpaceTargetKind.CLINIC,
+            missing_is_error=False,
+            ambiguous_picks_first=True,
+        )
+        if clinic_space is not None:
+            return clinic_space
+        return await self._resolve_bound_space(
+            department,
+            department_ids=self._department_chain(department),
+            kind=DepartmentSpaceTargetKind.DEPARTMENT,
+        )
+
+    async def _resolve_bound_space(
+        self,
+        department: Department,
+        *,
+        department_ids: list[int],
+        kind: DepartmentSpaceTargetKind,
+        missing_is_error: bool = True,
+        ambiguous_picks_first: bool = False,
+    ) -> Knowledge | None:
+        space_id: int | None
         try:
             space_id = await DepartmentSpaceTargetResolver.resolve(
                 department_ids,
@@ -786,15 +801,38 @@ class FilelibSyncService:
                 allow_legacy=False,
             )
         except DepartmentKnowledgeSpaceAmbiguousError as exc:
-            space_label = "clinic" if kind == DepartmentSpaceTargetKind.CLINIC else "department"
-            raise FilelibSyncConflictError(
-                msg=f"multiple target {space_label} knowledge spaces are bound to the department",
-            ) from exc
-        if space_id is not None:
-            space = await self.repository.find_knowledge_by_id(space_id)
-            if space is not None:
-                return space
-        raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
+            if ambiguous_picks_first:
+                candidate_space_ids = sorted(
+                    int(one) for one in (exc.kwargs.get("candidate_space_ids") or [])
+                )
+                if not candidate_space_ids:
+                    if missing_is_error:
+                        raise FilelibSyncConflictError(
+                            msg="multiple target clinic knowledge spaces are bound to the department",
+                        ) from exc
+                    return None
+                space_id = candidate_space_ids[0]
+                logger.warning(
+                    "filelib sync picked first clinic knowledge space department_id={} space_id={} candidates={}",
+                    int(department.id),
+                    space_id,
+                    candidate_space_ids,
+                )
+            else:
+                space_label = "clinic" if kind == DepartmentSpaceTargetKind.CLINIC else "department"
+                raise FilelibSyncConflictError(
+                    msg=f"multiple target {space_label} knowledge spaces are bound to the department",
+                ) from exc
+        if space_id is None:
+            if missing_is_error:
+                raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
+            return None
+        space = await self.repository.find_knowledge_by_id(space_id)
+        if space is None:
+            if missing_is_error:
+                raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
+            return None
+        return space
 
     async def _find_nearest_department_space(self, department: Department) -> Knowledge:
         return await self._find_department_space(department, dynamic_source="department_id")
