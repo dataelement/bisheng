@@ -46,6 +46,7 @@ import {
 } from './citationUtils';
 import type { CitationReferencesDesktopPayload } from './CitationReferencesDrawer';
 import CitationDocumentPreviewDrawer, { type CitationDocumentPreviewState } from './CitationDocumentPreviewDrawer';
+import { isDeliverableLinkHref } from '~/components/Linsight/Artifacts/artifactUtils';
 import { CitationSourceIcon } from './CitationSourceIcon';
 import MermaidBlock from './Mermaid'
 import Echarts from './Echarts'
@@ -223,6 +224,59 @@ export const a: React.ElementType = memo(({ href, children }: TAnchorProps) => {
       {children}
     </a>
   );
+});
+
+type ArtifactLinkResolver = (href: string) => unknown | undefined;
+
+type ArtifactLinkAnchorProps = TAnchorProps & {
+  resolveArtifactLink: ArtifactLinkResolver;
+  onArtifactPreview: (file: unknown) => void;
+};
+
+/** Linsight deliverable preview: map markdown file links to workspace artifacts. */
+const ArtifactLinkAnchor = memo(({
+  href,
+  children,
+  resolveArtifactLink,
+  onArtifactPreview,
+}: ArtifactLinkAnchorProps) => {
+  const localize = useLocalize();
+  const matched = useMemo(() => resolveArtifactLink(href), [href, resolveArtifactLink]);
+  const isPhantom = !matched && typeof href === 'string' && isDeliverableLinkHref(href);
+  // Once per link rather than per render (the component is memo'd but still
+  // re-renders with its parent): support needs to tell "the model claimed a file
+  // it never wrote" from "our resolver failed to match a real one".
+  useEffect(() => {
+    if (isPhantom) {
+      console.warn('[Linsight] deliverable link matches no artifact of this run:', href);
+    }
+  }, [isPhantom, href]);
+
+  if (matched) {
+    return (
+      <button
+        type="button"
+        className="text-blue-600 underline transition-colors hover:text-blue-700"
+        onClick={() => onArtifactPreview(matched)}
+      >
+        {children}
+      </button>
+    );
+  }
+  // The model named a deliverable this run never produced. Don't navigate (the
+  // relative output/ path is not a route), and don't keep it blue either — a blue
+  // span that does nothing reads as a broken app rather than as a model that
+  // overstated itself. Muted + an explicit badge, the same treatment an
+  // unresolvable image ref gets below.
+  if (isPhantom) {
+    return (
+      <span className="text-gray-400" title={localize('com_linsight_deliverable_not_generated_hint')}>
+        {children}
+        <span className="ml-1 text-xs">{localize('com_linsight_deliverable_not_generated')}</span>
+      </span>
+    );
+  }
+  return React.createElement(a, { href, children });
 });
 
 type TParagraphProps = {
@@ -778,6 +832,8 @@ const Markdown = memo(({
   messageId,
   onOpenCitationPanel,
   resolveImageSrc,
+  resolveArtifactLink,
+  onArtifactPreview,
 }: TContentProps & {
   webContent: any;
   /**
@@ -787,6 +843,10 @@ const Markdown = memo(({
    * default <img> (chat bubbles — unchanged).
    */
   resolveImageSrc?: (src: string) => Promise<string | null>;
+  /** Map markdown file links (e.g. output/report.md) to a workspace artifact. */
+  resolveArtifactLink?: ArtifactLinkResolver;
+  /** Open the matched artifact in the Linsight preview panel. */
+  onArtifactPreview?: (file: unknown) => void;
 }) => {
   const LaTeXParsing = useRecoilValue<boolean>(store.LaTeXParsing);
   const isMobileLayout = usePrefersMobileLayout();
@@ -1054,7 +1114,17 @@ const Markdown = memo(({
           components={
             {
               code,
-              a,
+              a: resolveArtifactLink && onArtifactPreview
+                ? ({ href, children }: TAnchorProps) => (
+                    <ArtifactLinkAnchor
+                      href={href}
+                      resolveArtifactLink={resolveArtifactLink}
+                      onArtifactPreview={onArtifactPreview}
+                    >
+                      {children}
+                    </ArtifactLinkAnchor>
+                  )
+                : a,
               p,
               artifact: Artifact,
               // Resolve relative image refs (Linsight deliverable preview) only when

@@ -200,16 +200,15 @@ class FineGrainedPermissionService:
         for resource_type, resource_id in lineage:
             level_saw_matching_tuple = False
             level_allowed = False
-            for tuple_resource_type in await cls._tuple_resource_types(resource_type, str(resource_id)):
+            # hotfix/2.6.0-2 (cd2e78a7e) dropped the knowledge_library→knowledge_space
+            # legacy tuple alias, so a resource only ever carries tuples under its own
+            # type; the former per-alias loop collapses to this single read.
+            for tuple_resource_type in (resource_type,):
                 tuples = await fga.read_tuples(
                     object=f"{tuple_resource_type}:{resource_id}",
                     consistency="HIGHER_CONSISTENCY",
                 )
-                binding_resource_type = (
-                    resource_type
-                    if tuple_resource_type != "knowledge_space" or resource_type != "knowledge_library"
-                    else "knowledge_library"
-                )
+                binding_resource_type = resource_type
                 for tuple_data in tuples or []:
                     tuple_user = tuple_data.get("user")
                     relation = tuple_data.get("relation")
@@ -538,15 +537,6 @@ class FineGrainedPermissionService:
 
         return [(object_type, str(object_id))]
 
-    @staticmethod
-    async def _tuple_resource_types(resource_type: str, resource_id: str) -> list[str]:
-        resource_types = [resource_type]
-        if resource_type == "knowledge_library":
-            resource_types.extend(
-                await PermissionService._legacy_alias_object_types(resource_type, resource_id),
-            )
-        return list(dict.fromkeys(resource_types))
-
     @classmethod
     async def get_effective_permission_ids_async(
         cls,
@@ -595,49 +585,43 @@ class FineGrainedPermissionService:
                 for resource_type, resource_id in lineage:
                     level_permissions: set[str] = set()
                     level_saw_tuple = False
-                    for tuple_resource_type in await cls._tuple_resource_types(resource_type, str(resource_id)):
-                        tuple_object = f"{tuple_resource_type}:{resource_id}"
-                        if tuple_cache is not None and tuple_object in tuple_cache:
-                            tuples = tuple_cache[tuple_object]
-                        else:
-                            tuples = await fga.read_tuples(object=tuple_object)
-                            if tuple_cache is not None:
-                                tuple_cache[tuple_object] = tuples
-                        binding_resource_type = (
-                            resource_type
-                            if tuple_resource_type != "knowledge_space" or resource_type != "knowledge_library"
-                            else "knowledge_library"
+                    tuple_object = f"{resource_type}:{resource_id}"
+                    if tuple_cache is not None and tuple_object in tuple_cache:
+                        tuples = tuple_cache[tuple_object]
+                    else:
+                        tuples = await fga.read_tuples(object=tuple_object)
+                        if tuple_cache is not None:
+                            tuple_cache[tuple_object] = tuples
+                    for tuple_data in tuples:
+                        tuple_user = tuple_data.get("user")
+                        relation = tuple_data.get("relation")
+                        if tuple_user not in user_subject_strings:
+                            continue
+                        binding = await cls._resolve_binding_for_tuple(
+                            resource_type,
+                            resource_id,
+                            tuple_user,
+                            relation,
+                            bindings,
+                            binding_department_paths,
+                            tuple_department_paths,
+                            binding_index=binding_index,
                         )
-                        for tuple_data in tuples:
-                            tuple_user = tuple_data.get("user")
-                            relation = tuple_data.get("relation")
-                            if tuple_user not in user_subject_strings:
-                                continue
-                            binding = await cls._resolve_binding_for_tuple(
-                                binding_resource_type,
-                                resource_id,
-                                tuple_user,
-                                relation,
-                                bindings,
-                                binding_department_paths,
-                                tuple_department_paths,
-                                binding_index=binding_index,
-                            )
-                            if cls._is_legacy_subscription_viewer_tuple(
-                                tuple_resource_type,
-                                tuple_user,
-                                relation,
-                                binding,
-                            ):
-                                saw_legacy_subscription_viewer_tuple = True
-                                continue
-                            model = models.get(binding.get("model_id")) if binding and binding.get("model_id") else None
-                            if binding and binding.get("model_id"):
-                                saw_bound_model_tuple = True
-                            level_saw_tuple = True
-                            level_permissions.update(
-                                cls._permission_ids_for_relation(resource_type, relation, model),
-                            )
+                        if cls._is_legacy_subscription_viewer_tuple(
+                            resource_type,
+                            tuple_user,
+                            relation,
+                            binding,
+                        ):
+                            saw_legacy_subscription_viewer_tuple = True
+                            continue
+                        model = models.get(binding.get("model_id")) if binding and binding.get("model_id") else None
+                        if binding and binding.get("model_id"):
+                            saw_bound_model_tuple = True
+                        level_saw_tuple = True
+                        level_permissions.update(
+                            cls._permission_ids_for_relation(resource_type, relation, model),
+                        )
                     if nearest_binding_wins and level_saw_tuple:
                         matched_lineage_binding = True
                         effective_permissions.update(level_permissions)

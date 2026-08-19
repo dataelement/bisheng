@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable, Optional
 
 from sqlalchemy import text as sa_text
 from sqlalchemy.sql import bindparam
@@ -24,34 +24,26 @@ logger = logging.getLogger(__name__)
 
 
 ACCESS_TYPE_TO_FGA: dict[int, tuple[str, str]] = {
-    1: ('knowledge_library', 'viewer'),
-    3: ('knowledge_library', 'editor'),
-    5: ('assistant', 'viewer'),
-    6: ('assistant', 'editor'),
-    7: ('tool', 'viewer'),
-    8: ('tool', 'editor'),
-    9: ('workflow', 'viewer'),
-    10: ('workflow', 'editor'),
-    11: ('dashboard', 'viewer'),
-    12: ('dashboard', 'editor'),
+    1: ("knowledge_library", "viewer"),
+    3: ("knowledge_library", "editor"),
+    5: ("assistant", "viewer"),
+    6: ("assistant", "editor"),
+    7: ("tool", "viewer"),
+    8: ("tool", "editor"),
+    9: ("workflow", "viewer"),
+    10: ("workflow", "editor"),
+    11: ("dashboard", "viewer"),
+    12: ("dashboard", "editor"),
 }
 
 RELATION_PRIORITY = {
-    'viewer': 1,
-    'editor': 2,
+    "viewer": 1,
+    "editor": 2,
 }
 
-ROLE_ACCESS_RELATIONS = frozenset({'viewer', 'editor'})
-ROLE_ACCESS_OBJECT_TYPES = frozenset(
-    candidate_type
-    for object_type, _relation in ACCESS_TYPE_TO_FGA.values()
-    for candidate_type in (
-        (object_type, 'knowledge_space')
-        if object_type == 'knowledge_library'
-        else (object_type,)
-    )
-)
-_RELATION_BINDINGS_CONFIG_KEY = 'permission_relation_model_bindings_v1'
+ROLE_ACCESS_RELATIONS = frozenset({"viewer", "editor"})
+ROLE_ACCESS_OBJECT_TYPES = frozenset(object_type for object_type, _relation in ACCESS_TYPE_TO_FGA.values())
+_RELATION_BINDINGS_CONFIG_KEY = "permission_relation_model_bindings_v1"
 
 
 @dataclass(frozen=True)
@@ -62,11 +54,11 @@ class RoleAccessSignature:
     resource_id: str
 
     @property
-    def user_id(self) -> Optional[int]:
-        if not self.user.startswith('user:'):
+    def user_id(self) -> int | None:
+        if not self.user.startswith("user:"):
             return None
         try:
-            return int(self.user.split(':', 1)[1])
+            return int(self.user.split(":", 1)[1])
         except Exception:
             return None
 
@@ -75,7 +67,7 @@ class RoleAccessSignature:
             action=action,
             user=self.user,
             relation=self.relation,
-            object=f'{self.object_type}:{self.resource_id}',
+            object=f"{self.object_type}:{self.resource_id}",
         )
 
 
@@ -94,15 +86,18 @@ class LegacyRBACSyncService:
         raw_new_role_ids = {int(role_id) for role_id in (new_role_ids or []) if role_id is not None}
 
         if (AdminRole in raw_old_role_ids) != (AdminRole in raw_new_role_ids):
-            action = 'write' if AdminRole in raw_new_role_ids else 'delete'
-            await cls._write_operations([
-                TupleOperation(
-                    action=action,
-                    user=f'user:{user_id}',
-                    relation='super_admin',
-                    object='system:global',
-                ),
-            ], [user_id])
+            action = "write" if AdminRole in raw_new_role_ids else "delete"
+            await cls._write_operations(
+                [
+                    TupleOperation(
+                        action=action,
+                        user=f"user:{user_id}",
+                        relation="super_admin",
+                        object="system:global",
+                    ),
+                ],
+                [user_id],
+            )
 
         old_role_ids = cls._clean_role_ids(raw_old_role_ids)
         new_role_ids = cls._clean_role_ids(raw_new_role_ids)
@@ -126,19 +121,23 @@ class LegacyRBACSyncService:
 
         operations: list[TupleOperation] = []
         for group_id in member_group_ids or []:
-            operations.append(TupleOperation(
-                action='write',
-                user=f'user:{user_id}',
-                relation='member',
-                object=f'user_group:{group_id}',
-            ))
+            operations.append(
+                TupleOperation(
+                    action="write",
+                    user=f"user:{user_id}",
+                    relation="member",
+                    object=f"user_group:{group_id}",
+                )
+            )
         for group_id in admin_group_ids or []:
-            operations.append(TupleOperation(
-                action='write',
-                user=f'user:{user_id}',
-                relation='admin',
-                object=f'user_group:{group_id}',
-            ))
+            operations.append(
+                TupleOperation(
+                    action="write",
+                    user=f"user:{user_id}",
+                    relation="admin",
+                    object=f"user_group:{group_id}",
+                )
+            )
         await cls._write_operations(operations, [user_id])
 
     @classmethod
@@ -202,7 +201,7 @@ class LegacyRBACSyncService:
         actual = await cls._actual_user_role_access_signatures(user_id)
 
         if actual is None:
-            await cls._write_operations([sig.to_operation('write') for sig in desired], [user_id])
+            await cls._write_operations([sig.to_operation("write") for sig in desired], [user_id])
             return
 
         await cls._apply_signature_diff(actual, desired)
@@ -214,24 +213,26 @@ class LegacyRBACSyncService:
 
         fga = PermissionService._get_fga()
         if fga is None:
-            logger.warning('FGAClient not available for user_group subject cleanup: %s', group_id)
+            logger.warning("FGAClient not available for user_group subject cleanup: %s", group_id)
             return
 
         operations: list[TupleOperation] = []
-        for relation in ('member', 'admin'):
-            user = f'user_group:{group_id}#{relation}'
+        for relation in ("member", "admin"):
+            user = f"user_group:{group_id}#{relation}"
             try:
                 tuples = await fga.read_tuples(user=user)
             except Exception as exc:
-                logger.warning('Failed to read tuples for %s: %s', user, exc)
+                logger.warning("Failed to read tuples for %s: %s", user, exc)
                 continue
             for t in tuples or []:
-                operations.append(TupleOperation(
-                    action='delete',
-                    user=t.get('user', ''),
-                    relation=t.get('relation', ''),
-                    object=t.get('object', ''),
-                ))
+                operations.append(
+                    TupleOperation(
+                        action="delete",
+                        user=t.get("user", ""),
+                        relation=t.get("relation", ""),
+                        object=t.get("object", ""),
+                    )
+                )
         await cls._write_operations(operations, [])
 
     @classmethod
@@ -245,18 +246,8 @@ class LegacyRBACSyncService:
         protected = await cls._resource_permission_user_binding_set(stale) if stale else set()
         to_delete = stale - protected
 
-        operations = [
-            sig.to_operation('delete')
-            for sig in to_delete
-        ] + [
-            sig.to_operation('write')
-            for sig in to_write
-        ]
-        affected = {
-            uid
-            for sig in (to_delete | to_write)
-            if (uid := sig.user_id) is not None
-        }
+        operations = [sig.to_operation("delete") for sig in to_delete] + [sig.to_operation("write") for sig in to_write]
+        affected = {uid for sig in (to_delete | to_write) if (uid := sig.user_id) is not None}
         await cls._write_operations(operations, affected)
 
     @classmethod
@@ -280,8 +271,9 @@ class LegacyRBACSyncService:
             await PermissionCache.invalidate_user(uid)
             try:
                 from bisheng.core.cache.redis_manager import get_redis_client
+
                 redis = await get_redis_client()
-                await redis.adelete(f'user:{uid}:is_super')
+                await redis.adelete(f"user:{uid}:is_super")
             except Exception:
                 pass
 
@@ -290,7 +282,7 @@ class LegacyRBACSyncService:
         cls,
         user_id: int,
         role_ids: Iterable[int],
-        override: Optional[tuple[int, int, set[str]]] = None,
+        override: tuple[int, int, set[str]] | None = None,
     ) -> set[RoleAccessSignature]:
         role_ids = cls._clean_role_ids(role_ids)
         if not role_ids:
@@ -335,7 +327,7 @@ class LegacyRBACSyncService:
         object_type, relation = mapping
         return [
             RoleAccessSignature(
-                user=f'user:{user_id}',
+                user=f"user:{user_id}",
                 relation=relation,
                 object_type=fga_type,
                 resource_id=str(resource_id),
@@ -361,19 +353,11 @@ class LegacyRBACSyncService:
 
     @staticmethod
     def _fga_object_types(object_type: str) -> tuple[str, ...]:
-        if object_type == 'knowledge_library':
-            return 'knowledge_library', 'knowledge_space'
-        if object_type == 'knowledge_space':
-            return 'knowledge_space', 'knowledge_library'
         return (object_type,)
 
     @staticmethod
     def _clean_role_ids(role_ids: Iterable[int]) -> set[int]:
-        return {
-            int(role_id)
-            for role_id in (role_ids or [])
-            if role_id is not None and int(role_id) != AdminRole
-        }
+        return {int(role_id) for role_id in (role_ids or []) if role_id is not None and int(role_id) != AdminRole}
 
     @classmethod
     async def _role_access_rows(
@@ -383,76 +367,83 @@ class LegacyRBACSyncService:
         if not role_ids:
             return []
         statement = (
-            sa_text('SELECT role_id, third_id, type FROM roleaccess '
-                    'WHERE role_id IN :role_ids AND type IN :access_types')
-            .bindparams(bindparam('role_ids', expanding=True))
-            .bindparams(bindparam('access_types', expanding=True))
+            sa_text(
+                "SELECT role_id, third_id, type FROM roleaccess WHERE role_id IN :role_ids AND type IN :access_types"
+            )
+            .bindparams(bindparam("role_ids", expanding=True))
+            .bindparams(bindparam("access_types", expanding=True))
         )
         async with get_async_db_session() as session:
             with bypass_tenant_filter():
-                rows = (await session.execute(
-                    statement,
-                    {
-                        'role_ids': sorted(role_ids),
-                        'access_types': sorted(ACCESS_TYPE_TO_FGA.keys()),
-                    },
-                )).all()
+                rows = (
+                    await session.execute(
+                        statement,
+                        {
+                            "role_ids": sorted(role_ids),
+                            "access_types": sorted(ACCESS_TYPE_TO_FGA.keys()),
+                        },
+                    )
+                ).all()
         return [(int(row[0]), str(row[1]), int(row[2])) for row in rows]
 
     @classmethod
     async def _role_ids_for_user(cls, user_id: int) -> set[int]:
-        statement = sa_text('SELECT role_id FROM userrole WHERE user_id = :user_id AND role_id != :admin_rid')
+        statement = sa_text("SELECT role_id FROM userrole WHERE user_id = :user_id AND role_id != :admin_rid")
         async with get_async_db_session() as session:
             with bypass_tenant_filter():
-                rows = (await session.execute(
-                    statement,
-                    {'user_id': int(user_id), 'admin_rid': AdminRole},
-                )).all()
+                rows = (
+                    await session.execute(
+                        statement,
+                        {"user_id": int(user_id), "admin_rid": AdminRole},
+                    )
+                ).all()
         return {int(row[0]) for row in rows}
 
     @classmethod
     async def _user_ids_for_role(cls, role_id: int) -> list[int]:
-        statement = sa_text('SELECT DISTINCT user_id FROM userrole WHERE role_id = :role_id')
+        statement = sa_text("SELECT DISTINCT user_id FROM userrole WHERE role_id = :role_id")
         async with get_async_db_session() as session:
             with bypass_tenant_filter():
-                rows = (await session.execute(statement, {'role_id': int(role_id)})).all()
+                rows = (await session.execute(statement, {"role_id": int(role_id)})).all()
         return [int(row[0]) for row in rows]
 
     @classmethod
     async def _actual_user_role_access_signatures(
         cls,
         user_id: int,
-    ) -> Optional[set[RoleAccessSignature]]:
+    ) -> set[RoleAccessSignature] | None:
         from bisheng.permission.domain.services.permission_service import PermissionService
 
         fga = PermissionService._get_fga()
         if fga is None:
             return None
         try:
-            tuples = await fga.read_tuples(user=f'user:{user_id}')
+            tuples = await fga.read_tuples(user=f"user:{user_id}")
         except Exception as exc:
-            logger.warning('Failed to read FGA tuples for user %s: %s', user_id, exc)
+            logger.warning("Failed to read FGA tuples for user %s: %s", user_id, exc)
             return None
 
         actual: set[RoleAccessSignature] = set()
         for t in tuples or []:
-            user = t.get('user', '')
-            relation = t.get('relation', '')
-            obj = t.get('object', '')
+            user = t.get("user", "")
+            relation = t.get("relation", "")
+            obj = t.get("object", "")
             if relation not in ROLE_ACCESS_RELATIONS:
                 continue
-            parts = obj.split(':', 1)
+            parts = obj.split(":", 1)
             if len(parts) != 2:
                 continue
             object_type, resource_id = parts
             if object_type not in ROLE_ACCESS_OBJECT_TYPES:
                 continue
-            actual.add(RoleAccessSignature(
-                user=user,
-                relation=relation,
-                object_type=object_type,
-                resource_id=resource_id,
-            ))
+            actual.add(
+                RoleAccessSignature(
+                    user=user,
+                    relation=relation,
+                    object_type=object_type,
+                    resource_id=resource_id,
+                )
+            )
         return actual
 
     @classmethod
@@ -481,12 +472,12 @@ class LegacyRBACSyncService:
         from bisheng.common.models.config import ConfigDao
 
         row = await ConfigDao.aget_config_by_key(_RELATION_BINDINGS_CONFIG_KEY)
-        if not row or not (row.value or '').strip():
+        if not row or not (row.value or "").strip():
             return []
         try:
-            bindings = json.loads(row.value or '[]')
+            bindings = json.loads(row.value or "[]")
         except Exception:
-            logger.warning('Failed to parse resource permission bindings config')
+            logger.warning("Failed to parse resource permission bindings config")
             return []
         if not isinstance(bindings, list):
             return []
@@ -501,10 +492,10 @@ class LegacyRBACSyncService:
     ) -> bool:
         check_types = set(cls._fga_object_types(sig.object_type))
         return any(
-            binding.get('resource_type') in check_types
-            and str(binding.get('resource_id')) == sig.resource_id
-            and binding.get('subject_type') == 'user'
-            and str(binding.get('subject_id')) == str(user_id)
-            and binding.get('relation') == sig.relation
+            binding.get("resource_type") in check_types
+            and str(binding.get("resource_id")) == sig.resource_id
+            and binding.get("subject_type") == "user"
+            and str(binding.get("subject_id")) == str(user_id)
+            and binding.get("relation") == sig.relation
             for binding in bindings
         )

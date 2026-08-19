@@ -136,6 +136,10 @@ export interface ChatMessage {
     /** raw upstream text (provider message, parser error, offending filename) kept
         behind the card's "view details" disclosure. */
     errorDetail?: string;
+    /** Human-readable failure copy for an errored assistant row. Kept apart from
+        `text` so a stream that failed *after* emitting an answer keeps that answer
+        renderable — overwriting `text` would destroy it. */
+    errorText?: string;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;

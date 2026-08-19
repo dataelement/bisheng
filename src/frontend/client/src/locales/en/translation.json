@@ -462,9 +462,12 @@
   "com_linsight_queue_position": "Position {{0}}",
   "com_linsight_queue_cancel": "Cancel queueing",
   "com_linsight_report_ready": "Here is your report",
+  "com_linsight_files_ready_prefix": "Here are your files, starting with",
+  "com_linsight_files_ready_suffix": "— {{0}} in total",
   "com_linsight_output_files": "Output files {{0}}",
   "com_linsight_save_as": "Save as",
   "com_linsight_preview": "Preview",
+  "com_linsight_opens_in_new_tab": "Opens in a new tab",
   "com_linsight_workspace": "Workspace",
   "com_linsight_workspace_empty": "No output files yet",
   "com_linsight_workspace_uploaded": "Uploaded files",
@@ -475,6 +478,8 @@
   "com_linsight_exit_fullscreen": "Exit fullscreen",
   "com_linsight_download_to_view": "Download to view",
   "com_linsight_preview_unsupported": "This file type cannot be previewed online",
+  "com_linsight_deliverable_not_generated": "(not generated)",
+  "com_linsight_deliverable_not_generated_hint": "The model mentioned this file but never wrote it, so there is nothing to open.",
   "com_linsight_preview_load_failed": "Failed to load the file",
   "com_linsight_download_failed": "Download failed, please try again later",
   "com_linsight_exporting": "Exporting, please wait…",
@@ -2149,6 +2154,10 @@
     "gate_blocked_action": "Sign in again"
   },
   "workstation": {
+    "toc": {
+      "label": "Contents",
+      "open": "Show contents"
+    },
     "messageExport": {
       "entry": "Export",
       "exportAsWord": "Export as Word",
@@ -2165,6 +2174,11 @@
       "batchLimit": "You can select up to 200 messages at a time",
       "importSuccess": "Imported successfully, file is being parsed",
       "renderFailed": "Failed to generate file, please try again"
+    },
+    "chat": {
+      "answer_interrupted": "This answer was interrupted while being generated; the content above may be incomplete.",
+      "answer_failed": "Something went wrong, please try again",
+      "connection_lost": "Connection lost, please try again"
     }
   },
   "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)",

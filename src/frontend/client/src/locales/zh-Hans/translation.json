@@ -450,9 +450,12 @@
   "com_linsight_queue_position": "第 {{0}} 位",
   "com_linsight_queue_cancel": "取消排队",
   "com_linsight_report_ready": "已为您整理好",
+  "com_linsight_files_ready_prefix": "已为您整理好",
+  "com_linsight_files_ready_suffix": "等 {{0}} 个文件",
   "com_linsight_output_files": "已整理输出文件 {{0}}",
   "com_linsight_save_as": "另存为",
   "com_linsight_preview": "预览",
+  "com_linsight_opens_in_new_tab": "在新标签页打开",
   "com_linsight_workspace": "工作区",
   "com_linsight_workspace_empty": "暂无产物文件",
   "com_linsight_workspace_uploaded": "上传的文件",
@@ -463,6 +466,8 @@
   "com_linsight_exit_fullscreen": "退出全屏",
   "com_linsight_download_to_view": "下载查看",
   "com_linsight_preview_unsupported": "该文件类型暂不支持在线预览",
+  "com_linsight_deliverable_not_generated": "（未生成）",
+  "com_linsight_deliverable_not_generated_hint": "模型提到了这个文件，但并未真正生成，因此无法预览或下载。",
   "com_linsight_preview_load_failed": "文件加载失败",
   "com_linsight_download_failed": "下载失败，请稍后重试",
   "com_linsight_exporting": "正在导出，请稍候…",
@@ -2078,6 +2083,10 @@
     "gate_blocked_action": "重新登录"
   },
   "workstation": {
+    "toc": {
+      "label": "目录",
+      "open": "展开目录"
+    },
     "messageExport": {
       "entry": "导出",
       "exportAsWord": "导出为 Word",
@@ -2094,6 +2103,11 @@
       "batchLimit": "单次最多选中 200 条消息",
       "importSuccess": "导入成功，文件正在解析中",
       "renderFailed": "文件生成失败，请稍后重试"
+    },
+    "chat": {
+      "answer_interrupted": "本次回答在生成过程中中断，以上内容可能不完整。",
+      "answer_failed": "发生错误，请重试",
+      "connection_lost": "网络连接中断，请重试"
     }
   },
   "com_linsight_legacy_sop": "历史 SOP 文档（旧版会话）",

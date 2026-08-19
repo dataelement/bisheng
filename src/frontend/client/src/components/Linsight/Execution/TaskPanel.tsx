@@ -30,15 +30,24 @@ export function TaskPanel({
 
     if (!tasks.length) return null;
 
-    const doneCount = tasks.filter((t) => isTaskDone(t.status)).length;
-    const allDone = completed || doneCount === tasks.length;
+    // On a NORMALLY finished run, `terminated` rows are todos the model pruned from
+    // its plan (or leftovers the backend swept at completion). They were never
+    // delivered, so counting them inflated the denominator — a finished run showed
+    // "4/7" with three grey rings that would never fill. On a STOPPED or FAILED run
+    // every unreached row is `terminated` too; there the list must stay intact, so
+    // those paths render byte-identically to before.
+    const visible = completed && !terminated ? tasks.filter((t) => t.status !== 'terminated') : tasks;
+    if (!visible.length) return null;
+
+    const doneCount = visible.filter((t) => isTaskDone(t.status)).length;
+    const allDone = completed || doneCount === visible.length;
 
     // Collapsed header surfaces the currently-running task name inline (Figma
     // 12221-40080): `≣ 任务  <running task>  N/M  ⌃`. While expanded the list
     // below already shows every task, so the header omits the inline name.
     // A terminated run is no longer "running", so it shows neither the spinner
     // nor the shimmering task name.
-    const runningTask = terminated ? undefined : tasks.find((t) => isTaskRunning(t.status));
+    const runningTask = terminated ? undefined : visible.find((t) => isTaskRunning(t.status));
     const runningName = runningTask?.name || runningTask?.task_data?.name || '';
     const showRunningInline = !open && !allDone && !!runningName;
 
@@ -81,7 +90,7 @@ export function TaskPanel({
                     className={cn('shrink-0 text-[14px] tabular-nums', showRunningInline ? 'ml-2' : 'ml-1')}
                     style={{ color: MUTED }}
                 >
-                    {doneCount}/{tasks.length}
+                    {doneCount}/{visible.length}
                 </span>
                 <span
                     className={cn('shrink-0', showRunningInline ? 'ml-2' : 'ml-auto')}
@@ -107,7 +116,7 @@ export function TaskPanel({
             >
                 <div className="overflow-hidden">
                     <ul className="max-h-60 overflow-y-auto px-4 pb-2 scrollbar-os">
-                        {tasks.map((task) => {
+                        {visible.map((task) => {
                             const done = isTaskDone(task.status);
                             const running = isTaskRunning(task.status);
                             return (

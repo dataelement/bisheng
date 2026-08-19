@@ -364,6 +364,10 @@ class KnowledgeDao(KnowledgeBase):
             # Cursor mode: append keyset WHERE and LIMIT only.
             statement = cls._apply_keyset_where(statement, sort_by, cursor)
             statement = statement.limit(limit)
+        elif not page and limit:
+            # The first cursor page uses page=0 and cursor=None.  Keep it
+            # bounded instead of accidentally returning every candidate row.
+            statement = statement.limit(limit)
 
         order_clauses = []
         # Pinning is a first-page-only UX; suppress it when continuing a cursor.
@@ -579,6 +583,8 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.limit(limit)
         elif page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+        elif limit:
+            statement = statement.limit(limit)
 
         order_clauses = []
         if preferred_ids and cursor is None:

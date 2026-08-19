@@ -149,7 +149,6 @@ async def test_permission_service_dispatches_after_authoritative_fga_write():
     batch_write = AsyncMock(side_effect=lambda *_args, **_kwargs: events.append("fga"))
     reconcile = AsyncMock(side_effect=lambda **_kwargs: events.append("dispatch"))
     with (
-        patch.object(PermissionService, "_legacy_alias_object_types", new=AsyncMock(return_value=[])),
         patch.object(PermissionService, "_expand_subject", new=AsyncMock(return_value=["user:2"])),
         patch.object(PermissionService, "_affected_user_ids_for_subject", new=AsyncMock(return_value=set())),
         patch.object(PermissionService, "batch_write_tuples", new=batch_write),
@@ -183,7 +182,6 @@ async def test_permission_service_fga_failure_does_not_dispatch():
     grant = AuthorizeGrantItem(subject_type="user", subject_id=2, relation="manager")
     reconcile = AsyncMock()
     with (
-        patch.object(PermissionService, "_legacy_alias_object_types", new=AsyncMock(return_value=[])),
         patch.object(PermissionService, "_expand_subject", new=AsyncMock(return_value=["user:2"])),
         patch.object(PermissionService, "_affected_user_ids_for_subject", new=AsyncMock(return_value=set())),
         patch.object(
@@ -220,7 +218,6 @@ async def test_permission_service_propagates_reconcile_failure_after_fga_commit(
         raise reconcile_failure
 
     with (
-        patch.object(PermissionService, "_legacy_alias_object_types", new=AsyncMock(return_value=[])),
         patch.object(PermissionService, "_expand_subject", new=AsyncMock(return_value=["user:2"])),
         patch.object(PermissionService, "_affected_user_ids_for_subject", new=AsyncMock(return_value=set())),
         patch.object(
@@ -313,7 +310,6 @@ async def test_generic_binding_failure_still_dispatches_committed_fga_change():
     )
     with (
         patch.object(PermissionService, "get_resource_permissions", new=AsyncMock(return_value=[])),
-        patch.object(PermissionService, "_legacy_alias_object_types", new=AsyncMock(return_value=[])),
         patch.object(PermissionService, "_expand_subject", new=AsyncMock(return_value=["department:3#member"])),
         patch.object(PermissionService, "_affected_user_ids_for_subject", new=AsyncMock(return_value=set())),
         patch.object(PermissionService, "batch_write_tuples", new=AsyncMock()),

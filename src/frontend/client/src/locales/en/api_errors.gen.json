@@ -158,6 +158,7 @@
   "11056": "Invalid GitHub URL. Expected format: https://github.com/OWNER/REPO/tree/BRANCH/PATH",
   "11057": "Failed to fetch the skill from GitHub: the repo, branch, or path was not found, or a network error occurred. Please check and try again.",
   "11058": "GitHub API rate limit exceeded. Please try again later.",
+  "11059": "Skill bundle contents exceed the 100MB unpacked size limit. Trim it and upload again.",
   "11060": "Manual search failed. Both vector and keyword search unavailable",
   "11070": "Manual search failed",
   "11080": "Failed to initialize workspace tools",

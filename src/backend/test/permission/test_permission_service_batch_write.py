@@ -181,7 +181,6 @@ async def test_authorize_forwards_caller_recovery_owner():
     grant = SimpleNamespace(subject_type="user", subject_id=400, include_children=False, relation="owner")
 
     with (
-        patch.object(PermissionService, "_legacy_alias_object_types", AsyncMock(return_value=[])),
         patch.object(PermissionService, "_expand_subject", AsyncMock(return_value=["user:400"])),
         patch.object(PermissionService, "_affected_user_ids_for_subject", AsyncMock(return_value=set())),
         patch.object(PermissionService, "batch_write_tuples", AsyncMock()) as batch_write,

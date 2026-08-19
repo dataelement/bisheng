@@ -652,6 +652,10 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         }
                     }
                 },
+                // The failure copy lands in `errorText`, never in `text`: the backend
+                // emits the SSE error event *before* it finishes the turn, so a stream
+                // that already produced an answer would lose it if we overwrote `text`
+                // (and the bubble would then render that answer as raw error text).
                 onError: (error, errorCode, meta) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -659,7 +663,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         if (lastMsg && !lastMsg.isCreatedByUser) {
                             msgs[msgs.length - 1] = {
                                 ...lastMsg,
-                                text: error || "发生错误，请重试",
+                                errorText: error || localize("workstation.chat.answer_failed"),
                                 error: true,
                                 errorCode,
                                 errorType: meta?.errorType,
@@ -822,6 +826,8 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         setConversationId(data.conversation.conversationId);
                     }
                 },
+                // Same as the send path: failure copy goes to `errorText` so a
+                // partially-streamed answer survives the error.
                 onError: (error, errorCode, meta) => {
                     setMessages((prev) => {
                         const msgs = [...prev];
@@ -831,7 +837,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
                         if (idx >= 0) {
                             msgs[idx] = {
                                 ...msgs[idx],
-                                text: error || "发生错误，请重试",
+                                errorText: error || localize("workstation.chat.answer_failed"),
                                 error: true,
                                 errorCode,
                                 errorType: meta?.errorType,
@@ -850,7 +856,7 @@ export default function useAiChat(initialConversationId: string = "new", isLings
             setIsStreaming(true);
             setSseSubmission(submission);
         },
-        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools]
+        [conversationId, isStreaming, chatModel, selectedOrgKbs, searchType, selectedAgentTools, localize]
     );
 
     return {

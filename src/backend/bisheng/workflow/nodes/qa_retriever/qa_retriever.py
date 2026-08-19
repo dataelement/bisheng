@@ -3,6 +3,7 @@ from typing import Any
 
 from bisheng.core.vectorstore.multi_retriever import MultiRetriever
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+from bisheng.workflow.common.retrieval_question import normalize_retrieval_question
 from bisheng.workflow.nodes.base import BaseNode
 from bisheng_langchain.chains.retrieval.retrieval_chain import RetrievalChain
 
@@ -46,8 +47,13 @@ class QARetrieverNode(BaseNode):
 
     def _run(self, unique_id: str):
         self.init_user_info()
+        question = normalize_retrieval_question(self.get_other_node_variable(self._user_question))
+        if not question:
+            self.graph_state.set_variable(self.id, '$retrieved_result$', None)
+            return {
+                'retrieved_result': ''
+            }
         self._init_retriever()
-        question = self.get_other_node_variable(self._user_question)
         result = self._retriever.invoke({'query': question})
         # qa have a result; turn out to bedocument
         if result['result']:

@@ -273,3 +273,109 @@ def test_classify_for_event_accepts_bare_string():
     assert result.error_type == ErrorType.CONTENT_FILTER.value
     assert result.error_code == 11090
     assert result.detail.startswith("Task execution failed")
+
+
+# --------------------------------------------------------------------------- #
+# Transient upstream-fetch failures wrapped in a 400
+#
+# Session 649ba617 (180 POC, 2026-08-09): a deck screenshot handed to the model
+# came back as a 400 whose body said the PROVIDER's own fetch of the staged image
+# was reset mid-flight — both endpoints inside the vendor's network. Plain 400s
+# DEGRADE, and DEGRADABLE on the main graph re-raises, so one transport blip
+# killed a 21-minute run with zero retries.
+# --------------------------------------------------------------------------- #
+
+_DOWNLOAD_RESET_BODY = {
+    "message": (
+        '{"error":{"code":"DOWNLOAD_FAILED","message":"failed to download image, err: '
+        'Get \\"http://ds-restful-api-bj-prod.oss-cn-beijing.aliyuncs.com/restful/data-uri/null/'
+        'd7f119b9/f7f86073?Expires=1786436767\\": read tcp 10.0.2.60:46976->10.86.10.104:6000: '
+        'read: connection reset by peer"}}'
+    ),
+    "type": "UploadFailed",
+    "code": "UploadFailed",
+}
+
+
+def test_provider_upstream_reset_is_retryable():
+    """The exact production payload."""
+    exc = make_exc(
+        openai.BadRequestError,
+        message=_DOWNLOAD_RESET_BODY["message"],
+        code="UploadFailed",
+        body=_DOWNLOAD_RESET_BODY,
+        status_code=400,
+    )
+    assert classify_behavior(exc) is Behavior.RETRYABLE
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "failed to download image, err: read: connection reset by peer",
+        "upstream fetch: write: broken pipe",
+        "dial tcp 10.0.0.1:6000: i/o timeout",
+        "unexpected EOF while reading the staged object",
+        "dial tcp 10.0.0.1:6000: connect: connection refused",
+        "no route to host",
+    ],
+)
+def test_transport_phrases_are_retryable(message):
+    exc = make_exc(openai.BadRequestError, message=message, status_code=400)
+    assert classify_behavior(exc) is Behavior.RETRYABLE
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "failed to download image, err: 404 Not Found",
+        "failed to download image: unsupported image format",
+        "invalid_request_error: image url is not accessible",
+        "malformed request",
+    ],
+)
+def test_permanent_fetch_failures_still_degrade(message):
+    """Transport-only on purpose: a 404 / bad URL / bad format will fail every
+    retry, so it must keep degrading instead of burning three backoffs."""
+    exc = make_exc(openai.BadRequestError, message=message, status_code=400)
+    assert classify_behavior(exc) is Behavior.DEGRADABLE
+
+
+def test_fail_fast_still_wins_over_a_transport_phrase():
+    """Ordering guard: the FAIL_FAST branches run first, so an arrears/auth error
+    that happens to mention a reset connection is never turned into a retry."""
+    arrears = make_exc(
+        openai.BadRequestError,
+        message="欠费 stopped the request; connection reset by peer",
+        status_code=400,
+    )
+    assert classify_behavior(arrears) is Behavior.FAIL_FAST
+
+    auth = make_exc(
+        openai.AuthenticationError,
+        message="invalid api key (connection reset by peer)",
+        status_code=401,
+    )
+    assert classify_behavior(auth) is Behavior.FAIL_FAST
+
+
+def test_content_filter_is_not_hijacked_by_a_transport_phrase():
+    """Content moderation must keep degrading — retrying it is pointless."""
+    exc = make_exc(
+        openai.BadRequestError,
+        message="Output data may contain inappropriate content",
+        code="data_inspection_failed",
+        status_code=400,
+    )
+    assert classify_behavior(exc) is Behavior.DEGRADABLE
+
+
+def test_upstream_reset_labels_as_service_unavailable():
+    """If retries do run out, the user gets "service busy", not the unknown card."""
+    exc = make_exc(
+        openai.BadRequestError,
+        message=_DOWNLOAD_RESET_BODY["message"],
+        body=_DOWNLOAD_RESET_BODY,
+        status_code=400,
+    )
+    assert label_error(exc) is ErrorType.SERVICE_UNAVAILABLE

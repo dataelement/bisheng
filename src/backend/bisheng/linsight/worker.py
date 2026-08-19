@@ -4,6 +4,7 @@ import logging
 import pickle
 import socket
 import uuid
+from functools import partial
 from multiprocessing import Manager, Process, set_start_method
 from multiprocessing.managers import ValueProxy
 from typing import Any, Union
@@ -221,19 +222,72 @@ class ScheduleCenterProcess(Process):
         # Semaphores
         self.semaphore: asyncio.Semaphore | None = None
         self.node_manager: NodeManager | None = None
+        # Strong refs to the fire-and-forget stranded-session repair tasks. asyncio
+        # only holds a weak reference to a running task, so without this the loop is
+        # free to garbage-collect a repair mid-flight and the session it was meant
+        # to force-fail stays IN_PROGRESS forever — the exact state the repair exists
+        # to clear.
+        self.repair_tasks: set[asyncio.Task] = set()
         self.max_concurrency: Union[int, ValueProxy] | None = max_concurrency
         self.node_id: ValueProxy | None = node_id
 
-    def handle_task_result(self, task: asyncio.Task):
+    def handle_task_result(self, task: asyncio.Task, session_version_id: str | None = None):
         try:
-            result = task.result()  # If there is an exception, it will be thrown here
+            task.result()  # If there is an exception, it will be thrown here
         except Exception as e:
-            logger.error(f"Task failed with exception: {e}")
+            logger.error(f"Task failed with exception: {e}", exc_info=True)
+            # task_exec owns the normal failure path; reaching here means it could
+            # not record a terminal status (its own handler raised, the worker was
+            # cancelled, ...). Without this net the session stays IN_PROGRESS and
+            # the frontend spins on it forever.
+            if session_version_id:
+                repair_task = asyncio.create_task(self._force_fail_stranded_session(session_version_id, e))
+                self.repair_tasks.add(repair_task)
+                repair_task.add_done_callback(self.repair_tasks.discard)
         finally:
             # Release semaphore
             if self.semaphore:
                 logger.info("Releasing semaphore after task completion.")
                 self.semaphore.release()
+
+    async def _force_fail_stranded_session(self, session_version_id: str, error: BaseException) -> None:
+        """Last-resort terminal write for a task that died without recording one.
+
+        Deliberately re-reads the session and gives up when it is already
+        terminal: task_exec's own failure path is richer (it emits the classified
+        error event and fails the sub-tasks), so this must never overwrite what
+        that path already wrote. Tenant filter is bypassed for the same reason as
+        ``_session_is_terminal`` — the standalone worker holds no tenant context.
+        """
+        try:
+            with bypass_tenant_filter():
+                session = await LinsightSessionVersionDao.get_by_id(session_version_id)
+                if session is None or session.status in _TERMINAL_SESSION_STATUSES:
+                    return
+                try:
+                    from bisheng.common.services.llm_error_classifier import classify_for_event
+
+                    classified = classify_for_event(error)
+                    error_type, error_code, detail = (
+                        classified.error_type,
+                        classified.error_code,
+                        classified.detail,
+                    )
+                except Exception:  # classification is a nicety, the terminal write is not
+                    error_type, error_code, detail = "unknown", None, str(error)
+                session.status = SessionVersionStatusEnum.FAILED
+                session.output_result = {
+                    "error_message": f"Task aborted unexpectedly: {error}",
+                    "error_code": error_code,
+                    "error_type": error_type,
+                    "detail": detail,
+                }
+                await LinsightSessionVersionDao.insert_one(session)
+            logger.warning(
+                f"Force-failed stranded session {session_version_id} (task died before recording a terminal status)"
+            )
+        except Exception:
+            logger.error(f"Failed to force-fail stranded session {session_version_id}", exc_info=True)
 
     def _release_semaphore(self):
         """Release the concurrency slot once, guarding against over-release."""
@@ -313,7 +367,7 @@ class ScheduleCenterProcess(Process):
         # done callback releases the slot. park-and-release therefore frees the
         # concurrency slot the moment the agent parks for user input — no slot
         # is held during the (possibly very long) waiting period.
-        task.add_done_callback(self.handle_task_result)
+        task.add_done_callback(partial(self.handle_task_result, session_version_id=session_version_id))
         return True
 
     async def async_run(self):

@@ -2,11 +2,11 @@ import glob
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
 import uuid
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from hashlib import md5
 from os import DirEntry
 from pathlib import Path
@@ -15,17 +15,33 @@ from typing import Any
 import matplotlib
 from loguru import logger
 
-from bisheng_langchain.gpts.tools.code_interpreter.base_executor import BaseExecutor
+from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
+    OUTPUT_DIR_NAME,
+    BaseExecutor,
+    path_namespace_rules,
+)
 
 CODE_BLOCK_PATTERN = r"```(\w*)\n(.*?)\n```"
 DEFAULT_TIMEOUT = 600
 WIN32 = sys.platform == "win32"
 PATH_SEPARATOR = (WIN32 and "\\") or "/"
 WORKING_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "extensions")
-TIMEOUT_MSG = "Timeout"
+# A bare "Timeout" reads as an infrastructure hiccup and invites a verbatim retry.
+# Name the cause so the next attempt is narrower instead of identical.
+TIMEOUT_MSG = (
+    "Timeout: this script ran longer than {timeout}s and was killed. It did not finish, "
+    "so nothing it was about to write exists. Scope the next attempt down — an unbounded "
+    "loop, or a recursive scan rooted at / or another huge directory, cannot finish here."
+)
 UNKNOWN = "unknown"
+# A failing run's log goes straight into the model's context. Cap it, keeping the
+# TAIL: a traceback states its cause on the last lines.
+MAX_FAILURE_LOG_CHARS = 8000
+LOG_TRUNCATED_NOTICE = "[... earlier output truncated ...]\n"
+PARTIAL_OUTPUT_HEADER = "\nOutput captured before the kill:\n"
 
-LOCAL_DESCRIPTION = """Evaluates python code in native environment. \
+LOCAL_DESCRIPTION = (
+    """Evaluates python code in native environment. \
 You must send the whole script every time and print your outputs. \
 Script should be pure python code that can be evaluated. \
 It should be in python format NOT markdown. \
@@ -35,15 +51,19 @@ FILE OUTPUT RULES (STRICT): write final deliverables to the RELATIVE directory \
 are subfolders of the current working directory. NEVER use an absolute path with a \
 leading slash such as `/output/...` or `/scratch/...` — anything written outside the \
 current working directory is DISCARDED and will NOT be delivered to the user. \
+"""
+    + path_namespace_rules(include_skills=True)
+    + """\
 Do not use things like plot.show() as it will not work; save figures to `output/` \
 instead. print() any output and results so you can capture the output. \
 AVAILABLE LIBRARIES: this runs in the backend Python environment; these are ALREADY \
 installed — pandas, numpy, matplotlib (charts), openpyxl / XlsxWriter (Excel), \
-python-docx (Word), Pillow (images), reportlab (generate PDF), and PyMuPDF a.k.a. \
+python-docx (Word), python-pptx (PowerPoint), Pillow (images), reportlab (generate PDF), and PyMuPDF a.k.a. \
 `fitz` (read/parse PDF). To READ text or tables from a PDF, use `import fitz` \
 (PyMuPDF); do NOT use pdfminer / pdfplumber / PyPDF2 — they are NOT installed. If an \
 import fails, switch to an already-installed library instead of assuming a package \
 exists; do NOT run `pip install` (this is a shared, offline environment)."""
+)
 
 
 class LocalExecutor(BaseExecutor):
@@ -153,29 +173,37 @@ class LocalExecutor(BaseExecutor):
             sys.executable if lang.startswith("python") else cls._cmd(lang),
             f".\\{filename}" if WIN32 else filename,
         ]
-        if WIN32:
-            logger.warning("SIGALRM is not supported on Windows. No timeout will be enforced.")
-            result = subprocess.run(
-                cmd,
-                cwd=work_dir,
-                capture_output=True,
-                text=True,
-            )
-        else:
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(
-                    subprocess.run,
-                    cmd,
-                    cwd=work_dir,
-                    capture_output=True,
-                    text=True,
-                )
-                try:
-                    result = future.result(timeout=timeout)
-                except TimeoutError:
-                    return 1, TIMEOUT_MSG, ""
-        if result.returncode:
-            logs = result.stderr
+        # start_new_session makes the child its own process group leader, so a timeout
+        # can take down whatever it spawned as well (see _kill_process_tree).
+        proc = subprocess.Popen(
+            cmd,
+            cwd=work_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=not WIN32,
+        )
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # communicate() leaves the child alive on timeout — kill it, then reap the
+            # pipes. The second communicate() returns everything buffered before the
+            # kill, which is the only clue the model gets about where the script hung.
+            cls._kill_process_tree(proc)
+            stdout, stderr = proc.communicate()
+            logger.warning("code interpreter run exceeded {}s and was killed", timeout)
+            message = TIMEOUT_MSG.format(timeout=timeout)
+            partial = f"{stdout or ''}{stderr or ''}"
+            if not partial.strip():
+                return 1, message, ""
+            # Cap the partial output alone, never message+partial: _tail keeps the END
+            # of what it is given, and the notice sits at the START — capping the pair
+            # would drop the very line that explains the failure. _tail also prepends
+            # its own truncation notice, which counts against the cap as well.
+            budget = MAX_FAILURE_LOG_CHARS - len(message) - len(PARTIAL_OUTPUT_HEADER) - len(LOG_TRUNCATED_NOTICE)
+            return 1, f"{message}{PARTIAL_OUTPUT_HEADER}{cls._tail(partial, budget)}", ""
+        if proc.returncode:
+            logs = stderr
             if file_path is not None:
                 abs_path = str(Path(file_path).absolute())
                 logs = logs.replace(str(abs_path), "").replace(filename, "")
@@ -183,8 +211,25 @@ class LocalExecutor(BaseExecutor):
                 abs_path = str(Path(work_dir).absolute()) + PATH_SEPARATOR
                 logs = logs.replace(str(abs_path), "")
         else:
-            logs = result.stdout
-        return result.returncode, logs, ""
+            logs = stdout
+        return proc.returncode, logs, ""
+
+    @staticmethod
+    def _kill_process_tree(proc: subprocess.Popen) -> None:
+        """SIGKILL the run's whole process group, not just the direct child.
+
+        The interpreter runs model-written code that routinely shells out (LibreOffice,
+        pandoc, pip). Killing only ``proc`` leaves those grandchildren spinning, and a
+        runaway one keeps a CPU core and a worker slot pinned for good.
+        """
+        if WIN32:
+            proc.kill()
+            return
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            # already reaped, or start_new_session did not take — settle for the child
+            proc.kill()
 
     @classmethod
     def execute_code(
@@ -212,7 +257,7 @@ class LocalExecutor(BaseExecutor):
         filepath = os.path.join(work_dir, filename)
         file_dir = os.path.dirname(filepath)
         os.makedirs(file_dir, exist_ok=True)
-        (Path(file_dir) / "output").mkdir(exist_ok=True, parents=True)
+        (Path(file_dir) / OUTPUT_DIR_NAME).mkdir(exist_ok=True, parents=True)
         if code is not None:
             with open(filepath, "w", encoding="utf-8") as fout:
                 fout.write(code)
@@ -224,29 +269,112 @@ class LocalExecutor(BaseExecutor):
             if filepath is not None:
                 os.remove(filepath)
 
+    @staticmethod
+    def _snapshot_files(dir_path: str) -> dict[str, tuple[float, int]]:
+        """Map every non-hidden file under ``dir_path`` to ``(mtime, size)``.
+
+        Taken before and after a run so the executor can tell what THIS run
+        produced. Without the diff the working dir is indistinguishable from its
+        contents: it also holds the prefetched uploaded sources and every earlier
+        step's files, so "what did this code write" is otherwise unanswerable.
+        """
+        snapshot: dict[str, tuple[float, int]] = {}
+        for root, dirs, files in os.walk(dir_path):
+            # hidden dirs and __pycache__ are never deliverables or inputs
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__pycache__"]
+            for name in files:
+                if name.startswith("."):
+                    continue
+                abs_path = os.path.join(root, name)
+                try:
+                    stat = os.stat(abs_path)
+                except OSError:
+                    # raced away between walk and stat — treat as absent
+                    continue
+                snapshot[os.path.relpath(abs_path, dir_path)] = (stat.st_mtime, stat.st_size)
+        return snapshot
+
+    def _relocate_root_files(self, dir_path: str, created: list[str]) -> list[tuple[str, str]]:
+        """Move run-created ROOT-level files into ``output/``; return the moves.
+
+        The working-dir root is not a delivery zone — only ``output/`` is harvested
+        into the result panel — so a model that writes ``report.xlsx`` instead of
+        ``output/report.xlsx`` loses its deliverable silently. Relocating is safe
+        because only files *this run created* are eligible: prefetched upload
+        sources and prior-step files sit in the pre-run snapshot and stay put.
+
+        An existing ``output/<name>`` is overwritten on purpose: re-running the same
+        script must refresh its deliverable, not accumulate ``report (1).xlsx``.
+        """
+        moved: list[tuple[str, str]] = []
+        for rel in created:
+            # anything with a path separator already lives in a zone (output/,
+            # scratch/, or a model-made subdir) — leave it alone
+            if os.sep in rel or "/" in rel:
+                continue
+            src = os.path.join(dir_path, rel)
+            if not os.path.isfile(src):
+                continue
+            target_dir = os.path.join(dir_path, OUTPUT_DIR_NAME)
+            dst = os.path.join(target_dir, rel)
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.move(src, dst)
+            except OSError:
+                # best-effort: a file we cannot relocate stays where it is (it just
+                # will not be delivered) — never fail the user's code run over this
+                logger.exception("relocate root deliverable failed: {}", src)
+                continue
+            moved.append((rel, os.path.relpath(dst, dir_path)))
+        return moved
+
     def run_with_dir(self, code: str, dir_path: str, lang: str) -> (int, str, list):
         """在指定目录下运行代码，并返回日志和生成的文件列表"""
+        pre_snapshot = self._snapshot_files(dir_path)
         exitcode, logs, _ = self.execute_code(
             code,
             work_dir=dir_path,
             lang=lang,
         )
-        logs += "\n" + logs
         file_list = []
         if exitcode != 0:
             return exitcode, logs, file_list
 
-        # 获取文件
-        for root, dirs, files in os.walk(dir_path):
-            for name in files:
-                file_name = os.path.join(root, name)
-                file_ext = os.path.splitext(name)[-1]
-                file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
+        post_snapshot = self._snapshot_files(dir_path)
+        created = [rel for rel in post_snapshot if rel not in pre_snapshot]
+        modified = [rel for rel, meta in post_snapshot.items() if rel in pre_snapshot and pre_snapshot[rel] != meta]
+
+        # Root-level new files are in no delivery zone; normalise them into output/
+        # and tell the model where they went (the old path stops resolving).
+        moved = self._relocate_root_files(dir_path, created)
+        relocated_from = {old for old, _ in moved}
+        touched = [rel for rel in created if rel not in relocated_from]
+        touched.extend(new for _, new in moved)
+        touched.extend(modified)
+        logs += self.relocation_advisory(moved)
+
+        # 获取文件: only what this run actually produced. Uploading the whole
+        # working dir every run (the previous behaviour) re-uploaded the prefetched
+        # upload sources and every earlier step's output on each call, so the tool
+        # result grew with the task and told the model nothing about its own write.
+        for rel in touched:
+            file_name = os.path.join(dir_path, rel)
+            if not os.path.isfile(file_name):
+                continue
+            file_ext = os.path.splitext(rel)[-1]
+            file_list.append(self.upload_minio(f"{uuid.uuid4().hex}.{file_ext}", file_name))
         # 同步执行结果文件到本地同步目录
         if self.local_sync_path and os.path.exists(self.local_sync_path):
             files_info = list(os.scandir(dir_path))
             self.sync_files_to_local(files_info, dir_path)
         return exitcode, logs, file_list
+
+    @staticmethod
+    def _tail(logs: str, limit: int = MAX_FAILURE_LOG_CHARS) -> str:
+        """Keep the last ``limit`` characters of a failing run's log."""
+        if len(logs) <= limit:
+            return logs
+        return LOG_TRUNCATED_NOTICE + logs[-limit:]
 
     def run(self, code: str) -> Any:
         original_code = code
@@ -262,9 +390,20 @@ class LocalExecutor(BaseExecutor):
             else:
                 with tempfile.TemporaryDirectory() as temp_dir:
                     exit_code, logs, file_list = self.run_with_dir(code, dir_path=temp_dir, lang=lang)
-            if exit_code != 0:
-                return {"exitcode": exit_code, "log": logs_all}
             logs_all += "\n" + logs
+            if exit_code != 0:
+                # The traceback (or the timeout notice) lives in THIS block's log, so it
+                # has to be accumulated BEFORE the early return. Returning the not-yet
+                # accumulated prefix handed the model {"exitcode": 1, "log": ""} on every
+                # failure and forced it to debug blind.
+                logger.warning("code interpreter block {}/{} exited {}", i + 1, len(code_blocks), exit_code)
+                # The advisory has to be attached HERE too, not only on the success
+                # path below: reading an absolute `/skills/...` raises
+                # FileNotFoundError, which is exactly a non-zero exit — so the one
+                # failure the read-side notice exists to explain would otherwise
+                # never see it. Appended AFTER ``_tail`` (which keeps the tail) so
+                # the truncation cannot eat it.
+                return {"exitcode": exit_code, "log": self._tail(logs_all) + self.absolute_path_advisory(original_code)}
             all_file_list += file_list
 
         # Deterministic safety net: if the script wrote a deliverable to an absolute

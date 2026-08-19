@@ -23,15 +23,17 @@ class KnowledgeRetriever(RagUtils):
         try:
             self.user_questions = self.init_user_question()
             self.init_user_info()
-            self.init_multi_retriever()
+            if any(self.user_questions):
+                self.init_multi_retriever()
             ret = {}
             for index, question in enumerate(self.user_questions):
                 output_key = self._output_keys[index]
-                if question is None:
-                    question = ""
                 try:
-                    self.init_rerank_model()
-                    question_answer = self.retrieve_question(question)
+                    if question:
+                        self.init_rerank_model()
+                        question_answer = self.retrieve_question(question)
+                    else:
+                        question_answer = []
                     question_answer = annotate_rag_documents_with_citations(question_answer)
                     citation_items = collect_rag_citation_registry_items(question_answer)
                     cache_citation_registry_items_sync(citation_items)

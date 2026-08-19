@@ -343,6 +343,47 @@ async def test_direct_answer_collects_output_deliverables_without_planned_todos(
     assert called["fallback"] is False
 
 
+async def test_direct_answer_flags_a_phantom_deliverable_without_repairing_it(monkeypatch):
+    """The model claims a second file it never wrote.
+
+    The claim must be RECORDED, not honoured: no extra file appears in
+    final_files. An earlier revision answered this exact case by creating
+    详细分析报告.md, which hid the defect and invented a document nobody asked for.
+    """
+    from bisheng.linsight.domain import task_exec as te
+
+    exec_task = te.LinsightWorkflowTask()
+    exec_task.session_version_id = "svid"
+    exec_task._last_assistant_text = "已生成 [概览](output/概览.md)，详细内容见 output/详细分析报告.md。"
+    exec_task.file_dir = "/tmp/nonexistent-linsight"
+
+    sm = MagicMock()
+    sm.set_session_version_info = AsyncMock()
+    sm.get_execution_tasks = AsyncMock(return_value=[_pseudo([])])
+    sm.update_execution_task_status = AsyncMock()
+    sm.push_message = AsyncMock()
+    exec_task._state_manager = sm
+
+    real = [{"file_name": "概览.md", "file_path": "/x/output/概览.md", "file_id": "i", "file_url": "u"}]
+
+    async def _final(*a, **k):
+        return real
+
+    monkeypatch.setattr(te.linsight_execute_utils, "get_final_result_file", _final)
+    monkeypatch.setattr(te.linsight_execute_utils, "read_file_directory", AsyncMock(return_value=real))
+    monkeypatch.setattr(te.linsight_execute_utils, "persist_task_turn_message", AsyncMock())
+
+    session = MagicMock()
+    session.id = "svid"
+    session.model_dump = MagicMock(return_value={})
+
+    await exec_task._handle_direct_answer_completion(session)
+
+    assert session.output_result["phantom_deliverables"] == ["详细分析报告.md"]
+    # Detected, not repaired: the real deliverable list is untouched.
+    assert session.output_result["final_files"] == real
+
+
 def _pseudo(history):
     return LinsightExecuteTask(
         id="svid",
