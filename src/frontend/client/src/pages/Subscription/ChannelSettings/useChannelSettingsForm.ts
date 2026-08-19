@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { generateUUID } from "~/utils";
 import {
   createManagerChannelApi,
   getChannelDetailApi,
@@ -96,7 +97,7 @@ export function useChannelSettingsForm(channelId?: string) {
   const [submitting, setSubmitting] = useState(false);
   const [authorizationRecovery, setAuthorizationRecovery] = useState<AuthorizationRecovery | null>(null);
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
-  const creationRequestId = useMemo(() => crypto.randomUUID(), []);
+  const creationRequestId = useMemo(() => generateUUID(32), []);
   const initBusinessFromChannel = business.initFromChannel;
   const setBusinessSources = business.setSources;
   const loadBusinessSourcesByIds = business.loadSourcesByIds;
@@ -262,7 +263,7 @@ export function useChannelSettingsForm(channelId?: string) {
       ) {
         const latestContext = await getResourcePermissionContext("channel", channelId);
         await mutateResourceGrants("channel", channelId, {
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: generateUUID(32),
           expected_resource_version: latestContext.resource_version,
           expected_catalog_release_id: latestContext.catalog_release_id,
           changes: permissionDraft.diff.changes,
@@ -292,7 +293,7 @@ export function useChannelSettingsForm(channelId?: string) {
     try {
       const context = await getResourcePermissionContext("channel", authorizationRecovery.channelId);
       await mutateResourceGrants("channel", authorizationRecovery.channelId, {
-        idempotency_key: crypto.randomUUID(),
+        idempotency_key: generateUUID(32),
         expected_resource_version: context.resource_version,
         expected_catalog_release_id: context.catalog_release_id,
         changes: permissionDraft.diff.changes,

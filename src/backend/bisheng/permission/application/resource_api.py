@@ -267,6 +267,20 @@ class F048ResourcePermissionApi:
             "visible",
         )
         await self._require_visible(actor, target)
+        if self._privileged(actor, target):
+            # A super admin / tenant admin is authorized on identity and holds
+            # no grant rows, so the grant-derived explanation would report an
+            # empty action set — "visible but powerless", which is exactly what
+            # made the client show them as having no permissions. Report the
+            # full effective action set for the resource type instead.
+            mode = await self._runtime.current_mode(target)
+            actions = await self._runtime.effective_actions(resource_type)
+            return {
+                "mode": mode.mode,
+                "actions": list(actions),
+                "sources": [],
+                "roster_complete": False,
+            }
         explanation = await self._explanation(
             actor,
             target,

@@ -124,6 +124,9 @@ class _Subjects:
     async def display_names(self, subjects):
         return {("user", "8"): "Member 8"}
 
+    async def actor_projected_subjects(self, actor):
+        return frozenset({f"user:{actor.user_id}"})
+
 
 @pytest.mark.asyncio
 async def test_super_admin_subject_validation_uses_target_tenant() -> None:
@@ -195,6 +198,30 @@ class _ContextRuntime(_Runtime):
         del target
         return SimpleNamespace(mode="CUSTOM", projection_state="READY")
 
+    async def effective_actions(self, resource_type):
+        del resource_type
+        # 'visible' is a base relation, not a registered action, so it never
+        # appears in the effective action set.
+        return ("use", "edit", "delete", "manage_permission")
+
+
+class _ExplainRuntime(_ContextRuntime):
+    """Visible via FGA, but the grant-derived explanation is empty.
+
+    Models an ordinary user who can see the resource yet holds no grant rows —
+    the path that must stay grant-derived (and NOT be handed the full set).
+    """
+
+    async def check_action(self, actor, target, action):
+        if action == "visible":
+            self.visible_checks += 1
+            return True
+        return True
+
+    async def explain_permissions(self, **kwargs):
+        del kwargs
+        return SimpleNamespace(mode="CUSTOM", action_codes=(), sources=())
+
 
 @pytest.mark.asyncio
 async def test_super_admin_reads_context_without_a_visible_tuple() -> None:
@@ -262,6 +289,52 @@ async def test_ordinary_user_context_still_requires_a_visible_tuple() -> None:
             actor=actor,
         )
     assert runtime.visible_checks == 1
+
+
+@pytest.mark.asyncio
+async def test_super_admin_my_permissions_returns_full_effective_actions() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=5, super_admin=True)
+
+    result = await api.get_my_permissions(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    # No grant rows exist for a super admin, so the grant-derived explanation
+    # would be empty; the full effective action set is reported instead.
+    assert result["actions"] == ["use", "edit", "delete", "manage_permission"]
+    assert result["sources"] == []
+    assert runtime.visible_checks == 0
+
+
+@pytest.mark.asyncio
+async def test_ordinary_user_my_permissions_stays_grant_derived() -> None:
+    runtime = _ExplainRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    # Same tenant as the resolved target (9) but no admin rights.
+    actor = PermissionActor(user_id=7, current_tenant_id=9)
+
+    result = await api.get_my_permissions(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    # Ordinary user: went through the real visibility check and stayed on the
+    # grant-derived path (empty here), never handed the full effective set.
+    assert runtime.visible_checks == 1
+    assert result["actions"] == []
 
 
 @pytest.mark.asyncio
