@@ -597,7 +597,7 @@ export async function getFolderSessions(
     spaceId: string | number,
     folderId?: string | number
 ): Promise<FolderSession[]> {
-    const params: Record<string, any> = {};
+    const params: Record<string, unknown> = {};
     if (folderId != null && folderId !== "") params.folder_id = folderId;
     const res = await http.get(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
@@ -614,7 +614,7 @@ export async function createFolderSession(
     spaceId: string | number,
     folderId?: number
 ): Promise<FolderSession> {
-    const body: Record<string, any> = {};
+    const body: Record<string, unknown> = {};
     if (folderId != null) body.folder_id = folderId;
     const res = await http.post(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
@@ -629,7 +629,7 @@ export async function deleteFolderSession(
     chatId: string,
     folderId?: number
 ): Promise<void> {
-    const body: Record<string, any> = { chat_id: chatId };
+    const body: Record<string, unknown> = { chat_id: chatId };
     if (folderId != null) body.folder_id = folderId;
     await http.deleteWithOptions(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
@@ -657,7 +657,7 @@ export async function getFolderChatHistory(
         pageSize?: number;
     }
 ): Promise<ChatMessage[]> {
-    const queryParams: Record<string, any> = {};
+    const queryParams: Record<string, unknown> = {};
     if (params.folderId != null && params.folderId !== "")
         queryParams.folder_id = params.folderId;
     if (params.chatId) queryParams.chat_id = params.chatId;

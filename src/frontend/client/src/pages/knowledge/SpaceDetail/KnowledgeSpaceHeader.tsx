@@ -5,17 +5,14 @@ import { cn } from "~/utils";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import {
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger,
-    DropdownMenuSeparator,
-    DropdownMenuCheckboxItem
 } from "~/components/ui/DropdownMenu";
-import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import {
+    ActionMenuCheckboxItem,
     ActionMenuContent,
     ActionMenuItem,
     actionMenuLabelClassName,
+    actionMenuSectionLabelClassName,
 } from "~/components/ActionMenu";
 import { Button } from "~/components/ui/Button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
@@ -23,6 +20,24 @@ import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
 import { KnowledgeBreadcrumb } from "./KnowledgeBreadcrumb";
 import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+
+/** Status options, in the order the filter menu lists them. */
+const STATUS_FILTER_OPTIONS: Array<{ value: FileStatus; labelKey: string }> = [
+    { value: FileStatus.UPLOADING, labelKey: "com_knowledge.uploading_status" },
+    { value: FileStatus.WAITING, labelKey: "com_knowledge.queueing_status" },
+    { value: FileStatus.PROCESSING, labelKey: "com_knowledge.parsing_status" },
+    { value: FileStatus.REBUILDING, labelKey: "com_knowledge.rebuilding_status" },
+    { value: FileStatus.SUCCESS, labelKey: "com_knowledge.success" },
+    { value: FileStatus.FAILED, labelKey: "com_knowledge.fail" },
+    { value: FileStatus.VIOLATION, labelKey: "com_knowledge.violation" },
+    { value: FileStatus.TIMEOUT, labelKey: "com_knowledge.timeout" },
+];
+
+const SORT_OPTIONS: Array<{ value: SortType; labelKey: string }> = [
+    { value: SortType.NAME, labelKey: "com_knowledge.sort_by_name_label" },
+    { value: SortType.TYPE, labelKey: "com_knowledge.sort_by_type_label" },
+    { value: SortType.UPDATE_TIME, labelKey: "com_knowledge.sort_by_update_time_label" },
+];
 
 interface KnowledgeSpaceHeaderProps {
     space: KnowledgeSpace;
@@ -158,65 +173,25 @@ export function KnowledgeSpaceHeader({
                             <Outlined.Filter className={cn("size-4", statusFilter.length > 0 ? "text-blue-600" : "text-[#818181]")} />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.status")}</div>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.UPLOADING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.UPLOADING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.uploading_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.WAITING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.WAITING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.queueing_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.PROCESSING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.PROCESSING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.parsing_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.REBUILDING)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.REBUILDING, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.rebuilding_status")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.SUCCESS)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.SUCCESS, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.success")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.FAILED)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.FAILED, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.fail")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.VIOLATION)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.VIOLATION, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.violation")}
-                        </DropdownMenuCheckboxItem>
-                        <DropdownMenuCheckboxItem
-                            checked={statusFilter.includes(FileStatus.TIMEOUT)}
-                            onCheckedChange={(checked) => onFilterStatus(FileStatus.TIMEOUT, checked)}
-                            onSelect={(e) => e.preventDefault()}
-                        >
-                            {localize("com_knowledge.timeout")}
-                        </DropdownMenuCheckboxItem>
-                    </DropdownMenuContent>
+                    {/* 120px panel centred on the trigger, 8px padding, 32px rows
+                        spaced 4px apart, 12px radius; scrolls past 240px. */}
+                    <ActionMenuContent
+                        align="center"
+                        width={120}
+                        className="max-h-[240px] min-w-0 gap-1 overflow-y-auto rounded-xl"
+                    >
+                        <div className={actionMenuSectionLabelClassName}>{localize("com_knowledge.status")}</div>
+                        {STATUS_FILTER_OPTIONS.map((option) => (
+                            <ActionMenuCheckboxItem
+                                key={option.value}
+                                checked={statusFilter.includes(option.value)}
+                                onCheckedChange={(checked) => onFilterStatus(option.value, checked)}
+                                onSelect={(e) => e.preventDefault()}
+                            >
+                                <span className={actionMenuLabelClassName}>{localize(option.labelKey)}</span>
+                            </ActionMenuCheckboxItem>
+                        ))}
+                    </ActionMenuContent>
                 </DropdownMenu>
             )}
 
@@ -230,21 +205,31 @@ export function KnowledgeSpaceHeader({
                             <Outlined.Sort className="size-4 shrink-0" aria-hidden />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className={knowledgeSpaceDropdownSurfaceClassName}>
-                        <div className="px-2 py-1.5 text-xs font-medium text-[#86909c]">{localize("com_knowledge.sort_field")}</div>
-                        <DropdownMenuItem onClick={() => onSort(SortType.NAME)}>
-                            {localize("com_knowledge.sort_by_name_label")}
-                            {sortBy === SortType.NAME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onSort(SortType.TYPE)}>
-                            {localize("com_knowledge.sort_by_type_label")}
-                            {sortBy === SortType.TYPE && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onSort(SortType.UPDATE_TIME)}>
-                            {localize("com_knowledge.sort_by_update_time_label")}
-                            {sortBy === SortType.UPDATE_TIME && (sortDirection === SortDirection.ASC ? "↑" : "↓")}
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
+                    {/* Same panel as the filter menu; the active field's direction sits
+                        in the trailing slot the filter uses for its check. */}
+                    <ActionMenuContent
+                        align="center"
+                        width={120}
+                        className="max-h-[240px] min-w-0 gap-1 overflow-y-auto rounded-xl"
+                    >
+                        <div className={actionMenuSectionLabelClassName}>{localize("com_knowledge.sort_field")}</div>
+                        {SORT_OPTIONS.map((option) => (
+                            <ActionMenuItem
+                                key={option.value}
+                                className="rounded-lg"
+                                onClick={() => onSort(option.value)}
+                            >
+                                <span className={actionMenuLabelClassName}>{localize(option.labelKey)}</span>
+                                {sortBy === option.value && (
+                                    <span className="ml-auto flex size-4 shrink-0 items-center justify-center text-primary">
+                                        {sortDirection === SortDirection.ASC
+                                            ? <Outlined.ArrowUp className="size-4" />
+                                            : <Outlined.ArrowDown className="size-4" />}
+                                    </span>
+                                )}
+                            </ActionMenuItem>
+                        ))}
+                    </ActionMenuContent>
                 </DropdownMenu>
             )}
         </div>
@@ -350,9 +335,8 @@ export function KnowledgeSpaceHeader({
                                                 </span>
                                             </TooltipTrigger>
                                             <TooltipContent
-                                                noArrow
-                                                side="left"
-                                                className="z-[999] max-w-md bg-white px-3 py-2 text-sm text-[#4e5969] shadow-md"
+                                                side="top"
+                                                className="z-[999] max-w-md"
                                             >
                                                 {localize(
                                                     knowledgeUploadCapabilities.media

@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+    DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
 } from "~/components/ui/DropdownMenu";
@@ -46,6 +47,10 @@ export const actionMenuItemClassName = itemRegularClassName;
 export const actionMenuItemDangerClassName = itemDangerClassName;
 export const actionMenuItemIconClassName = iconRegularClassName;
 export const actionMenuLabelClassName = labelClassName;
+
+/** Section heading above a group of rows: 12px/20 regular, muted, flush with the
+ *  container's 8px padding — it sits 8px left of the row labels (Figma 13198:78112). */
+export const actionMenuSectionLabelClassName = "text-xs leading-5 text-text-3";
 
 type DropdownMenuContentProps = React.ComponentPropsWithoutRef<
     typeof DropdownMenuContent
@@ -122,6 +127,27 @@ export const ActionMenuItem = React.forwardRef<
                 content
             )}
         </DropdownMenuItem>
+    );
+});
+
+type DropdownMenuCheckboxItemProps = React.ComponentPropsWithoutRef<
+    typeof DropdownMenuCheckboxItem
+>;
+
+/** Checkable row of an action menu: same 32px geometry as ActionMenuItem, with
+ *  the check in the trailing slot so labels stay flush left (Figma 13198:78111). */
+export const ActionMenuCheckboxItem = React.forwardRef<
+    React.ElementRef<typeof DropdownMenuCheckboxItem>,
+    DropdownMenuCheckboxItemProps
+>(function ActionMenuCheckboxItem({ className, ...props }, ref) {
+    return (
+        <DropdownMenuCheckboxItem
+            ref={ref}
+            indicatorSide="right"
+            // 8px row radius per 基础-阴影与圆角规范 §控件 (32px row = large).
+            className={cn(itemRegularClassName, "rounded-lg", className)}
+            {...props}
+        />
     );
 });
 
