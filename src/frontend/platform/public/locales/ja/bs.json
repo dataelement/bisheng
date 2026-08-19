@@ -1634,7 +1634,8 @@
       "knowledge_space": "ナレッジスペース",
       "tenant": "テナント管理",
       "llm": "モデル管理",
-      "approval": "承認管理"
+      "approval": "承認管理",
+      "filelib_sync": "Filelib 同期"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1707,7 +1708,11 @@
       "approvalFlowUpdate": "承認フロー更新",
       "approvalScenarioToggle": "承認シナリオの有効化/無効化",
       "approvalScenarioCreate": "承認シナリオを作成",
-      "approvalMenuAccessRevokeGrant": "メニュー権限付与を取り消し"
+      "approvalMenuAccessRevokeGrant": "メニュー権限付与を取り消し",
+      "filelibSyncUploadSuccess": "ファイル同期成功",
+      "filelibSyncUploadFailed": "ファイル同期失敗",
+      "filelibSyncInspectionStandardBatchSuccess": "検査標準一括同期成功",
+      "filelibSyncInspectionStandardBatchFailed": "検査標準一括同期失敗"
     },
     "objectTypeEnum": {
       "none": "なし",
@@ -1739,6 +1744,7 @@
     "resetButton": "リセット",
     "auditId": "監査ID",
     "username": "ユーザー名",
+    "responsiblePerson": "主責者",
     "operationTime": "操作日時",
     "systemModule": "システムモジュール",
     "operationAction": "操作アクション",
@@ -1747,6 +1753,7 @@
     "ipAddress": "IPアドレス",
     "remark": "備考",
     "selectUser": "ユーザーを選択",
+    "selectResponsiblePerson": "主責者を選択",
     "selectUserGroup": "ユーザーグループを選択",
     "startDate": "開始日",
     "endDate": "終了日",

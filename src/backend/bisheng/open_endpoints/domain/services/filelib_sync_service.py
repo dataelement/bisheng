@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.filelib_sync import (
     FilelibSyncConflictError,
+    FilelibSyncError,
     FilelibSyncInvalidParamsError,
     FilelibSyncNotFoundError,
     FilelibSyncPermissionDeniedError,
@@ -43,6 +44,7 @@ from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_reposito
     FilelibSyncRepository,
 )
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncParams, FilelibSyncResponseData
+from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import FilelibSyncAuditWriter
 from bisheng.open_endpoints.domain.services.filelib_sync_version_link_service import (
     FILELIB_SYNC_PENDING_VERSION_LINK_KEY,
     build_filelib_sync_pending_version_link_metadata,
@@ -146,6 +148,10 @@ class FilelibSyncService:
         file_persisted = False
         staged_upload_path = local_file_path
         extra_cleanup_paths: list[str] = []
+        identity: ResolvedIdentity | None = None
+        target: ResolvedFileSyncTarget | None = None
+        business_domain_code: str | None = None
+        replaced_file_id: int | None = None
         try:
             identity = await self._resolve_identity(params)
             portal_config = await self._get_portal_config()
@@ -299,7 +305,7 @@ class FilelibSyncService:
                 endpoint_tag,
                 trigger_type,
             )
-            return FilelibSyncResponseData(
+            response = FilelibSyncResponseData(
                 external_file_id=params.external_file_id,
                 file_id=int(created_file.id),
                 file_encoding=str(created_file.file_encoding),
@@ -309,7 +315,83 @@ class FilelibSyncService:
                 version_link_pending=replaced_file_id is not None,
                 replaced_file_id=replaced_file_id,
             )
-        except Exception:
+            folder_display_name = await self._resolve_folder_display_label(
+                identity=identity,
+                target=target,
+            )
+            await FilelibSyncAuditWriter.write_upload_success(
+                request=self.request,
+                login_user=self.login_user,
+                token_id=self.token_id,
+                token_name=self.token_name,
+                params=params,
+                identity=identity,
+                target=target,
+                created_file=created_file,
+                response=response,
+                endpoint_tag=endpoint_tag,
+                trigger_type=trigger_type,
+                business_domain_code=business_domain_code,
+                category_code=self.file_sync_rule.category.code,
+                subcategory_code=self.file_sync_rule.category.subcategory_code,
+                replaced_file_id=replaced_file_id,
+                extra_user_metadata=extra_user_metadata,
+                folder_display_name=folder_display_name,
+            )
+            return response
+        except FilelibSyncError as exc:
+            folder_display_name = await self._resolve_folder_display_label(
+                identity=identity,
+                target=target,
+            )
+            await FilelibSyncAuditWriter.write_upload_failed(
+                request=self.request,
+                login_user=self.login_user,
+                token_id=self.token_id,
+                token_name=self.token_name,
+                params=params,
+                endpoint_tag=endpoint_tag,
+                trigger_type=trigger_type,
+                identity=identity,
+                target=target,
+                business_domain_code=business_domain_code,
+                category_code=self.file_sync_rule.category.code,
+                subcategory_code=self.file_sync_rule.category.subcategory_code,
+                replaced_file_id=replaced_file_id,
+                extra_user_metadata=extra_user_metadata,
+                error=exc,
+                created_file=created_file if file_persisted else None,
+                folder_display_name=folder_display_name,
+            )
+            if not file_persisted:
+                await self._cleanup_failed_sync(created_file, local_file_path)
+                for extra_path in extra_cleanup_paths:
+                    await self._cleanup_failed_sync(None, extra_path)
+            raise
+        except Exception as exc:
+            folder_display_name = await self._resolve_folder_display_label(
+                identity=identity,
+                target=target,
+            )
+            await FilelibSyncAuditWriter.write_upload_failed(
+                request=self.request,
+                login_user=self.login_user,
+                token_id=self.token_id,
+                token_name=self.token_name,
+                params=params,
+                endpoint_tag=endpoint_tag,
+                trigger_type=trigger_type,
+                identity=identity,
+                target=target,
+                business_domain_code=business_domain_code,
+                category_code=self.file_sync_rule.category.code,
+                subcategory_code=self.file_sync_rule.category.subcategory_code,
+                replaced_file_id=replaced_file_id,
+                extra_user_metadata=extra_user_metadata,
+                error=exc,
+                created_file=created_file if file_persisted else None,
+                folder_display_name=folder_display_name,
+            )
             if not file_persisted:
                 await self._cleanup_failed_sync(created_file, local_file_path)
                 for extra_path in extra_cleanup_paths:
@@ -677,6 +759,23 @@ class FilelibSyncService:
         if folder is None:
             return None
         return int(folder.id)
+
+    async def _resolve_folder_display_label(
+        self,
+        *,
+        identity: ResolvedIdentity | None,
+        target: ResolvedFileSyncTarget | None,
+    ) -> str | None:
+        if target is None:
+            return None
+        if target.used_personal_fallback and identity is not None:
+            return self.build_personal_fallback_folder_path(identity)
+        if target.folder_id is None:
+            return "根目录"
+        folder = await self.repository.find_by_id(int(target.folder_id))
+        if folder is None:
+            return f"目录#{target.folder_id}"
+        return str(folder.file_name or f"#{target.folder_id}")
 
     async def _resolve_folder_path_override(
         self,

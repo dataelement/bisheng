@@ -1634,7 +1634,8 @@
       "knowledge_space": "知识空间",
       "tenant": "租户管理",
       "llm": "模型管理",
-      "approval": "审批管理"
+      "approval": "审批管理",
+      "filelib_sync": "Filelib 同步"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1707,7 +1708,11 @@
       "approvalFlowUpdate": "更新审批流程",
       "approvalScenarioToggle": "审批场景启停",
       "approvalScenarioCreate": "创建审批场景",
-      "approvalMenuAccessRevokeGrant": "撤回菜单授权"
+      "approvalMenuAccessRevokeGrant": "撤回菜单授权",
+      "filelibSyncUploadSuccess": "文件同步成功",
+      "filelibSyncUploadFailed": "文件同步失败",
+      "filelibSyncInspectionStandardBatchSuccess": "检验标准批量同步成功",
+      "filelibSyncInspectionStandardBatchFailed": "检验标准批量同步失败"
     },
     "objectTypeEnum": {
       "none": "无",
@@ -1739,6 +1744,7 @@
     "resetButton": "重置",
     "auditId": "审计ID",
     "username": "用户名",
+    "responsiblePerson": "主责人",
     "operationTime": "操作时间",
     "systemModule": "系统模块",
     "operationAction": "操作行为",
@@ -1747,6 +1753,7 @@
     "ipAddress": "IP地址",
     "remark": "备注",
     "selectUser": "选择用户",
+    "selectResponsiblePerson": "选择主责人",
     "selectUserGroup": "选择用户组",
     "startDate": "开始日期",
     "endDate": "结束日期",

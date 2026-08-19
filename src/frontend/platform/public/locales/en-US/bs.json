@@ -1651,7 +1651,8 @@
       "knowledge_space": "Knowledge Space",
       "tenant": "Tenant Management",
       "llm": "Model Management",
-      "approval": "Approval Management"
+      "approval": "Approval Management",
+      "filelib_sync": "Filelib Sync"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1724,7 +1725,11 @@
       "approvalFlowUpdate": "Update Approval Flow",
       "approvalScenarioToggle": "Toggle Approval Scenario",
       "approvalScenarioCreate": "Create Approval Scenario",
-      "approvalMenuAccessRevokeGrant": "Revoke Menu Access Grant"
+      "approvalMenuAccessRevokeGrant": "Revoke Menu Access Grant",
+      "filelibSyncUploadSuccess": "File Sync Succeeded",
+      "filelibSyncUploadFailed": "File Sync Failed",
+      "filelibSyncInspectionStandardBatchSuccess": "Inspection Standard Batch Sync Succeeded",
+      "filelibSyncInspectionStandardBatchFailed": "Inspection Standard Batch Sync Failed"
     },
     "objectTypeEnum": {
       "none": "None",
@@ -1756,6 +1761,7 @@
     "resetButton": "Reset",
     "auditId": "Audit ID",
     "username": "Username",
+    "responsiblePerson": "Responsible Person",
     "operationTime": "Operation Time",
     "systemModule": "System Module",
     "operationAction": "Operation Action",
@@ -1764,6 +1770,7 @@
     "ipAddress": "IP Address",
     "remark": "Remark",
     "selectUser": "Select User",
+    "selectResponsiblePerson": "Select Responsible Person",
     "selectUserGroup": "Select User Group",
     "startDate": "Start Date",
     "endDate": "End Date",

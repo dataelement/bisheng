@@ -4,7 +4,7 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
+import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi, getResponsiblePersonsApi } from "@/controllers/API/log";
 import { getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
@@ -73,9 +73,37 @@ const renderObjectName = (log: any, t: (key: string, opts?: any) => string): str
     return log.object_name || log.target_id || t('log.objectTypeEnum.none')
 }
 
+const renderRemark = (log: any, t: (key: string, opts?: any) => string): string => {
+    const remark = log.note || log.reason
+    if (!remark) return t('log.objectTypeEnum.none')
+    return String(remark).replace('编辑后', `\n编辑后`)
+}
+
+const getAuditMetadata = (log: any): Record<string, any> => {
+    const raw = log.audit_metadata ?? log.metadata
+    return raw && typeof raw === 'object' ? raw : {}
+}
+
+const renderResponsiblePerson = (log: any, t: (key: string, opts?: any) => string): string => {
+    const metadata = getAuditMetadata(log)
+    const externalId = String(metadata.responsible_person_external_id || '').trim()
+    const userName = String(metadata.responsible_user_name || '').trim()
+    if (externalId && userName && externalId !== userName) {
+        return `${externalId} (${userName})`
+    }
+    if (externalId || userName) {
+        return externalId || userName
+    }
+    if (metadata.responsible_user_id) {
+        return `#${metadata.responsible_user_id}`
+    }
+    return t('log.objectTypeEnum.none')
+}
+
 export default function SystemLog() {
     const { t } = useTranslation()
     const { users, loadUsers } = useUsers()
+    const { responsiblePersons, loadResponsiblePersons } = useResponsiblePersons()
     const { groups, loadData } = useGroups()
     const { modules, loadModules } = useModules()
     const { page, pageSize, loading, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
@@ -83,6 +111,7 @@ export default function SystemLog() {
     )
     const init = {
         userIds: [],
+        responsibleUserIds: [],
         groupId: '',
         start: undefined,
         end: undefined,
@@ -125,6 +154,15 @@ export default function SystemLog() {
                         // onLoad={loadUsers}
                         // onSearch={(key) => { searchUser(key); selectedRef.current = keys.userIds }}
                         onChange={(values) => setKeys({ ...keys, userIds: values })}
+                    ></MultiSelect>
+                </div>
+                <div className="w-[220px] relative">
+                    <MultiSelect contentClassName="overflow-y-auto max-w-[220px]" multiple
+                        options={responsiblePersons}
+                        value={keys.responsibleUserIds}
+                        placeholder={t('log.selectResponsiblePerson')}
+                        onLoad={loadResponsiblePersons}
+                        onChange={(values) => setKeys({ ...keys, responsibleUserIds: values })}
                     ></MultiSelect>
                 </div>
                 <div className="w-[200px] relative">
@@ -183,6 +221,7 @@ export default function SystemLog() {
                     <TableRow>
                         <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
                         <TableHead className="w-[200px] min-w-[100px]">{t('log.username')}</TableHead>
+                        <TableHead className="w-[200px] min-w-[100px]">{t('log.responsiblePerson')}</TableHead>
                         <TableHead className="w-[200px] min-w-[100px]">{t('log.operationTime')}</TableHead>
                         <TableHead className="w-[100px] min-w-[100px]">{t('log.systemModule')}</TableHead>
                         <TableHead className="w-[150px] min-w-[100px]">{t('log.operationAction')}</TableHead>
@@ -197,6 +236,7 @@ export default function SystemLog() {
                         <TableRow key={log.id}>
                             <TableCell>{log.id}</TableCell>
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
+                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderResponsiblePerson(log, t)}</div></TableCell>
                             <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
                             <TableCell>{renderSystemId(log, t)}</TableCell>
                             <TableCell>{renderEventType(log, t)}</TableCell>
@@ -204,14 +244,14 @@ export default function SystemLog() {
                             <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderObjectName(log, t)}</div></TableCell>
                             <TableCell>{log.ip_address}</TableCell>
                             <TableCell className="max-w-[250px]">
-                                <div className="whitespace-pre-line break-all">{log.note?.replace('编辑后', `\n编辑后`) || t('log.objectTypeEnum.none')}</div>
+                                <div className="whitespace-pre-line break-all">{renderRemark(log, t)}</div>
                             </TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
                 {!logs.length && <TableFooter>
                     <TableRow>
-                        <TableCell colSpan={9} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                        <TableCell colSpan={10} className="text-center text-gray-400">{t('build.empty')}</TableCell>
                     </TableRow>
                 </TableFooter>}
             </Table>
@@ -261,5 +301,24 @@ const useUsers = () => {
         searchUser(name) {
             search(name)
         }
+    }
+}
+
+const useResponsiblePersons = () => {
+    const [responsiblePersons, setResponsiblePersons] = useState<any[]>([])
+
+    const loadResponsiblePersons = () => {
+        getResponsiblePersonsApi().then((res: any) => {
+            const options = (Array.isArray(res) ? res : []).map((item: any) => ({
+                label: item.label,
+                value: item.user_id,
+            }))
+            setResponsiblePersons(options)
+        })
+    }
+
+    return {
+        responsiblePersons,
+        loadResponsiblePersons,
     }
 }
