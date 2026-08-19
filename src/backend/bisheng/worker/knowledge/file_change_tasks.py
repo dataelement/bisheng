@@ -373,28 +373,33 @@ async def _coordinate_execution_async(
         MutationExecutionCompleted,
     )
 
-    from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+    from bisheng.common.errcode.base import BaseErrorCode
 
     coordinator = _build_execution_coordinator()
     executor = _build_mutation_executor()
     try:
         prepared = await executor.prepare_execution(request_id=int(request_id))
-    except SpacePermissionDeniedError as exc:
-        # Permanent authorization failure: the approved applicant no longer holds
-        # the strict permission required to apply this change. Retrying can never
-        # succeed, and leaving the request in `queued` hides the failure forever
-        # (nothing re-drives a queued request). Fail it terminally so the error
-        # surfaces and the client stops showing 等待执行.
+    except BaseErrorCode as exc:
+        # A deterministic business-rule violation raised while preparing the
+        # approved change — e.g. the applicant no longer holds the required
+        # permission (SpacePermissionDeniedError), or the target already has a
+        # same-name/same-content file (SpaceFileDuplicateError /
+        # SpaceFileNameDuplicateError). These never succeed on retry, and leaving
+        # the request in `queued` hides the failure forever (nothing re-drives a
+        # queued request). Fail it terminally so the error surfaces and the
+        # client stops showing 等待执行. Infra/transient errors are NOT BaseErrorCode
+        # and still propagate to Celery autoretry.
         transitioned = await executor.fail_unstarted_request(
             request_id=int(request_id),
-            failure_reason=f"permission denied for approved file change: {exc}",
+            failure_reason=f"file change cannot be applied: {exc}",
         )
         logger.warning(
-            "F046 coordinate permanently failed (permission denied): request_id={} transitioned_to_failed={}",
+            "F046 coordinate permanently failed ({}): request_id={} transitioned_to_failed={}",
+            type(exc).__name__,
             request_id,
             transitioned,
         )
-        return {"status": "failed", "reason": "permission_denied"}
+        return {"status": "failed", "reason": "business_rule_violation"}
     if isinstance(prepared, MutationExecutionCompleted):
         return {"status": "completed"}
     if execution_token and str(execution_token) != str(prepared.execution_token):
