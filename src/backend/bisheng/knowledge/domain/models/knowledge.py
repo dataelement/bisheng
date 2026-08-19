@@ -18,7 +18,11 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, Knowle
 class KnowledgeTypeEnum(Enum):
     QA = 1  # QAThe knowledge base upon
     NORMAL = 0  # Docly Knowledge Base
-    PRIVATE = 2  # Workbench Personal Knowledge Base
+    # Deprecated: the workbench personal knowledge base was retired; kept only
+    # so historical rows with type=2 continue to decode. New code must not
+    # create PRIVATE knowledge bases and existing list endpoints stop serving
+    # them (see /api/v1/knowledge).
+    PRIVATE = 2  # Workbench Personal Knowledge Base (deprecated)
     SPACE = 3  # Knowledge Space
 
 
@@ -502,9 +506,26 @@ class KnowledgeDao(KnowledgeBase):
             return session.exec(statement).all(), session.scalar(count_statement)
 
     @classmethod
-    def generate_all_knowledge_filter(cls, statement, name: str = None, knowledge_type: KnowledgeTypeEnum = None):
+    def generate_all_knowledge_filter(
+        cls,
+        statement,
+        name: str = None,
+        knowledge_type: KnowledgeTypeEnum = None,
+        id_in: list[int] | None = None,
+    ):
         if knowledge_type is not None:
             statement = statement.where(Knowledge.type == knowledge_type.value)
+
+        # F048 visible-first refactor: `id_in` narrows the DB scan to the set
+        # of ids the caller can already see (via OpenFGA ListObjects). An empty
+        # list is treated as "nothing visible" so the caller does not need to
+        # short-circuit separately. `None` keeps the historical unfiltered
+        # semantics (admin-bypass path).
+        if id_in is not None:
+            if not id_in:
+                statement = statement.where(text("0=1"))
+            else:
+                statement = statement.where(Knowledge.id.in_(id_in))
 
         if name:
             conditions = [col(Knowledge.name).like(f"%{name}%"), col(Knowledge.description).like(f"%{name}%")]
@@ -541,11 +562,23 @@ class KnowledgeDao(KnowledgeBase):
         limit: int = 0,
         preferred_ids: list[int] | None = None,
         cursor: Sequence | None = None,
+        id_in: list[int] | None = None,
     ) -> list[Knowledge]:
         """Admin/scoped-super-admin path; same cursor semantics as
-        ``aget_user_knowledge`` (F027 AD-15)."""
+        ``aget_user_knowledge`` (F027 AD-15).
+
+        ``id_in`` optionally scopes the SELECT to a pre-computed set of
+        visible ids. Callers on the F048 visible-first path pass the id set
+        returned by ``F048PermissionRuntime.list_visible_objects``; the admin
+        bypass path passes ``None``.
+        """
         statement = select(Knowledge)
-        statement = cls.generate_all_knowledge_filter(statement, name=name, knowledge_type=knowledge_type)
+        statement = cls.generate_all_knowledge_filter(
+            statement,
+            name=name,
+            knowledge_type=knowledge_type,
+            id_in=id_in,
+        )
 
         if cursor is not None:
             statement = cls._apply_keyset_where(statement, sort_by, cursor)
