@@ -398,33 +398,42 @@ class WorkFlowService(BaseService):
             batch_cursor = [last_db["update_time"], last_db["id"]]
 
     @classmethod
-    async def _scan_visible_apps_page(
+    async def _scan_visible_apps_cursor(
         cls,
         *,
         user: UserPayload,
-        page: int,
         page_size: int,
-        name: str | None,
-        status: int | None,
+        name: str | None = None,
+        status: int | None = None,
         id_list: list[str] | None = None,
         id_list_not_in: list[str] | None = None,
         flow_type: int | None = None,
         search_description: bool = False,
         action: str = "visible",
         ranking_user_id: int | None = None,
-    ) -> tuple[list[dict], dict[str, frozenset[str]]]:
-        """Fill a legacy offset page using bounded keyset scans."""
-        normalized_page = max(int(page or 1), 1)
+        cursor: Sequence | None = None,
+    ) -> tuple[list[dict], bool, dict[str, frozenset[str]]]:
+        """Fill ONE cursor page by scanning keyset batches until enough visible.
+
+        Unlike the retired offset scan (which re-scanned and re-permission-checked
+        pages 1..N to serve page N), this resumes strictly after ``cursor`` so the
+        per-page permission-check cost is bounded by ``page_size`` no matter how
+        deep the caller has scrolled.
+
+        Returns ``(page_items, has_more, page_actions)``. ``page_items`` still
+        carry the ranking helper columns (``_used_rank``/``_sort_time``) when
+        ``ranking_user_id`` is set so the caller can derive ``next_cursor``; the
+        caller MUST strip them before serving the response.
+        """
         normalized_page_size = max(int(page_size or 1), 1)
-        page_start = (normalized_page - 1) * normalized_page_size
-        target_visible = normalized_page * normalized_page_size
+        requested_actions = tuple(dict.fromkeys((action, "edit", "share")))
 
         visible: list[dict] = []
         visible_actions: dict[str, frozenset[str]] = {}
-        batch_cursor: list | None = None
-        requested_actions = tuple(dict.fromkeys((action, "edit", "share")))
+        batch_cursor: list | None = list(cursor) if cursor else None
 
-        while len(visible) < target_visible:
+        # Accumulate one extra visible row (page_size + 1) to probe has_more.
+        while len(visible) <= normalized_page_size:
             batch, db_has_more = await FlowDao.aget_all_apps(
                 name=name,
                 status=status,
@@ -442,36 +451,30 @@ class WorkFlowService(BaseService):
 
             last_db = batch[-1]
             batch = cls.filter_supported_apps(batch)
-            action_map = await cls._application_action_map(
-                user,
-                batch,
-                requested_actions,
-            )
-            kept = [
-                item
-                for item in batch
-                if action
-                in action_map.get(str(item.get("id")), frozenset())
-            ]
-            for item in kept:
-                item_id = str(item.get("id"))
-                visible_actions[item_id] = action_map.get(
-                    item_id,
-                    frozenset(),
+            if batch:
+                action_map = await cls._application_action_map(
+                    user,
+                    batch,
+                    requested_actions,
                 )
+                for item in batch:
+                    item_id = str(item.get("id"))
+                    if action in action_map.get(item_id, frozenset()):
+                        visible.append(item)
+                        visible_actions[item_id] = action_map.get(
+                            item_id,
+                            frozenset(),
+                        )
 
-            visible.extend(kept)
-            if len(visible) >= target_visible or not db_has_more:
+            if not db_has_more:
                 break
             if ranking_user_id is not None:
                 batch_cursor = [last_db["_used_rank"], last_db["_sort_time"], last_db["id"]]
             else:
                 batch_cursor = [last_db["update_time"], last_db["id"]]
 
-        page_items = visible[page_start:target_visible]
-        for item in page_items:
-            item.pop("_used_rank", None)
-            item.pop("_sort_time", None)
+        has_more = len(visible) > normalized_page_size
+        page_items = visible[:normalized_page_size]
         page_actions = {
             str(item.get("id")): visible_actions.get(
                 str(item.get("id")),
@@ -479,7 +482,7 @@ class WorkFlowService(BaseService):
             )
             for item in page_items
         }
-        return page_items, page_actions
+        return page_items, has_more, page_actions
 
     @classmethod
     def _apply_page_can_share(
@@ -497,22 +500,38 @@ class WorkFlowService(BaseService):
         return data
 
     @classmethod
-    async def get_online_flows_page(
+    async def get_online_flows_cursor(
         cls,
         user: UserPayload,
         name: str | None,
         status: int,
         tag_id: int | None,
         flow_type: int | None,
-        page: int,
-        page_size: int,
+        cursor: str | None = None,
+        page_size: int = 10,
         *,
         search_description: bool = False,
         action: str = "use",
-    ) -> list[dict]:
-        """Return the legacy online-app page without materializing all apps."""
+    ) -> "PageInfiniteCursorData":
+        """Ranked online-app page as an F027 cursor envelope.
+
+        Apps the user has conversations with rank first (by last-used), then the
+        rest by update_time. The ranked keyset is ``(_used_rank, _sort_time, id)``.
+        Per-page permission-check cost is bounded by ``page_size`` regardless of
+        scroll depth (no offset re-scan of earlier pages).
+        """
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+        from bisheng.common.errcode.flow import AppInvalidCursorError
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        context = f"online|action={action}|search_description={int(bool(search_description))}"
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=3, expected_context=context)
+        except CursorDecodeError as exc:
+            raise AppInvalidCursorError(exception=exc)
+
         if flow_type is not None and flow_type not in cls.SUPPORTED_APP_TYPES:
-            return []
+            return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
 
         tagged_ids: list[str] | None = None
         if tag_id:
@@ -526,11 +545,10 @@ class WorkFlowService(BaseService):
             )
             tagged_ids = [row.resource_id for rows in tagged_rows for row in rows]
             if not tagged_ids:
-                return []
+                return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
 
-        data, action_map = await cls._scan_visible_apps_page(
+        page_items, has_more, action_map = await cls._scan_visible_apps_cursor(
             user=user,
-            page=page,
             page_size=page_size,
             name=name,
             status=status,
@@ -539,14 +557,35 @@ class WorkFlowService(BaseService):
             search_description=search_description,
             action=action,
             ranking_user_id=user.user_id,
+            cursor=decoded,
         )
+
+        # Derive the cursor from the last PAGE item's ranked keyset BEFORE the
+        # helper columns are stripped for serialization.
+        next_cursor: str | None = None
+        if has_more and page_items:
+            last = page_items[-1]
+            next_cursor = encode_cursor(
+                (last["_used_rank"], last["_sort_time"], last["id"]),
+                context=context,
+            )
+        for item in page_items:
+            item.pop("_used_rank", None)
+            item.pop("_sort_time", None)
+
         writeable_ids = {
             app_id
             for app_id, action_codes in action_map.items()
             if "edit" in action_codes
         }
-        data = cls.add_extra_field(user, data, writeable_ids=writeable_ids)
-        return cls._apply_page_can_share(user, data, action_map)
+        data = cls.add_extra_field(user, page_items, writeable_ids=writeable_ids)
+        data = cls._apply_page_can_share(user, data, action_map)
+        return PageInfiniteCursorData(
+            data=data,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     @classmethod
     async def get_all_flows_envelope(
@@ -974,16 +1013,30 @@ class WorkFlowService(BaseService):
         return is_new
 
     @classmethod
-    async def get_uncategorized_flows(
+    async def get_uncategorized_flows_envelope(
         cls,
         user: UserPayload,
-        page: int = 1,
+        cursor: str | None = None,
         page_size: int = 8,
         keyword: str | None = None,
-    ) -> list[dict]:
+    ) -> "PageInfiniteCursorData":
+        """Unsorted (untagged) online apps as an F027 cursor envelope.
+
+        Candidate = online apps NOT bound to any APPLICATION tag. Scans forward
+        from the cursor and permission-filters by ``visible``; per-page cost is
+        bounded by ``page_size`` regardless of scroll depth (the offset version
+        re-scanned pages 1..N and degraded on deep pages).
         """
-        Get a list of unsorted skills
-        """
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+        from bisheng.common.errcode.flow import AppInvalidCursorError
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        context = "uncategorized|action=visible"
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
+        except CursorDecodeError as exc:
+            raise AppInvalidCursorError(exception=exc)
+
         all_tags = await TagDao.asearch_tags(
             None,
             0,
@@ -1000,20 +1053,31 @@ class WorkFlowService(BaseService):
             )
             flow_ids_not_in = list({row.resource_id for rows in tagged_rows for row in rows})
 
-        data, permission_map = await cls._scan_visible_apps_page(
+        page_items, has_more, permission_map = await cls._scan_visible_apps_cursor(
             user=user,
-            page=page,
             page_size=page_size,
             name=keyword,
             status=FlowStatus.ONLINE.value,
             id_list_not_in=flow_ids_not_in,
             action="visible",
+            cursor=decoded,
         )
 
-        for one in data:
-            one["logo"] = cls.get_logo_share_link(one["logo"])
+        next_cursor: str | None = None
+        if has_more and page_items:
+            last = page_items[-1]
+            next_cursor = encode_cursor((last["update_time"], last["id"]), context=context)
 
-        return cls._apply_page_can_share(user, data, permission_map)
+        for one in page_items:
+            one["logo"] = cls.get_logo_share_link(one["logo"])
+        cls._apply_page_can_share(user, page_items, permission_map)
+
+        return PageInfiniteCursorData(
+            data=page_items,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     @classmethod
     async def get_one_workflow_simple_info(cls, workflow_id: str) -> Flow | None:

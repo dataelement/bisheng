@@ -23,8 +23,8 @@ export function useAppSwitcher() {
     setLoading(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- API untyped
-      const res: any = await getAllAccessibleAppsApi({ page: 1, limit: 200 });
-      setAllApps(res.data || []);
+      const res: any = await getAllAccessibleAppsApi({ limit: 200 });
+      setAllApps(res.list || []);
     } catch {
       console.error('Failed to fetch accessible apps');
     } finally {

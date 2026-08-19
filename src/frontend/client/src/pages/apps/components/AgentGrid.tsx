@@ -40,12 +40,15 @@ interface Category {
   selected: boolean
 }
 
-// 分页状态类型（含预请求字段）
+// 分页状态类型
+// - frequently_used 仍用页码 + 预请求（/app/used 未改，返回 {list,total}）
+// - uncategorized / category 改为游标瀑布流：cursor 由后端返回，hasMore 直接读响应
 interface Pagination {
-  page: number // 当前已加载到的页码
-  hasMore: boolean // 是否有下一页（基于预请求结果）
-  preloadedNextPage: Agent[] | null // 预请求的下一页数据（缓存）
-  isPreloading: boolean // 是否正在预请求下一页（防重复）
+  page: number // 当前已加载到的页码（仅 frequently_used 使用）
+  hasMore: boolean // 是否有下一页
+  preloadedNextPage: Agent[] | null // 预请求的下一页数据（仅 frequently_used 使用）
+  isPreloading: boolean // 是否正在预请求下一页（防重复，仅 frequently_used）
+  cursor?: string | null // 下一页游标（仅 uncategorized / category 使用）
 }
 
 const uncategorizedPageSize = 24
@@ -90,86 +93,30 @@ export function AgentGrid({
     return favorites ? favorites.includes(agentId) : false
   }
 
-  // 通用预请求函数：请求下一页数据并更新状态
+  // 预请求函数：仅用于「常用」列表（/app/used 仍是页码分页、返回 {list,total}）。
+  // uncategorized / category 已改为游标瀑布流，hasMore 直接来自后端响应，无需预请求探测。
   const preloadNextPage = async (
-    categoryType: "frequently" | "uncategorized" | "category",
-    categoryId?: string, // 分类ID（仅分类数据需要）
+    categoryType: "frequently",
+    _categoryId?: string,
     currentPage: number = 1
   ) => {
     const nextPageNum = currentPage + 1
-    // 避免重复预请求
-    if (categoryType === "frequently" && frequentlyUsedPagination.isPreloading) return
-    if (categoryType === "uncategorized" && uncategorizedPagination.isPreloading) return
-    if (categoryType === "category" && categoryId && pagination[categoryId]?.isPreloading) return
+    if (frequentlyUsedPagination.isPreloading) return
 
-    // 标记为正在预请求
-    if (categoryType === "frequently") {
-      setFrequentlyUsedPagination(prev => ({ ...prev, isPreloading: true }))
-    } else if (categoryType === "uncategorized") {
-      setUncategorizedPagination(prev => ({ ...prev, isPreloading: true }))
-    } else if (categoryType === "category" && categoryId) {
-      setPagination(prev => ({
-        ...prev,
-        [categoryId]: { ...(prev[categoryId] || initialPagination), isPreloading: true }
-      }))
-    }
-
+    setFrequentlyUsedPagination(prev => ({ ...prev, isPreloading: true }))
     try {
-      // 不同类型的预请求逻辑
-      let nextPageData: Agent[] = []
-      if (categoryType === "frequently") {
-        const res = await getFrequently(nextPageNum, pageSize)
-        nextPageData = res.data?.list || []
-      } else if (categoryType === "uncategorized") {
-        const res = await getUncategorized(nextPageNum, uncategorizedPageSize)
-        nextPageData = res.data || []
-      } else if (categoryType === "category" && categoryId) {
-        const res = await getChatOnlineApi(nextPageNum, "", parseInt(categoryId))
-        nextPageData = res.data || []
-      }
-
-      // 预请求结果：有数据→hasMore=true，无数据→hasMore=false
+      const res = await getFrequently(nextPageNum, pageSize)
+      const nextPageData: Agent[] = res.data?.list || []
       const hasMore = nextPageData.length > 0
-
-      // 更新分页状态（存储预请求数据）
-      if (categoryType === "frequently") {
-        setFrequentlyUsedPagination(prev => ({
-          ...prev,
-          hasMore: hasMore,
-          preloadedNextPage: nextPageData,
-          isPreloading: false
-        }))
-      } else if (categoryType === "uncategorized") {
-        setUncategorizedPagination(prev => ({
-          ...prev,
-          hasMore: hasMore,
-          preloadedNextPage: nextPageData,
-          isPreloading: false
-        }))
-      } else if (categoryType === "category" && categoryId) {
-        setPagination(prev => ({
-          ...prev,
-          [categoryId]: {
-            ...(prev[categoryId] || initialPagination),
-            hasMore: hasMore,
-            preloadedNextPage: nextPageData,
-            isPreloading: false
-          }
-        }))
-      }
+      setFrequentlyUsedPagination(prev => ({
+        ...prev,
+        hasMore,
+        preloadedNextPage: nextPageData,
+        isPreloading: false
+      }))
     } catch (error) {
       console.error(`预请求${categoryType}下一页失败:`, error)
-      // 失败默认认为无下一页
-      if (categoryType === "frequently") {
-        setFrequentlyUsedPagination(prev => ({ ...prev, hasMore: false, isPreloading: false }))
-      } else if (categoryType === "uncategorized") {
-        setUncategorizedPagination(prev => ({ ...prev, hasMore: false, isPreloading: false }))
-      } else if (categoryType === "category" && categoryId) {
-        setPagination(prev => ({
-          ...prev,
-          [categoryId]: { ...(prev[categoryId] || initialPagination), hasMore: false, isPreloading: false }
-        }))
-      }
+      setFrequentlyUsedPagination(prev => ({ ...prev, hasMore: false, isPreloading: false }))
     }
   }
 
@@ -178,7 +125,8 @@ export function AgentGrid({
     page: 1,
     hasMore: false,
     preloadedNextPage: null,
-    isPreloading: false
+    isPreloading: false,
+    cursor: null
   }
 
   // 1. 加载常用智能体（含预请求）
@@ -232,50 +180,38 @@ export function AgentGrid({
       })
       setPagination(initPagination)
 
-      // 加载每个分类的第1页数据
+      // 加载每个分类的首屏数据（游标首页）
       categoryList.forEach((category: Category) => {
-        fetchAgentsForCategory(category.value, 1)
+        fetchAgentsForCategory(category.value)
       })
 
-      // 加载未分类数据
-      fetchUncategorizedAgents(1)
+      // 加载未分类数据（游标首页）
+      fetchUncategorizedAgents()
     } catch (error) {
       console.error("获取分类失败:", error)
     }
   }
 
-  // 3. 加载分类智能体（含预请求）
-  const fetchAgentsForCategory = async (categoryId: string, pageNum: number = 1) => {
+  // 3. 加载分类智能体（游标瀑布流）。cursor=null 表示首屏。
+  const fetchAgentsForCategory = async (categoryId: string, cursor: string | null = null, append = false) => {
     setLoading(prev => ({ ...prev, [categoryId]: true }))
     try {
-      const res = await getChatOnlineApi(pageNum, "", parseInt(categoryId))
-      const agents = res.data || []
+      const res = await getChatOnlineApi(cursor, "", parseInt(categoryId))
+      const agents = res.list || []
 
-      // 首次加载第1页后，预请求第2页
-      if (pageNum === 1) {
-        preloadNextPage("category", categoryId, pageNum)
-      }
-
-      // 累加数据
       setAgentsByCategory(prev => ({
         ...prev,
-        [categoryId]: pageNum === 1 ? agents : [...(prev[categoryId] || []), ...agents]
+        [categoryId]: append ? [...(prev[categoryId] || []), ...agents] : agents
       }))
 
-      // 更新当前页码
       setPagination(prev => ({
         ...prev,
         [categoryId]: {
           ...(prev[categoryId] || initialPagination),
-          page: pageNum,
-          ...(pageNum > 1 && { preloadedNextPage: null }) // 清空已使用的预请求数据
+          cursor: res.nextCursor,
+          hasMore: !!res.hasMore
         }
       }))
-
-      // 后续加载后，预请求新的下一页
-      if (pageNum > 1) {
-        preloadNextPage("category", categoryId, pageNum)
-      }
     } catch (error) {
       console.error(`获取分类 ${categoryId} 失败:`, error)
     } finally {
@@ -283,32 +219,20 @@ export function AgentGrid({
     }
   }
 
-  // 4. 加载未分类智能体（含预请求）
-  const fetchUncategorizedAgents = async (pageNum: number = 1) => {
+  // 4. 加载未分类智能体（游标瀑布流）。cursor=null 表示首屏。
+  const fetchUncategorizedAgents = async (cursor: string | null = null, append = false) => {
     setUncategorizedLoading(true)
     try {
-      const res = await getUncategorized(pageNum, uncategorizedPageSize)
-      const agents = res.data || []
+      const res = await getUncategorized(cursor, uncategorizedPageSize)
+      const agents = res.list || []
 
-      // 首次加载第1页后，预请求第2页
-      if (pageNum === 1) {
-        preloadNextPage("uncategorized", undefined, pageNum)
-      }
+      setUncategorizedAgents(prev => append ? [...prev, ...agents] : agents)
 
-      // 累加数据
-      setUncategorizedAgents(prev => pageNum === 1 ? agents : [...prev, ...agents])
-
-      // 更新当前页码
       setUncategorizedPagination(prev => ({
         ...prev,
-        page: pageNum,
-        ...(pageNum > 1 && { preloadedNextPage: null }) // 清空已使用的预请求数据
+        cursor: res.nextCursor,
+        hasMore: !!res.hasMore
       }))
-
-      // 后续加载后，预请求新的下一页
-      if (pageNum > 1) {
-        preloadNextPage("uncategorized", undefined, pageNum)
-      }
     } catch (error) {
       console.error("获取未分类助手失败:", error)
     } finally {
@@ -335,40 +259,11 @@ export function AgentGrid({
         fetchFrequentlyUsed(nextPage)
       }
     } else if (categoryId === "uncategorized") {
-      const { page, preloadedNextPage } = uncategorizedPagination
-      const nextPage = page + 1
-      if (preloadedNextPage && preloadedNextPage.length > 0) {
-        setUncategorizedAgents(prev => [...prev, ...preloadedNextPage])
-        setUncategorizedPagination(prev => ({
-          ...prev,
-          page: nextPage,
-          preloadedNextPage: null
-        }))
-        preloadNextPage("uncategorized", undefined, nextPage)
-      } else {
-        fetchUncategorizedAgents(nextPage)
-      }
+      // 游标瀑布流：用后端返回的下一页游标续拉。
+      fetchUncategorizedAgents(uncategorizedPagination.cursor ?? null, true)
     } else {
       const categoryPage = pagination[categoryId] || initialPagination
-      const { page, preloadedNextPage } = categoryPage
-      const nextPage = page + 1
-      if (preloadedNextPage && preloadedNextPage.length > 0) {
-        setAgentsByCategory(prev => ({
-          ...prev,
-          [categoryId]: [...(prev[categoryId] || []), ...preloadedNextPage]
-        }))
-        setPagination(prev => ({
-          ...prev,
-          [categoryId]: {
-            ...categoryPage,
-            page: nextPage,
-            preloadedNextPage: null
-          }
-        }))
-        preloadNextPage("category", categoryId, nextPage)
-      } else {
-        fetchAgentsForCategory(categoryId, nextPage)
-      }
+      fetchAgentsForCategory(categoryId, categoryPage.cursor ?? null, true)
     }
   }
 

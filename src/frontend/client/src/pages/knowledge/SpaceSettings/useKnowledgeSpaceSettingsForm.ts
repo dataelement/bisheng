@@ -18,6 +18,7 @@ import {
   getCreationPermissionContext,
   getAllResourcePermissionGrants,
   getGrantablePermissionModels,
+  getMyResourcePermissions,
   getResourcePermissionContext,
   mutateResourceGrants,
 } from "~/api/permission";
@@ -202,10 +203,18 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       if (!spaceId) return;
       setLoading(true);
       try {
-        const space = await getSpaceInfoApi(spaceId);
+        // `getSpaceInfoApi` no longer carries the caller's effective actions,
+        // so authorization for this settings page is resolved via the F048
+        // my-permissions summary. Both reads are independent, so run them
+        // together to keep the page open fast.
+        const [space, myPermissions] = await Promise.all([
+          getSpaceInfoApi(spaceId),
+          getMyResourcePermissions("knowledge_space", spaceId),
+        ]);
         if (cancelled) return;
-        const canEditSpace = Boolean(space.actions?.includes("edit"));
-        const canManageSpace = Boolean(space.actions?.includes("manage_permission"));
+        const canEditSpace = myPermissions.actions.includes("edit");
+        const canManageSpace =
+          myPermissions.actions.includes("manage_permission");
         if (!canEditSpace && !canManageSpace) {
           throw new Error("Knowledge space settings access denied");
         }

@@ -131,6 +131,8 @@
     "pending": "Estimated impact: {{resources}} resources and {{grants}} grants",
     "review": "Review Impact",
     "blocked": "Blocking items prevent publishing",
+    "blockerUnavailableActions": "The custom permission \"{{model}}\" still uses deactivated actions: {{actions}}. Remove these actions from that custom permission first, then publish this change.",
+    "blockerNoEffectiveActions": "The custom permission \"{{model}}\" has no effective actions. Select valid actions for it or deactivate that custom permission first, then publish this change.",
     "expired": "The impact analysis expired. Generate it again.",
     "expiresAt": "Valid until {{value}}",
     "cancel": "Cancel",

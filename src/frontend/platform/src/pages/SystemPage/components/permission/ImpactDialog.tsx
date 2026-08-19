@@ -8,13 +8,16 @@ import {
   DialogTitle,
 } from "@/components/bs-ui/dialog"
 import type {
+  PermissionCatalogAction,
   PermissionCatalogDraft,
+  PermissionCatalogModel,
   PublishPermissionCatalogDraftRequest,
 } from "@/controllers/API/permission"
 import { formatDate } from "@/util/utils"
 import { AlertTriangle } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { formatBlockerMessage } from "./blockerMessages"
 
 interface ImpactDialogProps {
   open: boolean
@@ -24,6 +27,11 @@ interface ImpactDialogProps {
     draftId: number,
     payload: PublishPermissionCatalogDraftRequest,
   ) => Promise<unknown>
+  // Used only to resolve blocker model keys and action codes into the display
+  // names an operator recognises; optional so the dialog still renders raw
+  // blockers when the catalog is unavailable.
+  models?: PermissionCatalogModel[]
+  actions?: PermissionCatalogAction[]
   now?: Date
 }
 
@@ -67,6 +75,8 @@ export function ImpactDialog({
   draft,
   onOpenChange,
   onPublish,
+  models,
+  actions,
   now = new Date(),
 }: ImpactDialogProps) {
   const { t } = useTranslation("permission")
@@ -143,7 +153,9 @@ export function ImpactDialog({
             </div>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {draft.impact.blockers.map((blocker) => (
-                <li key={blocker}>{blocker}</li>
+                <li key={blocker}>
+                  {formatBlockerMessage(t, blocker, { models, actions })}
+                </li>
               ))}
             </ul>
           </div>
