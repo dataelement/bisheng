@@ -438,22 +438,66 @@
 
   // Copy. The AI prompt copies verbatim (it is prose for the agent); the manual
   // block strips the leading "$ " prompts and "# " comments so it pastes clean.
+  function flash(btn, msg){
+    var old = btn.getAttribute('data-label') || btn.textContent;
+    btn.setAttribute('data-label', old);
+    btn.textContent = msg;
+    setTimeout(function(){ btn.textContent = btn.getAttribute('data-label'); }, 1600);
+  }
+
+  // Copy the given text, then confirm on the button. navigator.clipboard only
+  // exists in a secure context (https or localhost) — over plain http on a LAN
+  // IP it is undefined, which is exactly how the platform is reached, so fall
+  // back to execCommand('copy'); if even that fails, select the source node so
+  // the reader can copy by hand rather than silently getting nothing.
+  function copyText(text, btn, sourceEl){
+    var ok = function(){ flash(btn, '已复制 ✓'); };
+    if(navigator.clipboard && window.isSecureContext){
+      navigator.clipboard.writeText(text).then(ok).catch(function(){ legacyCopy(text, btn, sourceEl, ok); });
+      return;
+    }
+    legacyCopy(text, btn, sourceEl, ok);
+  }
+
+  function legacyCopy(text, btn, sourceEl, ok){
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      var done = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if(done){ ok(); return; }
+    }catch(e){/* fall through to manual selection */}
+    // Last resort: select the visible text so the reader can press Ctrl/Cmd+C.
+    try{
+      var range = document.createRange();
+      range.selectNodeContents(sourceEl);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      flash(btn, '已选中，按 Ctrl/⌘+C 复制');
+    }catch(e2){ flash(btn, '请手动选择复制'); }
+  }
+
   document.querySelectorAll('[data-copy]').forEach(function(btn){
     btn.addEventListener('click', function(){
       var kind = btn.getAttribute('data-copy');
-      var text;
+      var sourceEl, text;
       if(kind === 'prompt'){
-        text = document.getElementById('ai-prompt').innerText.trim();
+        sourceEl = document.getElementById('ai-prompt');
+        text = sourceEl.innerText.trim();
       }else{
-        text = document.getElementById('manual-cmds').innerText
+        sourceEl = document.getElementById('manual-cmds');
+        text = sourceEl.innerText
           .replace(/^\s*\$\s?/gm,'').replace(/^\s*#.*$/gm,'').replace(/\n{2,}/g,'\n').trim();
       }
-      if(navigator.clipboard){
-        navigator.clipboard.writeText(text).then(function(){
-          var old = btn.textContent; btn.textContent = '已复制 ✓';
-          setTimeout(function(){ btn.textContent = old; }, 1500);
-        });
-      }
+      copyText(text, btn, sourceEl);
     });
   });
 </script>
