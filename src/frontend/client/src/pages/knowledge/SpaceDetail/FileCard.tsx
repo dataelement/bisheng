@@ -751,7 +751,7 @@ export function FileCard({
                             style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
                         />
                     </DropdownMenuTrigger>
-                    <ActionMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                    <ActionMenuContent align="start" width={140} onClick={(e) => e.stopPropagation()}>
                         {moreMenuItems}
                     </ActionMenuContent>
                 </DropdownMenu>
@@ -855,6 +855,7 @@ export function FileCard({
 
                                     <ActionMenuContent
                                         align="end"
+                                        width={140}
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         {moreMenuItems}

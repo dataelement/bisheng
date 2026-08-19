@@ -643,7 +643,7 @@ export function FileListRow({
                                 <Outlined.More />
                             </Button>
                         </DropdownMenuTrigger>
-                        <ActionMenuContent align="end">{moreMenuItems}</ActionMenuContent>
+                        <ActionMenuContent align="end" width={140}>{moreMenuItems}</ActionMenuContent>
                     </DropdownMenu>
                 )}
             </div>
@@ -660,7 +660,7 @@ export function FileListRow({
                             style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
                         />
                     </DropdownMenuTrigger>
-                    <ActionMenuContent align="start">{moreMenuItems}</ActionMenuContent>
+                    <ActionMenuContent align="start" width={140}>{moreMenuItems}</ActionMenuContent>
                 </DropdownMenu>
             )}
         </div>

@@ -144,7 +144,7 @@ export function KnowledgeSpaceHeader({
                             <Outlined.Down className="size-4" />
                         </button>
                     </DropdownMenuTrigger>
-                    <ActionMenuContent align="end">
+                    <ActionMenuContent align="end" width={140}>
                         {showPendingBatchGroup && (
                             <>
                                 <div className={cn("py-1.5", actionMenuSectionLabelClassName)}>
