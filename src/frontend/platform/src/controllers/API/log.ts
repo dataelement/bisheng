@@ -52,6 +52,22 @@ const filterMultiTenantOnly = <T extends { value: string }>(
     pick: (item: T) => boolean,
 ): T[] => (multiTenantEnabled ? items : items.filter((item) => !pick(item)))
 
+/**
+ * Fold a structured v2 action into its `log.eventTypeEnum` key.
+ *
+ * This is the ONLY way a v2 action's i18n key may be produced. The audit table
+ * derives it from the row (`systemLog/index.tsx` renderEventType), so a
+ * hand-written key that folds differently gives you a correct filter dropdown
+ * and a raw `open_api.api_key.issue` in the table cell — which is exactly how
+ * the `openApiKeyIssue` / `openApiApiKeyIssue` split happened. Deriving both
+ * sides from one function makes that divergence unrepresentable.
+ */
+export const actionToI18nKey = (action: string): string => {
+    const [head, ...rest] = action.split(/[._]/).filter(Boolean)
+    if (!head) return action
+    return head + rest.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')
+}
+
 // 系统模块
 // `tenant` / `llm` are synthetic v2 namespaces (action prefix `tenant.*` /
 // `llm.server.*`). Backend `get_audit_logs` maps them to `action LIKE '...'`
@@ -85,7 +101,10 @@ export async function getModulesApi({ multiTenantEnabled = true }: AuditFilterOp
     }
 }
 
-const actions = [
+// Legacy actions predate the structured `namespace.entity.verb` form: their
+// i18n keys are irregular (`add_tool`, not `addTool`) and the audit table looks
+// them up by the `event_type` column verbatim, so they stay hand-written.
+const legacyActions = [
     { name: 'log.eventTypeEnum.createChat', value: 'create_chat' },
     { name: 'log.eventTypeEnum.deleteChat', value: 'delete_chat' },
     { name: 'log.eventTypeEnum.createBuild', value: 'create_build' },
@@ -115,90 +134,103 @@ const actions = [
     { name: 'log.eventTypeEnum.delete_channel', value: 'delete_channel' },
     { name: 'log.eventTypeEnum.create_knowledge_space', value: 'create_knowledge_space' },
     { name: 'log.eventTypeEnum.delete_knowledge_space', value: 'delete_knowledge_space' },
-    // v2 structured actions surfaced to operators (2026-05-06 product call):
-    // tenant lifecycle + LLM server lifecycle only. Keep in sync with backend
-    // `_UI_VISIBLE_V2_ACTIONS`. Note: i18n keys use camelCase to avoid
-    // colliding with i18next's `.` nesting separator (the on-wire `value`
-    // keeps the dotted form expected by the audit_log.action column).
-    { name: 'log.eventTypeEnum.tenantMount', value: 'tenant.mount' },
-    { name: 'log.eventTypeEnum.tenantUnmount', value: 'tenant.unmount' },
-    { name: 'log.eventTypeEnum.tenantDisable', value: 'tenant.disable' },
-    { name: 'log.eventTypeEnum.llmServerCreate', value: 'llm.server.create' },
-    { name: 'log.eventTypeEnum.llmServerUpdate', value: 'llm.server.update' },
-    { name: 'log.eventTypeEnum.llmServerDelete', value: 'llm.server.delete' },
-    { name: 'log.eventTypeEnum.approvalRequestSubmit', value: 'approval.request.submit' },
-    { name: 'log.eventTypeEnum.approvalTaskApprove', value: 'approval.task.approve' },
-    { name: 'log.eventTypeEnum.approvalTaskReject', value: 'approval.task.reject' },
-    { name: 'log.eventTypeEnum.approvalRequestWithdraw', value: 'approval.request.withdraw' },
-    { name: 'log.eventTypeEnum.approvalRoutePass', value: 'approval.route.pass' },
-    { name: 'log.eventTypeEnum.approvalHandlerSuccess', value: 'approval.handler.success' },
-    { name: 'log.eventTypeEnum.approvalHandlerFailed', value: 'approval.handler.failed' },
-    { name: 'log.eventTypeEnum.approvalExceptionRetry', value: 'approval.exception.retry' },
-    { name: 'log.eventTypeEnum.approvalExceptionAssignApprover', value: 'approval.exception.assign_approver' },
-    { name: 'log.eventTypeEnum.approvalExceptionCancel', value: 'approval.exception.cancel' },
-    { name: 'log.eventTypeEnum.approvalFlowUpdate', value: 'approval.flow.update' },
-    { name: 'log.eventTypeEnum.approvalScenarioToggle', value: 'approval.scenario.toggle' },
-    { name: 'log.eventTypeEnum.approvalScenarioCreate', value: 'approval.scenario.create' },
-    { name: 'log.eventTypeEnum.approvalMenuAccessRevokeGrant', value: 'approval.menu_access.revoke_grant' },
-    // F049 open API auth (design D11). Lockstep with backend
-    // `_UI_VISIBLE_V2_ACTIONS` in database/models/audit_log.py and the
-    // `log.eventTypeEnum` copy in bs.json (three languages). The grant /
-    // share_link / ws families start producing events in later waves; they are
-    // registered here in one go so the filter never has to be touched twice.
-    { name: 'log.eventTypeEnum.openApiServiceAccountCreate', value: 'open_api.service_account.create' },
-    { name: 'log.eventTypeEnum.openApiServiceAccountUpdate', value: 'open_api.service_account.update' },
-    { name: 'log.eventTypeEnum.openApiServiceAccountEnable', value: 'open_api.service_account.enable' },
-    { name: 'log.eventTypeEnum.openApiServiceAccountDisable', value: 'open_api.service_account.disable' },
-    { name: 'log.eventTypeEnum.openApiServiceAccountDelete', value: 'open_api.service_account.delete' },
-    { name: 'log.eventTypeEnum.openApiKeyIssue', value: 'open_api.api_key.issue' },
-    { name: 'log.eventTypeEnum.openApiKeyUpdate', value: 'open_api.api_key.update' },
-    { name: 'log.eventTypeEnum.openApiKeyRevoke', value: 'open_api.api_key.revoke' },
-    { name: 'log.eventTypeEnum.openApiKeyRevokeAll', value: 'open_api.api_key.revoke_all' },
-    { name: 'log.eventTypeEnum.openApiKeyExpire', value: 'open_api.api_key.expire' },
-    { name: 'log.eventTypeEnum.openApiKeyInvalidateBySubject', value: 'open_api.api_key.invalidate_by_subject' },
-    { name: 'log.eventTypeEnum.openApiGrantAdd', value: 'open_api.grant.add' },
-    { name: 'log.eventTypeEnum.openApiGrantUpdate', value: 'open_api.grant.update' },
-    { name: 'log.eventTypeEnum.openApiGrantRemove', value: 'open_api.grant.remove' },
-    { name: 'log.eventTypeEnum.openApiGrantRemoveAll', value: 'open_api.grant.remove_all' },
-    { name: 'log.eventTypeEnum.openApiShareLinkRevoke', value: 'open_api.share_link.revoke' },
-    { name: 'log.eventTypeEnum.openApiShareLinkExpire', value: 'open_api.share_link.expire' },
-    { name: 'log.eventTypeEnum.openApiWsConnect', value: 'open_api.ws.connect' },
-    // F054 hosted applications. Lockstep with backend `_UI_VISIBLE_V2_ACTIONS`
-    // (audit_log.py) and `AppAuditAction` — an action registered on one side
-    // only is written to the DB and never appears in this filter.
-    { name: 'log.eventTypeEnum.appPublish', value: 'app.publish' },
-    { name: 'log.eventTypeEnum.appPublishPending', value: 'app.publish_pending' },
-    { name: 'log.eventTypeEnum.appManualPublish', value: 'app.manual_publish' },
-    { name: 'log.eventTypeEnum.appStop', value: 'app.stop' },
-    { name: 'log.eventTypeEnum.appResume', value: 'app.resume' },
-    { name: 'log.eventTypeEnum.appDelete', value: 'app.delete' },
-    { name: 'log.eventTypeEnum.appDeleteHookFailed', value: 'app.delete_hook_failed' },
-    { name: 'log.eventTypeEnum.appMetaUpdate', value: 'app.meta_update' },
-    { name: 'log.eventTypeEnum.appDataRowEdit', value: 'app.data_row_edit' },
-    // F056 governance. Key is derived by `actionToI18nKey` (systemLog/index.tsx),
-    // never chosen by hand: `app.visibility_change` folds to `appVisibilityChange`.
-    { name: 'log.eventTypeEnum.appVisibilityChange', value: 'app.visibility_change' },
-    // F055 publish pipeline. Registered here because the backend whitelist and
-    // this array are one list kept in two places: an action missing from this
-    // side is written to the database and then cannot be found on the audit
-    // page at all — the exact failure F054 recorded as pit 24, and the reason
-    // AC-27 is judged on the filter rather than on the write.
-    { name: 'log.eventTypeEnum.appReleaseSubmit', value: 'app.release.submit' },
-    { name: 'log.eventTypeEnum.appReleasePrecheckFailed', value: 'app.release.precheck_failed' },
-    { name: 'log.eventTypeEnum.appReleaseScanBlocked', value: 'app.release.scan_blocked' },
-    { name: 'log.eventTypeEnum.appReleaseVersionCreated', value: 'app.release.version_created' },
-    { name: 'log.eventTypeEnum.appReleaseApprovalCreated', value: 'app.release.approval_created' },
-    { name: 'log.eventTypeEnum.appReleaseApprovalException', value: 'app.release.approval_exception' },
-    { name: 'log.eventTypeEnum.appReleaseSelfApproval', value: 'app.release.self_approval' },
-    { name: 'log.eventTypeEnum.appReleaseApproved', value: 'app.release.approved' },
-    { name: 'log.eventTypeEnum.appReleaseRejected', value: 'app.release.rejected' },
-    { name: 'log.eventTypeEnum.appReleaseWithdrawn', value: 'app.release.withdrawn' },
-    { name: 'log.eventTypeEnum.appReleaseCancelled', value: 'app.release.cancelled' },
-    { name: 'log.eventTypeEnum.appReleaseOnline', value: 'app.release.online' },
-    { name: 'log.eventTypeEnum.appReleasePendingOnline', value: 'app.release.pending_online' },
-    { name: 'log.eventTypeEnum.appReleaseManualPublish', value: 'app.release.manual_publish' },
-    { name: 'log.eventTypeEnum.appReleaseCapabilityDeclared', value: 'app.release.capability_declared' },
-    { name: 'log.eventTypeEnum.appReleaseRollback', value: 'app.release.rollback' },
+];
+
+/**
+ * Structured v2 actions, in dropdown order.
+ *
+ * **This list is one half of a lockstep pair** — its twin is
+ * `_UI_VISIBLE_V2_ACTIONS` in `bisheng/database/models/audit_log.py`. An action
+ * registered on the backend only is written to the database and can never be
+ * found on the audit page; registered here only, the filter returns nothing
+ * forever. `src/test/logActions.test.ts` reads the Python tuple and asserts the
+ * two are equal, so the pair cannot drift silently again.
+ *
+ * Only the on-wire value is written here. The label key is derived by
+ * `actionToI18nKey`, which is also what the audit table uses — see the note on
+ * that function for why hand-writing it is not an option.
+ */
+export const V2_ACTIONS: string[] = [
+    'tenant.mount',
+    'tenant.unmount',
+    'tenant.disable',
+    'llm.server.create',
+    'llm.server.update',
+    'llm.server.delete',
+    'approval.request.submit',
+    'approval.task.approve',
+    'approval.task.reject',
+    'approval.request.withdraw',
+    'approval.route.pass',
+    'approval.handler.success',
+    'approval.handler.failed',
+    'approval.exception.retry',
+    'approval.exception.assign_approver',
+    'approval.exception.cancel',
+    'approval.flow.update',
+    'approval.scenario.toggle',
+    'approval.scenario.create',
+    'approval.exception.skip_node',
+    'approval.menu_access.revoke_grant',
+    // F049 open API auth. The grant / share_link / ws families get their first
+    // writers in later waves; registered in one go so the filter is touched
+    // exactly once per feature.
+    'open_api.service_account.create',
+    'open_api.service_account.update',
+    'open_api.service_account.enable',
+    'open_api.service_account.disable',
+    'open_api.service_account.delete',
+    'open_api.api_key.issue',
+    'open_api.api_key.update',
+    'open_api.api_key.revoke',
+    'open_api.api_key.revoke_all',
+    'open_api.api_key.expire',
+    'open_api.api_key.invalidate_by_subject',
+    'open_api.grant.add',
+    'open_api.grant.update',
+    'open_api.grant.remove',
+    'open_api.grant.remove_all',
+    'open_api.share_link.revoke',
+    'open_api.share_link.expire',
+    'open_api.ws.connect',
+    // F054 hosted applications — the state machine, meta updates and the
+    // deferred data-tab row edit.
+    'app.publish',
+    'app.publish_pending',
+    'app.manual_publish',
+    'app.stop',
+    'app.resume',
+    'app.delete',
+    'app.delete_hook_failed',
+    'app.meta_update',
+    'app.data_row_edit',
+    // F056 governance.
+    'app.visibility_change',
+    // F055 publish pipeline. Its own family, deliberately NOT nested under
+    // `app.publish` — that name is already the state action "the app went
+    // online", and reusing the prefix makes both the filter and the namespace
+    // mapping ambiguous.
+    'app.release.submit',
+    'app.release.precheck_failed',
+    'app.release.scan_blocked',
+    'app.release.version_created',
+    'app.release.approval_created',
+    'app.release.approval_exception',
+    'app.release.self_approval',
+    'app.release.approved',
+    'app.release.rejected',
+    'app.release.withdrawn',
+    'app.release.cancelled',
+    'app.release.online',
+    'app.release.pending_online',
+    'app.release.manual_publish',
+    'app.release.capability_declared',
+    'app.release.rollback',
+];
+
+const actions = [
+    ...legacyActions,
+    ...V2_ACTIONS.map(value => ({ name: `log.eventTypeEnum.${actionToI18nKey(value)}`, value })),
 ];
 
 // 全部操作行为

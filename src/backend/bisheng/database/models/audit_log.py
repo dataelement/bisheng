@@ -186,8 +186,15 @@ class AuditLog(AuditLogBase, table=True):
 # only a curated subset of structured actions to operators. Other v2 actions
 # (admin.scope_switch, resource.*, user.*, dept.*, llm.server.toggle_share,
 # llm.model.*) keep writing for compliance/forensics but stay hidden from
-# the UI list and filter dropdowns. Update this tuple in lockstep with the
-# frontend `getActionsApi` / `getActionsByModuleApi` whitelist.
+# the UI list and filter dropdowns.
+#
+# LOCKSTEP: this tuple must equal `V2_ACTIONS` in
+# src/frontend/platform/src/controllers/API/log.ts, and every entry needs copy
+# under `log.eventTypeEnum` in all three bs.json. **Both are enforced by
+# `pnpm check-i18n`, which CI runs** — an action added here alone fails the
+# gate rather than silently becoming an event nobody can find on the audit
+# page. The frontend label key is derived from the value, never hand-written,
+# so it cannot drift from what the table looks up.
 _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "tenant.mount",
     "tenant.unmount",
@@ -214,8 +221,6 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     "approval.menu_access.revoke_grant",
     # F049 open API auth (design D11). Registered once for all five families;
     # grant / share_link / ws events start being written in later waves.
-    # Lockstep: platform controllers/API/log.ts `actions` + `getModulesApi`,
-    # bs.json log.systemIdEnum / log.eventTypeEnum (three languages).
     "open_api.service_account.create",
     "open_api.service_account.update",
     "open_api.service_account.enable",
@@ -238,10 +243,8 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     # machine, meta updates and the deferred data-tab row edit are registered
     # in one go so this whitelist is touched exactly once for the feature —
     # `app.data_row_edit` starts being written in a later wave.
-    # Lockstep: bisheng/app_runtime/domain/constants.py AppAuditAction +
-    # platform controllers/API/log.ts (`actions` array, module dropdown,
-    # getActionsByModuleApi switch) + bs.json log.systemIdEnum /
-    # log.eventTypeEnum in all three languages.
+    # Also lockstep with bisheng/app_runtime/domain/constants.py AppAuditAction
+    # (backend-side twin, not covered by the frontend gate).
     "app.publish",
     "app.publish_pending",
     "app.manual_publish",
@@ -264,9 +267,6 @@ _UI_VISIBLE_V2_ACTIONS: tuple[str, ...] = (
     # Registered in one go — `capability_declared` / `rollback` get their first
     # writers in a later wave, and touching this whitelist twice for one
     # feature is how a written event ends up invisible on the audit page.
-    # Lockstep: platform controllers/API/log.ts (`actions` array, module
-    # dropdown, getActionsByModuleApi switch) + bs.json log.systemIdEnum /
-    # log.eventTypeEnum in all three languages (T045).
     "app.release.submit",
     "app.release.precheck_failed",
     "app.release.scan_blocked",

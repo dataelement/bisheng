@@ -5,7 +5,7 @@ import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
-import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
+import { actionToI18nKey, getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi } from "@/controllers/API/log";
 import { getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
@@ -44,11 +44,11 @@ const useModules = (multiTenantEnabled: boolean) => {
 // Both `.` and `_` act as word separators: i18next treats `.` as a nesting
 // separator and locale keys use camelCase throughout, so snake_case segments
 // must also be folded into the camelCase form to resolve.
-export const actionToI18nKey = (action: string): string => {
-    const [head, ...rest] = action.split(/[._]/).filter(Boolean)
-    if (!head) return action
-    return head + rest.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('')
-}
+// Re-exported so this page stays the discoverable home of the audit-table
+// rendering rules. The implementation lives next to the action list it has to
+// agree with (controllers/API/log.ts) — keeping them in one file is what makes
+// the filter label and the table cell provably the same key.
+export { actionToI18nKey }
 
 const renderSystemId = (log: any, t: (key: string, opts?: any) => string): string => {
     if (log.system_id) return t(`log.systemIdEnum.${log.system_id}`)
