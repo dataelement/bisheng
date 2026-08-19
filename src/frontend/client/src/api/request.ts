@@ -115,6 +115,11 @@ export const translateApiErrorMessage = (data: any) => {
   const statusMessage = typeof data?.status_message === "string" ? data.status_message : "";
   const statusMessageKey = statusMessage ? `api_errors.${statusMessage}` : "";
 
+  // F045 uses 18106 as a request-level safety gate with a deliberately specific
+  // backend message. Keep it instead of replacing it with the generic approval
+  // scenario translation registered for the same legacy error code.
+  if (data?.status_code === 18106 && statusMessage) return statusMessage;
+
   if (statusCodeKey && i18next.exists(statusCodeKey)) {
     return i18next.t(statusCodeKey, data?.data);
   }

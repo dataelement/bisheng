@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from bisheng.common.models.space_channel_member import UserRoleEnum
 from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum, KnowledgeBase
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileRead
-from bisheng.permission.domain.schemas.permission_schema import AuthorizeGrantItem
+from bisheng.knowledge.domain.schemas.knowledge_space_file_change_schema import FileChangeApprovalView
+from bisheng.permission.domain.schemas.permission_schema import AuthorizationItemResult, AuthorizeGrantItem
 
 
 class InitialPermissionRequest(BaseModel):
@@ -18,6 +19,11 @@ class InitialPermissionRequest(BaseModel):
 class InitialPermissionResult(BaseModel):
     status: Literal["success", "failed"]
     error_code: int | None = None
+    direct_applied_count: int = 0
+    invite_created_count: int = 0
+    invite_existing_count: int = 0
+    failed_count: int = 0
+    results: list[AuthorizationItemResult] = Field(default_factory=list)
 
 
 class SpaceSubscriptionStatusEnum(str, Enum):
@@ -249,6 +255,10 @@ class KnowledgeSpaceFileResponse(KnowledgeFileRead):
     approval_status: str | None = Field(None, description="Approval status for pending uploads")
     approval_reason: str | None = Field(None, description="Approval or safety reject reason")
     is_pending_approval: bool = Field(default=False, description="Whether the file is still pending approval")
+    file_change_approval: FileChangeApprovalView | None = Field(
+        default=None,
+        description="Active formal-resource change visible to the applicant/current approver",
+    )
     # Version management fields (populated by list_space_children when version feature is enabled)
     version_no: int | None = Field(default=None, description="Primary version number for multi-version docs")
     is_multi_version: bool = Field(default=False, description="Whether this file's logical document has >1 version")

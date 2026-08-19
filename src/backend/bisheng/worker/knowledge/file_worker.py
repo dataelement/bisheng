@@ -292,7 +292,19 @@ def insert_es(li: list, target: ElasticsearchStore, index_name: str):
 
 
 @bisheng_celery.task(acks_late=True)
-def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, callback_url: str = None):
+def parse_knowledge_file_celery(
+    file_id: int,
+    preview_cache_key: str | None = None,
+    callback_url: str | None = None,
+):
+    return _parse_knowledge_file_task_body(file_id, preview_cache_key, callback_url)
+
+
+def _parse_knowledge_file_task_body(
+    file_id: int,
+    preview_cache_key: str | None = None,
+    callback_url: str | None = None,
+):
     """Asynchronously parse one incoming file."""
     from bisheng.common.services.config_service import settings
     from bisheng.worker.knowledge import scheduler as file_scheduler
@@ -305,25 +317,20 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     )
 
     fair_enabled = settings.knowledge_file_worker.fair_scheduler_enabled
-    sched = file_scheduler.FileScheduler() if fair_enabled else None
-    lock_token = None
-    stop_heartbeat = None
-    if fair_enabled:
-        conf = settings.knowledge_file_worker.fair_scheduler
-        lock_token = sched.acquire_parse_lock(file_id=str(file_id), ttl_seconds=conf.parse_lock_ttl_seconds)
-        if lock_token is None:
-            # Idempotency guard: another worker is already parsing this file.
-            # A duplicate task can arrive via acks_late broker redelivery (this
-            # worker OOM-killed mid-parse) or a reconcile re-enqueue while the
-            # file is still parsing. Parsing it again means N threads loading the
-            # same file + LLM + Milvus/ES at once → memory blowup. Skip entirely;
-            # do NOT touch completion bookkeeping (the holder owns that).
-            logger.warning(
-                "parse_knowledge_file_celery: file_id={} already being parsed; skipping duplicate",
-                file_id,
-            )
-            return
-        stop_heartbeat = file_scheduler.start_parse_heartbeat(sched, file_id=str(file_id), token=lock_token, conf=conf)
+    # The lock is an execution invariant, not a fair-scheduler feature. Direct
+    # dispatch can also redeliver or crash after broker acceptance, and its
+    # parser accepts PROCESSING rows; without this guard two tasks can parse the
+    # same file concurrently.
+    sched = file_scheduler.FileScheduler()
+    conf = settings.knowledge_file_worker.fair_scheduler
+    lock_token = sched.acquire_parse_lock(file_id=str(file_id), ttl_seconds=conf.parse_lock_ttl_seconds)
+    if lock_token is None:
+        logger.warning(
+            "parse_knowledge_file_celery: file_id={} already being parsed; skipping duplicate",
+            file_id,
+        )
+        return
+    stop_heartbeat = file_scheduler.start_parse_heartbeat(sched, file_id=str(file_id), token=lock_token, conf=conf)
 
     knowledge = None
     try:
@@ -331,18 +338,18 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
     except Exception as e:
         logger.error("parse_knowledge_file_celery error: {}", str(e))
     finally:
-        if stop_heartbeat is not None:
-            stop_heartbeat()
-        db_file = KnowledgeFileDao.get_file_by_ids([file_id])
-        if not db_file and knowledge:
-            logger.debug("delete_knowledge_file_celery file_id={}", file_id)
-            # File was deleted during parsing; clean up the vector data.
-            # Note: original code had [db_file[0].id] here which would crash when
-            # db_file is empty — fixed to use file_id directly.
-            delete_vector_files([file_id], knowledge)
+        try:
+            if stop_heartbeat is not None:
+                stop_heartbeat()
+            db_file = KnowledgeFileDao.get_file_by_ids([file_id])
+            if not db_file and knowledge:
+                logger.debug("delete_knowledge_file_celery file_id={}", file_id)
+                # File was deleted during parsing; clean up the vector data.
+                # Note: original code had [db_file[0].id] here which would crash when
+                # db_file is empty — fixed to use file_id directly.
+                delete_vector_files([file_id], knowledge)
 
-        if fair_enabled:
-            try:
+            if fair_enabled:
                 if db_file:
                     sched.complete_file(user_id=str(db_file[0].user_id), file_id=str(file_id))
                 else:
@@ -352,16 +359,15 @@ def parse_knowledge_file_celery(file_id: int, preview_cache_key: str = None, cal
                     # concurrency counter never gets the slot back.
                     sched.release_file(file_id=str(file_id))
                 file_scheduler.trigger_dispatch_task.delay()
-            except Exception:
-                logger.exception(
-                    "file_scheduler: complete_file/trigger failed for file_id={}",
-                    file_id,
-                )
-            finally:
-                # Always release the parse lock last so a duplicate can't slip in
-                # between completion and release.
-                if lock_token is not None:
-                    sched.release_parse_lock(file_id=str(file_id), token=lock_token)
+        except Exception:
+            logger.exception(
+                "file_scheduler: parse completion bookkeeping failed for file_id={}",
+                file_id,
+            )
+        finally:
+            # Always release the token-checked lock last, including direct mode.
+            if lock_token is not None:
+                sched.release_parse_lock(file_id=str(file_id), token=lock_token)
 
 
 def _parse_knowledge_file(file_id: int, preview_cache_key: str = None, callback_url: str = None):

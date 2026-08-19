@@ -22,11 +22,71 @@ export interface InitialPermissionsPayload {
 export interface InitialPermissionResult {
   status: "success" | "failed";
   errorCode: number | null;
+  directAppliedCount: number;
+  inviteCreatedCount: number;
+  inviteExistingCount: number;
+  failedCount: number;
+  results: AuthorizationItemOutcome[];
 }
 
 export interface RawInitialPermissionResult {
   status: "success" | "failed";
   error_code?: number | null;
+  direct_applied_count?: number;
+  invite_created_count?: number;
+  invite_existing_count?: number;
+  failed_count?: number;
+  results?: RawAuthorizationItemOutcome[];
+}
+
+export type AuthorizationOutcome =
+  | "applied"
+  | "invite_created"
+  | "invite_existing"
+  | "failed";
+
+export interface AuthorizationItemOutcome {
+  operation: "grant" | "revoke";
+  subjectType: SubjectType;
+  subjectId: number;
+  relation: RelationLevel;
+  modelId: string | null;
+  outcome: AuthorizationOutcome;
+  approvalInstanceId: number | null;
+  errorCode: number | null;
+  errorMessage: string | null;
+}
+
+export interface RawAuthorizationItemOutcome {
+  operation: "grant" | "revoke";
+  subject_type: SubjectType;
+  subject_id: number;
+  relation: RelationLevel;
+  model_id?: string | null;
+  outcome: AuthorizationOutcome;
+  approval_instance_id?: number | null;
+  error_code?: number | null;
+  error_message?: string | null;
+}
+
+export interface AuthorizationResult {
+  syncedUserCount: number;
+  affectedMemberCount: number;
+  directAppliedCount: number;
+  inviteCreatedCount: number;
+  inviteExistingCount: number;
+  failedCount: number;
+  results: AuthorizationItemOutcome[];
+}
+
+export interface RawAuthorizationResult {
+  synced_user_count?: number;
+  affected_member_count?: number;
+  direct_applied_count?: number;
+  invite_created_count?: number;
+  invite_existing_count?: number;
+  failed_count?: number;
+  results?: RawAuthorizationItemOutcome[];
 }
 
 export interface PermissionEntry {
@@ -41,6 +101,10 @@ export interface PermissionEntry {
   include_children?: boolean;
   /** Channel creator: permission level is permanent and not editable. */
   is_creator?: boolean;
+  authorizationStatus?: "active" | "pending";
+  approvalInstanceId?: number | null;
+  authorization_status?: "active" | "pending";
+  approval_instance_id?: number | null;
 }
 
 export interface GrantItem {
@@ -49,6 +113,28 @@ export interface GrantItem {
   relation: RelationLevel;
   model_id?: string;
   include_children?: boolean;
+}
+
+function authorizationOutcomeMatchesGrant(
+  outcome: AuthorizationItemOutcome,
+  grant: GrantItem,
+): boolean {
+  return outcome.operation === "grant"
+    && outcome.subjectType === grant.subject_type
+    && outcome.subjectId === grant.subject_id
+    && outcome.relation === grant.relation
+    && (outcome.modelId ?? null) === (grant.model_id ?? null);
+}
+
+export function getFailedAuthorizationGrants(
+  grants: GrantItem[],
+  results: AuthorizationItemOutcome[],
+): GrantItem[] {
+  if (results.length === 0) return grants;
+  const failed = results.filter((result) => result.outcome === "failed");
+  return grants.filter((grant) => (
+    failed.some((outcome) => authorizationOutcomeMatchesGrant(outcome, grant))
+  ));
 }
 
 export type RevokeItem = Omit<GrantItem, "model_id">;
@@ -109,6 +195,49 @@ export function mapInitialPermissionResult(
   return {
     status: result.status,
     errorCode: result.error_code ?? null,
+    directAppliedCount: result.direct_applied_count ?? 0,
+    inviteCreatedCount: result.invite_created_count ?? 0,
+    inviteExistingCount: result.invite_existing_count ?? 0,
+    failedCount: result.failed_count ?? 0,
+    results: (result.results ?? []).map(mapAuthorizationItemOutcome),
+  };
+}
+
+function mapAuthorizationItemOutcome(
+  result: RawAuthorizationItemOutcome,
+): AuthorizationItemOutcome {
+  return {
+    operation: result.operation,
+    subjectType: result.subject_type,
+    subjectId: result.subject_id,
+    relation: result.relation,
+    modelId: result.model_id ?? null,
+    outcome: result.outcome,
+    approvalInstanceId: result.approval_instance_id ?? null,
+    errorCode: result.error_code ?? null,
+    errorMessage: result.error_message ?? null,
+  };
+}
+
+export function mapAuthorizationResult(
+  result?: RawAuthorizationResult | null,
+): AuthorizationResult {
+  return {
+    syncedUserCount: result?.synced_user_count ?? 0,
+    affectedMemberCount: result?.affected_member_count ?? 0,
+    directAppliedCount: result?.direct_applied_count ?? 0,
+    inviteCreatedCount: result?.invite_created_count ?? 0,
+    inviteExistingCount: result?.invite_existing_count ?? 0,
+    failedCount: result?.failed_count ?? 0,
+    results: (result?.results ?? []).map(mapAuthorizationItemOutcome),
+  };
+}
+
+function mapPermissionEntry(entry: PermissionEntry): PermissionEntry {
+  return {
+    ...entry,
+    authorizationStatus: entry.authorization_status ?? entry.authorizationStatus ?? "active",
+    approvalInstanceId: entry.approval_instance_id ?? entry.approvalInstanceId ?? null,
   };
 }
 
@@ -123,7 +252,7 @@ export async function getResourcePermissions(
     `/api/v1/permissions/resources/${resourceType}/${resourceId}/permissions`,
     withPermissionRequestOptions(config)
   );
-  return unwrapArray<PermissionEntry>(res);
+  return unwrapArray<PermissionEntry>(res).map(mapPermissionEntry);
 }
 
 export async function authorizeResource(
@@ -132,13 +261,13 @@ export async function authorizeResource(
   grants: GrantItem[],
   revokes: RevokeItem[],
   config?: PermissionRequestConfig
-): Promise<null> {
+): Promise<AuthorizationResult> {
   const res = await request.post(
     `/api/v1/permissions/resources/${resourceType}/${resourceId}/authorize`,
     { grants, revokes },
     withPermissionRequestOptions(config)
   );
-  return unwrap(res);
+  return mapAuthorizationResult(unwrap<RawAuthorizationResult | null>(res));
 }
 
 export async function checkPermission(

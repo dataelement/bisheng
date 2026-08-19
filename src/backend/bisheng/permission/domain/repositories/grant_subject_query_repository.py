@@ -72,6 +72,29 @@ class GrantSubjectQueryRepository:
         tenant = await TenantDao.aget_by_id(tenant_id)
         return tenant is not None and getattr(tenant, "status", None) == "active"
 
+    async def is_active_user_in_any_active_tenant(self, user_id: int) -> bool:
+        """Validate the identity behind a global-super tuple is still active."""
+        from bisheng.database.models.tenant import Tenant, UserTenant
+        from bisheng.user.domain.models.user import User
+
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                row = (
+                    await session.exec(
+                        select(User.user_id)
+                        .join(UserTenant, UserTenant.user_id == User.user_id)
+                        .join(Tenant, Tenant.id == UserTenant.tenant_id)
+                        .where(
+                            User.user_id == user_id,
+                            User.delete == 0,
+                            UserTenant.status == "active",
+                            UserTenant.is_active == 1,
+                            Tenant.status == "active",
+                        )
+                    )
+                ).first()
+        return row is not None
+
     async def list_users(
         self,
         *,
@@ -146,9 +169,7 @@ class GrantSubjectQueryRepository:
                     if getattr(item, "id", None) is not None
                 }
             )
-        primary_by_user = {
-            int(row.user_id): department_map.get(int(row.department_id)) for row in primary_rows
-        }
+        primary_by_user = {int(row.user_id): department_map.get(int(row.department_id)) for row in primary_rows}
 
         def display_path(department) -> str | None:
             if department is None:
@@ -178,11 +199,7 @@ class GrantSubjectQueryRepository:
         from bisheng.database.models.department import Department
         from bisheng.database.models.tenant import ROOT_TENANT_ID, Tenant
 
-        tenant = (
-            await session.exec(
-                select(Tenant).where(Tenant.id == tenant_id, Tenant.status == "active")
-            )
-        ).first()
+        tenant = (await session.exec(select(Tenant).where(Tenant.id == tenant_id, Tenant.status == "active"))).first()
         if tenant is None:
             return None
         root = None
@@ -243,9 +260,7 @@ class GrantSubjectQueryRepository:
             ).all()
         )
         visible = [item for item in rows if _in_scope(item, scope)]
-        child_ids = await self._children_existence(
-            session, [int(item.id) for item in visible], scope, department_model
-        )
+        child_ids = await self._children_existence(session, [int(item.id) for item in visible], scope, department_model)
         nodes = {
             int(item.id): _department_node(
                 item,
@@ -289,9 +304,7 @@ class GrantSubjectQueryRepository:
                     if root_ids:
                         root = (
                             await session.exec(
-                                select(Department).where(
-                                    Department.id == root_ids[-1], Department.status == "active"
-                                )
+                                select(Department).where(Department.id == root_ids[-1], Department.status == "active")
                             )
                         ).first()
                         departments = [root] if root is not None and _in_scope(root, scope) else []
@@ -311,9 +324,7 @@ class GrantSubjectQueryRepository:
                 else:
                     parent = (
                         await session.exec(
-                            select(Department).where(
-                                Department.id == parent_id, Department.status == "active"
-                            )
+                            select(Department).where(Department.id == parent_id, Department.status == "active")
                         )
                     ).first()
                     if parent is None or not _in_scope(parent, scope):
@@ -334,10 +345,7 @@ class GrantSubjectQueryRepository:
                 child_ids = await self._children_existence(
                     session, [int(item.id) for item in departments], scope, Department
                 )
-                return [
-                    _department_node(item, has_children=int(item.id) in child_ids)
-                    for item in departments
-                ]
+                return [_department_node(item, has_children=int(item.id) in child_ids) for item in departments]
 
     async def search_departments(
         self,
@@ -397,16 +405,12 @@ class GrantSubjectQueryRepository:
                     return {"roots": [], "total_matches": 0, "truncated": False}
                 target = (
                     await session.exec(
-                        select(Department).where(
-                            Department.id == dept_id, Department.status == "active"
-                        )
+                        select(Department).where(Department.id == dept_id, Department.status == "active")
                     )
                 ).first()
                 if target is None or not _in_scope(target, scope):
                     return {"roots": [], "total_matches": 0, "truncated": False}
-                roots = await self._build_pruned(
-                    session, [target], {int(target.id)}, scope, Department
-                )
+                roots = await self._build_pruned(session, [target], {int(target.id)}, scope, Department)
                 return {"roots": roots, "total_matches": 1, "truncated": False}
 
     async def list_user_groups(
@@ -424,11 +428,7 @@ class GrantSubjectQueryRepository:
         visible_ids: set[int] = set()
         if not can_view_all:
             rows = await UserGroupDao.aget_user_visible_group_ids(viewer_user_id)
-            visible_ids = {
-                int(row[0]) if isinstance(row, tuple) else int(row)
-                for row in rows or []
-                if row is not None
-            }
+            visible_ids = {int(row[0]) if isinstance(row, tuple) else int(row) for row in rows or [] if row is not None}
         with tenant_context.bypass_tenant_filter():
             async with database_module.get_async_db_session() as session:
                 statement = (
@@ -439,9 +439,7 @@ class GrantSubjectQueryRepository:
                     .limit(2000)
                 )
                 if not can_view_all:
-                    visible = (Group.visibility == "public") | (
-                        Group.create_user == viewer_user_id
-                    )
+                    visible = (Group.visibility == "public") | (Group.create_user == viewer_user_id)
                     if visible_ids:
                         visible = visible | col(Group.id).in_(visible_ids)
                     statement = statement.where(visible)
@@ -512,6 +510,256 @@ class GrantSubjectQueryRepository:
                 )
                 rows = (await session.exec(statement)).all()
         return {int(row[0] if isinstance(row, tuple) else row) for row in rows} == group_ids
+
+    async def resolve_exact_department_member_user_ids_batch(
+        self,
+        *,
+        department_ids: set[int],
+        tenant_id: int,
+    ) -> dict[int, set[int]]:
+        """Resolve tenant-scoped department usersets in one session.
+
+        Missing mapping keys are invalid/out-of-tenant departments. Valid empty
+        departments remain present with an empty member set. Exact departments
+        are used because include-children grants are already materialized as
+        separate OpenFGA department tuples on write.
+        """
+        if not department_ids:
+            return {}
+
+        from bisheng.database.models.department import Department, UserDepartment
+
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                scope = await self._resolve_department_scope(session, tenant_id, None)
+                if scope is None:
+                    return {}
+                department_statement = select(Department).where(
+                    col(Department.id).in_(department_ids),
+                    Department.status == "active",
+                )
+                departments = list(await session.exec(_apply_scope(department_statement, scope, Department)))
+                valid_department_ids = {
+                    int(department.id) for department in departments if getattr(department, "id", None) is not None
+                }
+                members_by_department = {department_id: set() for department_id in valid_department_ids}
+                if not valid_department_ids:
+                    return members_by_department
+
+                member_statement = (
+                    select(UserDepartment.department_id, UserDepartment.user_id)
+                    .join(Department, Department.id == UserDepartment.department_id)
+                    .where(
+                        col(UserDepartment.department_id).in_(valid_department_ids),
+                        Department.status == "active",
+                    )
+                )
+                member_rows = (await session.exec(_apply_scope(member_statement, scope, Department))).all()
+                for row in member_rows:
+                    department_id = int(getattr(row, "department_id", row[0]))
+                    user_id = int(getattr(row, "user_id", row[1]))
+                    members_by_department[department_id].add(user_id)
+        return members_by_department
+
+    async def resolve_user_group_member_user_ids_batch(
+        self,
+        *,
+        group_ids: set[int],
+        tenant_id: int,
+    ) -> dict[int, set[int]]:
+        """Resolve tenant-scoped user-group usersets in one session."""
+        if not group_ids:
+            return {}
+
+        from bisheng.database.models.group import Group
+        from bisheng.database.models.tenant import Tenant
+        from bisheng.database.models.user_group import UserGroup
+
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                groups = list(
+                    (
+                        await session.exec(
+                            select(Group)
+                            .join(Tenant, Tenant.id == Group.tenant_id)
+                            .where(
+                                col(Group.id).in_(group_ids),
+                                Group.tenant_id == tenant_id,
+                                Tenant.status == "active",
+                            )
+                        )
+                    ).all()
+                )
+                valid_group_ids = {int(group.id) for group in groups if getattr(group, "id", None) is not None}
+                members_by_group = {group_id: set() for group_id in valid_group_ids}
+                if not valid_group_ids:
+                    return members_by_group
+
+                member_rows = (
+                    await session.exec(
+                        select(UserGroup.group_id, UserGroup.user_id).where(
+                            col(UserGroup.group_id).in_(valid_group_ids),
+                            UserGroup.tenant_id == tenant_id,
+                        )
+                    )
+                ).all()
+                for row in member_rows:
+                    group_id = int(getattr(row, "group_id", row[0]))
+                    user_id = int(getattr(row, "user_id", row[1]))
+                    members_by_group[group_id].add(user_id)
+        return members_by_group
+
+    async def resolve_user_group_admin_user_ids_batch(
+        self,
+        *,
+        group_ids: set[int],
+        tenant_id: int,
+    ) -> dict[int, set[int]]:
+        """Resolve active tenant group-admin usersets without including members."""
+        if not group_ids:
+            return {}
+
+        from bisheng.database.models.group import Group
+        from bisheng.database.models.tenant import Tenant
+        from bisheng.database.models.user_group import UserGroup
+
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                groups = list(
+                    (
+                        await session.exec(
+                            select(Group)
+                            .join(Tenant, Tenant.id == Group.tenant_id)
+                            .where(
+                                col(Group.id).in_(group_ids),
+                                Group.tenant_id == tenant_id,
+                                Tenant.status == "active",
+                            )
+                        )
+                    ).all()
+                )
+                valid_group_ids = {int(group.id) for group in groups if getattr(group, "id", None) is not None}
+                admins_by_group = {group_id: set() for group_id in valid_group_ids}
+                if not valid_group_ids:
+                    return admins_by_group
+
+                admin_rows = (
+                    await session.exec(
+                        select(UserGroup.group_id, UserGroup.user_id).where(
+                            col(UserGroup.group_id).in_(valid_group_ids),
+                            UserGroup.tenant_id == tenant_id,
+                            UserGroup.is_group_admin == True,  # noqa: E712
+                        )
+                    )
+                ).all()
+                for row in admin_rows:
+                    group_id = int(getattr(row, "group_id", row[0]))
+                    user_id = int(getattr(row, "user_id", row[1]))
+                    admins_by_group[group_id].add(user_id)
+        return admins_by_group
+
+    async def filter_active_user_ids_in_tenant(
+        self,
+        *,
+        user_ids: set[int],
+        tenant_id: int,
+    ) -> set[int]:
+        """Keep enabled users with a current, active relation to one tenant."""
+        if not user_ids:
+            return set()
+
+        from bisheng.database.models.tenant import Tenant, UserTenant
+        from bisheng.user.domain.models.user import User
+
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                rows = (
+                    await session.exec(
+                        select(User.user_id)
+                        .join(UserTenant, UserTenant.user_id == User.user_id)
+                        .join(Tenant, Tenant.id == UserTenant.tenant_id)
+                        .where(
+                            col(User.user_id).in_(user_ids),
+                            User.delete == 0,
+                            UserTenant.tenant_id == tenant_id,
+                            UserTenant.status == "active",
+                            UserTenant.is_active == 1,
+                            Tenant.status == "active",
+                        )
+                    )
+                ).all()
+        return {int(row[0] if isinstance(row, tuple) else row) for row in rows if row is not None}
+
+    async def resolve_active_subject_strings_for_user(
+        self,
+        *,
+        user_id: int,
+        tenant_id: int,
+    ) -> set[str]:
+        """Build one user's current tenant-scoped OpenFGA subjects fail-closed."""
+        from bisheng.database.models.department import Department, UserDepartment
+        from bisheng.database.models.group import Group
+        from bisheng.database.models.tenant import Tenant, UserTenant
+        from bisheng.database.models.user_group import UserGroup
+        from bisheng.user.domain.models.user import User
+
+        with tenant_context.bypass_tenant_filter():
+            async with database_module.get_async_db_session() as session:
+                active_user = (
+                    await session.exec(
+                        select(User.user_id)
+                        .join(UserTenant, UserTenant.user_id == User.user_id)
+                        .join(Tenant, Tenant.id == UserTenant.tenant_id)
+                        .where(
+                            User.user_id == user_id,
+                            User.delete == 0,
+                            UserTenant.tenant_id == tenant_id,
+                            UserTenant.status == "active",
+                            UserTenant.is_active == 1,
+                            Tenant.status == "active",
+                        )
+                    )
+                ).first()
+                if active_user is None:
+                    return set()
+
+                subjects = {f"user:{int(user_id)}"}
+                department_ids = (
+                    await session.exec(
+                        select(UserDepartment.department_id)
+                        .join(Department, Department.id == UserDepartment.department_id)
+                        .where(
+                            UserDepartment.user_id == user_id,
+                            Department.tenant_id == tenant_id,
+                            Department.status == "active",
+                        )
+                    )
+                ).all()
+                subjects.update(
+                    f"department:{int(row[0] if isinstance(row, tuple) else row)}#member"
+                    for row in department_ids
+                )
+
+                group_rows = (
+                    await session.exec(
+                        select(UserGroup.group_id, UserGroup.is_group_admin)
+                        .join(Group, Group.id == UserGroup.group_id)
+                        .join(Tenant, Tenant.id == Group.tenant_id)
+                        .where(
+                            UserGroup.user_id == user_id,
+                            UserGroup.tenant_id == tenant_id,
+                            Group.tenant_id == tenant_id,
+                            Tenant.status == "active",
+                        )
+                    )
+                ).all()
+                for row in group_rows:
+                    group_id = int(getattr(row, "group_id", row[0]))
+                    is_admin = bool(getattr(row, "is_group_admin", row[1]))
+                    subjects.add(f"user_group:{group_id}#member")
+                    if is_admin:
+                        subjects.add(f"user_group:{group_id}#admin")
+        return subjects
 
     async def resolve_department_space_path(self, *, resource_type: str, resource_id: str):
         if resource_type != "knowledge_space" or not str(resource_id).isdigit():

@@ -148,3 +148,29 @@ class VersionLinkSourceFileMissingError(BaseErrorCode):
 class KnowledgeSpaceInvalidCursorError(BaseErrorCode):
     Code: int = 18070
     Msg: str = "Invalid pagination cursor"
+
+
+# F046: knowledge-space file change approval
+class SpaceFileChangeConflictError(BaseErrorCode):
+    Code: int = 18072
+    Msg: str = "The resource is locked by an unfinished file change request"
+
+
+class SpaceFileChangeRequestNotFoundError(BaseErrorCode):
+    Code: int = 18073
+    Msg: str = "File change request does not exist or is not visible"
+
+
+class SpaceFileChangeInvalidStateError(BaseErrorCode):
+    Code: int = 18074
+    Msg: str = "The file change request cannot be operated in its current state"
+
+
+class DepartmentSpacePrivateForbiddenError(BaseErrorCode):
+    Code: int = 18075
+    Msg: str = "Department knowledge spaces cannot be private"
+
+
+class SpaceFileChangeApproverUnavailableError(BaseErrorCode):
+    Code: int = 18076
+    Msg: str = "Knowledge space approvers are temporarily unavailable; please retry"

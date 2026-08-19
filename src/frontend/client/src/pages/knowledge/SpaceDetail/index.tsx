@@ -35,9 +35,13 @@ import {
     getFileInputAccept,
     getMaxFileSizeBytesForFile,
     getMaxFileSizeMBForFile,
+    isKnowledgeItemUnderReview,
     isKnowledgeItemUploading,
+    PENDING_REVIEW_FILTER,
     resolveUploadSizeLimits,
+    toBackendStatusFilter,
     triggerUrlDownload,
+    type FileStatusFilter,
     type UploadSizeLimits,
 } from "../knowledgeUtils";
 import { resolveLocalizedKnowledgeImportError } from "../webLinkI18n";
@@ -45,7 +49,8 @@ import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
-import { FileTable } from "./FileTable";
+import { FileListToolbar } from "./FileListToolbar";
+import { FileListView } from "./FileListView";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { MoveToDialog } from "./MoveToDialog";
@@ -53,12 +58,14 @@ import { VersionManagementDialog } from "./VersionManagementDialog";
 import { VersionHistorySheet } from "./VersionHistorySheet";
 import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
+import { FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef, useVersionManagementEnabled } from "~/hooks";
+import { useAuthContext } from "~/hooks/AuthContext";
 import {
     knowledgeSpaceDropdownSurfaceClassName,
     SidebarListMoreMenuContent,
@@ -71,6 +78,15 @@ import {
 } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
 import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
+import {
+    canDecidePendingUpload,
+    canWithdrawPendingUpload,
+    getFileChangeLockState,
+    isPendingUploadSelectable,
+    projectPendingUploadAsKnowledgeFile,
+    selectVisiblePendingUploads,
+    useFileChangeApproval,
+} from "../hooks/useFileChangeApproval";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -181,9 +197,39 @@ export function KnowledgeSpaceContent({
     onSelectedContentChange,
 }: KnowledgeSpaceContentProps) {
     const localize = useLocalize();
+    const { user } = useAuthContext();
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
+    const [searchQuery, setSearchQuery] = useState("");
+    const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
+    const [statusFilter, setStatusFilter] = useState<FileStatusFilter[]>([]);
+    const fileChangeApproval = useFileChangeApproval({
+        spaceId: space.id,
+        parentId: currentFolderId,
+        onFormalFilesRefresh: () => onDeleteFile(""),
+    });
+    const pendingUploadFiles = selectVisiblePendingUploads(fileChangeApproval.pendingItems).map((item) =>
+        projectPendingUploadAsKnowledgeFile(item, space.id),
+    );
+    // Pending uploads are merged client-side, so the status filter has to gate
+    // them here: an active filter shows them only when 待审核 is one of the
+    // checked options. Search results never include them.
+    const showPendingUploads =
+        searchQuery.trim().length === 0
+        && searchTagIds.length === 0
+        && (statusFilter.length === 0 || statusFilter.includes(PENDING_REVIEW_FILTER));
+    // 待审核 is the only active filter. The backend cannot express "awaiting
+    // review" as a file_status (a rename/delete/move lock rides on top of the
+    // file's real status), so the formal list comes back unfiltered — restrict
+    // it client-side to items actually pending a decision (staged uploads plus
+    // rename/delete/move change locks). Mixed selections keep the backend result.
+    const pendingReviewOnly =
+        statusFilter.includes(PENDING_REVIEW_FILTER)
+        && toBackendStatusFilter(statusFilter).length === 0;
+    const visiblePendingUploads = pendingReviewOnly
+        ? pendingUploadFiles.filter(isKnowledgeItemUnderReview)
+        : pendingUploadFiles;
+    const formalFiles = pendingReviewOnly ? files.filter(isKnowledgeItemUnderReview) : files;
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         // In-progress folder upload: show its placeholder card (keyed to the space +
@@ -204,20 +250,30 @@ export function KnowledgeSpaceContent({
                 String(f.spaceId) === String(space.id) &&
                 String(f.parentId ?? "") === String(currentFolderId ?? ""),
         ),
-        ...files
+        ...(showPendingUploads ? visiblePendingUploads : []),
+        ...formalFiles
     ];
+
+    /**
+     * The selected rows a reviewed-file batch action applies to. Pending uploads
+     * can be selected (for 同意 / 拒绝) but must never reach download / delete /
+     * move / tag / retry, which all address formal file ids.
+     */
+    const getReviewedSelection = () =>
+        displayFiles.filter((f) => selectedFiles.has(f.id) && !f.pendingUploadApproval);
 
     // Infinite scroll: trigger the next page when the scroll container nears its bottom.
     const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
-        if (!hasMore || loading) return;
         const el = e.currentTarget;
-        if (el.scrollHeight - el.scrollTop - el.clientHeight <= 240) {
+        if (el.scrollHeight - el.scrollTop - el.clientHeight > 240) return;
+        if (fileChangeApproval.pendingHasMore && !fileChangeApproval.pendingFetchingMore) {
+            void fileChangeApproval.fetchPendingNextPage();
+        }
+        if (hasMore && !loading) {
             onLoadMore();
         }
     };
 
-    const [searchQuery, setSearchQuery] = useState("");
-    const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
         if (typeof window === "undefined") return "list";
         return localStorage.getItem("knowledge-view-mode") === "card" ? "card" : "list";
@@ -230,11 +286,12 @@ export function KnowledgeSpaceContent({
     // Shared atom (not local state) so the bottom AI dock can clear the selection
     // on focus/send without prop drilling. See selectionStore.ts.
     const [selectedFiles, setSelectedFiles] = useRecoilState(knowledgeSelectedFilesState);
-    const [statusFilter, setStatusFilter] = useState<FileStatus[]>([]);
     const [sortBy, setSortBy] = useState<SortType | undefined>(undefined);
     const [sortDirection, setSortDirection] = useState<SortDirection | undefined>(undefined);
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
+    // Sequential batch reject has no dedicated mutation flag — track it here.
+    const [pendingBatchDeciding, setPendingBatchDeciding] = useState(false);
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
@@ -353,7 +410,7 @@ export function KnowledgeSpaceContent({
 
     // Open the similar-document dialog scoped to the currently selected files.
     const handleProcessSimilar = () => {
-        setSimilarRestrictIds(Array.from(selectedFiles));
+        setSimilarRestrictIds(getReviewedSelection().map((f) => f.id));
         setSimilarDialogOpen(true);
     };
 
@@ -395,7 +452,7 @@ export function KnowledgeSpaceContent({
     const [deleteEntryIds, setDeleteEntryIds] = useState<Set<string>>(new Set());
     const [downloadEntryIds, setDownloadEntryIds] = useState<Set<string>>(new Set());
     const permissionEntryProbeKey = displayFiles
-        .filter((file) => !file.isCreating && /^\d+$/.test(String(file.id)))
+        .filter((file) => !file.pendingUploadApproval && !file.isCreating && /^\d+$/.test(String(file.id)))
         .map((file) => `${file.id}:${file.type}`)
         .join("|");
     const canUseAddActions = (canCreateFolder || canUploadFile) && !isSearching;
@@ -715,13 +772,14 @@ export function KnowledgeSpaceContent({
         onSearch(params);
     };
 
-    const handleStatusFilter = (status: FileStatus, checked: boolean) => {
-        const coupled = [status];
+    const handleStatusFilter = (status: FileStatusFilter, checked: boolean) => {
         const newFilter = checked
-            ? [...statusFilter, ...coupled.filter(s => !statusFilter.includes(s))]
-            : statusFilter.filter(s => !coupled.includes(s));
+            ? (statusFilter.includes(status) ? statusFilter : [...statusFilter, status])
+            : statusFilter.filter((s) => s !== status);
         setStatusFilter(newFilter);
-        onFilterStatus(newFilter);
+        // Pending uploads come from a separate endpoint and are filtered
+        // client-side (see showPendingUploads) — the query only takes real statuses.
+        onFilterStatus(toBackendStatusFilter(newFilter));
     };
 
     const handleSort = (newSortBy: SortType) => {
@@ -738,9 +796,20 @@ export function KnowledgeSpaceContent({
     const isFolderUploadPlaceholder = (f: KnowledgeFile) =>
         f.type === FileType.FOLDER && isKnowledgeItemUploading(f);
 
+    // Pending-upload rows are selectable only while awaiting a decision (审核中):
+    // the applicant can batch-withdraw them and an approver can batch-decide them.
+    // Once decided they move into an execution state (处理中/执行失败/…) with no
+    // batch semantics, so they keep a disabled checkbox instead of becoming a dead
+    // selection. Uploading folder placeholders (no backend identity) also stay out.
+    // Mirrors `isSelectable` in FileListRow / FileCard.
+    const isSelectableFile = (f: KnowledgeFile) =>
+        f.pendingUploadApproval
+            ? isPendingUploadSelectable(f.pendingUploadApproval)
+            : !isFolderUploadPlaceholder(f);
+
     const handleSelectFile = (fileId: string, selected: boolean) => {
         const target = displayFiles.find((f) => f.id === fileId);
-        if (target && isFolderUploadPlaceholder(target)) return;
+        if (target && !isSelectableFile(target)) return;
         const newSelected = new Set(selectedFiles);
         if (selected) {
             newSelected.add(fileId);
@@ -766,7 +835,7 @@ export function KnowledgeSpaceContent({
     const handleSelectAll = (isAllSelectedOnPage: boolean) => {
         const newSelected = new Set(selectedFiles);
         // Skip uploading folder placeholders so select-all never picks them up.
-        const selectable = displayFiles.filter((f) => !isFolderUploadPlaceholder(f));
+        const selectable = displayFiles.filter(isSelectableFile);
         if (isAllSelectedOnPage) {
             selectable.forEach(f => newSelected.delete(f.id));
         } else {
@@ -776,7 +845,7 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchDownload = async () => {
-        const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
+        const selectedList = getReviewedSelection();
         const canDownloadSelected = selectedList.length > 0 && selectedList.every((file) =>
             downloadEntryIds.has(file.id)
         );
@@ -821,8 +890,195 @@ export function KnowledgeSpaceContent({
             dispatchKnowledgeSpaceFilesRefresh();
         },
     });
+    const handleFileChangePreview = (requestId: number) => {
+        const pendingFile = fileChangeApproval.pendingItems.find((item) => item.requestId === requestId);
+        if (!pendingFile) {
+            showToast({ message: localize("com_knowledge.file_change_preview_failed"), status: "error" });
+            return;
+        }
+        const url = `${__APP_ENV__.BASE_URL}/knowledge/file-change/${requestId}?name=${encodeURIComponent(pendingFile.fileName)}&spaceId=${encodeURIComponent(space.id)}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+    };
+    const handleFileChangeCleanup = async (requestId: number) => {
+        // Withdrawing a still-pending upload deletes the file, so it confirms
+        // like any other delete. Cleanup of an already-decided request only
+        // clears the failed record and needs no confirmation.
+        const pendingUpload = fileChangeApproval.pendingItems.find(
+            (item) => item.requestId === requestId && item.approvalStatus === "pending",
+        );
+        if (pendingUpload) {
+            const confirmed = await confirm({
+                description: `${localize("com_knowledge.confirm_delete_file")}${localize("com_knowledge.delete_irreversible_warning")}`,
+                variant: "destructive",
+            });
+            if (!confirmed) return;
+        }
+        try {
+            await fileChangeApproval.cleanup(requestId);
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
+    const handleFileChangeRetry = async (requestId: number) => {
+        try {
+            await fileChangeApproval.retryIngest(requestId);
+        } catch {
+            showToast({ message: localize("com_knowledge.retry_failed"), status: "error" });
+        }
+    };
+    const handleBatchApproveFileChanges = async (requestIds: number[]) => {
+        try {
+            const result = await fileChangeApproval.batchApprove(requestIds);
+            showToast({
+                message: localize("com_knowledge.file_change_batch_result", {
+                    0: result.successCount,
+                    1: result.failureCount,
+                }),
+                status: result.failureCount > 0 ? "warning" : "success",
+            });
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
+    const handlePendingUploadDecision = async (requestId: number, action: "approve" | "reject") => {
+        try {
+            await fileChangeApproval.decide({ requestId, action });
+            showToast({ message: localize("com_approval_toast_success"), status: "success" });
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
+    // Row-level delete for the applicant's own 审核中 upload (mirrors the
+    // approver's row-level 同意/拒绝). To the applicant this is simply "删除" —
+    // the file goes away — so it carries the same wording and the same
+    // destructive confirm as any other single-file delete, even though it is
+    // implemented by withdrawing the approval request via the cleanup API.
+    // Drop the row from the selection so a stale id doesn't linger after the
+    // async refresh removes it.
+    const handleWithdrawPendingUpload = async (requestId: number) => {
+        const confirmed = await confirm({
+            description: `${localize("com_knowledge.confirm_delete_file")}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
+        });
+        if (!confirmed) return;
+        try {
+            await fileChangeApproval.cleanup(requestId);
+            setSelectedFiles((prev) => {
+                const next = new Set(prev);
+                next.delete(`pending-upload:${requestId}`);
+                return next;
+            });
+            showToast({ message: localize("com_approval_toast_success"), status: "success" });
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
+    /** Request ids of the selected pending uploads this user may decide. */
+    const getPendingSelectionRequestIds = () =>
+        displayFiles
+            .filter((f) => selectedFiles.has(f.id) && canDecidePendingUpload(f.pendingUploadApproval))
+            .map((f) => f.pendingUploadApproval!.requestId);
+
+    const handleBatchApprovePending = async () => {
+        // Re-entrancy guard: the mobile toolbar buttons stay mounted while a batch
+        // runs, so a double-tap could otherwise fire a second overlapping run.
+        if (pendingBatchDeciding || fileChangeApproval.batchApproving) return;
+        const requestIds = getPendingSelectionRequestIds();
+        if (requestIds.length === 0) return;
+        try {
+            const result = await fileChangeApproval.batchApprove(requestIds);
+            setSelectedFiles(new Set());
+            showToast({
+                message: localize("com_knowledge.batch_approve_success", { 0: result.successCount }),
+                status: result.failureCount > 0 ? "warning" : "success",
+            });
+        } catch {
+            showToast({ message: localize("com_approval_toast_failed"), status: "error" });
+        }
+    };
+
+    // There is no batch-reject endpoint — reject each request in turn and report
+    // how many went through (mirrors the batch-approve summary).
+    const handleBatchRejectPending = async () => {
+        if (pendingBatchDeciding || fileChangeApproval.batchApproving) return;
+        const requestIds = getPendingSelectionRequestIds();
+        if (requestIds.length === 0) return;
+        setPendingBatchDeciding(true);
+        let rejected = 0;
+        try {
+            for (const requestId of requestIds) {
+                await fileChangeApproval.decide({ requestId, action: "reject" });
+                rejected += 1;
+            }
+            setSelectedFiles(new Set());
+            showToast({
+                message: localize("com_knowledge.batch_reject_success", { 0: rejected }),
+                status: "success",
+            });
+        } catch {
+            showToast({ message: localize("com_knowledge.batch_reject_failed"), status: "error" });
+        } finally {
+            setPendingBatchDeciding(false);
+        }
+    };
+
+    /** Request ids of the selected pending uploads the viewer initiated (may withdraw). */
+    const getPendingWithdrawRequestIds = () =>
+        displayFiles
+            .filter((f) => selectedFiles.has(f.id) && canWithdrawPendingUpload(f.pendingUploadApproval, user?.id))
+            .map((f) => f.pendingUploadApproval!.requestId);
+
+    // There is no batch-withdraw endpoint - withdraw each request in turn via
+    // the cleanup API (the backend withdraws the approval instance, closes the
+    // request and removes the staged file) and report how many went through.
+    const handleBatchWithdrawPending = async () => {
+        if (pendingBatchDeciding || fileChangeApproval.batchApproving) return;
+        const requestIds = getPendingWithdrawRequestIds();
+        if (requestIds.length === 0) return;
+        // Reads as a delete to the applicant — same confirm as 批量删除.
+        const confirmed = await confirm({
+            description: `${localize("com_knowledge.confirm_delete_files_count", { 0: requestIds.length })}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
+        });
+        if (!confirmed) return;
+        setPendingBatchDeciding(true);
+        let withdrawn = 0;
+        let failed = 0;
+        try {
+            // Each cleanup is an irreversible withdrawal, so a mid-loop failure
+            // must not abandon the rest: keep going and report the tally.
+            for (const requestId of requestIds) {
+                try {
+                    await fileChangeApproval.cleanup(requestId);
+                    withdrawn += 1;
+                } catch {
+                    failed += 1;
+                }
+            }
+            // Clear the selection once anything went through; the async refresh
+            // drops the withdrawn rows either way. On a total failure keep the
+            // selection so the user can retry.
+            if (withdrawn > 0) setSelectedFiles(new Set());
+            if (failed === 0) {
+                showToast({
+                    message: localize("com_knowledge.batch_withdraw_success", { 0: withdrawn }),
+                    status: "success",
+                });
+            } else if (withdrawn > 0) {
+                showToast({
+                    message: localize("com_knowledge.batch_withdraw_partial", { 0: withdrawn, 1: failed }),
+                    status: "warning",
+                });
+            } else {
+                showToast({ message: localize("com_knowledge.batch_withdraw_failed"), status: "error" });
+            }
+        } finally {
+            setPendingBatchDeciding(false);
+        }
+    };
+
     const handleBatchMove = () => {
-        const selected = displayFiles.filter((f) => selectedFiles.has(f.id));
+        const selected = getReviewedSelection();
         // Uploading placeholders have no backend id yet → can't be moved. Surface
         // them in the partial-move dialog so the user can still move the rest.
         const uploading = selected.filter((f) => isKnowledgeItemUploading(f));
@@ -922,7 +1178,7 @@ export function KnowledgeSpaceContent({
         // Optimistic batch delete (handled by the parent): rows are dropped from
         // the list in place — keeps the scroll position and works regardless of
         // which page they were loaded from. The parent rolls back on API failure.
-        const ids = selectedList.map(f => f.id);
+        const ids = getReviewedSelection().map(f => f.id);
         setSelectedFiles(new Set());
         const ok = await onBatchDeleteFiles(ids);
         if (ok) {
@@ -956,8 +1212,8 @@ export function KnowledgeSpaceContent({
 
     const handleBatchRetry = async () => {
         // Find selected files/folders that have FAILED status or partial failures
-        const retryIds = displayFiles
-            .filter(f => selectedFiles.has(f.id) && (
+        const retryIds = getReviewedSelection()
+            .filter(f => (
                 f.status === FileStatus.FAILED ||
                 f.status === FileStatus.VIOLATION ||
                 (f.type === FileType.FOLDER && f.hasFailedFiles === true)
@@ -1004,34 +1260,49 @@ export function KnowledgeSpaceContent({
         return null;
     };
 
-    const hasFailedFiles = displayFiles.some(f =>
-        selectedFiles.has(f.id) && (
-            f.status === FileStatus.FAILED ||
-            f.status === FileStatus.VIOLATION ||
-            (f.type === FileType.FOLDER && f.hasFailedFiles === true)
-        )
-    );
-    const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
+    const selectableFiles = displayFiles.filter(isSelectableFile);
+    const isAllSelectedOnPage =
+        selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
+    const isSelectionIndeterminate =
+        !isAllSelectedOnPage && selectableFiles.some((f) => selectedFiles.has(f.id));
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
-    const selectionHasFile = selectedList.some((f) => f.type !== FileType.FOLDER);
+    // Pending uploads only support 同意 / 拒绝 (viewer may decide them) and 撤回
+    // (viewer initiated them); every other batch action applies to the reviewed
+    // (formal) files in the selection (Figma 13198:78120).
+    const pendingSelectedList = selectedList.filter((f) => f.pendingUploadApproval);
+    const decidablePendingSelected = pendingSelectedList.filter((f) =>
+        canDecidePendingUpload(f.pendingUploadApproval)
+    );
+    const withdrawablePendingSelected = pendingSelectedList.filter((f) =>
+        canWithdrawPendingUpload(f.pendingUploadApproval, user?.id)
+    );
+    const reviewedSelectedList = selectedList.filter((f) => !f.pendingUploadApproval);
+    const hasFailedFiles = reviewedSelectedList.some(f =>
+        f.status === FileStatus.FAILED ||
+        f.status === FileStatus.VIOLATION ||
+        (f.type === FileType.FOLDER && f.hasFailedFiles === true)
+    );
+    const hasFoldersSelected = reviewedSelectedList.some(f => f.type === FileType.FOLDER);
+    const selectionHasFile = reviewedSelectedList.some((f) => f.type !== FileType.FOLDER);
     // Batch move requires the matching move permission for every kind in the
     // selection: folders need move_folder, files need move_file (a role may
     // grant only one). Uploading placeholders no longer block the entry — the
     // move flow warns about them and lets the user move the rest (handleBatchMove).
     const canBatchMove =
-        selectedList.length > 0 &&
+        reviewedSelectedList.length > 0 &&
+        reviewedSelectedList.every((file) => !getFileChangeLockState(file).locked) &&
         (!hasFoldersSelected || canMoveFolder) &&
         (!selectionHasFile || canMoveFile);
-    const canBatchDelete = selectedList.length > 0 && selectedList.every((file) =>
-        deleteEntryIds.has(file.id)
+    const canBatchDelete = reviewedSelectedList.length > 0 && reviewedSelectedList.every((file) =>
+        deleteEntryIds.has(file.id) && !getFileChangeLockState(file).locked
     );
-    const canBatchDownload = selectedList.length > 0 && selectedList.every((file) =>
+    const canBatchDownload = reviewedSelectedList.length > 0 && reviewedSelectedList.every((file) =>
         downloadEntryIds.has(file.id)
     );
     // "处理相似文档" uses union semantics (like batch retry's hasFailedFiles): the entry
     // appears whenever ANY selected file is a pending similar document. The dialog is then
     // scoped to exactly the selected files (see handleProcessSimilar).
-    const hasSimilarSelected = selectedList.some((f) => f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS);
+    const hasSimilarSelected = reviewedSelectedList.some((f) => f.has_similar && !f.is_multi_version && f.status === FileStatus.SUCCESS);
 
     // Mobile only ever shows the list form — never the multi-column card grid.
     const effectiveViewMode: "card" | "list" = isH5 ? "list" : viewMode;
@@ -1082,8 +1353,18 @@ export function KnowledgeSpaceContent({
     const singleSelectedId = selectedFiles.size === 1 ? Array.from(selectedFiles)[0] : undefined;
     const canManageSinglePermission = !!singleSelectedId && permissionEntryIds.has(singleSelectedId);
 
-    type BatchAction = { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; onClick: () => void; danger?: boolean };
+    // A batch is in flight when the sequential reject/withdraw flag is set or the
+    // approve mutation is pending; the pending-group buttons disable during it so
+    // a double-tap can't fire a second overlapping run (mirrors the header).
+    const pendingBatchBusy = pendingBatchDeciding || fileChangeApproval.batchApproving;
+    type BatchAction = { key: string; label: string; Icon: React.ComponentType<{ className?: string }>; onClick: () => void; danger?: boolean; disabled?: boolean };
     const batchActions: BatchAction[] = [
+        // Pending-upload actions come first, mirroring the desktop header's
+        // "待审核文件" group; each only addresses the selected rows the viewer
+        // may act on (decide / withdraw), so a mixed selection stays safe.
+        (decidablePendingSelected.length > 0) && { key: "pendingApprove", label: localize("com_approval.action_approve"), Icon: Outlined.Check, onClick: handleBatchApprovePending, disabled: pendingBatchBusy },
+        (decidablePendingSelected.length > 0) && { key: "pendingReject", label: localize("com_approval.action_reject"), Icon: Outlined.Close, onClick: handleBatchRejectPending, danger: true, disabled: pendingBatchBusy },
+        (withdrawablePendingSelected.length > 0) && { key: "pendingWithdraw", label: localize("com_knowledge.delete"), Icon: Outlined.Delete, onClick: handleBatchWithdrawPending, danger: true, disabled: pendingBatchBusy },
         canBatchDownload && {
             key: "download",
             label: localize("com_knowledge.download"),
@@ -1113,7 +1394,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden max-[767px]:px-0"
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg max-[767px]:overflow-hidden"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -1306,17 +1587,7 @@ export function KnowledgeSpaceContent({
                 space={space}
                 currentPath={currentPath}
                 onNavigateFolder={onNavigateFolder}
-                searchQuery={searchQuery}
                 isSearching={isSearching}
-                onSearch={handleSearch}
-                viewMode={viewMode}
-                setViewMode={setViewMode}
-                enableCardMode={!isH5}
-                statusFilter={statusFilter}
-                onFilterStatus={handleStatusFilter}
-                sortBy={sortBy}
-                sortDirection={sortDirection}
-                onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 onTriggerUploadFolder={triggerUploadFolder}
@@ -1341,8 +1612,37 @@ export function KnowledgeSpaceContent({
                 hasSimilarSelected={hasSimilarSelected}
                 onProcessSimilar={handleProcessSimilar}
                 canManageMembers={canManageMembers}
+                pendingSelectedCount={pendingSelectedList.length}
+                decidablePendingCount={decidablePendingSelected.length}
+                withdrawablePendingCount={withdrawablePendingSelected.length}
+                onBatchApprovePending={handleBatchApprovePending}
+                onBatchRejectPending={handleBatchRejectPending}
+                onBatchWithdrawPending={handleBatchWithdrawPending}
+                pendingBatchDeciding={pendingBatchDeciding || fileChangeApproval.batchApproving}
             />
             </div>
+            )}
+
+            {/* Unified toolbar — shared by the list and card views (Figma 13198:75844).
+                Hidden in the full-page search view, which carries its own search box. */}
+            {!isH5 && !searchMode && (
+                <FileListToolbar
+                    spaceId={space.id}
+                    isRoot={currentPath.length === 0}
+                    onSearch={handleSearch}
+                    statusFilter={statusFilter}
+                    onFilterStatus={handleStatusFilter}
+                    showFilter={space.role !== SpaceRole.MEMBER}
+                    sortBy={sortBy}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                    isAllSelected={isAllSelectedOnPage}
+                    isIndeterminate={isSelectionIndeterminate}
+                    hasSelectableFiles={selectableFiles.length > 0}
+                    onSelectAll={() => handleSelectAll(isAllSelectedOnPage)}
+                />
             )}
 
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
@@ -1385,7 +1685,7 @@ export function KnowledgeSpaceContent({
                     {suppressList ? (
                         // Search page before any query — intentionally empty.
                         <div className="min-h-0 flex-1" />
-                    ) : (loading && displayFiles.length === 0) ? (
+                    ) : ((loading || fileChangeApproval.pendingLoading) && displayFiles.length === 0) ? (
                         // Space switching / first load: show a spinner instead of the
                         // "no files here" empty illustration. The fileManager hook clears
                         // `files` immediately on activeSpace change, so this branch fires
@@ -1420,10 +1720,12 @@ export function KnowledgeSpaceContent({
                                 className={cn(
                                     // pb-[112px] reserves room for the bottom AI dock (40px gap + 56px input + 16px safe-area)
                                     // so the last card row clears the dock with a 40px visual gap above the input top.
-                                    "w-full min-w-0 pt-4 pb-[112px]",
+                                    "w-full min-w-0 pb-[112px]",
                                     effectiveViewMode === "list"
-                                        ? "grid grid-cols-1 gap-0"
-                                        : "grid gap-4"
+                                        // H5 list stays full-bleed — its rows carry their own px-4 so a
+                                        // selected row's background spans the full width.
+                                        ? "grid grid-cols-1 gap-0 pt-4"
+                                        : "grid gap-2 px-2 pt-1"
                                 )}
                                 style={
                                     effectiveViewMode === "card"
@@ -1467,22 +1769,26 @@ export function KnowledgeSpaceContent({
                                             onFolderDragOver={cardDrag.handleFolderDragOver(file)}
                                             onFolderDragLeave={cardDrag.handleFolderDragLeave(file)}
                                             onFolderDrop={cardDrag.handleFolderDrop(file)}
+                                            onOpenApprovalDetail={fileChangeApproval.openDetail}
+                                            onPreviewPendingUpload={handleFileChangePreview}
+                                            onDecidePendingUpload={handlePendingUploadDecision}
+                                            onWithdrawPendingUpload={handleWithdrawPendingUpload}
+                                            pendingUploadDeciding={fileChangeApproval.deciding || fileChangeApproval.cleaning}
+                                            currentUserId={user?.id}
                                         />
                                     </div>
                                 ))}
                             </div>
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#e5e6eb]">
-                                <FileTable files={displayFiles}
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                            <FileListView files={displayFiles}
                                     onEnsureFilePermissions={ensureFilePermissions}
                                     onScroll={handleListScroll}
                                     /* Reserve 112px under the last row so the bottom AI dock leaves
                                        a 40px visual gap above the input. */
                                     bottomSpacing={112}
                                     selectedFiles={selectedFiles}
-                                    handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
                                     isAdmin={isAdmin}
                                     currentUserRole={space.role}
@@ -1508,13 +1814,15 @@ export function KnowledgeSpaceContent({
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                     canManageMembers={canManageMembers}
-                                    sortBy={sortBy}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
                                     highlightedTagIds={searchTagIds}
                                     highlightKeyword={searchQuery}
-                                />
-                            </div>
+                                    onOpenApprovalDetail={fileChangeApproval.openDetail}
+                                    onPreviewPendingUpload={handleFileChangePreview}
+                                    onDecidePendingUpload={handlePendingUploadDecision}
+                                    onWithdrawPendingUpload={handleWithdrawPendingUpload}
+                                    pendingUploadDeciding={fileChangeApproval.deciding || fileChangeApproval.cleaning}
+                                    currentUserId={user?.id}
+                            />
                         </div>
                     )}
                 </div>
@@ -1523,7 +1831,7 @@ export function KnowledgeSpaceContent({
             {/* Footer：仅在搜索且有选中时展示所选文件的路径面包屑（无分页器） */}
             {!isH5 && isSearching && selectedFiles.size > 0 && (
                 <div className="mt-auto w-full min-w-0 shrink-0">
-                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white py-3">
+                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3">
                         <SelectionPathBreadcrumb
                             spaceId={space.id}
                             spaceName={space.name}
@@ -1547,9 +1855,11 @@ export function KnowledgeSpaceContent({
                                 <button
                                     type="button"
                                     onClick={a.onClick}
+                                    disabled={a.disabled}
                                     className={cn(
                                         "flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap px-4 py-[5px] text-sm",
                                         a.danger ? "text-[#F53F3F]" : "text-[#212121]",
+                                        a.disabled && "cursor-not-allowed opacity-50",
                                     )}
                                 >
                                     <a.Icon className="size-4" />
@@ -1575,6 +1885,7 @@ export function KnowledgeSpaceContent({
                                             <DropdownMenuItem
                                                 key={a.key}
                                                 onClick={a.onClick}
+                                                disabled={a.disabled}
                                                 className={a.danger ? sidebarListMoreMenuDangerItemClassName : sidebarListMoreMenuItemClassName}
                                             >
                                                 <a.Icon className={a.danger ? sidebarListMoreMenuDangerIconClassName : sidebarListMoreMenuIconClassName} />
@@ -1596,7 +1907,7 @@ export function KnowledgeSpaceContent({
                 onSaved={handleTagsSaved}
                 spaceId={space.id}
                 fileId={isBatchTagging ? null : editingTagsFileId}
-                fileIds={isBatchTagging ? Array.from(selectedFiles) : undefined}
+                fileIds={isBatchTagging ? getReviewedSelection().map((f) => f.id) : undefined}
                 initialTagIds={
                     editingTagsFileId && !isBatchTagging
                         ? (displayFiles.find(f => f.id === editingTagsFileId)?.tags?.map(t => t.id) || [])
@@ -1681,6 +1992,19 @@ export function KnowledgeSpaceContent({
                 currentSpaceId={space.id}
                 currentSpaceName={space.name}
                 onConfirm={handleMoveConfirm}
+            />
+
+            <FileChangeApprovalDetail
+                open={fileChangeApproval.detailRequestId != null}
+                onOpenChange={(open) => { if (!open) fileChangeApproval.closeDetail(); }}
+                detail={fileChangeApproval.detail}
+                loading={fileChangeApproval.detailLoading}
+                approving={fileChangeApproval.batchApproving}
+                batchResult={fileChangeApproval.batchApprovalResult}
+                onApprove={(requestId) => { void handleBatchApproveFileChanges([requestId]); }}
+                onPreview={(requestId) => { void handleFileChangePreview(requestId); }}
+                onRetry={(requestId) => { void handleFileChangeRetry(requestId); }}
+                onCleanup={(requestId) => { void handleFileChangeCleanup(requestId); }}
             />
 
             {versionManagementEnabled && (

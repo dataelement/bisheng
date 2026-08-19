@@ -3,7 +3,7 @@
 > **状态**：✅ 已确认并通过设计评审
 > **关联 Spec**：[spec.md](./spec.md)
 > **版本契约**：[release-contract.md](../release-contract.md)
-> **最后更新**：2026-08-07
+> **最后更新**：2026-08-11
 > **界面参考**：[Figma · BISHENG · node 13051:92477](https://www.figma.com/design/FNt6RR3OZtaJQH6x8enmaZ/BISHENG?node-id=13051-92477&m=dev)
 
 ## 1. 目标与非目标
@@ -15,11 +15,12 @@
 - 新建时先在本地维护权限草稿；提交时随现有创建请求传入，由后端创建资源后调用现有批量授权服务落地。
 - 编辑时只提交用户实际修改的权限项，不用过期快照覆盖其他并发变更。
 - 分享转私密继续由后端原有更新事务清理全部非创建者授权。
+- 中粮集团/部门知识空间沿用现有部门绑定模型，创建与更新均禁止 private；前台只禁用私密选项，不禁用加入审核或成员权限配置。
 
 ### 1.2 非目标
 
 - 不改 OpenFGA 模型、权限角色、细粒度权限 ID、授权对象范围或成员关系存储。
-- 不引入邀请确认、文件审批、中粮定制的部门空间强制分享规则。
+- 不引入邀请确认或文件审批。
 - 不把知识空间和频道的授权写接口合并成新的通用写接口。
 - 不合并“包含子部门”产生的多条底层授权记录。
 
@@ -32,6 +33,7 @@
 - 创建请求新增字段必须可选；未传 `initial_permissions` 的现有调用方请求与响应保持兼容。
 - 部门选择必须保持 F038 的逐层加载/服务端搜索，不恢复整棵部门树加载。
 - 本次只改 client SPA；不得把 client 的 Recoil/react-query v4 代码与 platform SPA 混用。
+- 集团根节点和普通部门均复用 `DepartmentKnowledgeSpace` 绑定与 `space_kind=department`，不新增资源类型或权限模型。
 
 **Constitution Check：通过。** 候选查询从 API endpoint 下沉为共享 `GrantSubjectQueryService`，endpoint 不直接查询 ORM，授权仍经 `PermissionService` / F026 owner service；无 DDL、手写 tenant 条件、新错误码、密钥或 store HTTP 调用。
 
@@ -86,6 +88,13 @@
 - **原因**：client 强制使用 `@bisheng/ui` 与主题 token；复制生成代码会绕过品牌主题、i18n 和移动端排版规则。
 - **重议条件**：设计系统正式新增对应组件并替换现有组件。
 
+### D7. 集团/部门空间固定分享采用前后端双重门禁
+
+- **备选**：只在前台隐藏私密；只在后端拒绝 private；前台展示并禁用私密且后端拒绝显式 private。
+- **选择**：`AccessModeSelector` 支持单独禁用私密项；知识空间设置页依据服务端 `space_kind=department` 禁用该项，但保留 shared 下的 `public/approval` 开关和权限草稿。`DepartmentKnowledgeSpaceService.batch_create_spaces` 与 `KnowledgeSpaceService.update_knowledge_space` 对显式 private fail-closed。
+- **原因**：前台禁用满足产品交互，服务端门禁覆盖绕过 UI 和旧客户端；只限制可见性，不改变加入审批、候选范围、relation model 或成员授权服务。
+- **历史数据**：不做批量数据迁移。若历史部门空间为 private，设置页按 approval 分享态初始化，下一次保存修正；未携带 `auth_type` 的其他后端维护操作仍可执行。
+
 ## 4. 详细设计
 
 ### 4.0 现状调用链
@@ -108,6 +117,8 @@
 | 频道 | private | review / public | 发布广场等现有设置 |
 
 选择私密后隐藏加入方式、广场和授权列表。私密切换为分享时，若本次页面尚未选择加入方式，则初始化为“需要审核”。
+
+集团/部门知识空间是上表知识空间的定制子集：访问方式固定为分享，前台仍渲染私密卡片但单项 disabled；分享下的“加入需审核”开关和成员权限草稿照常展示、保存。集团根节点与普通部门共用 `space_kind=department`。
 
 ### 4.2 页面数据流
 

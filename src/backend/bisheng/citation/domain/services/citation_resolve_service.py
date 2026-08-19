@@ -14,6 +14,7 @@ from bisheng.citation.domain.services.citation_runtime_cache_service import Cita
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.http_error import NotFoundError
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 
 
@@ -33,9 +34,11 @@ class CitationResolveService:
         self,
         repository: MessageCitationRepository,
         runtime_cache_service: CitationRuntimeCacheService | None = None,
+        knowledge_file_repository: KnowledgeFileRepository | None = None,
     ):
         self.registry_service = CitationRegistryService(repository)
         self.runtime_cache_service = runtime_cache_service or CitationRuntimeCacheService()
+        self.knowledge_file_repository = knowledge_file_repository
 
     # ------------------------------------------------------------------
     # F029 — view_file filter
@@ -47,11 +50,9 @@ class CitationResolveService:
     ) -> dict[int, set[int]]:
         """Group RAG citations by knowledge_id and collect their documentIds.
 
-        When the persisted payload is missing ``knowledgeId`` it is looked up
-        via ``KnowledgeFileDao.query_by_id_sync`` (matches the enrichment
-        path so the filter sees the same space the URLs would be issued
-        for). RAG citations whose file_id is unresolvable are returned
-        keyed under ``space_id=0`` so they can later be dropped.
+        Missing ``knowledgeId`` values are returned under ``space_id=0`` so
+        direct callers fail closed. Public logged-in resolve paths always run
+        the explicit-tenant canonicalization batch before reaching this helper.
         """
         grouped: dict[int, set[int]] = defaultdict(set)
         for item in items:
@@ -63,11 +64,8 @@ class CitationResolveService:
                 continue
             space_id = payload.knowledgeId
             if space_id is None:
-                file_info = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, file_id)
-                if file_info is None:
-                    grouped[0].add(int(file_id))
-                    continue
-                space_id = file_info.knowledge_id
+                grouped[0].add(int(file_id))
+                continue
             grouped[int(space_id)].add(int(file_id))
         return grouped
 
@@ -89,17 +87,197 @@ class CitationResolveService:
         if not grouped:
             return set()
 
-        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
-            KnowledgeFileVisibilityService,
-        )
-
-        visibility = KnowledgeFileVisibilityService(request=None, login_user=login_user)
+        visibility = self._build_visibility_service(login_user)
         allowed: set[int] = set()
         for space_id, file_ids in grouped.items():
             if space_id == 0 or not file_ids:
                 continue
-            allowed |= await visibility.post_filter_visible_files(space_id, file_ids)
+            allowed |= await visibility.post_filter_rebac_visible_files(space_id, file_ids)
         return allowed
+
+    @staticmethod
+    def _build_visibility_service(login_user: UserPayload):
+        from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+            KnowledgeFileVisibilityService,
+        )
+
+        return KnowledgeFileVisibilityService(request=None, login_user=login_user)
+
+    async def _canonicalize_rag_items(
+        self,
+        items: list[CitationRegistryItemSchema],
+        login_user: UserPayload | None,
+    ) -> list[CitationRegistryItemSchema]:
+        """Refresh persisted RAG locations before any permission or URL decision."""
+
+        if login_user is None or not items:
+            return list(items)
+        file_ids = sorted(
+            {
+                int(payload.documentId)
+                for item in items
+                if item.type == CitationType.RAG
+                and (payload := RagCitationPayloadSchema.model_validate(item.sourcePayload)).documentId is not None
+            }
+        )
+        if not file_ids:
+            return list(items)
+
+        visibility = self._build_visibility_service(login_user)
+        tenant_id = visibility.require_explicit_tenant()
+        if self.knowledge_file_repository is None:
+            raise RuntimeError("citation resolve requires KnowledgeFileRepository")
+        file_rows = await self.knowledge_file_repository.find_by_ids_for_tenant(
+            tenant_id=int(tenant_id),
+            entity_ids=file_ids,
+        )
+        rows_by_id = {int(row.id): row for row in file_rows}
+        candidate_space_ids = {
+            int(row.knowledge_id)
+            for row in rows_by_id.values()
+            if row.knowledge_id is not None and int(row.knowledge_id) > 0
+        }
+        candidate_space_ids.update(
+            int(payload.knowledgeId)
+            for item in items
+            if item.type == CitationType.RAG
+            and (payload := RagCitationPayloadSchema.model_validate(item.sourcePayload)).knowledgeId is not None
+            and int(payload.knowledgeId) > 0
+        )
+        authoritative_space_ids = await visibility.authoritative_mutation_space_ids(
+            space_ids=sorted(candidate_space_ids),
+            resource_ids=file_ids,
+        )
+
+        canonical: list[CitationRegistryItemSchema] = []
+        for item in items:
+            if item.type != CitationType.RAG:
+                canonical.append(item)
+                continue
+            payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
+            file_id = int(payload.documentId or 0)
+            file_row = rows_by_id.get(file_id)
+            if file_row is None:
+                continue
+            authoritative_space_id = authoritative_space_ids.get(file_id, int(file_row.knowledge_id))
+            canonical_payload = payload.model_copy(update={"knowledgeId": authoritative_space_id})
+            canonical_payload = self._rewrite_rag_payload_name(
+                canonical_payload,
+                projected_name=str(file_row.file_name),
+                replaced_name=payload.documentName,
+            )
+            canonical.append(item.model_copy(update={"sourcePayload": canonical_payload}))
+        return canonical
+
+    async def _file_change_visible_ids(
+        self,
+        items: list[CitationRegistryItemSchema],
+        login_user: UserPayload | None,
+    ) -> set[int] | None:
+        """Return RAG IDs not hidden by F046, batched across all cited spaces."""
+        if login_user is None or not items:
+            return None
+        grouped = await self._resolve_rag_space_pairs(items)
+        space_ids = sorted(space_id for space_id in grouped if space_id > 0)
+        resource_ids = sorted(
+            {
+                resource_id
+                for space_id, file_ids in grouped.items()
+                if space_id > 0
+                for resource_id in file_ids
+            }
+        )
+        if not space_ids or not resource_ids:
+            return set()
+        visibility = self._build_visibility_service(login_user)
+        return await visibility.filter_file_change_visible_ids(
+            space_ids=space_ids,
+            resource_ids=resource_ids,
+        )
+
+    @staticmethod
+    def _apply_file_change_filter(
+        items: list[CitationRegistryItemSchema],
+        visible_ids: set[int] | None,
+    ) -> list[CitationRegistryItemSchema]:
+        """F046 is a hard deny and therefore precedes accessScope tiering."""
+        if visible_ids is None:
+            return list(items)
+        filtered: list[CitationRegistryItemSchema] = []
+        for item in items:
+            if item.type != CitationType.RAG:
+                filtered.append(item)
+                continue
+            payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
+            if payload.documentId is not None and int(payload.documentId) in visible_ids:
+                filtered.append(item)
+        return filtered
+
+    async def _project_old_file_names(
+        self,
+        items: list[CitationRegistryItemSchema],
+        login_user: UserPayload | None,
+    ) -> list[CitationRegistryItemSchema]:
+        if login_user is None or not items:
+            return list(items)
+        grouped = await self._resolve_rag_space_pairs(items)
+        visibility = self._build_visibility_service(login_user)
+        names: dict[int, tuple[str, str]] = {}
+        for space_id, file_ids in grouped.items():
+            if space_id > 0 and file_ids:
+                names.update(
+                    await visibility.old_name_projection(
+                        space_id=space_id,
+                        resource_ids=file_ids,
+                    )
+                )
+        projected: list[CitationRegistryItemSchema] = []
+        for item in items:
+            if item.type != CitationType.RAG:
+                projected.append(item)
+                continue
+            payload = RagCitationPayloadSchema.model_validate(item.sourcePayload)
+            old_and_new = names.get(int(payload.documentId or 0))
+            if old_and_new is None:
+                projected.append(item)
+                continue
+            projected_name, replaced_name = old_and_new
+            payload = self._rewrite_rag_payload_name(
+                payload,
+                projected_name=projected_name,
+                replaced_name=replaced_name,
+            )
+            projected.append(item.model_copy(update={"sourcePayload": payload}))
+        return projected
+
+    @staticmethod
+    def _rewrite_rag_payload_name(
+        payload: RagCitationPayloadSchema,
+        *,
+        projected_name: str,
+        replaced_name: str | None,
+    ) -> RagCitationPayloadSchema:
+        if not projected_name:
+            return payload
+        updated_items = [
+            child.model_copy(
+                update={
+                    "content": child.content.replace(replaced_name, projected_name)
+                    if isinstance(child.content, str) and replaced_name
+                    else child.content
+                }
+            )
+            for child in payload.items
+        ]
+        return payload.model_copy(
+            update={
+                "documentName": projected_name,
+                "snippet": payload.snippet.replace(replaced_name, projected_name)
+                if isinstance(payload.snippet, str) and replaced_name
+                else payload.snippet,
+                "items": updated_items,
+            }
+        )
 
     @staticmethod
     def _rag_url_allowed(item: CitationRegistryItemSchema, permitted: set[int] | None) -> bool:
@@ -142,7 +320,11 @@ class CitationResolveService:
         F029 tests); ``resolve_citations`` computes ``permitted`` once and reuses it
         for both filtering and enrichment URL gating.
         """
+        items = await self._canonicalize_rag_items(items, login_user)
+        items = await self._project_old_file_names(items, login_user)
         permitted = await self._permitted_file_ids(items, login_user)
+        file_change_visible_ids = await self._file_change_visible_ids(items, login_user)
+        items = self._apply_file_change_filter(items, file_change_visible_ids)
         return self._apply_tier_filter(items, permitted)
 
     # ------------------------------------------------------------------
@@ -254,7 +436,14 @@ class CitationResolveService:
             raise NotFoundError()
         url_allowed = True
         if item.type == CitationType.RAG and login_user is not None:
+            canonical_items = await self._canonicalize_rag_items([item], login_user)
+            if not canonical_items:
+                raise NotFoundError()
+            item = (await self._project_old_file_names(canonical_items, login_user))[0]
             permitted = await self._permitted_file_ids([item], login_user)
+            file_change_visible_ids = await self._file_change_visible_ids([item], login_user)
+            if not self._apply_file_change_filter([item], file_change_visible_ids):
+                raise NotFoundError()
             url_allowed = self._rag_url_allowed(item, permitted)
             # per_user + no view_file → not found (AC-18); shared survives with
             # metadata but no full-file URL (AC-21).
@@ -281,9 +470,12 @@ class CitationResolveService:
         if missing_ids:
             items.extend(await self.registry_service.list_citations_by_ids(missing_ids))
 
+        items = await self._canonicalize_rag_items(items, login_user)
+        items = await self._project_old_file_names(items, login_user)
         permitted = await self._permitted_file_ids(items, login_user)
+        file_change_visible_ids = await self._file_change_visible_ids(items, login_user)
+        items = self._apply_file_change_filter(items, file_change_visible_ids)
         items = self._apply_tier_filter(items, permitted)
-
         enriched_items = await asyncio.gather(
             *(self._enrich_item(item, login_user, url_allowed=self._rag_url_allowed(item, permitted)) for item in items)
         )

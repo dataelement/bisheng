@@ -61,7 +61,6 @@ KNOWLEDGE_SPACE_PERMISSION_TEMPLATE: dict = {
                 {"id": "move_file", "label": "移动文件", "relation": "can_edit"},
                 {"id": "delete_file", "label": "删除文件", "relation": "can_delete"},
                 {"id": "download_file", "label": "下载文件", "relation": "can_read"},
-                {"id": "share_file", "label": "分享文件", "relation": "can_manage"},
                 {"id": "manage_file_relation", "label": "管理文件协作者", "relation": "can_manage"},
             ],
         },

@@ -23,8 +23,10 @@ from bisheng.worker.knowledge.lua_scripts import (
     DISPATCH_ONE,
     DROP_DISPATCH,
     ENQUEUE_FILE,
+    PURGE_FILE,
     REFRESH_LOCK,
     RELEASE_LOCK,
+    REMOVE_QUEUED,
     ROLLBACK_DISPATCH,
 )
 from bisheng.worker.main import bisheng_celery
@@ -135,6 +137,8 @@ class FileScheduler:
         self._rollback = self._conn.register_script(ROLLBACK_DISPATCH)
         self._drop = self._conn.register_script(DROP_DISPATCH)
         self._complete = self._conn.register_script(COMPLETE_FILE)
+        self._remove_queued = self._conn.register_script(REMOVE_QUEUED)
+        self._purge = self._conn.register_script(PURGE_FILE)
         self._release_lock_script = self._conn.register_script(RELEASE_LOCK)
         self._refresh_lock_script = self._conn.register_script(REFRESH_LOCK)
 
@@ -147,19 +151,28 @@ class FileScheduler:
         callback_url: str,
         file_ext: str,
         tenant_id: int | str | None = None,
+        idempotency_key: str | None = None,
         ttl_seconds: int | None = None,
-    ) -> None:
-        self._enqueue(
-            keys=[str(user_id)],
-            args=[
-                str(file_id),
-                preview_cache_key or "",
-                callback_url or "",
-                (file_ext or "").lower(),
-                ttl_seconds or self._PAYLOAD_TTL_SECONDS,
-                "" if tenant_id is None else str(tenant_id),
-            ],
+    ) -> bool:
+        result = int(
+            self._enqueue(
+                keys=[str(user_id)],
+                args=[
+                    str(file_id),
+                    preview_cache_key or "",
+                    callback_url or "",
+                    (file_ext or "").lower(),
+                    ttl_seconds or self._PAYLOAD_TTL_SECONDS,
+                    "" if tenant_id is None else str(tenant_id),
+                    idempotency_key or "",
+                    "",
+                    "",
+                ],
+            )
         )
+        if result < 0:
+            raise ValueError("file already has a different active parse generation")
+        return result == 1
 
     def dispatch_one(self, *, user_id: str) -> str | None:
         result = self._dispatch_one(keys=[str(user_id)])
@@ -213,6 +226,7 @@ class FileScheduler:
         user_id: str,
         file_ext: str,
         tenant_id: int | str | None,
+        idempotency_key: str | None = None,
         ttl_seconds: int,
     ) -> None:
         """(Re)write a file's payload hash with a fresh TTL.
@@ -222,16 +236,15 @@ class FileScheduler:
         dispatch lock (or run in reconcile), so there is no competing writer.
         """
         key = _payload_key(file_id)
-        self._conn.hset(
-            key,
-            mapping={
-                "preview_cache_key": preview_cache_key or "",
-                "callback_url": callback_url or "",
-                "user_id": str(user_id),
-                "file_ext": (file_ext or "").lower(),
-                "tenant_id": "" if tenant_id is None else str(tenant_id),
-            },
-        )
+        mapping = {
+            "preview_cache_key": preview_cache_key or "",
+            "callback_url": callback_url or "",
+            "user_id": str(user_id),
+            "file_ext": (file_ext or "").lower(),
+            "tenant_id": "" if tenant_id is None else str(tenant_id),
+            "idempotency_key": idempotency_key or "",
+        }
+        self._conn.hset(key, mapping=mapping)
         self._conn.expire(key, ttl_seconds)
 
     def queued_files(self, *, user_id: str) -> list[str]:
@@ -240,7 +253,7 @@ class FileScheduler:
 
     def remove_from_queue(self, *, user_id: str, file_id: str) -> None:
         """Remove every occurrence of a file id from a user's FIFO queue."""
-        self._conn.lrem(_queue_key(user_id), 0, str(file_id))
+        self._remove_queued(keys=[str(user_id)], args=[str(file_id)])
 
     def complete_file(self, *, user_id: str, file_id: str) -> None:
         self._complete(keys=[str(user_id)], args=[str(file_id)])
@@ -267,22 +280,7 @@ class FileScheduler:
         Called when a file is deleted so it does not linger as a ghost entry
         that later gets dispatched against a non-existent DB row.
         """
-        uid = str(user_id)
-        fid = str(file_id)
-        self._conn.lrem(_queue_key(uid), 0, fid)
-        self._conn.srem(_inflight_key(uid), fid)
-        self._conn.delete(_payload_key(fid))
-        # If the file was already confirmed in-flight, return its slot to the
-        # queue counter so deleting a parsing file doesn't leak capacity.
-        q = self._conn.hget(INFLIGHT_QUEUE_KEY, fid)
-        if q:
-            q = q.decode() if isinstance(q, bytes) else q
-            self._conn.decr(_inflight_total_key(q))
-            self._conn.hdel(INFLIGHT_QUEUE_KEY, fid)
-        if self._conn.scard(_inflight_key(uid)) == 0:
-            self._conn.srem(INFLIGHT_USERS_KEY, uid)
-        if self._conn.llen(_queue_key(uid)) == 0:
-            self._conn.srem(ACTIVE_USERS_KEY, uid)
+        self._purge(keys=[str(user_id)], args=[str(file_id)])
 
     def get_payload(self, *, file_id: str) -> dict[str, str]:
         raw = self._conn.hgetall(_payload_key(file_id))
@@ -361,11 +359,16 @@ def _fair_scheduler_enabled() -> bool:
     return bool(settings.knowledge_file_worker.fair_scheduler_enabled)
 
 
-def _parse_apply_async(*, args, queue):
+def _parse_apply_async(*, args, queue, task_id: str | None = None, headers: dict | None = None):
     """Indirection so tests can patch without importing the celery task."""
     from bisheng.worker.knowledge.file_worker import parse_knowledge_file_celery
 
-    parse_knowledge_file_celery.apply_async(args=args, queue=queue)
+    options = {"args": args, "queue": queue}
+    if task_id is not None:
+        options["task_id"] = task_id
+    if headers is not None:
+        options["headers"] = headers
+    parse_knowledge_file_celery.apply_async(**options)
 
 
 def start_parse_heartbeat(scheduler: FileScheduler, *, file_id: str, token: str, conf) -> callable:
@@ -436,6 +439,7 @@ def _recover_payload(
         "user_id": str(user_id),
         "file_ext": _extract_ext(row.file_name),
         "tenant_id": "" if getattr(row, "tenant_id", None) is None else str(row.tenant_id),
+        "idempotency_key": "",
     }
     scheduler.put_payload(
         file_id=file_id,
@@ -525,14 +529,21 @@ def run_dispatch_round(*, scheduler: FileScheduler | None = None) -> None:
             payload_tenant = payload.get("tenant_id") or ""
             tenant_token = current_tenant_id.set(int(payload_tenant)) if payload_tenant else None
             try:
-                _parse_apply_async(
-                    args=[
-                        int(file_id),
-                        payload.get("preview_cache_key", ""),
-                        payload.get("callback_url", ""),
-                    ],
-                    queue=queue,
-                )
+                parse_args = [
+                    int(file_id),
+                    payload.get("preview_cache_key", ""),
+                    payload.get("callback_url", ""),
+                ]
+                dispatch_options = {"args": parse_args, "queue": queue}
+                idempotency_key = payload.get("idempotency_key") or ""
+                if idempotency_key:
+                    if not payload_tenant:
+                        raise RuntimeError("tenant context is required for idempotent parse dispatch")
+                    dispatch_options.update(
+                        task_id=idempotency_key,
+                        headers={"tenant_id": int(payload_tenant)},
+                    )
+                _parse_apply_async(**dispatch_options)
             except Exception as exc:
                 sched.rollback_dispatch(user_id=user_id, file_id=file_id)
                 logger.exception(
@@ -576,6 +587,7 @@ def enqueue_or_dispatch(
     file_name: str,
     preview_cache_key: str | None,
     callback_url: str | None,
+    idempotency_key: str | None = None,
 ) -> None:
     """Single dispatch entry point used by service-layer callers.
 
@@ -586,10 +598,20 @@ def enqueue_or_dispatch(
     """
     preview_cache_key = preview_cache_key or ""
     callback_url = callback_url or ""
+    tenant_id = get_current_tenant_id()
+    if idempotency_key is not None and tenant_id is None:
+        raise RuntimeError("tenant context is required for idempotent parse dispatch")
 
     if not _fair_scheduler_enabled():
         queue = decide_queue(file_name)
-        _parse_apply_async(args=[int(file_id), preview_cache_key, callback_url], queue=queue)
+        parse_args = [int(file_id), preview_cache_key, callback_url]
+        dispatch_options = {"args": parse_args, "queue": queue}
+        if idempotency_key is not None:
+            dispatch_options.update(
+                task_id=str(idempotency_key),
+                headers={"tenant_id": int(tenant_id)},
+            )
+        _parse_apply_async(**dispatch_options)
         return
 
     scheduler = FileScheduler()
@@ -601,7 +623,8 @@ def enqueue_or_dispatch(
         file_ext=_extract_ext(file_name),
         # Captured in the request context so the later (possibly Beat-driven)
         # dispatch round can parse the file under its owning tenant.
-        tenant_id=get_current_tenant_id(),
+        tenant_id=tenant_id,
+        idempotency_key=idempotency_key,
         ttl_seconds=_fair_scheduler_conf().payload_ttl_seconds,
     )
     try:

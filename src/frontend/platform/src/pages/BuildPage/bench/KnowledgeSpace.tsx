@@ -1,4 +1,4 @@
-// 工作台「知识空间」配置页：只保留系统提示词、用户提示词、知识空间检索结果最大字符数
+// 工作台「知识空间」配置页
 import { Button } from "@/components/bs-ui/button";
 import { CardContent } from "@/components/bs-ui/card";
 import { Label } from "@/components/bs-ui/label";
@@ -27,6 +27,10 @@ import {
     type KnowledgeSpaceSensitivePolicyHandle,
 } from "./KnowledgeSpaceSensitivePolicy";
 import KnowledgeSpaceTagLibrarySection from "./KnowledgeSpaceTagLibrarySection";
+import {
+    FileChangeApprovalSettings,
+    type FileChangeApprovalSettingsHandle,
+} from "@/pages/KnowledgePage/FileChangeApprovalSettings";
 
 interface KnowledgeConfigForm {
     /** 系统提示词，对应接口 system_prompt */
@@ -54,6 +58,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
         configMeta,
     } = useKnowledgeConfig(scopeVersion);
     const sensitivePolicyRef = useRef<KnowledgeSpaceSensitivePolicyHandle>(null);
+    const fileChangeApprovalRef = useRef<FileChangeApprovalSettingsHandle>(null);
     const [managerOpen, setManagerOpen] = useState(false);
     const [departmentSpaces, setDepartmentSpaces] = useState<DepartmentKnowledgeSpaceSummary[]>([]);
     const [departmentSpacesLoading, setDepartmentSpacesLoading] = useState(false);
@@ -88,6 +93,8 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
     const handleSave = async () => {
         const sensitiveSaved = await sensitivePolicyRef.current?.save();
         if (sensitiveSaved === false) return false;
+        const fileChangeApprovalSaved = await fileChangeApprovalRef.current?.save();
+        if (fileChangeApprovalSaved === false) return false;
         return saveKnowledgeConfig();
     };
 
@@ -209,6 +216,15 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                             />
 
                             <KnowledgeSpaceSensitivePolicy ref={sensitivePolicyRef} />
+
+                            {canManageWorkbench && (
+                                <div className="px-5 pt-8">
+                                    <FileChangeApprovalSettings
+                                        ref={fileChangeApprovalRef}
+                                        embedded
+                                    />
+                                </div>
+                            )}
 
                             {isGlobalSuper && (
                                 <div className="p-5 rounded-lg">

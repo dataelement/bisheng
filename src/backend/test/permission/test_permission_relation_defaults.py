@@ -56,7 +56,6 @@ def test_knowledge_space_permission_defaults_accept_computed_relations():
         "share_space",
         "manage_space_relation",
         "manage_folder_relation",
-        "share_file",
         "manage_file_relation",
     }
 

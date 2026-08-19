@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 16
+      "count": 19
     }
   },
   "src/api/index.ts": {
@@ -75,7 +75,7 @@
   },
   "src/api/knowledge.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 64
+      "count": 62
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -1397,7 +1397,7 @@
   },
   "src/components/NotificationsDialog.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 23
+      "count": 20
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4
@@ -1406,7 +1406,7 @@
       "count": 8
     },
     "react-hooks/exhaustive-deps": {
-      "count": 3
+      "count": 2
     }
   },
   "src/components/PreviewFile/DocxFileViewer.tsx": {
@@ -2423,7 +2423,7 @@
   },
   "src/pages/ChannelSquare.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 7
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -2437,7 +2437,7 @@
   },
   "src/pages/ChannelSquareCard.tsx": {
     "no-restricted-syntax": {
-      "count": 1
+      "count": 2
     }
   },
   "src/pages/DevLogin/index.tsx": {
@@ -2562,6 +2562,9 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
+    },
+    "no-restricted-syntax": {
+      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -3088,6 +3091,9 @@
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
     },
+    "no-case-declarations": {
+      "count": 8
+    },
     "no-console": {
       "count": 4
     },
@@ -3190,6 +3196,9 @@
     }
   },
   "src/pages/knowledge/FilePreview/index.tsx": {
+    "@typescript-eslint/ban-ts-comment": {
+      "count": 1
+    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -3289,16 +3298,6 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/SpaceDetail/FileTable.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
-  "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceShareDialog.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -3362,11 +3361,14 @@
     }
   },
   "src/pages/knowledge/hooks/useFileUpload.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 5
+      "count": 2
     }
   },
   "src/pages/knowledge/hooks/useInlineRename.ts": {

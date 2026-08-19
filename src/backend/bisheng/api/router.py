@@ -1,55 +1,76 @@
 # Router for base api
-from bisheng.telemetry_search.api.router import router as telemetry_search_router
 from fastapi import APIRouter
 
-from bisheng.api.v1 import (assistant_router, audit_router, chat_router,
-                            endpoints_router,
-                            group_router, mark_router,
-                            report_router, tag_router,
-                            user_router, variable_router, workflow_router,
-                            workstation_router, tool_router, invite_code_router, skillcenter_router, flows_router)
-from bisheng.evaluation.api.router import router as evaluation_router
+from bisheng.admin.api.router import router as admin_router
+from bisheng.api.v1 import (
+    assistant_router,
+    audit_router,
+    chat_router,
+    endpoints_router,
+    flows_router,
+    group_router,
+    invite_code_router,
+    mark_router,
+    report_router,
+    skillcenter_router,
+    tag_router,
+    tool_router,
+    user_router,
+    variable_router,
+    workflow_router,
+    workstation_router,
+)
+from bisheng.approval.api.router import router as approval_router
+from bisheng.brand.api.router import router as brand_router
 from bisheng.channel.api.router import router as channel_router
 from bisheng.chat_session.api.router import router as session_router
 from bisheng.citation.api.router import router as citation_router
+from bisheng.department.api.router import router as department_router
+from bisheng.evaluation.api.router import router as evaluation_router
 from bisheng.finetune.api.finetune import router as finetune_router
 from bisheng.finetune.api.server import router as server_router
 from bisheng.knowledge.api.router import (
-    qa_router,
     knowledge_router,
+    knowledge_space_file_change_router,
     knowledge_space_router,
     knowledge_space_tag_library_router,
     knowledge_version_router,
+    qa_router,
 )
 from bisheng.linsight.api.router import router as linsight_router
 from bisheng.llm.api.router import router as llm_router
 from bisheng.message.api.router import router as message_router
 from bisheng.open_endpoints.api.endpoints.llm import router as llm_router_rpc
-from bisheng.open_endpoints.api.router import (assistant_router_rpc, chat_router_rpc,
-                                               citation_router_rpc, knowledge_router_rpc,
-                                               workflow_router_rpc, filelib_router_rpc,
-                                               flow_router_rpc)
-from bisheng.department.api.router import router as department_router
-from bisheng.user_group.api.router import router as user_group_router
-from bisheng.permission.api.router import router as permission_router
-from bisheng.role.api.router import router as role_router
-from bisheng.share_link.api.router import router as share_link_router
+from bisheng.open_endpoints.api.router import (
+    assistant_router_rpc,
+    chat_router_rpc,
+    citation_router_rpc,
+    filelib_router_rpc,
+    flow_router_rpc,
+    knowledge_router_rpc,
+    workflow_router_rpc,
+)
 from bisheng.org_sync.api.endpoints.relink import router as relink_router
 from bisheng.org_sync.api.router import router as org_sync_router
-from bisheng.sso_sync.api.router import router as sso_sync_router
-from bisheng.tenant.api.router import router as tenant_router
-from bisheng.admin.api.router import router as admin_router
-from bisheng.approval.api.router import router as approval_router
-from bisheng.brand.api.router import router as brand_router
+from bisheng.permission.api.router import router as permission_router
+from bisheng.role.api.router import router as role_router
 from bisheng.sensitive_word.api.router import router as sensitive_word_policy_router
+from bisheng.share_link.api.router import router as share_link_router
+from bisheng.sso_sync.api.router import router as sso_sync_router
+from bisheng.telemetry_search.api.router import router as telemetry_search_router
+from bisheng.tenant.api.router import router as tenant_router
+from bisheng.user_group.api.router import router as user_group_router
 from bisheng.workstation.api.endpoints.conversation_export import router as conversation_export_router
 
-router = APIRouter(prefix='/api/v1', )
+router = APIRouter(
+    prefix="/api/v1",
+)
 router.include_router(chat_router)
 router.include_router(endpoints_router)
 router.include_router(knowledge_router)
 router.include_router(knowledge_space_tag_library_router)
 router.include_router(knowledge_space_router)
+router.include_router(knowledge_space_file_change_router)
 router.include_router(knowledge_version_router)
 router.include_router(server_router)
 router.include_router(user_router)
@@ -91,7 +112,9 @@ router.include_router(approval_router)
 router.include_router(brand_router)
 router.include_router(sensitive_word_policy_router)
 
-router_rpc = APIRouter(prefix='/api/v2', )
+router_rpc = APIRouter(
+    prefix="/api/v2",
+)
 router_rpc.include_router(knowledge_router_rpc)
 router_rpc.include_router(filelib_router_rpc)
 router_rpc.include_router(chat_router_rpc)

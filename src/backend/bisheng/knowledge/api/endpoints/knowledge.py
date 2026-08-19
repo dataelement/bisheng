@@ -3,7 +3,7 @@ import json
 import urllib.parse
 from datetime import datetime
 from io import BytesIO
-from typing import List, Optional, Any, Literal
+from typing import Any, List, Literal, Optional
 
 import pandas as pd
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Query, Request, UploadFile
@@ -15,35 +15,45 @@ from bisheng.api.services import knowledge_imp
 from bisheng.api.services.knowledge_imp import add_qa
 from bisheng.api.v1.schemas import (
     KnowledgeFileProcess,
+    KnowledgeFileReProcess,
+    UpdateKnowledgeReq,
     UpdatePreviewFileChunk,
     UploadFileResponse,
-    UpdateKnowledgeReq,
-    KnowledgeFileReProcess,
 )
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
-from bisheng.common.errcode.http_error import UnAuthorizedError, NotFoundError, ServerError
+from bisheng.common.errcode.http_error import NotFoundError, ServerError, UnAuthorizedError
 from bisheng.common.errcode.knowledge import (
+    KnowledgeCPEmptyError,
     KnowledgeCPError,
-    KnowledgeQAError,
-    KnowledgeRebuildingError,
-    KnowledgePreviewError,
-    KnowledgeNotQAError,
     KnowledgeNoEmbeddingError,
     KnowledgeNotExistError,
-    KnowledgeCPEmptyError,
+    KnowledgeNotQAError,
+    KnowledgePreviewError,
+    KnowledgeQAError,
+    KnowledgeRebuildingError,
 )
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
-from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
+from bisheng.common.schemas.api import UnifiedResponseModel, resp_200, resp_500
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.role_access import AccessType, WebMenuResource
-from bisheng.knowledge.api.dependencies import get_knowledge_service, get_knowledge_file_service
-from bisheng.knowledge.domain.models.knowledge import KnowledgeCreate, KnowledgeDao, KnowledgeTypeEnum, KnowledgeUpdate
-from bisheng.knowledge.domain.models.knowledge import KnowledgeState
+from bisheng.knowledge.api.dependencies import (
+    get_knowledge_file_service,
+    get_knowledge_service,
+    get_knowledge_space_service,
+    get_knowledge_space_upload_stage_service,
+)
+from bisheng.knowledge.domain.models.knowledge import (
+    KnowledgeCreate,
+    KnowledgeDao,
+    KnowledgeState,
+    KnowledgeTypeEnum,
+    KnowledgeUpdate,
+)
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileDao,
     KnowledgeFileStatus,
@@ -51,21 +61,21 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     QAKnowledgeUpsert,
     QAStatus,
 )
-from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.knowledge.domain.schemas.knowledge_schema import (
     AddKnowledgeMetadataFieldsReq,
-    UpdateKnowledgeMetadataFieldsReq,
+    BatchAddFileTagsReq,
     ModifyKnowledgeFileMetaDataReq,
     UpdateFileTagsReq,
-    BatchAddFileTagsReq,
+    UpdateKnowledgeMetadataFieldsReq,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
+from bisheng.knowledge.domain.upload_file_size import validate_knowledge_upload_file_size
 from bisheng.llm.domain import LLMService
 from bisheng.llm.domain.const import LLMModelType
 from bisheng.llm.domain.models import LLMDao
-from bisheng.role.domain.services.quota_service import require_quota, QuotaResourceType, QuotaService
+from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService, require_quota
 from bisheng.user.domain.models.user import UserDao
-from bisheng.utils import generate_uuid, calc_data_sha256
+from bisheng.utils import calc_data_sha256, generate_uuid
 from bisheng.worker.knowledge.qa import insert_qa_celery
 
 # build router
@@ -105,42 +115,60 @@ async def upload_knowledge_file(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     knowledge_id: int,
     file: UploadFile = File(...),
+    space_service=Depends(get_knowledge_space_service),
+    stage_service=Depends(get_knowledge_space_upload_stage_service),
 ):
-    """Knowledge base upload file"""
+    """Stream to the legacy temporary bucket and register an opaque space stage."""
 
     try:
-        file_name = file.filename
+        file_name = file.filename or ""
         validate_knowledge_upload_file_size(file_name, file.size)
-
-        # Save the uploaded file
         uuid_file_name = await KnowledgeService.save_upload_file_original_name(file_name)
         file_path = await save_uploaded_file(file, "bisheng", uuid_file_name)
-
         if not isinstance(file_path, str):
             file_path = str(file_path)
 
         await file.seek(0)
-
-        # Calculate file md5
-        file_md5 = await asyncio.to_thread(calc_data_sha256, file.file)
-
-        # Check for duplicate files
+        content_hash = await asyncio.to_thread(calc_data_sha256, file.file)
         repeat_file = await KnowledgeFileDao.get_repeat_file(
-            knowledge_id=knowledge_id, file_name=file_name, md5_=file_md5
+            knowledge_id=knowledge_id,
+            file_name=file_name,
+            md5_=content_hash,
         )
-
-        ret = UploadFileResponse(file_path=file_path, file_name=file_name)
+        response = UploadFileResponse(
+            file_path=file_path,
+            file_name=file_name,
+            file_size=int(file.size or 0),
+            content_hash=content_hash,
+        )
         if repeat_file:
-            ret.repeat = True
-            ret.repeat_update_time = repeat_file.update_time
-            ret.repeat_file_name = repeat_file.file_name
+            response.repeat = True
+            response.repeat_update_time = repeat_file.update_time
+            response.repeat_file_name = repeat_file.file_name
 
-        return resp_200(ret)
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if knowledge is not None and knowledge.type == KnowledgeTypeEnum.SPACE.value:
+            await space_service.authorize_upload_stage(knowledge_id)
+            stage = await stage_service.create_stage(
+                space_id=knowledge_id,
+                uploader_user_id=login_user.user_id,
+                file_name=file_name,
+                file_size=int(file.size or 0),
+                content_hash=str(content_hash or ""),
+                temporary_object_name=uuid_file_name,
+            )
+            response.upload_id = stage.upload_id
+            response.space_id = int(stage.space_id)
+            response.state = str(stage.state)
+            response.expire_at = stage.expire_at
+            response.create_time = stage.create_time
+        return resp_200(response)
 
     except BaseErrorCode:
         raise
-    except Exception as e:
-        raise ServerError(msg=f"File upload failed: {e}")
+    except Exception as exc:
+        logger.exception("knowledge file upload failed")
+        raise ServerError(msg=f"File upload failed: {exc}")
 
     finally:
         await file.close()
@@ -495,8 +523,41 @@ async def get_filelist(
     page_size: int = 10,
     page_num: int = 1,
     status: List[int] = Query(default=None),
+    space_service=Depends(get_knowledge_space_service),
 ):
     """Get knowledge base file information."""
+    db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+    if not db_knowledge:
+        raise NotFoundError.http_exception()
+    row_tenant_id = getattr(db_knowledge, "tenant_id", None)
+    user_tenant_id = getattr(login_user, "tenant_id", None)
+    if row_tenant_id is not None and user_tenant_id is not None and int(row_tenant_id) != int(user_tenant_id):
+        raise NotFoundError.http_exception()
+
+    if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
+        page = await space_service.search_space_children(
+            knowledge_id,
+            parent_id=None,
+            keyword=file_name,
+            page=page_num,
+            page_size=page_size,
+            file_status=status,
+            file_ids=file_ids,
+        )
+        writeable = await space_service.can_write_space_container(knowledge_id, None)
+        return resp_200(
+            {
+                "data": page.get("data", []),
+                # An exact post-ReBAC total requires an unbounded full scan. SPACE
+                # callers advance with has_more instead of a fabricated count.
+                "total": None,
+                "writeable": writeable,
+                "page": page_num,
+                "page_size": page_size,
+                "has_more": bool(page.get("has_more")),
+            }
+        )
+
     data, total, flag = await KnowledgeService.aget_knowledge_files(
         request,
         login_user,

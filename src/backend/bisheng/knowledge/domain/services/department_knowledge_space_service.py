@@ -8,7 +8,10 @@ from fastapi import Request
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.department import DepartmentNotFoundError
 from bisheng.common.errcode.http_error import UnAuthorizedError
-from bisheng.common.errcode.knowledge_space import DepartmentKnowledgeSpaceExistsError
+from bisheng.common.errcode.knowledge_space import (
+    DepartmentKnowledgeSpaceExistsError,
+    DepartmentSpacePrivateForbiddenError,
+)
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -113,7 +116,7 @@ class DepartmentKnowledgeSpaceService:
             await cls._grant_department_admin_manager(space_id=space_id, user_id=admin_user_id)
 
     @classmethod
-    async def _grant_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+    async def _grant_department_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
         try:
             await PermissionService.authorize(
                 object_type="knowledge_space",
@@ -126,7 +129,10 @@ class DepartmentKnowledgeSpaceService:
                         include_children=False,
                     ),
                 ],
+                enforce_fga_success=True,
+                dispatch_file_change_approver_reconcile=False,
             )
+            return True
         except Exception as e:
             _logger.warning(
                 "Failed to write department admin manager tuple for space %s user %s: %s",
@@ -134,9 +140,10 @@ class DepartmentKnowledgeSpaceService:
                 user_id,
                 e,
             )
+            return False
 
     @classmethod
-    async def _revoke_department_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+    async def _revoke_department_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
         try:
             await PermissionService.authorize(
                 object_type="knowledge_space",
@@ -149,7 +156,10 @@ class DepartmentKnowledgeSpaceService:
                         include_children=False,
                     ),
                 ],
+                enforce_fga_success=True,
+                dispatch_file_change_approver_reconcile=False,
             )
+            return True
         except Exception as e:
             _logger.warning(
                 "Failed to delete department admin manager tuple for space %s user %s: %s",
@@ -157,6 +167,7 @@ class DepartmentKnowledgeSpaceService:
                 user_id,
                 e,
             )
+            return False
 
     @classmethod
     async def _grant_department_members_viewer(
@@ -194,32 +205,29 @@ class DepartmentKnowledgeSpaceService:
         space_id: int,
         login_user: UserPayload,
         user_id: int,
-    ) -> None:
+    ) -> bool:
         if user_id == login_user.user_id:
-            return
+            return False
         existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
         if existing is not None:
             if existing.user_role == UserRoleEnum.CREATOR:
-                return
+                return False
             if existing.membership_source == "department_admin":
                 existing.user_role = UserRoleEnum.ADMIN
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
-                return
+                return await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
             if existing.user_role == UserRoleEnum.ADMIN:
                 if existing.status != MembershipStatusEnum.ACTIVE:
                     existing.status = MembershipStatusEnum.ACTIVE
                     await SpaceChannelMemberDao.update(existing)
-                await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
-                return
+                return await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
             existing.department_admin_promoted_from_role = existing.user_role.value
             existing.user_role = UserRoleEnum.ADMIN
             existing.status = MembershipStatusEnum.ACTIVE
             existing.membership_source = "department_admin"
             await SpaceChannelMemberDao.update(existing)
-            await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
-            return
+            return await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
 
         member = SpaceChannelMember(
             business_id=str(space_id),
@@ -230,7 +238,7 @@ class DepartmentKnowledgeSpaceService:
             membership_source="department_admin",
         )
         await SpaceChannelMemberDao.async_insert_member(member)
-        await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
+        return await cls._grant_department_admin_manager(space_id=space_id, user_id=user_id)
 
     @classmethod
     async def _sync_removed_admin(
@@ -239,7 +247,7 @@ class DepartmentKnowledgeSpaceService:
         space_id: int,
         user_id: int,
         space_service: KnowledgeSpaceService | None = None,
-    ) -> None:
+    ) -> bool:
         """Revoke the department-admin space binding for ``user_id``.
 
         Clears both materialized copies of the derived admin status: the
@@ -253,7 +261,7 @@ class DepartmentKnowledgeSpaceService:
         """
         existing = await SpaceChannelMemberDao.async_find_member(space_id, user_id)
         if existing is None or existing.user_role == UserRoleEnum.CREATOR:
-            return
+            return False
         if existing.membership_source == "department_admin":
             previous_role = existing.department_admin_promoted_from_role
             if previous_role:
@@ -262,7 +270,10 @@ class DepartmentKnowledgeSpaceService:
                 existing.department_admin_promoted_from_role = None
                 existing.status = MembershipStatusEnum.ACTIVE
                 await SpaceChannelMemberDao.update(existing)
-                await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
+                fga_write_succeeded = await cls._revoke_department_admin_manager(
+                    space_id=space_id,
+                    user_id=user_id,
+                )
                 if space_service is not None and not await space_service._user_can_manage_space(user_id, space_id):
                     await space_service._send_space_event_notification(
                         action_code=SPACE_ADMIN_REVOKED_MESSAGE,
@@ -270,9 +281,12 @@ class DepartmentKnowledgeSpaceService:
                         space_id=space_id,
                         navigable=True,
                     )
-                return
+                return fga_write_succeeded
             await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
-            await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
+            fga_write_succeeded = await cls._revoke_department_admin_manager(
+                space_id=space_id,
+                user_id=user_id,
+            )
             if space_service is not None and not await space_service._user_can_read_space(user_id, space_id):
                 await space_service._send_space_event_notification(
                     action_code=SPACE_MEMBER_REMOVED_MESSAGE,
@@ -280,10 +294,10 @@ class DepartmentKnowledgeSpaceService:
                     space_id=space_id,
                     navigable=False,
                 )
-            return
+            return fga_write_succeeded
         if existing.user_role == UserRoleEnum.ADMIN:
-            return
-        await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
+            return False
+        return await cls._revoke_department_admin_manager(space_id=space_id, user_id=user_id)
 
     @classmethod
     async def batch_create_spaces(
@@ -296,6 +310,8 @@ class DepartmentKnowledgeSpaceService:
         cls._ensure_super_admin(login_user)
         if not req.items:
             return []
+        if any(item.auth_type == AuthTypeEnum.PRIVATE for item in req.items):
+            raise DepartmentSpacePrivateForbiddenError()
         dept_ids = [int(item.department_id) for item in req.items]
         if len(set(dept_ids)) != len(dept_ids):
             raise DepartmentKnowledgeSpaceExistsError(
@@ -358,20 +374,42 @@ class DepartmentKnowledgeSpaceService:
         if request is None:
             request = Request(scope={"type": "http"})
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
-        for user_id in sorted(set(int(uid) for uid in added_user_ids)):
-            await cls._sync_added_admin(
-                space_service=space_service,
-                space_id=space_id,
-                login_user=login_user,
-                user_id=user_id,
-            )
+        fga_write_succeeded = False
+        try:
+            for user_id in sorted({int(uid) for uid in added_user_ids}):
+                fga_write_succeeded = (
+                    bool(
+                        await cls._sync_added_admin(
+                            space_service=space_service,
+                            space_id=space_id,
+                            login_user=login_user,
+                            user_id=user_id,
+                        )
+                    )
+                    or fga_write_succeeded
+                )
 
-        for user_id in sorted(set(int(uid) for uid in removed_user_ids)):
-            await cls._sync_removed_admin(
-                space_service=space_service,
-                space_id=space_id,
-                user_id=user_id,
-            )
+            for user_id in sorted({int(uid) for uid in removed_user_ids}):
+                fga_write_succeeded = (
+                    bool(
+                        await cls._sync_removed_admin(
+                            space_service=space_service,
+                            space_id=space_id,
+                            user_id=user_id,
+                        )
+                    )
+                    or fga_write_succeeded
+                )
+        finally:
+            if fga_write_succeeded:
+                from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                    dispatch_file_change_approver_reconcile_for_spaces,
+                )
+
+                await dispatch_file_change_approver_reconcile_for_spaces(
+                    space_ids=[space_id],
+                    tenant_id=login_user.tenant_id,
+                )
 
     @classmethod
     async def cleanup_removed_department_admins(
@@ -394,8 +432,26 @@ class DepartmentKnowledgeSpaceService:
         space_id = await DepartmentKnowledgeSpaceDao.aget_space_id_by_department_id(department_id)
         if not space_id:
             return
-        for user_id in sorted(set(int(uid) for uid in user_ids)):
-            await cls._sync_removed_admin(space_id=space_id, user_id=user_id)
+        fga_write_succeeded = False
+        try:
+            for user_id in sorted({int(uid) for uid in user_ids}):
+                fga_write_succeeded = (
+                    bool(await cls._sync_removed_admin(space_id=space_id, user_id=user_id)) or fga_write_succeeded
+                )
+        finally:
+            if fga_write_succeeded:
+                from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                    dispatch_file_change_approver_reconcile_for_spaces,
+                )
+
+                resource_tenant_id = await PermissionService.resolve_resource_tenant_id(
+                    "knowledge_space",
+                    str(space_id),
+                )
+                await dispatch_file_change_approver_reconcile_for_spaces(
+                    space_ids=[space_id],
+                    tenant_id=resource_tenant_id,
+                )
 
     @classmethod
     async def get_user_department_spaces(

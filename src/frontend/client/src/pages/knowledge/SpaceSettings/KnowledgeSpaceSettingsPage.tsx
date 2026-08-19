@@ -53,6 +53,28 @@ export function KnowledgeSpaceSettingsPage() {
   const descriptionComposingRef = useRef(false);
 
   const isPrivate = settings.form.visibility === VisibilityType.PRIVATE;
+
+  const showSuccessfulAuthorizationFeedback = (
+    feedback: typeof settings.authorizationFeedback,
+  ) => {
+    if (!feedback || feedback.failedCount > 0) return;
+    if (feedback.inviteCreatedCount > 0) {
+      showToast({
+        message: localize("com_invite.invite_sent", {
+          count: feedback.inviteCreatedCount,
+        }),
+        severity: NotificationSeverity.SUCCESS,
+      });
+    }
+    if (feedback.inviteExistingCount > 0) {
+      showToast({
+        message: localize("com_invite.invite_existing", {
+          count: feedback.inviteExistingCount,
+        }),
+        severity: NotificationSeverity.INFO,
+      });
+    }
+  };
   const relationModels = useMemo(
     () =>
       settings.relationModels.map((model) => ({
@@ -165,10 +187,14 @@ export function KnowledgeSpaceSettingsPage() {
       }
     }
     try {
-      const result = await settings.submit();
+      const outcome = await settings.submit();
+      if (!outcome) return;
+      const result = outcome.space;
+      const feedback = outcome.authorizationFeedback;
       if (settings.mode === "create") {
         if (!result || result.initialPermissionResult?.status === "failed")
           return;
+        showSuccessfulAuthorizationFeedback(feedback);
         showToast({
           message: localize("com_knowledge.space_create_success"),
           severity: NotificationSeverity.SUCCESS,
@@ -176,6 +202,16 @@ export function KnowledgeSpaceSettingsPage() {
         navigate(`/knowledge/space/${result.id}`);
         return;
       }
+      if (feedback?.failedCount) {
+        showToast({
+          message: localize("com_invite.partial_failed", {
+            count: feedback.failedCount,
+          }),
+          severity: NotificationSeverity.WARNING,
+        });
+        return;
+      }
+      showSuccessfulAuthorizationFeedback(feedback);
       showToast({
         message: localize("com_knowledge.space_updated"),
         severity: NotificationSeverity.SUCCESS,

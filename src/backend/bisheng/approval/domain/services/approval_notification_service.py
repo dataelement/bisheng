@@ -12,6 +12,34 @@ class ApprovalNotificationService:
     """Station-message helpers for approval-center events."""
 
     @staticmethod
+    async def notify_pending_tasks(*, instance_id: int, task_ids: list[int]) -> None:
+        """Resolve Approval-owned task facts and notify their assignees."""
+
+        from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+
+        instance = await ApprovalInstanceRepository.get_instance(int(instance_id))
+        if instance is None:
+            raise LookupError(f"approval instance not found: {instance_id}")
+        requested_ids = {int(task_id) for task_id in task_ids}
+        tasks = [
+            task
+            for task in await ApprovalInstanceRepository.list_tasks(int(instance.id))
+            if int(task.id) in requested_ids
+        ]
+        if {int(task.id) for task in tasks} != requested_ids:
+            raise LookupError("one or more approval tasks were not found")
+        for task in tasks:
+            await ApprovalNotificationService.notify_user(
+                sender=int(instance.applicant_user_id),
+                receiver_user_id=int(task.approver_user_id),
+                action_code="approval_task_pending",
+                business_name=str(instance.business_name),
+                instance_id=int(instance.id),
+                scenario_code=str(instance.scenario_code),
+                task_id=int(task.id),
+            )
+
+    @staticmethod
     async def notify_user(
         *,
         sender: int,

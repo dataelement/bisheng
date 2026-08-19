@@ -223,6 +223,11 @@ function DefaultSpinner() {
 
 export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: ExcelPreviewProps) {
   const { t } = useTranslation('shared', { keyPrefix: 'knowledge.excelPreview' });
+  const translationRef = useRef(t);
+
+  useEffect(() => {
+    translationRef.current = t;
+  }, [t]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -263,6 +268,7 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
 
   useEffect(() => {
     const fetchAndParseFile = async () => {
+      const translate = translationRef.current;
       try {
         setLoading(true);
         setImages([]);
@@ -271,15 +277,15 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
         setSheets([]);
         setActiveSheet('');
 
-        if (!filePath) throw new Error(t('filePathEmpty'));
+        if (!filePath) throw new Error(translate('filePathEmpty'));
 
         const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`${t('fileLoadFailed')}: ${response.status}`);
+        if (!response.ok) throw new Error(`${translate('fileLoadFailed')}: ${response.status}`);
 
         const arrayBuffer = await response.arrayBuffer();
 
         if (isCSV) {
-          if (arrayBuffer.byteLength === 0) throw new Error(t('fileContentEmpty'));
+          if (arrayBuffer.byteLength === 0) throw new Error(translate('fileContentEmpty'));
 
           const uint8Array = new Uint8Array(arrayBuffer);
           let decodedStr = '';
@@ -308,7 +314,7 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
             wb = XLSX.read(arrayBuffer, { type: 'array' });
           } catch (e) {
             console.error('SheetJS parsing failed:', e);
-            throw new Error(t('excelParseFailed'));
+            throw new Error(translate('excelParseFailed'));
           }
 
           const sheetNames = wb.SheetNames;
@@ -337,13 +343,13 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
             }
           }
         } else {
-          throw new Error(t('unsupportedType', { type: fileExt }));
+          throw new Error(translate('unsupportedType', { type: fileExt }));
         }
 
         setError(null);
       } catch (err) {
         console.error('File parsing failed:', err);
-        setError(err instanceof Error ? err.message : t('unknownError'));
+        setError(err instanceof Error ? err.message : translate('unknownError'));
       } finally {
         setLoading(false);
       }
@@ -353,9 +359,9 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
       fetchAndParseFile();
     } else {
       setLoading(false);
-      setError(t('filePathEmpty'));
+      setError(translationRef.current('filePathEmpty'));
     }
-  }, [filePath, fileExt, isCSV, isXLSX, t]);
+  }, [filePath, fileExt, isCSV, isXLSX]);
 
   const renderContent = () => {
     const sheetData = excelData[activeSheet];

@@ -325,7 +325,17 @@ class _FakeReadTuplesFGA:
 
 @pytest.fixture
 def service():
-    return _load_service_class()(MagicMock(), _make_login_user())
+    instance = _load_service_class()(MagicMock(), _make_login_user())
+    visibility = MagicMock()
+    visibility.require_file_change_visible = AsyncMock()
+
+    async def keep_all_file_change_visible(*, space_ids, resource_ids):
+        del space_ids
+        return {int(resource_id) for resource_id in resource_ids}
+
+    visibility.filter_file_change_visible_ids = AsyncMock(side_effect=keep_all_file_change_visible)
+    instance._knowledge_file_visibility_service = visibility
+    return instance
 
 
 class TestReadPermissionBypass:
@@ -3347,6 +3357,11 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ),
             patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service."
+                "DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
                 new_callable=AsyncMock,
                 return_value=private_space,
@@ -3398,6 +3413,11 @@ class TestTupleLifecycle:
                 return_value=public_space,
             ),
             patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service."
+                "DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new=AsyncMock(return_value=None),
+            ),
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
                 new_callable=AsyncMock,
@@ -3484,6 +3504,11 @@ class TestTupleLifecycle:
                 service,
                 "_require_permission_id",
                 new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service."
+                "DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new=AsyncMock(return_value=None),
             ),
             patch(
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",

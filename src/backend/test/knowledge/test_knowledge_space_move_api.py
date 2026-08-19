@@ -43,8 +43,8 @@ def test_move_endpoint_registered_and_delegates():
     # request body typed as FileMoveReq
     annotations = {a.arg: getattr(a.annotation, "id", None) for a in fn.args.args}
     assert annotations.get("req") == "FileMoveReq"
-    # body delegates to the service's move_items
-    assert "move_items" in ast.get_source_segment(source, fn)
+    # F046 delegates each item through the approval-aware mutation orchestrator.
+    assert "_request_item_changes" in ast.get_source_segment(source, fn)
 
 
 def test_service_move_items_signature():

@@ -32,23 +32,23 @@ class _FlowNode:
 @pytest.fixture(autouse=True)
 def _mock_external_dependencies(monkeypatch: pytest.MonkeyPatch):
     async def _list_node_definitions(_tenant_id: int, _flow_version_id: int):
-        return [_FlowNode(node_code='n1', node_name='node 1', node_order=1, node_mode='or')]
+        return [_FlowNode(node_code="n1", node_name="node 1", node_order=1, node_mode="or")]
 
     async def _lookup_user_name(_user_id: int | None):
-        return 'operator'
+        return "operator"
 
     async def _noop_notify(**_kwargs):
         return None
 
-    def _noop_dispatch(_outbox_id: int | None):
+    def _noop_dispatch(_outbox_id: int | None, tenant_id: int | None = None):
         return None
 
-    monkeypatch.setattr(ApprovalScenarioRepository, 'list_node_definitions', _list_node_definitions)
-    monkeypatch.setattr(ApprovalCenterService, '_dispatch_outbox', staticmethod(_noop_dispatch))
-    monkeypatch.setattr(ApprovalCenterService, '_send_approval_notify', staticmethod(_noop_notify))
-    monkeypatch.setattr(ApprovalExceptionService, '_dispatch_outbox', staticmethod(_noop_dispatch))
-    monkeypatch.setattr(ApprovalExceptionService, '_notify_user', staticmethod(_noop_notify))
-    monkeypatch.setattr(ApprovalExceptionService, '_lookup_user_name', staticmethod(_lookup_user_name))
+    monkeypatch.setattr(ApprovalScenarioRepository, "list_node_definitions", _list_node_definitions)
+    monkeypatch.setattr(ApprovalCenterService, "_dispatch_outbox", staticmethod(_noop_dispatch))
+    monkeypatch.setattr(ApprovalCenterService, "_send_approval_notify", staticmethod(_noop_notify))
+    monkeypatch.setattr(ApprovalExceptionService, "_dispatch_outbox", staticmethod(_noop_dispatch))
+    monkeypatch.setattr(ApprovalExceptionService, "_notify_user", staticmethod(_noop_notify))
+    monkeypatch.setattr(ApprovalExceptionService, "_lookup_user_name", staticmethod(_lookup_user_name))
 
 
 class FakeApprovalRepo:
@@ -110,35 +110,37 @@ def _build_instance(status: str = ApprovalInstanceStatus.PENDING) -> ApprovalIns
     return ApprovalInstance(
         id=1,
         tenant_id=1,
-        scenario_code='knowledge_space_subscribe_request',
-        scenario_name='知识空间加入审批',
-        handler_key='knowledge_space_subscribe_request',
-        business_key='space:12:user:7',
-        business_resource_type='knowledge_space',
-        business_resource_id='12',
-        business_name='研发知识空间',
+        scenario_code="knowledge_space_subscribe_request",
+        scenario_name="知识空间加入审批",
+        handler_key="knowledge_space_subscribe_request",
+        business_key="space:12:user:7",
+        business_resource_type="knowledge_space",
+        business_resource_id="12",
+        business_name="研发知识空间",
         applicant_user_id=7,
-        applicant_user_name='alice',
+        applicant_user_name="alice",
         flow_version_id=1,
         route_rule_id=1,
         status=status,
-        payload_snapshot={'space_id': 12},
-        detail_snapshot={'space_name': '研发知识空间'},
-        current_node_name='一级审批',
+        payload_snapshot={"space_id": 12},
+        detail_snapshot={"space_name": "研发知识空间"},
+        current_node_name="一级审批",
     )
 
 
-def _build_task(task_id: int, *, user_id: int, node_mode: str = 'or', status: str = ApprovalTaskStatus.PENDING) -> ApprovalTask:
+def _build_task(
+    task_id: int, *, user_id: int, node_mode: str = "or", status: str = ApprovalTaskStatus.PENDING
+) -> ApprovalTask:
     return ApprovalTask(
         id=task_id,
         tenant_id=1,
         instance_id=1,
         flow_version_id=1,
-        node_code='n1',
-        node_name='一级审批',
+        node_code="n1",
+        node_name="一级审批",
         node_order=1,
         approver_user_id=user_id,
-        approver_source_type='user',
+        approver_source_type="user",
         node_mode=node_mode,
         status=status,
     )
@@ -148,34 +150,55 @@ def _build_task(task_id: int, *, user_id: int, node_mode: str = 'or', status: st
 async def test_or_sign_approves_one_and_skips_other_tasks(monkeypatch: pytest.MonkeyPatch):
     repo = FakeApprovalRepo()
     repo.instances[1] = _build_instance()
-    repo.tasks[1] = _build_task(1, user_id=1001, node_mode='or')
-    repo.tasks[2] = _build_task(2, user_id=1002, node_mode='or')
+    repo.tasks[1] = _build_task(1, user_id=1001, node_mode="or")
+    repo.tasks[2] = _build_task(2, user_id=1002, node_mode="or")
     service = ApprovalCenterService(instance_repository=repo)
-    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
+    monkeypatch.setattr(ApprovalCenterService, "_write_audit_log", AsyncMock())
 
-    await service.decide_task(task_id=1, action='approve', operator_user_id=1001, operator_user_name='u1', operator_tenant_id=1, operator_is_admin=True)
+    await service.decide_task(
+        task_id=1,
+        action="approve",
+        operator_user_id=1001,
+        operator_user_name="u1",
+        operator_tenant_id=1,
+        operator_is_admin=True,
+    )
 
     assert repo.tasks[1].status == ApprovalTaskStatus.APPROVED
     assert repo.tasks[2].status == ApprovalTaskStatus.SKIPPED
     assert repo.instances[1].status == ApprovalInstanceStatus.APPROVED
     assert len(repo.outbox_payloads) == 1
     assert repo.outbox_payloads[0].instance_id == 1
-    assert repo.outbox_payloads[0].handler_key == 'knowledge_space_subscribe_request'
+    assert repo.outbox_payloads[0].handler_key == "knowledge_space_subscribe_request"
 
 
 @pytest.mark.asyncio
 async def test_countersign_requires_all_tasks_to_approve(monkeypatch: pytest.MonkeyPatch):
     repo = FakeApprovalRepo()
     repo.instances[1] = _build_instance()
-    repo.tasks[1] = _build_task(1, user_id=1001, node_mode='and')
-    repo.tasks[2] = _build_task(2, user_id=1002, node_mode='and')
+    repo.tasks[1] = _build_task(1, user_id=1001, node_mode="and")
+    repo.tasks[2] = _build_task(2, user_id=1002, node_mode="and")
     service = ApprovalCenterService(instance_repository=repo)
-    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
+    monkeypatch.setattr(ApprovalCenterService, "_write_audit_log", AsyncMock())
 
-    await service.decide_task(task_id=1, action='approve', operator_user_id=1001, operator_user_name='u1', operator_tenant_id=1, operator_is_admin=True)
+    await service.decide_task(
+        task_id=1,
+        action="approve",
+        operator_user_id=1001,
+        operator_user_name="u1",
+        operator_tenant_id=1,
+        operator_is_admin=True,
+    )
     assert repo.instances[1].status == ApprovalInstanceStatus.PENDING
 
-    await service.decide_task(task_id=2, action='approve', operator_user_id=1002, operator_user_name='u2', operator_tenant_id=1, operator_is_admin=True)
+    await service.decide_task(
+        task_id=2,
+        action="approve",
+        operator_user_id=1002,
+        operator_user_name="u2",
+        operator_tenant_id=1,
+        operator_is_admin=True,
+    )
     assert repo.instances[1].status == ApprovalInstanceStatus.APPROVED
 
 
@@ -186,14 +209,21 @@ async def test_reject_terminates_instance_and_cancels_siblings(monkeypatch: pyte
     repo.tasks[1] = _build_task(1, user_id=1001)
     repo.tasks[2] = _build_task(2, user_id=1002)
     service = ApprovalCenterService(instance_repository=repo)
-    monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', AsyncMock())
+    monkeypatch.setattr(ApprovalCenterService, "_write_audit_log", AsyncMock())
 
-    await service.decide_task(task_id=1, action='reject', operator_user_id=1001, operator_user_name='u1', operator_tenant_id=1, operator_is_admin=True, comment='reject')
+    await service.decide_task(
+        task_id=1,
+        action="reject",
+        operator_user_id=1001,
+        operator_user_name="u1",
+        operator_tenant_id=1,
+        operator_is_admin=True,
+        comment="reject",
+    )
 
     assert repo.tasks[1].status == ApprovalTaskStatus.REJECTED
     assert repo.tasks[2].status == ApprovalTaskStatus.CANCELLED
     assert repo.instances[1].status == ApprovalInstanceStatus.REJECTED
-
 
 
 @pytest.mark.asyncio
@@ -205,7 +235,7 @@ async def test_route_missing_assign_flow_continues_instance():
         tenant_id=1,
         instance_id=1,
         exception_type=ApprovalExceptionType.ROUTE_MISSING,
-        status='open',
+        status="open",
         detail={},
     )
     service = ApprovalExceptionService(instance_repository=repo)
@@ -214,14 +244,14 @@ async def test_route_missing_assign_flow_continues_instance():
         exception_id=1,
         flow_version_id=3,
         route_rule_id=10,
-        node=_FlowNode(node_code='n3', node_name='三级审批', node_order=3, node_mode='and'),
+        node=_FlowNode(node_code="n3", node_name="三级审批", node_order=3, node_mode="and"),
         approver_user_ids=[3001, 3002],
         resolved_by_user_id=1,
     )
 
     assert repo.instances[1].status == ApprovalInstanceStatus.PENDING
     assert repo.instances[1].flow_version_id == 3
-    assert len([task for task in repo.tasks.values() if task.node_code == 'n3']) == 2
+    assert len([task for task in repo.tasks.values() if task.node_code == "n3"]) == 2
 
 
 @pytest.mark.asyncio
@@ -233,8 +263,8 @@ async def test_approver_empty_can_assign_approver_or_skip_node():
         tenant_id=1,
         instance_id=1,
         exception_type=ApprovalExceptionType.APPROVER_EMPTY,
-        status='open',
-        detail={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+        status="open",
+        detail={"node_code": "n1", "node_name": "一级审批", "node_order": 1, "node_mode": "or"},
     )
     service = ApprovalExceptionService(instance_repository=repo)
 
@@ -246,11 +276,11 @@ async def test_approver_empty_can_assign_approver_or_skip_node():
         tenant_id=1,
         instance_id=1,
         exception_type=ApprovalExceptionType.APPROVER_EMPTY,
-        status='open',
-        detail={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+        status="open",
+        detail={"node_code": "n1", "node_name": "一级审批", "node_order": 1, "node_mode": "or"},
     )
     await service.skip_node(exception_id=2, resolved_by_user_id=1)
-    assert repo.exceptions[2].status == 'resolved'
+    assert repo.exceptions[2].status == "resolved"
 
 
 @pytest.mark.asyncio
@@ -262,41 +292,41 @@ async def test_retry_exception_api_supports_assign_approvers_and_skip_node(monke
         tenant_id=1,
         instance_id=1,
         exception_type=ApprovalExceptionType.APPROVER_EMPTY,
-        status='open',
-        detail={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+        status="open",
+        detail={"node_code": "n1", "node_name": "一级审批", "node_order": 1, "node_mode": "or"},
     )
     repo.exceptions[2] = ApprovalException(
         id=2,
         tenant_id=1,
         instance_id=1,
         exception_type=ApprovalExceptionType.APPROVER_EMPTY,
-        status='open',
-        detail={'node_code': 'n1', 'node_name': '一级审批', 'node_order': 1, 'node_mode': 'or'},
+        status="open",
+        detail={"node_code": "n1", "node_name": "一级审批", "node_order": 1, "node_mode": "or"},
     )
-    monkeypatch.setattr(ApprovalInstanceRepository, 'get_exception', repo.get_exception)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', repo.get_instance)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'update_exception', repo.update_exception)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'update_instance', repo.update_instance)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', repo.list_tasks)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'create_task', repo.create_task)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'create_outbox', repo.create_outbox)
-    monkeypatch.setattr(ApprovalExceptionService, '_write_audit_log', AsyncMock())
+    monkeypatch.setattr(ApprovalInstanceRepository, "get_exception", repo.get_exception)
+    monkeypatch.setattr(ApprovalInstanceRepository, "get_instance", repo.get_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, "update_exception", repo.update_exception)
+    monkeypatch.setattr(ApprovalInstanceRepository, "update_instance", repo.update_instance)
+    monkeypatch.setattr(ApprovalInstanceRepository, "create_action_log", repo.create_action_log)
+    monkeypatch.setattr(ApprovalInstanceRepository, "list_tasks", repo.list_tasks)
+    monkeypatch.setattr(ApprovalInstanceRepository, "create_task", repo.create_task)
+    monkeypatch.setattr(ApprovalInstanceRepository, "create_outbox", repo.create_outbox)
+    monkeypatch.setattr(ApprovalExceptionService, "_write_audit_log", AsyncMock())
 
     assigned = await ApprovalExceptionService.retry_exception_api(
         exception_id=1,
-        action='assign_approvers',
+        action="assign_approvers",
         operator_user_id=1,
         approver_user_ids=[5001, 5002],
     )
     skipped = await ApprovalExceptionService.retry_exception_api(
         exception_id=2,
-        action='skip_node',
+        action="skip_node",
         operator_user_id=1,
     )
 
-    assert assigned['status'] == 'resolved'
-    assert skipped['status'] == 'resolved'
+    assert assigned["status"] == "resolved"
+    assert skipped["status"] == "resolved"
     assert len([task for task in repo.tasks.values() if task.approver_user_id in {5001, 5002}]) == 2
     assert len(repo.outbox_payloads) == 1
 
@@ -310,14 +340,14 @@ async def test_execute_failed_retry_success_and_failure():
         tenant_id=1,
         instance_id=1,
         exception_type=ApprovalExceptionType.EXECUTE_FAILED,
-        status='open',
+        status="open",
         detail={},
     )
     service = ApprovalExceptionService(instance_repository=repo)
 
     await service.retry_execute_failed(exception_id=1, resolved_by_user_id=1, executor=lambda instance_id: True)
     assert repo.instances[1].status == ApprovalInstanceStatus.EXECUTED
-    assert repo.exceptions[1].status == 'resolved'
+    assert repo.exceptions[1].status == "resolved"
 
     repo.instances[2] = _build_instance(status=ApprovalInstanceStatus.EXECUTE_FAILED)
     repo.instances[2].id = 2
@@ -326,12 +356,12 @@ async def test_execute_failed_retry_success_and_failure():
         tenant_id=1,
         instance_id=2,
         exception_type=ApprovalExceptionType.EXECUTE_FAILED,
-        status='open',
+        status="open",
         detail={},
     )
     await service.retry_execute_failed(exception_id=2, resolved_by_user_id=1, executor=lambda instance_id: False)
     assert repo.instances[2].status == ApprovalInstanceStatus.EXECUTE_FAILED
-    assert repo.exceptions[2].status == 'open'
+    assert repo.exceptions[2].status == "open"
 
 
 @pytest.mark.asyncio
@@ -343,23 +373,23 @@ async def test_retry_execute_failed_api_marks_outbox_success_or_failure():
         tenant_id=1,
         instance_id=1,
         exception_type=ApprovalExceptionType.EXECUTE_FAILED,
-        status='open',
+        status="open",
         detail={},
     )
     repo.outboxes[1] = ApprovalOutbox(
         id=1,
         tenant_id=1,
         instance_id=1,
-        handler_key='knowledge_space_subscribe_request',
+        handler_key="knowledge_space_subscribe_request",
         status=ApprovalOutboxStatus.FAILED,
-        payload_snapshot={'space_id': 12, 'applicant_user_id': 7},
+        payload_snapshot={"space_id": 12, "applicant_user_id": 7},
     )
     service = ApprovalExceptionService(instance_repository=repo)
     service._write_audit_log = AsyncMock()  # type: ignore[method-assign]
 
     class _SuccessHandler:
         async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
-            return {'instance_id': instance_id, 'payload': payload_snapshot}
+            return {"instance_id": instance_id, "payload": payload_snapshot}
 
     async def _build_success_handler(_scenario_code: str):
         return _SuccessHandler()
@@ -368,13 +398,13 @@ async def test_retry_execute_failed_api_marks_outbox_success_or_failure():
     success = await service.retry_execute_failed_api(
         exception_id=1,
         resolved_by_user_id=1,
-        scenario_code='knowledge_space_subscribe_request',
+        scenario_code="knowledge_space_subscribe_request",
     )
 
     assert success is True
     assert repo.instances[1].status == ApprovalInstanceStatus.EXECUTED
     assert repo.outboxes[1].status == ApprovalOutboxStatus.SUCCESS
-    assert repo.exceptions[1].status == 'resolved'
+    assert repo.exceptions[1].status == "resolved"
 
     repo.instances[2] = _build_instance(status=ApprovalInstanceStatus.EXECUTE_FAILED)
     repo.instances[2].id = 2
@@ -383,21 +413,21 @@ async def test_retry_execute_failed_api_marks_outbox_success_or_failure():
         tenant_id=1,
         instance_id=2,
         exception_type=ApprovalExceptionType.EXECUTE_FAILED,
-        status='open',
+        status="open",
         detail={},
     )
     repo.outboxes[2] = ApprovalOutbox(
         id=2,
         tenant_id=1,
         instance_id=2,
-        handler_key='knowledge_space_subscribe_request',
+        handler_key="knowledge_space_subscribe_request",
         status=ApprovalOutboxStatus.FAILED,
-        payload_snapshot={'space_id': 12, 'applicant_user_id': 7},
+        payload_snapshot={"space_id": 12, "applicant_user_id": 7},
     )
 
     class _FailHandler:
         async def on_approved(self, instance_id: int, payload_snapshot: dict) -> dict:
-            raise RuntimeError('retry failed')
+            raise RuntimeError("retry failed")
 
     async def _build_fail_handler(_scenario_code: str):
         return _FailHandler()
@@ -406,11 +436,11 @@ async def test_retry_execute_failed_api_marks_outbox_success_or_failure():
     success = await service.retry_execute_failed_api(
         exception_id=2,
         resolved_by_user_id=1,
-        scenario_code='knowledge_space_subscribe_request',
+        scenario_code="knowledge_space_subscribe_request",
     )
 
     assert success is False
     assert repo.instances[2].status == ApprovalInstanceStatus.EXECUTE_FAILED
     assert repo.outboxes[2].status == ApprovalOutboxStatus.FAILED
-    assert repo.outboxes[2].error_summary == 'retry failed'
-    assert repo.exceptions[2].status == 'open'
+    assert repo.outboxes[2].error_summary == "retry failed"
+    assert repo.exceptions[2].status == "open"

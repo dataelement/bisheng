@@ -28,6 +28,24 @@ export function isKnowledgeApprovalRejected(file: KnowledgeFile): boolean {
     return file.approvalStatus === "rejected" || file.approvalStatus === "sensitive_rejected";
 }
 
+/**
+ * UI-only status-filter value for files awaiting upload approval.
+ *
+ * Pending uploads are not part of the formal file list — they come from a
+ * separate endpoint and are merged client-side — so they have no `file_status`
+ * number the backend could filter on. The toolbar therefore carries this
+ * sentinel alongside the real `FileStatus` values, and the page strips it
+ * before handing the filter to the list query.
+ */
+export const PENDING_REVIEW_FILTER = "pending_review_filter";
+
+export type FileStatusFilter = FileStatus | typeof PENDING_REVIEW_FILTER;
+
+/** The backend-backed subset of a toolbar filter selection. */
+export function toBackendStatusFilter(filter: FileStatusFilter[]): FileStatus[] {
+    return filter.filter((value): value is FileStatus => value !== PENDING_REVIEW_FILTER);
+}
+
 export {
     isWebLinkKnowledgeFile,
     resolveWebLinkDisplayName,
@@ -63,6 +81,27 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
             FileStatus.UPLOADING,
         ].includes(file.status)
     );
+}
+
+/**
+ * True when the item is awaiting an approval decision (待审核), regardless of the
+ * change kind:
+ *  - a staged upload still pending review (`pendingUploadApproval`),
+ *  - a formal file/folder locked by a pending rename / delete / move change
+ *    request (`fileChangeApproval.status === "pending"`),
+ *  - a synthesized pending-review row (`approvalStatus === "pending_review"`).
+ * Post-decision execution states (executing / approved / failed) are NOT 待审核.
+ * Used to client-side filter the list when the 待审核 status filter is active,
+ * since the backend `file_status` filter cannot express "awaiting review".
+ */
+export function isKnowledgeItemUnderReview(file: KnowledgeFile): boolean {
+    if (file.pendingUploadApproval) {
+        return file.pendingUploadApproval.approvalStatus === "pending";
+    }
+    if (file.approvalStatus === "pending_review") {
+        return true;
+    }
+    return file.fileChangeApproval?.status === "pending";
 }
 
 // ─── File upload constants ──────────────────────────────────────────

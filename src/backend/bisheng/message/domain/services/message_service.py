@@ -40,6 +40,9 @@ APPROVAL_CENTER_NOTIFY_ACTION_CODES = [
     "approval_exception_approver_empty",
     "approval_execute_failed",
     "menu_grant_revoked",
+    "resource_user_invite_pending",
+    "resource_user_invite_effective",
+    "resource_user_invite_failed",
 ]
 
 

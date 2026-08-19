@@ -80,6 +80,9 @@ from bisheng.permission.domain.services.relation_model_store import (
 from bisheng.permission.domain.services.relation_model_store import (
     save_relation_models as _store_save_relation_models,
 )
+from bisheng.permission.domain.services.resource_user_invite_application_service import (
+    build_runtime_resource_user_invite_application_service,
+)
 from bisheng.permission.domain.tool_permission_template import (
     TOOL_PERMISSION_TEMPLATE,
 )
@@ -234,7 +237,7 @@ def _roster_cache_tenant_id() -> int:
 
 
 async def _get_relation_models() -> list[dict]:
-    """只读；若库中无记录则初始化默认四条，禁止每次读取都覆盖已保存的自定义模型。
+    """只读; 若库中无记录则初始化默认四条, 禁止每次读取都覆盖已保存的自定义模型。
 
     F040 (E): served from a process-local cache keyed by the config row's
     ``update_time``; on a version match the parse is skipped. Version unavailable
@@ -251,7 +254,7 @@ async def _save_relation_models(models: list[dict]) -> None:
 
 
 async def _get_bindings() -> list[dict]:
-    """只读；禁止每次读取都把绑定表写回空数组。
+    """只读; 禁止每次读取都把绑定表写回空数组。
 
     F040 (E): served from a process-local cache keyed by the config row's
     ``update_time`` — this collapses the repeated DB read + ``json.loads`` + legacy
@@ -658,9 +661,7 @@ async def _grant_departments_search(
     )
 
 
-async def _grant_departments_path_tree(
-    *, tenant_id: int, dept_id: int, restrict_root_path: str | None = None
-) -> dict:
+async def _grant_departments_path_tree(*, tenant_id: int, dept_id: int, restrict_root_path: str | None = None) -> dict:
     return await GrantSubjectQueryService().get_departments_path_tree(
         tenant_id=tenant_id, dept_id=dept_id, restrict_root_path=restrict_root_path
     )
@@ -672,6 +673,7 @@ async def _list_knowledge_space_grant_user_groups(
     return await GrantSubjectQueryService().list_user_groups(
         tenant_id=tenant_id, keyword=keyword, login_user=login_user
     )
+
 
 async def _resolve_grant_subject_tenant_id(
     *,
@@ -872,7 +874,7 @@ async def authorize_resource(
     """Grant or revoke permissions on a resource.
 
     调用方在资源上的档位需覆盖本次操作涉及的「关系模型授权级别」
-    （所有者级 / 管理级 / 使用级），与 PRD 管理应用所有者/管理者/使用者对齐。
+    (所有者级 / 管理级 / 使用级), 与 PRD 管理应用所有者/管理者/使用者对齐。
     """
     from bisheng.permission.domain.services.resource_authorization_service import (
         ResourceAuthorizationService,
@@ -885,12 +887,13 @@ async def authorize_resource(
         dispatch_notifications=_dispatch_authorize_notifications_in_background,
     )
     try:
-        await service.authorize(resource_type, resource_id, request, login_user)
+        result = await service.authorize(resource_type, resource_id, request, login_user)
     except PermissionTupleWriteError as error:
         return error.return_resp_instance()
     except BaseErrorCode as error:
         return error.__class__.return_resp(msg=error.message)
-    return resp_200(None)
+    return resp_200(result)
+
 
 @router.get("/creation-grant-subjects")
 async def get_creation_grant_subjects(
@@ -1153,7 +1156,37 @@ async def get_resource_permissions(
         model_map=model_map,
         login_user=login_user,
     )
+    from bisheng.permission.domain.services.resource_authorization_service import (
+        ResourceAuthorizationService,
+    )
+
+    resource_tenant_id = await PermissionService._resolve_resource_tenant(resource_type, resource_id)
+    if resource_tenant_id is None:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        resource_tenant_id = get_current_tenant_id() or login_user.tenant_id
+    permissions = await ResourceAuthorizationService().list_pending_permissions(
+        tenant_id=int(resource_tenant_id),
+        resource_type=resource_type,
+        resource_id=resource_id,
+        active_permissions=permissions,
+    )
     return resp_200(permissions)
+
+
+@router.post("/resource-user-invites/{request_id}/retry")
+async def retry_resource_user_invite(
+    request_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Re-dispatch an approved F045 request whose Permission execution failed."""
+
+    service = build_runtime_resource_user_invite_application_service()
+    result = await service.retry_failed_invite(
+        tenant_id=int(login_user.tenant_id),
+        request_id=request_id,
+    )
+    return resp_200(result)
 
 
 @router.get("/relation-models")
@@ -1367,7 +1400,7 @@ async def delete_relation_model(
 async def rebac_schema_summary(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """PRD §3.2.3 资源权限模板：返回当前内置 OpenFGA 模型类型与关系名（仅超管）。"""
+    """PRD §3.2.3 资源权限模板: 返回当前内置 OpenFGA 模型类型与关系名 (仅超管)。"""
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
 
@@ -1377,7 +1410,7 @@ async def rebac_schema_summary(
     types_out = []
     for td in model.get("type_definitions", []):
         tname = td.get("type")
-        rels = sorted(list((td.get("relations") or {}).keys()))
+        rels = sorted((td.get("relations") or {}).keys())
         types_out.append({"type": tname, "relations": rels})
     return resp_200(
         {"schema_version": model.get("schema_version"), "model_version": MODEL_VERSION, "types": types_out},

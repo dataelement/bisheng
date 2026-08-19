@@ -11,7 +11,19 @@ from bisheng.common.schemas.api import SSEResponse, resp_200
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_space_chat_service,
     get_knowledge_space_creation_application_service,
+    get_knowledge_space_file_change_service,
     get_knowledge_space_service,
+)
+from bisheng.knowledge.domain.schemas.knowledge_space_file_change_schema import (
+    FileBatchDeleteMutationResp,
+    FileBatchRenameMutationResp,
+    FileBatchRenameReq,
+    FileMoveMutationResp,
+    FileMutationItemResult,
+    FileMutationResult,
+    KnowledgeSpaceFolderUploadStageReq,
+    KnowledgeSpaceUploadIdsReq,
+    ResourceMutationItemResult,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchDeleteReq,
@@ -20,13 +32,11 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ChatReq,
     DepartmentKnowledgeSpaceBatchCreateReq,
     DepartmentKnowledgeSpaceVisibilityReq,
-    FileCreateReq,
     FileEncodingUpdateReq,
     FileMoveReq,
     FileRenameReq,
     FolderCreateReq,
     FolderRenameReq,
-    FolderUploadReq,
     KnowledgeSpaceCreateReq,
     KnowledgeSpaceUpdateReq,
     WebLinkCreateReq,
@@ -47,6 +57,72 @@ from bisheng.role.domain.services.quota_service import QuotaResourceType, requir
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
+
+
+def _resource_payload(resource: Any) -> dict | None:
+    if resource is None:
+        return None
+    if isinstance(resource, dict):
+        payload = dict(resource)
+    elif hasattr(resource, "model_dump"):
+        payload = resource.model_dump()
+    else:
+        raise TypeError("mutation resource must be a mapping or pydantic model")
+    for forbidden_key in ("object_name", "storage_object_name", "tenant_id"):
+        payload.pop(forbidden_key, None)
+    return payload
+
+
+def _single_mutation_payload(result) -> FileMutationResult:
+    return FileMutationResult(
+        decision=result.decision,
+        approval_instance_id=result.approval_instance_id,
+        change_request_id=result.change_request_id,
+        resource=_resource_payload(result.resource),
+    )
+
+
+def _mutation_item_payload(item: dict, result) -> FileMutationItemResult:
+    return FileMutationItemResult(
+        input_id=str(item["input_id"]),
+        resource_type=item["type"],
+        decision=result.decision,
+        resource=_resource_payload(result.resource),
+        approval_instance_id=result.approval_instance_id,
+        change_request_id=result.change_request_id,
+        error_code=result.error_code,
+        error_message=result.error_message,
+    )
+
+
+def _resource_item_payload(item: dict, result) -> ResourceMutationItemResult:
+    return ResourceMutationItemResult(
+        id=int(item["id"]),
+        type=item["type"],
+        resource=_resource_payload(result.resource),
+        approval_instance_id=result.approval_instance_id,
+        change_request_id=result.change_request_id,
+        error_code=result.error_code,
+        error_message=result.error_message,
+    )
+
+
+async def _request_item_changes(
+    *,
+    owner_service,
+    change_service,
+    space_id: int,
+    action: str,
+    items: list[dict],
+    **kwargs,
+):
+    commands = await owner_service.build_file_change_commands(
+        action=action,
+        space_id=space_id,
+        items=items,
+        **kwargs,
+    )
+    return await change_service.request_changes(commands)
 
 
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
@@ -377,16 +453,30 @@ async def add_folder(
 @router.post("/{space_id}/folders/upload")
 async def upload_folder(
     space_id: int,
-    req: FolderUploadReq,
+    req: KnowledgeSpaceFolderUploadStageReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    """F034 §5.5: register a whole client-side folder (nested) in one batch."""
-    files = await svc.upload_folder_items(
-        knowledge_id=space_id,
-        items=req.items,
+    items = [
+        {
+            "input_id": item.upload_id,
+            "type": "file",
+            "upload_id": item.upload_id,
+            "relative_path": item.relative_path,
+        }
+        for item in req.items
+    ]
+    results = await _request_item_changes(
+        owner_service=svc,
+        change_service=change_service,
+        space_id=space_id,
+        action="upload",
+        items=items,
         parent_id=req.parent_id,
     )
-    return resp_200(files)
+    return resp_200(
+        [_mutation_item_payload(item, result) for item, result in zip(items, results, strict=True)]
+    )
 
 
 @router.put("/{space_id}/folders/{folder_id}")
@@ -395,9 +485,16 @@ async def rename_folder(
     folder_id: int,
     req: FolderRenameReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    folder = await svc.rename_folder(folder_id, req.name)
-    return resp_200(folder)
+    command = await svc.build_file_change_command(
+        action="rename",
+        space_id=space_id,
+        resource_id=folder_id,
+        resource_type="folder",
+        name=req.name,
+    )
+    return resp_200(_single_mutation_payload(await change_service.request_change(command)))
 
 
 @router.delete("/{space_id}/folders/{folder_id}")
@@ -405,9 +502,15 @@ async def delete_folder(
     space_id: int,
     folder_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    await svc.delete_folder(space_id, folder_id)
-    return resp_200()
+    command = await svc.build_file_change_command(
+        action="delete",
+        space_id=space_id,
+        resource_id=folder_id,
+        resource_type="folder",
+    )
+    return resp_200(_single_mutation_payload(await change_service.request_change(command)))
 
 
 @router.get("/{space_id}/folders/{folder_id}/parent")
@@ -426,15 +529,25 @@ async def get_folder_parent(
 @router.post("/{space_id}/files")
 async def add_file(
     space_id: int,
-    req: FileCreateReq,
+    req: KnowledgeSpaceUploadIdsReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    file_record = await svc.add_file(
-        knowledge_id=space_id,
-        file_path=req.file_path,
+    items = [
+        {"input_id": upload_id, "type": "file", "upload_id": upload_id}
+        for upload_id in req.upload_ids
+    ]
+    results = await _request_item_changes(
+        owner_service=svc,
+        change_service=change_service,
+        space_id=space_id,
+        action="upload",
+        items=items,
         parent_id=req.parent_id,
     )
-    return resp_200(file_record)
+    return resp_200(
+        [_mutation_item_payload(item, result) for item, result in zip(items, results, strict=True)]
+    )
 
 
 @router.post("/{space_id}/web-links")
@@ -459,9 +572,16 @@ async def rename_file(
     file_id: int,
     req: FileRenameReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    file_record = await svc.rename_file(file_id, req.name)
-    return resp_200(file_record)
+    command = await svc.build_file_change_command(
+        action="rename",
+        space_id=space_id,
+        resource_id=file_id,
+        resource_type="file",
+        name=req.name,
+    )
+    return resp_200(_single_mutation_payload(await change_service.request_change(command)))
 
 
 @router.put("/{space_id}/files/{file_id}/encoding")
@@ -480,9 +600,15 @@ async def delete_file(
     space_id: int,
     file_id: int,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    await svc.delete_file(file_id)
-    return resp_200()
+    command = await svc.build_file_change_command(
+        action="delete",
+        space_id=space_id,
+        resource_id=file_id,
+        resource_type="file",
+    )
+    return resp_200(_single_mutation_payload(await change_service.request_change(command)))
 
 
 @router.post("/{space_id}/files/move")
@@ -490,17 +616,26 @@ async def move_file_folder(
     space_id: int,
     req: FileMoveReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    """F034: move files/folders within or across spaces (same-space when
-    target_space_id == space_id). Returns {moved, invalid}; see design §4.2."""
-    result = await svc.move_items(
-        space_id,
-        [item.model_dump() for item in req.items],
+    items = [
+        {"input_id": str(item.id), "id": item.id, "type": item.type}
+        for item in req.items
+    ]
+    results = await _request_item_changes(
+        owner_service=svc,
+        change_service=change_service,
+        space_id=space_id,
+        action="move",
+        items=items,
         target_space_id=req.target_space_id,
         target_folder_id=req.target_folder_id,
-        skip_invalid=req.skip_invalid,
     )
-    return resp_200(result)
+    response = FileMoveMutationResp()
+    for item, result in zip(items, results, strict=True):
+        payload = _resource_item_payload(item, result)
+        getattr(response, "moved" if result.decision == "direct" else result.decision).append(payload)
+    return resp_200(response)
 
 
 @router.get("/{space_id}/files/{file_id}/preview")
@@ -552,9 +687,52 @@ async def batch_delete(
     space_id: int,
     req: BatchDeleteReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
 ) -> Any:
-    await svc.batch_delete(space_id, req.file_ids, req.folder_ids)
-    return resp_200()
+    items = [
+        *({"input_id": str(resource_id), "id": resource_id, "type": "file"} for resource_id in req.file_ids),
+        *(
+            {"input_id": str(resource_id), "id": resource_id, "type": "folder"}
+            for resource_id in req.folder_ids
+        ),
+    ]
+    results = await _request_item_changes(
+        owner_service=svc,
+        change_service=change_service,
+        space_id=space_id,
+        action="delete",
+        items=items,
+    )
+    response = FileBatchDeleteMutationResp()
+    for item, result in zip(items, results, strict=True):
+        payload = _resource_item_payload(item, result)
+        getattr(response, "deleted" if result.decision == "direct" else result.decision).append(payload)
+    return resp_200(response)
+
+
+@router.post("/{space_id}/files/batch-rename")
+async def batch_rename(
+    space_id: int,
+    req: FileBatchRenameReq,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+    change_service=Depends(get_knowledge_space_file_change_service),
+) -> Any:
+    items = [
+        {"input_id": str(item.id), "id": item.id, "type": item.type, "name": item.name}
+        for item in req.items
+    ]
+    results = await _request_item_changes(
+        owner_service=svc,
+        change_service=change_service,
+        space_id=space_id,
+        action="rename",
+        items=items,
+    )
+    response = FileBatchRenameMutationResp()
+    for item, result in zip(items, results, strict=True):
+        payload = _resource_item_payload(item, result)
+        getattr(response, "renamed" if result.decision == "direct" else result.decision).append(payload)
+    return resp_200(response)
 
 
 @router.post("/{space_id}/files/batch-tag")

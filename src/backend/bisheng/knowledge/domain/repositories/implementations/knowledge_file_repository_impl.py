@@ -1,6 +1,7 @@
-from typing import Any, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
-from sqlmodel import select, col
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.repositories.implementations.base_repository_impl import BaseRepositoryImpl
@@ -14,7 +15,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
     def __init__(self, session: AsyncSession):
         super().__init__(session, KnowledgeFile)
 
-    async def find_by_ids(self, entity_ids: List[int]) -> Sequence[KnowledgeFile]:
+    async def find_by_ids(self, entity_ids: list[int]) -> Sequence[KnowledgeFile]:
         """Fetch multiple KnowledgeFile rows by id list.
 
         Overrides the base class to use session.execute() so this impl works
@@ -23,6 +24,22 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         if not entity_ids:
             return []
         query = select(KnowledgeFile).where(col(KnowledgeFile.id).in_(entity_ids))
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+
+    async def find_by_ids_for_tenant(
+        self,
+        *,
+        tenant_id: int,
+        entity_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        """Fetch multiple files with tenant isolation encoded in the SQL."""
+        if not entity_ids:
+            return []
+        query = select(KnowledgeFile).where(
+            KnowledgeFile.tenant_id == int(tenant_id),
+            col(KnowledgeFile.id).in_(entity_ids),
+        )
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
@@ -39,7 +56,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
     async def find_main_version_files_in_space(
         self,
         knowledge_id: int,
-        exclude_file_id: Optional[int] = None,
+        exclude_file_id: int | None = None,
     ) -> list[KnowledgeFile]:
         """Parsed-SUCCESS files in a space that are the primary version of their logical document.
 
@@ -89,4 +106,3 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 user_metadata_dict[knowledge_file.id] = {}
 
         return user_metadata_dict
-

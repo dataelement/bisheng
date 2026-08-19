@@ -63,7 +63,7 @@ def test_idempotent():
 
 def test_only_missing_added_never_removed():
     # owner already has move_file but not move_folder → only the missing one is added
-    models = [_model("owner", "owner", permissions=["view_space", "move_file", "share_file"])]
+    models = [_model("owner", "owner", permissions=["view_space", "move_file", "download_file"])]
     updated, changes = apply_move_permission_backfill(models)
     assert changes[0]["added"] == ["move_folder"]
-    assert {"view_space", "move_file", "move_folder", "share_file"} <= set(updated[0]["permissions"])
+    assert {"view_space", "move_file", "move_folder", "download_file"} <= set(updated[0]["permissions"])

@@ -47,6 +47,11 @@ const KnowledgeSpaceSettingsPage = lazy(() =>
   })),
 );
 const FilePreviewPage = lazy(() => import('~/pages/knowledge/FilePreview/FilePreviewPage'));
+const FileChangePreviewPage = lazy(() =>
+  import('~/pages/knowledge/FilePreview/FileChangePreviewPage').then((module) => ({
+    default: module.FileChangePreviewPage,
+  })),
+);
 const ArticlePage = lazy(() => import('~/pages/Subscription/Article/ArticlePage'));
 const DevLogin = lazy(() => import('~/pages/DevLogin'));
 const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
@@ -278,6 +283,7 @@ export const router = createBrowserRouter([
       // through login first and is returned here afterwards.
       { path: 'share/:token/:vid?', element: suspended(<RequireLogin><Share /></RequireLogin>) },
       { path: 'knowledge/file/:fileId', element: suspended(<FilePreviewPage />) },
+      { path: 'knowledge/file-change/:requestId', element: suspended(<FileChangePreviewPage />) },
       { path: 'channel/:channelId/article/:articleId', element: suspended(<ArticlePage />) },
     ],
   },
