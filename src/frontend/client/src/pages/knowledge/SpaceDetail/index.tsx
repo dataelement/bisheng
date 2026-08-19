@@ -887,6 +887,19 @@ export function KnowledgeSpaceContent({
         window.open(url, "_blank", "noopener,noreferrer");
     };
     const handleFileChangeCleanup = async (requestId: number) => {
+        // Withdrawing a still-pending upload deletes the file, so it confirms
+        // like any other delete. Cleanup of an already-decided request only
+        // clears the failed record and needs no confirmation.
+        const pendingUpload = fileChangeApproval.pendingItems.find(
+            (item) => item.requestId === requestId && item.approvalStatus === "pending",
+        );
+        if (pendingUpload) {
+            const confirmed = await confirm({
+                description: `${localize("com_knowledge.confirm_delete_file")}${localize("com_knowledge.delete_irreversible_warning")}`,
+                variant: "destructive",
+            });
+            if (!confirmed) return;
+        }
         try {
             await fileChangeApproval.cleanup(requestId);
         } catch {
@@ -922,11 +935,19 @@ export function KnowledgeSpaceContent({
             showToast({ message: localize("com_approval_toast_failed"), status: "error" });
         }
     };
-    // Row-level withdraw for the applicant's own 审核中 upload (mirrors the
-    // approver's row-level 同意/拒绝). Withdraw is applicant-only, single-request,
-    // via the cleanup API; drop the row from the selection so a stale id doesn't
-    // linger after the async refresh removes it.
+    // Row-level delete for the applicant's own 审核中 upload (mirrors the
+    // approver's row-level 同意/拒绝). To the applicant this is simply "删除" —
+    // the file goes away — so it carries the same wording and the same
+    // destructive confirm as any other single-file delete, even though it is
+    // implemented by withdrawing the approval request via the cleanup API.
+    // Drop the row from the selection so a stale id doesn't linger after the
+    // async refresh removes it.
     const handleWithdrawPendingUpload = async (requestId: number) => {
+        const confirmed = await confirm({
+            description: `${localize("com_knowledge.confirm_delete_file")}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
+        });
+        if (!confirmed) return;
         try {
             await fileChangeApproval.cleanup(requestId);
             setSelectedFiles((prev) => {
@@ -1001,6 +1022,12 @@ export function KnowledgeSpaceContent({
         if (pendingBatchDeciding || fileChangeApproval.batchApproving) return;
         const requestIds = getPendingWithdrawRequestIds();
         if (requestIds.length === 0) return;
+        // Reads as a delete to the applicant — same confirm as 批量删除.
+        const confirmed = await confirm({
+            description: `${localize("com_knowledge.confirm_delete_files_count", { 0: requestIds.length })}${localize("com_knowledge.delete_irreversible_warning")}`,
+            variant: "destructive",
+        });
+        if (!confirmed) return;
         setPendingBatchDeciding(true);
         let withdrawn = 0;
         let failed = 0;
@@ -1322,9 +1349,9 @@ export function KnowledgeSpaceContent({
         // Pending-upload actions come first, mirroring the desktop header's
         // "待审核文件" group; each only addresses the selected rows the viewer
         // may act on (decide / withdraw), so a mixed selection stays safe.
-        (decidablePendingSelected.length > 0) && { key: "pendingApprove", label: localize("com_approval_action_approve"), Icon: Outlined.Check, onClick: handleBatchApprovePending, disabled: pendingBatchBusy },
-        (decidablePendingSelected.length > 0) && { key: "pendingReject", label: localize("com_approval_action_reject"), Icon: Outlined.Close, onClick: handleBatchRejectPending, danger: true, disabled: pendingBatchBusy },
-        (withdrawablePendingSelected.length > 0) && { key: "pendingWithdraw", label: localize("com_approval_action_withdraw"), Icon: Outlined.CloseCircle, onClick: handleBatchWithdrawPending, danger: true, disabled: pendingBatchBusy },
+        (decidablePendingSelected.length > 0) && { key: "pendingApprove", label: localize("com_approval.action_approve"), Icon: Outlined.Check, onClick: handleBatchApprovePending, disabled: pendingBatchBusy },
+        (decidablePendingSelected.length > 0) && { key: "pendingReject", label: localize("com_approval.action_reject"), Icon: Outlined.Close, onClick: handleBatchRejectPending, danger: true, disabled: pendingBatchBusy },
+        (withdrawablePendingSelected.length > 0) && { key: "pendingWithdraw", label: localize("com_knowledge.delete"), Icon: Outlined.Delete, onClick: handleBatchWithdrawPending, danger: true, disabled: pendingBatchBusy },
         canBatchDownload && {
             key: "download",
             label: localize("com_knowledge.download"),
@@ -1685,7 +1712,7 @@ export function KnowledgeSpaceContent({
                                         // H5 list stays full-bleed — its rows carry their own px-4 so a
                                         // selected row's background spans the full width.
                                         ? "grid grid-cols-1 gap-0 pt-4"
-                                        : "grid gap-4 px-4 pt-1"
+                                        : "grid gap-2 px-2 pt-1"
                                 )}
                                 style={
                                     effectiveViewMode === "card"

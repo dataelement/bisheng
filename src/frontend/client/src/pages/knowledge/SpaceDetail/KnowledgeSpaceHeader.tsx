@@ -8,8 +8,10 @@ import {
 } from "~/components/ui/DropdownMenu";
 import {
     ActionMenuContent,
+    ActionMenuDivider,
     ActionMenuItem,
     actionMenuLabelClassName,
+    actionMenuSectionLabelClassName,
 } from "~/components/ActionMenu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { CopyShareLinkButton } from "~/components/CopyShareLinkButton";
@@ -145,7 +147,7 @@ export function KnowledgeSpaceHeader({
                     <ActionMenuContent align="end">
                         {showPendingBatchGroup && (
                             <>
-                                <div className="px-2 py-1.5 text-xs font-medium text-text-3">
+                                <div className={cn("py-1.5", actionMenuSectionLabelClassName)}>
                                     {localize("com_knowledge.batch_group_pending")}
                                 </div>
                                 {canDecidePendingSelection && onBatchApprovePending && (
@@ -155,7 +157,8 @@ export function KnowledgeSpaceHeader({
                                         disabled={pendingBatchDeciding}
                                         onClick={onBatchApprovePending}
                                         icon={<Outlined.Check className="text-success" />}
-                                        label={localize("com_approval_action_approve")}
+                                        // 同意 (not 审批中心's 通过) per the batch-menu design (Figma 13198:78124).
+                                        label={localize("com_approval.action_approve")}
                                     />
                                 )}
                                 {canDecidePendingSelection && onBatchRejectPending && (
@@ -164,7 +167,7 @@ export function KnowledgeSpaceHeader({
                                         disabled={pendingBatchDeciding}
                                         onClick={onBatchRejectPending}
                                         icon={<Outlined.Close />}
-                                        label={localize("com_approval_action_reject")}
+                                        label={localize("com_approval.action_reject")}
                                     />
                                 )}
                                 {canWithdrawPendingSelection && onBatchWithdrawPending && (
@@ -172,16 +175,20 @@ export function KnowledgeSpaceHeader({
                                         danger
                                         disabled={pendingBatchDeciding}
                                         onClick={onBatchWithdrawPending}
-                                        icon={<Outlined.CloseCircle />}
-                                        label={localize("com_approval_action_withdraw")}
+                                        icon={<Outlined.Delete />}
+                                        label={localize("com_knowledge.delete")}
                                     />
                                 )}
                             </>
                         )}
                         {showPendingBatchGroup && showReviewedBatchGroup && (
-                            <div className="px-2 py-1.5 text-xs font-medium text-text-3">
-                                {localize("com_knowledge.batch_group_reviewed")}
-                            </div>
+                            <>
+                                {/* 组间分割线 + 第二组标题 (Figma 13198:78120) */}
+                                <ActionMenuDivider />
+                                <div className={cn("py-1.5", actionMenuSectionLabelClassName)}>
+                                    {localize("com_knowledge.batch_group_reviewed")}
+                                </div>
+                            </>
                         )}
                         {showReviewedBatchGroup && (
                             <>
@@ -246,7 +253,7 @@ export function KnowledgeSpaceHeader({
                             <Outlined.Down className="size-4" />
                         </button>
                     </DropdownMenuTrigger>
-                    <ActionMenuContent align="end" width={200}>
+                    <ActionMenuContent align="end">
                         {canCreateFolder && (
                             <ActionMenuItem
                                 onClick={onCreateFolder}
@@ -275,9 +282,8 @@ export function KnowledgeSpaceHeader({
                                                 </span>
                                             </TooltipTrigger>
                                             <TooltipContent
-                                                noArrow
-                                                side="left"
-                                                className="z-[999] max-w-md bg-white px-3 py-2 text-sm text-[#4e5969] shadow-md"
+                                                side="top"
+                                                className="z-[999] max-w-md"
                                             >
                                                 {localize(
                                                     knowledgeUploadCapabilities.media

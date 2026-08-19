@@ -4,6 +4,7 @@ import { useState, type MouseEvent } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
+import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import { Card, CardContent } from "~/components/ui/Card";
 import {
     DropdownMenu,
@@ -462,11 +463,19 @@ export function FileCard({
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
     const showMoveItem = Boolean(onMove) && !isCreating;
-    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
-    const showMoreMenu = !pendingUpload && !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
-    /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
-    const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
+    // Card view puts EVERY action behind the ⋮ menu, even a lone one, so a card
+    // never sprouts a second floating control over its thumbnail. That includes
+    // the approval decisions, which used to sit inline. The H5 row keeps its own
+    // inline 同意/拒绝 (it has the width and no thumbnail to cover), so the
+    // pending branch is card-only.
+    const showPendingMenuItems = Boolean(pendingUpload) && !mobileListMode
+        && (canDecidePending || canWithdrawPending);
+    const hasReviewedMenuItems = showMenuDownloadItem || isAdmin || canRename || canDelete
+        || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory;
+    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
+    const showMoreMenu = !isUploadingFolderPlaceholder
+        && (pendingUpload ? showPendingMenuItems : hasReviewedMenuItems);
     const showCardActions = moreMenuOpen || hovered;
     const cardOpensPreviewOrFolder =
         !isCreating &&
@@ -474,8 +483,43 @@ export function FileCard({
         !isUploadingFolderPlaceholder &&
         (Boolean(pendingUpload) || isFolder || isKnowledgeItemPreviewable(file));
 
+    // A pending upload is not a real file yet: the only things that apply are the
+    // approval decisions, so its menu replaces the ordinary file actions.
+    const pendingMenuItems = pendingUpload && (
+        <>
+            {canDecidePending && onDecidePendingUpload && (
+                <ActionMenuItem
+                    className="text-success data-[highlighted]:text-success focus:text-success"
+                    disabled={pendingUploadDeciding}
+                    onClick={(e) => { e.stopPropagation(); onDecidePendingUpload(pendingUpload.requestId, "approve"); }}
+                    icon={<Outlined.Check className="text-success" />}
+                    // 同意 (not 审批中心's 通过) per the pending-upload design (Figma 13198:78124).
+                    label={localize("com_approval.action_approve")}
+                />
+            )}
+            {canDecidePending && onDecidePendingUpload && (
+                <ActionMenuItem
+                    danger
+                    disabled={pendingUploadDeciding}
+                    onClick={(e) => { e.stopPropagation(); onDecidePendingUpload(pendingUpload.requestId, "reject"); }}
+                    icon={<Outlined.Close />}
+                    label={localize("com_approval.action_reject")}
+                />
+            )}
+            {canWithdrawPending && onWithdrawPendingUpload && (
+                <ActionMenuItem
+                    danger
+                    disabled={pendingUploadDeciding}
+                    onClick={(e) => { e.stopPropagation(); onWithdrawPendingUpload(pendingUpload.requestId); }}
+                    icon={<Outlined.Delete />}
+                    label={localize("com_knowledge.delete")}
+                />
+            )}
+        </>
+    );
+
     // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
-    const moreMenuItems = (
+    const reviewedMenuItems = (
         <>
             {showMenuDownloadItem && (
                 <ActionMenuItem
@@ -546,6 +590,8 @@ export function FileCard({
             )}
         </>
     );
+
+    const moreMenuItems = showPendingMenuItems ? pendingMenuItems : reviewedMenuItems;
 
     const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
         if (!showMoreMenu) return;
@@ -724,7 +770,7 @@ export function FileCard({
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
                             className={cn(
-                                isSelected ? "border-primary" : "border-gray-400",
+                                SELECTION_CHECKBOX_CLASS,
                                 !isSelectable && "cursor-not-allowed opacity-50",
                             )}
                             disabled={!isSelectable}
@@ -770,7 +816,7 @@ export function FileCard({
                         >
                             <Checkbox
                                 className={cn(
-                                    isSelected ? "border-primary" : "border-gray-400",
+                                    SELECTION_CHECKBOX_CLASS,
                                     !isSelectable && "cursor-not-allowed opacity-50",
                                 )}
                                 disabled={!isSelectable}
@@ -794,25 +840,6 @@ export function FileCard({
                                     : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                             )}
                         >
-                            {pendingUpload && (canDecidePending || canWithdrawPending) && (
-                                <PendingUploadApprovalActions
-                                    requestId={pendingUpload.requestId}
-                                    disabled={pendingUploadDeciding}
-                                    onDecide={canDecidePending ? onDecidePendingUpload : undefined}
-                                    onWithdraw={canWithdrawPending ? onWithdrawPendingUpload : undefined}
-                                />
-                            )}
-                            {showInlineDownloadButton && (
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="w-5 h-5 rounded-md hover:bg-gray-100 shrink-0"
-                                    onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                    title={localize("com_knowledge.download")}
-                                >
-                                    <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />
-                                </Button>
-                            )}
                             {showMoreMenu && (
                                 <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                                     <DropdownMenuTrigger asChild>

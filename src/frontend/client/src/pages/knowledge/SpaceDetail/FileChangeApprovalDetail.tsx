@@ -126,9 +126,13 @@ export function FileChangeApprovalDetail({
                         )}
                         {canCleanup(detail) && onCleanup && (
                             <Button color="danger" variant="outline" onClick={() => onCleanup(detail.requestId)}>
-                                {detail.approvalStatus === "pending"
-                                    ? localize("com_approval_action_withdraw")
-                                    : localize("com_knowledge.file_change_cleanup")}
+                                {detail.approvalStatus !== "pending"
+                                    ? localize("com_knowledge.file_change_cleanup")
+                                    : detail.action === "upload"
+                                        // Withdrawing a pending upload just removes the file, so the
+                                        // applicant sees 删除 here too — matching the row action.
+                                        ? localize("com_knowledge.delete")
+                                        : localize("com_approval_action_withdraw")}
                             </Button>
                         )}
                         {canRetry(detail) && onRetry && (

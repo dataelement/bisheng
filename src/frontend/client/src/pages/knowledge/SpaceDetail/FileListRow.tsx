@@ -1,3 +1,4 @@
+import { Button } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { FileSearch, GitBranch, History } from "lucide-react";
 import { useState } from "react";
@@ -21,6 +22,7 @@ import { FileChangeActionIcon } from "./FileChangeActionIcon";
 import { FileChangePendingTooltip } from "./FileChangePendingTooltip";
 import FileIconRenderer from "./FileIcon";
 import { PendingUploadApprovalActions } from "./PendingUploadApprovalActions";
+import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import TagGroup from "./TagGroup";
 
 /**
@@ -48,10 +50,6 @@ const renderHighlightedName = (text: string, keyword?: string) => {
             : part
     );
 };
-
-/** Row action button — 32x32 ghost icon (Figma 13198:75882). */
-const ROW_ACTION_BTN_CLASS =
-    "flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2 hover:text-text-1";
 
 type Tone = { bg: string; text: string; dot: string };
 
@@ -311,6 +309,16 @@ export function FileListRow({
     const isSelectable = pendingUpload
         ? isPendingUploadSelectable(pendingUpload)
         : !isUploadingFolderPlaceholder;
+    // Shared look for every button in the row-action strip. rounded-lg (8px)
+    // overrides the size variant's rounded-md (6px). The hover fill flips on a
+    // selected row: the default neutral step reads as a faint smudge over the
+    // brand tint, so the button lifts towards white instead — same contrast cue,
+    // opposite direction, semi-transparent so it thins the tint rather than
+    // punching an opaque white hole in the row.
+    const rowActionClass = cn(
+        "rounded-lg",
+        isSelected ? "hover:bg-white/60" : "hover:bg-btn-fill-2",
+    );
 
     // F040: resolve this file's action permissions lazily, only when the menu opens.
     const handleMoreMenuOpenChange = (open: boolean) => {
@@ -466,8 +474,8 @@ export function FileListRow({
                 onCheckedChange={onSelect}
                 disabled={!isSelectable}
                 className={cn(
-                    "size-4 shrink-0 border-border-deep",
-                    isSelected && "border-primary",
+                    "size-4 shrink-0",
+                    SELECTION_CHECKBOX_CLASS,
                     !isSelectable && "cursor-not-allowed opacity-50",
                 )}
             />
@@ -594,17 +602,26 @@ export function FileListRow({
                         disabled={pendingUploadDeciding}
                         onDecide={canDecidePending ? onDecidePendingUpload : undefined}
                         onWithdraw={canWithdrawPending ? onWithdrawPendingUpload : undefined}
+                        hoverClassName={rowActionClass}
                     />
                 )}
                 {canDownload && (
-                    <button
-                        type="button"
-                        className={ROW_ACTION_BTN_CLASS}
-                        onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                        title={localize("com_knowledge.download")}
-                    >
-                        <Outlined.Download className="size-4" />
-                    </button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button
+                                color="default"
+                                variant="text"
+                                size="medium"
+                                iconOnly
+                                className={rowActionClass}
+                                aria-label={localize("com_knowledge.download")}
+                                onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                            >
+                                <Outlined.Download />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{localize("com_knowledge.download")}</TooltipContent>
+                    </Tooltip>
                 )}
                 {canDownload && showMoreMenu && (
                     <span aria-hidden className="mx-1 h-2 w-px shrink-0 bg-border-base" />
@@ -612,9 +629,19 @@ export function FileListRow({
                 {showMoreMenu && (
                     <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                         <DropdownMenuTrigger asChild>
-                            <button type="button" className={ROW_ACTION_BTN_CLASS}>
-                                <Outlined.More className="size-4" />
-                            </button>
+                            {/* No Tooltip here: a tooltip on a menu trigger lingers over the
+                                open menu unless it is manually suppressed (see KnowledgeBreadcrumb).
+                                The menu itself names the actions, so aria-label alone is enough. */}
+                            <Button
+                                color="default"
+                                variant="text"
+                                size="medium"
+                                iconOnly
+                                className={rowActionClass}
+                                aria-label={localize("com_knowledge_operation")}
+                            >
+                                <Outlined.More />
+                            </Button>
                         </DropdownMenuTrigger>
                         <ActionMenuContent align="end">{moreMenuItems}</ActionMenuContent>
                     </DropdownMenu>
