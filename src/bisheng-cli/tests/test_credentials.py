@@ -168,3 +168,73 @@ def test_corrupt_store_is_reported_not_silently_reset() -> None:
         credentials.load_current()
     assert str(path) in excinfo.value.next_step
     assert os.path.exists(path)
+
+
+# ---- Windows ACL hardening: SID grant + never brick the file (field fix) ----
+
+
+class _FakeRun:
+    def __init__(self, returncode: int = 0, stdout: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+
+
+def test_current_user_grantee_prefers_sid(monkeypatch: pytest.MonkeyPatch) -> None:
+    # whoami /user gives an unambiguous SID; a bare username may not resolve.
+    monkeypatch.setattr(
+        credentials.subprocess,
+        "run",
+        lambda *a, **k: _FakeRun(0, '"DESKTOP-ABC\\X1C","S-1-5-21-1-2-3-1001"\n'),
+    )
+    assert credentials._current_user_grantee() == "*S-1-5-21-1-2-3-1001"
+
+
+def test_current_user_grantee_falls_back_to_username(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*a, **k):
+        raise OSError
+
+    monkeypatch.setattr(credentials.subprocess, "run", boom)
+    monkeypatch.setenv("USERNAME", "X1C")
+    assert credentials._current_user_grantee() == "X1C"
+
+
+def test_run_icacls_never_strips_inheritance(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # /inheritance:r on a file with only inherited ACEs is what bricked the field
+    # machine: it must never be issued again.
+    path = tmp_path / "credentials.json"
+    path.write_text("{}", encoding="utf-8")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(credentials.subprocess, "run", lambda args, **k: calls.append(args) or _FakeRun())
+    monkeypatch.setattr(credentials, "_current_user_grantee", lambda: "*S-1-5-21-x")
+    monkeypatch.setattr(credentials, "_can_read", lambda p: True)
+
+    assert credentials._run_icacls(path) is True
+    flat = [a for call in calls for a in call]
+    assert "/inheritance:r" not in flat
+    assert "*S-1-5-21-x:F" in flat  # granted by SID
+    assert not any("/reset" in call for call in calls)  # readable, so no rollback
+
+
+def test_run_icacls_rolls_back_when_the_grant_bricks_read(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # If the ACL change somehow leaves the file unreadable by us, restore inherited
+    # permissions so the next `bisheng deploy` can still read the key.
+    path = tmp_path / "credentials.json"
+    path.write_text("{}", encoding="utf-8")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(credentials.subprocess, "run", lambda args, **k: calls.append(args) or _FakeRun())
+    monkeypatch.setattr(credentials, "_current_user_grantee", lambda: "*S-1-5-21-x")
+    reads = iter([False, True])  # unreadable after grant, readable after /reset
+    monkeypatch.setattr(credentials, "_can_read", lambda p: next(reads))
+
+    assert credentials._run_icacls(path) is True
+    assert any("/reset" in call for call in calls)
+
+
+def test_run_icacls_returns_false_only_when_still_unreadable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    path = tmp_path / "credentials.json"
+    path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(credentials.subprocess, "run", lambda args, **k: _FakeRun())
+    monkeypatch.setattr(credentials, "_current_user_grantee", lambda: "*S-1-5-21-x")
+    monkeypatch.setattr(credentials, "_can_read", lambda p: False)  # even /reset didn't help
+
+    assert credentials._run_icacls(path) is False

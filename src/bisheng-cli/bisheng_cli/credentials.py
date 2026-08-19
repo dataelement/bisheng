@@ -94,20 +94,85 @@ def _is_windows() -> bool:
     return os.name == "nt"
 
 
-def _run_icacls(path: Path) -> bool:
-    """Restrict `path` to the current user. Returns False if that failed."""
-    user = os.environ.get("USERNAME") or os.environ.get("USER") or ""
-    if not user:
-        return False
+def _current_user_grantee() -> str | None:
+    """The icacls principal for the current user — its SID, name as a fallback.
+
+    A bare ``%USERNAME%`` is unreliable as an icacls grantee: on a Microsoft-account
+    or domain login the name may not map to a SID, and a grant that fails to
+    resolve — on top of the old ``/inheritance:r`` — left the credentials file with
+    an empty DACL, i.e. unreadable by *everyone*. That is the field failure this
+    guards against: login succeeds and writes the file, then the next
+    ``bisheng deploy`` reads it and gets "Permission denied". The SID from
+    ``whoami`` resolves unambiguously and independent of locale, so we grant that.
+    A ``*``-prefixed SID is how icacls names a principal by SID directly.
+    """
     try:
-        result = subprocess.run(
-            ["icacls", str(path), "/inheritance:r", "/grant:r", f"{user}:F"],
+        out = subprocess.run(
+            ["whoami", "/user", "/fo", "csv", "/nh"],
             capture_output=True,
+            text=True,
             check=False,
         )
     except OSError:
+        out = None
+    if out is not None and out.returncode == 0 and out.stdout.strip():
+        # A row like: "HOST\user","S-1-5-21-..."
+        cells = [c.strip().strip('"') for c in out.stdout.strip().split('","')]
+        if len(cells) == 2 and cells[1].startswith("S-1-"):
+            return "*" + cells[1]
+    user = os.environ.get("USERNAME") or os.environ.get("USER") or ""
+    return user or None
+
+
+def _can_read(path: Path) -> bool:
+    try:
+        with open(path, "rb"):
+            return True
+    except OSError:
         return False
-    return result.returncode == 0
+
+
+def _restore_inheritance(path: Path) -> None:
+    """Undo a hardening attempt that left the file unreadable by its owner.
+
+    ``/reset`` replaces the DACL with the parent's inherited one (the profile
+    folder already excludes other standard users), which the owner can always do
+    even when the current DACL grants them nothing.
+    """
+    try:
+        subprocess.run(["icacls", str(path), "/reset"], capture_output=True, check=False)
+        subprocess.run(["icacls", str(path), "/inheritance:e"], capture_output=True, check=False)
+    except OSError:
+        return
+
+
+def _run_icacls(path: Path) -> bool:
+    """Grant the current user access on `path`, never leaving it unreadable.
+
+    We deliberately do **not** run ``/inheritance:r`` any more. A user's
+    ``~/.bisheng`` inherits the profile folder's ACL, which already keeps other
+    standard users out — that is the real protection. Stripping inheritance only
+    created two ways to brick the file: a grant that did not resolve left an empty
+    DACL, and a grant that *did* locked the key to exactly the login-time token so
+    a deploy under a slightly different token (elevation) could not read it. So we
+    only add the current user, then confirm this process can still read the file;
+    if it cannot, we restore inherited permissions rather than leave a dead file.
+    Returns False only when the file is still unreadable after that recovery.
+    """
+    grantee = _current_user_grantee()
+    if grantee:
+        try:
+            subprocess.run(
+                ["icacls", str(path), "/grant:r", f"{grantee}:F"],
+                capture_output=True,
+                check=False,
+            )
+        except OSError:
+            pass
+    if _can_read(path):
+        return True
+    _restore_inheritance(path)
+    return _can_read(path)
 
 
 def _harden(path: Path, warn: Callable[[str], None] | None) -> None:
@@ -117,8 +182,8 @@ def _harden(path: Path, warn: Callable[[str], None] | None) -> None:
         return
     if warn is not None:
         warn(
-            f"无法收紧 {path} 的访问权限：本机其它账号可能读到明文密钥。"
-            "请手动执行 icacls 限制该文件，或改用专用账号运行 CLI。"
+            f"凭据文件 {path} 的权限可能异常：若后续命令报「读取凭据被拒 / Permission denied」，"
+            f'请在 PowerShell 执行  icacls "{path}" /reset  后重试。'
         )
 
 
