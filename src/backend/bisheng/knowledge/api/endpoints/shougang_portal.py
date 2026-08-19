@@ -41,6 +41,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteStatusReq,
     ShougangPortalFavoriteStatusResp,
     ShougangPortalFileBrowseReq,
+    ShougangPortalFileCountReq,
+    ShougangPortalFileCountResp,
     ShougangPortalFileDetailResp,
     ShougangPortalFileSearchReq,
     ShougangPortalFileSearchResp,
@@ -325,6 +327,17 @@ async def count_shougang_portal_category_files(
             discovery_scope=req.discovery_scope,
         )
     return resp_200(ShougangPortalCategoryFileCountResp(counts=counts).model_dump(mode="json"))
+
+
+@router.post("/files/count")
+async def count_shougang_portal_files(
+    req: ShougangPortalFileCountReq,
+    svc: Any = Depends(get_knowledge_space_service),
+) -> Any:
+    result = await svc.count_shougang_portal_files(req)
+    return resp_200(
+        ShougangPortalFileCountResp(**result).model_dump(mode="json")
+    )
 
 
 @router.post("/home")

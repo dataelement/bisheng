@@ -213,6 +213,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFavoriteStatusResp,
     ShougangPortalFavoriteStatusResultItem,
     ShougangPortalFileBrowseReq,
+    ShougangPortalFileCountReq,
     ShougangPortalFileItemResp,
     ShougangPortalFileSearchReq,
     ShougangPortalHomeReq,
@@ -5531,6 +5532,179 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
         return await KnowledgeFileDao.async_count_files_by_category_scopes(visible_scopes)
 
+    async def count_shougang_portal_files(
+        self,
+        req: ShougangPortalFileCountReq,
+    ) -> dict[str, Any]:
+        """Count the exact traversable result set without blocking the list request."""
+        if req.query_type == "keyword":
+            search_payload = req.model_dump(
+                exclude={"query_type", "conditions"},
+            )
+            search_payload["limit"] = PORTAL_SEARCH_FINAL_LIMIT
+            search_payload["cursor"] = None
+            result = await self.search_shougang_portal_files(
+                ShougangPortalFileSearchReq.model_validate(search_payload)
+            )
+            discovery = getattr(self, "_portal_discovery_result", None)
+            return {
+                "total": len(result.get("data") or []),
+                "discovery_snapshot": discovery.snapshot if discovery else "",
+            }
+
+        if req.query_type == "advanced":
+            advanced_payload = req.model_dump(
+                exclude={"query_type", "q", "filter_tag"},
+                exclude_unset=True,
+            )
+            advanced_payload["limit"] = 100
+            advanced_payload["cursor"] = None
+            total = 0
+            seen_cursors: set[str] = set()
+            while True:
+                result = await self.advanced_search_shougang_portal_files(
+                    ShougangPortalAdvancedFileSearchReq.model_validate(
+                        advanced_payload
+                    )
+                )
+                total += len(result.get("data") or [])
+                next_cursor = str(result.get("next_cursor") or "")
+                if not result.get("has_more") or not next_cursor:
+                    break
+                if next_cursor in seen_cursors:
+                    logger.warning("portal advanced count stopped on repeated cursor")
+                    break
+                seen_cursors.add(next_cursor)
+                advanced_payload["cursor"] = next_cursor
+            discovery = getattr(self, "_portal_discovery_result", None)
+            return {
+                "total": total,
+                "discovery_snapshot": discovery.snapshot if discovery else "",
+            }
+
+        if req.query_type == "recommendation":
+            browse_payload = req.model_dump(
+                exclude={
+                    "query_type",
+                    "q",
+                    "conditions",
+                    "filter_tag",
+                    "all_keywords",
+                    "exact_phrase",
+                    "any_keywords",
+                    "exclude_keywords",
+                    "search_field",
+                    "original_uploader_id",
+                    "original_knowledge_id",
+                    "preview_count_min",
+                    "preview_count_max",
+                    "download_count_min",
+                    "download_count_max",
+                    "updated_from",
+                    "updated_to",
+                }
+            )
+            browse_payload["limit"] = 100
+            browse_payload["cursor"] = None
+            seen_documents: set[int] = set()
+            seen_cursors: set[str] = set()
+            while True:
+                result = await self.browse_shougang_portal_files(
+                    ShougangPortalFileBrowseReq.model_validate(browse_payload)
+                )
+                for item in result.get("data") or []:
+                    canonical_id = int(
+                        item.get("canonical_document_id") or item.get("id") or 0
+                    )
+                    if canonical_id > 0:
+                        seen_documents.add(canonical_id)
+                next_cursor = str(result.get("next_cursor") or "")
+                if not result.get("has_more") or not next_cursor:
+                    break
+                if next_cursor in seen_cursors:
+                    logger.warning("portal recommendation count stopped on repeated cursor")
+                    break
+                seen_cursors.add(next_cursor)
+                browse_payload["cursor"] = next_cursor
+            discovery = getattr(self, "_portal_discovery_result", None)
+            return {
+                "total": len(seen_documents),
+                "discovery_snapshot": discovery.snapshot if discovery else "",
+            }
+
+        effective_discovery_scope = (
+            req.discovery_scope
+            if req.discovery_scope in {"portal_public", "portal_configured"}
+            else "public"
+            if req.public_only
+            else req.discovery_scope
+        )
+        spaces = await self._get_shougang_portal_request_spaces(
+            requested_space_ids=req.space_ids,
+            space_level=req.space_level,
+            discovery_scope=effective_discovery_scope,
+        )
+        discovery = getattr(self, "_portal_discovery_result", None)
+        if not spaces:
+            return {
+                "total": 0,
+                "discovery_snapshot": discovery.snapshot if discovery else "",
+            }
+
+        space_ids = [int(space.id) for space in spaces]
+        tag_file_ids = await self._get_shougang_portal_tag_file_ids(space_ids, req.tag)
+        if req.tag and not tag_file_ids:
+            return {
+                "total": 0,
+                "discovery_snapshot": discovery.snapshot if discovery else "",
+            }
+        filter_tag_file_ids = await self._get_shougang_portal_tag_file_ids(
+            space_ids,
+            req.filter_tag,
+        )
+        if req.filter_tag and not filter_tag_file_ids:
+            return {
+                "total": 0,
+                "discovery_snapshot": discovery.snapshot if discovery else "",
+            }
+        if tag_file_ids is not None and filter_tag_file_ids is not None:
+            filter_tag_file_id_set = set(filter_tag_file_ids)
+            tag_file_ids = [
+                file_id for file_id in tag_file_ids if file_id in filter_tag_file_id_set
+            ]
+        elif filter_tag_file_ids is not None:
+            tag_file_ids = filter_tag_file_ids
+
+        full_space_ids: list[int] | None = None
+        explicit_file_ids: list[int] | None = None
+        if req.discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
+            full_space_id_set = (
+                set(discovery.discoverable_space_ids)
+                | set(discovery.explicitly_visible_space_ids)
+            )
+            full_space_ids = sorted(full_space_id_set)
+            grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_id_set
+            explicit_file_ids = sorted(
+                file_id
+                for file_id, parent_space_id in discovery.explicit_file_space_by_id.items()
+                if parent_space_id in grant_only_parent_ids
+            )
+        total = await KnowledgeFileDao.acount_portal_files(
+            knowledge_ids=space_ids,
+            status=[KnowledgeFileStatus.SUCCESS.value],
+            file_ids=tag_file_ids,
+            file_ext=req.file_ext,
+            document_type=req.document_type,
+            file_subcategory_code=req.file_subcategory_code,
+            business_domain_code=req.business_domain_code,
+            full_space_ids=full_space_ids,
+            explicit_file_ids=explicit_file_ids,
+        )
+        return {
+            "total": total,
+            "discovery_snapshot": discovery.snapshot if discovery else "",
+        }
+
     async def get_shougang_portal_home(self, req: ShougangPortalHomeReq) -> dict:
         result = await self._get_shougang_portal_home_sections(req)
         result["hot_searches"] = await self._list_shougang_portal_hot_searches()
@@ -6411,7 +6585,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         req: ShougangPortalAdvancedFileSearchReq
         | ShougangPortalAdvancedUploaderSearchReq,
     ) -> tuple[list[Knowledge], str, bool]:
-        effective_discovery_scope = "public" if req.public_only else req.discovery_scope
+        effective_discovery_scope = (
+            req.discovery_scope
+            if req.discovery_scope in {"portal_public", "portal_configured"}
+            else "public"
+            if req.public_only
+            else req.discovery_scope
+        )
         trusted_public_scope = effective_discovery_scope == "public"
         if effective_discovery_scope != "legacy":
             spaces = await self._get_shougang_portal_request_spaces(
@@ -7453,7 +7633,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         is_public_latest_selected = bool(req.public_only) and self._is_shougang_portal_latest_selected_recommendation(
             req.recommendation
         )
-        effective_discovery_scope = "public" if req.public_only else req.discovery_scope
+        effective_discovery_scope = (
+            req.discovery_scope
+            if req.discovery_scope in {"portal_public", "portal_configured"}
+            else "public"
+            if req.public_only
+            else req.discovery_scope
+        )
         if effective_discovery_scope != "legacy":
             spaces = await self._get_shougang_portal_request_spaces(
                 requested_space_ids=req.space_ids,
@@ -7538,7 +7724,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _browse_shougang_portal_files_impl(self, req: ShougangPortalFileBrowseReq) -> dict:
         _set_portal_search_stage("resolve_spaces")
         trusted_public_scope = bool(req.public_only)
-        effective_discovery_scope = "public" if req.public_only else req.discovery_scope
+        effective_discovery_scope = (
+            req.discovery_scope
+            if req.discovery_scope in {"portal_public", "portal_configured"}
+            else "public"
+            if req.public_only
+            else req.discovery_scope
+        )
         if effective_discovery_scope != "legacy":
             spaces = await self._get_shougang_portal_request_spaces(
                 requested_space_ids=req.space_ids,

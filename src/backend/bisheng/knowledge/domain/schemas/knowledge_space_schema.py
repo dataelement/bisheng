@@ -621,6 +621,28 @@ class ShougangPortalAdvancedFileSearchReq(ShougangPortalFileBrowseReq):
         return self
 
 
+class ShougangPortalFileCountReq(ShougangPortalAdvancedFileSearchReq):
+    """Independent exact-count request for portal file-list variants."""
+
+    query_type: Literal["browse", "keyword", "advanced", "recommendation"] = "browse"
+    q: str | None = Field(default=None, max_length=500)
+    filter_tag: str | None = Field(default=None, description="Optional second tag intersection filter")
+
+    @model_validator(mode="after")
+    def validate_count_mode(self):
+        self.cursor = None
+        if self.query_type == "keyword" and not (self.q or "").strip():
+            raise ValueError("keyword count requires q")
+        if self.query_type == "recommendation" and not (self.recommendation or "").strip():
+            raise ValueError("recommendation count requires recommendation")
+        return self
+
+
+class ShougangPortalFileCountResp(BaseModel):
+    total: int = Field(default=0, ge=0)
+    discovery_snapshot: str = ""
+
+
 class ShougangPortalAdvancedUploaderSearchReq(BaseModel):
     discovery_scope: Literal[
         "legacy",
