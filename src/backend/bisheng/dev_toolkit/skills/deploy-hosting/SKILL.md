@@ -133,6 +133,9 @@ port: 8080                   # 必填,应用监听的端口
 
 ## 4. 部署工作流
 
+**先确保 `bisheng` 命令可用**——你可能在一个**新会话**里跑,而命令行是上一次会话装的。若 `bisheng: command not found`(常报成"没有配置 bisheng CLI"),不是没装,多半是**装进了项目局部 venv 或没进 PATH**:
+先在常见位置找 `~/.local/bin/bisheng`、`~/.bisheng-venv/bin/bisheng`、pipx 目录、项目 `./.venv/bin/bisheng`;找到就用它、并软链进 PATH(`mkdir -p ~/.local/bin && ln -sf <找到的路径> ~/.local/bin/bisheng`)。都没有就用 `pipx install` 重装(别装进项目 venv),判据是 `bash -lc 'bisheng --version'` 在全新 shell 里能跑通。
+
 ```bash
 # 0. 若还没登录:管理员给你一把服务账号密钥(bs-sak-…),登录一次(凭据存本机,后面不用再输)
 bisheng login <平台地址> --api-key bs-sak-...      # 或 --api-key-stdin 从标准输入读
