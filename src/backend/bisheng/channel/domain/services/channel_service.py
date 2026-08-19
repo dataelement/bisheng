@@ -3,6 +3,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from hashlib import sha256
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
@@ -82,12 +83,13 @@ from bisheng.common.models.space_channel_member import (
     resolve_channel_relation,
 )
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.message.domain.services.notification_content import build_notify_content
-from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     batch_check_business_visible,
@@ -135,6 +137,19 @@ CHANNEL_MEMBERSHIP_MODEL = {
 # (default 65536). Beyond that, the batched unread query falls back to the
 # per-channel total-minus-read path to avoid a query error.
 _MAX_UNREAD_EXCLUDE_TERMS = 65536
+
+# Upper bound on the number of channel ids OpenFGA may return for the "我加入的"
+# list. Mirrors ``_JOINED_VISIBLE_MAX_RESULTS`` in ``knowledge_space_service`` so
+# the two "visible-ids-first" flows share the same capacity envelope; the
+# permission runtime emits ``capacity_80_percent`` telemetry as the population
+# approaches this ceiling so a real-world tenant approaching it is flagged
+# before the enumeration silently truncates.
+_FOLLOWED_VISIBLE_MAX_RESULTS = 5000
+
+# Chunk size for the ``IN (:ids)`` DB read. Bounds the SQL parse cost and driver
+# parameter buffer without changing behaviour — the visible-id list is dominated
+# by tens/hundreds per user, so a single chunk covers the common case.
+_FOLLOWED_DB_ID_BATCH_SIZE = 500
 
 
 class ChannelResourceAuthorizationPort:
@@ -866,56 +881,67 @@ class ChannelService:
     async def _get_followed_channels(
         self, login_user: UserPayload, pinned_ids: set[str]
     ) -> list[ChannelItemResponse]:
-        """Channels the user can see but did not create."""
-        # 1. Enumerate tenant-scoped candidate channels in bounded cursor pages,
-        #    keeping the loaded rows so we don't have to re-query them later.
-        candidate_map: dict[str, Channel] = {}
-        after_id: str | None = None
-        while True:
-            candidate_page = await self.channel_repository.find_permission_candidates(
-                after_id=after_id,
-                limit=100,
-            )
-            if not candidate_page:
-                break
-            for channel in candidate_page:
-                candidate_map[str(channel.id)] = channel
-            after_id = str(candidate_page[-1].id)
-            if len(candidate_page) < 100:
-                break
-        if not candidate_map:
-            return []
+        """Channels the user can see but did not create.
 
-        # 2. Keep only the channels the user can actually see (single visible check),
-        #    reusing the already-loaded candidate rows and dropping the user's own
-        #    created channels (they belong to the "created" list).
-        visible_map = await batch_check_business_visible(
-            login_user,
+        Uses the "visible-ids-first" pattern (F048 ``list_visible_objects``): one
+        OpenFGA ``StreamListObjects`` call returns the complete set of channel ids
+        the caller can see (creator-of + org-granted + membership); a single
+        indexed ``IN`` read then materialises exactly those rows from the
+        ``channel`` table, with the caller's own created channels excluded at the
+        DB layer (they belong to the "created" list). Mirrors
+        ``KnowledgeSpaceService.get_my_followed_spaces`` so the "我加入的" flow is
+        uniform across resources.
+
+        Replaces the earlier "enumerate tenant candidates + per-id
+        ``batch_check_business_visible``" loop, whose per-target
+        ``ensure_runtime_ready`` / ``ensure_readable`` / resolve fan-out issued
+        several SQL reads per candidate channel — 176 channels became ~700 SQL
+        statements and ~2s wall-time for a single-row response body.
+        """
+        started = perf_counter()
+        runtime = await get_f048_runtime()
+        actor = await resolve_permission_actor(login_user)
+
+        fga_started = perf_counter()
+        visible = await runtime.list_visible_objects(
+            actor,
             resource_type="channel",
-            resource_ids=list(candidate_map.keys()),
+            max_results=_FOLLOWED_VISIBLE_MAX_RESULTS,
         )
-        channels = [
-            channel
-            for channel_id, channel in candidate_map.items()
-            if visible_map.get(channel_id, False) and getattr(channel, "user_id", None) != login_user.user_id
-        ]
-        if not channels:
-            return []
+        fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+        visible_ids = list(visible.object_ids)
 
-        # 3. Membership rows carry the subscribe time + relation for the followed
-        #    rows (a channel visible only via org grant has no membership row).
-        memberships = await self.space_channel_member_repository.find_channel_memberships(
-            user_id=login_user.user_id,
-            roles=[UserRoleEnum.ADMIN, UserRoleEnum.MEMBER],
-            statuses=[MembershipStatusEnum.ACTIVE],
-        )
-        membership_map = {m.business_id: m for m in memberships}
+        channels: list[Channel] = []
+        db_started = perf_counter()
+        for offset in range(0, len(visible_ids), _FOLLOWED_DB_ID_BATCH_SIZE):
+            channels.extend(
+                await self.channel_repository.find_followed_by_visible_ids(
+                    visible_ids[offset : offset + _FOLLOWED_DB_ID_BATCH_SIZE],
+                    tenant_id=actor.current_tenant_id,
+                    exclude_creator_id=login_user.user_id,
+                )
+            )
+        db_elapsed_ms = (perf_counter() - db_started) * 1000
+
+        # Membership rows carry the subscribe time + relation for the followed
+        # rows (a channel visible only via org grant has no membership row). Skip
+        # the query entirely when the visibility set + DB-side creator filter
+        # already yielded no rows — there is nothing to enrich.
+        if channels:
+            memberships = await self.space_channel_member_repository.find_channel_memberships(
+                user_id=login_user.user_id,
+                roles=[UserRoleEnum.ADMIN, UserRoleEnum.MEMBER],
+                statuses=[MembershipStatusEnum.ACTIVE],
+            )
+            membership_map = {m.business_id: m for m in memberships}
+        else:
+            membership_map = {}
 
         # The channel list UI (the header ChannelSwitcher dropdown) only needs the
         # name + pin state; edit/manage/delete are resolved lazily by the settings
-        # button (ChannelActionsMenu -> channel detail) when a channel is opened, so
-        # the list carries no F048 action set at all (the visible check above only
-        # decides membership of the list, it is not echoed back per row).
+        # button (ChannelActionsMenu -> channel detail) when a channel is opened,
+        # so the list carries no F048 action set at all (visibility is what
+        # decides membership of this list, it is not echoed back per row).
         result: list[ChannelItemResponse] = []
         for channel in channels:
             membership = membership_map.get(channel.id)
@@ -936,6 +962,28 @@ class ChannelService:
                     subscribed_at=membership.create_time if membership else None,
                 )
             )
+
+        emit_metric(
+            "permission_visible_list",
+            tenant=actor.current_tenant_id,
+            resource_type="channel",
+            strategy="visible_ids_first_followed",
+            candidate_count=len(visible_ids),
+            visible_count=len(visible_ids),
+            scanned_count=len(visible_ids),
+            scan_amplification=1 if visible_ids else 0,
+            stream_completed=True,
+            capacity=_FOLLOWED_VISIBLE_MAX_RESULTS,
+            db_elapsed_ms=db_elapsed_ms,
+            fga_elapsed_ms=fga_elapsed_ms,
+            total_elapsed_ms=(perf_counter() - started) * 1000,
+            returned_count=len(result),
+            alert=(
+                "capacity_80_percent"
+                if len(visible_ids) >= _FOLLOWED_VISIBLE_MAX_RESULTS * 0.8
+                else None
+            ),
+        )
         return result
 
     async def _calculate_sub_channel_unread_counts(self, channel: Channel, all_read_ids: list[str]) -> dict[str, int]:

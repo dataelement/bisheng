@@ -33,6 +33,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeNoEmbeddingError,
     KnowledgeNotExistError,
     KnowledgeCPEmptyError,
+    KnowledgeSpaceListNotSupportedError,
 )
 from bisheng.common.errcode.llm_tenant import LLMModelNotAccessibleError
 from bisheng.common.schemas.api import resp_200, resp_500, UnifiedResponseModel
@@ -408,6 +409,14 @@ async def get_knowledge(
     infinite-scroll loading on the client.
     """
     knowledge_type = KnowledgeTypeEnum(knowledge_type)
+    # Knowledge spaces have their own dedicated list endpoints; this handler
+    # covers document/QA libraries only. Rejecting SPACE here keeps the
+    # response uniform across identities — the previous behaviour returned an
+    # empty page for regular users and the full set for super admins because
+    # the resource-type mismatch was only detected inside F048 target
+    # resolution, which super_admin bypasses.
+    if knowledge_type is KnowledgeTypeEnum.SPACE:
+        raise KnowledgeSpaceListNotSupportedError.http_exception()
     pinned: Optional[List[int]] = None
     if preferred_ids:
         parsed: List[int] = []

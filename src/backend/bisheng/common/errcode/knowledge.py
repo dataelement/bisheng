@@ -218,3 +218,14 @@ class BackendProcessingError(BaseErrorCode):
 class KnowledgeInvalidCursorError(BaseErrorCode):
     Code: int = 10991
     Msg: str = "Invalid pagination cursor"
+
+
+# F048 visible-first refactor: /api/v1/knowledge is for document/QA libraries
+# (knowledge_library) only. Knowledge spaces have their own list endpoints,
+# and previously this handler returned an empty page for ordinary users but
+# the full set for super admins because super_admin short-circuited before the
+# resource-type mismatch was detected. Reject SPACE explicitly so both roles
+# see the same error.
+class KnowledgeSpaceListNotSupportedError(BaseErrorCode):
+    Code: int = 10992
+    Msg: str = "This endpoint does not list knowledge spaces; use the knowledge-space endpoints instead"

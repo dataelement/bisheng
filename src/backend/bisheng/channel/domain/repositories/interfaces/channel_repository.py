@@ -35,13 +35,22 @@ class ChannelRepository(BaseRepository[Channel, str], ABC):
         pass
 
     @abstractmethod
-    async def find_permission_candidates(
+    async def find_followed_by_visible_ids(
         self,
+        channel_ids: list[str],
         *,
-        after_id: str | None,
-        limit: int,
+        tenant_id: int,
+        exclude_creator_id: int,
     ) -> list[Channel]:
-        """Return one tenant-scoped business cursor page for BatchCheck."""
+        """Load the "followed" subset of a bounded visible-id chunk.
+
+        Given the OpenFGA-resolved visible channel ids for the current user, load
+        the concrete ``channel`` rows in one indexed ``IN`` query, scoped to the
+        current tenant and excluding the caller's own created channels (they
+        belong to the "created" list, not the "followed" list). Mirrors the
+        knowledge-space equivalent ``async_get_joined_spaces_by_visible_ids`` so
+        the "我加入的" pattern stays uniform across resources.
+        """
         pass
 
     @abstractmethod

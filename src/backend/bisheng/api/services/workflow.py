@@ -29,10 +29,14 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
 from bisheng.database.models.user_link import UserLinkDao
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
+from bisheng.common.services.metric_log import emit_metric
+from bisheng.permission.application.access import get_f048_runtime
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     require_business_action,
 )
+from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
 from bisheng.workflow.callback.base_callback import BaseCallback
@@ -49,6 +53,14 @@ if TYPE_CHECKING:
 # wasted permission lookups when most rows are filtered out.
 _FLOW_PERMISSION_SCAN_BATCH_SIZE = 50
 _APP_COMPAT_PAGE_SCAN_BATCH_SIZE = 50
+
+# F048 visible-first: upper bound on the number of visible app ids OpenFGA may
+# return per resource type (workflow + assistant queried separately). Matches
+# the ceiling used for knowledge_library / knowledge_space / channel so all
+# visible-first flows share the same capacity envelope; the permission
+# runtime emits ``capacity_80_percent`` telemetry before this hits the
+# schema-level 5 000 hard cap.
+_APP_VISIBLE_MAX_RESULTS = 5000
 
 
 class WorkflowResourceAuthorizationPort:
@@ -309,6 +321,7 @@ class WorkFlowService(BaseService):
         managed: bool,
         search_description: bool,
         required_action: str,
+        admin_bypass: bool = False,
     ) -> tuple[list[dict], bool, set[str]]:
         """F027 cursor-paginated scan for /workflow/list: keep fetching DB
         batches via keyset, apply ReBAC fine-grained filtering, accumulate
@@ -318,6 +331,14 @@ class WorkFlowService(BaseService):
         Returns ``(visible_items[:page_size], has_more, writeable_ids)`` —
         ``writeable_ids`` aggregates across all scanned batches so the
         ``can_write`` flag in the response stays accurate.
+
+        ``admin_bypass=True`` skips the per-batch F048 BatchCheck and marks
+        every row as writeable; the envelope selects this branch when the
+        actor is a super admin or a tenant admin of the current tenant. The
+        envelope also handles ``flow_ids`` prefiltering (visible-id union for
+        regular users, tag prefilter for admins), so the scan loop only sees
+        the pre-filtered candidate universe and does not need to distinguish
+        between the two callers itself.
         """
         visible: list[dict] = []
         writeable_ids: set[str] = set()
@@ -352,34 +373,40 @@ class WorkFlowService(BaseService):
             if not batch:
                 return visible[:page_size], False, writeable_ids
 
-            permission_map_start = perf_counter()
-            permission_map = await cls._application_action_map(
-                user,
-                batch,
-                tuple(dict.fromkeys((required_action, "edit"))),
-            )
-            kept = [
-                one
-                for one in batch
-                if required_action
-                in permission_map.get(str(one.get("id")), frozenset())
-            ]
-            writeable_ids |= {
-                str(app_id)
-                for app_id, action_codes in permission_map.items()
-                if "edit" in action_codes
-            }
-            logger.info(
-                "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} "
-                "action={} took_ms={:.2f}",
-                user.user_id,
-                flow_type,
-                len(batch),
-                len(kept),
-                len(writeable_ids),
-                required_action,
-                (perf_counter() - permission_map_start) * 1000,
-            )
+            if admin_bypass:
+                # Admin sees everything and edits everything — no BatchCheck,
+                # every row is kept and every id counts toward writeable_ids.
+                kept = batch
+                writeable_ids |= {str(one.get("id")) for one in batch}
+            else:
+                permission_map_start = perf_counter()
+                permission_map = await cls._application_action_map(
+                    user,
+                    batch,
+                    tuple(dict.fromkeys((required_action, "edit"))),
+                )
+                kept = [
+                    one
+                    for one in batch
+                    if required_action
+                    in permission_map.get(str(one.get("id")), frozenset())
+                ]
+                writeable_ids |= {
+                    str(app_id)
+                    for app_id, action_codes in permission_map.items()
+                    if "edit" in action_codes
+                }
+                logger.info(
+                    "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} "
+                    "writeable={} action={} took_ms={:.2f}",
+                    user.user_id,
+                    flow_type,
+                    len(batch),
+                    len(kept),
+                    len(writeable_ids),
+                    required_action,
+                    (perf_counter() - permission_map_start) * 1000,
+                )
 
             for item in kept:
                 visible.append(item)
@@ -639,17 +666,78 @@ class WorkFlowService(BaseService):
                 return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
             flow_ids = [one.resource_id for one in ret]
 
+        # F048 visible-first strategy:
+        #   * Super admins and tenant admins skip the permission system
+        #     entirely and scan the business DB directly; every returned row
+        #     gets ``write=True`` because they are effectively unrestricted.
+        #     Enumerating "all apps in a tenant" through OpenFGA is wasteful
+        #     for these identities and prone to trip the 5 000-object visible
+        #     enumeration cap.
+        #   * Regular users first ask OpenFGA for the small set of workflow
+        #     and assistant ids they can see (``list_visible_objects`` per
+        #     resource_type), pass their union into ``_scan_visible_flows_cursor``
+        #     as an ``id_list`` prefilter, and keep the per-batch BatchCheck
+        #     because visible ⊇ edit ⊇ use — the pre-filter is a valid
+        #     superset for the concrete action, but the action itself still
+        #     needs to be verified per page.
+        actor = await resolve_permission_actor(user)
+        is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
+
+        fga_elapsed_ms = 0.0
+        effective_flow_ids: list[str]
+        visible_id_count: int | None = None
+        if is_admin:
+            # Admin bypass — no permission enumeration; tag prefilter only.
+            effective_flow_ids = flow_ids
+        else:
+            fga_started = perf_counter()
+            try:
+                visible_id_list = await cls._collect_visible_app_ids(actor, flow_type)
+            except PermissionEnumerationIncompleteError:
+                fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+                emit_metric(
+                    "permission_visible_list",
+                    tenant=actor.current_tenant_id,
+                    resource_type="application",
+                    strategy="visible_ids_first_flow_list",
+                    candidate_count=0,
+                    visible_count=0,
+                    scanned_count=0,
+                    scan_amplification=0,
+                    stream_completed=False,
+                    capacity=_APP_VISIBLE_MAX_RESULTS,
+                    db_elapsed_ms=0,
+                    fga_elapsed_ms=fga_elapsed_ms,
+                    total_elapsed_ms=(perf_counter() - total_start) * 1000,
+                    alert="stream_incomplete",
+                )
+                raise
+            fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+            visible_id_count = len(visible_id_list)
+            if flow_ids:
+                tag_set = {str(fid) for fid in flow_ids}
+                visible_id_list = [i for i in visible_id_list if i in tag_set]
+            if not visible_id_list:
+                return PageInfiniteCursorData(
+                    data=[],
+                    page_size=page_size,
+                    has_more=False,
+                    next_cursor=None,
+                )
+            effective_flow_ids = visible_id_list
+
         data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
             user=user,
             name=name,
             status=status,
-            flow_ids=flow_ids,
+            flow_ids=effective_flow_ids,
             flow_type=flow_type,
             cursor=decoded,
             page_size=page_size,
             managed=managed,
             search_description=search_description,
             required_action=required_action,
+            admin_bypass=is_admin,
         )
 
         enrich_start = perf_counter()
@@ -668,7 +756,7 @@ class WorkFlowService(BaseService):
         )
         logger.info(
             "[perf][workflow.list.total] user_id={} flow_type={} page_size={} managed={} action={} "
-            "rows={} has_more={} took_ms={:.2f}",
+            "rows={} has_more={} took_ms={:.2f} strategy={}",
             user.user_id,
             flow_type,
             page_size,
@@ -677,7 +765,31 @@ class WorkFlowService(BaseService):
             len(data),
             has_more,
             (perf_counter() - total_start) * 1000,
+            "admin_bypass" if is_admin else "visible_ids_first",
         )
+
+        if not is_admin and visible_id_count is not None:
+            emit_metric(
+                "permission_visible_list",
+                tenant=actor.current_tenant_id,
+                resource_type="application",
+                strategy="visible_ids_first_flow_list",
+                candidate_count=visible_id_count,
+                visible_count=visible_id_count,
+                scanned_count=len(data),
+                scan_amplification=(visible_id_count / max(len(data), 1)) if visible_id_count else 0,
+                stream_completed=True,
+                capacity=_APP_VISIBLE_MAX_RESULTS,
+                db_elapsed_ms=(perf_counter() - enrich_start) * 1000,
+                fga_elapsed_ms=fga_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - total_start) * 1000,
+                returned_count=len(data),
+                alert=(
+                    "capacity_80_percent"
+                    if visible_id_count >= _APP_VISIBLE_MAX_RESULTS * 0.8
+                    else None
+                ),
+            )
 
         next_cursor: str | None = None
         if has_more and data:
@@ -697,6 +809,47 @@ class WorkFlowService(BaseService):
             has_more=has_more,
             next_cursor=next_cursor,
         )
+
+    @classmethod
+    async def _collect_visible_app_ids(
+        cls,
+        actor,
+        flow_type: int | None,
+    ) -> list[str]:
+        """Union OpenFGA visible-id enumerations across workflow + assistant.
+
+        ``flow_type`` narrows which resource_types are queried: ``None`` fans
+        out to both, otherwise only the matching one is asked. Returns the
+        list of raw resource ids as strings (workflow ids are integer-typed
+        but stored as strings in ``FlowDao.aget_all_apps`` id filters, and
+        assistant ids are UUID hex strings — both are compared against
+        ``sub_query.c.id`` in the UNION ALL query without adapter shims).
+        """
+        resource_types: list[str] = []
+        if flow_type is None:
+            resource_types = ["workflow", "assistant"]
+        elif flow_type == FlowType.WORKFLOW.value:
+            resource_types = ["workflow"]
+        elif flow_type == FlowType.ASSISTANT.value:
+            resource_types = ["assistant"]
+        else:
+            return []
+
+        runtime = await get_f048_runtime()
+        results = await asyncio.gather(
+            *(
+                runtime.list_visible_objects(
+                    actor,
+                    resource_type=resource_type,
+                    max_results=_APP_VISIBLE_MAX_RESULTS,
+                )
+                for resource_type in resource_types
+            )
+        )
+        ids: list[str] = []
+        for result in results:
+            ids.extend(str(object_id) for object_id in result.object_ids)
+        return ids
 
     @classmethod
     async def filter_apps_by_action(
