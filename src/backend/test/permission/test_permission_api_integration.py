@@ -1240,12 +1240,13 @@ class TestPermissionApiIntegration:
             object_id="wf-1",
         )
 
-    def test_permissions_list_hides_legacy_subscription_viewer_tuple(self):
+    def test_knowledge_space_permissions_list_ignores_openfga_only_rows(self):
         app = _make_app(_ViewerUser)
 
         with (
             patch(
-                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                "bisheng.permission.domain.services.fine_grained_permission_service."
+                "FineGrainedPermissionService.get_effective_permission_ids_from_verified_bindings_async",
                 new_callable=AsyncMock,
                 return_value={"manage_space_relation"},
             ),
@@ -1266,7 +1267,7 @@ class TestPermissionApiIntegration:
                         relation="manager",
                     ),
                 ],
-            ),
+            ) as list_fga_permissions,
             patch(
                 "bisheng.permission.api.endpoints.resource_permission._get_relation_models",
                 new_callable=AsyncMock,
@@ -1283,14 +1284,16 @@ class TestPermissionApiIntegration:
                 body = resp.json()
 
         assert body["status_code"] == 200
-        assert [item["subject_id"] for item in body["data"]] == [9]
+        assert body["data"] == []
+        list_fga_permissions.assert_not_awaited()
 
     def test_permissions_list_keeps_bound_viewer_grant(self):
         app = _make_app(_ViewerUser)
 
         with (
             patch(
-                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                "bisheng.permission.domain.services.fine_grained_permission_service."
+                "FineGrainedPermissionService.get_effective_permission_ids_from_verified_bindings_async",
                 new_callable=AsyncMock,
                 return_value={"manage_space_relation"},
             ),
@@ -1351,7 +1354,8 @@ class TestPermissionApiIntegration:
 
         with (
             patch(
-                "bisheng.permission.domain.services.fine_grained_permission_service.FineGrainedPermissionService.get_effective_permission_ids_async",
+                "bisheng.permission.domain.services.fine_grained_permission_service."
+                "FineGrainedPermissionService.get_effective_permission_ids_from_verified_bindings_async",
                 new_callable=AsyncMock,
                 return_value={"manage_space_relation"},
             ),

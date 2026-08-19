@@ -77,10 +77,14 @@ const AiModelSelect = memo(
                     very long ones. `auto` (see SelectContent) keeps the popup
                     from being forced to the trigger's width. No flash on open:
                     the model list is already in memory via `options`. */}
-                <SelectContent auto className="bg-white w-auto min-w-[100px] max-w-[240px]">
+                <SelectContent
+                    auto
+                    className="bg-white w-auto min-w-[100px] max-w-[240px] rounded-2xl"
+                    viewportClassName="flex flex-col gap-1 p-3"
+                >
                     {uniqueOptions.map((opt) => (
-                        <SelectItem key={opt.id + ""} value={opt.id + ""} textValue={opt.displayName}>
-                            <div className="flex min-w-0 items-center py-0.5">
+                        <SelectItem key={opt.id + ""} value={opt.id + ""} textValue={opt.displayName} className="h-8 rounded-lg">
+                            <div className="flex min-w-0 items-center">
                                 {/* Explicit color: SelectContent's text-popover-foreground is
                                     undefined in this app's Tailwind config, so options would
                                     otherwise inherit body black — unify with the other menus. */}

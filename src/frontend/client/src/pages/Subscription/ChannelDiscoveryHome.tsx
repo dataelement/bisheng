@@ -12,7 +12,7 @@ import { EmptyStateIllustration } from "~/components/illustrations";
 import { ChannelSquareCard } from "../ChannelSquareCard";
 import { SERIF_FONT_STACK } from "./ArticleList/ChannelSwitcher";
 
-type DiscoverStatus = "join" | "joined" | "pending" | "private" | "rejected";
+type DiscoverStatus = "join" | "joined" | "pending" | "private";
 
 interface DiscoverChannel {
     id: string;
@@ -56,11 +56,11 @@ const mapRecommendItem = (item: any): DiscoverChannel | null => {
     const sourceInfos: any[] = Array.isArray(item.source_infos) ? item.source_infos : [];
     const avatars = sourceInfos.map((s) => s.source_icon).filter(Boolean).slice(0, 3);
     const subStatus = String(item.subscription_status ?? "");
+    // `rejected` falls through to "join": a rejected application can be resubmitted.
     const status: DiscoverStatus =
         subStatus === "subscribed" ? "joined"
             : subStatus === "pending" ? "pending"
-                : subStatus === "rejected" ? "rejected"
-                    : "join";
+                : "join";
     return {
         id: String(rawId),
         title: String(item.name ?? item.title ?? ""),

@@ -292,6 +292,11 @@ describe("KnowledgeSpaceSettingsPage", () => {
     expect(settingsSurface?.className).toContain("w-full");
     expect(settingsSurface?.className).not.toContain("max-w-[1368px]");
     expect(
+      screen
+        .getByText("com_unified_permission.confirm_create")
+        .closest("footer")?.className,
+    ).toContain("h-16");
+    expect(
       screen.getByPlaceholderText(
         "com_subscription.enter_knowledge_space_name",
       ).className,
@@ -364,6 +369,31 @@ describe("KnowledgeSpaceSettingsPage", () => {
         }) as HTMLButtonElement
       ).getAttribute("aria-checked"),
     ).toBe("true");
+  });
+
+  it("disables private mode for department knowledge spaces", async () => {
+    mockedGetSpaceInfo.mockResolvedValue({
+      ...baseSpace,
+      spaceKind: "department",
+      visibility: VisibilityType.APPROVAL,
+    });
+    mockEditCapabilities(true, true);
+
+    renderPage("/knowledge/space/7/settings");
+    await screen.findByTestId("permission-section");
+
+    const privateMode = screen.getByRole("radio", {
+      name: /com_unified_permission\.private/,
+    }) as HTMLButtonElement;
+    expect(privateMode.disabled).toBe(true);
+
+    fireEvent.click(privateMode);
+    expect(privateMode.getAttribute("data-state")).toBe("unchecked");
+    expect(
+      screen.getByRole("radio", {
+        name: /com_unified_permission\.shared/,
+      }).getAttribute("data-state"),
+    ).toBe("checked");
   });
 
   it("applies the model selected in the reused authorization dialog", async () => {

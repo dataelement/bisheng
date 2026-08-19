@@ -93,7 +93,6 @@ export default function FilePreview({
         if (viewerType !== "pdf" || !fileUrl) return;
 
         pdfjsLib.GlobalWorkerOptions.workerSrc =
-            // @ts-ignore
             __APP_ENV__.BASE_URL + "/pdf.worker.min.js";
 
         pdfjsLib
@@ -102,7 +101,6 @@ export default function FilePreview({
                 // CMaps are required for CID-keyed PDFs with non-embedded CJK
                 // fonts (e.g. GBK-EUC-H government docs) — without them the
                 // text layer renders blank. Shipped to /cmaps/ by viteStaticCopy.
-                // @ts-ignore
                 cMapUrl: __APP_ENV__.BASE_URL + "/cmaps/",
                 cMapPacked: true,
             })
