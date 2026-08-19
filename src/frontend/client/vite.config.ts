@@ -196,6 +196,8 @@ export default defineConfig(({ command, mode }) => {
     sourcemapExclude({ excludeNodeModules: true }),
     compression({
       threshold: 10240,
+      // The production Nginx image serves gzip files but does not include Brotli support.
+      algorithms: [['gzip', { level: 6 }]],
     }),
     createHtmlPlugin({}),
     {
