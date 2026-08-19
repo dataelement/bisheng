@@ -535,6 +535,10 @@ async def _dispatch_file_change_step(context) -> str:
 
 
 async def _execute_step_async(**kwargs) -> dict:
+    from bisheng.knowledge.domain.services.knowledge_space_file_change_execution_coordinator import (
+        ExecutionReconcileStatus,
+    )
+
     coordinator = _build_execution_coordinator()
     identity = await coordinator.load_identity_by_request(
         tenant_id=int(kwargs["tenant_id"]),
@@ -548,6 +552,24 @@ async def _execute_step_async(**kwargs) -> dict:
         step_code=str(kwargs["step_code"]),
         verifier=_build_mutation_executor().execute_and_verify_step,
     )
+    # Self-propel the saga. A step that completes while the request is still
+    # RUNNING means the next step is now ready, but nothing has dispatched it:
+    # acknowledge_step only reconciles (completion check), and the actual
+    # dispatch_ready_steps runs solely inside the coordinate task. Without this
+    # hand-off the next step would wait for the periodic ~60s watchdog, so a
+    # multi-step rename/move/delete/upload drags out to tens of seconds even
+    # though each step takes ~1s. Re-enqueue coordination (bound to the current
+    # execution_token so a superseded generation is ignored) to dispatch the
+    # next ready step immediately; the watchdog stays as the safety net if this
+    # hand-off is ever lost.
+    if status == ExecutionReconcileStatus.RUNNING:
+        coordinate_file_change_execution.apply_async(
+            kwargs={
+                "request_id": int(kwargs["request_id"]),
+                "execution_token": str(kwargs["execution_token"]),
+            },
+            headers={"tenant_id": int(kwargs["tenant_id"])},
+        )
     return {"status": str(status)}
 
 
