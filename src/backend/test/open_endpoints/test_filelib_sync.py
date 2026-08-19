@@ -753,10 +753,10 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         "developer_token_id": 42,
         "developer_token_name": "token-42",
     }
-    assert knowledge_file.user_id == 1
-    assert knowledge_file.user_name == "caller"
-    assert knowledge_file.updater_id == 1
-    assert knowledge_file.updater_name == "caller"
+    assert knowledge_file.user_id == 2
+    assert knowledge_file.user_name == "owner"
+    assert knowledge_file.updater_id == 2
+    assert knowledge_file.updater_name == "owner"
     assert knowledge_file.original_uploader_id == 2
     service._ensure_domain_bound.assert_not_called()
     assert persist_update.call_count == 2

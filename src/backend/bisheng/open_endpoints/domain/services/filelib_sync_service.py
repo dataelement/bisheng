@@ -240,15 +240,15 @@ class FilelibSyncService:
                 created_file = await self.repository.find_by_id(file_id)
             if created_file is None:
                 raise FilelibSyncNotFoundError(msg="created knowledge file does not exist")
-            token_user_id = int(self.login_user.user_id)
-            token_user_name = str(self.login_user.user_name or "")
-            # File owner (DB user_id) is the API token user; original_uploader_id tracks
-            # the responsible person from params, defaulting to the token user when omitted.
-            created_file.user_id = token_user_id
-            created_file.user_name = token_user_name
-            created_file.updater_id = token_user_id
-            created_file.updater_name = token_user_name
-            created_file.original_uploader_id = int(identity.responsible_user_id)
+            owner_user_id = int(identity.responsible_user_id)
+            owner_user_name = str(identity.responsible_user_name or "")
+            # File owner follows params.responsible_person_id/responsible_person when provided;
+            # otherwise defaults to the token-bound user via _resolve_responsible_user().
+            created_file.user_id = owner_user_id
+            created_file.user_name = owner_user_name
+            created_file.updater_id = owner_user_id
+            created_file.updater_name = owner_user_name
+            created_file.original_uploader_id = owner_user_id
             user_metadata = {
                 **(created_file.user_metadata or {}),
                 "external_file_id": params.external_file_id,
