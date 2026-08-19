@@ -47,6 +47,11 @@ class PermissionCatalogDecisionPort(Protocol):
         action: str,
     ) -> bool: ...
 
+    async def effective_actions(
+        self,
+        resource_type: str,
+    ) -> tuple[str, ...]: ...
+
 
 class PermissionScopeFencePort(Protocol):
     async def ensure_readable(
@@ -475,6 +480,16 @@ class F048PermissionService:
         if any(not value.startswith(prefix) for value in objects):
             raise PermissionProjectionFailedError(msg="OpenFGA ListObjects returned an unexpected object type")
         return tuple(dict.fromkeys(value[len(prefix) :] for value in objects))
+
+    async def effective_actions(self, resource_type: str) -> tuple[str, ...]:
+        """All action codes effective for a resource type in the CURRENT catalog.
+
+        Used to report the full capability of a privileged actor, who is
+        authorized on identity and therefore holds no grant rows to explain.
+        """
+
+        await self._catalog.ensure_runtime_ready()
+        return await self._catalog.effective_actions(resource_type)
 
     @staticmethod
     def _normalize_action(action: str) -> str:
