@@ -105,6 +105,7 @@ const APPROVAL_TASK_SCENARIO_TEXT_KEYS: Record<string, string> = {
     menu_access_request: "com_notifications_action_request_menu_access",
     channel_subscribe_request: "com_notifications_action_request_channel",
     knowledge_space_subscribe_request: "com_notifications_action_request_knowledge_space",
+    app_publish_request: "com_notifications_action_request_app_publish",
 };
 
 export function NotificationsDialog({

@@ -12,7 +12,9 @@
 
 ## 架构(子系统深度)
 
-[`architecture/`](architecture/) — 13 篇:总览 / 后端模块 / 工作流引擎 / RAG / Linsight / 双前端 / 数据模型 / 部署 / 开发指南 / 权限 ReBAC / 商业网关 / 多租户 / 游标分页 + 数据库表结构。子系统架构的唯一正文。
+[`architecture/`](architecture/) — 14 篇:总览 / 后端模块 / 工作流引擎 / RAG / Linsight / 双前端 / 数据模型 / 部署 / 开发指南 / 权限 ReBAC / 商业网关 / 多租户 / 游标分页 / 应用工场部署 + 数据库表结构。子系统架构的唯一正文。
+
+装机相关的两篇:平台本体见 [`architecture/08-deployment.md`](architecture/08-deployment.md);**应用工场**(托管应用运行时层,v3.0 新增、默认不装)见 [`architecture/14-app-factory-deployment.md`](architecture/14-app-factory-deployment.md)——含 `app_runtime` / `open_platform` 配置项详解、两种部署形态、⚠️ 升级顺序与排障对照表。
 
 ## 功能文档(SDD 产出)
 

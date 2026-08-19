@@ -137,6 +137,45 @@ class TestForwarding:
         assert response.status_code == 418
         assert response.headers["content-type"].startswith("application/json")
 
+    def test_every_set_cookie_survives_the_hop(self, logged_in, echo_upstream):
+        """Session + CSRF in one response is the ordinary case, not a corner one.
+
+        Django, Rails, Flask-WTF and every "log in then set a CSRF token" flow
+        emit two ``Set-Cookie`` headers at once. Building the response from a
+        Mapping keeps the last one only, and the visitor sees "cannot log in" or
+        "form POST 403" with a completely clean log on both sides — the app did
+        send both cookies, and the proxy did return 200.
+        """
+        echo_upstream.response_headers = [
+            (b"set-cookie", b"sessionid=abc; Path=/; HttpOnly"),
+            (b"set-cookie", b"csrftoken=xyz; Path=/"),
+        ]
+        response = logged_in.get("/apps/foo/login", headers=NAVIGATE_HEADERS)
+
+        cookies = response.headers.get_list("set-cookie")
+        assert len(cookies) == 2, f"a cookie was dropped on the way back: {cookies}"
+        assert any("sessionid=abc" in value for value in cookies)
+        assert any("csrftoken=xyz" in value for value in cookies)
+
+    def test_repeated_response_header_is_not_collapsed(self, logged_in, echo_upstream):
+        """``Set-Cookie`` is the expensive case, but the rule is general."""
+        echo_upstream.response_headers = [(b"vary", b"Accept"), (b"vary", b"Cookie")]
+        response = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
+
+        assert response.headers.get_list("vary") == ["Accept", "Cookie"]
+
+    def test_response_hop_by_hop_headers_are_not_replayed(self, logged_in, echo_upstream):
+        """They describe the upstream hop; replaying them desyncs this one."""
+        echo_upstream.response_headers = [
+            (b"connection", b"keep-alive"),
+            (b"transfer-encoding", b"chunked"),
+            (b"set-cookie", b"sessionid=abc; Path=/"),
+        ]
+        response = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
+
+        assert "keep-alive" not in response.headers.get("connection", "").lower()
+        assert response.headers.get_list("set-cookie") == ["sessionid=abc; Path=/"]
+
     def test_streaming_and_large_body_passthrough(self, logged_in, echo_upstream):
         """Hosted apps stream (SSE, downloads). Buffering would break both."""
         echo_upstream.stream_chunks = [b"x" * 1024] * 64

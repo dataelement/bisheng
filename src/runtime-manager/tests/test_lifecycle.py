@@ -23,10 +23,12 @@ questions, marked ``@pytest.mark.docker`` (CI middleware stage + 114, T075).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
 from runtime_manager.api.schemas import DeployRequest, TierIn
+from runtime_manager.config import set_config
 from runtime_manager.desired_state import get_store
 from runtime_manager.errors import CapacityExhaustedError, ProbeFailedError
 from runtime_manager.lifecycle import LifecycleService, container_name
@@ -117,6 +119,40 @@ def test_readonly_rootfs_and_tmpfs(rtm_config, fake_docker):
     expected_bind = f"{rtm_config.app_data_dir('app-1')}:/data:rw"
     assert host["Binds"] == [expected_bind]
     assert rtm_config.app_data_dir("app-1").is_dir()
+
+
+def test_bind_source_is_the_host_path_when_the_manager_is_containerised(rtm_config, fake_docker):
+    """The compose-shape trap: ``Binds`` is resolved by the *host* daemon.
+
+    When the manager itself runs in a container, ``RTM_DATA_ROOT`` is a path
+    inside that container and handing it to dockerd makes it create a brand-new
+    empty directory of the same name on the host. Everything downstream still
+    works — the app starts, the probe passes — and the SQLite the manager thinks
+    it is managing lives somewhere nobody looks. So the payload must carry the
+    host view while every filesystem call this process makes keeps the local one.
+    """
+    config = rtm_config.with_overrides(host_data_root=Path("/srv/bisheng/app-data"))
+    set_config(config)
+    try:
+        _service(config, fake_docker).deploy(_request())
+    finally:
+        set_config(rtm_config)
+
+    host = fake_docker.last_call("create_container")["payload"]["HostConfig"]
+    assert host["Binds"] == ["/srv/bisheng/app-data/apps/app-1/db:/data:rw"]
+    # ...and the directory this process created is still the one it can reach.
+    assert config.app_data_dir("app-1").is_dir()
+    assert str(config.app_data_dir("app-1")).startswith(str(rtm_config.data_root))
+
+
+def test_bind_source_falls_back_to_the_local_path(rtm_config, fake_docker):
+    """systemd shape — one filesystem view, so the two must not diverge."""
+    assert rtm_config.host_data_root is None
+
+    _service(rtm_config, fake_docker).deploy(_request())
+
+    host = fake_docker.last_call("create_container")["payload"]["HostConfig"]
+    assert host["Binds"] == [f"{rtm_config.app_data_dir('app-1')}:/data:rw"]
 
 
 def test_no_new_privileges(rtm_config, fake_docker):

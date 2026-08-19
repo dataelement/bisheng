@@ -9,9 +9,10 @@ import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOpe
 import { getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
 import { formatDate } from "@/util/utils";
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { locationContext } from "@/contexts/locationContext";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -20,10 +21,13 @@ const useGroups = () => {
     }
     return { groups, loadData }
 }
-const useModules = () => {
+// `multiTenantEnabled` is threaded in from `appConfig` because the audit
+// filter must not offer the 租户管理 module on a single-tenant deployment —
+// it can never match a row there. See `getModulesApi` in controllers/API/log.
+const useModules = (multiTenantEnabled: boolean) => {
     const [modules, setModules] = useState([])
     const loadModules = () => {
-        getModulesApi().then(res => setModules(res.data))
+        getModulesApi({ multiTenantEnabled }).then(res => setModules(res.data))
     }
     return { modules, loadModules }
 }
@@ -76,9 +80,11 @@ const renderObjectName = (log: any, t: (key: string, opts?: any) => string): str
 
 export default function SystemLog() {
     const { t } = useTranslation()
+    const { appConfig } = useContext(locationContext)
+    const multiTenantEnabled = !!appConfig.multiTenantEnabled
     const { users, loadUsers } = useUsers()
     const { groups, loadData } = useGroups()
-    const { modules, loadModules } = useModules()
+    const { modules, loadModules } = useModules(multiTenantEnabled)
     const { page, pageSize, loading, data: logs, total, setPage, filterData } = useTable({ pageSize: 20 }, (param) =>
         getLogsApi({ ...param })
     )
@@ -95,7 +101,7 @@ export default function SystemLog() {
     const [keys, setKeys] = useState({ ...init })
 
     const handleActionOpen = async () => {
-        setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()))
+        setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi({ multiTenantEnabled })))
     }
     const handleSearch = () => {
         const startTime = keys.start && formatDate(keys.start, 'yyyy-MM-dd HH:mm:ss')

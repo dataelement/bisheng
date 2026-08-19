@@ -27,28 +27,61 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
     )
 }
 
+/**
+ * Deployment-shape switches the audit filter has to respect.
+ *
+ * `multi_tenant.enabled` defaults to false on a standard docker install, and
+ * the flag only reaches the frontend through React context
+ * (`appConfig.multiTenantEnabled`). This module must stay free of React, so
+ * callers pass the flag down instead. Defaults keep the full list, so any
+ * caller that does not care is unaffected.
+ */
+export type AuditFilterOptions = {
+    multiTenantEnabled?: boolean
+}
+
+// Audit modules that only ever produce rows on a multi-tenant deployment.
+const MULTI_TENANT_ONLY_MODULES = ['tenant']
+// ...and the action prefixes behind them (`tenant.mount` / `unmount` /
+// `disable` all describe attaching or detaching a CHILD tenant).
+const MULTI_TENANT_ONLY_ACTION_PREFIXES = ['tenant.']
+
+const filterMultiTenantOnly = <T extends { value: string }>(
+    items: T[],
+    multiTenantEnabled: boolean,
+    pick: (item: T) => boolean,
+): T[] => (multiTenantEnabled ? items : items.filter((item) => !pick(item)))
+
 // 系统模块
 // `tenant` / `llm` are synthetic v2 namespaces (action prefix `tenant.*` /
 // `llm.server.*`). Backend `get_audit_logs` maps them to `action LIKE '...'`
 // instead of `system_id = ?`. Keep this list in sync with backend
 // `_V2_NAMESPACE_TO_ACTION_PREFIX` in audit_log.py.
-export async function getModulesApi(): Promise<{ data: any[] }> {
+//
+// On a single-tenant deployment the 租户管理 module is a shell: there is no
+// second tenant to mount, unmount or disable, so picking it can only ever
+// return an empty result set.
+export async function getModulesApi({ multiTenantEnabled = true }: AuditFilterOptions = {}): Promise<{ data: any[] }> {
+    const modules = [
+        { name: 'log.systemIdEnum.chat', value: 'chat' },
+        { name: 'log.systemIdEnum.build', value: 'build' },
+        { name: 'log.systemIdEnum.knowledge', value: 'knowledge' },
+        { name: 'log.systemIdEnum.system', value: 'system' },
+        { name: 'log.systemIdEnum.dashboard', value: 'dashboard' },
+        { name: 'log.systemIdEnum.subscribe', value: 'subscription' },
+        { name: 'log.systemIdEnum.knowledgeSpace', value: 'knowledge_space' },
+        { name: 'log.systemIdEnum.tenant', value: 'tenant' },
+        { name: 'log.systemIdEnum.llm', value: 'llm' },
+        { name: 'log.systemIdEnum.approval', value: 'approval' },
+        { name: 'log.systemIdEnum.openApi', value: 'open_api' },
+        { name: 'log.systemIdEnum.appFactory', value: 'app' },
+    ]
     return {
-        data: [
-            { name: 'log.systemIdEnum.chat', value: 'chat' },
-            { name: 'log.systemIdEnum.build', value: 'build' },
-            { name: 'log.systemIdEnum.knowledge', value: 'knowledge' },
-            { name: 'log.systemIdEnum.system', value: 'system' },
-            { name: 'log.systemIdEnum.dashboard', value: 'dashboard' },
-            { name: 'log.systemIdEnum.subscribe', value: 'subscription' },
-            { name: 'log.systemIdEnum.knowledgeSpace', value: 'knowledge_space' },
-            { name: 'log.systemIdEnum.tenant', value: 'tenant' },
-            { name: 'log.systemIdEnum.llm', value: 'llm' },
-            { name: 'log.systemIdEnum.approval', value: 'approval' },
-            { name: 'log.systemIdEnum.openApi', value: 'open_api' },
-            { name: 'log.systemIdEnum.appFactory', value: 'app' },
-        ],
-
+        data: filterMultiTenantOnly(
+            modules,
+            multiTenantEnabled,
+            (module) => MULTI_TENANT_ONLY_MODULES.includes(module.value),
+        ),
     }
 }
 
@@ -169,8 +202,12 @@ const actions = [
 ];
 
 // 全部操作行为
-export async function getActionsApi() {
-    return actions
+export async function getActionsApi({ multiTenantEnabled = true }: AuditFilterOptions = {}) {
+    return filterMultiTenantOnly(
+        actions,
+        multiTenantEnabled,
+        (action) => MULTI_TENANT_ONLY_ACTION_PREFIXES.some((prefix) => action.value.startsWith(prefix)),
+    )
 }
 
 // 系统模块下操作行为

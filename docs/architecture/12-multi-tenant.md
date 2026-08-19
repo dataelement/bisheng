@@ -366,7 +366,7 @@ WebSocket 走 `WebSocketLoggingMiddleware`，从 ASGI headers 解 Cookie 后调�
 
 **前端入口只有 2 处**：`ModelPage/manage/ScopeBar.tsx`（模型管理）与 `BuildPage/bench/DialogueWork.tsx`（工作台配置）。白名单里的 knowledge / tool / linsight 等**没有 UI 入口**。`components/AdminScopeSelector.tsx` 是零 import 的死代码。
 
-> 已知瑕疵：`DialogueWork.tsx:25` 的 ScopeBar 未加 `multiTenantEnabled` 守卫（ModelPage 侧有），单租户部署下超管在工作台配置页仍会看到「管理视图」下拉。
+> v3.0 修复：`DialogueWork.tsx` 的 ScopeBar 曾缺 `multiTenantEnabled` 守卫（ModelPage 侧有），单租户部署下超管在工作台配置页仍会看到「管理视图」下拉。现两处调用点已一致地写成 `{appConfig.multiTenantEnabled && <ScopeBar .../>}`。
 
 ---
 

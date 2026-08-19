@@ -12,11 +12,23 @@ env var                      backend-side counterpart
 ===========================  =========================================
 ``RTM_HMAC_SECRET``          ``settings.app_runtime.manager_hmac_secret``
 ``RTM_DATA_ROOT``            ``settings.app_runtime.data_root``
+``RTM_HOST_DATA_ROOT``       (deployment-only) the same directory as seen by
+                             the **host** dockerd — see below
 ``RTM_RESERVE_MB``           ``settings.app_runtime.reserve_mb``
 ``RTM_OVERCOMMIT_RATIO``     ``settings.app_runtime.overcommit_ratio``
 ``RTM_BUILD_RESERVE_MB``     ``settings.app_runtime.build_reserve_mb``
 ``RTM_BUILD_INDEX_URL``      ``settings.app_runtime.build_index_url``
 ===========================  =========================================
+
+``RTM_HOST_DATA_ROOT`` exists because ``HostConfig.Binds`` is resolved by the
+**dockerd that creates the container**, not by this process. In the systemd
+shape the manager runs on the host and the two views of the data root are the
+same path, so it may stay empty. Under docker-compose the manager is itself a
+container: ``RTM_DATA_ROOT=/app-data`` is the path *inside* it, while the bind
+handed to dockerd has to be the host side of that same volume — set them both
+and they cannot drift. Getting this wrong is silent: dockerd happily creates a
+brand-new empty directory at the container-internal path on the host, every app
+starts, and its SQLite lives somewhere nobody ever looks.
 
 ``RTM_DOCKER_HOST`` is the D2-A → D2-B switch: empty means the local
 ``/var/run/docker.sock``; pointing it at ``tcp://127.0.0.1:2375`` moves the
@@ -55,6 +67,22 @@ LABEL_PORT = "bisheng.port"
 LABEL_HEALTH_PATH = "bisheng.health.path"
 LABEL_GENERATION = "bisheng.generation"
 
+#: Variables a deployment must set explicitly — the dataclass defaults below are
+#: development conveniences, not deployment values. ``docker/verify-app-runtime-
+#: compose.sh`` asserts the compose file provides every one of them, which is the
+#: gate that would have caught the 3.0 compose file shipping ``APP_PROXY_*``
+#: names nothing reads.
+REQUIRED_ENV: tuple[str, ...] = (
+    "RTM_HOST",  # default is loopback; inside a container that means "nobody can reach me"
+    "RTM_PORT",
+    "RTM_HMAC_SECRET",  # empty = fail closed, every intent answered 401
+    "RTM_DATA_ROOT",
+)
+
+#: Additionally required when *this process itself* runs in a container, where
+#: its filesystem view and the host dockerd's no longer coincide.
+CONTAINERISED_REQUIRED_ENV: tuple[str, ...] = ("RTM_HOST_DATA_ROOT",)
+
 
 def _env_str(name: str, default: str = "") -> str:
     value = os.environ.get(name)
@@ -88,6 +116,12 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_path(name: str) -> Path | None:
+    """Optional path variable — unset and empty both mean "not configured"."""
+    raw = _env_str(name)
+    return Path(raw) if raw else None
+
+
 @dataclass(frozen=True)
 class Config:
     """Immutable process configuration.
@@ -108,7 +142,14 @@ class Config:
     network: str = DEFAULT_NETWORK
 
     # --- storage ----------------------------------------------------------
+    #: Where *this process* reads and writes app data, build contexts and the
+    #: desired-state file.
     data_root: Path = Path(DEFAULT_DATA_ROOT)
+    #: The same directory as the **host** dockerd sees it. ``None`` means "the
+    #: process and the daemon share one filesystem view" — true for the systemd
+    #: shape and for the whole test suite. Only bind mount sources may use it;
+    #: everything this process opens itself must keep using ``data_root``.
+    host_data_root: Path | None = None
 
     # --- capacity admission (D11) ----------------------------------------
     reserve_mb: int = 2048
@@ -153,8 +194,22 @@ class Config:
         return self.data_root / "builds"
 
     def app_data_dir(self, app_id: str) -> Path:
-        """Host side of the only writable persistent path of an instance."""
+        """Process-side view of the only writable persistent path of an instance."""
         return self.apps_root / app_id / "db"
+
+    @property
+    def host_apps_root(self) -> Path:
+        """``apps_root`` as the host dockerd sees it (see ``host_data_root``)."""
+        return (self.host_data_root or self.data_root) / "apps"
+
+    def host_app_data_dir(self, app_id: str) -> Path:
+        """Bind mount **source** for an instance — always a host path.
+
+        The single caller is ``lifecycle.build_container_payload``. Anything
+        that ``mkdir``s, ``chown``s or ``rmtree``s must use
+        :meth:`app_data_dir` instead: those run in this process.
+        """
+        return self.host_apps_root / app_id / "db"
 
     def with_overrides(self, **kwargs) -> Config:
         return replace(self, **kwargs)
@@ -170,6 +225,7 @@ def load_config() -> Config:
         docker_host=_env_str("RTM_DOCKER_HOST"),
         network=_env_str("RTM_NETWORK", DEFAULT_NETWORK) or DEFAULT_NETWORK,
         data_root=Path(_env_str("RTM_DATA_ROOT", DEFAULT_DATA_ROOT) or DEFAULT_DATA_ROOT),
+        host_data_root=_env_path("RTM_HOST_DATA_ROOT"),
         reserve_mb=_env_int("RTM_RESERVE_MB", 2048),
         overcommit_ratio=_env_float("RTM_OVERCOMMIT_RATIO", 0.8),
         build_reserve_mb=_env_int("RTM_BUILD_RESERVE_MB", 2048),

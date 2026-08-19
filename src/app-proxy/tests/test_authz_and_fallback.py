@@ -89,7 +89,11 @@ class TestFallbackPages:
         assert "问卷小助手" in body
         assert "李四" in body
         assert "无访问权限" in body
-        assert "租户管理员" in body
+        # Never "租户管理员": multi_tenant.enabled is off in a standard install,
+        # so that person does not exist (Root cannot be granted one, 19204) and
+        # this process cannot read the switch to find out. See pages.py.
+        assert "平台管理员" in body
+        assert "租户" not in body
         assert "返回广场" in body
         assert "申请" not in body, "本版无在线申请入口"
 
@@ -100,6 +104,7 @@ class TestFallbackPages:
         body = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS).text
         assert "已停用" in body
         assert "问卷小助手" in body
+        assert "租户" not in body
         assert "返回广场" in body
 
     def test_not_found_page_for_draft_pending_deleted_and_unknown(self, logged_in, fake_backend):
@@ -133,7 +138,7 @@ class TestFallbackPages:
         response = logged_in.get("/apps/foo", headers=NAVIGATE_HEADERS)
         assert response.status_code == 200
         assert "未启用应用工场" in response.text
-        assert "超管" in response.text
+        assert "平台管理员" in response.text
 
     def test_pages_are_self_contained(self, logged_in, fake_backend):
         """No CDN, no fonts, no logo URL: this page is what the user sees when

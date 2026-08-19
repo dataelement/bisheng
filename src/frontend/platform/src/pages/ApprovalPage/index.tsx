@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import SelectSearch from "@/components/bs-ui/select/select";
@@ -41,7 +41,15 @@ import {
   type ApprovalScenarioItem,
   type ApprovalScenarioPreset,
 } from "@/controllers/API/approval";
+import { locationContext } from "@/contexts/locationContext";
 import { useTranslation } from "react-i18next";
+import {
+  approverSourceLabel,
+  FIXED_ROLE_VALUES,
+  offerableApproverSources,
+  selectableRoleValues,
+  type TFn,
+} from "./approverSources";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -130,13 +138,6 @@ interface ConditionFieldMeta {
 
 // All label strings below are i18n keys resolved with t() at render time.
 
-// Static fixed identity labels (always present regardless of system roles)
-const FIXED_ROLE_VALUES = [
-  { value: 'admin',        label: 'approvalPage.roleValue.admin' },
-  { value: 'tenant_admin', label: 'approvalPage.roleValue.tenant_admin' },
-  { value: 'dept_admin',   label: 'approvalPage.roleValue.dept_admin' },
-];
-
 // Static menu key options mirroring backend WebMenuResource enum
 // Top-level items only — mirrors the visible toggles in role config (Roles.tsx).
 // Sub-items (create_knowledge, create_app) are excluded: users apply for the
@@ -175,19 +176,6 @@ const CONDITION_FIELD_META: Record<string, ConditionFieldMeta> = {
     ],
   },
 };
-
-// Approver source type i18n key map
-const APPROVER_SOURCE_LABEL_KEYS: Record<string, string> = {
-  direct_user:             'approvalPage.approverSource.direct_user',
-  department_admin:        'approvalPage.approverSource.department_admin',
-  tenant_admin:            'approvalPage.approverSource.tenant_admin',
-  channel_admin:           'approvalPage.approverSource.channel_admin',
-  space_admin:             'approvalPage.approverSource.space_admin',
-  knowledge_space_owner:   'approvalPage.approverSource.knowledge_space_owner',
-  knowledge_space_manager: 'approvalPage.approverSource.knowledge_space_manager',
-};
-
-type TFn = (key: string, opts?: Record<string, string>) => string;
 
 function conditionLabel(
   matchConfig: { field?: string; value?: string } | null | undefined,
@@ -228,6 +216,7 @@ function AddScenarioDialog({
   onConfirm: (preset: ApprovalScenarioPreset) => void;
 }) {
   const { t } = useTranslation("bs");
+  const { appConfig } = useContext(locationContext);
   const available = useMemo(
     () => presets.filter((p) => !existingCodes.has(p.scenario_code)),
     [presets, existingCodes],
@@ -243,8 +232,12 @@ function AddScenarioDialog({
     .map((f) => t(`approvalPage.condition.${f}`, { defaultValue: f }))
     .join("、");
 
+  // This line previews which approver sources the scenario will let you configure,
+  // so it must match the NodeDialog picker one-for-one. Every source is offerable
+  // on both deployment shapes (T046) — single-tenant only relabels `tenant_admin`,
+  // which is why this maps but no longer filters.
   const approverSourceLabels = (preset?.approver_source_types ?? [])
-    .map((s) => t(APPROVER_SOURCE_LABEL_KEYS[s] ?? `approvalPage.approverSource.${s}`, { defaultValue: s }))
+    .map((s) => approverSourceLabel(s, t, undefined, !!appConfig.multiTenantEnabled))
     .join("、");
 
   return (
@@ -362,11 +355,22 @@ function RouteDialog({
   }, [open]);
 
   const { t } = useTranslation("bs");
+  const { appConfig } = useContext(locationContext);
   const fieldMeta = condField ? CONDITION_FIELD_META[condField] : null;
+  // T046: a single-tenant deployment does not offer `tenant_admin` as a *new*
+  // identity, but a route already saved with it keeps its entry — otherwise
+  // reopening the dialog and pressing save would silently blank the condition.
+  const roleValueOptions = useMemo(() => {
+    const selectable = selectableRoleValues(!!appConfig.multiTenantEnabled);
+    const alreadySaved = FIXED_ROLE_VALUES.filter(
+      (v) => v.value === condValue && !selectable.some((s) => s.value === v.value),
+    );
+    return [...selectable, ...alreadySaved];
+  }, [appConfig.multiTenantEnabled, condValue]);
   // For applicant_role: fixed entries use i18n keys → need t(); system roles have real names → no translation
   const allRoleValues = condField === 'applicant_role'
     ? [
-        ...FIXED_ROLE_VALUES.map((v) => ({ value: v.value, label: t(v.label, { defaultValue: v.value }) })),
+        ...roleValueOptions.map((v) => ({ value: v.value, label: t(v.label, { defaultValue: v.value }) })),
         ...systemRoles,  // label is already the display name, skip t()
       ]
     : (fieldMeta?.values ?? []).map((v) => ({
@@ -586,16 +590,6 @@ function FlowDialog({
   );
 }
 
-// i18n keys for all known approver source options
-const APPROVER_SOURCE_OPTIONS = [
-  { value: "direct_user",             labelKey: "approvalPage.approverSource.direct_user" },
-  { value: "department_admin",        labelKey: "approvalPage.approverSource.department_admin" },
-  { value: "knowledge_space_owner",   labelKey: "approvalPage.approverSource.knowledge_space_owner" },
-  { value: "knowledge_space_manager", labelKey: "approvalPage.approverSource.knowledge_space_manager" },
-  { value: "channel_owner",           labelKey: "approvalPage.approverSource.channel_owner" },
-  { value: "channel_manager",         labelKey: "approvalPage.approverSource.channel_manager" },
-];
-
 function NodeDialog({
   open,
   initial,
@@ -629,15 +623,14 @@ function NodeDialog({
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [selectedUserNames, setSelectedUserNames] = useState<string[]>([]);
 
-  // Filter global list to only those allowed for the current scenario
-  const effectiveSourceOptions = allowedSourceTypes
-    ? APPROVER_SOURCE_OPTIONS.filter((o) => allowedSourceTypes.includes(o.value))
-    : APPROVER_SOURCE_OPTIONS;
+  const { appConfig } = useContext(locationContext);
 
-  const getApproverLabel = (type: string) => {
-    const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === type);
-    return opt ? t(opt.labelKey, { defaultValue: type }) : type;
-  };
+  const effectiveSourceOptions = useMemo(
+    () => offerableApproverSources(allowedSourceTypes),
+    [allowedSourceTypes],
+  );
+
+  const getApproverLabel = (type: string) => approverSourceLabel(type, t, undefined, !!appConfig.multiTenantEnabled);
 
   useEffect(() => {
     if (open) {
@@ -777,10 +770,10 @@ function NodeDialog({
                 className="h-7 rounded-full border border-dashed border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 text-xs text-muted-foreground outline-none"
               >
                 <option value="">＋ {t("approvalPage.addApprover")}</option>
-                {effectiveSourceOptions.filter((o) => !sources.some((s) => s.type === o.value)).map(
-                  (o) => (
-                    <option key={o.value} value={o.value}>
-                      {t(o.labelKey, { defaultValue: o.value })}
+                {effectiveSourceOptions.filter((v) => !sources.some((s) => s.type === v)).map(
+                  (v) => (
+                    <option key={v} value={v}>
+                      {approverSourceLabel(v, t, undefined, !!appConfig.multiTenantEnabled)}
                     </option>
                   ),
                 )}
@@ -1115,6 +1108,7 @@ function ApprovalTimeline({ detail }: { detail: ApprovalInstanceDetail }) {
 
 export default function ApprovalPage() {
   const { t } = useTranslation("bs");
+  const { appConfig } = useContext(locationContext);
 
   // ── data ──────────────────────────────────────────────────────────────────
   const [presets, setPresets] = useState<ApprovalScenarioPreset[]>([]);
@@ -2025,10 +2019,7 @@ export default function ApprovalPage() {
                                       className="inline-flex items-center gap-1 rounded-full border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2.5 py-0.5 text-xs text-foreground"
                                     >
                                       <Users size={10} className="text-muted-foreground" />
-                                      {(() => {
-                                        const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
-                                        return opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type);
-                                      })()}
+                                      {approverSourceLabel(src.type, t, src.label, !!appConfig.multiTenantEnabled)}
                                     </span>
                                   );
                                 })}
@@ -2329,14 +2320,13 @@ export default function ApprovalPage() {
                                 </span>
                               ));
                             }
-                            const opt = APPROVER_SOURCE_OPTIONS.find((o) => o.value === src.type);
                             return (
                               <span
                                 key={src.type}
                                 className="inline-flex items-center gap-1 rounded-full border border-border bg-gray-50 dark:bg-gray-50/[0.06] px-2 py-0.5 text-xs text-foreground"
                               >
                                 <Users size={10} className="text-muted-foreground" />
-                                {opt ? t(opt.labelKey, { defaultValue: src.type }) : (src.label ?? src.type)}
+                                {approverSourceLabel(src.type, t, src.label, !!appConfig.multiTenantEnabled)}
                               </span>
                             );
                           })}

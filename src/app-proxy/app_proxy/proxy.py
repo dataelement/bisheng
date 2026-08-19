@@ -134,14 +134,19 @@ def _recovering_response(request: Request, request_id: str, app_name: str | None
     """
     from app_proxy.login_handoff import is_navigation
 
+    accept_language = request.headers.get("Accept-Language")
     if not is_navigation(request):
-        return JSONResponse(error_payload(PAGE_RECOVERING, request_id), status_code=json_status(PAGE_RECOVERING))
+        return JSONResponse(
+            error_payload(PAGE_RECOVERING, request_id, accept_language=accept_language),
+            status_code=json_status(PAGE_RECOVERING),
+        )
     return HTMLResponse(
         render_page(
             PAGE_RECOVERING,
             app_name=app_name,
             square_url=get_config().square_url,
             request_id=request_id,
+            accept_language=accept_language,
         ),
         status_code=PAGE_HTTP_STATUS,
     )
@@ -245,15 +250,32 @@ async def forward(
             upstream.generation,
             (time.monotonic() - started) * 1000,
         )
-        response_headers = [
-            (name, value) for name, value in response.headers.multi_items() if name.lower() not in _RESPONSE_HOP_BY_HOP
-        ]
-        return StreamingResponse(
+        # ``raw``, not ``multi_items()`` or a dict. Both alternatives lose
+        # information a hosted app depends on:
+        #
+        # * a Mapping keeps ONE value per name, and ``Set-Cookie`` is the header
+        #   that is legitimately repeated — an app that sets a session cookie and
+        #   a CSRF cookie in the same response would have one of them silently
+        #   dropped, and the symptom ("cannot log in" / "form POST 403") shows up
+        #   with clean logs on both sides;
+        # * ``multi_items()`` keeps the duplicates but hands back ``str``, which
+        #   httpx decoded with its own guessed charset; re-encoding that as
+        #   latin-1 for ASGI can raise on a header the upstream sent as UTF-8.
+        #
+        # The raw byte pairs are exactly what arrived, so they are exactly what
+        # leaves. ``raw_headers`` is assigned after construction because
+        # ``StreamingResponse(headers=...)`` only accepts a Mapping.
+        proxied = StreamingResponse(
             response.aiter_raw(),
             status_code=response.status_code,
-            headers=dict(response_headers),
             background=BackgroundTask(response.aclose),
         )
+        proxied.raw_headers = [
+            (name, value)
+            for name, value in response.headers.raw
+            if name.lower().decode("latin-1") not in _RESPONSE_HOP_BY_HOP
+        ]
+        return proxied
 
     logger.warning(
         "app_proxy.fallback request_id=%s slug=%s kind=recovering prefix=%s",

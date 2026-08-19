@@ -149,3 +149,123 @@ logger_conf:
       rotation: "00:00"
       retention: "3 Days"
       enqueue: ture
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 应用工场（v3.0 新增）
+#
+# ⚠️ 升级顺序不可颠倒：**先发代码 → 再加下面的键 → 再全量重启**。
+#    后端加载 config.yaml 时对**不认识的顶层键直接抛 KeyError 拒绝启动**
+#    （common/services/config_service.py 的 load_settings_from_yaml）。
+#    也就是说：把 `app_runtime:` / `open_platform:` 加到还没升级到 v3.0 的
+#    镜像上，后端会起不来，症状是容器反复重启而不是"功能没生效"。
+#    正因如此，**下面两块默认整体注释掉**——本文件要能被任何镜像版本安全加载。
+#    升级到 v3.0 镜像之后，再把要用的那一块解开注释（去掉行首的 "# "）并重启。
+#
+# 两个开关互相独立、任意组合都能启动，**默认都是 false = 整层不装**：
+#   - open_platform  开放能力层（本地开发工具包 / CLI 的三个 scope、连接信息面板）
+#   - app_runtime    工场运行时层（runtime-manager + app-proxy + /apps/{slug} 入口）
+# 完整运维说明见 docs/architecture/14-app-factory-deployment.md
+# ══════════════════════════════════════════════════════════════════════════
+
+# ── 开放能力层开关（F049）────────────────────────────────────────────────
+# false：本地开发工具包的三个 scope（model:invoke / identity:read / app:manage）
+#        既不在密钥签发表单里出现，也不接受携带它们的请求（错误码 26023）；
+#        服务账号模块本身始终可用，不受此开关影响。
+# 用 CLI（bisheng login / bisheng deploy）部署托管应用时**必须为 true**——
+# 它签发的密钥需要 app:manage 位。
+# open_platform:
+#   enabled: false
+
+# ── 开放 API 调用链参数（可选，不配则用下面的默认值）───────────────────
+# open_api:
+#   service_account_idle_days: 90       # 多少天无调用后在列表里标记为"闲置"
+#   credential_cache_ttl_seconds: 3     # 凭据校验的 Redis 正缓存秒数；硬上限 5，超过按 5 处理
+
+# ── 工场运行时层（F054）─────────────────────────────────────────────────
+# 这一层可以整层不装：enabled 保持 false 时，平台其余部分零变化，
+# /apps/{slug} 会落到"本环境未启用应用工场"引导页，CLI 部署被 16207 明确拒绝。
+# compose 形态下这两个服务挂在 `app-runtime` profile 后面，不带
+# `--profile app-runtime` 启动就根本不创建（docker/deploy.sh 已自动处理）。
+# app_runtime:
+  # 本机（本部署）是否安装了工场运行时层
+#   enabled: false
+
+  # ── 与 runtime-manager 的通道 ─────────────────────────────────────────
+  # systemd 形态：runtime-manager 是宿主机上的独立单元，用回环地址；
+  # compose 形态：改成 http://runtime-manager:8091（service 名）。
+#   manager_base_url: "http://127.0.0.1:8091"
+
+  # ── 三个共享密钥：**必须替换**，且三个各不相同 ─────────────────────
+  # 生成：openssl rand -hex 32
+  # 空值 = fail-closed（拒绝一切调用），不是"免鉴权"。
+  # 不要把明文写进本文件；用 !env 从环境变量注入（见下方注释形态）。
+  # ⚠️ `!env ${VAR}` 在环境变量**不存在时会直接报错拒启**，所以要么整行注释掉、
+  #    要么保证部署脚本一定注入了该变量。
+  #
+  # manager_hmac_secret: !env ${BISHENG_RTM_HMAC_SECRET}        # backend → runtime-manager 验签；须与 RTM_HMAC_SECRET 一致
+  # proxy_hmac_secret:   !env ${BISHENG_APP_PROXY_HMAC_SECRET}  # app-proxy → backend 内部授权端点验签；须与 APP_PROXY_BACKEND_SECRET 一致
+  # obo_secret:          !env ${BISHENG_APP_OBO_SECRET}         # 注入应用的临时身份令牌签名密钥，**必须不同于 jwt_secret**
+#   manager_hmac_secret: ""
+#   proxy_hmac_secret: ""
+#   obo_secret: ""
+
+  # 注入应用的临时身份令牌有效期（秒），最小 60
+#   obo_ttl_seconds: 900
+
+  # ── 入口地址 ──────────────────────────────────────────────────────────
+  # 用户实际访问平台的对外基地址（含协议与端口，不带结尾斜杠），
+  # 例如 https://bisheng.example.com 或 http://192.168.1.10:3001。
+  # 应用地址 = {entry_base_url}/apps/{slug}。留空时后端只能给出相对地址
+  # /apps/{slug}——浏览器里能用，但二维码、CLI 回显、外发链接都会是残缺的，
+  # 所以**强烈建议配置**。
+#   entry_base_url: ""
+
+  # 单条被反代的 WebSocket 连接的授权寿命上限（秒），最小 60（能力后置，先占位）
+#   ws_max_lifetime_seconds: 28800
+
+  # ── 存储与容量准入 ────────────────────────────────────────────────────
+  # 托管应用的每应用数据目录所在的宿主机目录（{data_root}/apps/{app_id}/db → 容器内 /data）。
+  # 必须是**本机磁盘**：应用的 SQLite 用 WAL，放网络存储会损坏。
+#   data_root: "/opt/bisheng/app-data"
+
+  # 闸①：从实际可用内存（/proc/meminfo 的 MemAvailable，即 free -m 的 available 列）
+  # 里先扣掉这么多 MB 再判断能否放行。这是给平台本体（uvicorn / celery / 灵思 worker /
+  # 商业版 JVM）的抖动留的余量，不是保险系数。
+  # ⚠️ 按 available 配，不要按总内存配。
+#   reserve_mb: 2048
+
+  # 闸②：已运行实例的规格之和 + 本次 ≤ 总内存 × 本比例（CPU 同理按 nproc × 本比例）。
+  # 取值范围 (0, 1]。
+#   overcommit_ratio: 0.8
+
+  # 构建同样过闸，按这个数字预留内存（pip install 的内存尖峰就是这么把机器压垮的）
+#   build_reserve_mb: 2048
+
+  # 构建期注入给容器的包索引（PIP_INDEX_URL）。内网/离线环境填私有镜像源；留空 = 用镜像内默认源。
+#   build_index_url: ""
+
+  # ── 应用包上限（同时是 CLI 上传前自检的取值来源，GET /api/v2/apps/deploy-limits）──
+#   max_package_mb: 50           # 上传包体积上限（MB）
+#   max_unpacked_mb: 200         # 解包后总体积上限（MB），防解压炸弹
+#   max_package_entries: 20000   # 包内条目数上限，防海量小文件
+
+  # ── 出厂资源档位（可选）───────────────────────────────────────────────
+  # 不配 = 用内置三档：轻量 1C/2G · 标准 2C/4G · 性能 4C/8G。
+  # ⚠️ 档位只在**首次启动播种**时写库，之后改本项无效（改档位请走超管界面）。
+  #    小内存机器必须在第一次启动前就配好。配置会**整体替换**内置三档，不是合并。
+  # default_tiers:
+  #   light:
+  #     name: "轻量"
+  #     cpu_millicores: 500      # 注意单位是毫核：500 = 0.5 核
+  #     memory_mb: 512
+  #     description: "内部工具、表单、看板类应用"
+  #     sort_order: 0
+  #   standard:
+  #     name: "标准"
+  #     cpu_millicores: 1000
+  #     memory_mb: 1024
+  #     sort_order: 1
+
+  # 审核人临时预览实例的存活天数，最小 1（能力后置，先占位）
+#   preview_ttl_days: 7

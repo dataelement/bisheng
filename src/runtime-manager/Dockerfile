@@ -14,7 +14,7 @@ WORKDIR /app
 
 # 依赖层单独 COPY：只改代码时不重新解析依赖树。
 COPY pyproject.toml uv.lock /app/
-RUN pip install --no-cache-dir uv && uv export --frozen --no-dev --format requirements-txt > /tmp/req.txt \
+RUN pip install --no-cache-dir uv && uv export --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/req.txt \
     && pip install --no-cache-dir -r /tmp/req.txt && rm -f /tmp/req.txt
 
 COPY runtime_manager /app/runtime_manager

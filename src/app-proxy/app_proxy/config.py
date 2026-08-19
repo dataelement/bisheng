@@ -52,6 +52,25 @@ DEFAULT_LOGIN_PATH = "/admin"
 #: at the end-user SPA root.
 DEFAULT_SQUARE_URL = "/workspace"
 
+#: Variables a deployment must set explicitly. Every default below is a
+#: single-host loopback convenience, so a deployment that leaves any of these
+#: unset is talking to itself: ``backend_base`` / ``manager_base`` point at
+#: ``127.0.0.1`` (in a container, that is the container), and both secrets
+#: default to empty, which is **fail closed** — the process still starts, still
+#: reports healthy, and renders the fallback page on every single request.
+#: ``docker/verify-app-runtime-compose.sh`` asserts the compose file sets them.
+REQUIRED_ENV: tuple[str, ...] = (
+    "APP_PROXY_HOST",
+    "APP_PROXY_PORT",
+    "APP_PROXY_BACKEND_BASE",
+    "APP_PROXY_MANAGER_BASE",
+    "APP_PROXY_BACKEND_SECRET",
+    "APP_PROXY_MANAGER_SECRET",
+)
+
+#: app-proxy keeps no state on disk, so being containerised adds nothing.
+CONTAINERISED_REQUIRED_ENV: tuple[str, ...] = ()
+
 
 def _env_str(name: str, default: str = "") -> str:
     value = os.environ.get(name)

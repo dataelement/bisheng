@@ -207,6 +207,9 @@ class EchoUpstream:
         self.requests: list[dict[str, Any]] = []
         #: Bytes to stream back in chunks — used by the streaming passthrough test.
         self.stream_chunks: list[bytes] | None = None
+        #: Extra response headers as raw pairs, so a test can send the SAME name
+        #: twice (``Set-Cookie``) — the case a Mapping cannot express.
+        self.response_headers: list[tuple[bytes, bytes]] = []
 
     async def __call__(self, scope, receive, send) -> None:
         request = Request(scope, receive)
@@ -225,7 +228,7 @@ class EchoUpstream:
                 {
                     "type": "http.response.start",
                     "status": self.status_code,
-                    "headers": [(b"content-type", b"application/octet-stream")],
+                    "headers": [(b"content-type", b"application/octet-stream"), *self.response_headers],
                 }
             )
             for chunk in self.stream_chunks:
@@ -234,6 +237,7 @@ class EchoUpstream:
             return
 
         response = JSONResponse(record, status_code=self.status_code)
+        response.raw_headers.extend(self.response_headers)
         await response(scope, receive, send)
 
 

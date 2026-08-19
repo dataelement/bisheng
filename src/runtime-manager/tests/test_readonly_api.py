@@ -21,11 +21,13 @@ is a real-daemon question, marked ``@pytest.mark.docker``.
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pytest
 
 from runtime_manager.admission import AdmissionService
 from runtime_manager.api.schemas import DeployRequest, TierIn
+from runtime_manager.config import set_config
 from runtime_manager.desired_state import ALL_PHASES, get_store
 from runtime_manager.lifecycle import LifecycleService, container_name
 from tests.fakes import FakeHostProbe
@@ -247,6 +249,7 @@ def test_runtime_status_shape(rtm_client, rtm_config, fake_docker):
     assert checks["orchestration_backend"]["ok"] is True
     assert checks["application_network"]["ok"] is True
     assert checks["data_root_writable"]["ok"] is True
+    assert checks["host_data_root_mapping"]["ok"] is True
     assert checks["runtime_templates"]["ok"] is True
     assert checks["base_images"]["ok"] is False  # nothing pulled in the fake daemon
     assert all({"name", "ok", "detail"} == set(item) for item in body["preflight"])
@@ -266,6 +269,25 @@ def test_runtime_status_flags_a_missing_application_network(rtm_client, fake_doc
     check = next(item for item in body["preflight"] if item["name"] == "application_network")
     assert check["ok"] is False
     assert "bisheng-apps" in check["detail"]
+
+
+def test_runtime_status_flags_a_relative_host_data_root(rtm_client, rtm_config):
+    """The compose-shape misconfiguration that dockerd rejects on every bind.
+
+    ``RTM_HOST_DATA_ROOT`` is the *host* side of the volume, so a relative value
+    (the shape you get from reusing ``${DOCKER_VOLUME_DIRECTORY:-.}``) makes the
+    daemon refuse every container create. Nothing else in the process can tell
+    you that: it is the daemon's rule, about a path this process never opens.
+    """
+    set_config(rtm_config.with_overrides(host_data_root=Path("./data/app-runtime")))
+    try:
+        body = rtm_client.get("/v1/runtime/status").json()
+    finally:
+        set_config(rtm_config)
+
+    check = next(item for item in body["preflight"] if item["name"] == "host_data_root_mapping")
+    assert check["ok"] is False
+    assert "RTM_HOST_DATA_ROOT" in check["detail"]
 
 
 def test_backend_unavailable_reports_not_500(rtm_client, rtm_config, fake_docker):

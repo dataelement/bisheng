@@ -70,15 +70,15 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
     ),
     26002: (
         "平台不接受这把密钥（不存在、已撤销或已过期——平台不区分这三种成因）",
-        "请租户管理员在服务账号详情页重新签发一把密钥，或改用另一把仍然有效的密钥。",
+        "请平台管理员在服务账号详情页重新签发一把密钥，或改用另一把仍然有效的密钥。",
     ),
     26027: (
         "密钥所属的服务账号已被停用或删除",
-        "请租户管理员启用该服务账号；换一把密钥没有用，问题在账号本身。",
+        "请平台管理员启用该服务账号；换一把密钥没有用，问题在账号本身。",
     ),
     26003: (
         "这把密钥缺少本次操作需要的权限位",
-        "请租户管理员在服务账号详情页编辑该密钥、补勾所缺权限位后重试（无需重新签发）。",
+        "请平台管理员在服务账号详情页编辑该密钥、补勾所缺权限位后重试（无需重新签发）。",
     ),
     26004: (
         "请求携带了身份传递头，而 CLI 从不发送这两个头——这是 CLI 缺陷",
@@ -155,6 +155,10 @@ ERROR_HINTS: dict[int, tuple[str, str]] = {
         "本环境未启用能力总线",
         "本版本不支持能力声明，请从 bisheng-app.yaml 删除 capabilities 段后重发。",
     ),
+    16232: (
+        "本版托管运行时不支持 WebSocket",
+        "删掉声明里的 WebSocket 键；服务端推送改用 SSE 或轮询——托管入口会直接关闭 WS 握手（close 4501），本地连得上不代表线上连得上。",
+    ),
     16241: (
         "安全扫描在包内命中了疑似密钥",
         "按输出里的 文件:行号 移除密钥、改用环境变量引用后重发；平台不会回显命中的值。",
@@ -212,6 +216,7 @@ ERROR_EXIT_CODES: dict[int, int] = {
     16228: EXIT_PRECHECK_FAILED,
     16230: EXIT_PRECHECK_FAILED,
     16231: EXIT_PRECHECK_FAILED,
+    16232: EXIT_PRECHECK_FAILED,
     16241: EXIT_SECRET_FOUND,
     16225: EXIT_SCENE_MISSING,
     16226: EXIT_CAPACITY,
@@ -301,7 +306,7 @@ def error_from_platform(
         next_step = "检查密钥是否有效、是否已过期或被撤销。"
     elif exit_code == EXIT_FORBIDDEN:
         human = f"平台以权限不足拒绝了这次请求（HTTP {http_status}）"
-        next_step = "请租户管理员核对该密钥的权限位。"
+        next_step = "请平台管理员核对该密钥的权限位。"
     else:
         human = f"平台返回未登记的错误码 {code}"
         next_step = "按平台给出的信息处置；若无法判断，请把该错误码报给平台支持。"
@@ -342,7 +347,7 @@ def delegate_refusal() -> CliError:
     return CliError(
         "这把密钥被配置为委托专用（delegate），不能用于本地开发",
         exit_code=EXIT_FORBIDDEN,
-        next_step="请租户管理员另外签发一把不含 delegate 位的服务账号密钥用于 CLI。",
+        next_step="请平台管理员另外签发一把不含 delegate 位的服务账号密钥用于 CLI。",
     )
 
 

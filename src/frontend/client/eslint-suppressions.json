@@ -1700,9 +1700,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 16
     },
-    "no-restricted-syntax": {
-      "count": 4
-    },
     "react-hooks/exhaustive-deps": {
       "count": 3
     }

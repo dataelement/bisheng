@@ -10,9 +10,12 @@
 //                                when the GET envelope returns
 //                                inherited_from_root=true.
 
+import { useContext } from "react";
 import { useTranslation } from "react-i18next";
+import { locationContext } from "@/contexts/locationContext";
 import { Tenant } from "@/types/api/tenant";
 import { User } from "@/types/api/user";
+import { displayTenantName } from "@/utils/tenantDisplayName";
 
 const ROOT_TENANT_ID = 1;
 
@@ -36,11 +39,20 @@ export function ScopeBanner({
     childTenant,
 }: ScopeBannerProps): JSX.Element | null {
     const { t } = useTranslation('model');
+    const { appConfig } = useContext(locationContext);
     const isRootScope = scopeTenantId === null || scopeTenantId === ROOT_TENANT_ID;
     // Resolve the display name for whichever tenant the banner is about.
     // The fallback chain (name → code → "Root") avoids a blank substitution
     // on the rare deployments where the Root tenant has no display name set.
-    const rootName = rootTenant?.tenant_name || rootTenant?.tenant_code || 'Root';
+    // `displayTenantName` localizes the system-seeded "Default Tenant" so the
+    // banner matches what ScopeBar renders instead of leaking the English seed.
+    const rootName = displayTenantName(rootTenant?.tenant_name) || rootTenant?.tenant_code || 'Root';
+
+    // Single-tenant deployments (`multi_tenant.enabled=false`, the default of a
+    // standard docker install) have no child tenants and no scope switcher, so
+    // every branch below — "children inherit this", "you are editing tenant X"
+    // — describes machinery the operator cannot see and cannot use.
+    if (!appConfig.multiTenantEnabled) return null;
 
     if (isGlobalSuper && isRootScope) {
         return (

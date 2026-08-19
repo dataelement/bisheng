@@ -183,7 +183,7 @@
 ### D7：兜底页与过渡态渲染归属 = app-proxy 自渲染（A′），登录回跳靠内联 JS 页
 
 - **备选**：
-  - A. **app-proxy 自渲染 HTML**（4 类兜底 + 2 类过渡 + 登录交接页）— 优点：**URL 不变**（扫码 / 收藏 / 刷新重试语义最稳）、hash 零丢失、client 零改动；缺点：品牌 / 三语 / 深色主题要在 Python 侧再做一小套，`pnpm check-i18n` 覆盖不到
+  - A. **app-proxy 自渲染 HTML**（4 类兜底 + 2 类过渡 + 登录交接页）— 优点：**URL 不变**（扫码 / 收藏 / 刷新重试语义最稳）、hash 零丢失、client 零改动；缺点：品牌 / 三语 / 深色主题要在 Python 侧再做一小套，`pnpm check-i18n` 覆盖不到（**2026-08-19 更新：三语这笔代价已付**——`pages.py` 落了 `_COPY[locale][kind]` 六页 × zh-Hans/en/ja + 手写 `negotiate_locale()` Accept-Language 协商，零新依赖；`check-i18n` 仍覆盖不到，改由 `src/app-proxy/tests/test_pages_i18n.py` 的 parity 测试兜底。**新增一页必须三语同批 + 补 parity 用例**）
   - B. **302 → client SPA 的 gate 路由**（`/workspace/apps/gate/:slug?reason=…`）— 优点：品牌 / 三语 / 主题天然一致；缺点：① gate 路由**必须放在 `AuthLayout` 之外**，否则 `AuthContextProvider` 一挂载就拉 `/user/info`、401 拦截器先跑 `redirectToLogin()`（**首次调用胜出的一次性守卫**，`client/src/utils/loginRedirect.ts:87-106`）→ 写进 `LOGIN_PATHNAME` 的会是 gate 页 URL 而非应用 URL；② `forbidden` / `stopped` 页要应用名与 owner，得再加一个登录态接口或把它们塞 query；③ **过渡页反正只能 A**（gate 页轮询要多一个接口）
   - C. 复用 platform SPA 承接 — 缺点：platform 是管理端，兜底页给的是普通业务用户看的
 - **选定**：**A′ = A 全承接**（4 兜底 + 2 过渡 + 登录交接内联页）；**「未部署」引导页两条路都覆盖不了**（app-proxy 不存在）→ 落 platform SPA `apps/*` 路由（D5）。
@@ -602,6 +602,7 @@ runtime-manager reconcile 循环（15s）
 | 契约 | 形式 | 谁在用 |
 |---|---|---|
 | `AppStateService.{publish, manual_publish, stop, resume, delete}` + 对应 `POST /api/v1/apps/{id}/actions/*` | 内部 Python API + HTTP | **F055**（管线在审批通过 / 手动上线时调用；决议-8：只调不直写）· platform 卡片与详情页 |
+| `AppProvisionService.create_draft(*, name, slug, description, owner_user_id, tenant_id) -> app_id`（落 `app` 行 `state=draft` + F048 owner 投影；slug 冲突答 16103）——**首发建应用的唯一入口** | 内部 Python API | **F055**（首发管线经 `publish_pipeline_service._create_draft:217` 调它，**在 INSERT `app_deployment` 之前**；决议-8：**F055 只调不直写 `app` 表**。⚠️ `app_deployment.app_id` 的列注释与模型 docstring 仍写「先建行、再 `create_draft` 回填」，与今天的实现顺序相反——按实现读，该列在首发路径上其实从不为 NULL） |
 | `AppStateService.stage_version(app_id, version_id)`（落已审批待运行版本，写 `app.pending_version_id`、不改应用态；`resume` / `publish` 取 `pending ?? current`） | 内部 Python API | **F055**（审批通过节点；AC-04「已下线态可落新版本但不自动启用」的唯一落点） |
 | `AppMetaService.update_meta` + `PATCH /api/v1/apps/{app_id}`（不改态 / 不产版本 / 计审计 `app.meta_update`，AC-06） | 内部 Python API + HTTP | **F055**（release-contract「元信息随 deploy 更新」调它，**不另写一份**）· platform 详情页 |
 | **删除事件钩子** `lifecycle_hooks.register_app_deleted_hook(fn)` → 删除动作末尾同步 `on_app_deleted(app_id, actor, tenant_id)`（AC-43） | 内部 Python 回调（**F055 在组合根注册**） | **F055**（收到即取消在途审批单 → 已取消 + 通知审批人，F055 AC-35）。**钩子失败不回滚删除**（写 `app.delete_hook_failed` 审计）→ **F055 侧必须自带防御**：审批单读侧对"应用已删除"独立判定并按已取消呈现 |

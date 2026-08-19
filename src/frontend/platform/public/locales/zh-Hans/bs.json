@@ -1219,7 +1219,9 @@
       "llm": "模型管理",
       "approval": "审批管理",
       "openApi": "开放 API",
-      "appFactory": "应用工场"
+      "open_api": "开放 API",
+      "appFactory": "应用工场",
+      "app": "应用工场"
     },
     "eventTypeEnum": {
       "createChat": "新建会话",
@@ -1340,6 +1342,7 @@
     },
     "objectTypeEnum": {
       "app": "应用",
+      "app_version": "应用版本",
       "none": "无",
       "work_flow": "工作流",
       "flow": "技能",
@@ -1849,6 +1852,7 @@
       "direct_user": "指定用户",
       "department_admin": "申请人部门管理员",
       "tenant_admin": "租户管理员",
+      "tenant_admin_single": "平台管理员",
       "channel_admin": "频道管理员",
       "channel_owner": "频道 Owner",
       "channel_manager": "频道 Manager",
@@ -2111,6 +2115,7 @@
       "draft": "草稿",
       "online": "已上线",
       "pendingCapacity": "待上线（资源不足）",
+      "pendingDeployFailed": "待上线（上线失败）",
       "stopped": "已下线",
       "deleted": "已删除"
     },
@@ -2227,6 +2232,66 @@
       "summary": "已授予 {{total}} 个主体",
       "loading": "加载中…",
       "noManagePermission": "你没有权限管理该应用的可见范围。"
+    },
+    "publishStatus": {
+      "title": "发布与审批",
+      "loading": "加载中…",
+      "loadFailed": "发布状态加载失败",
+      "noPermission": "你没有权限查看该应用的发布状态。",
+      "submit": "提交发布",
+      "submitDisabledHint": "该应用由命令行导入，平台侧没有草稿工作区；请在本地项目中执行 bisheng deploy 提交新版本。",
+      "tierLabel": "资源档位",
+      "tierSpec": "CPU {{cpu}}m / 内存 {{memory}}MB",
+      "approvalNone": "该应用还没有发布审批记录。",
+      "approvalState": {
+        "pending": "待审批",
+        "approved": "已通过",
+        "executing": "执行中",
+        "rejected": "已驳回",
+        "exception": "审批异常",
+        "withdrawn": "已撤回",
+        "cancelled": "已取消",
+        "executeFailed": "执行失败",
+        "unknown": "未知状态"
+      },
+      "submittedAt": "提交时间",
+      "decidedAt": "处理时间",
+      "approvers": "审批人",
+      "rejectReason": "驳回理由",
+      "withdraw": "撤回申请",
+      "withdrawTitle": "确认撤回发布申请",
+      "withdrawDesc": "撤回「{{name}}」的发布申请后，本次申请作废，已收到待办的审批人无需再处理；修改后重新提交会生成新的审批单。",
+      "withdrawDone": "发布申请已撤回",
+      "withdrawFailed": "撤回失败",
+      "pendingTitle": "待上线成因",
+      "pendingCapacity": "审批已通过，但运行环境暂时没有足够资源启动该应用。可稍后点击「手动上线」重试，或联系平台管理员释放资源。",
+      "pendingDeployFailed": "审批已通过，但应用上一次启动失败。请先在「运行日志」中定位原因，修复后重新执行 bisheng deploy，或点击「手动上线」重试。",
+      "schemaChangeTitle": "表结构变更"
+    },
+    "versionList": {
+      "title": "版本记录",
+      "readonlyHint": "版本记录只读，托管应用不提供回滚或版本切换。",
+      "no": "版本",
+      "kind": "类型",
+      "kindInitial": "首发",
+      "kindIteration": "迭代",
+      "submittedAt": "提交时间",
+      "outcome": "状态",
+      "outcomeOnline": "已上线",
+      "outcomeRejected": "已驳回",
+      "outcomeWithdrawn": "已撤回",
+      "outcomePendingOnline": "待上线",
+      "outcomeInReview": "审批中",
+      "current": "运行中",
+      "empty": "暂无版本记录",
+      "loading": "加载中…",
+      "loadFailed": "版本记录加载失败"
+    },
+    "dangerZone": {
+      "title": "危险操作",
+      "delete": "删除应用",
+      "deleteDesc": "删除后将一并移除应用代码、对话历史与应用生产数据，且无法恢复。仅应用负责人可以执行。",
+      "blockedByOnline": "请先下线应用后再删除。"
     }
   }
 }

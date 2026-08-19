@@ -675,3 +675,16 @@
 | T029 | 服务账号 tab 内不放 ScopeBar（超管切租户视角仍走「模型管理」页那一个入口） | 无（design §4.3 前端行未列 ScopeBar） | Radix `TabsContent` 非激活即卸载，切回本 tab 必然重新挂载拉取，切换视角后的数据天然是新的；再放一个切换器会出现两处真相 |
 
 （实现期每条偏差一行，design 同步覆盖为「今天的状态」。）
+
+---
+
+## 跨 Feature 回写受理
+
+> 别的 Feature 请求本 Feature 交付的增量，逐条记「谁请求 / 请求什么 / 交付没交付 / 在哪」。**只追加，不改上面任何任务的勾选**。
+
+| 请求方 | 请求内容 | 状态 | 交付物 |
+|---|---|---|---|
+| **F053 T034 ①** | `WhoamiResponse` 增 `resource_owner: {user_id, user_name}` —— 服务端 `OpenApiPrincipal.resource_owner_user_id` 早就有（`open_api/domain/context.py:37-39`），但 `whoami` 不吐，于是 `bisheng login` 那一刻**看不见这把 key 的资源归属人是谁**。而资源归属人正是此后 `deploy` 出的应用 owner，选错要等到 deploy 之后甚至换人接手才暴露——F049 自己在签发表单上加的那条风险提示，说的就是这个错 | ✅ **已交付**（commit `874bd688b`，2026-08-18） | `open_api/domain/schemas/credential.py` 新增 `WhoamiResourceOwner` + `WhoamiResponse.resource_owner`（可选，`None` 表示该主体无归属人）；CLI 侧 `login` 输出随之解除降级（F053 AC-06 的 `[受阻于 F049 回写]` 标记可撤） |
+| **F053 T034 ④** | 裁定 F053 spec AC-05 的措辞冲突：「`login` 校验入口在开放能力层未部署时不可达」与本 Feature「服务账号模块恒在 + `whoami` 恒在注册」（`api/router.py:123-126`；`core/config/open_platform.py:17-18` 注释逐字 "the service-account module is always on"）矛盾 | ✅ **已裁定**（同 commit `874bd688b`） | **改 F053 spec，不改 F049**——把 `whoami` 也置于开关下等于让 F049 的显式设计破例，并波及已落码的鉴权面。F053 改为「CLI 的 `login` 在该环境不可用并给出可读原因」，由其 T008 的前置探测 + exit 8 兑现 |
+
+（2026-08-19 由收口批登记；本表不影响上方任务勾选状态。）

@@ -1,4 +1,6 @@
+import { useContext } from "react";
 import { useTranslation } from "react-i18next";
+import { locationContext } from "@/contexts/locationContext";
 
 export interface ConfigEnvelopeMeta {
     inherited_from_root?: boolean;
@@ -45,6 +47,16 @@ export function resolveConfigEnvelope<T>(value: any): { data: T | null; meta: Co
 
 export default function ConfigInheritanceBanner({ meta }: { meta?: ConfigEnvelopeMeta | null }) {
     const { t } = useTranslation();
+    const { appConfig } = useContext(locationContext);
+    // Single-tenant deployments (`multi_tenant.enabled=false`, the default of a
+    // standard docker install) always land in the `hasOverride` branch: the
+    // backend short-circuits to `(value, inherited=False, DEFAULT_TENANT_ID,
+    // has_override=True)` and `endpoints/config.py` ships those fields
+    // unconditionally. The banner would then permanently claim "this tenant has
+    // its own configuration" on a platform that has no tenants to compare
+    // against. Every branch here is about Root↔child inheritance, so drop the
+    // whole block rather than reword it.
+    if (!appConfig.multiTenantEnabled) return null;
     if (!meta) return null;
     const inherited = !!meta.inherited_from_root;
     const hasOverride = meta.has_override === true;

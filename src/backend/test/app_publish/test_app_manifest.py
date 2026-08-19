@@ -174,6 +174,66 @@ async def test_secret_reference_rejected_16230(tier_seed):
     assert excinfo.value.code == 16230
 
 
+@pytest.mark.parametrize(
+    "overrides,expected_field",
+    [
+        ({"websocket": {"path": "/ws"}}, "websocket"),
+        ({"ws": True}, "ws"),
+        ({"ws_path": "/ws"}, "ws_path"),
+        ({"websocket_path": "/ws"}, "websocket_path"),
+        ({"websockets": ["/ws"]}, "websockets"),
+        ({"capabilities": {"websocket": True}}, "capabilities.websocket"),
+    ],
+)
+async def test_websocket_declaration_rejected_16232(tier_seed, overrides, expected_field):
+    """A declared WebSocket is refused before the schema can call it an unknown field.
+
+    The whole point is the *answer*, not the rejection: ``extra="forbid"`` would
+    already reject every one of these as 16221 "unknown field, did you mean …",
+    which sends the developer off to rename a key and ship an app whose sockets
+    are closed with 4501 in production while the platform logs stay clean.
+    """
+    from bisheng.common.errcode.app_publish import AppWebSocketUnsupportedError
+
+    with pytest.raises(AppWebSocketUnsupportedError) as excinfo:
+        await _validate(_yaml(**overrides))
+    assert excinfo.value.code == 16232
+    details = excinfo.value.kwargs["details"]
+    assert details["field"] == expected_field
+    assert details["reason"] == "websocket_unsupported"
+
+
+async def test_websocket_rejection_carries_close_code_and_the_replacement(tier_seed):
+    """``details`` matches what the browser showed; ``hints`` say what to build instead."""
+    from bisheng.common.errcode.app_publish import AppWebSocketUnsupportedError
+
+    with pytest.raises(AppWebSocketUnsupportedError) as excinfo:
+        await _validate(_yaml(ws_path="/ws"))
+    assert excinfo.value.kwargs["details"]["ws_close_code"] == 4501, "the code app-proxy closes the upgrade with"
+    joined = " ".join(excinfo.value.kwargs["hints"])
+    assert "SSE" in joined, "a refusal without the replacement is a dead end"
+    assert "4501" in joined
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        # Prose that merely mentions the word is not a declaration.
+        {"description": "WebSocket 聊天室的替代实现"},
+        # Outbound only: the limitation is on the inbound entry, an app that
+        # dials somebody else's socket as a client is unaffected.
+        {"egress": {"domains": ["wss://api.example.com"]}},
+        # ``database.tables[*]`` is ``extra="allow"`` — user data, not a key set
+        # we own; a column named ``ws_state`` must not fail a publish.
+        {"database": {"tables": [{"name": "sessions", "ws_state": "text"}]}},
+    ],
+)
+async def test_websocket_check_does_not_fire_on_user_data(tier_seed, overrides):
+    """The narrow scan is the point — a false positive here blocks a publish for nothing."""
+    outcome = await _validate(_yaml(**overrides))
+    assert outcome.manifest is not None
+
+
 async def test_database_tables_declared_gives_hints_not_reject(tier_seed):
     """This round the platform does not create tables; refusing the declaration would block the script (D3)."""
     outcome = await _validate(_yaml(database={"tables": [{"name": "orders", "columns": []}]}))

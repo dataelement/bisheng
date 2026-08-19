@@ -21,6 +21,8 @@ import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 import { Dialog, DialogContent } from "../ui/Dialog";
 import { ExpandableSearchField } from "../ui/ExpandableSearchField";
+import { AppPublishDetailPanel, isAppPublishScenario } from "./AppPublishDetailPanel";
+import { DetailHeader, formatSerialNo, formatTime, InfoGrid, StatusBadge } from "./ApprovalDetailPrimitives";
 
 type ApprovalCenterTarget = {
   tab?: ApprovalCenterTab;
@@ -42,48 +44,6 @@ function getId(item: { task_id?: number; id?: number; instance_id?: number } | n
   const raw = type === "task" ? (item?.task_id ?? item?.id) : ((item as any)?.instance_id ?? item?.id);
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
-}
-
-function formatSerialNo(instanceId: number, ts?: string | null): string {
-  const d = ts ? new Date(ts) : new Date();
-  return `SP${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}${String(instanceId).padStart(4, "0")}`;
-}
-
-function formatTime(ts?: string | Date | null): string {
-  if (!ts) return "--";
-  const d = new Date(ts as string);
-  if (Number.isNaN(d.getTime())) return String(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-function StatusBadge({ status, instanceStatus, scope, localize }: { status?: string | null; instanceStatus?: string | null; scope: "task" | "instance"; localize: ReturnType<typeof useLocalize> }) {
-  const s = String(status || "").toLowerCase();
-  const is = String(instanceStatus || "").toLowerCase();
-  // Task scope: if my task is approved but instance execution failed, surface the failure.
-  const effective = scope === "task" && s === "approved" && is === "execute_failed" ? "execute_failed" : s;
-  const TASK_MAP: Record<string, { text: string; cls: string }> = {
-    pending:        { text: localize("com_approval_task_badge_pending"),    cls: "bg-[#e8f3ff] text-[#165dff]" },
-    approved:       { text: localize("com_approval_task_badge_approved"),   cls: "bg-[#e8ffea] text-[#00b42a]" },
-    rejected:       { text: localize("com_approval_task_badge_rejected"),   cls: "bg-[#fff2f0] text-[#f53f3f]" },
-    cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
-    skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-[#f7f8fa] text-[#86909c]" },
-    execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
-    exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
-  };
-  const INSTANCE_MAP: Record<string, { text: string; cls: string }> = {
-    pending:        { text: localize("com_approval_status_pending"),        cls: "bg-[#e8f3ff] text-[#165dff]" },
-    approved:       { text: localize("com_approval_status_approved"),       cls: "bg-[#e8ffea] text-[#00b42a]" },
-    executed:       { text: localize("com_approval_status_approved"),       cls: "bg-[#e8ffea] text-[#00b42a]" },
-    rejected:       { text: localize("com_approval_status_rejected"),       cls: "bg-[#fff2f0] text-[#f53f3f]" },
-    withdrawn:      { text: localize("com_approval_status_withdrawn"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
-    cancelled:      { text: localize("com_approval_status_cancelled"),      cls: "bg-[#f7f8fa] text-[#86909c]" },
-    skipped:        { text: localize("com_approval_status_skipped"),        cls: "bg-[#f7f8fa] text-[#86909c]" },
-    execute_failed: { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
-    exception:      { text: localize("com_approval_badge_exception"),       cls: "bg-[#fff7e8] text-[#ff7d00]" },
-  };
-  const MAP = scope === "instance" ? INSTANCE_MAP : TASK_MAP;
-  const { text, cls } = MAP[effective] ?? MAP[s] ?? { text: status ?? "--", cls: "bg-[#f7f8fa] text-[#86909c]" };
-  return <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", cls)}>{text}</span>;
 }
 
 function TimelineStep({ action, operatorName, createTime, detail, localize, isLast }: {
@@ -128,12 +88,22 @@ function formatTitle(
 ): string {
   if (!businessName) return "--";
   if (scenarioCode === "menu_access_request") {
-    return localize("com_approval_menu_access_title" as any, { menuName: businessName, defaultValue: `申请访问${businessName}菜单` }) as string;
+    // defaultValue stays copy-free: the key ships in all three locales, so the
+    // only case it fires is a missing bundle, where the raw name beats a key name.
+    return localize("com_approval_menu_access_title" as any, { menuName: businessName, defaultValue: businessName }) as string;
   }
   return businessName;
 }
 
-const DETAIL_INTERNAL_KEYS = new Set(["menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name"]);
+// Keys the generic two-column grid must never print: internal ids, plus the
+// structured sub-trees the app-publish scenario ships (objects/arrays would
+// render as "[object Object]" under their raw English key name). The dedicated
+// AppPublishDetailPanel renders those; anything not dispatched just hides them.
+const DETAIL_INTERNAL_KEYS = new Set([
+  "menu_key", "space_id", "channel_id", "applicant_user_id", "applicant_user_name",
+  "scenario_code", "app_id", "owner_user_id", "version_id", "deployment_id", "tenant_id",
+  "capabilities", "visibility_snapshot", "tier", "schema_change", "approver_note",
+]);
 
 function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>): string {
   const map: Record<string, string> = {
@@ -147,22 +117,6 @@ function localizeFieldKey(key: string, localize: ReturnType<typeof useLocalize>)
     space_id:      localize("com_approval_field_space_id" as any),
   };
   return map[key] ?? key;
-}
-
-function InfoGrid({ rows }: { rows: [string, string][] }) {
-  return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#f2f3f5] bg-[#f2f3f5]">
-      {rows.map(([label, value]) => (
-        <div key={label} className="bg-white px-3 py-2">
-          <div className="text-[12px] text-[#86909c]">{label}</div>
-          <div className="mt-1 text-[14px] font-medium text-text-primary break-all">{value || "--"}</div>
-        </div>
-      ))}
-      {/* Fill the trailing empty slot on an odd row count so it stays white, not the grid's gray gutter.
-         -ml-px covers the 1px gap gutter on its left so no divider line shows beside the empty cell. */}
-      {rows.length % 2 === 1 && <div className="-ml-px bg-white" />}
-    </div>
-  );
 }
 
 export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCenterDialogProps) {
@@ -327,9 +281,14 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
 
   const runTaskDecision = async (action: "approve" | "reject") => {
     if (!selectedTaskId) return;
+    const comment = decisionComment.trim();
+    // A rejection must say why; approving without a comment stays allowed.
+    if (action === "reject" && !comment) {
+      showToast({ message: localize("com_approval_reject_reason_required"), severity: NotificationSeverity.WARNING });
+      return;
+    }
     setActionLoading(true);
-    const comment = decisionComment.trim() || (action === "approve" ? "同意" : "驳回");
-    try { await decideApprovalTaskApi(selectedTaskId, { action, comment }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
+    try { await decideApprovalTaskApi(selectedTaskId, { action, comment: comment || undefined }); setDecisionComment(""); await loadTasks(selectedTaskId); toast(true); }
     catch { toast(false); } finally { setActionLoading(false); }
   };
   const runWithdraw = () => {
@@ -559,7 +518,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                   <div className="flex items-center justify-end gap-3">
                   {isTaskPending && (
                     <>
-                      <button type="button" disabled={actionLoading}
+                      <button type="button" disabled={actionLoading || !decisionComment.trim()}
                         className="inline-flex h-8 flex-1 items-center justify-center rounded-md border border-[#f53f3f] px-4 text-[14px] font-normal text-[#f53f3f] hover:bg-[#fff2f0] disabled:opacity-60 md:flex-none"
                         onClick={() => runTaskDecision("reject")}>
                         {localize("com_approval_action_reject")}
@@ -647,38 +606,6 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   );
 }
 
-function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenarioName, createTime, localize, onBack }: {
-  title?: string; status?: string; instanceStatus?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>; onBack?: () => void;
-}) {
-  return (
-    // Pinned to the top of the scrolling detail pane so the title/status/serial stay visible while the body scrolls.
-    <div className="sticky top-0 z-10 -mx-5 mb-5 border-b border-[#f2f3f5] bg-white px-5 pb-3 pt-3">
-      <div className="flex items-start gap-3">
-        {/* Compact-only back control — sits to the left of the detail title, split by a short vertical divider.
-            h-6 matches the title line so the arrow centers against it under items-start. */}
-        {onBack && (
-          <div className="flex h-6 shrink-0 items-center gap-3 md:hidden">
-            <button type="button" onClick={onBack} aria-label={localize("com_approval_back")} className="flex items-center text-[#999999]">
-              <Outlined.ArrowLeft className="h-4 w-4" />
-            </button>
-            <span className="h-4 w-px bg-[#e5e6eb]" />
-          </div>
-        )}
-        {/* Title + serial share one column so the serial line aligns with the title, not the back arrow. */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <h3 className="min-w-0 flex-1 text-[16px] font-semibold text-text-primary leading-snug">{title || "--"}</h3>
-            <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} />
-          </div>
-          <p className="mt-1.5 text-[13px] text-[#86909c]">
-            {serialNo} · {scenarioName || "--"} · {formatTime(createTime)}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize>; onBack?: () => void }) {
   const instanceId = detail.instance_id;
   const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
@@ -698,36 +625,45 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
   );
   const showContent = detailEntries.length > 0;
 
+  // Early dispatch, not a scenario registry — one scenario does not earn one.
+  const isAppPublish = isAppPublishScenario(detail.scenario_code);
+
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
-        serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
+      {isAppPublish ? (
+        <AppPublishDetailPanel detail={detail} scope="task" localize={localize} onBack={onBack} />
+      ) : (
+        <>
+          <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
+            serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
 
-      <div>
-        <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
-        <InfoGrid rows={basicRows} />
-      </div>
-
-      {showContent && (
-        <div>
-          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#f2f3f5] bg-[#f2f3f5]">
-            {detailEntries.map(([k, v]) => (
-              <div key={k} className="bg-white px-3 py-2">
-                <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
-                <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
-              </div>
-            ))}
-            {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
+          <div>
+            <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
+            <InfoGrid rows={basicRows} />
           </div>
-        </div>
-      )}
 
-      {detail.reason && (
-        <div>
-          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
-          <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
-        </div>
+          {showContent && (
+            <div>
+              <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#f2f3f5] bg-[#f2f3f5]">
+                {detailEntries.map(([k, v]) => (
+                  <div key={k} className="bg-white px-3 py-2">
+                    <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
+                    <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+                  </div>
+                ))}
+                {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
+              </div>
+            </div>
+          )}
+
+          {detail.reason && (
+            <div>
+              <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
+              <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
+            </div>
+          )}
+        </>
       )}
 
       {((detail.action_logs && detail.action_logs.length > 0) || (detail.tasks && detail.tasks.length > 0) || detail.current_node_name) ? (
@@ -870,36 +806,45 @@ function RequestDetailPanel({ detail, localize, onBack }: { detail: ApprovalInst
     ([k, v]) => !DETAIL_INTERNAL_KEYS.has(k) && k !== "reason" && v !== undefined && v !== null && v !== "",
   );
 
+  // Early dispatch, not a scenario registry — one scenario does not earn one.
+  const isAppPublish = isAppPublishScenario(detail.scenario_code);
+
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
-        scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
+      {isAppPublish ? (
+        <AppPublishDetailPanel detail={detail} scope="instance" localize={localize} onBack={onBack} />
+      ) : (
+        <>
+          <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
+            scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
 
-      <div>
-        <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
-        <InfoGrid rows={basicRows} />
-      </div>
-
-      {detailEntries.length > 0 && (
-        <div>
-          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#f2f3f5] bg-[#f2f3f5]">
-            {detailEntries.map(([k, v]) => (
-              <div key={k} className="bg-white px-3 py-2">
-                <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
-                <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
-              </div>
-            ))}
-            {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
+          <div>
+            <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_basic_info")}</div>
+            <InfoGrid rows={basicRows} />
           </div>
-        </div>
-      )}
 
-      {detail.reason && (
-        <div>
-          <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
-          <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
-        </div>
+          {detailEntries.length > 0 && (
+            <div>
+              <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_business_content")}</div>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-[#f2f3f5] bg-[#f2f3f5]">
+                {detailEntries.map(([k, v]) => (
+                  <div key={k} className="bg-white px-3 py-2">
+                    <div className="text-[12px] text-[#86909c]">{localizeFieldKey(k, localize)}</div>
+                    <div className="mt-1 text-[14px] text-text-primary break-all">{Array.isArray(v) ? v.join(", ") : String(v)}</div>
+                  </div>
+                ))}
+                {detailEntries.length % 2 === 1 && <div className="-ml-px bg-white" />}
+              </div>
+            </div>
+          )}
+
+          {detail.reason && (
+            <div>
+              <div className="mb-2 text-[14px] font-medium text-text-primary">{localize("com_approval_section_apply_reason")}</div>
+              <div className="rounded-lg bg-[#fafbfc] p-4 text-[14px] text-[#4e5969] break-all">{detail.reason}</div>
+            </div>
+          )}
+        </>
       )}
 
       {((detail.action_logs && detail.action_logs.length > 0) || (detail.tasks && detail.tasks.length > 0)) && (

@@ -222,6 +222,27 @@ class AppCapabilityBusDisabledError(AppPublishError):
     Msg: str = "The capability bus is not enabled in this environment; remove the capabilities declaration"
 
 
+class AppWebSocketUnsupportedError(AppPublishError):
+    """The manifest declares an inbound WebSocket endpoint, which this version's entry cannot carry.
+
+    Its own code rather than a generic 16221 for exactly the reason 16230 is
+    its own code: as an "unknown field" the developer is told to rename or
+    delete the key, when the true answer is that **no** manifest spelling buys
+    a WebSocket this version — ``app-proxy`` refuses the upgrade with close
+    code ``4501`` (``login_handoff.WS_CLOSE_NOT_IMPLEMENTED``; the reverse
+    proxy itself is F054 T079/T080).
+
+    Refused rather than accepted-and-ignored for the same reason as 16231: the
+    failure is otherwise invisible. nginx forwards ``Upgrade`` fine, so there
+    is no 502 — the handshake is closed by the peer, the app's own JavaScript
+    sees a ``close`` event, and the platform logs stay clean. An owner has
+    nothing to debug with.
+    """
+
+    Code: int = 16232
+    Msg: str = "WebSocket is not supported by the hosted runtime in this version"
+
+
 # ---------------------------------------------------------------------------
 # 16240-16249 — secret scan
 # ---------------------------------------------------------------------------

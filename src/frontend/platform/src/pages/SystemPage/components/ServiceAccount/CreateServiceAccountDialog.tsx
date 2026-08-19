@@ -44,6 +44,12 @@ export function CreateServiceAccountDialog({
   const [owner, setOwner] = useState<DepartmentUserOption[]>([])
   const [loading, setLoading] = useState(false)
 
+  // Single-tenant deployments have exactly one tenant, so naming it in the
+  // picker hint only adds a concept the operator never sees anywhere else.
+  const ownerPlaceholder = appConfig.multiTenantEnabled
+    ? t("create.resourceOwnerPlaceholderTenant")
+    : t("create.resourceOwnerPlaceholder")
+
   const handleClose = () => {
     if (loading) return
     setName("")
@@ -116,7 +122,7 @@ export function CreateServiceAccountDialog({
               multiple={false}
               value={owner}
               onChange={setOwner}
-              placeholder={t("create.resourceOwnerPlaceholder")}
+              placeholder={ownerPlaceholder}
             />
             <p className="text-sm text-muted-foreground">{t("create.resourceOwnerTip")}</p>
             {/* Extra ownership consequences that only exist once apps can be deployed. */}
@@ -126,7 +132,11 @@ export function CreateServiceAccountDialog({
               </p>
             )}
           </div>
-          <p className="text-sm text-muted-foreground">{t("create.tenantFixedTip")}</p>
+          {/* The tenant a service account belongs to is only a decision worth
+              explaining when more than one tenant exists. */}
+          {appConfig.multiTenantEnabled && (
+            <p className="text-sm text-muted-foreground">{t("create.tenantFixedTip")}</p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" disabled={loading} onClick={handleClose}>

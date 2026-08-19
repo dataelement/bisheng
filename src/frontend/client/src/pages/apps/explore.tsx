@@ -19,6 +19,10 @@ const appFlowOriginKey = (flowId: string) => `app-flow-origin:${flowId}`;
 const appLastOriginKey = 'app-last-origin';
 /** F054 hosted application — the one card type that leaves this SPA. */
 const HOSTED_APP_FLOW_TYPE = 35;
+/** Catch-all tab id shared with AgentNavigation — apps carrying no home tag. */
+const UNCATEGORIZED = 'uncategorized';
+/** Sentinel understood by `getChatOnlineApi` as "do not filter by tag". */
+const ALL_CATEGORIES = -1;
 
 export default function ExplorePlaza() {
     // Null until the navigation has its tags and can say which tab is the
@@ -35,6 +39,9 @@ export default function ExplorePlaza() {
     const [hasMore, setHasMore] = useState(true);
     const loaderRef = useRef<HTMLDivElement>(null);
     const loadMoreLockRef = useRef(false);
+    // Bumped by every first-page request. A response whose ticket no longer
+    // matches has been superseded by a newer tab/keyword and is discarded.
+    const listSeqRef = useRef(0);
     const pageSize = 20;
 
     const navigate = useNavigate()
@@ -53,16 +60,40 @@ export default function ExplorePlaza() {
         return 1;
     }, [isAtLeast768, isAtLeast1024]);
 
+    // Tab and keyword are alternative filters, never combined: a search spans
+    // every category, so picking a tab drops the keyword and gives the user
+    // that tab's own contents back. Must stay referentially stable —
+    // AgentNavigation keys its initial tag load off this callback.
+    const handleCategoryChange = useCallback((categoryId: number | string) => {
+        setActiveTabId(categoryId);
+        setSearchQuery('');
+    }, []);
+
     // Modify Fetch Function
     const fetchAgents = useCallback(async (query: string, categoryId: number | string, currentPage: number, isAppend: boolean) => {
-        if (loading || loadingMore) return;
+        // Infinite scroll stays serialized. A first-page request never is: it
+        // carries a new tab or keyword, and the old shared lock silently dropped
+        // it whenever one was still in flight — the grid then kept showing the
+        // previous filter's apps with the new keyword sitting in the box.
+        if (isAppend && (loading || loadingMore)) return;
+        const seq = isAppend ? listSeqRef.current : ++listSeqRef.current;
         if (isAppend) setLoadingMore(true);
         else setLoading(true);
         try {
-            const result = categoryId === 'uncategorized'
-                ? await getUncategorized(currentPage, pageSize, query)
-                : await getChatOnlineApi(currentPage, query, categoryId as number, pageSize);
+            const keyword = query.trim();
+            // Search spans every category. An app carrying no home tag only ever
+            // shows up under the "uncategorised" tab, so a tag-scoped search made
+            // it unfindable from any other tab — the tab the plaza lands on by
+            // default whenever home tags are configured (F056 AC-08). While a
+            // keyword is present the tab filter is therefore dropped, and the
+            // active tab is un-highlighted so the widened scope is visible.
+            const result = keyword
+                ? await getChatOnlineApi(currentPage, keyword, ALL_CATEGORIES, pageSize)
+                : categoryId === UNCATEGORIZED
+                    ? await getUncategorized(currentPage, pageSize)
+                    : await getChatOnlineApi(currentPage, '', categoryId as number, pageSize);
 
+            if (seq !== listSeqRef.current) return;
             const pageData = (result as any).data || [];
 
             const formattedResults = pageData.map((item: any) => ({
@@ -76,10 +107,14 @@ export default function ExplorePlaza() {
             setHasMore(pageData.length >= pageSize);
         } catch (error) {
             console.error("Failed to fetch agents:", error);
+            if (seq !== listSeqRef.current) return;
             if (!isAppend) setAgents([]);
         } finally {
+            // The append lane owns `loadingMore` alone, so it always clears it.
+            // A superseded first page must NOT clear `loading` — the request
+            // that replaced it is still running and owns the spinner.
             if (isAppend) setLoadingMore(false);
-            else setLoading(false);
+            else if (seq === listSeqRef.current) setLoading(false);
         }
     }, [loading, loadingMore]);
 
@@ -241,7 +276,11 @@ export default function ExplorePlaza() {
                     <AppSearchBar query={searchQuery} onSearch={setSearchQuery} />
                 </div>
                 <div className="order-1 max-[576px]:order-2 w-full min-w-0">
-                    <AgentNavigation onCategoryChange={setActiveTabId} onRefresh={() => setRefreshTrigger(prev => prev + 1)} />
+                    <AgentNavigation
+                        onCategoryChange={handleCategoryChange}
+                        onRefresh={() => setRefreshTrigger(prev => prev + 1)}
+                        searchActive={searchQuery.trim().length > 0}
+                    />
                 </div>
             </div>
 

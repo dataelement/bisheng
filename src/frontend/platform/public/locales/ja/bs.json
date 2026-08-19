@@ -1219,7 +1219,9 @@
       "llm": "モデル管理",
       "approval": "承認管理",
       "openApi": "オープン API",
-      "appFactory": "アプリ工場"
+      "open_api": "オープン API",
+      "appFactory": "アプリ工場",
+      "app": "アプリ工場"
     },
     "eventTypeEnum": {
       "createChat": "新規チャット作成",
@@ -1340,6 +1342,7 @@
     },
     "objectTypeEnum": {
       "app": "アプリ",
+      "app_version": "アプリバージョン",
       "none": "なし",
       "work_flow": "ワークフロー",
       "flow": "スキル",
@@ -1849,6 +1852,7 @@
       "direct_user": "指定ユーザー",
       "department_admin": "申請者の部署管理者",
       "tenant_admin": "テナント管理者",
+      "tenant_admin_single": "プラットフォーム管理者",
       "channel_admin": "チャンネル管理者",
       "channel_owner": "チャンネルオーナー",
       "channel_manager": "チャンネルマネージャー",
@@ -2111,6 +2115,7 @@
       "draft": "下書き",
       "online": "公開中",
       "pendingCapacity": "公開待ち（リソース不足）",
+      "pendingDeployFailed": "公開待ち（起動失敗）",
       "stopped": "オフライン",
       "deleted": "削除済み"
     },
@@ -2227,6 +2232,66 @@
       "summary": "{{total}} 件の対象に付与済み",
       "loading": "読み込み中…",
       "noManagePermission": "このアプリの公開範囲を管理する権限がありません。"
+    },
+    "publishStatus": {
+      "title": "公開と承認",
+      "loading": "読み込み中…",
+      "loadFailed": "公開状態の読み込みに失敗しました",
+      "noPermission": "このアプリの公開状態を閲覧する権限がありません。",
+      "submit": "公開を申請",
+      "submitDisabledHint": "このアプリはコマンドラインから取り込まれており、プラットフォーム側に下書きワークスペースがありません。ローカルのプロジェクトで bisheng deploy を実行して新しいバージョンを提出してください。",
+      "tierLabel": "リソース区分",
+      "tierSpec": "CPU {{cpu}}m / メモリ {{memory}}MB",
+      "approvalNone": "このアプリにはまだ公開承認の記録がありません。",
+      "approvalState": {
+        "pending": "承認待ち",
+        "approved": "承認済み",
+        "executing": "実行中",
+        "rejected": "却下",
+        "exception": "承認エラー",
+        "withdrawn": "取り下げ済み",
+        "cancelled": "キャンセル済み",
+        "executeFailed": "実行失敗",
+        "unknown": "不明な状態"
+      },
+      "submittedAt": "提出時刻",
+      "decidedAt": "処理時刻",
+      "approvers": "承認者",
+      "rejectReason": "却下理由",
+      "withdraw": "申請を取り下げ",
+      "withdrawTitle": "公開申請を取り下げますか？",
+      "withdrawDesc": "「{{name}}」の公開申請を取り下げると、この申請は無効になり、すでにタスクを受け取った承認者は対応が不要になります。修正後に再提出すると新しい申請が作成されます。",
+      "withdrawDone": "公開申請を取り下げました",
+      "withdrawFailed": "取り下げに失敗しました",
+      "pendingTitle": "公開待ちの原因",
+      "pendingCapacity": "承認は通りましたが、実行環境に起動できるだけのリソースが一時的にありません。しばらくしてから「手動公開」で再試行するか、プラットフォーム管理者にリソースの解放を依頼してください。",
+      "pendingDeployFailed": "承認は通りましたが、前回の起動に失敗しました。「実行ログ」で原因を特定し、修正後に bisheng deploy を再実行するか、「手動公開」で再試行してください。",
+      "schemaChangeTitle": "テーブル構造の変更"
+    },
+    "versionList": {
+      "title": "バージョン記録",
+      "readonlyHint": "バージョン記録は閲覧のみです。ホスティングアプリではロールバックやバージョン切り替えは提供しません。",
+      "no": "バージョン",
+      "kind": "種別",
+      "kindInitial": "初回",
+      "kindIteration": "改訂",
+      "submittedAt": "提出時刻",
+      "outcome": "状態",
+      "outcomeOnline": "公開済み",
+      "outcomeRejected": "却下",
+      "outcomeWithdrawn": "取り下げ済み",
+      "outcomePendingOnline": "公開待ち",
+      "outcomeInReview": "承認中",
+      "current": "実行中",
+      "empty": "バージョン記録がありません",
+      "loading": "読み込み中…",
+      "loadFailed": "バージョン記録の読み込みに失敗しました"
+    },
+    "dangerZone": {
+      "title": "危険な操作",
+      "delete": "アプリを削除",
+      "deleteDesc": "削除するとアプリのコード・会話履歴・本番データもあわせて削除され、復元できません。実行できるのはアプリ担当者のみです。",
+      "blockedByOnline": "先にアプリをオフラインにしてから削除してください。"
     }
   }
 }

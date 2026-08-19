@@ -17,11 +17,17 @@ interface Category {
 interface AgentNavigationProps {
     onCategoryChange: (categoryId: number | string) => void
     onRefresh: () => void
+    /**
+     * A keyword search is running. Search results span every category, so no
+     * tab is highlighted while one is active — clicking a tab ends the search
+     * (the parent clears the keyword) and the highlight comes back.
+     */
+    searchActive?: boolean
 }
 
 const UNCATEGORIZED = 'uncategorized'
 
-export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigationProps) {
+export function AgentNavigation({ onCategoryChange, onRefresh, searchActive = false }: AgentNavigationProps) {
     const { user } = useAuthContext();
     const localize = useLocalize();
 
@@ -93,7 +99,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
     }
 
     const renderTab = (id: number | string, label: string) => {
-        const isActive = activeCategory === id;
+        const isActive = !searchActive && activeCategory === id;
         return (
             <button
                 key={id}

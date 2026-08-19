@@ -14,6 +14,7 @@ import {
 } from "@/controllers/API/hostedApp"
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { versionTerminalStateI18nKey } from "../types"
 
 interface VersionsTabProps {
   appId: string
@@ -63,32 +64,44 @@ export function VersionsTab({ appId, contentSlot = null }: VersionsTabProps) {
             </tr>
           </thead>
           <tbody>
-            {versions.map((version) => (
-              <tr key={version.version_id} className="border-t">
-                <td className="px-3 py-2">{`v${version.version_no}`}</td>
-                <td className="px-3 py-2">
-                  {t(
-                    version.kind === "initial"
-                      ? "hostedApp.versions.kindInitial"
-                      : "hostedApp.versions.kindIteration",
-                  )}
-                </td>
-                <td className="px-3 py-2">{version.terminal_state || "-"}</td>
-                <td className="px-3 py-2">{version.submitted_at || "-"}</td>
-                <td className="px-3 py-2">
-                  {version.is_current && (
-                    <span className="mr-1 rounded-sm bg-emerald-100 px-1 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                      {t("hostedApp.versions.current")}
-                    </span>
-                  )}
-                  {version.is_pending && (
-                    <span className="rounded-sm bg-amber-100 px-1 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                      {t("hostedApp.versions.pending")}
-                    </span>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {versions.map((version) => {
+              // Mapped, never printed raw: `online` / `rejected` / `withdrawn`
+              // are wire values, and an owner reading "withdrawn" in a Chinese
+              // UI is reading a database column. A version with no latched
+              // outcome keeps the dash — the marker column next door already
+              // says whether it is staged or still under approval.
+              const outcomeKey = versionTerminalStateI18nKey(
+                version.terminal_state,
+              )
+              return (
+                <tr key={version.version_id} className="border-t">
+                  <td className="px-3 py-2">{`v${version.version_no}`}</td>
+                  <td className="px-3 py-2">
+                    {t(
+                      version.kind === "initial"
+                        ? "hostedApp.versions.kindInitial"
+                        : "hostedApp.versions.kindIteration",
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {outcomeKey ? t(outcomeKey) : "-"}
+                  </td>
+                  <td className="px-3 py-2">{version.submitted_at || "-"}</td>
+                  <td className="px-3 py-2">
+                    {version.is_current && (
+                      <span className="mr-1 rounded-sm bg-emerald-100 px-1 text-xs text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                        {t("hostedApp.versions.current")}
+                      </span>
+                    )}
+                    {version.is_pending && (
+                      <span className="rounded-sm bg-amber-100 px-1 text-xs text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                        {t("hostedApp.versions.pending")}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

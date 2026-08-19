@@ -1236,7 +1236,9 @@
       "llm": "Model Management",
       "approval": "Approval Management",
       "openApi": "Open API",
-      "appFactory": "App factory"
+      "open_api": "Open API",
+      "appFactory": "App factory",
+      "app": "App factory"
     },
     "eventTypeEnum": {
       "createChat": "Create Session",
@@ -1357,6 +1359,7 @@
     },
     "objectTypeEnum": {
       "app": "Application",
+      "app_version": "Application Version",
       "none": "None",
       "work_flow": "Workflow",
       "flow": "Skill",
@@ -1899,6 +1902,7 @@
       "direct_user": "Specified User",
       "department_admin": "Applicant's Dept Admin",
       "tenant_admin": "Tenant Admin",
+      "tenant_admin_single": "Platform Admin",
       "channel_admin": "Channel Admin",
       "channel_owner": "Channel Owner",
       "channel_manager": "Channel Manager",
@@ -2166,6 +2170,7 @@
       "draft": "Draft",
       "online": "Online",
       "pendingCapacity": "Pending (insufficient resources)",
+      "pendingDeployFailed": "Pending (start failed)",
       "stopped": "Offline",
       "deleted": "Deleted"
     },
@@ -2282,6 +2287,66 @@
       "summary": "{{total}} subject(s) granted",
       "loading": "Loading…",
       "noManagePermission": "You do not have permission to manage this application's visibility."
+    },
+    "publishStatus": {
+      "title": "Release & approval",
+      "loading": "Loading…",
+      "loadFailed": "Failed to load the release state",
+      "noPermission": "You do not have permission to view this application's release state.",
+      "submit": "Submit for release",
+      "submitDisabledHint": "This application was imported from the CLI and has no draft workspace on the platform. Run bisheng deploy in the local project to submit a new version.",
+      "tierLabel": "Resource tier",
+      "tierSpec": "CPU {{cpu}}m / memory {{memory}}MB",
+      "approvalNone": "This application has no release approval yet.",
+      "approvalState": {
+        "pending": "Awaiting approval",
+        "approved": "Approved",
+        "executing": "In progress",
+        "rejected": "Rejected",
+        "exception": "Approval exception",
+        "withdrawn": "Withdrawn",
+        "cancelled": "Cancelled",
+        "executeFailed": "Execution failed",
+        "unknown": "Unknown"
+      },
+      "submittedAt": "Submitted at",
+      "decidedAt": "Decided at",
+      "approvers": "Approvers",
+      "rejectReason": "Rejection reason",
+      "withdraw": "Withdraw request",
+      "withdrawTitle": "Withdraw this release request?",
+      "withdrawDesc": "Withdrawing the release request for \"{{name}}\" voids it, and approvers who already have the task no longer need to act. Submitting again after changes creates a new request.",
+      "withdrawDone": "Release request withdrawn",
+      "withdrawFailed": "Failed to withdraw the request",
+      "pendingTitle": "Why it is pending",
+      "pendingCapacity": "Approved, but the runtime does not currently have enough resources to start this application. Retry later with \"Bring online\", or ask a platform administrator to free capacity.",
+      "pendingDeployFailed": "Approved, but the application failed to start last time. Find the cause under \"Run logs\", fix it and run bisheng deploy again, or retry with \"Bring online\".",
+      "schemaChangeTitle": "Table structure change"
+    },
+    "versionList": {
+      "title": "Version records",
+      "readonlyHint": "Version records are read-only; hosted applications offer no rollback and no version switch.",
+      "no": "Version",
+      "kind": "Kind",
+      "kindInitial": "Initial",
+      "kindIteration": "Iteration",
+      "submittedAt": "Submitted at",
+      "outcome": "Status",
+      "outcomeOnline": "Online",
+      "outcomeRejected": "Rejected",
+      "outcomeWithdrawn": "Withdrawn",
+      "outcomePendingOnline": "Pending online",
+      "outcomeInReview": "Under approval",
+      "current": "Running",
+      "empty": "No version records yet",
+      "loading": "Loading…",
+      "loadFailed": "Failed to load the version records"
+    },
+    "dangerZone": {
+      "title": "Danger zone",
+      "delete": "Delete application",
+      "deleteDesc": "Deleting removes the application's code, conversation history and production data, and cannot be undone. Only the owner can do this.",
+      "blockedByOnline": "Take the application offline before deleting it."
     }
   }
 }

@@ -79,8 +79,12 @@ def render_verdict_response(
 ) -> Response:
     """One refusal, two renderings — HTML for people, JSON for code (D7)."""
     config = get_config()
+    accept_language = request.headers.get("Accept-Language")
     if not is_navigation(request):
-        return JSONResponse(error_payload(kind, request_id), status_code=json_status(kind))
+        return JSONResponse(
+            error_payload(kind, request_id, accept_language=accept_language),
+            status_code=json_status(kind),
+        )
 
     if kind == DECISION_LOGIN:
         return HTMLResponse(render_login_handoff(config.login_path), status_code=PAGE_HTTP_STATUS)
@@ -91,6 +95,7 @@ def render_verdict_response(
         owner_name=verdict.owner_name if verdict else None,
         square_url=config.square_url,
         request_id=request_id,
+        accept_language=accept_language,
     )
     return HTMLResponse(html, status_code=PAGE_HTTP_STATUS)
 

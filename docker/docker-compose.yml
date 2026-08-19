@@ -271,14 +271,31 @@ services:
       # 所有编排意图被回 401，而 backend 会把它折叠成 16121「编排器不可用」——
       # 排查时容易误判成 dockerd 挂了。
       RTM_HMAC_SECRET: ${BISHENG_RTM_HMAC_SECRET:-}
+      # ⚠️ 这两个变量指的是**同一个目录的两种视角**，必须同时给。
+      #   RTM_DATA_ROOT       = 本容器内看到的路径（进程自己 mkdir/chown/读写用）
+      #   RTM_HOST_DATA_ROOT  = 宿主上看到的路径（交给宿主 dockerd 做 bind 用）
+      # runtime-manager 通过 docker.sock 让**宿主 dockerd** 创建应用容器，
+      # HostConfig.Binds 由宿主解释；只给 RTM_DATA_ROOT 的话宿主会在
+      # /app-data/... 凭空建一个空目录，应用照样起、探活照样过，只是它的
+      # SQLite 落在谁也不看的地方。systemd 形态两者相同，所以那边可以不设。
       RTM_DATA_ROOT: /app-data
+      RTM_HOST_DATA_ROOT: ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}
     volumes:
       - /etc/localtime:/etc/localtime:ro
       # 这是全平台唯一被允许挂 docker socket 的地方（arch-guard RULE-10 的另一
       # 半：backend 编译期与运行期都不得持有编排访问面）。D2-B 的
       # docker-socket-proxy 变体是 Wave 4 的事，届时只改 RTM_DOCKER_HOST。
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${DOCKER_VOLUME_DIRECTORY:-.}/data/app-runtime:/app-data
+      # 源路径写成与 RTM_HOST_DATA_ROOT **逐字相同的表达式**，这样两者不可能漂移。
+      # 不能沿用 ${DOCKER_VOLUME_DIRECTORY:-.}：它默认是相对路径 `.`，compose 自己
+      # 会相对本文件解析，但作为环境变量原样传进去后 dockerd 只接受绝对路径。
+      - ${BISHENG_APP_DATA_ROOT:-/opt/bisheng/app-data}:/app-data
+    networks:
+      # default：backend / app-proxy 靠服务名找它。
+      # bisheng-apps：启动探活是 manager 进程**直接 HTTP 访问应用容器在该网络上的
+      # bridge IP**（probe.py:95），不在这张网上就永远探不通。
+      - default
+      - bisheng-apps
     restart: on-failure
 
   app-proxy:
@@ -290,14 +307,50 @@ services:
       TZ: Asia/Shanghai
       APP_PROXY_HOST: '0.0.0.0'
       APP_PROXY_PORT: '8090'
-      APP_PROXY_BACKEND_BASE_URL: 'http://backend:7860'
+      # ⚠️ 变量名以 app_proxy/config.py 顶部的契约表为准，**不要照猜**。曾经写成
+      # APP_PROXY_BACKEND_BASE_URL / APP_PROXY_HMAC_SECRET：进程照常启动、容器
+      # healthy，但两个 base 都停在 127.0.0.1 默认值、两个密钥都是空串（fail
+      # closed），于是**每个请求都渲染「暂时无法访问」**。同样的坑 systemd 那份
+      # 单元文件（features/v3.0.0/054-app-domain-runtime/deploy/）里逐字记着。
+      APP_PROXY_BACKEND_BASE: 'http://backend:7860'
+      APP_PROXY_MANAGER_BASE: 'http://runtime-manager:8091'
       # 与 backend 的 app_runtime.proxy_hmac_secret 一致。
-      APP_PROXY_HMAC_SECRET: ${BISHENG_APP_PROXY_HMAC_SECRET:-}
+      APP_PROXY_BACKEND_SECRET: ${BISHENG_APP_PROXY_HMAC_SECRET:-}
+      # 与 backend 的 app_runtime.manager_hmac_secret 一致 = runtime-manager 的
+      # RTM_HMAC_SECRET，同一把密钥，别再生成第二个。
+      APP_PROXY_MANAGER_SECRET: ${BISHENG_RTM_HMAC_SECRET:-}
     volumes:
       - /etc/localtime:/etc/localtime:ro
+    networks:
+      # default：nginx 用 `app-proxy` 这个服务名做变量式 upstream 解析
+      #（docker/nginx/conf.d/default.conf:65-67），backend 也在这张网上。
+      # bisheng-apps：它拿到的 upstream 是应用容器的 bridge IP（design D5.1），
+      # 跨 bridge 网络会被 docker 的隔离规则丢包，必须同网。
+      - default
+      - bisheng-apps
     # 每个请求都要向 backend 问一次入口判定（3s 缓存 × 30s 宽限）。
+    # runtime-manager 是路由表的唯一真相（design D5.1），一起排序。
     depends_on:
       - backend
+      - runtime-manager
     restart: on-failure
     # 刻意**不挂** docker socket：它只做解析路由 / 剥头 / 注入身份 / 转发，
     # 给它编排权限是纯粹的权限扩散。
+
+# ── 托管应用专用网络 ────────────────────────────────────────────────────
+# runtime-manager 只**读**这张网（docker_backend.py:161-166「网络由部署方创建」），
+# 它绝不自己建——一个会偷偷建网的编排器会把"新机器上第一次发布必挂"这件事藏起来。
+# 那么 compose 形态下的"部署方"就是这个文件。
+#
+# `name:` 必须显式写死：compose 默认会加项目名前缀（docker_bisheng-apps），而
+# runtime-manager 是用裸 Docker API 建应用容器的，NetworkMode 取的是
+# RTM_NETWORK / DEFAULT_NETWORK = `bisheng-apps` 这个真名，对不上就 404 network
+# not found，每次 deploy 都失败。
+#
+# 两个 service 都显式列了 `networks:`，这是有意的：一旦给 service 写了 networks，
+# 它就**不再自动接 default**，而 nginx→app-proxy、backend→runtime-manager 都靠
+# default 上的服务名解析，所以两张网都得列上。
+networks:
+  bisheng-apps:
+    name: bisheng-apps
+    driver: bridge

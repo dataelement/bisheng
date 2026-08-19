@@ -18,6 +18,8 @@ Two numbers in there are load bearing:
 
 Data lives outside the instance (AC-39): ``{data_root}/apps/{app_id}/db`` is
 bind-mounted at ``/data`` and is untouched by stop, destroy, crash or rebuild.
+(That path is the *host* one — ``Config.host_app_data_dir`` — whenever the
+manager is containerised; see ``config.RTM_HOST_DATA_ROOT``.)
 Only ``destroy(purge_volume=True)`` — the owner's explicit delete — removes it
 (AC-40). The bind is a *host* directory on purpose: the per-app SQLite runs in
 WAL mode, which needs shared memory between processes and therefore must never
@@ -174,8 +176,15 @@ def build_container_payload(
 
     Pure function on purpose: this is the artefact the security review reads and
     the unit tests assert against, so it must be derivable without a daemon.
+
+    ``Binds`` is the one field here that is **not** in this process's own frame
+    of reference: the daemon that creates the container resolves it, so it must
+    carry the *host* path (``host_app_data_dir``), never the path this process
+    opens (``app_data_dir``). The two coincide in the systemd shape and diverge
+    the moment the manager itself runs in a container — silently, because dockerd
+    just creates a fresh empty directory at whatever it is handed.
     """
-    data_dir = config.app_data_dir(app_id)
+    host_data_dir = config.host_app_data_dir(app_id)
     return {
         "Image": image_ref,
         "Env": [f"{key}={value}" for key, value in sorted(env.items())],
@@ -207,7 +216,7 @@ def build_container_payload(
             # AC-17 — read-only root, one ephemeral scratch, one persistent path.
             "ReadonlyRootfs": True,
             "Tmpfs": {"/tmp": "rw,noexec,nosuid,size=64m"},
-            "Binds": [f"{data_dir}:/data:rw"],
+            "Binds": [f"{host_data_dir}:/data:rw"],
             "SecurityOpt": ["no-new-privileges:true"],
             # AC-33 — never published; the bridge address is the only way in.
             "PortBindings": {},

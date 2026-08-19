@@ -163,7 +163,12 @@ def _report(emitter: Emitter, base_url: str, whoami: dict[str, Any], account: di
         # publish, and picking the wrong one is the exact mistake the issuing
         # form warns about.
         emitter.info("  资源归属人: 平台当前版本未返回该字段，请在服务账号详情页确认")
-    emitter.info(f"  租户: {whoami.get('tenant_id')}")
+    # Printed only when the platform sends it. A single-tenant install has one
+    # (Root) tenant, so the id is a constant the developer can do nothing with,
+    # and "租户" is a word that deployment shape is supposed to never show. The
+    # platform decides — the CLI cannot read the multi_tenant switch.
+    if whoami.get("tenant_id") is not None:
+        emitter.info(f"  租户: {whoami.get('tenant_id')}")
     emitter.info(f"  密钥: {whoami.get('key_mask') or '(平台未返回掩码)'}")
     emitter.info(f"  到期时间: {whoami.get('expires_at') or '未设置'}")
     emitter.info(f"  凭据已写入 {credentials.credentials_path()}（仅当前用户可读写）")

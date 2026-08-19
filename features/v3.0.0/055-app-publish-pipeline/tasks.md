@@ -15,7 +15,7 @@
 | spec.md | ✅ 已评审 | 2026-08-17 初稿 + 同日独立审查 33 条修订，65 AC 定稿（决议-1～9） |
 | design.md | ✅ 已评审 | 2026-08-17 初版 + 同日评审 15 条修订（D1–D16 / 30 坑）；接手时的第一入口 |
 | tasks.md | ✅ 已拆解（2026-08-17） | 本文；70 任务 / 7 Wave / 53 条 `[MVP-核心]`（2026-08-17 独立审查 14 条修订：Celery 登记 / 组合根接线 / 跨 Wave 执行序 / 档位依赖链 / 图标落地 / 16207 闸 / T044·T027 拆分 / 路径与 i18n 补齐 / 建桶接线 / 顺延任务测试载体 / 追溯表订正 / T051 上提） |
-| 实现 | 🚧 进行中 | 42 / 70 完成（Wave 1 + Wave 2 + **Wave 3.1–3.4**（T024–T041）落地，2026-08-17；`uv run pytest test/app_publish` **301 passed / 1 xfailed**，`test/app_publish test/app_runtime` 与 `test/app_runtime test/app_publish` 两种顺序各 **530 passed / 7 skipped(F054 docker) / 1 xfailed**）。剩余 Wave 3：3.5 事件触达（T042/T043）· 3.6–3.7 前端（T044–T048）· 3.8 `withdraw` 守卫（T051）· 3.9 114 验证与上游回写（T049/T050）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
+| 实现 | 🚧 进行中 | **46 / 70 完成**（Wave 1 + Wave 2 + **Wave 3.1–3.5**（T024–T043）+ **3.8**（T051）+ **T050**（上游回写）落地。2026-08-17 落 T024–T041；**2026-08-19 收口批**核实并勾上 T042 / T043（事件触达——实现早于勾选，服务与两个调用点在 3.1–3.4 那批就已随 `publish_approval_service` / `publish_online_service` 落地）、完成 T051（`withdraw` 终态守卫 + 18118）。`pytest test/app_publish` **343 passed**（2026-08-19 实测，含新增 `test_publish_notification.py` 14 例 + `test_withdraw_guard.py` 15 例）。⚠️ `test/approval` 有 13 例失败，逐条归因为**本批之前就红的既有漂移**（4–5 例本地 MySQL 未起、6 例 fake 与被测 API 漂移、2 例断言漂移），无一走 `withdraw_instance`——详见 T051 偏差记录与 followup）。剩余 Wave 3：3.6–3.7 前端（T044–T048，**代码已在工作区落地但本文未勾**——本次收口 agent 未收到那几波的实施结论，不替它们勾）· 3.9 只剩 **T049**（114 部署与手动验证；T050 上游回写已于 2026-08-19 完成并勾选）。偏差处理见 design.md 顶部调整原则 + `docs/SDD-Guide.md` §3-§4 |
 
 ---
 
@@ -67,7 +67,7 @@ T001–T007（Wave 1，可并行）
 - **T002**（`database/models/resource_tier.py` 落共享层）—— 与 F054 只读契约相关：模型放共享层就是为了不让 `app_runtime` 反向 import `app_publish`（C1 / D16）；**arch-guard 不管 domain 层跨模块方向，靠 review 维持**。
 - **T050**（回写 F053 spec AC-32 / F054 design + tasks；同 PR 更新 `.claude/skills/approval-module/SKILL.md`）。
 
-**依赖 F054 的任务ID（跨 Feature，签名变更须回头改本文）**：F054 **T001**（`app` / `app_version` 模型与 DAO）· **T006**（`AppState` 枚举 + `DEFAULT_TIERS`）· **T047**（`orchestrator_client` 门面）· **T049**（`create_app` / `stage_version` / 取版规则）· **T051**（五个状态动作 + `lifecycle_hooks`）· **T053**（`AppMetaService.update_meta`）· **T057**（`/api/v1/apps/*` 端点）· **T064**（`useHostedAppActions`）· **T066/T067**（详情页壳与发布 tab slot）。依赖 F049 的：**T005**（`open_api_subject` `Depends` 工厂）· **T002/T003**（`api_credential.KEY_PREFIX` / `KEY_SECRET_LENGTH` 常量、`OpenApiPrincipal.resource_owner_user_id`）· **T005**（`app:manage` 位注册）。
+**依赖 F054 的任务ID（跨 Feature，签名变更须回头改本文）**：F054 **T001**（`app` / `app_version` 模型与 DAO）· **T006**（`AppState` 枚举 + `DEFAULT_TIERS`）· **T047**（`orchestrator_client` 门面）· **T049**（`AppProvisionService.create_draft` / `stage_version` / 取版规则）· **T051**（五个状态动作 + `lifecycle_hooks`）· **T053**（`AppMetaService.update_meta`）· **T057**（`/api/v1/apps/*` 端点）· **T064**（`useHostedAppActions`）· **T066/T067**（详情页壳与发布 tab slot）。依赖 F049 的：**T005**（`open_api_subject` `Depends` 工厂）· **T002/T003**（`api_credential.KEY_PREFIX` / `KEY_SECRET_LENGTH` 常量、`OpenApiPrincipal.resource_owner_user_id`）· **T005**（`app:manage` 位注册）。
 
 ---
 
@@ -218,7 +218,7 @@ T001–T007（Wave 1，可并行）
 
 - [x] **T021**: `[MVP-核心]` `publish_pipeline_service.accept()` 实现（同步前段）
   **文件**: `src/backend/bisheng/app_publish/domain/services/publish_pipeline_service.py`（新，本任务只落 `accept()`）
-  **逻辑**: 按 design §4.1-A ① 的顺序：归属判定（`principal.resource_owner_user_id == app.owner_user_id`，否 → 16205）→ 大小闸 → 落临时盘 → `put_object` 到 `bisheng-apps` → 解包安全闸 + 解包大小闸 + 条目数闸 → 读 `bisheng-app.yaml` → `manifest_validator`（T009）→ 本地引用校验 → **首发**：调 F054 `AppStateService.create_app(manifest, owner_user_id, tenant_id)` 建草稿应用（**不直写 `app` 表**）→ 在途审批单闸（16251）/ 待上线态闸（16252）→ INSERT `app_deployment(stage=received, status=running)` → `apply_async` 后段 → 返回 `{deployment_id, app_id, version_id}`。**本段绝不发任何编排器 RPC**（D1-C 的兑现：秒级错误秒级回）。审计 `app.release.submit`。
+  **逻辑**: 按 design §4.1-A ① 的顺序：归属判定（`principal.resource_owner_user_id == app.owner_user_id`，否 → 16205）→ 大小闸 → 落临时盘 → `put_object` 到 `bisheng-apps` → 解包安全闸 + 解包大小闸 + 条目数闸 → 读 `bisheng-app.yaml` → `manifest_validator`（T009）→ 本地引用校验 → **首发**：调 F054 `AppProvisionService.create_draft(name, slug, description, owner_user_id, tenant_id)` 建草稿应用（**不直写 `app` 表**；本文原写 `AppStateService.create_app`，2026-08-19 按实现真名更正——「建应用」不是状态迁移，故不在 `AppStateService` 上）→ 在途审批单闸（16251）/ 待上线态闸（16252）→ INSERT `app_deployment(stage=received, status=running)` → `apply_async` 后段 → 返回 `{deployment_id, app_id, version_id}`。**本段绝不发任何编排器 RPC**（D1-C 的兑现：秒级错误秒级回）。审计 `app.release.submit`。
   **测试**: T020 全部通过。
   **覆盖 AC**: AC-01, AC-02, AC-03, AC-04, AC-05
   **依赖**: T020, T031
@@ -308,7 +308,7 @@ T001–T007（Wave 1，可并行）
 - [x] **T030**: `[MVP-核心]` `publish_approval_service` 测试（Gate 组装 / 前置闸 / 首节点通知 / 草稿不可访问）
   **文件**: `src/backend/test/app_publish/test_publish_approval_service.py`（新）
   **逻辑**: 断言 Gate 的组装范式、两个"静默"语义的调用方兜底、首节点通知自发。
-  **测试**: `test_gate_assembled_per_request_with_fresh_registry_and_handler`（范式逐字照 `channel_service.py:1523-1530`：`ApprovalRegistry.with_default_presets()` → `register_handler(...)` → `ApprovalGate(registry=...)`；**引擎本就没有全局单例注册表**，K1 ②）→ AC-23 / `test_active_instance_checked_before_gate_raises_16251`（Gate 命中 `find_duplicate_active_instance` 会**静默返回既有实例**，靠它兜 = CLI 显示"提交成功"但什么都没提交，坑 8）→ AC-03 / `test_pending_online_checked_before_gate_raises_16252` → AC-03 / `test_scenario_disabled_raises_maps_to_16225_not_16226`（一码一义红线）→ AC-23 / `test_first_node_notification_sent_by_us_not_gate`（`approval_gate.py:232-248` 只建 task + 写审计、**不发站内信**，三个既有场景都在自己那侧补发，坑 5）→ AC-64 / `test_business_key_is_deployment_id`（一次发布尝试 = 一个审批单）→ AC-23 / `test_draft_app_not_accessible_before_approval`（首发在审批通过前，除审批人外任何其他用户不可访问——**MVP 期的落点是 F054 `create_app` 的 `authorize_created(protected=True)` 默认仅 owner 可见**；审读视图 / 预览试用两条审批人通道随 Wave 4）→ AC-30
+  **测试**: `test_gate_assembled_per_request_with_fresh_registry_and_handler`（范式逐字照 `channel_service.py:1523-1530`：`ApprovalRegistry.with_default_presets()` → `register_handler(...)` → `ApprovalGate(registry=...)`；**引擎本就没有全局单例注册表**，K1 ②）→ AC-23 / `test_active_instance_checked_before_gate_raises_16251`（Gate 命中 `find_duplicate_active_instance` 会**静默返回既有实例**，靠它兜 = CLI 显示"提交成功"但什么都没提交，坑 8）→ AC-03 / `test_pending_online_checked_before_gate_raises_16252` → AC-03 / `test_scenario_disabled_raises_maps_to_16225_not_16226`（一码一义红线）→ AC-23 / `test_first_node_notification_sent_by_us_not_gate`（`approval_gate.py:232-248` 只建 task + 写审计、**不发站内信**，三个既有场景都在自己那侧补发，坑 5）→ AC-64 / `test_business_key_is_deployment_id`（一次发布尝试 = 一个审批单）→ AC-23 / `test_draft_app_not_accessible_before_approval`（首发在审批通过前，除审批人外任何其他用户不可访问——**MVP 期的落点是 F054 `AppProvisionService.create_draft` 里的 `authorize_created(protected=True)` 默认仅 owner 可见**；审读视图 / 预览试用两条审批人通道随 Wave 4）→ AC-30
   **覆盖 AC**: AC-03, AC-23, AC-30, AC-64
   **依赖**: T029
 
@@ -401,17 +401,19 @@ T001–T007（Wave 1，可并行）
 
 #### 3.5 事件触达
 
-- [ ] **T042**: `[MVP-核心]` 六类触达测试（收件人解析 + 消息不承载操作）
+- [x] **T042**: `[MVP-核心]` 六类触达测试（收件人解析 + 消息不承载操作）
   **文件**: `src/backend/test/app_publish/test_publish_notification.py`（新）
   **逻辑**: 断言 AC-64 六类事件的接收方与 AC-65 的"只通知不承载操作"发送契约。
   **测试**: `test_approval_created_notifies_approvers`（Gate 不发、由我们自发，坑 5）→ AC-64 / `test_approved_and_rejected_notify_owner` → AC-64 / `test_withdrawn_notifies_approvers_who_received_task` → AC-64 / `test_cancelled_by_delete_notifies_approvers_new_action_code`（`approval_instance_cancelled`）→ AC-64 / `test_pending_online_notifies_owner_and_tenant_admin_root_super_admin` → AC-64 / `test_resource_released_and_capability_revoked_send_nothing`（两类**不主动提示**，仅发布面自查）→ AC-64 / `test_non_approval_notifications_use_neutral_message_type`（**发送契约写死**：`message_type` **不得为 `request` / `approve`**——`isApprovalMessageType`（`NotificationsDialog.tsx:152-156`）在这两个类型下**也为真**，并不只看 action_code 白名单，用错类型会长出一个点了会报错的跳转按钮，AC-65 当场破）→ AC-65 / `test_notifications_carry_no_action_payload` → AC-65
+  **实际偏差记录**（2026-08-19 核实并勾选）: ①用例名与本文预写的清单不逐字一致（实际 14 例，见 `test_publish_notification.py`），但**六类事件与两条发送契约逐条覆盖**：approve / reject 经 `ApprovalCenterService.decide_task_api` **真跑引擎**而不是读 `publish_notification_service` 的 docstring；withdraw 两例（普通场景收件人 = 持有 task 的审批人、自审场景排除操作人本人后一条都不发）；「资源释放后可手动上线」「能力被收回」两类**不主动提示**同时用行为侧（真跑 `manual_publish` 断言零通知）与结构侧（`ast` 遍历整个 `bisheng/app_publish` 断言只有两个发送调用点）双重钉住——只看一次 manual_publish 分不清「我们选择不通知」和「这条分支恰好没走到」。②「删除致取消」一类不在本文件，端到端覆盖在 `test_release_terminal_states.py::test_app_deleted_cancels_active_instance_and_notifies_approvers`，本文件的 `test_app_publish_owns_exactly_two_notification_call_sites` 是它不被悄悄搬走的护栏。③两个 fixture（`approval_notifications` 答「谁被通知」/ `message_sink` 答「消息长什么样」）刻意互斥——同时请求会观察到一条根本没到达消息服务的通知。
   **覆盖 AC**: AC-64, AC-65
   **依赖**: T033, T035
 
-- [ ] **T043**: `[MVP-核心]` `publish_notification_service` 实现
+- [x] **T043**: `[MVP-核心]` `publish_notification_service` 实现
   **文件**: `src/backend/bisheng/app_publish/domain/services/publish_notification_service.py`（新）
   **逻辑**: 六类触达的收件人解析与发送，**复用** `ApprovalNotificationService` / 既有站内消息服务（不新建通道）。新 action_code（design §4.2 ⑦）：`approval_instance_cancelled`（审批人）· `app_publish_pending_capacity`（owner + 租户管理员，Root → 超管）· `app_publish_deploy_failed`（同上）。后两者是**非审批类**，`message_type` 用中性类型（见 T042 的发送契约）。待上线两类的管理员收件人**直接复用** `_get_admin_recipient_ids` 的无条件 union（多通知一个超管无害；与 T025 的条件回退是两码事，**别混用**）。**消息只通知不承载操作**（AC-65），处理动作一律回发布面或审批中心。
   **测试**: T042 全部通过。
+  **实际偏差记录**（2026-08-19 核实并勾选，**实现早于勾选**——服务与两个调用点在 Wave 3.1–3.4 那批就已随 `publish_approval_service` / `publish_online_service` 落地，只是复选框一直没勾）: ①本服务只承担**六类里的三类**（首节点待办 `approval_task_pending` + 待上线两类 `app_publish_pending_capacity` / `app_publish_deploy_failed`），其余三类（通过 / 驳回 / 撤回）由审批引擎自己发——我们再发一份等于让 owner 一个事件收两条站内信。这条不对称是设计本身，模块 docstring 顶部的事件表是其单一出处。②`approval_instance_cancelled` 的发送落在 `approval_center_service.cancel_instance_by_business`（`:600`）而不是本文件——它由 F054 的删除 hook 触发，发送方是审批模块。③真实调用点两处且仅两处：`publish_approval_service.py:254` → `notify_approvers_of_new_task`、`publish_online_service.py:261` → `notify_pending_online`（由 T042 的 `ast` 结构测试钉死）。
   **覆盖 AC**: AC-64, AC-65
   **依赖**: T042
 
@@ -476,11 +478,12 @@ T001–T007（Wave 1，可并行）
 
 #### 3.8 `withdraw` 终态守卫（§6 字面读法留在 MVP 内）
 
-- [ ] **T051**: `[MVP-核心]` `withdraw` 终态守卫（非 PENDING 一律拒；错误码走 **approval 段 181xx**、不占 162）
+- [x] **T051**: `[MVP-核心]` `withdraw` 终态守卫（非 PENDING 一律拒；错误码走 **approval 段 181xx**、不占 162）
   **文件**: `src/backend/bisheng/approval/domain/services/approval_center_service.py`（`withdraw_instance` 约 `:432` 之前加守卫）, `src/backend/bisheng/common/errcode/approval.py`, `src/frontend/packages/locales/src/api_errors/{zh-Hans,en,ja}.json`（新错误码三语一组）, `src/backend/test/app_publish/test_withdraw_guard.py`（新）
   **逻辑**: `withdraw_instance` 今天只校验 `applicant_user_id`、**不校验 instance 状态**（坑 4）→ 已 APPROVED / REJECTED / CANCELLED 的单子被直接打 API 也能"撤回"，落到 F055 就是**已上线版本的 `terminal_state` 被反复改写成 `withdrawn`**（`on_withdrawn` 照样触发）。守卫加在 `applicant_user_id` 校验之后、状态变更之前：`if instance.status != PENDING: raise ApprovalInstanceNotPendingError`（**新码归 approval 段 181xx**，不占 F055 的 162 段——它修的是审批模块的既有缺陷，不是应用发布的业务错误）。
   **⚠️ 跨 Feature**: 改的是审批模块公共 API 的行为（收紧），对频道订阅 / 知识空间加入两个既有场景同样生效 → 测试须含这两个场景的回归；同 PR 更新 approval-module skill（T050 一并做）。
   **测试**: `test_withdraw_pending_still_succeeds` / `test_withdraw_approved_rejected_181xx`（三个终态各一次）/ `test_withdraw_cancelled_rejected` / `test_online_version_terminal_state_not_overwritten_by_late_withdraw`（AC-22 的真实后果）/ `test_existing_channel_and_knowledge_scenarios_withdraw_unaffected_when_pending`（行为收紧的护栏）
+  **实际偏差记录**（2026-08-19 完成）: ①落码 **18118 `ApprovalInstanceNotPendingError`**（approval 段，未占 162），三语文案落 `packages/locales/src/api_errors/`，六个生成物由 `packages/locales/scripts/build.mjs` 产出、未手改；`docs/constitution.md` C5 补 **181 = approval 段位说明条目**（181 此前只在表里有名字、无细则），并写明「在这里加码会同时收紧菜单权限 / 频道订阅 / 知识空间加入 / 应用发布四个场景，必须有全场景回归」。②守卫**刻意排在 `applicant_user_id` 校验之后**——反过来的话，陌生人打一个终态单子会拿到「已结束」而不是「无权限」，等于把「哪些单子还开着」探测出去；有专门用例钉住这个顺序。③`test_withdraw_guard.py` 共 15 例全绿，含负向对照验证（把守卫改成 `if False and ...` 后 11 例转红），并含频道订阅 / 知识空间加入两个既有场景的「PENDING 仍可撤回 + 三终态各拒」回归。④守卫是 `!= PENDING` 一刀切，因此 `executing` / `executed` / `execute_failed` / `exception` 四个审批后状态同样被拒——符合「已结束不能撤回」，但 `exception`（通过后业务执行异常）场景产品是否要给申请人别的出口，未定，测试里只写了注释没写用例。⑤**未顺手改**：`withdraw_instance` 里 instance 不存在仍 `raise ValueError`、非申请人仍 `raise PermissionError`，两个裸异常落到前端是 500 而非可渲染业务错误（与 backend AGENTS.md 相悖）——改动既有契约会影响前端分支，另行评估。
   **覆盖 AC**: AC-22
   **依赖**: T035
 
@@ -506,14 +509,19 @@ T001–T007（Wave 1，可并行）
   **覆盖 AC**: AC-01, AC-03, AC-10, AC-11, AC-12, AC-15, AC-16, AC-21, AC-22, AC-24, AC-31, AC-32, AC-33, AC-34, AC-35, AC-64, AC-65
   **依赖**: T039, T041, T044a, T044b, T045, T046, T047, T048, T051
 
-- [ ] **T050**: `[MVP-核心]` 上游回写三项 + approval-module skill 同步
+- [x] **T050**: `[MVP-核心]` 上游回写三项 + approval-module skill 同步
   **文件**: `features/v3.0.0/054-app-domain-runtime/{design.md,tasks.md}`（回写 1、2）, `features/v3.0.0/053-dev-cli-skills/spec.md`（回写 3）, `.claude/skills/approval-module/SKILL.md`（§3 / §4 / §5 / §7 / §8）
   **逻辑**（design §8「必须回写上游的三项」）:
   1. **F054 `DEFAULT_TIERS`**：数值与第三档名称按 D11 裁定回写（1C/2G · 2C/4G · 4C/8G，「增强」→「性能」），并把 F054 design D11「何时重新考虑」里的"支持删档"改为"档位只可停用不可删"——**代码侧改动在 T015，本任务只改文档**。
-  2. **F054 `create_app` 契约行**：F054 tasks T049 已提供 `create_app(manifest, owner_user_id, tenant_id)`（坑 26 的"尚不存在"已被 F054 tasks 覆盖）→ 在 F054 design §4.2 ② 与 §6.1 各补一行把它登记为 Outgoing 契约（今天只列了五个状态动作 + `stage_version` + `update_meta`），并注明 **F055 调它、不直写 `app` 表**。
+  2. **F054 建应用契约行**：真名是 **`AppProvisionService.create_draft(*, name, slug, description, owner_user_id, tenant_id) -> app_id`**（不是本文原写的 `AppStateService.create_app` —— F054 T049 的实际偏差记录 ① 已说明：「建应用」不是状态迁移，塞进「应用态唯一写入方」会稀释决议-8）→ 在 F054 design §4.2 ② 与 §6.1 各登记一行。**2026-08-19 完成**：§4.2 ② 早已有该行；§6.1 本次补上，写明「首发建应用的唯一入口」「slug 冲突答 16103」「F055 只调不直写 `app` 表（`publish_pipeline_service._create_draft:217`）」。
   3. **F053 spec AC-32**：补一句「上限经 `GET /api/v2/apps/deploy-limits` 取，取不到则直接上传由服务端 16201 兜底」——否则 CLI 只能硬编码 50 MiB，正是 K7「同一契约分两处必漂移」自己反对的形态。
   4. **approval-module skill**：本 Feature 改了 `approver_resolver`（T025）、新增 `cancel_instance_by_business`（T035）、新增预置场景与四件套（T027a / T027b / T029）、新增站内信触发时机（T043）、收紧 `withdraw_instance`（T051）→ **同一 PR 必须更新 SKILL.md**（该 skill 的维护契约明写"改完代码后问自己：本 skill 里有没有哪句话现在变成假的了"）。
   **⚠️ 不做的一项**：**不要**去改 `release-contract.md:98` 的错误码分配表与 `constitution.md` C5——161–164 早已落定（F054 落码时写入），照旧文回写会产生空转任务，还可能让实现者去"修正"本已正确的表（K9）。
+  **实际偏差记录**（2026-08-19 完成并勾选）:
+  1. **`DEFAULT_TIERS` 回写**：早于本次完成——F054 design §6.1 的档位行已写「1C/2G · 2C/4G · 4C/8G，数值与第三档名以 F055 spec AC-44 为准，2026-08-17 由 F055 T015 回写」；D11「何时重新考虑」也已改成「**「支持删档」这条已被 F055 关掉**——`ResourceTierDao` 不提供删除，退役只有 `enabled=False`」。本次只核实，未改。
+  2. **建应用契约行**：本文原写的 `create_app` **不是真名**，实际是 **`AppProvisionService.create_draft`**（F054 T049 偏差记录 ① 说明了为什么：「建应用」不是状态迁移，塞进 `AppStateService` 会稀释决议-8）。F054 design **§4.2 ② 早已有该行**；**§6.1 本次补上**。本文内三处 `create_app` 字样（依赖索引 :70、T017 逻辑、T029 测试说明）同批更正为真名；`test_first_deploy_creates_draft_app_via_f054_create_app` 是实际存在的测试函数名，**未改**。
+  3. **F053 spec AC-32 补 `deploy-limits` 口径**：已写进 F053 spec 的 **AC-32 正文与 §3 边界**——上限经 `GET /api/v2/apps/deploy-limits` 取（服务端唯一出处 `package_service.deploy_limits()`），取不到（端点未部署 / 该跳不通 / 16207）时按内置默认值给**提示性**自检并照常上传、由 16201 兜底。**「一次取不到上限绝不能阻断 deploy」**这句是关键——CLI 侧 `_check_size` 的 docstring 逐字表达了同一判断（"a soft check that can kill the main flow is worse than no check"）。
+  4. **approval-module skill 同步**：`.claude/skills/approval-module/SKILL.md` 已更新 §2 / §3 / §4 / §5 / §7 / §8 / §10 / §11 / §12 + front-matter TRIGGER。落点比本文原列的五节更宽，因为核对时发现另外几处已经变假：**§4 的 seed 段整段过时**（真身已从 `common/init_data.py::_init_default_approval_scenarios()` 迁到 `approval/domain/services/approval_seed_service.py`，租户从常量变成参数，「新租户不自动 seed、需管理后台手工配置」这句**已经是错的**——两条建租户路径现在都调 `seed_approval_scenarios_for_tenant`）；**§10 新增 `tenant_admin` 语义变更专节**（含新旧对照表与三条不能改的性质，以及「这条改的是共享 resolver，配了该来源的既有节点审批人集合当场就变」的回归口径）；§11 新增两条排障入口（18118、审批人从超管变成别人）。
   **依赖**: T015, T025, T027a, T027b, T029, T035, T043, T051
 
 ---
@@ -725,9 +733,25 @@ T001–T007（Wave 1，可并行）
 20. **组合根只注册删除钩子，不注册场景 handler** —— T035 写「注册 F054 删除钩子 + 场景 handler」。场景 handler 由 `approval_runtime_handler_factory` 的分支按需构建：**一个靠组合根填充的注册表，正是 K1 ③ 警告的那种失败**（组合根没跑 → 审批通过、工厂找不到 handler、outbox 记一条失败、应用永远不上线）。分支自带 import，忘不掉。`register()` 仍在 API 与 worker 两处各调一次并由 T034 守住。
 
 21. **⚠️ 跨 Feature 阻塞（需 F054 修，已用 strict xfail 钉住）：状态机没有 `online → online` 边** —— `ALLOWED_TRANSITIONS[ONLINE] = {STOPPED}`（`app_runtime/domain/constants.py`），而 `AppStateService._start` 起手就查 `is_transition_allowed(app.state, ONLINE)`。后果：**对一个已上线应用做迭代发布，审批通过后 `publish()` 直接抛 16102**，`on_approved` 按 D9「状态机拒绝 = 系统性失败」把它抛给 outbox → 审批单变 `execute_failed`。首发（草稿 → 上线）不受影响，MVP 演示剧本走的是首发，但**迭代发布链路今天是断的**。`test_on_approved.py::test_iteration_on_an_online_app_can_publish` 以 `xfail(strict=True)` 锁住，F054 补上这条边（或让 `_start` 对 source==target==online 放行）当天会自动转红提醒。F055 侧不做任何绕行——绕过状态机就是在决议-8 上开洞。
+  → **✅ 已解除**（2026-08-18 那批修掉，2026-08-19 收口批核实）：`app_runtime/domain/constants.py` 的 `ALLOWED_TRANSITIONS[ONLINE]` 现含 `ONLINE`，注释逐字写明「``ONLINE → ONLINE`` is a real edge, not a typo」；该用例的 `xfail(strict=True)` 已撤、现为普通正向用例并通过（`pytest test/app_publish` 343 passed / 0 failed）。**这条阻塞不要再当成 open 项转述。**
 
 ### 本批未做（属 T042–T051，留给后续批次）
 
-- **T042/T043 事件触达全表**：本批只落了 `on_approved` / 手动上线自己需要的两类（`app_publish_pending_capacity` / `app_publish_deploy_failed`，见 `publish_notification_service.py`）与首节点通知。其余四类与 `test_publish_notification.py` 未写。
-- **三个新 action_code 的三语文案**（`approval_instance_cancelled` / `app_publish_pending_capacity` / `app_publish_deploy_failed`）：本批**未加**，因为本次不动 `src/frontend/`。`pnpm check-i18n` 当前通过（本批没有新增错误码，162 段 26 条三语齐全），但前端渲染这三条通知时会落到 `com_notifications_action_{code}` 兜底文案——落前端那一批必须补。
-- **T044–T048 前端**、**T051 `withdraw` 终态守卫**、**T049/T050 114 验证与上游回写**。
+> ⚠️ **本节写于 Wave 3.1–3.4 那一批（2026-08-17），下面三条已被 2026-08-19 收口批部分推翻**，逐条标注了现状，原文保留以便追溯。
+
+- ~~**T042/T043 事件触达全表**：本批只落了 `on_approved` / 手动上线自己需要的两类（`app_publish_pending_capacity` / `app_publish_deploy_failed`，见 `publish_notification_service.py`）与首节点通知。其余四类与 `test_publish_notification.py` 未写。~~ → **2026-08-19 已完成并勾选**：核实后确认其余四类本就由审批引擎自己发（我们再发一份 = owner 一个事件收两条），`publish_notification_service` 只该管三类；`test_publish_notification.py` 14 例已补齐，含「不重复发」与两类「不主动提示」的行为侧 + 结构侧双重断言。
+- ~~**三个新 action_code 的三语文案**……本批**未加**~~ → 待落前端那一批核对（本收口批未动 `src/frontend/` 的通知文案；`approval_instance_cancelled` 等仍走 `com_notifications_action_{code}` 兜底）。**唯一新增的三语是 18118 的错误码文案**，已落 `packages/locales/src/api_errors/` 并由 build 脚本生成六个 artifact。
+- ~~**T044–T048 前端**、**T051 `withdraw` 终态守卫**、**T049/T050 114 验证与上游回写**。~~ → **T051 已完成**（18118 + 15 例测试）；**T050 四项回写已完成**（见该任务偏差记录）；**T044–T048 前端**与 **T049 114 验证**仍未勾。
+
+---
+
+## 跨 Feature 回写受理
+
+> 别的 Feature 请求本 Feature 交付的增量，逐条记「谁请求 / 请求什么 / 交付没交付 / 在哪」。**只追加，不改上面任何任务的勾选**。
+
+| 请求方 | 请求内容 | 状态 | 交付物 |
+|---|---|---|---|
+| **F053 T034 ②** | `GET /api/v2/apps/{id}/logs` 的返回补 `app_state` / `pending_reason` —— 空 `lines` 有两个成因而**日志文本永远分不出来**：应用在跑但还没输出，还是根本没有运行实例（草稿 / 待上线 / 已停运）。CLI 此前只能把三种可能都列出来，读起来像「日志查询坏了」，把 owner 支去查错方向 | ✅ **已交付**（commit `95c0ed98e`，2026-08-18） | 服务端点名状态，CLI 据此分别说「还是草稿」「已停运」「正在运行但还没有输出」——三者的下一步动作完全不同。解除 F053 AC-43 的降级（其 T026） |
+| **F053 T034 ③** | `GET /api/v2/apps/deployments/{id}` 的轮询载荷补 `entry_url`（`app_state=已上线` 时非空）—— 它此前**只在 `POST /deploy` 的返回里**，而首发那一刻应用还是草稿，于是这个字段几乎总在最需要它的时候是 `null` | ✅ **已交付**（同 commit `95c0ed98e`） | 每次轮询都带，`deploy --wait` 成功时直接打出真实地址而不是把开发者支到详情页去翻。**地址由 F054 的唯一实现按 slug 推导**，不在 F055 拼、更不在浏览器里拼（F054 AC-25）。CLI 的 `_absorb` 同批把它纳入吸收键。解除 F053 AC-31c / AC-33 / 决议-12 的降级（其 T024） |
+
+（2026-08-19 由收口批登记；本表不影响上方任务勾选状态。）

@@ -16,6 +16,7 @@ import { toast } from "@/components/bs-ui/toast/use-toast"
 import type {
   HostedAppDetail,
   HostedAppInstance,
+  HostedAppPendingReason,
 } from "@/controllers/API/hostedApp"
 import { copyText } from "@/utils"
 import { Copy, ExternalLink, Loader2 } from "lucide-react"
@@ -25,7 +26,11 @@ import {
   useHostedAppActions,
   type HostedAppActionKind,
 } from "../../useHostedAppActions"
-import { phaseI18nKey, stateBadgeClass, stateI18nKey } from "../types"
+import {
+  pendingAwareStateI18nKey,
+  phaseI18nKey,
+  stateBadgeClass,
+} from "../types"
 
 interface PublishTabProps {
   app: HostedAppDetail
@@ -38,6 +43,20 @@ interface PublishTabProps {
   visibilitySlot?: React.ReactNode
   /** F055 — danger zone (delete lives there on this page). */
   dangerZoneSlot?: React.ReactNode
+  /**
+   * F055 — the release read model's own verdict on "may this person retry a
+   * parked release" (AC-32 / AC-62). `undefined` while that model has not
+   * loaded, or could not be: the button then falls back to the state-only rule
+   * below, because hiding an owner's only way forward is worse than offering a
+   * button the server will refuse.
+   */
+  canManualPublish?: boolean
+  /**
+   * F055 — why the application is parked. Refines the state badge: the plain
+   * `pending_capacity` label names only the capacity cause, which is the wrong
+   * story for a release that built fine and then failed to start.
+   */
+  pendingReason?: HostedAppPendingReason | null
 }
 
 function Section({
@@ -63,6 +82,8 @@ export function PublishTab({
   pipelineSlot = null,
   visibilitySlot = null,
   dangerZoneSlot = null,
+  canManualPublish,
+  pendingReason = null,
 }: PublishTabProps) {
   const { t } = useTranslation()
   const { stopApp, resumeApp, manualPublishApp } = useHostedAppActions({
@@ -107,7 +128,7 @@ export function PublishTab({
           <span
             className={`rounded-sm px-2 py-0.5 text-xs ${stateBadgeClass(app.state)}`}
           >
-            {t(stateI18nKey(app.state))}
+            {t(pendingAwareStateI18nKey(app.state, pendingReason))}
           </span>
           {online && (
             <Button
@@ -135,7 +156,7 @@ export function PublishTab({
               {t("hostedApp.publish.resume")}
             </Button>
           )}
-          {parked && (
+          {parked && canManualPublish !== false && (
             <Button
               variant="outline"
               size="sm"

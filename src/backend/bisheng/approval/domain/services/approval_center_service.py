@@ -20,6 +20,7 @@ from bisheng.approval.domain.services.menu_access_handler import MenuAccessAppro
 from bisheng.approval.domain.services.user_menu_access_service import UserMenuAccessService
 from bisheng.common.errcode.approval import (
     ApprovalGrantNotRevokableError,
+    ApprovalInstanceNotPendingError,
     ApprovalRequestAlreadyProcessedError,
     ApprovalRequestNotFoundError,
     ApprovalRequestPermissionDeniedError,
@@ -429,6 +430,15 @@ class ApprovalCenterService:
             raise ValueError(f"instance not found: {instance_id}")
         if instance.applicant_user_id != operator_user_id:
             raise PermissionError("only applicant can withdraw")
+        # Only an in-flight request can be withdrawn. Without this the applicant
+        # could re-withdraw an already approved / rejected / cancelled instance
+        # by replaying the API call, and every replay re-fires ``on_withdrawn``:
+        # for the publish scenario (F055) that means a shipped version having its
+        # ``terminal_state`` rewritten to "withdrawn" long after it went online.
+        # Placed after the applicant check and before any write, so a refusal
+        # leaves the instance, its tasks and its action log untouched.
+        if instance.status != ApprovalInstanceStatus.PENDING:
+            raise ApprovalInstanceNotPendingError()
         tasks = await ApprovalInstanceRepository.list_tasks(instance.id)
         for task in tasks:
             if task.status == ApprovalTaskStatus.PENDING:

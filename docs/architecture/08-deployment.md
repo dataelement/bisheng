@@ -278,3 +278,6 @@ ownership）。横向扩容时按下表核对。
 - 系统架构总览 -- `docs/architecture/01-architecture-overview.md`
 - 配置系统详解 -- Settings 类定义在 `src/backend/bisheng/core/config/settings.py`
 - 开发指南 -- `docs/architecture/09-development-guide.md`
+- **应用工场部署与配置** -- `docs/architecture/14-app-factory-deployment.md`（v3.0 新增的托管应用
+  运行时层：runtime-manager / app-proxy 两个服务、`/apps/` 的 nginx location、`app_runtime` 与
+  `open_platform` 配置项、⚠️ 加键与发版的先后顺序。**这一层默认不安装**，不装时本文其余内容不受影响）

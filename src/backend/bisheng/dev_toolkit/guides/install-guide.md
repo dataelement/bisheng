@@ -90,6 +90,6 @@ bash -lc 'bisheng --version'      # 或 zsh：zsh -lic 'bisheng --version'
 - **下载得到的是名为 `download` 的文件**：同样是文件名问题（用了 `-O`/`-sO` 或 `pip install <url>`）。改用 `curl -OJ` 重下。
 - **`externally-managed-environment`（PEP 668）**：优先改用 `pipx`；确要系统装，加 `--user` 或 `--break-system-packages`。
 - **新会话里 `bisheng: command not found`（当初装的时候明明是好的）**：这是最常见的坑——命令行被装进了只在当初那个会话有效的环境（项目局部 venv，或没进 PATH）。用 `pipx install ./bisheng_cli-*.whl` 重装（装到 `~/.local/bin`，全局可用），或把已装好的入口软链进 PATH：`mkdir -p ~/.local/bin && ln -sf <venv>/bin/bisheng ~/.local/bin/bisheng` 后 `python3 -m pipx ensurepath`。判据：`bash -lc 'bisheng --version'` 在**全新 shell** 里能跑通。
-- **登录报 403 / `20001`**：这多半不是密钥错，而是该账号所在租户被禁用之类的**平台侧**问题——让用户联系管理员，不要反复重签密钥。
+- **登录报 403 / `20001`**：这多半不是密钥错，而是该账号被停用、或密钥已被平台侧撤销之类的**平台侧**问题——让用户联系管理员，不要反复重签密钥。
 - **登录说“未接入任何 AI 编程工具”**：本机没检测到 `~/.claude`（Claude Code）或 `~/.codex`（Codex）。用这两个工具的，确认装过后重跑 `bisheng skills sync`；用 Cursor / Trae / 通义灵码等其它工具的，首次 `bisheng deploy` 会在项目里写一个 `AGENTS.md` 指明技能位置，AI 读它即可。
 - **代理环境**：内网地址走了公司代理会连不上平台，可对该地址设置 `NO_PROXY` 后重试。

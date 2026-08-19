@@ -193,7 +193,7 @@ class PublishStatusService:
         raise AppPublishOwnerOnlyError(
             msg="没有查看该应用发布状态的权限",
             details={"app_id": app.id, "action": "view_publish_status", "reason": "not_visible"},
-            hints=["请联系该应用的负责人或租户管理员"],
+            hints=["请联系该应用的负责人或平台管理员"],
         )
 
     @staticmethod

@@ -52,6 +52,11 @@ export function OverviewTab({ detail, onChanged, onDeleted }: OverviewTabProps) 
   const [owner, setOwner] = useState<DepartmentUserOption[]>([])
   const [saving, setSaving] = useState(false)
 
+  // Mirrors the create dialog: the tenant is only named where more than one exists.
+  const ownerPlaceholder = appConfig.multiTenantEnabled
+    ? t("create.resourceOwnerPlaceholderTenant")
+    : t("create.resourceOwnerPlaceholder")
+
   const startEdit = () => {
     setName(detail.name)
     setDescription(detail.description || "")
@@ -200,7 +205,7 @@ export function OverviewTab({ detail, onChanged, onDeleted }: OverviewTabProps) 
                   multiple={false}
                   value={owner}
                   onChange={setOwner}
-                  placeholder={t("create.resourceOwnerPlaceholder")}
+                  placeholder={ownerPlaceholder}
                 />
                 <p className="text-sm text-muted-foreground">
                   {t("overview.ownerNotRetroactive")}

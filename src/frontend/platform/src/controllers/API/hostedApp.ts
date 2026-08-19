@@ -220,10 +220,171 @@ export async function resumeHostedAppApi(
 }
 
 // ---------------------------------------------------------------------------
+// publish pipeline (F055)
+// ---------------------------------------------------------------------------
+
+/** Why an approved application is parked instead of running. */
+export type HostedAppPendingReason = "capacity" | "deploy_failed"
+
+/**
+ * Approval-instance status, mirroring the approval centre's own vocabulary.
+ *
+ * The union is written out so the card's label map is exhaustive, but the
+ * payload field stays widened to `string`: the approval centre owns these
+ * values and may add one, and a status the card cannot name must degrade to a
+ * neutral label rather than render nothing.
+ */
+export type HostedAppApprovalStatus =
+  | "pending"
+  | "approved"
+  | "executing"
+  | "executed"
+  | "rejected"
+  | "exception"
+  | "withdrawn"
+  | "cancelled"
+  | "execute_failed"
+
+export interface HostedAppApproval {
+  instance_id: number
+  status: HostedAppApprovalStatus | string
+  submitted_at: string | null
+  decided_at: string | null
+  /** Sent in full by the backend, and rendered in full here (AC-33). */
+  reject_reason: string | null
+  approver_names: string[]
+}
+
+export interface HostedAppDeploymentRef {
+  id: string | null
+  stage: string | null
+  status: string | null
+  failure: Record<string, unknown> | null
+}
+
+export interface HostedAppTier {
+  code: string | null
+  name: string | null
+  cpu_millicores: number | null
+  memory_mb: number | null
+  enabled?: boolean
+}
+
+/**
+ * Breaking table-structure change awaiting confirmation.
+ *
+ * The backend always sends `null` in this release (the capability/schema wave
+ * is deferred). The shape is declared now so the publish face can keep a slot
+ * for it without changing type when the wave lands.
+ */
+export interface HostedAppSchemaChange {
+  summary?: string | null
+  details?: string[] | null
+}
+
+/**
+ * `GET /api/v1/apps/{id}/publish-status` — the single release read model
+ * (AC-38), shared with the MCP status tool.
+ */
+export interface HostedAppPublishStatus {
+  app_id: string
+  app_state: HostedAppState
+  pending_reason: HostedAppPendingReason | null
+  current_version: HostedAppVersion | null
+  pending_version: HostedAppVersion | null
+  deployment: HostedAppDeploymentRef | null
+  approval: HostedAppApproval | null
+  tier: HostedAppTier | null
+  /** Deferred capability wave; always empty in this release. */
+  capabilities: unknown[]
+  schema_change: HostedAppSchemaChange | null
+  can: {
+    withdraw: boolean
+    manual_publish: boolean
+    /** AC-06 — always false while every application arrives through the CLI. */
+    submit: boolean
+  }
+}
+
+/**
+ * Outcome of a pipeline manual publish.
+ *
+ * Not a `HostedAppActionResult`: this endpoint answers with the pipeline's own
+ * `status` word (`online` / `pending_capacity` / `pending_deploy_failed`),
+ * which carries the parked *reason* that `ok: false` alone would lose.
+ */
+export interface HostedAppPublishOutcome {
+  status: "online" | "pending_capacity" | "pending_deploy_failed" | string
+  app_id: string
+  version_id: string
+  app_state: HostedAppState
+  reason?: string | null
+}
+
+/**
+ * The release read model (AC-38).
+ *
+ * `silent: true` is mandatory. A viewer who is neither owner nor administrator
+ * is refused with business code 16254 inside a 200 envelope; without `silent`
+ * the interceptor swallows the code (the caller receives a bare message string)
+ * and toasts on every page open, and any future 403/404 on this GET would
+ * navigate the whole SPA to `/403` — losing the detail page over one card.
+ */
+export async function getPublishStatusApi(
+  appId: string,
+): Promise<HostedAppPublishStatus> {
+  return await axios.get(`${APPS_BASE}/${appId}/publish-status`, {
+    silent: true,
+  })
+}
+
+/**
+ * Retry a parked release through the pipeline (AC-32).
+ *
+ * Distinct from `manualPublishHostedAppApi`, which is F054's state action: this
+ * one adds the owner-only pre-check and latches the version record's terminal
+ * state, so it is what the publish face calls.
+ */
+export async function manualPublishViaPipelineApi(
+  appId: string,
+): Promise<HostedAppPublishOutcome> {
+  return await axios.post(`${APPS_BASE}/${appId}/publish/manual-publish`)
+}
+
+/**
+ * Withdraw an in-flight publish request (AC-34).
+ *
+ * Deliberately the approval centre's own endpoint rather than a publish-side
+ * one: "only the applicant may withdraw" is already enforced there, and a
+ * second endpoint would be a second place for that rule to drift.
+ *
+ * The body is required even when there is no reason — the endpoint declares a
+ * pydantic model without a default, so a bodyless POST is a 422.
+ */
+export async function withdrawApprovalApi(
+  instanceId: number,
+  reason?: string,
+): Promise<unknown> {
+  return await axios.post(
+    `/api/v1/approval/instances/${instanceId}/withdraw`,
+    reason ? { reason } : {},
+  )
+}
+
+// ---------------------------------------------------------------------------
 // business-code helpers
 // ---------------------------------------------------------------------------
 
-/** 161xx codes the UI branches on. Everything else is a generic failure. */
+/**
+ * Codes the UI branches on. Everything else is a generic failure.
+ *
+ * Two bands, and they are not interchangeable: **161xx** is F054 (the hosted
+ * application itself — state actions, logs, runtime layer), **162xx** is F055
+ * (the publish pipeline — approval, version records, tiers). The same
+ * condition genuinely exists in both — 16125 is "a state action was refused
+ * for capacity", 16226 is "a publish parked for capacity" — and the copy
+ * differs, so collapsing them would make one of the two messages wrong.
+ */
 export const HOSTED_APP_ERROR = {
   NOT_FOUND: 16101,
   STATE_CONFLICT: 16102,
@@ -234,6 +395,14 @@ export const HOSTED_APP_ERROR = {
   CAPACITY_INSUFFICIENT: 16125,
   LOG_FORBIDDEN: 16161,
   LAYER_NOT_DEPLOYED: 16181,
+  // 162xx — publish pipeline (F055).
+  PUBLISH_LAYER_DISABLED: 16207,
+  PUBLISH_CAPACITY_INSUFFICIENT: 16226,
+  PUBLISH_APPROVAL_IN_FLIGHT: 16251,
+  PUBLISH_PENDING_ONLINE: 16252,
+  PUBLISH_VERSION_NOT_FOUND: 16253,
+  PUBLISH_OWNER_ONLY: 16254,
+  PUBLISH_STATE_CONFLICT: 16255,
 } as const
 
 /**

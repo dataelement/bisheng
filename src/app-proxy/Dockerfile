@@ -13,7 +13,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 COPY pyproject.toml uv.lock /app/
-RUN pip install --no-cache-dir uv && uv export --frozen --no-dev --format requirements-txt > /tmp/req.txt \
+RUN pip install --no-cache-dir uv && uv export --frozen --no-dev --no-emit-project --format requirements-txt > /tmp/req.txt \
     && pip install --no-cache-dir -r /tmp/req.txt && rm -f /tmp/req.txt
 
 COPY app_proxy /app/app_proxy

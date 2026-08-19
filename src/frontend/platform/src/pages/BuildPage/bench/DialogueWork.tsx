@@ -1,4 +1,5 @@
 // DialogueWork.tsx
+import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
 import { ScopeBar } from "@/pages/ModelPage/manage/ScopeBar";
 import { useContext, useEffect, useState } from "react";
@@ -14,6 +15,7 @@ export default function DialogueWork() {
   const [scopeVersion, setScopeVersion] = useState(0);
   const { t, i18n } = useTranslation();
   const { user } = useContext(userContext) as any;
+  const { appConfig } = useContext(locationContext);
   useEffect(() => {
     i18n.loadNamespaces('tool');
   }, [i18n]);
@@ -22,12 +24,20 @@ export default function DialogueWork() {
     <div className="w-full h-full px-2 pt-4 relative">
       <Tabs defaultValue={defaultValue} className="w-full mb-[40px]">
         <div className="mb-4 flex items-center gap-3">
-          <ScopeBar
-            user={user}
-            onScopeChange={() => {
-              setScopeVersion((value) => value + 1);
-            }}
-          />
+          {/* Single-tenant deployments (`multi_tenant.enabled=false`, the
+              default of a standard docker install) have exactly one tenant and
+              cannot create children, so the scope switcher would only ever
+              offer "default tenant" plus a greyed-out "no child tenants".
+              Mirrors the guard on the other ScopeBar call site
+              (ModelPage/manage/index.tsx). */}
+          {appConfig.multiTenantEnabled && (
+            <ScopeBar
+              user={user}
+              onScopeChange={() => {
+                setScopeVersion((value) => value + 1);
+              }}
+            />
+          )}
           {/* F035 (PRD §4.8): the 灵思 tab is merged into 首页 (home) — task-mode
               display name / input placeholder live there now, the entry toggle
               moved to role menus, tools share the home pool, and the SOP

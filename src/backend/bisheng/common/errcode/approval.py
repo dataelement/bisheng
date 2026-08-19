@@ -89,3 +89,8 @@ class ApprovalFlowNotFoundError(BaseErrorCode):
 class ApprovalFlowInUseByRoutesError(BaseErrorCode):
     Code: int = 18117
     Msg: str = '该流程已被分支引用，请先在分支管理中解除绑定后再删除'
+
+
+class ApprovalInstanceNotPendingError(BaseErrorCode):
+    Code: int = 18118
+    Msg: str = '该审批申请已结束，无法撤回'

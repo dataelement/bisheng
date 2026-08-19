@@ -274,6 +274,8 @@ def _preflight(config: Config, docker: DockerBackend, runtimes: list[str], avail
     writable, detail = _data_root_writable(config)
     checks.append({"name": "data_root_writable", "ok": writable, "detail": detail})
 
+    checks.append(_host_data_root_check(config))
+
     checks.append(
         {
             "name": "runtime_templates",
@@ -304,6 +306,41 @@ def _preflight(config: Config, docker: DockerBackend, runtimes: list[str], avail
     checks.append({"name": "base_images", "ok": images_ok, "detail": images_detail})
 
     return checks
+
+
+def _host_data_root_check(config: Config) -> dict[str, Any]:
+    """Is the bind mount source expressed in the daemon's frame of reference?
+
+    Writable-and-wrong is the nastiest shape this layer has: with the manager
+    itself in a container, ``/app-data`` is writable inside it *and* dockerd
+    happily creates a brand-new ``/app-data`` on the host for the bind. Every
+    app starts, every probe passes, and the two halves of "the app's data" sit
+    in different filesystems. Nothing downstream can notice, so it has to be
+    said here.
+    """
+    name = "host_data_root_mapping"
+    host_root = config.host_data_root
+    if host_root is None:
+        return {
+            "name": name,
+            "ok": True,
+            "detail": f"this process and the daemon share one view of {config.data_root}",
+        }
+    if not host_root.is_absolute():
+        return {
+            "name": name,
+            "ok": False,
+            "detail": (
+                f"RTM_HOST_DATA_ROOT={host_root} is not an absolute path — the daemon will "
+                "reject every bind mount; set it to the host side of the volume mounted at "
+                f"{config.data_root}"
+            ),
+        }
+    return {
+        "name": name,
+        "ok": True,
+        "detail": f"{config.data_root} in this process == {host_root} on the host",
+    }
 
 
 def _data_root_writable(config: Config) -> tuple[bool, str]:

@@ -21,7 +21,13 @@ Order matters and is not arbitrary:
 3. **``manifest_version`` before the schema**, for the same reason: a newer CLI
    writing keys this platform has never heard of must be told to upgrade the
    platform, not to delete its fields.
-4. Schema → runtime → capabilities → tier.
+4. **WebSocket declarations after the version gate, still before the schema.**
+   Same shape as (2) and the opposite answer to (3): no platform upgrade and no
+   spelling of the key buys a WebSocket this version, because the entry closes
+   the upgrade with 4501. "Unknown field ws_path, did you mean slug" would send
+   the developer off to rename a key and ship an app whose sockets die silently
+   in production.
+5. Schema → runtime → capabilities → tier.
 
 **Tier resolution is delegated, never re-implemented.** ``resolve_tier`` owns
 the ``details.reason ∈ {not_found, disabled}`` verdict that AC-46 / AC-47 are
@@ -50,6 +56,7 @@ from bisheng.common.errcode.app_publish import (
     AppManifestInvalidError,
     AppRuntimeUnsupportedError,
     AppSecretReferenceUnsupportedError,
+    AppWebSocketUnsupportedError,
 )
 from bisheng.database.models.resource_tier import ResourceTier
 
@@ -62,6 +69,28 @@ MANIFEST_FILENAME = "bisheng-app.yaml"
 #: secret would reject ``description: "set your token in the console"``.
 _SECRET_KEY_RE = re.compile(r"(?i)(secret|credential|password|passwd|token|api[_-]?key|private[_-]?key)")
 _SECRET_VALUE_RE = re.compile(r"(?i)^(vault|secret|secretref|ssm|kms)://")
+
+#: Keys that can only mean "this application wants the platform to serve it a
+#: WebSocket". Matched on **key names only, and only inside the two closed key
+#: sets** (top level and ``capabilities``, both ``extra="forbid"``): every other
+#: place in a manifest holds user data — ``database.tables[*]`` is
+#: ``extra="allow"`` — and a column named ``ws_state`` must not fail a publish.
+#: Values are never matched either: ``description: "WebSocket 聊天室"`` is a
+#: description, not a declaration.
+#:
+#: Outbound ``wss://`` in ``egress.domains`` is deliberately **not** matched.
+#: The limitation lives on the inbound entry; an app that dials somebody else's
+#: socket as a client is unaffected by it, and refusing that would be a lie.
+_WEBSOCKET_KEY_RE = re.compile(
+    r"(?i)^(wss?|websockets?|socketio|socket_io)(_[a-z0-9_]+)?$|^[a-z0-9_]+_(wss?|websockets?)$"
+)
+
+#: The code ``app-proxy`` closes an unsupported upgrade with
+#: (``app_proxy/login_handoff.py::WS_CLOSE_NOT_IMPLEMENTED``). **Copied, not
+#: imported** — app-proxy is a separate service and backend must not take a
+#: dependency on it. Carried in ``details`` so a developer can match the number
+#: their browser already showed them.
+_WS_NOT_IMPLEMENTED_CLOSE_CODE = 4501
 
 #: Hint attached to a declared-but-not-created table set (design D3).
 _DATABASE_TABLES_HINT = (
@@ -88,6 +117,7 @@ async def validate_manifest(raw: str | bytes) -> ManifestValidation:
     document = _load_yaml(raw)
     _reject_secret_references(document)
     _check_manifest_version(document)
+    _reject_websocket_declaration(document)
     manifest = _parse(document)
     _check_runtime(manifest)
     _check_capabilities(manifest)
@@ -153,6 +183,48 @@ def _find_secret_reference(node: Any, *, path: str) -> str | None:
         return None
     if isinstance(node, str) and _SECRET_VALUE_RE.match(node):
         return path
+    return None
+
+
+def _reject_websocket_declaration(document: dict[str, Any]) -> None:
+    """Refuse a manifest that asks the platform to serve a WebSocket (16232).
+
+    Caught here rather than left to the schema because the generic answer is
+    actively misleading: ``extra="forbid"`` turns ``ws_path:`` into "unknown
+    field ws_path, did you mean slug", the developer deletes or renames the key
+    and ships — and the socket then dies in production with nothing to look at
+    (nginx forwards the upgrade, app-proxy closes it with 4501, platform logs
+    stay clean). The remedy is not a spelling change, it is SSE or polling.
+    """
+    hit = _find_websocket_key(document)
+    if hit is None:
+        return
+    raise AppWebSocketUnsupportedError(
+        msg="本版托管运行时不支持 WebSocket",
+        details={
+            "field": hit,
+            "reason": "websocket_unsupported",
+            "ws_close_code": _WS_NOT_IMPLEMENTED_CLOSE_CODE,
+        },
+        hints=[
+            f"托管入口本版不反代 WebSocket: 握手会被直接关闭(close code {_WS_NOT_IMPLEMENTED_CLOSE_CODE}), "
+            "不会返回 502 —— 应用侧只收到 close 事件, 平台侧不留任何错误日志, 本地连得上不代表线上连得上",
+            "服务端推送请改用 SSE(text/event-stream)或轮询: 两者走普通 HTTP, 托管入口原样透传流式响应",
+            f"请从 {MANIFEST_FILENAME} 删除该键后重新发布; 换个键名不会让 WebSocket 变得可用",
+        ],
+    )
+
+
+def _find_websocket_key(document: dict[str, Any]) -> str | None:
+    """The offending key path, or ``None``. Top level plus ``capabilities`` only."""
+    for key in document:
+        if _WEBSOCKET_KEY_RE.match(str(key)):
+            return str(key)
+    capabilities = document.get("capabilities")
+    if isinstance(capabilities, dict):
+        for key in capabilities:
+            if _WEBSOCKET_KEY_RE.match(str(key)):
+                return f"capabilities.{key}"
     return None
 
 
