@@ -131,6 +131,8 @@
     "pending": "预计影响 {{resources}} 个资源、{{grants}} 条授权",
     "review": "查看影响",
     "blocked": "存在阻断项，当前不能发布",
+    "blockerUnavailableActions": "自定义权限「{{model}}」仍在使用已停用的动作：{{actions}}。请先在该自定义权限中移除这些动作，再发布本次变更。",
+    "blockerNoEffectiveActions": "自定义权限「{{model}}」当前没有任何生效的动作。请先为它勾选有效动作或停用该自定义权限，再发布本次变更。",
     "expired": "影响分析已过期，请重新生成",
     "expiresAt": "有效期至 {{value}}",
     "cancel": "取消",
