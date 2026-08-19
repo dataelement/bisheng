@@ -1858,23 +1858,19 @@ class KnowledgeDocumentDistributionService:
             return "remove_share"
         if entry.entry_type != KnowledgeFileEntryType.MANAGER.value:
             raise KnowledgeDocumentDistributionError("entry type does not support explicit delete")
-        if document.predecessor_logic_file_id is not None:
-            return "rollback"
-
-        entries = await self.file_repository.find_distribution_entries_by_document_id(
-            document_id,
-        )
-        if any(
-            candidate.entry_type == KnowledgeFileEntryType.SHARE.value
-            and candidate.entry_status
-            in {
-                KnowledgeFileEntryStatus.PREPARING.value,
-                KnowledgeFileEntryStatus.ACTIVE.value,
-            }
-            for candidate in entries
-        ):
-            raise KnowledgeDocumentDistributionError("active shares must be revoked before final manager deletion")
         return "final_delete"
+
+    @staticmethod
+    def _mark_entry_for_manager_delete(
+        entry: KnowledgeFile,
+        status: KnowledgeFileEntryStatus,
+    ) -> None:
+        entry.entry_status = status.value
+        entry.desired_entry_generation = int(entry.desired_entry_generation or 0) + 1
+        entry.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        entry.projection_next_retry_at = None
+        entry.projection_lease_owner = None
+        entry.projection_lease_until = None
 
     async def delete_manager(
         self,
@@ -1883,6 +1879,20 @@ class KnowledgeDocumentDistributionService:
         document_id: int,
         manager_file_id: int,
     ) -> DeleteManagerResult:
+        manager_snapshot = await self.file_repository.find_by_id(manager_file_id)
+        if manager_snapshot is None:
+            raise KnowledgeDocumentDistributionError("manager delete state no longer exists")
+        manager_space_id = int(manager_snapshot.knowledge_id)
+        await self.session.execute(
+            select(Knowledge)
+            .where(
+                Knowledge.id == manager_space_id,
+                Knowledge.tenant_id == tenant_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
         document = await self.document_repository.find_by_id_for_update(document_id)
         manager = await self.file_repository.find_by_id_for_update(manager_file_id)
         if document is None or manager is None:
@@ -1892,6 +1902,8 @@ class KnowledgeDocumentDistributionService:
             or int(manager.tenant_id or 0) != tenant_id
             or int(manager.reference_document_id or 0) != document_id
             or manager.entry_type != KnowledgeFileEntryType.MANAGER.value
+            or int(manager.knowledge_id) != manager_space_id
+            or int(document.knowledge_id) != manager_space_id
         ):
             raise KnowledgeDocumentDistributionError("delete target is not the canonical manager")
         if (
@@ -1905,46 +1917,46 @@ class KnowledgeDocumentDistributionService:
                 idempotent=True,
             )
 
-        predecessor_id = document.predecessor_logic_file_id
-        if manager.entry_status == KnowledgeFileEntryStatus.PREPARING.value and predecessor_id is not None:
-            return await self._rollback_manager(
-                tenant_id=tenant_id,
-                document=document,
-                manager=manager,
-                predecessor_id=int(predecessor_id),
-            )
-        if manager.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
+        if manager.entry_status not in {
+            KnowledgeFileEntryStatus.ACTIVE.value,
+            KnowledgeFileEntryStatus.PREPARING.value,
+            KnowledgeFileEntryStatus.DELETING.value,
+        }:
             raise KnowledgeDocumentDistributionError("manager state changed concurrently")
-        if predecessor_id is not None:
-            return await self._rollback_manager(
-                tenant_id=tenant_id,
-                document=document,
-                manager=manager,
-                predecessor_id=int(predecessor_id),
-            )
 
         entries = await self.file_repository.find_distribution_entries_by_document_id(
             document_id,
             for_update=True,
         )
-        if any(
-            entry.entry_type == KnowledgeFileEntryType.SHARE.value
-            and entry.entry_status
-            in {
-                KnowledgeFileEntryStatus.PREPARING.value,
-                KnowledgeFileEntryStatus.ACTIVE.value,
-            }
-            for entry in entries
-        ):
-            raise KnowledgeDocumentDistributionError("active shares must be revoked before final manager deletion")
-
         document.lifecycle_status = KnowledgeDocumentLifecycleStatus.DELETING.value
-        manager.entry_status = KnowledgeFileEntryStatus.DELETING.value
-        manager.desired_entry_generation += 1
-        manager.projection_status = KnowledgeFileProjectionStatus.PENDING.value
-        manager.projection_next_retry_at = None
+        for entry in entries:
+            if int(entry.id) == manager_file_id:
+                self._mark_entry_for_manager_delete(
+                    entry,
+                    KnowledgeFileEntryStatus.DELETING,
+                )
+            elif (
+                entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+                and entry.entry_type
+                in {
+                    KnowledgeFileEntryType.PUBLISH.value,
+                    KnowledgeFileEntryType.SHARE.value,
+                }
+            ):
+                self._mark_entry_for_manager_delete(
+                    entry,
+                    KnowledgeFileEntryStatus.INVALID,
+                )
+            elif entry.entry_status in {
+                KnowledgeFileEntryStatus.PREPARING.value,
+                KnowledgeFileEntryStatus.DELETING.value,
+            }:
+                self._mark_entry_for_manager_delete(
+                    entry,
+                    KnowledgeFileEntryStatus.DELETING,
+                )
         self.session.add(document)
-        self.session.add(manager)
+        self.session.add_all(entries)
         await self.session.flush()
         await self._commit()
         return DeleteManagerResult(

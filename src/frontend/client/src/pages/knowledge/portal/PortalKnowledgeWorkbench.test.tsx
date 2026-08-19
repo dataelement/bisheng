@@ -3255,6 +3255,49 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByText("权限管理")).not.toBeInTheDocument();
     });
 
+    test("原文件删除导致的失效入口显示对应原因", async () => {
+        const departmentSpace = makeSpace("department-file-invalid", "接收知识库", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const invalidFile = makeFile("320", "原文件已删除制度.pdf", {
+            type: FileType.PDF,
+            spaceId: departmentSpace.id,
+            entryType: "share",
+            entryStatus: "invalid",
+            distributionInvalidReason: "manager_file_deleted",
+            capabilities: {
+                canView: false,
+                canPreview: false,
+                canDownload: false,
+                canMove: false,
+                canManageMembers: false,
+                canEditContent: false,
+                canPublish: false,
+                canShare: false,
+                canDelete: true,
+            },
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [invalidFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(departmentSpace as any);
+
+        renderWorkbench(`/knowledge-portal?spaceId=${departmentSpace.id}`);
+
+        const row = await screen.findByTestId("file-tree-row-320");
+        expect(within(row).getByText("已失效：原文件已删除")).toBeInTheDocument();
+    });
+
     test("keeps share deletion hidden when the live delete permission is denied", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
         const departmentSpace = makeSpace("department-delete-denied", "接收知识库", {

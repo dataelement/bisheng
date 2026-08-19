@@ -1531,7 +1531,9 @@ function FileRow({
                                 {!isFolder && file.entryType && file.entryType !== "normal" && (
                                     <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
                                         {file.entryStatus === "invalid"
-                                            ? "已失效：原管理知识库已删除"
+                                            ? file.distributionInvalidReason === "manager_file_deleted"
+                                                ? "已失效：原文件已删除"
+                                                : "已失效：原管理知识库已删除"
                                             : file.entryType === "manager"
                                             ? "管理文件"
                                             : file.entryType === "publish"

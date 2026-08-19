@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeState
 from bisheng.knowledge.domain.models.knowledge_file import FileType
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -208,6 +208,67 @@ async def test_distribution_origin_names_are_loaded_in_batches():
     assert result[9001]["original_knowledge_id"] == 10
     assert result[9001]["original_knowledge_name"] == "原始知识库"
     load_users.assert_awaited_once_with([42])
+    load_spaces.assert_awaited_once_with([10])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("manager_space_state", "expected_reason"),
+    [
+        (KnowledgeState.PUBLISHED.value, "manager_file_deleted"),
+        (KnowledgeState.DELETING.value, "manager_space_deleted"),
+    ],
+)
+async def test_invalid_distribution_reason_is_derived_from_manager_space_in_batch(
+    manager_space_state: str,
+    expected_reason: str,
+):
+    svc = _make_svc()
+    logical = _make_file(9001)
+    logical.reference_document_id = 501
+    logical.entry_type = "publish"
+    logical.entry_status = "invalid"
+    logical.desired_content_generation = 1
+    logical.applied_content_generation = 1
+    logical.desired_entry_generation = 2
+    logical.applied_entry_generation = 1
+    logical.projection_status = "pending"
+    svc._entry_permission_ids_by_file = {9001: {"delete_file"}}
+    svc.doc_repo = SimpleNamespace(
+        find_by_ids=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    id=501,
+                    knowledge_id=10,
+                    primary_version_id=None,
+                    lifecycle_status="deleting",
+                )
+            ]
+        )
+    )
+
+    with patch(
+        "bisheng.knowledge.domain.services.knowledge_space_service."
+        "KnowledgeDao.async_get_spaces_by_ids",
+        new_callable=AsyncMock,
+        return_value=[
+            SimpleNamespace(id=10, name="管理知识库", state=manager_space_state)
+        ],
+    ) as load_spaces:
+        result = await svc._load_document_distribution_info([logical])
+
+    assert result[9001]["distribution_invalid_reason"] == expected_reason
+    assert result[9001]["capabilities"] == {
+        "can_view": False,
+        "can_preview": False,
+        "can_download": False,
+        "can_move": False,
+        "can_manage_members": False,
+        "can_edit_content": False,
+        "can_publish": False,
+        "can_share": False,
+        "can_delete": True,
+    }
     load_spaces.assert_awaited_once_with([10])
 
 

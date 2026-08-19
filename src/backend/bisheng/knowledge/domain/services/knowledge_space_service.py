@@ -47,7 +47,6 @@ from bisheng.common.errcode.knowledge_space import (
     FreeSpaceMigratingError,
     FreeSpaceMigrationEmbeddingMismatchError,
     FreeSpaceMigrationTargetNotFoundError,
-    KnowledgeDocumentActiveShareError,
     KnowledgeDocumentDownloadDeniedError,
     KnowledgeDocumentEntryTypeInvalidError,
     KnowledgeDocumentManagerRequiredError,
@@ -139,7 +138,10 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeState,
     KnowledgeTypeEnum,
 )
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document import (
+    KnowledgeDocument,
+    KnowledgeDocumentLifecycleStatus,
+)
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
 )
@@ -780,8 +782,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 return True
         except KnowledgeDocumentDistributionError as exc:
-            if "shares must be revoked" in str(exc):
-                raise KnowledgeDocumentActiveShareError() from exc
             raise KnowledgeDocumentStateConflictError() from exc
 
         raise KnowledgeDocumentEntryTypeInvalidError()
@@ -819,8 +819,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 entry_id=int(file_record.id),
             )
         except KnowledgeDocumentDistributionError as exc:
-            if "shares must be revoked" in str(exc):
-                raise KnowledgeDocumentActiveShareError() from exc
             if "publish entries cannot be deleted" in str(exc):
                 raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除") from exc
             raise KnowledgeDocumentStateConflictError() from exc
@@ -14103,12 +14101,30 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 and item.original_knowledge_id is not None
             }
         )
+        invalid_manager_space_ids = sorted(
+            {
+                int(document.knowledge_id)
+                for item in file_items
+                if item.entry_status == KnowledgeFileEntryStatus.INVALID.value
+                and item.reference_document_id is not None
+                and (document := document_map.get(int(item.reference_document_id)))
+                is not None
+                and document.lifecycle_status
+                in {
+                    KnowledgeDocumentLifecycleStatus.DELETING.value,
+                    KnowledgeDocumentLifecycleStatus.INVALID.value,
+                }
+            }
+        )
+        distribution_space_ids = sorted(
+            set(original_knowledge_ids) | set(invalid_manager_space_ids)
+        )
         original_users, original_spaces = await asyncio.gather(
             UserDao.aget_user_by_ids(original_uploader_ids)
             if original_uploader_ids
             else asyncio.sleep(0, result=[]),
-            KnowledgeDao.async_get_spaces_by_ids(original_knowledge_ids)
-            if original_knowledge_ids
+            KnowledgeDao.async_get_spaces_by_ids(distribution_space_ids)
+            if distribution_space_ids
             else asyncio.sleep(0, result=[]),
         )
         original_user_name_map = {
@@ -14116,6 +14132,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         }
         original_space_name_map = {
             int(space.id): str(space.name or space.id) for space in original_spaces
+        }
+        distribution_space_state_map = {
+            int(space.id): getattr(space, "state", None)
+            for space in original_spaces
         }
 
         info: dict[int, dict] = {}
@@ -14187,7 +14207,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "manager_file_id": manager_file_id,
                 "manager_space_id": manager_space_id,
                 "distribution_invalid_reason": (
-                    "manager_space_deleted" if is_invalid else None
+                    (
+                        "manager_file_deleted"
+                        if document is not None
+                        and document.lifecycle_status
+                        in {
+                            KnowledgeDocumentLifecycleStatus.DELETING.value,
+                            KnowledgeDocumentLifecycleStatus.INVALID.value,
+                        }
+                        and distribution_space_state_map.get(
+                            int(document.knowledge_id)
+                        )
+                        == KnowledgeState.PUBLISHED.value
+                        else "manager_space_deleted"
+                    )
+                    if is_invalid
+                    else None
                 ),
                 "desired_content_generation": (int(item.desired_content_generation) if is_distribution else 0),
                 "applied_content_generation": (int(item.applied_content_generation) if is_distribution else 0),
