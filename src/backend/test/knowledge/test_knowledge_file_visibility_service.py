@@ -38,8 +38,13 @@ def _make_service(
     login_user = MagicMock()
     login_user.user_id = user_id
     login_user.user_name = f"user-{user_id}"
+    login_user.tenant_id = 1
     login_user.is_admin = MagicMock(return_value=is_admin)
-    return KnowledgeFileVisibilityService(request=MagicMock(), login_user=login_user)
+    service = KnowledgeFileVisibilityService(request=MagicMock(), login_user=login_user)
+    # F029 contract tests isolate permission strategy. F046 has a separate
+    # integration suite and is neutral here unless a test explicitly opts in.
+    service._list_file_change_excluded_ids = AsyncMock(return_value=set())
+    return service
 
 
 # ---------------------------------------------------------------------------
@@ -236,7 +241,7 @@ async def test_build_index_prefilter_admin_short_circuits(monkeypatch):
 @pytest.mark.asyncio
 async def test_build_index_prefilter_intersects_candidate_ids(monkeypatch):
     """When candidate_file_ids is provided (folder / tag scope), the K used
-    for strategy selection is the intersection of accessible × candidate.
+    for strategy selection is the intersection of accessible and candidate.
     """
     svc = _make_service()
     _patch_accessible_ids(monkeypatch, [str(i) for i in range(1, 1001)])

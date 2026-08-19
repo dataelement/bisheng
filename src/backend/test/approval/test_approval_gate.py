@@ -27,7 +27,7 @@ from bisheng.approval.domain.repositories.user_menu_access_repository import Use
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
 from bisheng.approval.domain.services.approval_gate import ApprovalGate
 from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
-from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+from bisheng.common.errcode.approval import ApprovalConfirmationFlowRequiredError, ApprovalScenarioDisabledError
 
 
 @pytest_asyncio.fixture
@@ -356,6 +356,7 @@ async def test_gate_pass_when_route_direct_approve():
     instance_repository = SimpleNamespace(
         find_duplicate_active_instance=AsyncMock(return_value=None),
         create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 201})),
+        create_outbox=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 211})),
         create_exception=AsyncMock(),
         create_task=AsyncMock(),
     )
@@ -366,19 +367,23 @@ async def test_gate_pass_when_route_direct_approve():
         route_matcher=AsyncMock(return_value=SimpleNamespace(id=11, route_type="pass")),
     )
 
-    result = await gate.request_or_pass(
-        ApprovalGateRequest(
-            tenant_id=1,
-            scenario_code="menu_access_request",
-            business_key="menu:knowledge:user:7",
-            business_resource_type="web_menu",
-            business_resource_id="knowledge",
-            business_name="知识管理",
-            applicant_user_id=7,
-            applicant_user_name="alice",
-            payload_snapshot={"menu_key": "knowledge"},
+    with (
+        patch("bisheng.approval.domain.services.approval_gate.AuditLogDao.ainsert_v2", new=AsyncMock()),
+        patch.object(ApprovalGate, "_dispatch_outbox_task"),
+    ):
+        result = await gate.request_or_pass(
+            ApprovalGateRequest(
+                tenant_id=1,
+                scenario_code="menu_access_request",
+                business_key="menu:knowledge:user:7",
+                business_resource_type="web_menu",
+                business_resource_id="knowledge",
+                business_name="知识管理",
+                applicant_user_id=7,
+                applicant_user_name="alice",
+                payload_snapshot={"menu_key": "knowledge"},
+            )
         )
-    )
 
     assert result.decision == ApprovalGateDecision.PASS
     assert result.instance_id == 201
@@ -424,6 +429,7 @@ async def test_gate_pending_when_route_hits_flow():
         create_instance=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": 300})),
         create_exception=AsyncMock(),
         create_task=AsyncMock(side_effect=lambda row: row.model_copy(update={"id": next(task_ids)})),
+        create_action_log=AsyncMock(),
     )
     gate = ApprovalGate(
         registry=registry,
@@ -432,19 +438,20 @@ async def test_gate_pending_when_route_hits_flow():
         route_matcher=AsyncMock(return_value=SimpleNamespace(id=31, route_type="flow", flow_definition_id=9)),
     )
 
-    result = await gate.request_or_pass(
-        ApprovalGateRequest(
-            tenant_id=1,
-            scenario_code="knowledge_space_subscribe_request",
-            business_key="space:12:user:7",
-            business_resource_type="knowledge_space",
-            business_resource_id="12",
-            business_name="研发知识空间",
-            applicant_user_id=7,
-            applicant_user_name="alice",
-            payload_snapshot={"space_id": 12},
+    with patch("bisheng.approval.domain.services.approval_gate.AuditLogDao.ainsert_v2", new=AsyncMock()):
+        result = await gate.request_or_pass(
+            ApprovalGateRequest(
+                tenant_id=1,
+                scenario_code="knowledge_space_subscribe_request",
+                business_key="space:12:user:7",
+                business_resource_type="knowledge_space",
+                business_resource_id="12",
+                business_name="研发知识空间",
+                applicant_user_id=7,
+                applicant_user_name="alice",
+                payload_snapshot={"space_id": 12},
+            )
         )
-    )
 
     assert result.decision == ApprovalGateDecision.PENDING
     assert result.instance_id == 300
@@ -483,6 +490,77 @@ async def test_gate_returns_existing_instance_for_duplicate_business_key():
 
     assert result.decision == ApprovalGateDecision.PENDING
     assert result.instance_id == 401
+
+
+def _invite_request() -> ApprovalGateRequest:
+    return ApprovalGateRequest(
+        tenant_id=1,
+        scenario_code="resource_user_invite_confirmation",
+        business_key="resource-user-invite:knowledge_space:88:user:9",
+        business_resource_type="knowledge_space",
+        business_resource_id="88",
+        business_name="docs",
+        applicant_user_id=7,
+        applicant_user_name="alice",
+        payload_snapshot={"target_user_id": 9},
+    )
+
+
+@pytest.mark.asyncio
+async def test_invite_pass_route_rejected():
+    handler = SimpleNamespace(
+        dedupe_scope="business_key",
+        requires_self_confirmation=True,
+        build_detail=AsyncMock(return_value={}),
+        build_title=AsyncMock(return_value="docs"),
+    )
+    gate = ApprovalGate(
+        registry=SimpleNamespace(get_handler=AsyncMock(return_value=handler)),
+        scenario_repository=SimpleNamespace(
+            get_scenario_by_code=AsyncMock(return_value=SimpleNamespace(id=1, enabled=True)),
+            list_route_rules=AsyncMock(return_value=[]),
+        ),
+        instance_repository=SimpleNamespace(find_blocking_invite=AsyncMock(return_value=None)),
+        route_matcher=AsyncMock(return_value=SimpleNamespace(route_type="pass")),
+    )
+
+    with pytest.raises(ApprovalConfirmationFlowRequiredError):
+        await gate.request_or_pass(_invite_request())
+
+
+@pytest.mark.asyncio
+async def test_invite_requires_single_or_target():
+    handler = SimpleNamespace(
+        dedupe_scope="business_key",
+        requires_self_confirmation=True,
+        build_detail=AsyncMock(return_value={}),
+        build_title=AsyncMock(return_value="docs"),
+        resolve_approvers=AsyncMock(return_value=[7]),
+    )
+    gate = ApprovalGate(
+        registry=SimpleNamespace(get_handler=AsyncMock(return_value=handler)),
+        scenario_repository=SimpleNamespace(
+            get_scenario_by_code=AsyncMock(return_value=SimpleNamespace(id=1, enabled=True)),
+            list_route_rules=AsyncMock(return_value=[]),
+            get_active_flow_version=AsyncMock(return_value=SimpleNamespace(id=2)),
+            list_node_definitions=AsyncMock(
+                return_value=[
+                    SimpleNamespace(
+                        node_mode="or",
+                        approver_config={"sources": [{"type": "invited_user"}]},
+                        node_code="invitee",
+                        node_name="confirm",
+                        node_order=0,
+                    )
+                ]
+            ),
+        ),
+        instance_repository=SimpleNamespace(find_blocking_invite=AsyncMock(return_value=None)),
+        route_matcher=AsyncMock(return_value=SimpleNamespace(id=3, route_type="flow", flow_definition_id=4)),
+    )
+
+    with pytest.raises(ApprovalConfirmationFlowRequiredError):
+        await gate.request_or_pass(_invite_request())
 
 
 @pytest.mark.asyncio
@@ -757,5 +835,6 @@ def test_registry_exposes_default_presets():
         "menu_access_request",
         "channel_subscribe_request",
         "knowledge_space_subscribe_request",
+        "resource_user_invite_confirmation",
     }
     assert presets["menu_access_request"].handler_key == "menu_access_request"

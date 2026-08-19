@@ -5,12 +5,11 @@ Verifies check, list_objects, write_tuples, batch_check, read_tuples,
 health, and error handling (fail-closed).
 """
 
-import pytest
 import httpx
+import pytest
 
 from bisheng.core.openfga.client import FGAClient
 from bisheng.core.openfga.exceptions import (
-    FGAClientError,
     FGAConnectionError,
     FGAWriteError,
 )
@@ -115,6 +114,34 @@ class TestFGAClientWriteTuples:
     async def test_write_tuples_noop(self, fga_client):
         # Empty writes/deletes should be a no-op
         await fga_client.write_tuples()
+
+
+class TestFGAClientReadTuples:
+
+    @pytest.mark.asyncio
+    async def test_read_tuples_threads_higher_consistency_to_every_page(self, fga_client, monkeypatch):
+        bodies = []
+
+        async def fake_post(path, body):
+            bodies.append((path, body))
+            if len(bodies) == 1:
+                return {
+                    "tuples": [{"key": {"user": "user:7", "relation": "owner", "object": "workflow:a"}}],
+                    "continuation_token": "next",
+                }
+            return {"tuples": [], "continuation_token": ""}
+
+        monkeypatch.setattr(fga_client, "_post", fake_post)
+
+        result = await fga_client.read_tuples(
+            relation="owner",
+            object="workflow:a",
+            consistency="HIGHER_CONSISTENCY",
+        )
+
+        assert result == [{"user": "user:7", "relation": "owner", "object": "workflow:a"}]
+        assert [body["consistency"] for _path, body in bodies] == ["HIGHER_CONSISTENCY", "HIGHER_CONSISTENCY"]
+        assert bodies[1][1]["continuation_token"] == "next"
 
 
 class TestFGAClientHealth:

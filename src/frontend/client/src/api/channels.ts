@@ -7,11 +7,13 @@ import type {
   InitialPermissionResult,
   InitialPermissionsPayload,
   PermissionEntry,
+  AuthorizationResult,
+  RawAuthorizationResult,
   RawInitialPermissionResult,
   RelationModel,
   RevokeItem,
 } from "./permission";
-import { mapInitialPermissionResult } from "./permission";
+import { mapAuthorizationResult, mapInitialPermissionResult } from "./permission";
 
 export type { InitialPermissionResult } from "./permission";
 
@@ -341,20 +343,26 @@ export async function getChannelPermissionsApi(
         `/api/v1/channel/manager/${channelId}/permissions`,
         withChannelPermissionRequestOptions(config),
     );
-    return unwrapChannelPermissionArray<PermissionEntry>(res);
+    return unwrapChannelPermissionArray<PermissionEntry>(res).map((entry) => ({
+        ...entry,
+        authorizationStatus: entry.authorization_status ?? entry.authorizationStatus ?? "active",
+        approvalInstanceId: entry.approval_instance_id ?? entry.approvalInstanceId ?? null,
+    }));
 }
 
 export async function authorizeChannelApi(
     channelId: string,
     payload: ChannelAuthorizePayload,
     config?: ChannelPermissionRequestConfig
-): Promise<null> {
+): Promise<AuthorizationResult> {
     const res = await request.post(
         `/api/v1/channel/manager/${channelId}/authorize`,
         payload,
         withChannelPermissionRequestOptions(config),
     );
-    return unwrapChannelPermissionPayload<null>(res);
+    return mapAuthorizationResult(
+        unwrapChannelPermissionPayload<RawAuthorizationResult | null>(res),
+    );
 }
 
 export async function getChannelGrantableRelationModelsApi(

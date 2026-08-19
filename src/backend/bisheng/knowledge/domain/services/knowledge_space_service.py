@@ -22,6 +22,10 @@ from bisheng.approval.domain.services.knowledge_space_subscribe_scenario_handler
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
 from bisheng.common.errcode.knowledge_space import (
+    DepartmentSpacePrivateForbiddenError,
+    SpaceFileChangeApproverUnavailableError,
+    SpaceFileChangeInvalidStateError,
+    SpaceFileChangeRequestNotFoundError,
     SpaceFileDuplicateError,
     SpaceFileExtensionError,
     SpaceFileNameDuplicateError,
@@ -47,6 +51,7 @@ from bisheng.common.models.space_channel_member import (
     SpaceChannelMember,
     SpaceChannelMemberDao,
     UserRoleEnum,
+    resolve_channel_relation,
 )
 from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.database import get_async_db_session
@@ -175,6 +180,7 @@ _CHILD_PERMISSION_CHECK_CONCURRENCY = 8
 # filtering is refilled from the next OFFSET window, so this only bounds per-round
 # DB fetch + visibility evaluation, not the page size.
 _SEARCH_SCAN_BATCH_SIZE = 100
+_FOLDER_COUNT_UNION_CHUNK_SIZE = 100
 _WEB_LINK_SEPARATORS = ["\n\n", "\n", "。", "\\.", "，", ",", "；", ";", "、", "\\s+", ""]
 _WEB_LINK_SEPARATOR_RULES = ["after"] * len(_WEB_LINK_SEPARATORS)
 _AUDIO_FILE_EXTENSIONS = {"mp3", "wav", "m4a", "aac", "flac", "ogg"}
@@ -200,6 +206,46 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # cascade during file deletion to clear the logical-document anchor
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
+
+    def _file_change_visibility_service(self):
+        if not hasattr(self, "_knowledge_file_visibility_service"):
+            from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
+                KnowledgeFileVisibilityService,
+            )
+
+            visibility = KnowledgeFileVisibilityService(self.request, self.login_user)
+            visibility.version_repo = self.version_repo
+            self._knowledge_file_visibility_service = visibility
+        return self._knowledge_file_visibility_service
+
+    async def _get_file_change_excluded_ids(self, *, space_id: int) -> set[int]:
+        """Load publication/deletion hard-deny IDs once per service request."""
+        normalized_space_id = int(space_id)
+        visibility_service = self._file_change_visibility_service()
+        effective_tenant_id = visibility_service.require_explicit_tenant()
+        cache = self.__dict__.setdefault("_file_change_excluded_ids_cache", {})
+        cache_key = (effective_tenant_id, normalized_space_id)
+        if cache_key not in cache:
+            cache[cache_key] = await visibility_service.list_file_change_excluded_ids(
+                space_ids=[normalized_space_id],
+            )
+        return set(cache[cache_key])
+
+    async def _require_file_change_batch_visible(
+        self,
+        *,
+        space_id: int,
+        resource_ids: list[int],
+    ) -> None:
+        unique_ids = set(self._dedupe_ids(resource_ids))
+        if not unique_ids:
+            return
+        visible_ids = await self._file_change_visibility_service().filter_file_change_visible_ids(
+            space_ids=[int(space_id)],
+            resource_ids=unique_ids,
+        )
+        if visible_ids != unique_ids:
+            raise SpaceFileChangeRequestNotFoundError()
 
     def _ensure_space_async_task_tenant_consistency(self, space: Knowledge, operation: str) -> None:
         current_tid = get_current_tenant_id()
@@ -860,15 +906,39 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
             )
 
+        bindings = await _get_bindings()
+        current_relations = {
+            str(binding.get("relation"))
+            for binding in bindings
+            if cls._is_direct_space_user_binding(binding, space_id, user_id)
+        }
+        approver_relation_changed = desired_relation == "manager" or "manager" in current_relations
+
         await PermissionService.authorize(
             object_type="knowledge_space",
             object_id=str(space_id),
             grants=grants,
             revokes=revokes,
             enforce_fga_success=True,
+            dispatch_file_change_approver_reconcile=False,
         )
+        if approver_relation_changed:
+            from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                dispatch_file_change_approver_reconcile_for_permission_change,
+            )
 
-        bindings = await _get_bindings()
+            resource_tenant_id = await PermissionService.resolve_resource_tenant_id(
+                "knowledge_space",
+                str(space_id),
+            )
+            await dispatch_file_change_approver_reconcile_for_permission_change(
+                resource_type="knowledge_space",
+                resource_id=space_id,
+                grants=grants,
+                revokes=revokes,
+                tenant_id=resource_tenant_id,
+            )
+
         updated_bindings = [
             binding for binding in bindings if not cls._is_direct_space_user_binding(binding, space_id, user_id)
         ]
@@ -1338,6 +1408,88 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if permission_id not in effective_permissions:
             raise SpacePermissionDeniedError()
 
+    async def has_effective_permission_id(
+        self,
+        object_type: str,
+        object_id: int,
+        permission_id: str,
+        *,
+        space_id: int | None = None,
+    ) -> bool:
+        """Authoritative permission-id check shared by upload entry/execution.
+
+        This deliberately evaluates custom relation-model ``permissions`` via
+        the same owner path as ``_require_permission_id``. A computed relation
+        such as ``can_edit`` is not by itself proof that ``upload_file`` remains
+        enabled in a custom model.
+        """
+        effective_permissions = await self._get_effective_permission_ids(
+            object_type,
+            object_id,
+            space_id=space_id,
+            include_public_viewer=False,
+        )
+        return str(permission_id) in effective_permissions
+
+    async def has_effective_permission_id_strict(
+        self,
+        object_type: str,
+        object_id: int,
+        permission_id: str,
+        *,
+        space_id: int,
+        locked_space: Knowledge | None = None,
+    ) -> bool:
+        """Strong, fail-closed permission-id check for approved execution.
+
+        OpenFGA remains the sole grant authority. Database projections only
+        constrain which legacy unbound direct-user tuples can be interpreted;
+        they can never grant access when the strong tuple read is absent.
+        """
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None or int(tenant_id) != int(self.login_user.tenant_id):
+            raise RuntimeError("a matching tenant context is required for strict permission evaluation")
+        space = locked_space or await KnowledgeDao.aquery_by_id(int(space_id))
+        if space is None or int(space.tenant_id or 0) != int(tenant_id):
+            return False
+
+        allowed_unbound: set[tuple[str, str, str]] = set()
+        if int(space.user_id or 0) == int(self.login_user.user_id):
+            allowed_unbound.add(("knowledge_space", str(space_id), "owner"))
+        member = await SpaceChannelMemberDao.async_find_member(int(space_id), int(self.login_user.user_id))
+        if member is not None and member.is_active:
+            member_relation = resolve_channel_relation(member)
+            if member_relation is not None:
+                allowed_unbound.add(("knowledge_space", str(space_id), member_relation.value))
+
+        # A file/folder's own creator holds a direct ``owner`` tuple on the
+        # resource itself (written when they uploaded/created it). That grant is
+        # exactly what admits their rename/delete/move request at submission time
+        # (the non-strict ``_get_effective_permission_ids`` honours it), so the
+        # approved execution must honour it too. Without this, an approved change
+        # to one's own file fails the strict re-check and the request is stuck in
+        # ``queued`` forever. Trust it only when the DB projection confirms the
+        # login user still owns that exact resource in this space.
+        if object_type in ("knowledge_file", "folder"):
+            resource = await KnowledgeFileDao.query_by_id(int(object_id))
+            if (
+                resource is not None
+                and resource.user_id is not None
+                and int(resource.user_id) == int(self.login_user.user_id)
+                and int(resource.knowledge_id) == int(space_id)
+            ):
+                allowed_unbound.add((object_type, str(object_id), "owner"))
+
+        return await FineGrainedPermissionService.has_effective_permission_id_strict(
+            self.login_user,
+            object_type,
+            object_id,
+            permission_id,
+            tenant_id=int(tenant_id),
+            space_id=int(space_id),
+            allowed_unbound_direct_tuples=allowed_unbound,
+        )
+
     async def can_write_space_container(self, space_id: int, parent_id: int | None = None) -> bool:
         """F030: best-effort boolean — can the acting user upload into this container?
 
@@ -1778,6 +1930,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_permission_id("knowledge_space", space_id, "edit_space")
 
         old_auth_type = space.auth_type
+        if auth_type == AuthTypeEnum.PRIVATE:
+            department_binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
+            if department_binding is not None:
+                raise DepartmentSpacePrivateForbiddenError()
 
         if name is not None:
             space.name = name
@@ -1853,6 +2009,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         new_auth_type = space.auth_type
 
         if private_cleanup_requested:
+            from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                dispatch_file_change_approver_reconcile_for_spaces,
+            )
+
+            await dispatch_file_change_approver_reconcile_for_spaces(
+                space_ids=[space_id],
+                tenant_id=self.login_user.tenant_id,
+            )
+            # F045: retract still-pending share invitations so the "同意加入"
+            # approval task is withdrawn from the invitee's inbox rather than
+            # silently granting access to the now-private space. Runs after the
+            # space is persisted as PRIVATE so the accept-side guard is the
+            # effective backstop for any concurrent acceptance.
+            await self._withdraw_pending_invites_for_private(space_id)
             final_removed_user_ids = []
             for user_id in removed_user_ids:
                 if not await self._user_can_read_space(user_id, space_id):
@@ -1881,6 +2051,65 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
 
         return space
+
+    async def _withdraw_pending_invites_for_private(self, space_id: int) -> None:
+        """Withdraw still-pending F045 share invitations when a space goes PRIVATE.
+
+        Only ``AWAITING_APPROVAL`` invites still own a PENDING approval instance
+        that can be withdrawn; ``QUEUED``/``APPLYING``/``FAILED`` rows mean the
+        invitee already decided, and those are handled by the accept-side PRIVATE
+        guard in ``ResourceAuthorizationService._validate_confirmed_grant_command``.
+
+        Withdrawal is performed on behalf of each invite's applicant (the
+        inviter) — the only operator ``withdraw_instance`` accepts — and is
+        best-effort: a concurrent acceptance may terminalise the instance first,
+        raising here, in which case the accept-side guard blocks the grant.
+        """
+        from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
+        from bisheng.permission.domain.models.resource_user_invite_request import (
+            ResourceUserInviteExecutionState,
+        )
+        from bisheng.permission.domain.services.resource_user_invite_application_service import (
+            build_runtime_resource_user_invite_application_service,
+        )
+
+        tenant_id = self.login_user.tenant_id
+        try:
+            invite_service = build_runtime_resource_user_invite_application_service()
+            pending = await invite_service.list_pending_invites(
+                tenant_id=tenant_id,
+                resource_type="knowledge_space",
+                resource_id=str(space_id),
+            )
+        except Exception as error:  # pragma: no cover - defensive
+            logger.warning(
+                "failed to list pending invites while making space {} private: {}",
+                space_id,
+                error,
+            )
+            return
+
+        for invite in pending:
+            if invite.execution_state != ResourceUserInviteExecutionState.AWAITING_APPROVAL:
+                continue
+            approval_instance_id = getattr(invite, "approval_instance_id", None)
+            if approval_instance_id is None:
+                continue
+            try:
+                await ApprovalCenterService.withdraw_instance(
+                    instance_id=int(approval_instance_id),
+                    operator_user_id=int(invite.inviter_user_id),
+                    reason="知识空间已转为私密, 邀请自动撤回",
+                )
+            except Exception as error:
+                # A concurrent accept (or an already-terminal instance) raises
+                # here; the accept-side PRIVATE guard is the backstop for it.
+                logger.warning(
+                    "failed to withdraw pending invite instance {} for space {}: {}",
+                    approval_instance_id,
+                    space_id,
+                    error,
+                )
 
     # ──────────────────────────── Listings ────────────────────────────────────
 
@@ -2186,10 +2415,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         Pin state lives in the decoupled ``knowledge_space_user_pin`` table, not
         on the membership row — a user may pin a space reachable only via ReBAC /
-        department authorization (no membership row). We gate on ``view_space``
-        first so a pin can only be written for a space the user can actually see.
+        department authorization (no membership row). Pinning is a pure personal
+        UI preference and is not permission-gated: we only validate the space
+        exists (and is a SPACE), so a pin is never written for an invalid id.
+        Stale pins stay inert because every space listing re-checks ``view_space``
+        on read.
         """
-        await self._require_read_permission(space_id)
+        await self._get_space_or_raise(space_id)
         if is_pinned:
             await KnowledgeSpaceUserPinDao.pin(user_id=self.login_user.user_id, space_id=space_id)
         else:
@@ -2470,7 +2702,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         return items
 
-    async def _handle_file_folder_extra_info(self, res: list[KnowledgeFile]) -> list[dict]:
+    async def _handle_file_folder_extra_info(
+        self,
+        res: list[KnowledgeFile],
+        *,
+        file_change_excluded_ids: set[int] | None = None,
+    ) -> list[dict]:
         folder_ids = []
         file_ids = []
         for one in res:
@@ -2482,49 +2719,109 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # folder need find all success file num and all file num
         folder_counts = {}
         if folder_ids:
-            from sqlalchemy import func, or_
+            from sqlalchemy import func, literal, or_, union_all
             from sqlmodel import col, select
 
             from bisheng.core.database import get_async_db_session
 
-            async def count_folder(folder: KnowledgeFile):
-                prefix = f"{folder.file_level_path or ''}/{folder.id}"
-                stmt = (
-                    select(KnowledgeFile.status, func.count(KnowledgeFile.id))
-                    .where(
-                        KnowledgeFile.knowledge_id == folder.knowledge_id,
-                        KnowledgeFile.file_type == 1,
-                        or_(
-                            col(KnowledgeFile.file_level_path) == prefix,
-                            col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
-                        ),
-                    )
-                    .group_by(KnowledgeFile.status)
-                )
-
-                in_progress_statuses = {
-                    KnowledgeFileStatus.PROCESSING.value,
-                    KnowledgeFileStatus.WAITING.value,
-                    KnowledgeFileStatus.REBUILDING.value,
-                }
-                # Statuses a batch-retry would actually act on (see batch_retry_failed_files).
-                retryable_statuses = {
-                    KnowledgeFileStatus.FAILED.value,
-                    KnowledgeFileStatus.VIOLATION.value,
-                }
-                async with get_async_db_session() as session:
-                    rows = (await session.exec(stmt)).all()
-                    success = sum(r[1] for r in rows if r[0] == KnowledgeFileStatus.SUCCESS.value)
-                    processing = sum(r[1] for r in rows if r[0] in in_progress_statuses)
-                    failed = sum(r[1] for r in rows if r[0] in retryable_statuses)
-                    folder_counts[folder.id] = {
-                        "has_failed_files": failed > 0,
-                        "success_file_num": success,
-                        "processing_file_num": processing,
-                    }
-
+            effective_tenant_id = self._file_change_visibility_service().require_explicit_tenant()
             folders = [f for f in res if f.file_type == FileType.DIR]
-            await asyncio.gather(*(count_folder(f) for f in folders))
+            folder_scopes = {
+                int(folder.id): (
+                    int(folder.knowledge_id),
+                    f"{folder.file_level_path or ''}/{folder.id}",
+                )
+                for folder in folders
+            }
+            aggregate_queries = [
+                select(
+                    literal(folder_id).label("folder_id"),
+                    KnowledgeFile.status,
+                    func.count(KnowledgeFile.id).label("file_count"),
+                )
+                .where(
+                    KnowledgeFile.tenant_id == effective_tenant_id,
+                    KnowledgeFile.knowledge_id == knowledge_id,
+                    KnowledgeFile.file_type == FileType.FILE.value,
+                    or_(
+                        col(KnowledgeFile.file_level_path) == prefix,
+                        col(KnowledgeFile.file_level_path).like(f"{prefix}/%"),
+                    ),
+                )
+                .group_by(KnowledgeFile.status)
+                for folder_id, (knowledge_id, prefix) in folder_scopes.items()
+            ]
+            async with get_async_db_session() as session:
+                aggregate_rows = []
+                for offset in range(0, len(aggregate_queries), _FOLDER_COUNT_UNION_CHUNK_SIZE):
+                    aggregate_stmt = union_all(
+                        *aggregate_queries[offset : offset + _FOLDER_COUNT_UNION_CHUNK_SIZE],
+                    )
+                    aggregate_rows.extend((await session.exec(aggregate_stmt)).all())
+
+                hidden_rows = []
+                hidden_ids = sorted(file_change_excluded_ids or set())
+                for offset in range(0, len(hidden_ids), 500):
+                    hidden_chunk = hidden_ids[offset : offset + 500]
+                    hidden_stmt = select(
+                        KnowledgeFile.id,
+                        KnowledgeFile.knowledge_id,
+                        KnowledgeFile.status,
+                        KnowledgeFile.file_level_path,
+                    ).where(
+                        KnowledgeFile.tenant_id == effective_tenant_id,
+                        KnowledgeFile.knowledge_id.in_(
+                            sorted({scope[0] for scope in folder_scopes.values()}),
+                        ),
+                        KnowledgeFile.file_type == FileType.FILE.value,
+                        col(KnowledgeFile.id).in_(hidden_chunk),
+                    )
+                    hidden_rows.extend((await session.exec(hidden_stmt)).all())
+
+            in_progress_statuses = {
+                KnowledgeFileStatus.PROCESSING.value,
+                KnowledgeFileStatus.WAITING.value,
+                KnowledgeFileStatus.REBUILDING.value,
+            }
+            # Statuses a batch-retry would actually act on (see batch_retry_failed_files).
+            retryable_statuses = {
+                KnowledgeFileStatus.FAILED.value,
+                KnowledgeFileStatus.VIOLATION.value,
+            }
+            raw_counts = {folder_id: {"success": 0, "processing": 0, "failed": 0} for folder_id in folder_scopes}
+            for folder_id, status, count in aggregate_rows:
+                normalized_folder_id = int(folder_id)
+                if status == KnowledgeFileStatus.SUCCESS.value:
+                    raw_counts[normalized_folder_id]["success"] += int(count)
+                elif status in in_progress_statuses:
+                    raw_counts[normalized_folder_id]["processing"] += int(count)
+                elif status in retryable_statuses:
+                    raw_counts[normalized_folder_id]["failed"] += int(count)
+
+            for _file_id, row_knowledge_id, status, file_level_path in hidden_rows:
+                normalized_path = str(file_level_path or "")
+                for folder_id, (knowledge_id, prefix) in folder_scopes.items():
+                    if int(row_knowledge_id) != knowledge_id:
+                        continue
+                    if normalized_path != prefix and not normalized_path.startswith(f"{prefix}/"):
+                        continue
+                    if status == KnowledgeFileStatus.SUCCESS.value:
+                        counter = "success"
+                    elif status in in_progress_statuses:
+                        counter = "processing"
+                    elif status in retryable_statuses:
+                        counter = "failed"
+                    else:
+                        continue
+                    raw_counts[folder_id][counter] = max(0, raw_counts[folder_id][counter] - 1)
+
+            for folder_id in folder_scopes:
+                counts = raw_counts[folder_id]
+                folder_counts[folder_id] = {
+                    "has_failed_files": counts["failed"] > 0,
+                    "success_file_num": counts["success"],
+                    "processing_file_num": counts["processing"],
+                }
 
         # file need find all tags
         file_tags = {}
@@ -2555,7 +2852,114 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
             result.append(item)
 
-        return result
+        return await self._enrich_file_change_approval_views(res, result)
+
+    async def _load_file_change_approval_matches(self, *, tenant_id: int, space_id: int, resources):
+        from bisheng.knowledge.domain.repositories.knowledge_space_file_change_footprint_repository import (
+            KnowledgeSpaceFileChangeFootprintRepository,
+        )
+
+        async with get_async_db_session() as session:
+            return await KnowledgeSpaceFileChangeFootprintRepository(session).list_active_resource_matches(
+                tenant_id=int(tenant_id),
+                space_id=int(space_id),
+                resources=resources,
+            )
+
+    async def _enrich_file_change_approval_views(
+        self,
+        rows: list[KnowledgeFile],
+        items: list[dict],
+    ) -> list[dict]:
+        """Attach one tenant-bound F046 projection to a formal-resource page."""
+
+        if not rows:
+            return items
+        from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+            KnowledgeSpaceFileChangeLockScope,
+        )
+        from bisheng.knowledge.domain.repositories.knowledge_space_file_change_footprint_repository import (
+            FootprintEntry,
+            KnowledgeSpaceFileChangeFootprintRepository,
+        )
+        from bisheng.knowledge.domain.services.knowledge_space_file_change_approver_resolver import (
+            KnowledgeSpaceFileChangeApproverResolver,
+        )
+
+        tenant_id = self._file_change_visibility_service().require_explicit_tenant()
+        space_ids = {int(row.knowledge_id) for row in rows}
+        if len(space_ids) != 1:
+            raise RuntimeError("formal file approval enrichment cannot mix knowledge spaces")
+        space_id = space_ids.pop()
+
+        def full_path(row: KnowledgeFile) -> str:
+            prefix = str(row.file_level_path or "").strip("/")
+            raw = f"/{prefix}/{int(row.id)}/" if prefix else f"/{int(row.id)}/"
+            normalized = KnowledgeSpaceFileChangeFootprintRepository.normalize_path_root(raw)
+            assert normalized is not None
+            return normalized
+
+        page_resources = [
+            FootprintEntry(
+                space_id=space_id,
+                resource_type="folder" if int(row.file_type) == FileType.DIR.value else "knowledge_file",
+                resource_id=int(row.id),
+                path_root=full_path(row),
+                lock_scope=KnowledgeSpaceFileChangeLockScope.EXACT,
+            )
+            for row in rows
+        ]
+        matches = await self._load_file_change_approval_matches(
+            tenant_id=tenant_id,
+            space_id=space_id,
+            resources=page_resources,
+        )
+        if not matches:
+            return items
+        try:
+            is_current_approver = bool(
+                await KnowledgeSpaceFileChangeApproverResolver.is_current_approver(
+                    tenant_id=tenant_id,
+                    space_id=space_id,
+                    user_id=int(self.login_user.user_id),
+                )
+            )
+        except SpaceFileChangeApproverUnavailableError:
+            logger.warning(
+                "file-change approval enrichment denied unavailable approver lookup: tenant_id={} space_id={}",
+                tenant_id,
+                space_id,
+            )
+            is_current_approver = False
+
+        for row, item in zip(rows, items, strict=True):
+            row_path = full_path(row)
+            for match in matches:
+                request = match.request
+                applicant = int(request.applicant_user_id) == int(self.login_user.user_id)
+                if not applicant and not is_current_approver:
+                    continue
+                root_resource_id = int(request.resource_id)
+                inherited = int(row.id) != root_resource_id
+                if inherited and (
+                    match.lock_scope != KnowledgeSpaceFileChangeLockScope.SUBTREE
+                    or not match.path_root
+                    or not row_path.startswith(str(match.path_root))
+                ):
+                    continue
+                if not inherited and int(row.id) != root_resource_id:
+                    continue
+                item["file_change_approval"] = {
+                    "status": str(request.execution_state),
+                    "action": str(request.action),
+                    "instance_id": int(request.approval_instance_id),
+                    "request_id": int(request.id),
+                    "can_approve": bool(is_current_approver and not applicant),
+                    "inherited": inherited,
+                    "root_resource_id": root_resource_id,
+                }
+                break
+        return items
 
     async def _filter_visible_child_items_reference(
         self,
@@ -2689,6 +3093,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if self._is_read_permission_bypassed(space_id)
             else await self._build_child_permission_context(space_id)
         )
+        file_change_excluded_ids = await self._get_file_change_excluded_ids(space_id=space_id)
         batch_cursor: list | None = list(cursor) if cursor else None
 
         while True:
@@ -2714,6 +3119,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 context=permission_context,
                 collect_permission_ids=collect_permission_ids,
             )
+            visible_batch = [item for item in visible_batch if int(item.id) not in file_change_excluded_ids]
             for item in visible_batch:
                 visible_page_items.append(item)
                 if len(visible_page_items) > page_size:
@@ -2772,6 +3178,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if self._is_read_permission_bypassed(space_id)
             else await self._build_child_permission_context(space_id)
         )
+        file_change_excluded_ids = await self._get_file_change_excluded_ids(space_id=space_id)
         visible: list[KnowledgeFile] = []
         batch_num = 0
 
@@ -2794,14 +3201,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             if not batch:
                 break
-            visible.extend(
-                await self._filter_visible_child_items(
-                    batch,
-                    space_id=space_id,
-                    context=permission_context,
-                    collect_permission_ids=collect_permission_ids,
-                )
+            visible_batch = await self._filter_visible_child_items(
+                batch,
+                space_id=space_id,
+                context=permission_context,
+                collect_permission_ids=collect_permission_ids,
             )
+            visible.extend(item for item in visible_batch if int(item.id) not in file_change_excluded_ids)
             if len(batch) < _SEARCH_SCAN_BATCH_SIZE:
                 break
 
@@ -2883,7 +3289,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(visible_page_items)
 
-        data = await self._handle_file_folder_extra_info(visible_page_items)
+        data = await self._handle_file_folder_extra_info(
+            visible_page_items,
+            file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
+        )
         for item in data:
             item["permission_ids"] = collected_permission_ids.get(int(item["id"]))
 
@@ -2918,6 +3327,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_status: list[int] = None,
         order_field: str = "file_type",
         order_sort: str = "asc",
+        file_ids: list[int] | None = None,
     ) -> dict:
         read_permission_bypassed = self._is_read_permission_bypassed(space_id)
         if read_permission_bypassed:
@@ -2928,7 +3338,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._require_permission_id("knowledge_space", space_id, "view_space")
 
         file_level_path = None
-        filter_files = []
+        if file_ids is not None and not file_ids:
+            return {"page": page, "page_size": page_size, "data": [], "has_more": False}
+        filter_files = list(dict.fromkeys(int(file_id) for file_id in (file_ids or [])))
 
         if parent_id:
             if read_permission_bypassed:
@@ -2940,7 +3352,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             children_ids = await SpaceFileDao.get_children_by_prefix(space_id, file_level_path)
             if not children_ids:
                 return {"page": page, "page_size": page_size, "data": [], "has_more": False}
-            filter_files = [one.id for one in children_ids]
+            child_ids = [int(one.id) for one in children_ids]
+            filter_files = list(set(filter_files) & set(child_ids)) if file_ids is not None else child_ids
+            if not filter_files:
+                return {"page": page, "page_size": page_size, "data": [], "has_more": False}
 
         if tag_ids:
             resources = await TagDao.aget_resources_by_tags(tag_ids, ResourceTypeEnum.SPACE_FILE)
@@ -3033,7 +3448,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
         await self._enrich_with_version_info(page_items)
 
-        data = await self._handle_file_folder_extra_info(page_items)
+        data = await self._handle_file_folder_extra_info(
+            page_items,
+            file_change_excluded_ids=await self._get_file_change_excluded_ids(space_id=space_id),
+        )
         for item in data:
             item["permission_ids"] = collected_permission_ids.get(int(item["id"]))
         # `total` is intentionally dropped (INV-6): an accurate post-ReBAC-filter
@@ -3241,6 +3659,171 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not candidate.lower().endswith(".html"):
             candidate = f"{candidate}.html"
         return candidate
+
+    @classmethod
+    async def add_file_in_uow(
+        cls,
+        *,
+        session,
+        request,
+        stage,
+        applicant_user_name: str | None = None,
+        mutation_repository=None,
+    ):
+        """Create a staged upload's formal file graph in the caller transaction.
+
+        This is the session-bound counterpart of ``add_file``. It deliberately
+        performs no MinIO/OpenFGA/telemetry/worker action and never commits. The
+        caller can therefore persist the F046 request link and durable steps in
+        the same transaction before any formal row becomes visible.
+        """
+        from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+            KnowledgeSpaceFileChangeAction,
+        )
+        from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
+            KnowledgeSpaceUploadStageState,
+        )
+        from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
+            FormalUploadBundle,
+            KnowledgeSpaceMutationRepository,
+        )
+
+        if not session.in_transaction():
+            raise RuntimeError("add_file_in_uow requires an active caller transaction")
+        if request.action != KnowledgeSpaceFileChangeAction.UPLOAD:
+            raise ValueError("add_file_in_uow only accepts upload requests")
+        if request.upload_stage_id is None or int(request.upload_stage_id) != int(stage.id):
+            raise ValueError("upload request is not bound to the supplied stage")
+        if request.tenant_id is None or int(request.tenant_id) != int(stage.tenant_id):
+            raise ValueError("upload request and stage tenant do not match")
+        if int(request.space_id) != int(stage.space_id):
+            raise ValueError("upload request and stage space do not match")
+        if int(request.applicant_user_id) != int(stage.uploader_user_id):
+            raise ValueError("upload request and stage uploader do not match")
+        if (
+            request.file_name != stage.file_name
+            or int(request.file_size or -1) != int(stage.file_size)
+            or request.content_hash != stage.content_hash
+        ):
+            raise ValueError("upload stage metadata changed after approval submission")
+        if stage.state not in {
+            KnowledgeSpaceUploadStageState.ATTACHED,
+            KnowledgeSpaceUploadStageState.CONSUMED,
+        }:
+            raise ValueError(f"upload stage cannot become formal from state={stage.state}")
+
+        repository = mutation_repository or KnowledgeSpaceMutationRepository(session)
+        duplicate = await repository.find_duplicate_file(
+            tenant_id=int(request.tenant_id),
+            space_id=int(request.space_id),
+            file_name=str(stage.file_name),
+            content_hash=str(stage.content_hash),
+        )
+        if duplicate is not None:
+            if duplicate.md5 == stage.content_hash:
+                raise SpaceFileDuplicateError()
+            raise SpaceFileNameDuplicateError()
+
+        display_user_name = applicant_user_name or str(request.applicant_user_id)
+        level = 0
+        file_level_path = ""
+        if request.source_parent_id is not None:
+            parent = await repository.get_folder(
+                tenant_id=int(request.tenant_id),
+                space_id=int(request.space_id),
+                folder_id=int(request.source_parent_id),
+                for_update=True,
+            )
+            if parent is None:
+                raise SpaceFolderNotFoundError()
+            level = int(parent.level or 0) + 1
+            file_level_path = f"{parent.file_level_path or ''}/{int(parent.id)}"
+
+        # Folder uploads persist their relative directories only after approval.
+        # Replaying the same request reuses any directory already created at the
+        # same parent path; the request row lock serializes concurrent attempts.
+        relative_path = str((request.action_snapshot or {}).get("relative_path") or "")
+        relative_parts = [
+            part for part in relative_path.replace("\\", "/").split("/") if part and part not in {".", ".."}
+        ]
+        relative_folders = relative_parts[:-1] if relative_parts else []
+        created_folders: list[KnowledgeFile] = []
+        for folder_name in relative_folders:
+            folder = await repository.get_folder_by_name_and_path(
+                tenant_id=int(request.tenant_id),
+                space_id=int(request.space_id),
+                folder_name=folder_name,
+                file_level_path=file_level_path,
+            )
+            if folder is None:
+                if level > MAX_FOLDER_LEVEL:
+                    raise SpaceFolderDepthError()
+                folder = KnowledgeFile(
+                    tenant_id=int(request.tenant_id),
+                    knowledge_id=int(request.space_id),
+                    user_id=int(request.applicant_user_id),
+                    user_name=display_user_name,
+                    updater_id=int(request.applicant_user_id),
+                    updater_name=display_user_name,
+                    file_name=folder_name,
+                    file_type=FileType.DIR.value,
+                    file_source=FileSource.SPACE_UPLOAD.value,
+                    level=level,
+                    file_level_path=file_level_path,
+                    status=KnowledgeFileStatus.SUCCESS.value,
+                )
+                await repository.add_folder(folder)
+                created_folders.append(folder)
+            level = int(folder.level or 0) + 1
+            file_level_path = f"{folder.file_level_path or ''}/{int(folder.id)}"
+
+        split_rule = FileProcessBase(knowledge_id=int(request.space_id)).model_dump()
+        db_file = KnowledgeFile(
+            tenant_id=int(request.tenant_id),
+            knowledge_id=int(request.space_id),
+            file_name=str(stage.file_name),
+            file_size=int(stage.file_size),
+            md5=str(stage.content_hash),
+            split_rule=json.dumps(split_rule, ensure_ascii=False),
+            user_id=int(request.applicant_user_id),
+            user_name=display_user_name,
+            updater_id=int(request.applicant_user_id),
+            updater_name=display_user_name,
+            level=level,
+            file_level_path=file_level_path,
+            file_source=cls._resolve_upload_file_source(
+                str(stage.file_name),
+                FileSource.SPACE_UPLOAD.value,
+            ),
+            status=KnowledgeFileStatus.WAITING.value,
+            object_name=str(stage.object_name),
+        )
+        bundle = await repository.add_formal_upload_bundle(
+            file=db_file,
+            document=KnowledgeDocument(
+                knowledge_id=int(request.space_id),
+                file_level_path=file_level_path,
+                level=level,
+            ),
+            version=KnowledgeDocumentVersion(
+                document_id=0,
+                knowledge_file_id=0,
+                version_no=1,
+                is_primary=True,
+            ),
+        )
+        stage.state = KnowledgeSpaceUploadStageState.CONSUMED
+        from bisheng.knowledge.domain.repositories.knowledge_space_upload_stage_repository import (
+            KnowledgeSpaceUploadStageRepository,
+        )
+
+        await KnowledgeSpaceUploadStageRepository(session).save(stage)
+        return FormalUploadBundle(
+            file=bundle.file,
+            document=bundle.document,
+            version=bundle.version,
+            created_folders=tuple(created_folders),
+        )
 
     @staticmethod
     def _get_web_link_markdown_object_name(file_id: int) -> str:
@@ -4315,6 +4898,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def get_file_preview(self, file_id: int) -> dict:
         file_record = await self._require_file_relation(file_id, "can_read")
         await self._require_permission_id("knowledge_file", file_id, "view_file", space_id=file_record.knowledge_id)
+        await self._file_change_visibility_service().require_file_change_visible(
+            space_id=file_record.knowledge_id,
+            resource_id=file_id,
+            allow_unpublished_stakeholder=True,
+        )
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
         metadata = file_record.user_metadata or {}
@@ -4341,6 +4929,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_id,
             "download_file",
             space_id=file_record.knowledge_id,
+        )
+        await self._file_change_visibility_service().require_file_change_visible(
+            space_id=file_record.knowledge_id,
+            resource_id=file_id,
         )
 
         original_url, preview_url = KnowledgeService.get_file_share_url(file_id)
@@ -4413,6 +5005,368 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await TagDao.add_tags(tag_ids, str(file_record.id), resource_type, self.login_user.user_id)
 
         await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+
+    # ───────────────────── F046 mutation owner API ─────────────────────
+
+    async def authorize_upload_stage(self, space_id: int) -> None:
+        """Authorize byte staging against the same destination gate as registration."""
+        await self._require_permission_id("knowledge_space", space_id, "upload_file")
+
+    async def cleanup_failed_file_change_upload(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+        request_id: int,
+        executed_resource_id: int,
+    ) -> None:
+        """Idempotently remove one unpublished failed F046 upload.
+
+        This owner operation does not re-check the applicant's current delete
+        permission. The resource never became visible, while the request,
+        tenant, space and formal resource binding are all verified here.
+        """
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            raise RuntimeError("tenant context does not match failed upload cleanup")
+
+        from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+            KnowledgeSpaceFileChangeAction,
+        )
+        from bisheng.knowledge.domain.repositories.knowledge_space_file_change_request_repository import (
+            KnowledgeSpaceFileChangeRequestRepository,
+        )
+        from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
+            KnowledgeSpaceMutationRepository,
+        )
+
+        file_ids = [int(executed_resource_id)]
+        async with get_async_db_session() as session:
+            async with session.begin():
+                request = await KnowledgeSpaceFileChangeRequestRepository(session).get_by_id(
+                    tenant_id=int(tenant_id),
+                    request_id=int(request_id),
+                    for_update=True,
+                )
+                if (
+                    request is None
+                    or request.action != KnowledgeSpaceFileChangeAction.UPLOAD
+                    or int(request.space_id) != int(space_id)
+                    or int(request.executed_resource_id or 0) != int(executed_resource_id)
+                ):
+                    raise SpaceFileChangeInvalidStateError()
+
+                repository = KnowledgeSpaceMutationRepository(session)
+                file_record = await repository.get_formal_file(
+                    tenant_id=int(tenant_id),
+                    space_id=int(space_id),
+                    file_id=int(executed_resource_id),
+                    for_update=True,
+                )
+                if file_record is not None:
+                    if int(file_record.status) == KnowledgeFileStatus.SUCCESS.value:
+                        raise SpaceFileChangeInvalidStateError()
+                    manifest = await repository.build_delete_manifest(
+                        tenant_id=int(tenant_id),
+                        space_id=int(space_id),
+                        resource_id=int(executed_resource_id),
+                        resource_type="knowledge_file",
+                        source_name=str(file_record.file_name),
+                        source_path=str(file_record.file_level_path or ""),
+                        source_level=int(file_record.level or 0),
+                    )
+                    file_ids = [int(file_id) for file_id in manifest.get("file_ids", file_ids)]
+                    await repository.apply_delete_cutover(
+                        tenant_id=int(tenant_id),
+                        manifest=manifest,
+                    )
+
+        from bisheng.worker.knowledge.file_worker import delete_knowledge_file_celery
+
+        delete_knowledge_file_celery.apply_async(
+            kwargs={
+                "file_ids": file_ids,
+                "knowledge_id": int(space_id),
+                "clear_minio": True,
+            },
+            headers={"tenant_id": int(tenant_id)},
+        )
+        await self._cleanup_resource_tuples([("knowledge_file", int(file_id)) for file_id in file_ids])
+
+    async def build_file_change_command(
+        self,
+        *,
+        action: str,
+        space_id: int,
+        resource_id: int | None = None,
+        resource_type: str = "file",
+        upload_id: str | None = None,
+        parent_id: int | None = None,
+        relative_path: str | None = None,
+        name: str | None = None,
+        target_space_id: int | None = None,
+        target_folder_id: int | None = None,
+        **_ignored,
+    ):
+        """Build the immutable F046 command without accepting storage metadata."""
+        from bisheng.knowledge.domain.models.knowledge_space_file_change_request import (
+            KnowledgeSpaceFileChangeResourceType,
+        )
+        from bisheng.knowledge.domain.repositories.knowledge_space_upload_stage_repository import (
+            KnowledgeSpaceUploadStageRepository,
+        )
+        from bisheng.knowledge.domain.services.knowledge_space_file_change_service import (
+            FileChangeRequestCommand,
+        )
+
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None:
+            raise RuntimeError("tenant context is required for file change command")
+        internal_type = (
+            KnowledgeSpaceFileChangeResourceType.FOLDER
+            if resource_type == "folder"
+            else KnowledgeSpaceFileChangeResourceType.KNOWLEDGE_FILE
+        )
+        resource = None
+        stage = None
+        if action == "upload" and upload_id:
+            async with get_async_db_session() as session:
+                stage = await KnowledgeSpaceUploadStageRepository(session).get_by_upload_id(
+                    tenant_id=int(tenant_id),
+                    upload_id=upload_id,
+                )
+            internal_type = KnowledgeSpaceFileChangeResourceType.STAGED_UPLOAD
+        elif resource_id is not None:
+            from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
+                KnowledgeSpaceMutationRepository,
+            )
+
+            async with get_async_db_session() as session:
+                resource = await KnowledgeSpaceMutationRepository(session).get_formal_file(
+                    tenant_id=int(tenant_id),
+                    space_id=int(space_id),
+                    file_id=int(resource_id),
+                )
+
+        old_name = str(getattr(resource, "file_name", "") or "")
+        resource_name = old_name or str(getattr(stage, "file_name", "") or name or upload_id or resource_id or "")
+        snapshot = {
+            "space_name": "",
+            "old_name": old_name or None,
+            "new_name": name,
+            "source_path": getattr(resource, "file_level_path", None),
+            "source_level": getattr(resource, "level", None),
+            "relative_path": relative_path,
+        }
+        return FileChangeRequestCommand(
+            action=action,
+            space_id=int(space_id),
+            applicant_user_id=int(self.login_user.user_id),
+            applicant_user_name=str(self.login_user.user_name or ""),
+            resource_type=internal_type,
+            resource_name=resource_name,
+            resource_id=int(resource_id) if resource_id is not None else None,
+            upload_id=upload_id,
+            source_parent_id=parent_id,
+            target_space_id=target_space_id,
+            target_parent_id=target_folder_id,
+            action_snapshot={key: value for key, value in snapshot.items() if value is not None},
+            login_user=self.login_user,
+            ip_address=get_request_ip(self.request),
+        )
+
+    async def build_file_change_commands(
+        self,
+        *,
+        action: str,
+        space_id: int,
+        items: list[dict],
+        **kwargs,
+    ) -> list:
+        commands = []
+        for item in items:
+            commands.append(
+                await self.build_file_change_command(
+                    action=action,
+                    space_id=space_id,
+                    resource_id=item.get("id"),
+                    resource_type=str(item.get("type") or "file"),
+                    upload_id=item.get("upload_id"),
+                    relative_path=item.get("relative_path"),
+                    name=item.get("name"),
+                    **kwargs,
+                )
+            )
+        return commands
+
+    async def authorize_file_change(self, command) -> None:
+        """Permission-first owner check used before policy or approval state is read."""
+        if command.action == "upload":
+            if command.source_parent_id is not None:
+                await self._get_folder_for_action(command.space_id, command.source_parent_id)
+                await self._require_permission_id(
+                    "folder",
+                    command.source_parent_id,
+                    "upload_file",
+                    space_id=command.space_id,
+                )
+            else:
+                await self.authorize_upload_stage(command.space_id)
+            return
+
+        is_folder = command.resource_type == "folder"
+        if is_folder:
+            record = await self._get_folder_for_action(command.space_id, command.resource_id)
+        else:
+            record = await self._get_file_for_action(command.resource_id, space_id=command.space_id)
+        permission_id = f"{command.action}_{'folder' if is_folder else 'file'}"
+        await self._require_permission_id(
+            "folder" if is_folder else "knowledge_file",
+            int(record.id),
+            permission_id,
+            space_id=command.space_id,
+        )
+        if command.action == "move":
+            target_space_id = int(command.target_space_id)
+            if command.target_parent_id is not None:
+                await self._get_folder_for_action(target_space_id, command.target_parent_id)
+                await self._require_permission_id(
+                    "folder",
+                    command.target_parent_id,
+                    "upload_file",
+                    space_id=target_space_id,
+                )
+            else:
+                await self._require_permission_id("knowledge_space", target_space_id, "upload_file")
+
+    async def resolve_file_change_footprints(self, command):
+        """Delegate authoritative expansion to the session-bound owner repository."""
+        from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
+            KnowledgeSpaceMutationRepository,
+        )
+
+        tenant_id = get_current_tenant_id()
+        if tenant_id is None:
+            raise RuntimeError("tenant context is required for file change footprint")
+        async with get_async_db_session() as session:
+            return await KnowledgeSpaceMutationRepository(session).resolve_file_change_footprints(
+                tenant_id=int(tenant_id),
+                command=command,
+            )
+
+    async def execute_direct_file_change(self, command, *, stage_service):
+        """Run the existing authoritative mutation body for no-review decisions."""
+        if command.action == "rename":
+            if command.resource_type == "folder":
+                return await self.rename_folder(command.resource_id, command.action_snapshot["new_name"])
+            return await self.rename_file(command.resource_id, command.action_snapshot["new_name"])
+        if command.action == "move":
+            result = await self.move_items(
+                command.space_id,
+                [{"id": command.resource_id, "type": "folder" if command.resource_type == "folder" else "file"}],
+                target_space_id=command.target_space_id,
+                target_folder_id=command.target_parent_id,
+                skip_invalid=True,
+            )
+            if not result["moved"]:
+                raise ValueError(str(result["invalid"][0].get("reason") or "move is invalid"))
+            return result["moved"][0]
+        if command.action == "delete":
+            if command.resource_type == "folder":
+                await self.delete_folder(command.space_id, command.resource_id)
+            else:
+                await self.delete_file(command.resource_id)
+            return None
+        if command.action != "upload":
+            raise ValueError(f"unsupported direct file change action: {command.action}")
+
+        tenant_id = get_current_tenant_id()
+        async with get_async_db_session() as session:
+            from bisheng.knowledge.domain.repositories.knowledge_space_upload_stage_repository import (
+                KnowledgeSpaceUploadStageRepository,
+            )
+
+            stage = await KnowledgeSpaceUploadStageRepository(session).get_by_upload_id(
+                tenant_id=int(tenant_id),
+                upload_id=str(command.upload_id),
+            )
+        if (
+            stage is None
+            or int(stage.space_id) != int(command.space_id)
+            or int(stage.uploader_user_id) != int(command.applicant_user_id)
+        ):
+            raise SpaceFileChangeRequestNotFoundError()
+        from bisheng.knowledge.domain.models.knowledge_space_upload_stage import (
+            KnowledgeSpaceUploadStageState,
+        )
+        from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
+            KnowledgeSpaceMutationRepository,
+        )
+
+        if stage.state in {
+            KnowledgeSpaceUploadStageState.ATTACHED,
+            KnowledgeSpaceUploadStageState.CONSUMED,
+        }:
+            async with get_async_db_session() as session:
+                existing_file = await KnowledgeSpaceMutationRepository(session).find_duplicate_file(
+                    tenant_id=int(tenant_id),
+                    space_id=int(command.space_id),
+                    file_name=str(stage.file_name),
+                    content_hash=str(stage.content_hash),
+                )
+            if existing_file is not None and existing_file.md5 == stage.content_hash:
+                if stage.state == KnowledgeSpaceUploadStageState.ATTACHED:
+                    await stage_service.consume(str(command.upload_id))
+                return existing_file
+            if stage.state == KnowledgeSpaceUploadStageState.CONSUMED:
+                raise RuntimeError("consumed direct upload stage has no formal file")
+        stage = await stage_service.attach(str(command.upload_id))
+        upload_file_name = await KnowledgeService.save_upload_file_original_name(stage.file_name)
+        temporary_object = upload_file_name
+        await stage_service.storage.copy_object(
+            source_bucket=stage_service.storage.bucket,
+            source_object=stage.object_name,
+            dest_bucket=stage_service.storage.tmp_bucket,
+            dest_object=temporary_object,
+        )
+        source_url = await stage_service.storage.get_share_link(
+            temporary_object,
+            bucket=stage_service.storage.tmp_bucket,
+            expire_days=1,
+        )
+        parent_id = command.source_parent_id
+        relative_parts = [
+            part
+            for part in str(command.action_snapshot.get("relative_path") or "").replace("\\", "/").split("/")
+            if part and part not in {".", ".."}
+        ]
+        child_path = ""
+        if parent_id is not None:
+            parent = await self._get_folder_for_action(command.space_id, parent_id)
+            child_path = f"{parent.file_level_path or ''}/{int(parent.id)}"
+        for folder_name in relative_parts[:-1]:
+            async with get_async_db_session() as session:
+                folder = await KnowledgeSpaceMutationRepository(session).get_folder_by_name_and_path(
+                    tenant_id=int(tenant_id),
+                    space_id=int(command.space_id),
+                    folder_name=folder_name,
+                    file_level_path=child_path,
+                )
+            if folder is None:
+                folder = await self.add_folder(command.space_id, folder_name, parent_id)
+            parent_id = int(folder.id)
+            child_path = f"{folder.file_level_path or ''}/{int(folder.id)}"
+        try:
+            resources = await self.add_file(command.space_id, [source_url], parent_id=parent_id)
+        finally:
+            try:
+                await stage_service.storage.remove_object(stage_service.storage.tmp_bucket, temporary_object)
+            except Exception:
+                # Temporary bridge cleanup is best effort; the authoritative stage/formal rows remain recoverable.
+                logger.exception("failed to remove direct-upload compatibility object {}", temporary_object)
+        await stage_service.consume(str(command.upload_id))
+        return resources[0] if resources else None
 
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """
@@ -4588,6 +5542,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # All KnowledgeFile objects this download touches
         all_records: list[KnowledgeFile] = direct_files + folder_db_records
+        await self._require_file_change_batch_visible(
+            space_id=space_id,
+            resource_ids=[record.id for record in all_records],
+        )
 
         # ── 2. Build id→name map for every folder encountered ─────────────────
         #       We need this to translate '/7/42' → 'Reports/Q1'
@@ -4892,27 +5850,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         instance_id: int,
         task_ids: list[int],
     ) -> None:
-        from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+        from bisheng.approval.domain.services.approval_notification_service import (
+            ApprovalNotificationService,
+        )
 
-        approver_user_ids: list[int] = []
-        seen: set[int] = set()
-        for task_id in task_ids:
-            task = await ApprovalInstanceRepository.get_task(task_id)
-            if task and task.approver_user_id not in seen:
-                seen.add(task.approver_user_id)
-                approver_user_ids.append(task.approver_user_id)
-        if not approver_user_ids:
-            return
-        await self.message_service.send_generic_approval(
-            applicant_user_id=self.login_user.user_id,
-            applicant_user_name=self.login_user.user_name,
-            action_code="request_knowledge_space",
-            business_type="approval_instance_id",
-            business_id=str(instance_id),
-            business_name=space.name,
-            button_action_code="request_knowledge_space",
-            receiver_user_ids=approver_user_ids,
-            scenario_code="knowledge_space_subscribe_request",
+        del space
+        await ApprovalNotificationService.notify_pending_tasks(
+            instance_id=int(instance_id),
+            task_ids=[int(task_id) for task_id in task_ids],
         )
 
     async def _send_subscription_notification(self, space: Knowledge):

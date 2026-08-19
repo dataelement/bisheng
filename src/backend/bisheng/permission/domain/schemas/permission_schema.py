@@ -1,6 +1,7 @@
 """Pydantic DTOs for permission module."""
 
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -87,6 +88,26 @@ class AuthorizeRequest(BaseModel):
     revokes: list[AuthorizeRevokeItem] = Field(default_factory=list)
 
 
+class AuthorizationItemResult(BaseModel):
+    operation: Literal["grant", "revoke"]
+    subject_type: str
+    subject_id: int
+    relation: str
+    model_id: str | None = None
+    outcome: Literal["applied", "invite_created", "invite_existing", "failed"]
+    approval_instance_id: int | None = None
+    error_code: int | None = None
+    error_message: str | None = None
+
+
+class AuthorizationResult(BaseModel):
+    direct_applied_count: int = 0
+    invite_created_count: int = 0
+    invite_existing_count: int = 0
+    failed_count: int = 0
+    results: list[AuthorizationItemResult] = Field(default_factory=list)
+
+
 class ResourcePermissionItem(BaseModel):
     """Single permission entry in resource permissions list."""
 
@@ -104,6 +125,8 @@ class ResourcePermissionItem(BaseModel):
     # and file read/write/delete all honor). Lets the UI lock the row like the
     # channel creator. Other resource types leave it False (owner/creator decoupled).
     is_creator: bool = False
+    authorization_status: Literal["active", "pending"] = "active"
+    approval_instance_id: int | None = None
 
 
 class RelationModelItem(BaseModel):

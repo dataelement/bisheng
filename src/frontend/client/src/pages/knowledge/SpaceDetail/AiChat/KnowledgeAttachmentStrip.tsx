@@ -28,7 +28,7 @@ import {
 } from "../../knowledgeUtils";
 import type { KnowledgeAiReference } from "./KnowledgeAiInput";
 
-/** File icon mirroring the file list exactly (FileTable.renderRowFileIcon):
+/** File icon mirroring the file list exactly (FileIcon.tsx):
  *  audio / video / image get their media icons, everything else the generic
  *  file glyph — NOT the home-chat per-format mapping (W/P/T…), so a chip always
  *  shows the same icon as the row it was ticked from. */

@@ -48,7 +48,106 @@ def _make_app(user_factory):
     return app
 
 
+@pytest.fixture(autouse=True)
+def _stub_invitation_dependencies():
+    """Keep legacy API contract tests focused on their original permission concern."""
+    invite_application_service = SimpleNamespace(
+        list_pending_invite_items=AsyncMock(return_value=[]),
+    )
+    with (
+        patch(
+            "bisheng.permission.domain.services.resource_user_invite_application_service."
+            "build_runtime_resource_user_invite_application_service",
+            return_value=invite_application_service,
+        ),
+        patch(
+            "bisheng.permission.domain.services.relation_binding_mutation_service."
+            "RelationBindingMutationService.mutate",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+    ):
+        yield
+
+
 class TestPermissionApiIntegration:
+    def test_authorize_returns_item_results(self):
+        from bisheng.permission.domain.schemas.permission_schema import (
+            AuthorizationItemResult,
+            AuthorizationResult,
+        )
+
+        app = _make_app(_AdminUser)
+        result = AuthorizationResult(
+            invite_created_count=1,
+            results=[
+                AuthorizationItemResult(
+                    operation="grant",
+                    subject_type="user",
+                    subject_id=42,
+                    relation="viewer",
+                    outcome="invite_created",
+                    approval_instance_id=88,
+                )
+            ],
+        )
+        with (
+            patch(
+                "bisheng.permission.domain.services.resource_authorization_service.ResourceAuthorizationService.authorize",
+                new_callable=AsyncMock,
+                return_value=result,
+            ),
+            # F045 pending-admin gate runs before authorize and reads the
+            # department binding; this space is a normal one (no binding).
+            patch(
+                "bisheng.knowledge.domain.models.department_knowledge_space."
+                "DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
+            with TestClient(app) as client:
+                response = client.post(
+                    "/api/v1/permissions/resources/knowledge_space/11/authorize",
+                    json={"grants": [{"subject_type": "user", "subject_id": 42, "relation": "viewer"}]},
+                )
+
+        body = response.json()
+        assert body["status_code"] == 200
+        assert body["data"]["invite_created_count"] == 1
+        assert body["data"]["results"][0]["approval_instance_id"] == 88
+
+    def test_disabled_invite_scenario_returns_explicit_18106(self):
+        from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+
+        app = _make_app(_AdminUser)
+        error = ApprovalScenarioDisabledError(
+            msg="个人用户邀请确认场景未启用，无法新增个人用户权限"  # noqa: RUF001
+        )
+        with (
+            patch(
+                "bisheng.permission.domain.services.resource_authorization_service.ResourceAuthorizationService.authorize",
+                new_callable=AsyncMock,
+                side_effect=error,
+            ),
+            # F045 pending-admin gate (see above) — normal space, no binding.
+            patch(
+                "bisheng.knowledge.domain.models.department_knowledge_space."
+                "DepartmentKnowledgeSpaceDao.aget_by_space_id",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+        ):
+            with TestClient(app) as client:
+                response = client.post(
+                    "/api/v1/permissions/resources/knowledge_space/11/authorize",
+                    json={"grants": [{"subject_type": "user", "subject_id": 42, "relation": "viewer"}]},
+                )
+
+        body = response.json()
+        assert body["status_code"] == 18106
+        assert body["status_message"] == "个人用户邀请确认场景未启用，无法新增个人用户权限"  # noqa: RUF001
+
     def test_create_relation_model_rejects_duplicate_name(self):
         app = _make_app(_AdminUser)
         state = [
@@ -901,6 +1000,9 @@ class TestPermissionApiIntegration:
     def test_permissions_list_includes_creator_owner_when_tuple_is_missing(self):
         app = _make_app(_ViewerUser)
 
+        async def keep_active_permissions(*, active_permissions, **_kwargs):
+            return active_permissions
+
         with (
             patch(
                 "bisheng.permission.api.endpoints.resource_permission._has_resource_permission_management_access",
@@ -937,12 +1039,24 @@ class TestPermissionApiIntegration:
                 new_callable=AsyncMock,
                 return_value=7,
             ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService._resolve_resource_tenant",
+                new_callable=AsyncMock,
+                return_value=3,
+            ),
+            patch(
+                "bisheng.permission.domain.services.resource_authorization_service."
+                "ResourceAuthorizationService.list_pending_permissions",
+                new_callable=AsyncMock,
+                side_effect=keep_active_permissions,
+            ) as list_pending,
         ):
             with TestClient(app) as client:
                 resp = client.get("/api/v1/permissions/resources/workflow/wf-1/permissions")
                 body = resp.json()
 
         assert body["status_code"] == 200
+        assert list_pending.await_args.kwargs["tenant_id"] == 3
         assert body["data"] == [
             {
                 "subject_type": "user",
@@ -957,6 +1071,8 @@ class TestPermissionApiIntegration:
                 # workflow (decoupled type): the ownerless-safety-net creator is NOT
                 # flagged is_creator, so its owner remains removable.
                 "is_creator": False,
+                "authorization_status": "active",
+                "approval_instance_id": None,
             }
         ]
 
@@ -1563,6 +1679,17 @@ class TestPermissionApiIntegration:
                     "view_folder",
                     "view_file",
                 },
+            ),
+            patch(
+                "bisheng.permission.domain.services.permission_service.PermissionService.get_resource_permissions",
+                new_callable=AsyncMock,
+                return_value=[
+                    ResourcePermissionItem(
+                        subject_type="user",
+                        subject_id=2,
+                        relation="viewer",
+                    )
+                ],
             ),
             patch(
                 "bisheng.permission.domain.services.permission_service.PermissionService.authorize",

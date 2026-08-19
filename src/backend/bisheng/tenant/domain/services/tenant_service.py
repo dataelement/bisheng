@@ -124,6 +124,14 @@ class TenantService:
             from bisheng.workstation.domain.services import WorkStationService
             await WorkStationService.acopy_root_builtin_tools_to_tenant(tenant.id)
 
+            # System-owned approval scenarios are tenant-local and cannot be
+            # inherited from the root tenant.
+            from bisheng.approval.domain.services.approval_registry import (
+                ensure_system_file_change_scenario,
+            )
+
+            await ensure_system_file_change_scenario(tenant_id=tenant.id)
+
             return _safe_tenant_dump(tenant)
 
         except TenantCodeDuplicateError:

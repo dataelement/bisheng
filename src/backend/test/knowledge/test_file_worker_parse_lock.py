@@ -56,6 +56,23 @@ def test_duplicate_parse_skipped_when_lock_held(monkeypatch):
     trigger.assert_not_called()
 
 
+def test_duplicate_parse_is_also_skipped_when_fair_scheduler_is_disabled(monkeypatch):
+    monkeypatch.setattr(
+        "bisheng.common.services.config_service.settings.knowledge_file_worker.fair_scheduler_enabled",
+        False,
+    )
+    parse = MagicMock()
+    monkeypatch.setattr(file_worker, "_parse_knowledge_file", parse)
+    sched = MagicMock()
+    sched.acquire_parse_lock.return_value = None
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.FileScheduler", lambda: sched)
+
+    file_worker.parse_knowledge_file_celery.run(3684)
+
+    parse.assert_not_called()
+    sched.acquire_parse_lock.assert_called_once()
+
+
 def test_parse_lock_released_after_parse(monkeypatch):
     """A successful parse must release the lock it acquired (token-checked)."""
     monkeypatch.setattr(file_worker, "_parse_knowledge_file", lambda *a, **kw: MagicMock())

@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from bisheng.approval.domain.models.approval_instance import (
     ApprovalActionLog,
     ApprovalException,
@@ -21,7 +23,16 @@ from bisheng.approval.domain.schemas.approval_center_schema import (
     ApprovalGateRequest,
     ApprovalGateResult,
 )
-from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
+from bisheng.approval.domain.services.approval_uow import (
+    ApprovalGateUowResult,
+    ApprovalPostCommitEffect,
+    SessionBoundApprovalInstanceRepository,
+    build_post_commit_effect,
+)
+from bisheng.common.errcode.approval import (
+    ApprovalConfirmationFlowRequiredError,
+    ApprovalScenarioDisabledError,
+)
 from bisheng.database.models.audit_log import AuditLogDao
 
 
@@ -39,7 +50,7 @@ async def _get_user_role_labels(user_id: int, tenant_id: int) -> frozenset[str]:
                          e.g. 'role_3', 'role_7'
                          Allows conditions like {"field":"applicant_role","value":"role_3"}
 
-    PRD §4.3: "同一申请人可能同时具备多个身份标签，条件匹配采用'包含即命中'"
+    PRD §4.3: one applicant may have multiple identity labels; matching uses contains semantics.
     """
     labels: set[str] = {"regular_user"}
     try:
@@ -90,31 +101,83 @@ class ApprovalGate:
         self.route_matcher = route_matcher or self._match_first_route
 
     async def request_or_pass(self, req: ApprovalGateRequest) -> ApprovalGateResult:
-        duplicate = await self.instance_repository.find_duplicate_active_instance(
-            tenant_id=req.tenant_id,
-            scenario_code=req.scenario_code,
-            business_key=req.business_key,
-            applicant_user_id=req.applicant_user_id,
+        return await self._request_or_pass(req, post_commit_effects=None)
+
+    async def request_or_pass_in_uow(
+        self,
+        req: ApprovalGateRequest,
+        *,
+        session: AsyncSession,
+    ) -> ApprovalGateUowResult:
+        """Create the Approval bundle inside the caller-owned transaction.
+
+        The caller must commit the session before invoking
+        ``run_post_commit_effects`` on the returned value.
+        """
+
+        post_commit_effects: list[ApprovalPostCommitEffect] = []
+        session_bound_gate = ApprovalGate(
+            registry=self.registry,
+            scenario_repository=self.scenario_repository,
+            instance_repository=SessionBoundApprovalInstanceRepository(session),
+            route_matcher=self.route_matcher,
         )
-        if duplicate:
-            return ApprovalGateResult(
-                decision=self._decision_from_instance_status(duplicate.status),
-                instance_id=duplicate.id,
-            )
+        result = await session_bound_gate._request_or_pass(
+            req,
+            post_commit_effects=post_commit_effects,
+        )
+        return ApprovalGateUowResult(
+            result=result,
+            post_commit_effects=post_commit_effects,
+            transaction_is_active=session.in_transaction,
+        )
 
+    async def _request_or_pass(
+        self,
+        req: ApprovalGateRequest,
+        *,
+        post_commit_effects: list[ApprovalPostCommitEffect] | None,
+    ) -> ApprovalGateResult:
         handler = await self.registry.get_handler(req.scenario_code)
-        detail_snapshot = await handler.build_detail(req)
-        business_name = await handler.build_title(req)
-
+        uses_business_key_dedupe = getattr(handler, "dedupe_scope", None) == "business_key"
+        if not uses_business_key_dedupe:
+            duplicate = await self.instance_repository.find_duplicate_active_instance(
+                tenant_id=req.tenant_id,
+                scenario_code=req.scenario_code,
+                business_key=req.business_key,
+                applicant_user_id=req.applicant_user_id,
+            )
+            if duplicate:
+                return ApprovalGateResult(
+                    decision=self._decision_from_instance_status(duplicate.status),
+                    instance_id=duplicate.id,
+                )
         scenario = await self.scenario_repository.get_scenario_by_code(req.tenant_id, req.scenario_code)
         if not scenario or not scenario.enabled:
-            raise ApprovalScenarioDisabledError()
+            raise ApprovalScenarioDisabledError(msg=getattr(handler, "scenario_disabled_message", None))
+
+        if uses_business_key_dedupe:
+            duplicate = await self.instance_repository.find_blocking_invite(
+                tenant_id=req.tenant_id,
+                business_key=req.business_key,
+            )
+            if duplicate:
+                return ApprovalGateResult(
+                    decision=self._decision_from_instance_status(duplicate.status),
+                    instance_id=duplicate.id,
+                )
+
+        detail_snapshot = await handler.build_detail(req)
+        business_name = await handler.build_title(req)
 
         route_rules = await self.scenario_repository.list_route_rules(req.tenant_id, scenario.id)
         matched_route = await self.route_matcher(route_rules, req)
         if not matched_route:
+            if getattr(handler, "requires_self_confirmation", False):
+                raise ApprovalConfirmationFlowRequiredError()
             return await self._create_exception_result(
                 req=req,
+                post_commit_effects=post_commit_effects,
                 scenario_name=scenario.scenario_name,
                 handler_key=req.scenario_code,
                 business_name=business_name,
@@ -123,6 +186,8 @@ class ApprovalGate:
             )
 
         if matched_route.route_type == "pass":
+            if getattr(handler, "requires_self_confirmation", False):
+                raise ApprovalConfirmationFlowRequiredError()
             instance = await self.instance_repository.create_instance(
                 ApprovalInstance(
                     tenant_id=req.tenant_id,
@@ -153,8 +218,17 @@ class ApprovalGate:
                     payload_snapshot=req.payload_snapshot,
                 )
             )
-            self._dispatch_outbox_task(outbox.id)
-            await AuditLogDao.ainsert_v2(
+            await self._run_or_defer_effect(
+                post_commit_effects,
+                "dispatch_approval_outbox",
+                self._dispatch_outbox_task,
+                outbox.id,
+                req.tenant_id,
+            )
+            await self._run_or_defer_effect(
+                post_commit_effects,
+                "audit_approval_route_pass",
+                AuditLogDao.ainsert_v2,
                 tenant_id=req.tenant_id,
                 operator_id=0,
                 operator_tenant_id=req.tenant_id,
@@ -179,8 +253,11 @@ class ApprovalGate:
             matched_route.flow_definition_id,
         )
         if not flow_version:
+            if getattr(handler, "requires_self_confirmation", False):
+                raise ApprovalConfirmationFlowRequiredError()
             return await self._create_exception_result(
                 req=req,
+                post_commit_effects=post_commit_effects,
                 scenario_name=scenario.scenario_name,
                 handler_key=req.scenario_code,
                 business_name=business_name,
@@ -194,8 +271,11 @@ class ApprovalGate:
         if first_node:
             approvers = await handler.resolve_approvers(first_node.approver_config, req)
         if not first_node or not approvers:
+            if getattr(handler, "requires_self_confirmation", False):
+                raise ApprovalConfirmationFlowRequiredError()
             return await self._create_exception_result(
                 req=req,
+                post_commit_effects=post_commit_effects,
                 scenario_name=scenario.scenario_name,
                 handler_key=req.scenario_code,
                 business_name=business_name,
@@ -205,6 +285,92 @@ class ApprovalGate:
                 route_rule_id=getattr(matched_route, "id", None),
                 current_node_name=getattr(first_node, "node_name", None),
                 node=first_node,
+            )
+
+        if getattr(handler, "requires_self_confirmation", False):
+            target_user_id = (req.payload_snapshot or {}).get("target_user_id")
+            sources = (first_node.approver_config or {}).get("sources") or []
+            valid_self_flow = (
+                len(node_definitions) == 1
+                and first_node.node_mode == "or"
+                and len(sources) == 1
+                and sources[0].get("type") == "invited_user"
+                and len(approvers) == 1
+                and str(approvers[0]) == str(target_user_id)
+            )
+            if not valid_self_flow:
+                raise ApprovalConfirmationFlowRequiredError()
+
+            instance, tasks, _ = await self.instance_repository.create_instance_bundle(
+                instance=ApprovalInstance(
+                    tenant_id=req.tenant_id,
+                    scenario_code=req.scenario_code,
+                    scenario_name=scenario.scenario_name,
+                    handler_key=req.scenario_code,
+                    business_key=req.business_key,
+                    business_resource_type=req.business_resource_type,
+                    business_resource_id=req.business_resource_id,
+                    business_name=business_name,
+                    applicant_user_id=req.applicant_user_id,
+                    applicant_user_name=req.applicant_user_name,
+                    applicant_department_id=req.applicant_department_id,
+                    flow_version_id=flow_version.id,
+                    route_rule_id=getattr(matched_route, "id", None),
+                    status=ApprovalInstanceStatus.PENDING,
+                    reason=req.reason,
+                    payload_snapshot=req.payload_snapshot,
+                    detail_snapshot=detail_snapshot,
+                    current_node_name=first_node.node_name,
+                ),
+                tasks=[
+                    ApprovalTask(
+                        tenant_id=req.tenant_id,
+                        instance_id=0,
+                        flow_version_id=flow_version.id,
+                        node_code=first_node.node_code,
+                        node_name=first_node.node_name,
+                        node_order=first_node.node_order,
+                        approver_user_id=int(target_user_id),
+                        approver_source_type="invited_user",
+                        node_mode=first_node.node_mode,
+                        status=ApprovalTaskStatus.PENDING,
+                    )
+                ],
+                action_log=ApprovalActionLog(
+                    tenant_id=req.tenant_id,
+                    instance_id=0,
+                    action="submitted",
+                    operator_user_id=req.applicant_user_id,
+                    operator_user_name=req.applicant_user_name,
+                    detail={},
+                ),
+            )
+            await self._run_or_defer_effect(
+                post_commit_effects,
+                "audit_resource_user_invite_request",
+                AuditLogDao.ainsert_v2,
+                tenant_id=req.tenant_id,
+                operator_id=req.applicant_user_id,
+                operator_tenant_id=req.tenant_id,
+                action="resource.user_invite.request",
+                target_type="approval_instance",
+                target_id=str(instance.id),
+                reason=req.reason,
+                metadata={
+                    "instance_id": instance.id,
+                    "scenario_code": req.scenario_code,
+                    "business_resource_type": req.business_resource_type,
+                    "business_resource_id": req.business_resource_id,
+                    "target_user_id": int(target_user_id),
+                },
+                operator_name=req.applicant_user_name,
+                object_name=business_name,
+                ip_address=req.ip_address,
+            )
+            return ApprovalGateResult(
+                decision=ApprovalGateDecision.PENDING,
+                instance_id=instance.id,
+                task_ids=[task.id for task in tasks],
             )
 
         instance = await self.instance_repository.create_instance(
@@ -256,7 +422,10 @@ class ApprovalGate:
                 detail={},
             )
         )
-        await AuditLogDao.ainsert_v2(
+        await self._run_or_defer_effect(
+            post_commit_effects,
+            "audit_approval_request_submit",
+            AuditLogDao.ainsert_v2,
             tenant_id=req.tenant_id,
             operator_id=req.applicant_user_id,
             operator_tenant_id=req.tenant_id,
@@ -286,6 +455,7 @@ class ApprovalGate:
         self,
         *,
         req: ApprovalGateRequest,
+        post_commit_effects: list[ApprovalPostCommitEffect] | None,
         scenario_name: str,
         handler_key: str,
         business_name: str,
@@ -345,7 +515,10 @@ class ApprovalGate:
         )
         # Audit the submission even when the instance lands in exception state — every
         # instance creation must leave a trace per the approval module compliance rule.
-        await AuditLogDao.ainsert_v2(
+        await self._run_or_defer_effect(
+            post_commit_effects,
+            "audit_approval_request_exception",
+            AuditLogDao.ainsert_v2,
             tenant_id=req.tenant_id,
             operator_id=req.applicant_user_id,
             operator_tenant_id=req.tenant_id,
@@ -371,7 +544,10 @@ class ApprovalGate:
             ip_address=req.ip_address,
         )
         # Notify tenant admins so they can handle the exception
-        await self._notify_admins_of_exception(
+        await self._run_or_defer_effect(
+            post_commit_effects,
+            "notify_approval_exception_admins",
+            self._notify_admins_of_exception,
             tenant_id=req.tenant_id,
             applicant_user_id=req.applicant_user_id,
             exception_type=exception_type,
@@ -385,11 +561,29 @@ class ApprovalGate:
         )
 
     @staticmethod
-    def _dispatch_outbox_task(outbox_id: int) -> None:
+    async def _run_or_defer_effect(
+        post_commit_effects: list[ApprovalPostCommitEffect] | None,
+        name: str,
+        callback: Callable[..., Any],
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None:
+        effect = build_post_commit_effect(name, callback, *args, **kwargs)
+        if post_commit_effects is None:
+            await effect.run()
+            return
+        post_commit_effects.append(effect)
+
+    @staticmethod
+    def _dispatch_outbox_task(outbox_id: int, tenant_id: int) -> None:
+        tenant_id = int(tenant_id)
+        if tenant_id <= 0:
+            raise ValueError("a positive tenant_id is required to dispatch an approval outbox")
         try:
             from bisheng.worker.approval.tasks import execute_approval_outbox
 
-            execute_approval_outbox.delay(outbox_id)
+            execute_approval_outbox.apply_async(args=[outbox_id], headers={"tenant_id": tenant_id})
         except Exception:
             import logging
 

@@ -68,6 +68,7 @@ def _install(all_candidates, visible_ids, *, batch_size=4):
         patch(f"{_KS}.KnowledgeFileDao.aget_file_by_filters", new=_fake_dao),
         patch.object(KnowledgeSpaceService, "_filter_visible_child_items", _fake_filter),
         patch.object(KnowledgeSpaceService, "_build_child_permission_context", new=AsyncMock(return_value={})),
+        patch.object(KnowledgeSpaceService, "_get_file_change_excluded_ids", new=AsyncMock(return_value=set())),
         patch(f"{_KS}._SEARCH_SCAN_BATCH_SIZE", batch_size),
     ]
     return counter, patchers
@@ -101,7 +102,7 @@ async def test_scan_page_equals_fetch_all_filter_slice():
     cands = _candidates(40)
     visible_ids = {c.id for c in cands if c.id % 2 == 0}  # half visible
 
-    counter, patchers = _install(cands, visible_ids, batch_size=4)
+    _counter, patchers = _install(cands, visible_ids, batch_size=4)
     import contextlib
 
     with contextlib.ExitStack() as stack:
@@ -124,7 +125,7 @@ async def test_scan_walks_all_pages_no_dup_no_gap():
     import contextlib
 
     while True:
-        counter, patchers = _install(cands, visible_ids, batch_size=7)
+        _counter, patchers = _install(cands, visible_ids, batch_size=7)
         with contextlib.ExitStack() as stack:
             for p in patchers:
                 stack.enter_context(p)
@@ -167,7 +168,7 @@ async def test_scan_last_page_has_more_false():
     cands = _candidates(10)
     visible_ids = {c.id for c in cands}  # 10 visible
 
-    counter, patchers = _install(cands, visible_ids, batch_size=4)
+    _counter, patchers = _install(cands, visible_ids, batch_size=4)
     import contextlib
 
     with contextlib.ExitStack() as stack:
@@ -187,7 +188,7 @@ async def test_scan_sparse_visibility_refills_across_batches():
     cands = _candidates(30)
     visible_ids = {c.id for c in cands[-4:]}  # ids 26,27,28,29
 
-    counter, patchers = _install(cands, visible_ids, batch_size=5)
+    _counter, patchers = _install(cands, visible_ids, batch_size=5)
     import contextlib
 
     with contextlib.ExitStack() as stack:

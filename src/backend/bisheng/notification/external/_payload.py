@@ -24,6 +24,9 @@ FORWARDABLE_ACTION_CODES: set[str] = {
     "approval_exception_approver_empty",
     "approval_execute_failed",
     "menu_grant_revoked",
+    "resource_user_invite_pending",
+    "resource_user_invite_effective",
+    "resource_user_invite_failed",
     "assigned_channel_admin",
     "assigned_knowledge_space_admin",
     "revoked_channel_admin",
@@ -138,6 +141,21 @@ _TEMPLATES: dict[str, dict[str, str]] = {
         "normal": "你对菜单「{resource_name}」的访问权限已被{applicant}撤回",
         "highlight": "",
     },
+    "resource_user_invite_pending": {
+        "title": "[知源] 新的资源权限邀请",
+        "normal": "{applicant}邀请你加入「{resource_name}」，请本人确认",
+        "highlight": "",
+    },
+    "resource_user_invite_effective": {
+        "title": "[知源] 资源权限邀请已生效",
+        "normal": "{applicant}已确认「{resource_name}」邀请，权限已生效",
+        "highlight": "",
+    },
+    "resource_user_invite_failed": {
+        "title": "[知源] 资源权限邀请未生效",
+        "normal": "「{resource_name}」邀请未生效",
+        "highlight": "",
+    },
     "assigned_channel_admin": {
         "title": "[知源] 频道管理员授权",
         "normal": "你已被设为频道「{resource_name}」的管理员",
@@ -226,7 +244,7 @@ def _normalize_reason(reason: str | None) -> str:
     value = reason.strip()
     for prefix in ("原因：", "原因:"):
         if value.startswith(prefix):
-            return value[len(prefix):].strip()
+            return value[len(prefix) :].strip()
     return value
 
 

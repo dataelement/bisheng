@@ -8,6 +8,8 @@ from bisheng.citation.domain.repositories.implementations.message_citation_repos
 )
 from bisheng.citation.domain.repositories.interfaces.message_citation_repository import MessageCitationRepository
 from bisheng.common.dependencies.core_deps import get_db_session
+from bisheng.knowledge.api.dependencies import get_knowledge_file_repository
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import KnowledgeFileRepository
 
 if TYPE_CHECKING:
     from bisheng.citation.domain.services.citation_registry_service import CitationRegistryService
@@ -32,8 +34,12 @@ async def get_citation_registry_service(
 
 async def get_citation_resolve_service(
     repository: MessageCitationRepository = Depends(get_message_citation_repository),
+    knowledge_file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
 ) -> 'CitationResolveService':
     """Provide CitationResolveService instance."""
     from bisheng.citation.domain.services.citation_resolve_service import CitationResolveService
 
-    return CitationResolveService(repository)
+    return CitationResolveService(
+        repository,
+        knowledge_file_repository=knowledge_file_repository,
+    )

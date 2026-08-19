@@ -8,28 +8,28 @@ Strategy:
 - Patch all other heavy machinery (process_one_file, Celery, QuotaService,
   permission checks, DAO update calls) so we only exercise the doc+V1 path.
 """
+
 from contextlib import asynccontextmanager
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
+from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
+from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
 from test.knowledge.test_knowledge_space_service import (
     _load_service_class,
     _make_file,
     _make_login_user,
     _make_space,
 )
-from bisheng.knowledge.domain.models.knowledge import AuthTypeEnum
-from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
-from bisheng.knowledge.domain.models.knowledge_document_version import KnowledgeDocumentVersion
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_session_context_manager(session: AsyncSession):
     """Return an asynccontextmanager that yields the given session.
@@ -42,6 +42,7 @@ def _make_session_context_manager(session: AsyncSession):
     commit() in SQLite disposes the current transaction and can close rows.
     Instead we let the service call commit() — the session will handle it.
     """
+
     @asynccontextmanager
     async def _ctx():
         yield session
@@ -53,6 +54,7 @@ def _make_session_context_manager(session: AsyncSession):
 # Fixture
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def service():
     return _load_service_class()(None, _make_login_user())
@@ -61,6 +63,7 @@ def service():
 # ---------------------------------------------------------------------------
 # Test
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_add_file_creates_document_and_v1(service, async_db_session: AsyncSession):
@@ -81,50 +84,71 @@ async def test_add_file_creates_document_and_v1(service, async_db_session: Async
 
     session_ctx = _make_session_context_manager(async_db_session)
 
-    with patch.object(
-        service, "_require_permission_id", new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
-        new_callable=AsyncMock,
-        return_value=space,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size",
-        new_callable=AsyncMock,
-        return_value=0,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_knowledge_space_upload_limit_bytes",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_remaining_bytes",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file",
-        return_value=added_file,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples",
-        new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple",
-        new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
-        new_callable=AsyncMock,
-    ), patch.object(
-        service, "update_folder_update_time", new_callable=AsyncMock,
-    ), patch.object(
-        service, "_initialize_child_resource_permissions", new_callable=AsyncMock,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
-        new=session_ctx,
-    ), patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.file_worker"
-        ".parse_knowledge_file_celery",
-        new_callable=MagicMock,
-    ) as mock_celery:
-        mock_celery.delay = MagicMock()
-
+    with (
+        patch.object(
+            service,
+            "_require_permission_id",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=space,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.get_user_total_file_size",
+            new_callable=AsyncMock,
+            return_value=0,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_knowledge_space_upload_limit_bytes",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_tenant_storage_remaining_bytes",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeService.process_one_file",
+            return_value=added_file,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.update",
+            side_effect=lambda file: file,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            service,
+            "update_folder_update_time",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            service,
+            "_initialize_child_resource_permissions",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+            new=session_ctx,
+        ),
+        patch(
+            "bisheng.worker.knowledge.scheduler.enqueue_or_dispatch",
+            new_callable=MagicMock,
+        ),
+    ):
         result = await service.add_file(knowledge_id, ["/tmp/report.pdf"])
 
     # --- Assert: service returned the fake file ---
@@ -132,19 +156,29 @@ async def test_add_file_creates_document_and_v1(service, async_db_session: Async
     assert result[0].id == 42
 
     # --- Assert: KnowledgeDocument row was created ---
-    doc_rows = (await async_db_session.execute(
-        select(KnowledgeDocument).where(KnowledgeDocument.knowledge_id == knowledge_id)
-    )).scalars().all()
+    doc_rows = (
+        (
+            await async_db_session.execute(
+                select(KnowledgeDocument).where(KnowledgeDocument.knowledge_id == knowledge_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
     assert len(doc_rows) == 1, f"Expected 1 KnowledgeDocument, got {len(doc_rows)}"
     doc = doc_rows[0]
     assert doc.knowledge_id == knowledge_id
 
     # --- Assert: KnowledgeDocumentVersion V1 row was created ---
-    ver_rows = (await async_db_session.execute(
-        select(KnowledgeDocumentVersion).where(
-            KnowledgeDocumentVersion.document_id == doc.id
+    ver_rows = (
+        (
+            await async_db_session.execute(
+                select(KnowledgeDocumentVersion).where(KnowledgeDocumentVersion.document_id == doc.id)
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(ver_rows) == 1, f"Expected 1 KnowledgeDocumentVersion, got {len(ver_rows)}"
     ver = ver_rows[0]
     assert ver.knowledge_file_id == 42
@@ -153,7 +187,7 @@ async def test_add_file_creates_document_and_v1(service, async_db_session: Async
 
     # --- Assert: doc.primary_version_id was back-filled ---
     # Re-fetch doc to see updated primary_version_id
-    refreshed_doc = (await async_db_session.execute(
-        select(KnowledgeDocument).where(KnowledgeDocument.id == doc.id)
-    )).scalar_one()
+    refreshed_doc = (
+        await async_db_session.execute(select(KnowledgeDocument).where(KnowledgeDocument.id == doc.id))
+    ).scalar_one()
     assert refreshed_doc.primary_version_id == ver.id

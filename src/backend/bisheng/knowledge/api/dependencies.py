@@ -3,8 +3,11 @@ from typing import TYPE_CHECKING
 from fastapi import Depends, Request
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from bisheng.approval.api.dependencies import get_approval_submission_port
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.core.database import get_async_db_session
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -130,6 +133,64 @@ async def get_knowledge_space_service(
     service.version_repo = version_repo
     service.doc_repo = doc_repo
     return service
+
+
+async def get_knowledge_space_upload_stage_service(
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Compose opaque upload staging with authoritative user and tenant quotas."""
+    from bisheng.knowledge.domain.repositories.knowledge_space_mutation_repository import (
+        KnowledgeSpaceMutationRepository,
+    )
+    from bisheng.knowledge.domain.services.knowledge_space_upload_stage_service import (
+        KnowledgeSpaceUploadCapacity,
+        KnowledgeSpaceUploadStageService,
+    )
+    from bisheng.role.domain.services.quota_service import QuotaService
+
+    async def load_capacity(tenant_id: int, uploader_user_id: int) -> KnowledgeSpaceUploadCapacity:
+        user_limit = await QuotaService.get_knowledge_space_upload_limit_bytes(login_user)
+        async with get_async_db_session() as session:
+            user_used = await KnowledgeSpaceMutationRepository(session).get_user_uploaded_file_size(
+                tenant_id=tenant_id,
+                user_id=uploader_user_id,
+            )
+        tenant_used = await QuotaService.get_tenant_storage_used_bytes(tenant_id)
+        tenant_remaining = await QuotaService.get_tenant_storage_remaining_bytes(tenant_id)
+        return KnowledgeSpaceUploadCapacity(
+            user_used_bytes=user_used,
+            user_limit_bytes=user_limit,
+            tenant_used_bytes=tenant_used,
+            tenant_limit_bytes=(tenant_used + tenant_remaining) if tenant_remaining is not None else None,
+        )
+
+    return KnowledgeSpaceUploadStageService(
+        storage=await get_minio_storage(),
+        capacity_loader=load_capacity,
+    )
+
+
+async def get_knowledge_space_file_change_service(
+    owner_service: "KnowledgeSpaceService" = Depends(get_knowledge_space_service),
+    stage_service=Depends(get_knowledge_space_upload_stage_service),
+    submission_port=Depends(get_approval_submission_port),
+):
+    """Compose F046 with real permission, footprint, executor and notification owners."""
+    from bisheng.knowledge.domain.services.knowledge_space_file_change_service import (
+        KnowledgeSpaceFileChangeService,
+    )
+
+    async def execute_direct(command):
+        return await owner_service.execute_direct_file_change(command, stage_service=stage_service)
+
+    return KnowledgeSpaceFileChangeService(
+        session_factory=get_async_db_session,
+        submission_port=submission_port,
+        mutation_authorizer=owner_service.authorize_file_change,
+        footprint_resolver=owner_service.resolve_file_change_footprints,
+        direct_executor=execute_direct,
+        stage_retainer=stage_service.retain_bound_stage,
+    )
 
 
 async def get_knowledge_space_creation_application_service(

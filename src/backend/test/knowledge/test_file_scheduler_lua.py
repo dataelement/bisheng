@@ -217,8 +217,133 @@ def test_put_payload_writes_hash_with_ttl(scheduler, redis_conn):
         "user_id": "9",
         "file_ext": "pdf",
         "tenant_id": "3",
+        "idempotency_key": "",
     }
     assert 0 < redis_conn.ttl("{bisheng_fs}:payload:5") <= 120
+
+
+def test_enqueue_persists_nonempty_idempotency_key(scheduler, redis_conn):
+    scheduler.enqueue_file(
+        user_id="42",
+        file_id="100",
+        preview_cache_key="pk1",
+        callback_url="http://cb",
+        file_ext="pdf",
+        tenant_id="3",
+        idempotency_key="f046:23:upload.parse",
+    )
+
+    payload = redis_conn.hgetall("{bisheng_fs}:payload:100")
+    assert payload["tenant_id"] == "3"
+    assert payload["idempotency_key"] == "f046:23:upload.parse"
+
+
+def test_replay_after_broker_enqueue_before_step_ack_does_not_duplicate_fifo_or_confirm(
+    scheduler,
+    redis_conn,
+):
+    kwargs = {
+        "user_id": "42",
+        "file_id": "100",
+        "preview_cache_key": "pk1",
+        "callback_url": "http://cb",
+        "file_ext": "pdf",
+        "tenant_id": "3",
+        "idempotency_key": "f046:23:upload.parse",
+    }
+    assert scheduler.enqueue_file(**kwargs) is True
+    assert scheduler.dispatch_one(user_id="42") == "100"
+
+    # Simulate apply_async success followed by a process crash before the
+    # durable execution step is acknowledged/confirm_dispatch is called.
+    assert scheduler.enqueue_file(**kwargs) is False
+    assert redis_conn.lrange("{bisheng_fs}:queue:42", 0, -1) == []
+    assert redis_conn.smembers("{bisheng_fs}:inflight:42") == {"100"}
+
+    scheduler.confirm_dispatch(file_id="100", queue="ocr_celery")
+    scheduler.confirm_dispatch(file_id="100", queue="ocr_celery")
+    assert scheduler.inflight_total(queue="ocr_celery") == 1
+
+
+def test_complete_from_wrong_owner_does_not_release_original_inflight_slot(scheduler, redis_conn):
+    scheduler.enqueue_file(
+        user_id="42",
+        file_id="100",
+        preview_cache_key="",
+        callback_url="",
+        file_ext="txt",
+        idempotency_key="f046:23:upload.parse",
+    )
+    scheduler.dispatch_one(user_id="42")
+    scheduler.confirm_dispatch(file_id="100", queue="knowledge_celery")
+
+    scheduler.complete_file(user_id="99", file_id="100")
+
+    assert scheduler.inflight_total(queue="knowledge_celery") == 1
+    assert redis_conn.smembers("{bisheng_fs}:inflight:42") == {"100"}
+
+
+def test_complete_releases_identity_for_a_later_generation(scheduler, redis_conn):
+    kwargs = {
+        "user_id": "42",
+        "file_id": "100",
+        "preview_cache_key": "",
+        "callback_url": "",
+        "file_ext": "txt",
+        "idempotency_key": "f046:23:upload.parse",
+    }
+    scheduler.enqueue_file(**kwargs)
+    scheduler.dispatch_one(user_id="42")
+    scheduler.confirm_dispatch(file_id="100", queue="knowledge_celery")
+    scheduler.complete_file(user_id="42", file_id="100")
+
+    assert scheduler.enqueue_file(**kwargs) is True
+    assert redis_conn.lrange("{bisheng_fs}:queue:42", 0, -1) == ["100"]
+
+
+def test_different_generation_is_rejected_while_file_is_active(scheduler, redis_conn):
+    scheduler.enqueue_file(
+        user_id="42",
+        file_id="100",
+        preview_cache_key="",
+        callback_url="",
+        file_ext="txt",
+        idempotency_key="generation-1",
+    )
+
+    with pytest.raises(ValueError, match="different active parse generation"):
+        scheduler.enqueue_file(
+            user_id="42",
+            file_id="100",
+            preview_cache_key="",
+            callback_url="",
+            file_ext="txt",
+            idempotency_key="generation-2",
+        )
+
+
+def test_purge_releases_identity_and_confirmed_counter(scheduler, redis_conn):
+    scheduler.enqueue_file(
+        user_id="42",
+        file_id="100",
+        preview_cache_key="",
+        callback_url="",
+        file_ext="txt",
+        idempotency_key="generation-1",
+    )
+    scheduler.dispatch_one(user_id="42")
+    scheduler.confirm_dispatch(file_id="100", queue="knowledge_celery")
+    scheduler.purge_file(user_id="42", file_id="100")
+
+    assert scheduler.inflight_total(queue="knowledge_celery") == 0
+    assert scheduler.enqueue_file(
+        user_id="42",
+        file_id="100",
+        preview_cache_key="",
+        callback_url="",
+        file_ext="txt",
+        idempotency_key="generation-2",
+    ) is True
 
 
 def test_queued_files_returns_queue_contents(scheduler, redis_conn):

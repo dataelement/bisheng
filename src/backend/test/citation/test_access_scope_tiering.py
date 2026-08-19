@@ -74,7 +74,10 @@ async def test_resolve_citations_shared_metadata_no_url():
 
     login_user = SimpleNamespace(user_id=7, is_admin=lambda: False)
     with (
+        patch.object(svc, "_canonicalize_rag_items", AsyncMock(side_effect=lambda items, _user: list(items))),
+        patch.object(svc, "_project_old_file_names", AsyncMock(side_effect=lambda items, _user: list(items))),
         patch.object(svc, "_permitted_file_ids", AsyncMock(return_value={3})),  # only doc 3 visible
+        patch.object(svc, "_file_change_visible_ids", AsyncMock(return_value={2, 3})),
         patch(
             "bisheng.citation.domain.services.citation_resolve_service.KnowledgeFileDao.query_by_id_sync",
             side_effect=lambda fid: file_infos.get(fid),

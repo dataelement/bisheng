@@ -451,6 +451,9 @@ export default defineConfig(({ command, mode }) => {
       chunkSizeWarningLimit: 1500,
     },
     resolve: {
+      // Workspace source packages must share the app's i18n singleton. pnpm can
+      // otherwise resolve a second react-i18next copy for a peer dependency.
+      dedupe: ['react', 'react-dom', 'i18next', 'react-i18next'],
       alias: {
         '~': path.join(__dirname, 'src/'),
         '@': path.join(__dirname, 'src/'),

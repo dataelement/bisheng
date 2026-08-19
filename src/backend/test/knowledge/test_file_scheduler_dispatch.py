@@ -389,6 +389,32 @@ def test_stamps_owning_tenant(monkeypatch):
     assert current_tenant_id.get() == 1
 
 
+def test_fair_payload_dispatches_stable_idempotency_key_and_explicit_tenant_header(monkeypatch):
+    sched = _sched()
+    sched.active_users.return_value = ["a"]
+    sched.dispatch_one.side_effect = ["10", None]
+    sched.get_payload.return_value = {
+        "preview_cache_key": "pk",
+        "callback_url": "",
+        "file_ext": "txt",
+        "tenant_id": "18",
+        "idempotency_key": "f046:81:upload.parse",
+    }
+    apply_async = MagicMock()
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._parse_apply_async", apply_async)
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler.decide_queue", lambda ext: "knowledge_celery")
+    monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_conf", lambda: _conf())
+
+    run_dispatch_round(scheduler=sched)
+
+    apply_async.assert_called_once_with(
+        args=[10, "pk", ""],
+        queue="knowledge_celery",
+        task_id="f046:81:upload.parse",
+        headers={"tenant_id": 18},
+    )
+
+
 def test_trigger_dispatch_task_returns_early_when_fair_disabled(monkeypatch):
     monkeypatch.setattr("bisheng.worker.knowledge.scheduler._fair_scheduler_enabled", lambda: False)
     run_round = MagicMock()

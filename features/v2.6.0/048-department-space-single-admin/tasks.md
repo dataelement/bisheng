@@ -98,7 +98,7 @@
   **覆盖 AC**: AC-05(最终一致面) · **依赖**: T005
 
 - [ ] **T013**: e2e 清单 + /e2e-test
-  **文件**: `features/v2.6.0/045-department-space-single-admin/e2e-checklist.md`
+  **文件**: `features/v2.6.0/048-department-space-single-admin/e2e-checklist.md`
   **逻辑**: design §7 手动主线全跑;补审批场景:部门空间上传审批由空间管理员审批、待配置时发起被锁。
   **覆盖 AC**: 全部回归 · **依赖**: T006~T012
 

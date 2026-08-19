@@ -84,7 +84,7 @@ export function AccessModeSelector({
         >
           <RadioGroup.Item
             value={option.value}
-            disabled={option.disabled}
+            disabled={disabled || option.disabled}
             className="flex size-4 shrink-0 items-center justify-center rounded-full border-2 border-border-deep data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500"
           >
             <RadioGroup.Indicator className="size-1 rounded-full bg-fill-1" />

@@ -2720,6 +2720,11 @@
       "count": 2
     }
   },
+  "src/pages/KnowledgePage/FileChangeApprovalSettings.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
   "src/pages/KnowledgePage/KnowledgeFile.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 11
@@ -3065,11 +3070,6 @@
       "count": 3
     },
     "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
-  "src/pages/KnowledgePage/index.tsx": {
-    "react-hooks/rules-of-hooks": {
       "count": 1
     }
   },
@@ -3672,7 +3672,7 @@
       "count": 3
     },
     "no-restricted-syntax": {
-      "count": 17
+      "count": 15
     }
   },
   "src/test/departmentPageRefresh.test.tsx": {
@@ -3756,10 +3756,10 @@
   },
   "src/test/permissionRegressions.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 36
+      "count": 34
     },
     "no-restricted-syntax": {
-      "count": 95
+      "count": 79
     }
   },
   "src/test/resolveRoutePermissions.test.ts": {

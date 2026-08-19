@@ -434,6 +434,45 @@
   "setSeparately": "Set separately for each table",
   "split": "Split",
   "successMsg": "File uploaded successfully",
+  "fileChangeApproval": {
+    "departmentHint": "Department space",
+    "description": "Configure whether file uploads and file or folder renames, moves, and deletions in non-private knowledge spaces require approval.",
+    "empty": "No knowledge spaces found",
+    "enabled": "Enable file change approval",
+    "enabledHint": "When disabled, file changes in the current tenant do not require approval.",
+    "loadFailed": "Failed to load the approval policy",
+    "loading": "Loading...",
+    "nonPrivate": "Non-private",
+    "normalSpace": "Standard knowledge space",
+    "privateBypass": "Private (approval bypassed)",
+    "retry": "Retry",
+    "save": "Save settings",
+    "saveSuccess": "Settings saved",
+    "saveSuccessHint": "The updated approval settings are now in effect.",
+    "scope": {
+      "allSpaces": "All knowledge spaces",
+      "allSpacesHint": "Require approval for file changes in every non-private knowledge space.",
+      "perSpace": "Configure by knowledge space",
+      "perSpaceHint": "Non-private knowledge spaces require approval by default; you can turn off individual spaces.",
+      "title": "Approval scope"
+    },
+    "searchLabel": "Search knowledge spaces",
+    "searchPlaceholder": "Search by knowledge space name",
+    "settingsLoadFailed": "Failed to load knowledge space settings",
+    "spaceToggleLabel": "Require approval for file changes in",
+    "tab": "File change approval settings",
+    "spaces": {
+      "description": "Private knowledge spaces always bypass approval. Department spaces cannot be private.",
+      "title": "Knowledge space settings"
+    },
+    "table": {
+      "kind": "Space type",
+      "required": "Approval required",
+      "space": "Knowledge space",
+      "visibility": "Visibility"
+    },
+    "title": "Knowledge space file change approval"
+  },
   "qa": {},
   "legacyFormatNotSupported": "Legacy file format cannot be previewed"
 }

@@ -240,6 +240,26 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.knowledge.space_admin_reconcile.reconcile_department_space_admins",
                 "schedule": crontab.from_string("30 */6 * * *"),  # every 6 hours, offset from F012
             }
+        if "file_change_approver_reconcile" not in self.beat_schedule:
+            self.beat_schedule["file_change_approver_reconcile"] = {
+                "task": "bisheng.worker.knowledge.file_change_tasks.reconcile_all_file_change_approvers",
+                "schedule": 300.0,
+            }
+        if "file_change_deferred_watchdog" not in self.beat_schedule:
+            self.beat_schedule["file_change_deferred_watchdog"] = {
+                "task": "bisheng.worker.knowledge.file_change_tasks.watchdog_all_file_change_executions",
+                "schedule": 60.0,
+            }
+        if "file_change_execution_compensation" not in self.beat_schedule:
+            self.beat_schedule["file_change_execution_compensation"] = {
+                "task": "bisheng.worker.knowledge.file_change_tasks.compensate_all_file_change_execution_steps",
+                "schedule": 60.0,
+            }
+        if "file_change_cleanup" not in self.beat_schedule:
+            self.beat_schedule["file_change_cleanup"] = {
+                "task": "bisheng.worker.knowledge.file_change_tasks.cleanup_all_file_change_residue",
+                "schedule": 300.0,
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():
@@ -703,6 +723,21 @@ class MetricLogConf(BaseModel):
     )
 
 
+class ApprovalInviteConf(BaseModel):
+    """Concurrency controls for personal-user approval invitations."""
+
+    business_lock_ttl_seconds: int = Field(default=15, ge=1)
+    binding_lock_ttl_seconds: int = Field(default=60, ge=3)
+    binding_lock_renewal_interval_seconds: int = Field(default=20, ge=1)
+    outbox_claim_ttl_seconds: int = Field(default=1200, gt=900)
+
+    @model_validator(mode="after")
+    def validate_lock_intervals(self):
+        if self.binding_lock_renewal_interval_seconds >= self.binding_lock_ttl_seconds:
+            raise ValueError("binding lock renewal interval must be shorter than its TTL")
+        return self
+
+
 class Settings(BaseModel):
     """Application Settings"""
 
@@ -769,6 +804,7 @@ class Settings(BaseModel):
     in_app_message_forwarding: InAppMessageForwardingConf = InAppMessageForwardingConf()
     database_pool: DatabasePoolConf = DatabasePoolConf()
     metric_log: MetricLogConf = MetricLogConf()
+    approval_invite: ApprovalInviteConf = ApprovalInviteConf()
 
     @field_validator("database_url")
     @classmethod

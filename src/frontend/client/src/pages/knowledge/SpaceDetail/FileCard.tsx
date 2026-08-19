@@ -4,6 +4,7 @@ import { useState, type MouseEvent } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { RoundCheckbox } from "~/components/ui/RoundCheckbox";
+import { SELECTION_CHECKBOX_CLASS } from "./selectionCheckboxStyles";
 import { Card, CardContent } from "~/components/ui/Card";
 import {
     DropdownMenu,
@@ -11,12 +12,16 @@ import {
 } from "~/components/ui/DropdownMenu";
 import { ActionMenuContent, ActionMenuItem } from "~/components/ActionMenu";
 import { cn } from "~/utils";
+import { FileChangeActionIcon } from "./FileChangeActionIcon";
+import { FileChangePendingTooltip } from "./FileChangePendingTooltip";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
 import { formatTimeCard, getKnowledgeApprovalStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeItemUploading } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
+import { canDecidePendingUpload, canWithdrawPendingUpload, getFileChangeLockState, isPendingUploadSelectable } from "../hooks/useFileChangeApproval";
+import { PendingUploadApprovalActions } from "./PendingUploadApprovalActions";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -82,6 +87,14 @@ interface FileCardProps {
     onFolderDragOver?: (e: React.DragEvent) => void;
     onFolderDragLeave?: () => void;
     onFolderDrop?: (e: React.DragEvent) => void;
+    onOpenApprovalDetail?: (requestId: number) => void;
+    onPreviewPendingUpload?: (requestId: number) => void;
+    onDecidePendingUpload?: (requestId: number, action: "approve" | "reject") => void;
+    /** Row-level withdraw for the applicant's own pending upload. */
+    onWithdrawPendingUpload?: (requestId: number) => void;
+    pendingUploadDeciding?: boolean;
+    /** Current viewer id, to tell whether a pending row is the viewer's to withdraw. */
+    currentUserId?: string | number;
 }
 
 export function FileCard({
@@ -121,6 +134,12 @@ export function FileCard({
     onFolderDragOver,
     onFolderDragLeave,
     onFolderDrop,
+    onOpenApprovalDetail,
+    onPreviewPendingUpload,
+    onDecidePendingUpload,
+    onWithdrawPendingUpload,
+    pendingUploadDeciding = false,
+    currentUserId,
 }: FileCardProps) {
     const localize = useLocalize();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
@@ -128,8 +147,12 @@ export function FileCard({
         "(hover: hover) and (pointer: fine)",
     );
     const isCreating = !!file.isCreating;
+    const pendingUpload = file.pendingUploadApproval;
+    const canDecidePending = canDecidePendingUpload(pendingUpload);
+    const canWithdrawPending = canWithdrawPendingUpload(pendingUpload, currentUserId);
     // Uploading placeholder cards have no backend identity yet — not movable.
     const isUploading = isKnowledgeItemUploading(file);
+    const fileChangeLock = getFileChangeLockState(file);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     // F040: resolve this file's action permissions lazily, only when the menu opens.
@@ -157,6 +180,15 @@ export function FileCard({
     // Inline-create placeholders (isCreating) are excluded — a freshly created
     // folder is a normal folder with a highlighted rename input, no scrim/tag.
     const isUploadingFolderPlaceholder = isFolder && isUploading && !isCreating;
+    // A pending-upload row is selectable only while awaiting a decision (审核中):
+    // the applicant can batch-withdraw and an approver can batch-decide. Once
+    // decided it moves into an execution state (处理中/执行失败/…) with no batch
+    // semantics, so it keeps a disabled checkbox. The frontend-only folder upload
+    // placeholder (no backend identity) also stays unselectable. Unselectable rows
+    // keep a disabled checkbox instead of dropping it, so the column stays put.
+    const isSelectable = pendingUpload
+        ? isPendingUploadSelectable(pendingUpload)
+        : !isUploadingFolderPlaceholder;
     /** Files that haven't finished parsing get the neutral grey skin (Figma 11671:34497). */
     const isNotParsed = !isFolder && !!file.status && file.status !== FileStatus.SUCCESS;
     /** Subset of isNotParsed that should show the "In progress" overlay tag. */
@@ -186,7 +218,7 @@ export function FileCard({
 
     // formatTime is now imported from ../knowledgeUtils
 
-    const nameToneClass = isKnowledgeItemPreviewable(file)
+    const nameToneClass = (pendingUpload || isKnowledgeItemPreviewable(file))
         ? "text-[#212121]"
         : "text-[#999]";
 
@@ -195,6 +227,77 @@ export function FileCard({
      * Covers all non-success states: parsing-like (neutral grey) + error / approval (colored).
      */
     const renderStatusOverlayTag = (inline = false) => {
+        if (pendingUpload) {
+            const failed = pendingUpload.status === "failed";
+            // Still awaiting a decision → neutral pill; the business execution
+            // status only carries meaning once the request has been approved.
+            // An approver reads "待审核" (it is on their desk), everyone else "审核中".
+            const awaitingDecision = pendingUpload.approvalStatus === "pending";
+            const pendingLabel = localize(
+                pendingUpload.canApprove
+                    ? "com_knowledge.file_change_pending_approver"
+                    : "com_knowledge.file_change_pending_applicant",
+            );
+            const pill = (
+                <button
+                    type="button"
+                    className={cn(
+                        "inline-flex items-center justify-center gap-1 rounded px-2 text-caption",
+                        awaitingDecision
+                            ? "bg-fill-2 text-text-3"
+                            : failed ? "bg-danger/10 text-danger" : "bg-success/10 text-success",
+                    )}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenApprovalDetail?.(pendingUpload.requestId);
+                    }}
+                >
+                    {awaitingDecision ? (
+                        <FileChangeActionIcon action="upload" />
+                    ) : (
+                        <span className={cn("size-1 rounded-full", failed ? "bg-danger" : "bg-success")} />
+                    )}
+                    {awaitingDecision
+                        ? pendingLabel
+                        : localize(`com_knowledge.file_change_status_${pendingUpload.status}`)}
+                </button>
+            );
+            const tipped = awaitingDecision
+                ? (
+                    <FileChangePendingTooltip file={file} side={inline ? "left" : "top"}>
+                        {pill}
+                    </FileChangePendingTooltip>
+                )
+                : pill;
+            return inline ? tipped : <div className="absolute bottom-1 left-1 z-20">{tipped}</div>;
+        }
+        if (fileChangeLock.showBadge && file.fileChangeApproval) {
+            // rename / move / delete awaiting approval — same neutral pill as a
+            // pending upload, so all four change actions read alike.
+            const pill = (
+                <button
+                    type="button"
+                    className="inline-flex items-center justify-center gap-1 rounded bg-fill-2 px-2 text-caption text-text-3"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onOpenApprovalDetail?.(file.fileChangeApproval!.requestId);
+                    }}
+                >
+                    <FileChangeActionIcon action={file.fileChangeApproval.action} />
+                    {localize(
+                        file.fileChangeApproval.canApprove
+                            ? "com_knowledge.file_change_pending_approver"
+                            : "com_knowledge.file_change_pending_applicant",
+                    )}
+                </button>
+            );
+            const tipped = (
+                <FileChangePendingTooltip file={file} side={inline ? "left" : "top"}>
+                    {pill}
+                </FileChangePendingTooltip>
+            );
+            return inline ? tipped : <div className="absolute bottom-1 left-1 z-20">{tipped}</div>;
+        }
         // Uploading folder placeholder: a neutral "uploading" pill in the same
         // bottom-left slot as the file status tags — no spinner over the icon.
         if (isUploadingFolderPlaceholder) {
@@ -337,6 +440,10 @@ export function FileCard({
             return;
         }
 
+        if (pendingUpload) {
+            onPreviewPendingUpload?.(pendingUpload.requestId);
+            return;
+        }
         if (!isKnowledgeItemPreviewable(file)) return;
 
         // Space square drawer sets disableClickNavigate to avoid relying on default navigation;
@@ -356,20 +463,63 @@ export function FileCard({
     const showVersionManagement = versionManagementEnabled && !isFolder && file.status === FileStatus.SUCCESS && isAdmin && Boolean(onOpenVersionManagement);
     const showVersionHistory = versionManagementEnabled && !isFolder && Boolean(file.is_multi_version) && Boolean(onOpenVersionHistory);
     const showMoveItem = Boolean(onMove) && !isCreating;
-    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
-    const showMoreMenu = !isUploadingFolderPlaceholder && (canDownload || isAdmin || canRename || canDelete || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory);
-    /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */
-    const showInlineDownloadButton = canDownload && !hideDownloadActions && !showMoreMenu;
     const showMenuDownloadItem = canDownload && !hideDownloadActions;
+    // Card view puts EVERY action behind the ⋮ menu, even a lone one, so a card
+    // never sprouts a second floating control over its thumbnail. That includes
+    // the approval decisions, which used to sit inline. The H5 row keeps its own
+    // inline 同意/拒绝 (it has the width and no thumbnail to cover), so the
+    // pending branch is card-only.
+    const showPendingMenuItems = Boolean(pendingUpload) && !mobileListMode
+        && (canDecidePending || canWithdrawPending);
+    const hasReviewedMenuItems = showMenuDownloadItem || isAdmin || canRename || canDelete
+        || Boolean(onManagePermission) || showMoveItem || showVersionManagement || showVersionHistory;
+    // Placeholder has only a temp id (no backend identity) — suppress all row actions.
+    const showMoreMenu = !isUploadingFolderPlaceholder
+        && (pendingUpload ? showPendingMenuItems : hasReviewedMenuItems);
     const showCardActions = moreMenuOpen || hovered;
     const cardOpensPreviewOrFolder =
         !isCreating &&
         !isRenaming &&
         !isUploadingFolderPlaceholder &&
-        (isFolder || isKnowledgeItemPreviewable(file));
+        (Boolean(pendingUpload) || isFolder || isKnowledgeItemPreviewable(file));
+
+    // A pending upload is not a real file yet: the only things that apply are the
+    // approval decisions, so its menu replaces the ordinary file actions.
+    const pendingMenuItems = pendingUpload && (
+        <>
+            {canDecidePending && onDecidePendingUpload && (
+                <ActionMenuItem
+                    className="text-success data-[highlighted]:text-success focus:text-success"
+                    disabled={pendingUploadDeciding}
+                    onClick={(e) => { e.stopPropagation(); onDecidePendingUpload(pendingUpload.requestId, "approve"); }}
+                    icon={<Outlined.Check className="text-success" />}
+                    // 同意 (not 审批中心's 通过) per the pending-upload design (Figma 13198:78124).
+                    label={localize("com_approval.action_approve")}
+                />
+            )}
+            {canDecidePending && onDecidePendingUpload && (
+                <ActionMenuItem
+                    danger
+                    disabled={pendingUploadDeciding}
+                    onClick={(e) => { e.stopPropagation(); onDecidePendingUpload(pendingUpload.requestId, "reject"); }}
+                    icon={<Outlined.Close />}
+                    label={localize("com_approval.action_reject")}
+                />
+            )}
+            {canWithdrawPending && onWithdrawPendingUpload && (
+                <ActionMenuItem
+                    danger
+                    disabled={pendingUploadDeciding}
+                    onClick={(e) => { e.stopPropagation(); onWithdrawPendingUpload(pendingUpload.requestId); }}
+                    icon={<Outlined.Delete />}
+                    label={localize("com_knowledge.delete")}
+                />
+            )}
+        </>
+    );
 
     // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
-    const moreMenuItems = (
+    const reviewedMenuItems = (
         <>
             {showMenuDownloadItem && (
                 <ActionMenuItem
@@ -394,14 +544,15 @@ export function FileCard({
             )}
             {canRename && (
                 <ActionMenuItem
-                    onClick={(e) => { e.stopPropagation(); startRenaming(); }}
+                    disabled={fileChangeLock.locked}
+                    onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) startRenaming(); }}
                     icon={<Outlined.Edit />}
                     label={localize("com_knowledge.rename")}
                 />
             )}
             {showMoveItem && (
                 <ActionMenuItem
-                    disabled={!canMove || isUploading}
+                    disabled={!canMove || isUploading || fileChangeLock.locked}
                     onClick={(e) => { e.stopPropagation(); onMove?.(); }}
                     icon={<Outlined.MoveToFolder />}
                     label={localize("com_knowledge.move")}
@@ -431,13 +582,16 @@ export function FileCard({
             {canDelete && (
                 <ActionMenuItem
                     danger
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    disabled={fileChangeLock.locked}
+                    onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) onDelete(); }}
                     icon={<Outlined.Delete />}
                     label={localize("com_knowledge.delete")}
                 />
             )}
         </>
     );
+
+    const moreMenuItems = showPendingMenuItems ? pendingMenuItems : reviewedMenuItems;
 
     const handleCardContextMenu = (e: MouseEvent<HTMLDivElement>) => {
         if (!showMoreMenu) return;
@@ -525,11 +679,21 @@ export function FileCard({
                     </div>
                 </div>
 
+                {pendingUpload && (canDecidePending || canWithdrawPending) && (
+                    <PendingUploadApprovalActions
+                        requestId={pendingUpload.requestId}
+                        disabled={pendingUploadDeciding}
+                        onDecide={canDecidePending ? onDecidePendingUpload : undefined}
+                        onWithdraw={canWithdrawPending ? onWithdrawPendingUpload : undefined}
+                    />
+                )}
+
                 {/* Circular selection checkbox on the far right */}
-                {!hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                {!hideSelectionCheckbox && (
                     <RoundCheckbox
                         className="shrink-0"
                         checked={isSelected}
+                        disabled={!isSelectable}
                         onCheckedChange={(checked) => onSelect(checked)}
                     />
                 )}
@@ -539,7 +703,7 @@ export function FileCard({
 
     return (
         <Card
-            draggable={cardDraggable && !isCreating && !isUploading}
+            draggable={!pendingUpload && cardDraggable && !isCreating && !isUploading}
             onDragStart={cardDraggable ? onCardDragStart : undefined}
             onDragOver={isFolder && !isUploadingFolderPlaceholder ? onFolderDragOver : undefined}
             onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
@@ -551,8 +715,8 @@ export function FileCard({
                 isSelected
                     ? "bg-blue-50"
                     : isNotParsed
-                        ? "bg-[#fbfbfb]"
-                        : "bg-white",
+                      ? "bg-[#fbfbfb]"
+                      : "bg-white",
                 isSelected
                     ? "border-[#ECECEC] shadow-[0_4px_20px_0_rgba(0,17,147,0.05)]"
                     : "border-[#ECECEC] hover:border-[#c9cdd4]",
@@ -587,7 +751,7 @@ export function FileCard({
                             style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
                         />
                     </DropdownMenuTrigger>
-                    <ActionMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                    <ActionMenuContent align="start" width={140} onClick={(e) => e.stopPropagation()}>
                         {moreMenuItems}
                     </ActionMenuContent>
                 </DropdownMenu>
@@ -605,7 +769,11 @@ export function FileCard({
                 {!hideSelectionCheckbox && mobileListMode && (
                     <div className="hidden max-[767px]:flex max-[767px]:shrink-0 max-[767px]:items-center max-[767px]:justify-center max-[767px]:pl-1 max-[767px]:pr-0.5">
                         <Checkbox
-                            className={isSelected ? "border-primary" : "border-gray-400"}
+                            className={cn(
+                                SELECTION_CHECKBOX_CLASS,
+                                !isSelectable && "cursor-not-allowed opacity-50",
+                            )}
+                            disabled={!isSelectable}
                             checked={isSelected}
                             onCheckedChange={(checked) => onSelect(!!checked)}
                             onPointerDown={(e) => e.stopPropagation()}
@@ -634,7 +802,7 @@ export function FileCard({
                         {renderSimilarTag(true)}
                     </div>
 
-                    {!hideSelectionCheckbox && !isUploadingFolderPlaceholder && (
+                    {!hideSelectionCheckbox && (
                         <div
                             className={cn(
                                 "absolute left-2 top-2 z-10 transition-opacity",
@@ -647,7 +815,11 @@ export function FileCard({
                             )}
                         >
                             <Checkbox
-                                className={isSelected ? "border-primary" : "border-gray-400"}
+                                className={cn(
+                                    SELECTION_CHECKBOX_CLASS,
+                                    !isSelectable && "cursor-not-allowed opacity-50",
+                                )}
+                                disabled={!isSelectable}
                                 checked={isSelected}
                                 onCheckedChange={(checked) => onSelect(!!checked)}
                                 onPointerDown={(e) => e.stopPropagation()}
@@ -668,17 +840,6 @@ export function FileCard({
                                     : "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100"
                             )}
                         >
-                            {showInlineDownloadButton && (
-                                <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="w-5 h-5 rounded-md hover:bg-gray-100 shrink-0"
-                                    onClick={(e) => { e.stopPropagation(); onDownload(); }}
-                                    title={localize("com_knowledge.download")}
-                                >
-                                    <Download className="size-3.5 text-[#4e5969] group-hover:text-[#1d2129]" />
-                                </Button>
-                            )}
                             {showMoreMenu && (
                                 <DropdownMenu open={moreMenuOpen} onOpenChange={handleMoreMenuOpenChange}>
                                     <DropdownMenuTrigger asChild>
@@ -694,6 +855,7 @@ export function FileCard({
 
                                     <ActionMenuContent
                                         align="end"
+                                        width={140}
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         {moreMenuItems}
@@ -786,9 +948,10 @@ export function FileCard({
                                 )}
                                 {canRename && (
                                     <ActionMenuItem
+                                        disabled={fileChangeLock.locked}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            startRenaming();
+                                            if (!fileChangeLock.locked) startRenaming();
                                         }}
                                         icon={<Outlined.Edit />}
                                         label={localize("com_knowledge.rename")}
@@ -796,7 +959,7 @@ export function FileCard({
                                 )}
                                 {showMoveItem && (
                                     <ActionMenuItem
-                                        disabled={!canMove || isUploading}
+                                        disabled={!canMove || isUploading || fileChangeLock.locked}
                                         onClick={(e) => { e.stopPropagation(); onMove?.(); }}
                                         icon={<Outlined.MoveToFolder />}
                                         label={localize("com_knowledge.move")}
@@ -826,7 +989,8 @@ export function FileCard({
                                 {canDelete && (
                                     <ActionMenuItem
                                         danger
-                                        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                                        disabled={fileChangeLock.locked}
+                                        onClick={(e) => { e.stopPropagation(); if (!fileChangeLock.locked) onDelete(); }}
                                         icon={<Outlined.Delete />}
                                         label={localize("com_knowledge.delete")}
                                     />

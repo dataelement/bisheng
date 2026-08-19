@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 
 from bisheng.api.router import router, router_rpc
+from bisheng.bootstrap.approval_scenarios import bootstrap_approval_scenarios
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
@@ -93,6 +94,8 @@ async def lifespan(app: FastAPI):
 
 def create_app():
     """Create the FastAPI app and include the router."""
+
+    bootstrap_approval_scenarios()
 
     app = FastAPI(
         exception_handlers=_EXCEPTION_HANDLERS,

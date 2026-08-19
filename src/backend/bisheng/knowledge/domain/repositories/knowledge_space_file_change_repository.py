@@ -1,0 +1,280 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from bisheng.approval.domain.models.approval_scenario import ApprovalScenario
+from bisheng.approval.domain.services.approval_registry import SYSTEM_FILE_CHANGE_SCENARIO_CODE
+from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_space_file_change_policy import (
+    KnowledgeSpaceFileChangePolicy,
+    KnowledgeSpaceFileChangeSetting,
+)
+
+
+@dataclass(frozen=True)
+class KnowledgeSpaceFileChangeSettingRow:
+    space: Knowledge
+    setting: KnowledgeSpaceFileChangeSetting | None
+    is_department: bool
+
+
+class KnowledgeSpaceFileChangeRepository:
+    """Session-bound persistence for F046 policy and per-space settings."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    @staticmethod
+    def build_policy_statement(*, tenant_id: int, for_update: bool = False):
+        statement = select(KnowledgeSpaceFileChangePolicy).where(
+            KnowledgeSpaceFileChangePolicy.tenant_id == int(tenant_id)
+        )
+        return statement.with_for_update() if for_update else statement
+
+    async def get_policy(
+        self,
+        *,
+        tenant_id: int,
+        for_update: bool = False,
+    ) -> KnowledgeSpaceFileChangePolicy | None:
+        statement = self.build_policy_statement(tenant_id=tenant_id, for_update=for_update)
+        return (await self.session.exec(statement)).first()
+
+    async def is_file_change_scenario_enabled(self, *, tenant_id: int) -> bool:
+        """Read the tenant's file-change approval scenario master switch.
+
+        The scenario is auto-provisioned enabled per tenant; an administrator can
+        turn it off in the Approval Center. A missing row is treated as "not
+        disabled" (enabled) so behaviour only changes when explicitly toggled off.
+        """
+        statement = select(ApprovalScenario.enabled).where(
+            ApprovalScenario.tenant_id == int(tenant_id),
+            ApprovalScenario.scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+        )
+        enabled = (await self.session.exec(statement)).first()
+        return enabled is None or bool(enabled)
+
+    async def ensure_policy_row(
+        self,
+        *,
+        tenant_id: int,
+        for_update: bool = False,
+    ) -> KnowledgeSpaceFileChangePolicy:
+        """Insert the tenant lock row once and recover concurrent inserts safely."""
+        tenant_id = int(tenant_id)
+        existing = await self.get_policy(tenant_id=tenant_id)
+        if existing is not None:
+            if not for_update:
+                return existing
+            locked = await self.get_policy(tenant_id=tenant_id, for_update=True)
+            if locked is None:  # pragma: no cover - concurrent delete is forbidden by the model owner
+                raise RuntimeError(f"file change policy disappeared for tenant {tenant_id}")
+            return locked
+
+        candidate = KnowledgeSpaceFileChangePolicy(tenant_id=tenant_id)
+        try:
+            async with self.session.begin_nested():
+                self.session.add(candidate)
+                await self.session.flush()
+        except IntegrityError:
+            # Another transaction inserted the unique tenant row. The savepoint
+            # keeps the caller's UoW usable; lock the winner before quota work.
+            winner = await self.get_policy(tenant_id=tenant_id, for_update=True)
+            if winner is None:
+                raise RuntimeError(f"concurrent file change policy insert was not visible for tenant {tenant_id}")
+            return winner
+
+        return candidate
+
+    async def save_policy(
+        self,
+        *,
+        tenant_id: int,
+        enabled: bool,
+        scope: str,
+    ) -> KnowledgeSpaceFileChangePolicy:
+        row = await self.ensure_policy_row(tenant_id=tenant_id, for_update=True)
+        row.enabled = bool(enabled)
+        row.scope = scope
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    @staticmethod
+    def build_setting_statement(
+        *,
+        tenant_id: int,
+        space_id: int,
+        for_update: bool = False,
+    ):
+        statement = select(KnowledgeSpaceFileChangeSetting).where(
+            KnowledgeSpaceFileChangeSetting.tenant_id == int(tenant_id),
+            KnowledgeSpaceFileChangeSetting.space_id == int(space_id),
+        )
+        return statement.with_for_update() if for_update else statement
+
+    async def get_setting(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+        for_update: bool = False,
+    ) -> KnowledgeSpaceFileChangeSetting | None:
+        statement = self.build_setting_statement(
+            tenant_id=tenant_id,
+            space_id=space_id,
+            for_update=for_update,
+        )
+        return (await self.session.exec(statement)).first()
+
+    async def save_setting(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+        approval_required: bool,
+    ) -> KnowledgeSpaceFileChangeSetting:
+        row = await self.get_setting(
+            tenant_id=tenant_id,
+            space_id=space_id,
+            for_update=True,
+        )
+        if row is None:
+            row = KnowledgeSpaceFileChangeSetting(
+                tenant_id=int(tenant_id),
+                space_id=int(space_id),
+                approval_required=bool(approval_required),
+            )
+        else:
+            row.approval_required = bool(approval_required)
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
+    @staticmethod
+    def build_settings_by_space_ids_statement(*, tenant_id: int, space_ids: Sequence[int]):
+        normalized_ids = [int(space_id) for space_id in space_ids]
+        return select(KnowledgeSpaceFileChangeSetting).where(
+            KnowledgeSpaceFileChangeSetting.tenant_id == int(tenant_id),
+            KnowledgeSpaceFileChangeSetting.space_id.in_(normalized_ids),
+        )
+
+    async def get_settings_by_space_ids(
+        self,
+        *,
+        tenant_id: int,
+        space_ids: Sequence[int],
+    ) -> list[KnowledgeSpaceFileChangeSetting]:
+        if not space_ids:
+            return []
+        statement = self.build_settings_by_space_ids_statement(
+            tenant_id=tenant_id,
+            space_ids=space_ids,
+        )
+        return list((await self.session.exec(statement)).all())
+
+    async def get_space(self, *, tenant_id: int, space_id: int) -> Knowledge | None:
+        statement = select(Knowledge).where(
+            Knowledge.tenant_id == int(tenant_id),
+            Knowledge.id == int(space_id),
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+        )
+        return (await self.session.exec(statement)).first()
+
+    async def lock_spaces_by_ids(self, *, tenant_id: int, space_ids: Sequence[int]) -> list[Knowledge]:
+        """Lock a bounded current-tenant space set in deterministic order."""
+
+        normalized_ids = sorted({int(space_id) for space_id in space_ids})
+        if not normalized_ids:
+            return []
+        statement = (
+            select(Knowledge)
+            .where(
+                Knowledge.tenant_id == int(tenant_id),
+                Knowledge.id.in_(normalized_ids),
+                Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+            )
+            .order_by(Knowledge.id.asc())
+            .with_for_update()
+        )
+        return list((await self.session.exec(statement)).all())
+
+    async def list_space_setting_rows(
+        self,
+        *,
+        tenant_id: int,
+        keyword: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[KnowledgeSpaceFileChangeSettingRow], int]:
+        filters = [
+            Knowledge.tenant_id == int(tenant_id),
+            Knowledge.type == KnowledgeTypeEnum.SPACE.value,
+        ]
+        normalized_keyword = (keyword or "").strip()
+        if normalized_keyword:
+            filters.append(col(Knowledge.name).contains(normalized_keyword))
+
+        total_statement = select(func.count(Knowledge.id)).where(*filters)
+        total = int((await self.session.exec(total_statement)).one())
+
+        space_statement = (
+            select(Knowledge)
+            .where(*filters)
+            .order_by(Knowledge.id.asc())
+            .offset((int(page) - 1) * int(page_size))
+            .limit(int(page_size))
+        )
+        spaces = list((await self.session.exec(space_statement)).all())
+        space_ids = [int(space.id) for space in spaces]
+        if not space_ids:
+            return [], total
+
+        settings = await self.get_settings_by_space_ids(
+            tenant_id=tenant_id,
+            space_ids=space_ids,
+        )
+        settings_by_space_id = {int(setting.space_id): setting for setting in settings}
+        department_statement = select(DepartmentKnowledgeSpace.space_id).where(
+            DepartmentKnowledgeSpace.tenant_id == int(tenant_id),
+            DepartmentKnowledgeSpace.space_id.in_(space_ids),
+        )
+        department_space_ids = {int(space_id) for space_id in (await self.session.exec(department_statement)).all()}
+        return (
+            [
+                KnowledgeSpaceFileChangeSettingRow(
+                    space=space,
+                    setting=settings_by_space_id.get(int(space.id)),
+                    is_department=int(space.id) in department_space_ids,
+                )
+                for space in spaces
+            ],
+            total,
+        )
+
+    async def get_space_setting_row(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+    ) -> KnowledgeSpaceFileChangeSettingRow | None:
+        space = await self.get_space(tenant_id=tenant_id, space_id=space_id)
+        if space is None:
+            return None
+        setting = await self.get_setting(tenant_id=tenant_id, space_id=space_id)
+        department_statement = select(DepartmentKnowledgeSpace.id).where(
+            DepartmentKnowledgeSpace.tenant_id == int(tenant_id),
+            DepartmentKnowledgeSpace.space_id == int(space_id),
+        )
+        return KnowledgeSpaceFileChangeSettingRow(
+            space=space,
+            setting=setting,
+            is_department=(await self.session.exec(department_statement)).first() is not None,
+        )
