@@ -243,6 +243,12 @@ class CeleryConf(BaseModel):
                 "task": "bisheng.worker.knowledge.scheduler.reconcile_file_scheduler_task",
                 "schedule": 300.0,
             }
+        # v3.0.0-beta1 052: 10min stale permission projection reconcile.
+        if "reconcile_stale_parent_projections" not in self.beat_schedule:
+            self.beat_schedule["reconcile_stale_parent_projections"] = {
+                "task": "bisheng.worker.knowledge.stale_projection_reconciler.reconcile_stale_parent_projections",
+                "schedule": crontab.from_string("*/10 * * * *"),  # every 10 minutes
+            }
 
         # convert str to crontab
         for key, task_info in self.beat_schedule.items():

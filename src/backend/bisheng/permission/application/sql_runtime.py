@@ -194,7 +194,17 @@ class SqlPermissionScopeFence:
             or row.parent_type != target.parent_type
             or row.parent_id != target.parent_id
         ):
-            raise PermissionPublishNotReadyError(msg="Resource permission projection is not current")
+            raise PermissionPublishNotReadyError(
+                msg="Resource permission projection is not current",
+                stored_parent_type=row.parent_type if row else None,
+                stored_parent_id=row.parent_id if row else None,
+                stored_version=row.version if row else None,
+                stored_projection_state=row.projection_state if row else None,
+                expected_parent_type=target.parent_type,
+                expected_parent_id=target.parent_id,
+                expected_version=target.resource_version,
+                expected_projection_state="CURRENT",
+            )
 
 
 class RedisConsistencyMarker:
