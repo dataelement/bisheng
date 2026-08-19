@@ -2,8 +2,10 @@
 
 The list endpoint no longer returns unread counts or F048 actions, reads pin state
 from the decoupled channel_user_pin table, sources "created" straight from the
-channel table by user_id, and derives "followed" from the F048-visible subset minus
-the user's own created channels. set_channel_pin gates on the concrete visible action.
+channel table by user_id, and derives "followed" from OpenFGA's visible-ids
+enumeration (via ``runtime.list_visible_objects``) minus the user's own created
+channels — filtered at the DB layer, not in Python. set_channel_pin gates on the
+concrete visible action.
 """
 
 from __future__ import annotations
@@ -78,6 +80,33 @@ def _stub_pin_dao(monkeypatch, pinned: set[str]):
     return mod.ChannelUserPinDao
 
 
+def _stub_visible_flow(monkeypatch, *, visible_ids: list[str]):
+    """Stub the F048 "visible-ids-first" path used by _get_followed_channels.
+
+    ``resolve_permission_actor`` is replaced with a light wrapper that just
+    exposes ``user_id`` / ``current_tenant_id`` from the test login_user;
+    ``get_f048_runtime`` returns a fake with a ``list_visible_objects`` coroutine
+    that yields the requested id set. Together they let the service run without
+    booting the F048 runtime, OpenFGA client, or Redis marker plumbing.
+    """
+
+    async def _resolve_actor(login_user):
+        return SimpleNamespace(
+            user_id=login_user.user_id,
+            current_tenant_id=getattr(login_user, "tenant_id", 1),
+        )
+
+    async def _list_visible_objects(actor, *, resource_type, max_results):
+        assert resource_type == "channel"
+        return SimpleNamespace(object_ids=tuple(visible_ids))
+
+    async def _get_runtime():
+        return SimpleNamespace(list_visible_objects=_list_visible_objects)
+
+    monkeypatch.setattr(mod, "resolve_permission_actor", _resolve_actor)
+    monkeypatch.setattr(mod, "get_f048_runtime", _get_runtime)
+
+
 # ─────────────────────────── created branch ───────────────────────────
 
 async def test_created_reads_channel_table_no_actions_no_unread(monkeypatch):
@@ -115,29 +144,29 @@ async def test_created_empty_returns_empty(monkeypatch):
 # ─────────────────────────── followed branch ───────────────────────────
 
 async def test_followed_keeps_visible_excludes_own_and_invisible(monkeypatch):
+    """FGA marks c1(own) + c2(visible other) visible; c3 not visible → not in list.
+
+    The old code let batch_check_business_visible say True for all three and then
+    filtered ``user_id != login_user.user_id`` in Python. The new flow trusts
+    OpenFGA to omit the un-visible id, and pushes the "not my own" predicate
+    into the DB read — so ``find_followed_by_visible_ids`` is what drops c1.
+    """
     _stub_pin_dao(monkeypatch, pinned=set())
-    # c1 = own (login user 1), c2 = visible other, c3 = not visible
-    candidates = [
-        _channel("c1", "Own", user_id=1),
-        _channel("c2", "Visible", user_id=2),
-        _channel("c3", "Hidden", user_id=3),
-    ]
-    monkeypatch.setattr(
-        mod,
-        "batch_check_business_visible",
-        AsyncMock(return_value={"c1": True, "c2": True, "c3": False}),
-    )
+    _stub_visible_flow(monkeypatch, visible_ids=["c1", "c2"])
+    # The DB layer honours ``exclude_creator_id=1``, so only c2 comes back even
+    # though FGA said c1 is also visible (creators can always see their own).
+    followed_rows = _async([_channel("c2", "Visible", user_id=2)])
     service = _service(
-        channel_repo={"find_permission_candidates": _async(candidates)},
+        channel_repo={"find_followed_by_visible_ids": followed_rows},
         member_repo={"find_channel_memberships": _async([_membership("c2")])},
     )
 
     result = await service.get_my_channels(
         MyChannelQueryRequest(query_type=QueryTypeEnum.FOLLOWED),
-        SimpleNamespace(user_id=1),
+        SimpleNamespace(user_id=1, tenant_id=1),
     )
 
-    assert [item.id for item in result] == ["c2"]  # own (c1) + invisible (c3) dropped
+    assert [item.id for item in result] == ["c2"]
     item = result[0]
     assert item.actions == []
     assert item.user_role == UserRoleEnum.MEMBER.value
@@ -146,42 +175,109 @@ async def test_followed_keeps_visible_excludes_own_and_invisible(monkeypatch):
     assert "unread_count" not in item.model_dump()
 
 
+async def test_followed_delegates_own_exclusion_to_db_layer(monkeypatch):
+    """The service must pass ``exclude_creator_id=login_user.user_id`` through.
+
+    Guards the invariant that the "not my own" predicate lives in the SQL
+    ``WHERE`` clause (not in a Python post-filter), which is the whole point of
+    moving off the "candidate + batch_check_business_visible" flow.
+    """
+    _stub_pin_dao(monkeypatch, pinned=set())
+    _stub_visible_flow(monkeypatch, visible_ids=["c1", "c2"])
+    captured: dict[str, object] = {}
+
+    async def _find_followed(channel_ids, *, tenant_id, exclude_creator_id):
+        captured["channel_ids"] = list(channel_ids)
+        captured["tenant_id"] = tenant_id
+        captured["exclude_creator_id"] = exclude_creator_id
+        # DB drops c1 (own), keeps c2.
+        return [_channel("c2", "Visible", user_id=2)]
+
+    service = _service(
+        channel_repo={"find_followed_by_visible_ids": _find_followed},
+        member_repo={"find_channel_memberships": _async([])},
+    )
+
+    await service.get_my_channels(
+        MyChannelQueryRequest(query_type=QueryTypeEnum.FOLLOWED),
+        SimpleNamespace(user_id=7, tenant_id=42),
+    )
+
+    assert captured == {
+        "channel_ids": ["c1", "c2"],
+        "tenant_id": 42,
+        "exclude_creator_id": 7,
+    }
+
+
 async def test_followed_visible_without_membership_has_null_subscribed_at(monkeypatch):
     _stub_pin_dao(monkeypatch, pinned=set())
-    candidates = [_channel("c9", "OrgGranted", user_id=2)]
-    monkeypatch.setattr(
-        mod, "batch_check_business_visible", AsyncMock(return_value={"c9": True})
-    )
+    _stub_visible_flow(monkeypatch, visible_ids=["c9"])
     # Visible via org grant, but no membership row.
     service = _service(
-        channel_repo={"find_permission_candidates": _async(candidates)},
+        channel_repo={
+            "find_followed_by_visible_ids": _async([_channel("c9", "OrgGranted", user_id=2)]),
+        },
         member_repo={"find_channel_memberships": _async([])},
     )
 
     result = await service.get_my_channels(
         MyChannelQueryRequest(query_type=QueryTypeEnum.FOLLOWED),
-        SimpleNamespace(user_id=1),
+        SimpleNamespace(user_id=1, tenant_id=1),
     )
 
     assert [item.id for item in result] == ["c9"]
     assert result[0].subscribed_at is None
 
 
-async def test_followed_no_visible_returns_empty(monkeypatch):
+async def test_followed_no_visible_ids_skips_db_and_membership(monkeypatch):
+    """Empty visible id set → no DB read, no membership query, empty response.
+
+    Locks in that both downstream calls are skipped so the endpoint costs one
+    OpenFGA hop (and one catalog SQL inside the runtime) when the user can see
+    zero channels.
+    """
     _stub_pin_dao(monkeypatch, pinned=set())
-    candidates = [_channel("c2", "V", user_id=2)]
-    monkeypatch.setattr(
-        mod, "batch_check_business_visible", AsyncMock(return_value={"c2": False})
-    )
+    _stub_visible_flow(monkeypatch, visible_ids=[])
+    db_calls = AsyncMock(return_value=[])
+    member_calls = AsyncMock(return_value=[])
     service = _service(
-        channel_repo={"find_permission_candidates": _async(candidates)},
-        member_repo={"find_channel_memberships": _async([])},
+        channel_repo={"find_followed_by_visible_ids": db_calls},
+        member_repo={"find_channel_memberships": member_calls},
     )
+
     result = await service.get_my_channels(
         MyChannelQueryRequest(query_type=QueryTypeEnum.FOLLOWED),
-        SimpleNamespace(user_id=1),
+        SimpleNamespace(user_id=1, tenant_id=1),
     )
+
     assert result == []
+    db_calls.assert_not_called()
+    member_calls.assert_not_called()
+
+
+async def test_followed_all_own_channels_skip_membership_query(monkeypatch):
+    """When every visible channel is the caller's own, no follower rows remain.
+
+    The DB layer's ``exclude_creator_id`` drops them all, so the membership fetch
+    can be short-circuited too — asserted here so future refactors don't
+    accidentally re-issue a needless query.
+    """
+    _stub_pin_dao(monkeypatch, pinned=set())
+    _stub_visible_flow(monkeypatch, visible_ids=["c1"])
+    member_calls = AsyncMock(return_value=[])
+    service = _service(
+        channel_repo={"find_followed_by_visible_ids": _async([])},  # DB filtered c1 out
+        member_repo={"find_channel_memberships": member_calls},
+    )
+
+    result = await service.get_my_channels(
+        MyChannelQueryRequest(query_type=QueryTypeEnum.FOLLOWED),
+        SimpleNamespace(user_id=1, tenant_id=1),
+    )
+
+    assert result == []
+    member_calls.assert_not_called()
 
 
 # ─────────────────────────── set_channel_pin ───────────────────────────
