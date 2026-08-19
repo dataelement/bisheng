@@ -9,7 +9,6 @@ import { DragDropContext, Draggable, Droppable } from "react-beautiful-dnd";
 import { useTranslation } from "react-i18next";
 
 const MAX_RECOMMENDED_APPS = 16;
-const PAGE_SIZE = 40;
 
 // Tab config for app types: workflow=10, assistant=5
 const APP_TYPE_TABS = [
@@ -45,11 +44,11 @@ export default function RecommendedAppsConfig({
     const [activeTab, setActiveTab] = useState("workflow");
     const [searchTerm, setSearchTerm] = useState("");
     const [appList, setAppList] = useState<AppItem[]>([]);
-    const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
     const listRef = useRef<HTMLDivElement>(null);
     const loadingRef = useRef(false);
+    const cursorRef = useRef<string | null>(null);
 
     const currentFlowType = APP_TYPE_TABS.find((tab) => tab.key === activeTab)?.flowType;
 
@@ -62,22 +61,22 @@ export default function RecommendedAppsConfig({
         });
     }, []);
 
-    // Load apps list from API — server filters by flow_type so pagination is correct.
+    // Load apps list from API (F027 cursor waterfall). `cursor === null` starts fresh.
     const loadApps = useCallback(
-        async (pageNum: number, reset = false) => {
+        async (cursor: string | null, reset = false) => {
             if (loadingRef.current || currentFlowType === undefined) return;
             loadingRef.current = true;
             setLoading(true);
             try {
-                const res: any = await getChatOnlineApi(pageNum, searchTerm, -1, currentFlowType, {
+                const res: any = await getChatOnlineApi(cursor, searchTerm, -1, currentFlowType, {
                     sortBy: 'update_time',
                     searchDescription: true,
                 });
-                const pageData: AppItem[] = res || [];
+                const pageData: AppItem[] = res.list || [];
                 setAppList((prev) => (reset ? pageData : [...prev, ...pageData]));
                 mergeDetails(pageData);
-                setHasMore(pageData.length >= PAGE_SIZE);
-                setPage(pageNum);
+                setHasMore(!!res.hasMore);
+                cursorRef.current = res.nextCursor;
             } catch (error) {
                 console.error("Error loading apps:", error);
             } finally {
@@ -91,9 +90,9 @@ export default function RecommendedAppsConfig({
     // Reset and reload when tab or search changes
     useEffect(() => {
         setAppList([]);
-        setPage(1);
         setHasMore(true);
-        loadApps(1, true);
+        cursorRef.current = null;
+        loadApps(null, true);
     }, [activeTab, searchTerm, loadApps]);
 
     // Scroll to bottom loads more
@@ -101,9 +100,9 @@ export default function RecommendedAppsConfig({
         if (!listRef.current || !hasMore || loading) return;
         const { scrollTop, scrollHeight, clientHeight } = listRef.current;
         if (scrollTop + clientHeight >= scrollHeight - 20) {
-            loadApps(page + 1);
+            loadApps(cursorRef.current);
         }
-    }, [hasMore, loading, page, loadApps]);
+    }, [hasMore, loading, loadApps]);
 
     // On mount (or once ids become available) fetch details for already-configured apps.
     const initializedRef = useRef(false);

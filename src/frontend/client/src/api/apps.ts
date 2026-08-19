@@ -400,14 +400,18 @@ export async function unpinUsedAppApi(flowId: string) {
         data: { flow_id: flowId }
     });
 }
-export async function getUncategorized(page: number = 1, pageSize: number = 8, keyword?: string) {
-    return await request.get('/api/v1/workstation/app/uncategorized', {
+/** F027 cursor waterfall. Pass the previous response's `nextCursor` to load more;
+ * omit for the first page. Returns { list, hasMore, nextCursor }. */
+export async function getUncategorized(cursor: string | null = null, pageSize: number = 8, keyword?: string) {
+    const res = await request.get('/api/v1/workstation/app/uncategorized', {
         params: {
-            page,
+            cursor: cursor || undefined,
             limit: pageSize,
-            keyword
+            keyword: keyword || undefined
         }
-    })
+    }) as { data?: { data?: unknown[]; has_more?: boolean; next_cursor?: string | null } }
+    const env = res?.data || {}
+    return { list: env.data || [], hasMore: !!env.has_more, nextCursor: env.next_cursor || null }
 }
 
 export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1, type }) {
@@ -426,18 +430,30 @@ export async function getAppsApi({ page = 1, pageSize = 8, keyword, tag_id = -1,
 }
 
 
-export const getChatOnlineApi = async (page, keyword, tag_id, disableLimit = 8, action: 'visible' | 'use' = 'visible') => {
-    const params = {
-        page,
-        keyword,
-        limit: disableLimit,
+/** F027 cursor waterfall. Pass the previous response's `nextCursor` to load more;
+ * omit for the first page. Returns { list, hasMore, nextCursor }. */
+export const getChatOnlineApi = async (
+    cursor: string | null,
+    keyword: string,
+    tag_id: number,
+    pageSize = 8,
+    action: 'visible' | 'use' = 'visible'
+) => {
+    const params: Record<string, unknown> = {
+        cursor: cursor || undefined,
+        keyword: keyword || undefined,
+        limit: pageSize,
         action
     }
     if (tag_id !== -1 && tag_id != null) {
         params.tag_id = tag_id
     }
 
-    return await request.get(`/api/v1/chat/online`, { params })
+    const res = await request.get(`/api/v1/chat/online`, { params }) as {
+        data?: { data?: unknown[]; has_more?: boolean; next_cursor?: string | null }
+    }
+    const env = res?.data || {}
+    return { list: env.data || [], hasMore: !!env.has_more, nextCursor: env.next_cursor || null }
 }
 
 // Get recommended apps configured by admin
@@ -471,8 +487,16 @@ export async function getAppConversationsApi(flowId: string, page: number = 1, l
  */
 export async function getAllAccessibleAppsApi(params: {
     keyword?: string;
-    page?: number;
+    cursor?: string | null;
     limit?: number;
 }) {
-    return await request.get('/api/v1/chat/online', { params })
+    const res = await request.get('/api/v1/chat/online', {
+        params: {
+            keyword: params.keyword || undefined,
+            cursor: params.cursor || undefined,
+            limit: params.limit
+        }
+    }) as { data?: { data?: unknown[]; has_more?: boolean; next_cursor?: string | null } }
+    const env = res?.data || {}
+    return { list: env.data || [], hasMore: !!env.has_more, nextCursor: env.next_cursor || null }
 }
