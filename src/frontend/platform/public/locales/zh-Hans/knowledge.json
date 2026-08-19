@@ -451,9 +451,9 @@
     "saveSuccessHint": "最新审批设置已生效。",
     "scope": {
       "allSpaces": "全部知识空间",
-      "allSpacesHint": "非私密知识空间的文件变更默认均需审批，仍可在下方对单个知识空间单独关闭。",
+      "allSpacesHint": "非私密知识空间的文件变更均需审批。",
       "perSpace": "按知识空间配置",
-      "perSpaceHint": "分别设置每个非私密知识空间是否需要审批。",
+      "perSpaceHint": "非私密知识空间默认均需审批，可对单个知识空间单独关闭。",
       "title": "审批范围"
     },
     "searchLabel": "搜索知识空间",

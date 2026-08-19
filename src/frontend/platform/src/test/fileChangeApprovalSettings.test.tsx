@@ -254,22 +254,27 @@ describe("FileChangeApprovalSettings", () => {
     );
   });
 
-  it("saves policy and settings atomically with one request", async () => {
+  it("hides the per-space list under all_spaces and preserves stored settings on save", async () => {
     requestMocks.put
       .mockRejectedValueOnce(new Error("configuration save failed"))
       .mockResolvedValueOnce({
         policy: { enabled: true, scope: "all_spaces" },
-        settings: [{ ...settingsPage.data[0], approval_required: false }],
+        settings: [],
       });
     render(<FileChangeApprovalSettings />);
 
+    // The per-space list is visible under the default per_space scope.
     const publicRow = (await screen.findByText("Public Space")).closest(
       "tr",
     ) as HTMLElement;
+    // A per-space draft made before switching scope must not be pushed on save.
     fireEvent.click(within(publicRow).getByRole("switch"));
+
     fireEvent.click(
       screen.getByRole("radio", { name: "fileChangeApproval.scope.allSpaces" }),
     );
+    // Switching to all_spaces hides the per-space list entirely.
+    expect(screen.queryByText("Public Space")).not.toBeInTheDocument();
 
     const saveButton = screen.getByRole("button", {
       name: "fileChangeApproval.save",
@@ -284,11 +289,13 @@ describe("FileChangeApprovalSettings", () => {
 
     fireEvent.click(saveButton);
     await waitFor(() => expect(requestMocks.put).toHaveBeenCalledTimes(2));
+    // Only the policy is saved; no per-space settings are sent, so previously
+    // stored per-space opt-outs are preserved on the backend.
     expect(requestMocks.put).toHaveBeenCalledWith(
       "/api/v1/knowledge/space/admin/file-change-configuration",
       {
         policy: { enabled: true, scope: "all_spaces" },
-        settings: [{ space_id: 101, approval_required: false }],
+        settings: [],
       },
     );
     await waitFor(() => expect(saveButton).toBeDisabled());

@@ -155,11 +155,14 @@ export const FileChangeApprovalSettings = forwardRef<
     (policyBaseline.enabled !== policyDraft.enabled ||
       policyBaseline.scope !== policyDraft.scope),
   );
-  const hasChanges = policyChanged || changedSpaceIds.length > 0;
-  // The per-space toggles stay visible under both scopes: an explicit per-space
-  // OFF is always honored, so admins must be able to opt individual spaces out
-  // even when the scope defaults every space to "require approval".
-  const settingsVisible = policyDraft?.enabled === true;
+  // The per-space list is only shown under the per_space scope. Under all_spaces
+  // it is hidden — but any per-space opt-out the user configured earlier stays
+  // stored on the backend (we never push per-space changes while the list is
+  // hidden), so switching back to per_space restores them.
+  const settingsVisible =
+    policyDraft?.enabled === true && policyDraft?.scope === "per_space";
+  const settingsToSave = settingsVisible ? changedSpaceIds : [];
+  const hasChanges = policyChanged || settingsToSave.length > 0;
 
   const handleScopeChange = (scope: string) => {
     setPolicyDraft((current) =>
@@ -181,7 +184,7 @@ export const FileChangeApprovalSettings = forwardRef<
     const result = await captureAndAlertRequestErrorHoc(
       updateFileChangeConfigurationApi({
         policy: policyChanged ? policyDraft : undefined,
-        settings: changedSpaceIds.map((spaceId) => ({
+        settings: settingsToSave.map((spaceId) => ({
           space_id: spaceId,
           approval_required: settingDrafts[spaceId],
         })),
@@ -192,7 +195,7 @@ export const FileChangeApprovalSettings = forwardRef<
       setPolicyBaseline(policyDraft);
       setSettingBaselines((current) => {
         const next = { ...current };
-        changedSpaceIds.forEach((spaceId) => {
+        settingsToSave.forEach((spaceId) => {
           next[spaceId] = settingDrafts[spaceId];
         });
         return next;
@@ -206,7 +209,7 @@ export const FileChangeApprovalSettings = forwardRef<
     setSaving(false);
     return Boolean(succeeded);
   }, [
-    changedSpaceIds,
+    settingsToSave,
     hasChanges,
     policyChanged,
     policyDraft,

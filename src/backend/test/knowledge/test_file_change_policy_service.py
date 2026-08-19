@@ -137,7 +137,7 @@ async def _read_setting(engine, tenant_id: int, space_id: int) -> KnowledgeSpace
         return (await session.exec(statement)).first()
 
 
-async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_space_skips_approval(policy_engine):
+async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_space_requires_approval(policy_engine):
     set_current_tenant_id(17)
     await _insert_space(policy_engine, tenant_id=17, space_id=101)
     service = _service(policy_engine)
@@ -146,9 +146,9 @@ async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_spa
 
     assert policy.enabled is True
     assert policy.scope == KnowledgeSpaceFileChangePolicyScope.PER_SPACE
-    # Missing policy resolves to per_space, so an unconfigured space is not
-    # forced through approval — only explicitly enabled spaces require it.
-    assert await service.is_approval_required(space_id=101) is False
+    # An unconfigured space defaults to REQUIRING approval; only a space the user
+    # explicitly turned OFF skips approval.
+    assert await service.is_approval_required(space_id=101) is True
     assert await _read_policy(policy_engine, 17) is None
 
 
@@ -191,7 +191,7 @@ async def test_all_spaces_defaults_unconfigured_space_to_required(policy_engine)
     assert await service.is_approval_required(space_id=102) is True
 
 
-async def test_per_space_uses_saved_value_and_defaults_unconfigured_space_to_skip(policy_engine):
+async def test_per_space_uses_saved_value_and_defaults_unconfigured_space_to_required(policy_engine):
     set_current_tenant_id(17)
     await _insert_space(policy_engine, tenant_id=17, space_id=101)
     await _insert_space(policy_engine, tenant_id=17, space_id=102)
@@ -201,10 +201,10 @@ async def test_per_space_uses_saved_value_and_defaults_unconfigured_space_to_ski
     await service.save_space_setting(space_id=103, approval_required=True)
     await service.save_policy(enabled=True, scope=KnowledgeSpaceFileChangePolicyScope.PER_SPACE)
 
-    # Explicit OFF -> skip; explicit ON -> require; unconfigured -> skip (only
-    # explicitly enabled spaces require approval under per_space).
+    # Explicit OFF -> skip; explicit ON -> require; unconfigured -> require
+    # (a space defaults to approval unless the user explicitly turns it OFF).
     assert await service.is_approval_required(space_id=101) is False
-    assert await service.is_approval_required(space_id=102) is False
+    assert await service.is_approval_required(space_id=102) is True
     assert await service.is_approval_required(space_id=103) is True
 
 
@@ -301,11 +301,11 @@ async def test_settings_page_keeps_unconfigured_spaces_and_marks_department_spac
     )
 
     assert page.total == 2
-    # No policy saved resolves to per_space, so unconfigured spaces default to
-    # "no approval" in the projection.
+    # Unconfigured spaces default to REQUIRING approval in the projection
+    # (a space is on unless the user explicitly turns it off).
     assert [(row.space_id, row.space_kind, row.approval_required) for row in page.data] == [
-        (101, "normal", False),
-        (102, "department", False),
+        (101, "normal", True),
+        (102, "department", True),
     ]
 
 
@@ -473,9 +473,10 @@ async def test_tenant_configuration_is_strictly_isolated_without_root_fallback(p
     tenant_policy = await service.get_policy()
     assert tenant_policy.enabled is True
     assert tenant_policy.scope == KnowledgeSpaceFileChangePolicyScope.PER_SPACE
-    # Tenant 17 has no policy of its own: per_space default => unconfigured space
-    # skips approval (no cross-tenant fallback to tenant 1's all_spaces policy).
-    assert await service.is_approval_required(space_id=201) is False
+    # Tenant 17 has no policy of its own: it resolves to the default enabled
+    # per_space policy, so an unconfigured space defaults to REQUIRING approval
+    # (no cross-tenant fallback to tenant 1's disabled all_spaces policy).
+    assert await service.is_approval_required(space_id=201) is True
     assert await _read_policy(policy_engine, 17) is None
 
     with pytest.raises(LookupError, match="knowledge space not found"):

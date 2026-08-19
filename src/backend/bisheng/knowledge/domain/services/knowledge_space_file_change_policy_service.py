@@ -331,14 +331,13 @@ class KnowledgeSpaceFileChangePolicyService:
     ) -> KnowledgeSpaceFileChangeSettingResp:
         auth_type = row.space.auth_type
         auth_type_value = auth_type.value if isinstance(auth_type, AuthTypeEnum) else str(auth_type)
-        # The scope selector decides the default for spaces without an explicit
-        # setting: under all_spaces they default to "require approval", under
-        # per_space they default to "no approval" (only explicitly enabled spaces
-        # go through approval). An explicit per-space value always wins.
-        scope = policy.scope if policy is not None else KnowledgeSpaceFileChangePolicyScope.PER_SPACE
-        scope_default_required = scope == KnowledgeSpaceFileChangePolicyScope.ALL_SPACES
+        # A space without an explicit per-space setting defaults to REQUIRING
+        # approval (for both the all_spaces and per_space scopes). Approval is
+        # only skipped when the user has explicitly turned the space's switch OFF
+        # (an explicit per-space value), which always wins over the default.
+        default_required = True
         approval_required = (
-            scope_default_required if row.setting is None else bool(row.setting.approval_required)
+            default_required if row.setting is None else bool(row.setting.approval_required)
         )
         # The Approval Center scenario switch, the build-UI switch (policy.enabled)
         # and the space's own switch must ALL be ON for approval to apply; if any
@@ -391,11 +390,11 @@ class KnowledgeSpaceFileChangePolicyService:
         setting = await repository.get_setting(tenant_id=tenant_id, space_id=space_id)
         if setting is not None:
             return bool(setting.approval_required)
-        # No explicit per-space setting: fall back to the scope default. Under
-        # all_spaces every space requires approval by default; under per_space
-        # only explicitly enabled spaces do, so unconfigured spaces are skipped.
-        scope = policy.scope if policy is not None else KnowledgeSpaceFileChangePolicyScope.PER_SPACE
-        return scope == KnowledgeSpaceFileChangePolicyScope.ALL_SPACES
+        # No explicit per-space setting: a space defaults to REQUIRING approval
+        # (for both the all_spaces and per_space scopes). Approval is only skipped
+        # when the user has explicitly turned the space's switch OFF (a stored
+        # per-space setting with approval_required=False, handled above).
+        return True
 
     @staticmethod
     async def _require_space(

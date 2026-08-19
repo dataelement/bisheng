@@ -451,9 +451,9 @@
     "saveSuccessHint": "The updated approval settings are now in effect.",
     "scope": {
       "allSpaces": "All knowledge spaces",
-      "allSpacesHint": "Require approval for file changes in every non-private knowledge space by default; individual spaces can still be turned off below.",
+      "allSpacesHint": "Require approval for file changes in every non-private knowledge space.",
       "perSpace": "Configure by knowledge space",
-      "perSpaceHint": "Set approval requirements separately for each non-private knowledge space.",
+      "perSpaceHint": "Non-private knowledge spaces require approval by default; you can turn off individual spaces.",
       "title": "Approval scope"
     },
     "searchLabel": "Search knowledge spaces",
