@@ -115,7 +115,7 @@ export function useChartState(
             displayName: dc.stackDimension.displayName || dc.stackDimension.fieldName,
             originalName: dc.stackDimension.fieldName,
             sort: dc.stackDimension.sort || null,
-            timeGranularity: dc.timeGranularity || null,
+            timeGranularity: dc.stackDimension.timeGranularity || null,
             sortPriority: 0,
             fieldType: 'dimension'
           }

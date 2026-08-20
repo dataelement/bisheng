@@ -18,6 +18,7 @@ import { ComponentConfigDrawer } from "../config/ComponentConfigDrawer"
 import { ComponentWrapper } from "./ComponentWrapper"
 import Home from "./Home"
 import "./index.css"
+import { useAutoScrollToNewComponent } from "./useAutoScrollToNewComponent"
 
 interface EditorCanvasProps {
     isPreviewMode?: boolean
@@ -26,6 +27,7 @@ interface EditorCanvasProps {
 
 export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
     const { width, containerRef, mounted } = useContainerWidth()
+    const scrollContainerRef = useRef<HTMLDivElement>(null)
     const {
         currentDashboard,
         setCurrentDashboard,
@@ -49,6 +51,17 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
     })
 
     const theme = currentDashboard?.style_config?.theme
+    const componentIds = useMemo(
+        () => currentDashboard?.components.map(component => component.id) ?? [],
+        [currentDashboard?.components],
+    )
+
+    useAutoScrollToNewComponent({
+        componentIds,
+        dashboardId: currentDashboard?.id,
+        enabled: !isPreviewMode,
+        scrollContainerRef,
+    })
 
     // Mutation for copying component to another dashboard
     const copyToMutation = useMutation({
@@ -238,6 +251,7 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
         <>
             <div className="flex h-full">
                 <div
+                    ref={scrollContainerRef}
                     id="edit-charts-panne"
                     className={cn("flex-1 relative overflow-auto no-scrollbar", theme === 'dark' ? 'bg-[#1a1a1a] dark' : 'bg-[#f5f5f5] theme-force-light')}
                 >
@@ -276,7 +290,11 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
                                     compactor={verticalCompactor}
                                 >
                                     {currentDashboard.components.map((component) => (
-                                        <div key={component.id} className={`drag-handle`}>
+                                        <div
+                                            key={component.id}
+                                            className="drag-handle"
+                                            data-dashboard-component-id={component.id}
+                                        >
                                             <ComponentWrapper
                                                 dashboards={dashboards}
                                                 component={component}

@@ -3,14 +3,27 @@
 ## 元信息
 
 - Feature ID: `055-knowledge-space-content-stat-rebuild`
-- Status: `code-verified-awaiting-destructive-confirmation`
+- Status: `scope-updated-req008-not-implemented`
 - Verified at: `2026-08-20`
 - Covered tasks: `T001`～`T013`
-- Pending task: `T014`
+- Pending tasks: `T014`～`T018`（其中 `T014` 为独立破坏性操作，`T015`～`T018` 为新增知识贡献占比）
 
 ## 结论
 
-代码实现、定向回归、静态语法检查、架构守卫和目标环境只读 dry-run 已完成。实际删除并重建 `mid_knowledge_space_content_stat` 尚未执行；旧预览、下载、收藏、门户参与度及额外的 5 条 `record_type=preview` 数据仍在现有索引中。
+`REQ-001` 至 `REQ-007` 的代码实现、定向回归、静态语法检查、架构守卫和目标环境只读 dry-run 已完成。新增 `REQ-008` 两套知识贡献占比仅完成规格更新，尚未修改代码或产生验证证据。实际删除并重建 `mid_knowledge_space_content_stat` 也尚未执行；旧预览、下载、收藏、门户参与度及额外的 5 条 `record_type=preview` 数据仍在现有索引中。
+
+## `REQ-008` 范围更新与验证计划
+
+本节记录计划，不是通过证据。
+
+| Verification ID | 当前状态 | 计划证据 |
+|---|---|---|
+| `V-CONTRIBUTION-SCHEMA-001` | `NOT_RUN` | 两个数据集指标的策略、层级、过滤、聚合和默认格式契约；Mapping/重建无变化 |
+| `V-CONTRIBUTION-QUERY-001` | `NOT_RUN` | 单层、多级父级、非组织切片、空字段、零分母和 stack dimension 参数化服务测试 |
+| `V-CONTRIBUTION-FORMAT-001` | `NOT_RUN` | 新指标首次加入组件默认 percent + 1 位小数，保存格式优先 |
+| `V-CONTRIBUTION-REGRESSION-001` | `NOT_RUN` | 既有 divide、普通虚拟指标、已有指标与结果合并行为不变 |
+
+`REQ-008` 不依赖 T014，不需要删除或重建索引。后续应单独执行 `T015`～`T018`，不得把贡献占比实现授权解释为 T014 的破坏性操作授权。
 
 ## 可执行证据
 

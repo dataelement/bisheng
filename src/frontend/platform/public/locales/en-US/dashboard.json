@@ -359,6 +359,7 @@
   "nameRequired": "Name cannot be empty",
   "charLimit200": "Character limit: 1-200 characters",
   "charLimit200b": "The name cannot exceed 200 characters ",
+  "chartTitleCharLimit30": "Chart titles cannot exceed 30 characters",
   "rename": "Rename",
   "duplicate": "Copy",
   "copyTo": "Copy to",
