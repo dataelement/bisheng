@@ -1,7 +1,5 @@
 """Inherited roster rows: name the parent, and don't repeat its creator.
 
-Two走查 findings on the "继承上级" view.
-
 The roster reported inheritance as `knowledge_space:3377`, because the permission
 layer holds a resource's identity and never its label. Resource names are
 resolved the same way subject names already are — through the business side.
@@ -13,7 +11,12 @@ nothing here and cannot be acted on.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from bisheng.permission.application.resource_api import _split_resource_key
+from bisheng.tenant.domain.services.f048_permission_subject import (
+    TenantPermissionSubjectDirectory,
+)
 
 
 def test_split_resource_key() -> None:
@@ -41,3 +44,33 @@ def test_inherited_creator_rows_are_dropped() -> None:
 
     assert [key for _, key in kept] == ["viewer", "viewer"]
     assert all(row.source_type != "CREATOR" for row, _ in kept)
+
+
+async def test_resource_display_names_resolves_spaces_and_folders(monkeypatch) -> None:
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+
+    async def load_spaces(ids: list[int]):
+        assert ids == [3377]
+        return [SimpleNamespace(id=3377, name="Product Knowledge")]
+
+    async def load_folders(ids: list[int]):
+        assert ids == [94661]
+        return [SimpleNamespace(id=94661, file_name="Release Notes")]
+
+    monkeypatch.setattr(KnowledgeDao, "aget_list_by_ids", load_spaces)
+    monkeypatch.setattr(KnowledgeFileDao, "aget_file_by_ids", load_folders)
+
+    labels = await TenantPermissionSubjectDirectory().resource_display_names(
+        (
+            ("knowledge_space", "3377"),
+            ("folder", "94661"),
+            ("folder", "not-an-id"),
+            ("workflow", "wf-1"),
+        )
+    )
+
+    assert labels == {
+        ("knowledge_space", "3377"): "Product Knowledge",
+        ("folder", "94661"): "Release Notes",
+    }

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass
-from typing import Any
 
 from sqlalchemy import update
 from sqlmodel import col, select
@@ -408,9 +407,7 @@ class SqlPermissionControlState:
                 # The parent's creator carries no authority here — this resource
                 # has its own protected creator row, and the inherited copy only
                 # showed up as a second, identical entry that cannot be acted on.
-                inherited_rows = [
-                    (row, model_key) for row, model_key in inherited_rows if row.source_type != "CREATOR"
-                ]
+                inherited_rows = [(row, model_key) for row, model_key in inherited_rows if row.source_type != "CREATOR"]
         combined = sorted(
             (
                 *((row, model_key, "LOCAL") for row, model_key in local_rows),
@@ -543,6 +540,7 @@ class SqlPermissionControlState:
         context: OwnerProjectionContext,
         grant: GrantSnapshot | None,
         source: GrantSourceRecord | None,
+        visibility: VisibilityProjectionCompilation | None,
         *,
         operation_id: int,
     ) -> None:
@@ -581,19 +579,26 @@ class SqlPermissionControlState:
                             source=projection_source,
                             state="PENDING",
                         )
+                if visibility is not None:
+                    await self._prepare_visible_sources(
+                        session,
+                        tenant_id=context.target.tenant_id,
+                        visibility=visibility,
+                        operation_id=operation_id,
+                    )
 
     async def finalize_owner(
         self,
         context: OwnerProjectionContext,
         grant: GrantSnapshot | None,
-        outcome: Any,
+        visibility: VisibilityProjectionCompilation | None,
+        outcome: ProjectionOutcome,
     ) -> None:
-        del outcome
         projection_grants = self._owner_projection_grants(
             context,
             grant,
         )
-        if not projection_grants:
+        if not projection_grants and visibility is None:
             return
         async with get_async_db_session() as session:
             async with session.begin():
@@ -622,6 +627,13 @@ class SqlPermissionControlState:
                             PermissionGrantAssignee.state == "PENDING",
                         )
                         .values(state="ACTIVE")
+                    )
+                if visibility is not None:
+                    await self._finalize_visible_sources(
+                        session,
+                        tenant_id=context.target.tenant_id,
+                        visibility=visibility,
+                        operation_id=outcome.operation_id,
                     )
 
     async def mark_owner_compensation(
@@ -1361,6 +1373,7 @@ class SqlOwnerProjectionState:
         context,
         grant,
         source,
+        visibility,
         *,
         operation_id,
     ) -> None:
@@ -1368,11 +1381,12 @@ class SqlOwnerProjectionState:
             context,
             grant,
             source,
+            visibility,
             operation_id=operation_id,
         )
 
-    async def finalize(self, context, grant, outcome) -> None:
-        await self._state.finalize_owner(context, grant, outcome)
+    async def finalize(self, context, grant, visibility, outcome) -> None:
+        await self._state.finalize_owner(context, grant, visibility, outcome)
 
     async def mark_compensation_required(self, context, error) -> None:
         await self._state.mark_owner_compensation(context, error)

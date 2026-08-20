@@ -15,6 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
+    SameLevelGrantRequiresManagePermissionError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.openfga.authorization_model_f048 import (
@@ -451,6 +452,106 @@ async def test_action_level_draft_rebuilds_every_standard_and_custom_model(
     assert "edit" in by_model["collaborator"]
     collaborator = next(row for row in model_rows if row.model_key == "collaborator")
     assert collaborator.derived_level == 3
+    assert draft["impact"]["action_changes"] == [
+        {
+            "action_code": "edit",
+            "action_name": "edit",
+            "before_level": 2,
+            "after_level": 3,
+            "before_active": True,
+            "after_active": True,
+        }
+    ]
+    assert draft["impact"]["model_changes"] == [
+        {
+            "model_key": "collaborator",
+            "model_name": "协作者",
+            "kind": "CUSTOM",
+            "before_level": 2,
+            "after_level": 3,
+            "added_action_codes": [],
+            "removed_action_codes": [],
+            "affected_assignee_count": 0,
+        },
+        {
+            "model_key": "editor",
+            "model_name": "编辑者",
+            "kind": "STANDARD",
+            "before_level": 2,
+            "after_level": 2,
+            "added_action_codes": [],
+            "removed_action_codes": ["edit"],
+            "affected_assignee_count": 0,
+        },
+    ]
+
+
+async def test_action_level_draft_reports_custom_model_level_only_change(
+    session_factory: SessionFactory,
+) -> None:
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    api = _api(session_factory, fga, marker)
+
+    draft = await api.create_draft(
+        request=CatalogDraftRequest(
+            idempotency_key="raise-edit-to-owner",
+            base_release_id=int(current.id),
+            changes=(
+                CatalogChangeRequest(
+                    type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                    action_code="edit",
+                    level=4,
+                ),
+            ),
+        ),
+        operator_id=7,
+    )
+
+    custom_change = next(change for change in draft["impact"]["model_changes"] if change["model_key"] == "collaborator")
+    assert custom_change == {
+        "model_key": "collaborator",
+        "model_name": "协作者",
+        "kind": "CUSTOM",
+        "before_level": 2,
+        "after_level": 4,
+        "added_action_codes": [],
+        "removed_action_codes": [],
+        "affected_assignee_count": 0,
+    }
+
+
+async def test_action_level_draft_reports_same_level_policy_conflict(
+    session_factory: SessionFactory,
+) -> None:
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    api = _api(session_factory, fga, marker)
+
+    with pytest.raises(SameLevelGrantRequiresManagePermissionError) as raised:
+        await api.create_draft(
+            request=CatalogDraftRequest(
+                idempotency_key="manager-same-level-conflict",
+                base_release_id=int(current.id),
+                changes=(
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.SET_ALLOW_SAME_LEVEL,
+                        model_key="manager",
+                        allow_same_level=True,
+                    ),
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                        action_code="manage_permission",
+                        level=4,
+                    ),
+                ),
+            ),
+            operator_id=7,
+        )
+
+    assert raised.value.Code == 25015
 
 
 async def test_catalog_publish_allows_visibility_only_grant_after_action_level_change(
@@ -518,6 +619,9 @@ async def test_catalog_publish_allows_visibility_only_grant_after_action_level_c
     assert impact["assignee_count"] == 1
     assert impact["expansion_count"] == 0
     assert impact["revocation_count"] == 1
+    viewer_change = next(change for change in impact["model_changes"] if change["model_key"] == "viewer")
+    assert viewer_change["removed_action_codes"] == ["download"]
+    assert viewer_change["affected_assignee_count"] == 1
     assert impact["blockers"] == []
     result = await api.publish_draft(
         draft_id=draft["draft_id"],

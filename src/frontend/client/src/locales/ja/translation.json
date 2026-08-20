@@ -2045,7 +2045,10 @@
       "summary_only": "自分の権限概要のみ表示できます。",
       "protected": "保護対象",
       "read_only": "読み取り専用",
-      "inherited_from": "継承元"
+      "inherited_from": "継承元",
+      "parent_folder": "上位フォルダー",
+      "parent_knowledge_space": "上位ナレッジスペース",
+      "parent_resource": "上位リソース"
     },
     "scope": {
       "local": "ローカル",

@@ -72,6 +72,38 @@ const draft = {
     assignee_count: 12,
     expansion_count: 2,
     revocation_count: 3,
+    action_changes: [
+      {
+        action_code: "manage_permission",
+        action_name: "Manage permission",
+        before_level: 3 as const,
+        after_level: 4 as const,
+        before_active: true,
+        after_active: true,
+      },
+    ],
+    model_changes: [
+      {
+        model_key: "manager",
+        model_name: "Manager",
+        kind: "STANDARD" as const,
+        before_level: 3 as const,
+        after_level: 3 as const,
+        added_action_codes: [],
+        removed_action_codes: ["manage_permission"],
+        affected_assignee_count: 12,
+      },
+      {
+        model_key: "collaborator",
+        model_name: "Collaborator",
+        kind: "CUSTOM" as const,
+        before_level: 3 as const,
+        after_level: 4 as const,
+        added_action_codes: [],
+        removed_action_codes: [],
+        affected_assignee_count: 0,
+      },
+    ],
     blockers: [],
     expires_at: "2026-07-29T13:00:00Z",
   },
@@ -417,10 +449,12 @@ describe("ImpactDialog", () => {
       />,
     )
 
-    expect(screen.getByTestId("impact-resource-count")).toHaveTextContent("8")
-    expect(screen.getByTestId("impact-grant-count")).toHaveTextContent("5")
     expect(screen.getByTestId("impact-assignee-count")).toHaveTextContent("12")
-    expect(screen.getByTestId("impact-revocation-count")).toHaveTextContent("3")
+    expect(screen.getByText("impact.changeTitle")).toBeInTheDocument()
+    expect(screen.getByText("level.manager")).toBeInTheDocument()
+    expect(screen.getByText("Collaborator")).toBeInTheDocument()
+    expect(screen.getByText("impact.customLevelOnly")).toBeInTheDocument()
+    expect(screen.queryByText("impact.resources")).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: "impact.publish" }))
     await waitFor(() => {

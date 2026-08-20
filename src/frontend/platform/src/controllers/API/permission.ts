@@ -94,8 +94,30 @@ export interface PermissionCatalogImpact {
   assignee_count: number
   expansion_count: number
   revocation_count: number
+  action_changes?: PermissionCatalogActionChange[]
+  model_changes?: PermissionCatalogModelChange[]
   blockers: string[]
   expires_at: string
+}
+
+export interface PermissionCatalogActionChange {
+  action_code: string
+  action_name: string
+  before_level: PermissionActionLevel | null
+  after_level: PermissionActionLevel | null
+  before_active: boolean
+  after_active: boolean
+}
+
+export interface PermissionCatalogModelChange {
+  model_key: string
+  model_name: string
+  kind: PermissionModelKind
+  before_level: PermissionActionLevel | null
+  after_level: PermissionActionLevel | null
+  added_action_codes: string[]
+  removed_action_codes: string[]
+  affected_assignee_count: number
 }
 
 export interface PermissionCatalogDraft {

@@ -198,6 +198,26 @@ class CatalogDraftRequest(StrictRequestModel):
     changes: tuple[CatalogChangeRequest, ...] = Field(min_length=1, max_length=50)
 
 
+class CatalogActionChangeDTO(BaseModel):
+    action_code: str
+    action_name: str
+    before_level: PermissionActionLevel | None = None
+    after_level: PermissionActionLevel | None = None
+    before_active: bool
+    after_active: bool
+
+
+class CatalogModelChangeDTO(BaseModel):
+    model_key: str
+    model_name: str
+    kind: Literal["STANDARD", "CUSTOM"]
+    before_level: PermissionActionLevel | None = None
+    after_level: PermissionActionLevel | None = None
+    added_action_codes: tuple[str, ...] = ()
+    removed_action_codes: tuple[str, ...] = ()
+    affected_assignee_count: int = Field(ge=0)
+
+
 class CatalogImpactDTO(BaseModel):
     checksum: str = Field(min_length=64, max_length=64)
     resource_count: int = Field(ge=0)
@@ -205,6 +225,8 @@ class CatalogImpactDTO(BaseModel):
     assignee_count: int = Field(ge=0)
     expansion_count: int = Field(ge=0)
     revocation_count: int = Field(ge=0)
+    action_changes: tuple[CatalogActionChangeDTO, ...] = ()
+    model_changes: tuple[CatalogModelChangeDTO, ...] = ()
     blockers: tuple[str, ...] = ()
     expires_at: datetime
 

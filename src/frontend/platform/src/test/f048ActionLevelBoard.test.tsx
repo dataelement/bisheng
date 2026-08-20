@@ -194,6 +194,29 @@ describe("ActionLevelBoard", () => {
     expect(onReviewImpact).not.toHaveBeenCalled()
   })
 
+  it("shows the localized business reason returned by draft validation", async () => {
+    onCreateDraft.mockRejectedValueOnce(
+      "Turn off same-level grants for Manager before moving permission management to a higher level.",
+    )
+    render(
+      <ActionLevelBoard
+        actions={actions}
+        onCreateDraft={onCreateDraft}
+        onReviewImpact={onReviewImpact}
+      />,
+    )
+
+    await selectMenuOption("actionLevel.change.edit", 3)
+    fireEvent.click(
+      screen.getByRole("button", { name: "actionLevel.publishChanges" }),
+    )
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Turn off same-level grants for Manager",
+    )
+    expect(onReviewImpact).not.toHaveBeenCalled()
+  })
+
   it("shows resource scope on demand and the inactive marker on the card", async () => {
     // The card carries only what the author scans for — name and on/off. The
     // scope is one hover away rather than a row of chips on every card.
