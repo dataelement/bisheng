@@ -10,6 +10,7 @@ from bisheng.common.errcode.department import DepartmentNotFoundError
 from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.knowledge_space import (
     DepartmentKnowledgeSpaceExistsError,
+    DepartmentSpacePrivateForbiddenError,
     SpaceAdminConflictError,
     SpaceAdminInvalidUserError,
     SpaceAdminRequiredError,
@@ -86,12 +87,15 @@ class DepartmentKnowledgeSpaceService:
         return dept_map
 
     @classmethod
-    async def _grant_space_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+    async def _grant_space_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
         """Write the ``knowledge_space#manager`` tuple for the space admin.
 
-        FGA failure is retried once by ``PermissionService`` internals and then
-        logged: the DB column stays the source of truth and the reconcile task
-        (T012) repairs the tuple later, so the swap itself must not roll back.
+        FGA failure is logged and reported as ``False``: the DB column stays the
+        source of truth and the reconcile task repairs the tuple later, so the
+        swap itself must not roll back. The boolean lets callers batch the F046
+        file-change approver reconciliation into one dispatch per space
+        (``dispatch_file_change_approver_reconcile=False`` suppresses the
+        per-write dispatch inside ``authorize``).
         """
         try:
             await PermissionService.authorize(
@@ -105,7 +109,10 @@ class DepartmentKnowledgeSpaceService:
                         include_children=False,
                     ),
                 ],
+                enforce_fga_success=True,
+                dispatch_file_change_approver_reconcile=False,
             )
+            return True
         except Exception as e:
             _logger.warning(
                 "Failed to write space admin manager tuple for space %s user %s: %s",
@@ -113,9 +120,10 @@ class DepartmentKnowledgeSpaceService:
                 user_id,
                 e,
             )
+            return False
 
     @classmethod
-    async def _revoke_space_admin_manager(cls, *, space_id: int, user_id: int) -> None:
+    async def _revoke_space_admin_manager(cls, *, space_id: int, user_id: int) -> bool:
         try:
             await PermissionService.authorize(
                 object_type="knowledge_space",
@@ -128,7 +136,10 @@ class DepartmentKnowledgeSpaceService:
                         include_children=False,
                     ),
                 ],
+                enforce_fga_success=True,
+                dispatch_file_change_approver_reconcile=False,
             )
+            return True
         except Exception as e:
             _logger.warning(
                 "Failed to delete space admin manager tuple for space %s user %s: %s",
@@ -136,6 +147,7 @@ class DepartmentKnowledgeSpaceService:
                 user_id,
                 e,
             )
+            return False
 
     @classmethod
     async def _validate_admin_candidate(cls, *, user_id: int | None, tenant_id: int) -> int:
@@ -186,7 +198,35 @@ class DepartmentKnowledgeSpaceService:
                 membership_source=SPACE_ADMIN_MEMBERSHIP_SOURCE,
             )
             await SpaceChannelMemberDao.async_insert_member(member)
-        await cls._grant_space_admin_manager(space_id=space_id, user_id=user_id)
+        if await cls._grant_space_admin_manager(space_id=space_id, user_id=user_id):
+            await cls._reconcile_file_change_approvers(space_id)
+
+    @classmethod
+    async def _reconcile_file_change_approvers(cls, space_id: int) -> None:
+        """Recompute the F046 file-change approvers after an admin relation write.
+
+        The space admin IS the department space's file-change approver, so every
+        materialize/dematerialize must refresh that cache. The per-write dispatch
+        inside ``authorize`` is suppressed (``dispatch_file_change_approver_
+        reconcile=False``) so one admin swap triggers exactly one reconcile per
+        space instead of one per tuple. Best-effort: the periodic beat reconcile
+        is the backstop, so a failure here must not break the admin change.
+        """
+        try:
+            from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                dispatch_file_change_approver_reconcile_for_spaces,
+            )
+
+            resource_tenant_id = await PermissionService.resolve_resource_tenant_id(
+                "knowledge_space",
+                str(space_id),
+            )
+            await dispatch_file_change_approver_reconcile_for_spaces(
+                space_ids=[space_id],
+                tenant_id=resource_tenant_id,
+            )
+        except Exception:
+            _logger.exception("F046 approver reconcile dispatch failed for space %s", space_id)
 
     @classmethod
     async def _dematerialize_space_admin(cls, *, space_id: int, user_id: int) -> None:
@@ -206,7 +246,8 @@ class DepartmentKnowledgeSpaceService:
                 await SpaceChannelMemberDao.update(existing)
             else:
                 await SpaceChannelMemberDao.delete_space_member(space_id, user_id)
-        await cls._revoke_space_admin_manager(space_id=space_id, user_id=user_id)
+        if await cls._revoke_space_admin_manager(space_id=space_id, user_id=user_id):
+            await cls._reconcile_file_change_approvers(space_id)
 
     @classmethod
     async def _super_admin_user_ids(cls) -> list[int]:
@@ -429,6 +470,8 @@ class DepartmentKnowledgeSpaceService:
         cls._ensure_super_admin(login_user)
         if not req.items:
             return []
+        if any(item.auth_type == AuthTypeEnum.PRIVATE for item in req.items):
+            raise DepartmentSpacePrivateForbiddenError()
         dept_ids = [int(item.department_id) for item in req.items]
         if len(set(dept_ids)) != len(dept_ids):
             raise DepartmentKnowledgeSpaceExistsError(

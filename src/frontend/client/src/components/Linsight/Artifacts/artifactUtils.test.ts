@@ -2,8 +2,11 @@ import {
     type ArtifactFile,
     applyHtmlViewerTabIdentity,
     isAbsoluteImageSrc,
+    isDeliverableLinkHref,
+    isHtmlArtifact,
     matchArtifactByRelPath,
     openHtmlArtifactViewer,
+    resolveDeliverableLink,
     stripEmptyHtmlPlaceholders,
     stripWorkspacePaths,
 } from './artifactUtils';
@@ -122,6 +125,69 @@ describe('matchArtifactByRelPath', () => {
     });
 });
 
+describe('resolveDeliverableLink', () => {
+    const report = mkArtifact({
+        file_name: '报告.md',
+        file_path: '/w/output/报告.md',
+    });
+
+    it('does not map a phantom name onto the sole generic report', () => {
+        // Used to return `report`: any unmatched name opened 报告.md, which served a
+        // file with other contents under another name and hid the fact that the
+        // claimed file was never written. The caller now renders this as 未生成.
+        expect(resolveDeliverableLink([report], '视频内容摘要.md')).toBeUndefined();
+        expect(resolveDeliverableLink([report], 'output/视频内容摘要.md')).toBeUndefined();
+    });
+
+    it('still resolves the sole deliverable when only the casing differs', () => {
+        const named = mkArtifact({ file_name: 'Report.md', file_path: '/w/output/Report.md' });
+        expect(resolveDeliverableLink([named], 'report.md')).toBe(named);
+    });
+
+    it('does not map a different phantom name to a specifically named sole deliverable', () => {
+        const audio = mkArtifact({
+            file_name: '音频转录结果.md',
+            file_path: '/w/output/音频转录结果.md',
+        });
+        expect(resolveDeliverableLink([audio], '视频内容摘要.md')).toBeUndefined();
+        expect(resolveDeliverableLink([audio], '音频转录结果.md')).toBe(audio);
+    });
+
+    it('prefers an exact match when the filename exists', () => {
+        const named = mkArtifact({
+            file_name: '视频内容摘要.md',
+            file_path: '/w/output/视频内容摘要.md',
+        });
+        expect(resolveDeliverableLink([named], '视频内容摘要.md')).toBe(named);
+    });
+
+    it('does not guess when several deliverables exist', () => {
+        const other = mkArtifact({ file_name: 'other.md', file_path: '/w/output/other.md' });
+        expect(resolveDeliverableLink([report, other], 'phantom.md')).toBeUndefined();
+    });
+});
+
+describe('isDeliverableLinkHref', () => {
+    it('detects workspace deliverable paths', () => {
+        expect(isDeliverableLinkHref('output/详细分析报告.md')).toBe(true);
+        expect(isDeliverableLinkHref('详细分析报告.md')).toBe(true);
+        expect(isDeliverableLinkHref('https://example.com/x.md')).toBe(false);
+        expect(isDeliverableLinkHref('charts/x.png')).toBe(false);
+    });
+});
+
+describe('isHtmlArtifact', () => {
+    // The panel hooks route the click and NewTabHint marks the row from this one
+    // predicate, so the marker can never disagree with what the click does.
+    it('is true only for .html deliverables, case-insensitively', () => {
+        expect(isHtmlArtifact(mkArtifact({ file_name: '分析报告.html' }))).toBe(true);
+        expect(isHtmlArtifact(mkArtifact({ file_name: '分析报告.HTML' }))).toBe(true);
+        expect(isHtmlArtifact(mkArtifact({ file_name: '分析报告.md' }))).toBe(false);
+        expect(isHtmlArtifact(mkArtifact({ file_name: 'html' }))).toBe(false);
+        expect(isHtmlArtifact(mkArtifact({ file_name: 'a.html.md' }))).toBe(false);
+    });
+});
+
 describe('stripEmptyHtmlPlaceholders', () => {
     it('removes an empty styled <div></div> placeholder box (the leaked-noise case)', () => {
         const md = '正文\n\n<div style="border:1px solid #ccc; height:120px; background:#f9f9f9;"></div>\n\n更多';
@@ -160,6 +226,8 @@ describe('openHtmlArtifactViewer', () => {
     afterEach(() => {
         (global as any).__APP_ENV__ = origEnv;
         openSpy.mockRestore();
+        // The share-token cases navigate; leave the location as they found it.
+        window.history.pushState({}, '', '/');
     });
 
     // Regression: file_url is a MinIO object key (no leading slash). The old code
@@ -197,6 +265,30 @@ describe('openHtmlArtifactViewer', () => {
         const qs = new URLSearchParams(opened.split('?')[1]);
         expect(qs.get('vid')).toBe('');
         expect(qs.get('url')).toBe('linsight/final_result/x/a.html');
+    });
+
+    // The viewer opens as its own tab at /html, so it cannot read the share
+    // token off its own location — without forwarding it here, a share
+    // recipient's HTML report 403s on resolve.
+    it('forwards the share token when opened from a share page', () => {
+        window.history.pushState({}, '', '/workspace/share/tok-1/SV-9');
+        openHtmlArtifactViewer(
+            { file_id: '3', file_name: 'r.html', file_url: 'linsight/final_result/y/r.html' },
+            'SV-9',
+        );
+        const qs = new URLSearchParams((openSpy.mock.calls[0][0] as string).split('?')[1]);
+        expect(qs.get('share')).toBe('tok-1');
+        expect(qs.get('vid')).toBe('SV-9');
+    });
+
+    it('omits the share param outside a share page', () => {
+        window.history.pushState({}, '', '/workspace/c/abc');
+        openHtmlArtifactViewer(
+            { file_id: '4', file_name: 'r.html', file_url: 'linsight/final_result/y/r.html' },
+            'SV-9',
+        );
+        const qs = new URLSearchParams((openSpy.mock.calls[0][0] as string).split('?')[1]);
+        expect(qs.has('share')).toBe(false);
     });
 });
 

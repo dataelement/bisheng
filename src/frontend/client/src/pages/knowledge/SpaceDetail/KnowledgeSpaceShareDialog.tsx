@@ -1,3 +1,4 @@
+import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     INCLUDE_CHILDREN_CHECKBOX_CLASS,
@@ -23,11 +24,35 @@ import {
     TabsList,
     TabsTrigger,
 } from "~/components/ui";
+import { getFileTypeIcon } from "~/components/ui/icon/File/FileIcon";
 import { useLocalize } from "~/hooks";
 import { useRecoilValue } from "recoil";
 import store from "~/store";
 import { getGrantableRelationModels } from "~/api/permission";
 import type { RelationModel, ResourceType } from "~/api/permission";
+
+/**
+ * The resource name sits here instead of in the dialog title: file names can run
+ * past 100 characters, and appended to the title they wrapped under the close
+ * button. One truncated line keeps the header height fixed; the native tooltip
+ * still exposes the full name. Icon + name, no container fill — same shape as
+ * the uploaded-file rows in chat.
+ */
+function ResourceContextBar({ name, resourceType }: { name: string; resourceType: ResourceType }) {
+    const Icon =
+        resourceType === "folder"
+            ? Outlined.FolderClose
+            : resourceType === "knowledge_space" || resourceType === "knowledge_library"
+                ? Outlined.Book
+                : getFileTypeIcon(name);
+
+    return (
+        <div className="mb-3 flex shrink-0 items-center gap-1.5 text-text-2" title={name}>
+            <Icon size={14} className="shrink-0 text-text-3" />
+            <span className="truncate text-body-sm">{name}</span>
+        </div>
+    );
+}
 
 interface KnowledgeSpaceShareDialogProps {
     open: boolean;
@@ -100,8 +125,6 @@ export function KnowledgeSpaceShareDialog({
         setGrantDialogOpen(false);
     }, [grantSubjectType]);
 
-    const dialogTitle = `${localize("com_permission.dialog_title")} - ${resourceName}`;
-
     // F033: department spaces drop the user-group dimension. The list view and
     // the grant dialog share this array, so both lose the tab at once.
     const SUBJECT_TABS = useMemo<Array<{
@@ -172,10 +195,13 @@ export function KnowledgeSpaceShareDialog({
             <Dialog open={open} onOpenChange={onOpenChange}>
                 <DialogContent className={PERMISSION_DIALOG_CONTENT_CLASS}>
                     <DialogHeader className="shrink-0 text-left">
-                        <DialogTitle className="text-left">{dialogTitle}</DialogTitle>
+                        <DialogTitle className="text-left">
+                            {localize("com_permission.dialog_title")}
+                        </DialogTitle>
                     </DialogHeader>
 
                     <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <ResourceContextBar name={resourceName} resourceType={resourceType} />
                         {permissionPanel}
                     </div>
                 </DialogContent>
@@ -185,11 +211,12 @@ export function KnowledgeSpaceShareDialog({
                 <DialogContent className={PERMISSION_DIALOG_CONTENT_CLASS}>
                     <DialogHeader className="shrink-0 text-left">
                         <DialogTitle className="text-left">
-                            {localize("com_permission.tab_grant")} - {resourceName}
+                            {localize("com_permission.tab_grant")}
                         </DialogTitle>
                     </DialogHeader>
 
                     <div className="user-manger mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        <ResourceContextBar name={resourceName} resourceType={resourceType} />
                         <div className="flex items-center gap-3">
                             <div className={`inline-flex items-center justify-center ${SUBJECT_TAB_LIST_CLASS}`}>
                                 {SUBJECT_TABS.map((tab) => (
@@ -226,6 +253,7 @@ export function KnowledgeSpaceShareDialog({
                                 resourceType={resourceType}
                                 resourceId={resourceId}
                                 onSuccess={handleGrantSuccess}
+                                onCancel={() => setGrantDialogOpen(false)}
                                 prefetchedGrantableModels={grantableModels}
                                 prefetchedGrantableModelsLoaded={grantableModelsLoaded}
                                 prefetchedUseDefaultModels={useDefaultModels}

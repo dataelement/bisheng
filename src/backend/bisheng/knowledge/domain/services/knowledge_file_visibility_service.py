@@ -13,14 +13,19 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
 
 from fastapi import Request
 from loguru import logger
 from sqlmodel import select
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.common.errcode.knowledge_space import (
+    SpaceFileChangeRequestNotFoundError,
+    SpacePermissionDeniedError,
+)
 from bisheng.core.config.settings import KnowledgeQAFilterConf
+from bisheng.core.context.tenant import get_admin_scope_tenant_id, get_current_tenant_id
 from bisheng.core.database import get_async_db_session
 
 
@@ -91,6 +96,210 @@ class KnowledgeFileVisibilityService:
             conf = None
         return conf or KnowledgeQAFilterConf()
 
+    def _publication_guard(self):
+        if not hasattr(self, "_knowledge_space_file_publication_guard"):
+            from bisheng.knowledge.domain.services.knowledge_space_file_publication_guard import (
+                KnowledgeSpaceFilePublicationGuard,
+            )
+
+            self._knowledge_space_file_publication_guard = KnowledgeSpaceFilePublicationGuard()
+        return self._knowledge_space_file_publication_guard
+
+    def _deletion_guard(self):
+        if not hasattr(self, "_knowledge_space_deletion_guard"):
+            from bisheng.knowledge.domain.services.knowledge_space_deletion_guard import (
+                KnowledgeSpaceDeletionGuard,
+            )
+
+            self._knowledge_space_deletion_guard = KnowledgeSpaceDeletionGuard()
+        return self._knowledge_space_deletion_guard
+
+    def _mutation_read_projection(self):
+        if not hasattr(self, "_knowledge_space_mutation_read_projection"):
+            from bisheng.knowledge.domain.services.knowledge_space_mutation_read_projection_service import (
+                MutationReadProjectionService,
+            )
+
+            self._knowledge_space_mutation_read_projection = MutationReadProjectionService()
+        return self._knowledge_space_mutation_read_projection
+
+    def _require_explicit_tenant(self) -> int:
+        """Require the request identity and ContextVar to name the same tenant."""
+        login_tenant_id = int(self.login_user.tenant_id)
+        user_id = int(self.login_user.user_id)
+        current_tenant_id = get_current_tenant_id()
+        if login_tenant_id <= 0 or user_id <= 0 or current_tenant_id is None or int(current_tenant_id) <= 0:
+            raise ValueError("positive tenant_id and user_id are required for file visibility")
+        effective_tenant_id = int(current_tenant_id)
+        if effective_tenant_id == login_tenant_id:
+            return effective_tenant_id
+        admin_scope_tenant_id = get_admin_scope_tenant_id()
+        if (
+            admin_scope_tenant_id is not None
+            and int(admin_scope_tenant_id) == effective_tenant_id
+            and self.login_user.is_global_super is True
+        ):
+            return effective_tenant_id
+        raise RuntimeError("a matching tenant context is required for file visibility")
+
+    def require_explicit_tenant(self) -> int:
+        """Expose the validated effective tenant to composed knowledge services."""
+        return self._require_explicit_tenant()
+
+    async def _list_file_change_excluded_ids(self, *, space_ids: list[int]) -> set[int]:
+        tenant_id = self._require_explicit_tenant()
+        publication_guard = self._publication_guard()
+        deletion_guard = self._deletion_guard()
+        unpublished_ids, deleted_ids, fenced_ids = await asyncio.gather(
+            publication_guard.list_unpublished_ids(
+                tenant_id=tenant_id,
+                space_ids=space_ids,
+            ),
+            deletion_guard.list_deleted_ids(
+                tenant_id=tenant_id,
+                space_ids=space_ids,
+            ),
+            self._mutation_read_projection().list_invisible_ids(
+                tenant_id=tenant_id,
+                space_ids=space_ids,
+            ),
+        )
+        return {int(resource_id) for resource_id in unpublished_ids | deleted_ids | fenced_ids}
+
+    async def list_file_change_excluded_ids(self, *, space_ids: list[int]) -> set[int]:
+        """Return F046 hard-deny IDs with one batched guard read per space set."""
+        return await self._list_file_change_excluded_ids(space_ids=space_ids)
+
+    async def filter_file_change_visible_ids(
+        self,
+        *,
+        space_ids: list[int],
+        resource_ids: Iterable[int],
+    ) -> set[int]:
+        """Apply only F046's publication/deletion hard deny to a batch of IDs."""
+        candidate_ids = {int(resource_id) for resource_id in resource_ids}
+        if not candidate_ids:
+            return set()
+        excluded_ids = await self._list_file_change_excluded_ids(space_ids=space_ids)
+        visible = candidate_ids - excluded_ids
+        authoritative = await self._mutation_read_projection().authoritative_space_ids(
+            tenant_id=self._require_explicit_tenant(),
+            space_ids=space_ids,
+            resource_ids=visible,
+        )
+        if not authoritative:
+            return visible
+        allowed_spaces = {
+            space_id: await self.is_space_visible(space_id)
+            for space_id in sorted(set(authoritative.values()))
+        }
+        return {
+            resource_id
+            for resource_id in visible
+            if resource_id not in authoritative or allowed_spaces[authoritative[resource_id]]
+        }
+
+    async def require_file_change_visible(
+        self,
+        *,
+        space_id: int,
+        resource_id: int,
+        allow_unpublished_stakeholder: bool = False,
+    ) -> None:
+        """Deny an F046-hidden row after the caller's existing ReBAC check."""
+        tenant_id = self._require_explicit_tenant()
+        await self._deletion_guard().require_not_deleted(
+            tenant_id=tenant_id,
+            space_id=int(space_id),
+            resource_id=int(resource_id),
+        )
+        await self._mutation_read_projection().require_current_view(
+            tenant_id=tenant_id,
+            space_id=int(space_id),
+            resource_id=int(resource_id),
+        )
+        authoritative = await self._mutation_read_projection().authoritative_space_ids(
+            tenant_id=tenant_id,
+            space_ids=[int(space_id)],
+            resource_ids=[int(resource_id)],
+        )
+        authoritative_space_id = authoritative.get(int(resource_id))
+        if authoritative_space_id is not None and not await self.is_space_visible(authoritative_space_id):
+            raise SpaceFileChangeRequestNotFoundError()
+        if allow_unpublished_stakeholder:
+            await self._publication_guard().require_published_or_stakeholder(
+                tenant_id=tenant_id,
+                space_id=int(space_id),
+                resource_id=int(resource_id),
+                viewer_user_id=int(self.login_user.user_id),
+            )
+            return
+        unpublished_ids = await self._publication_guard().list_unpublished_ids(
+            tenant_id=tenant_id,
+            space_ids=[int(space_id)],
+        )
+        if int(resource_id) in unpublished_ids:
+            raise SpaceFileChangeRequestNotFoundError()
+
+    async def project_mutation_retrieval_names(self, *, space_id: int, documents: list[Any]) -> list[Any]:
+        """Project retrieval names to the durable OLD_VIEW or NEW_VIEW."""
+
+        document_ids = {
+            int(document.metadata["document_id"])
+            for document in documents
+            if getattr(document, "metadata", None) and document.metadata.get("document_id") is not None
+        }
+        names = await self._mutation_read_projection().name_projection(
+            tenant_id=self._require_explicit_tenant(),
+            space_id=int(space_id),
+            resource_ids=document_ids,
+        )
+        for document in documents:
+            metadata = getattr(document, "metadata", None)
+            if not metadata or metadata.get("document_id") is None:
+                continue
+            old_and_new = names.get(int(metadata["document_id"]))
+            if old_and_new is None:
+                continue
+            projected_name, replaced_name = old_and_new
+            document.metadata = {**metadata, "document_name": projected_name}
+            if isinstance(getattr(document, "page_content", None), str):
+                document.page_content = document.page_content.replace(replaced_name, projected_name)
+        return documents
+
+    async def old_name_projection(
+        self,
+        *,
+        space_id: int,
+        resource_ids: Iterable[int],
+    ) -> dict[int, tuple[str, str]]:
+        return await self._mutation_read_projection().name_projection(
+            tenant_id=self._require_explicit_tenant(),
+            space_id=int(space_id),
+            resource_ids=resource_ids,
+        )
+
+    async def authoritative_mutation_space_ids(
+        self,
+        *,
+        space_ids: list[int],
+        resource_ids: Iterable[int],
+    ) -> dict[int, int]:
+        """Resolve active OLD/NEW mutation locations within the current tenant."""
+
+        return await self._mutation_read_projection().authoritative_space_ids(
+            tenant_id=self._require_explicit_tenant(),
+            space_ids=space_ids,
+            resource_ids=resource_ids,
+        )
+
+    async def project_mutation_retrieval_query(self, *, space_id: int, query: str) -> str:
+        return await self._mutation_read_projection().expand_retrieval_query(
+            tenant_id=self._require_explicit_tenant(),
+            space_id=int(space_id),
+            query=str(query),
+        )
+
     # ------------------------------------------------------------------
     # is_space_visible — AC-11
     # ------------------------------------------------------------------
@@ -134,6 +343,7 @@ class KnowledgeFileVisibilityService:
             object_type="knowledge_file",
             login_user=self.login_user,
         )
+        file_change_excluded_ids = await self._list_file_change_excluded_ids(space_ids=[int(space_id)])
 
         # candidate_file_ids carries the explicit folder / tag business scope.
         # Unlike the permission set, it has NO result-layer backstop
@@ -145,13 +355,31 @@ class KnowledgeFileVisibilityService:
         # Admin: list_accessible_ids returns None → unrestricted by permission.
         # With no business scope there is nothing to push down (admin sees the
         # whole space); with a folder / tag scope we still must enforce it.
-        if accessible_ids is None and not has_business_scope:
+        if accessible_ids is None and not has_business_scope and not file_change_excluded_ids:
             return IndexFilter(strategy="none")
+
+        if accessible_ids is None and not has_business_scope:
+            excluded_ids = sorted(file_change_excluded_ids)
+            return IndexFilter(
+                strategy="notin",
+                milvus_expr=f"document_id not in {excluded_ids}",
+                es_filter=[
+                    {
+                        "bool": {
+                            "must_not": {
+                                "terms": {"metadata.document_id": excluded_ids},
+                            }
+                        }
+                    }
+                ],
+                excluded_ids=excluded_ids,
+            )
 
         # Scope to this space — the user's full accessible set spans every
         # knowledge_file they can read tenant-wide. We only care about files
         # in the queried space.
-        space_primary_ids = await self._list_primary_file_ids_in_space(space_id)
+        all_space_primary_ids = await self._list_primary_file_ids_in_space(space_id)
+        space_primary_ids = all_space_primary_ids - file_change_excluded_ids
         if accessible_ids is None:
             # Admin: every file in the space is permission-visible.
             scoped = set(space_primary_ids)
@@ -181,7 +409,7 @@ class KnowledgeFileVisibilityService:
         # configured threshold. When a business scope is in force we must still
         # push down even past the threshold, so fall back to whichever of the
         # IN / NOT-IN lists is smaller rather than dropping the scope.
-        complement = sorted(space_primary_ids - scoped)
+        complement = sorted((all_space_primary_ids - scoped) | file_change_excluded_ids)
         if complement and (n - k <= threshold or (has_business_scope and len(complement) <= k)):
             return IndexFilter(
                 strategy="notin",
@@ -201,6 +429,24 @@ class KnowledgeFileVisibilityService:
                 milvus_expr=f"document_id in {sorted_ids}",
                 es_filter=[{"terms": {"metadata.document_id": sorted_ids}}],
                 accessible_size=k,
+            )
+
+        if file_change_excluded_ids:
+            excluded_ids = sorted(file_change_excluded_ids)
+            return IndexFilter(
+                strategy="notin",
+                milvus_expr=f"document_id not in {excluded_ids}",
+                es_filter=[
+                    {
+                        "bool": {
+                            "must_not": {
+                                "terms": {"metadata.document_id": excluded_ids},
+                            }
+                        }
+                    }
+                ],
+                accessible_size=k,
+                excluded_ids=excluded_ids,
             )
 
         # Permission-only path, both sides too large — push the work entirely to
@@ -242,6 +488,22 @@ class KnowledgeFileVisibilityService:
         if not file_id_set:
             return set()
 
+        rebac_visible_ids = await self.post_filter_rebac_visible_files(space_id, file_id_set)
+        return await self.filter_file_change_visible_ids(
+            space_ids=[int(space_id)],
+            resource_ids=rebac_visible_ids,
+        )
+
+    async def post_filter_rebac_visible_files(
+        self,
+        space_id: int,
+        file_ids: Iterable[int],
+    ) -> set[int]:
+        """Run the original F029 ReBAC/effective-permission post-filter only."""
+        file_id_set: set[int] = {int(x) for x in file_ids}
+        if not file_id_set:
+            return set()
+
         if self.login_user.is_admin():
             return file_id_set
 
@@ -278,7 +540,7 @@ class KnowledgeFileVisibilityService:
     # ------------------------------------------------------------------
 
     async def _count_primary_files_in_space(self, space_id: int) -> int:
-        """Count primary-version files in the space (total − non-primary)."""
+        """Count primary-version files in the space (total minus non-primary)."""
         from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 
         total = await KnowledgeFileDao.async_count_file_by_knowledge_id(space_id)

@@ -40,7 +40,7 @@ module.exports = {
   },
   // @bisheng/ui is source-shipped TS from the workspace — jest must transform it
   // (default ignore would skip everything under node_modules).
-  transformIgnorePatterns: ['node_modules/(?!(@bisheng/ui|@zattoo/use-double-click)/)'],
+  transformIgnorePatterns: ['node_modules/(?!(@bisheng/file-viewers|@bisheng/ui|@zattoo/use-double-click)/)'],
   preset: 'ts-jest',
   setupFilesAfterEnv: ['@testing-library/jest-dom/extend-expect', '<rootDir>/test/setupTests.js'],
   clearMocks: true,

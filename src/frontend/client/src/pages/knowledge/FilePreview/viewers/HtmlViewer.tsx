@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { ARTIFACT_SANDBOX, buildSandboxedSrcDoc } from "~/utils/sandboxedHtml";
 import { resolveKnowledgePreviewUrl } from "../previewUrlUtils";
 
 interface HtmlViewerProps {
@@ -55,9 +56,11 @@ export function HtmlViewer({ fileUrl, zoomLevel }: HtmlViewerProps) {
         <div className="scrollbar-os flex-1 overflow-auto bg-[#fbfbfb]">
             <div className="w-full h-full">
                 <iframe
-                    srcDoc={htmlContent || ""}
+                    srcDoc={buildSandboxedSrcDoc(htmlContent || "")}
                     title={localize("com_knowledge.html_preview")}
-                    sandbox="allow-same-origin"
+                    // Was `allow-same-origin` with no `allow-scripts`: exactly inverted —
+                    // the page's own scripts never ran, yet it inherited this app's origin.
+                    sandbox={ARTIFACT_SANDBOX}
                     className="w-full h-full border-none bg-white"
                     style={{
                         transform: `scale(${scale})`,

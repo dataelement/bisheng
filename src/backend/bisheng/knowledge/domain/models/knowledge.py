@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Integer, String
+from sqlalchemy import Boolean, Integer, String, collate
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
@@ -364,6 +364,10 @@ class KnowledgeDao(KnowledgeBase):
             # Cursor mode: append keyset WHERE and LIMIT only.
             statement = cls._apply_keyset_where(statement, sort_by, cursor)
             statement = statement.limit(limit)
+        elif not page and limit:
+            # The first cursor page uses page=0 and cursor=None.  Keep it
+            # bounded instead of accidentally returning every candidate row.
+            statement = statement.limit(limit)
 
         order_clauses = []
         # Pinning is a first-page-only UX; suppress it when continuing a cursor.
@@ -579,6 +583,8 @@ class KnowledgeDao(KnowledgeBase):
             statement = statement.limit(limit)
         elif page and limit:
             statement = statement.offset((page - 1) * limit).limit(limit)
+        elif limit:
+            statement = statement.limit(limit)
 
         order_clauses = []
         if preferred_ids and cursor is None:
@@ -839,7 +845,15 @@ class KnowledgeDao(KnowledgeBase):
 
         rejection_cutoff = datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
 
+        # A CAST result carries the *connection* collation (utf8mb4_0900_ai_ci on MySQL 8),
+        # never the table's, so matching it against the utf8mb4_unicode_ci `business_id`
+        # column fails with "Illegal mix of collations" (1267) — table-level charset args
+        # cannot prevent that. Pin the cast to the schema collation on MySQL only: DM8 has
+        # no such collation name and rejects the COLLATE clause outright (-2007).
         kid_str = col(Knowledge.id).cast(String)
+        db_conn = await get_database_connection()
+        if db_conn.async_engine.dialect.name == "mysql":
+            kid_str = collate(kid_str, "utf8mb4_unicode_ci")
 
         # Subquery: count unique active subscribers per space
         subscriber_subq = (

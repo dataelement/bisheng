@@ -333,7 +333,7 @@ class TestPermissionServiceCheck:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_check_knowledge_library_accepts_legacy_knowledge_space_tuple(
+    async def test_check_knowledge_library_ignores_knowledge_space_tuple(
         self,
         mock_fga,
         mock_login_user_normal,
@@ -346,12 +346,6 @@ class TestPermissionServiceCheck:
 
         with (
             patch.object(PermissionService, "_get_fga", return_value=mock_fga),
-            patch.object(
-                PermissionService,
-                "_legacy_alias_object_types",
-                new_callable=AsyncMock,
-                return_value=["knowledge_space"],
-            ),
             patch(
                 "bisheng.permission.domain.services.permission_cache.PermissionCache.get_check",
                 new_callable=AsyncMock,
@@ -370,7 +364,7 @@ class TestPermissionServiceCheck:
                 login_user=mock_login_user_normal,
             )
 
-        assert result is True
+        assert result is False
 
 
 class TestPermissionServiceListAccessible:
@@ -426,7 +420,7 @@ class TestPermissionServiceListAccessible:
         assert sorted(result) == ["abc", "def"]
 
     @pytest.mark.asyncio
-    async def test_knowledge_library_list_unions_legacy_ids(self, mock_fga, mock_login_user_normal):
+    async def test_knowledge_library_list_uses_canonical_object_type(self, mock_fga, mock_login_user_normal):
         from bisheng.permission.domain.services.permission_service import PermissionService
 
         await mock_fga.write_tuples(
@@ -444,13 +438,6 @@ class TestPermissionServiceListAccessible:
                 new_callable=AsyncMock,
                 side_effect=lambda ids, *_args, **_kwargs: ids,
             ),
-            patch.object(
-                PermissionService,
-                "_legacy_alias_object_types",
-                new_callable=AsyncMock,
-                return_value=["knowledge_space"],
-            ),
-            patch.object(PermissionService, "_filter_legacy_alias_ids", new_callable=AsyncMock, return_value=["def"]),
             patch(
                 "bisheng.permission.domain.services.permission_cache.PermissionCache.get_list_objects",
                 new_callable=AsyncMock,
@@ -468,7 +455,7 @@ class TestPermissionServiceListAccessible:
                 login_user=mock_login_user_normal,
             )
 
-        assert sorted(result) == ["abc", "def"]
+        assert result == ["abc"]
 
     @pytest.mark.asyncio
     async def test_fga_unavailable_still_returns_creator_owned_ids(self, mock_login_user_normal):
@@ -563,17 +550,11 @@ class TestPermissionServiceAuthorize:
         mock_fga.assert_tuple_count(0)
 
     @pytest.mark.asyncio
-    async def test_authorize_knowledge_library_dual_writes_legacy_knowledge_space(self, mock_fga):
+    async def test_authorize_knowledge_library_writes_only_canonical_object(self, mock_fga):
         from bisheng.permission.domain.services.permission_service import PermissionService
 
         with (
             patch.object(PermissionService, "_get_fga", return_value=mock_fga),
-            patch.object(
-                PermissionService,
-                "_legacy_alias_object_types",
-                new_callable=AsyncMock,
-                return_value=["knowledge_space"],
-            ),
             patch(
                 "bisheng.permission.domain.services.permission_cache.PermissionCache.invalidate_user",
                 new_callable=AsyncMock,
@@ -592,7 +573,7 @@ class TestPermissionServiceAuthorize:
             )
 
         mock_fga.assert_tuple_exists("user:5", "viewer", "knowledge_library:abc")
-        mock_fga.assert_tuple_exists("user:5", "viewer", "knowledge_space:abc")
+        mock_fga.assert_tuple_count(1)
 
     @pytest.mark.asyncio
     async def test_authorize_department_invalidates_expanded_users(self, mock_fga):
@@ -780,7 +761,7 @@ class TestPermissionServiceBatchWrite:
 
 class TestPermissionServiceGetPermissionLevel:
     @pytest.mark.asyncio
-    async def test_knowledge_library_permission_level_uses_legacy_knowledge_space_tuples(
+    async def test_knowledge_library_permission_level_ignores_knowledge_space_tuples(
         self,
         mock_fga,
         mock_login_user_normal,
@@ -793,12 +774,6 @@ class TestPermissionServiceGetPermissionLevel:
 
         with (
             patch.object(PermissionService, "_get_fga", return_value=mock_fga),
-            patch.object(
-                PermissionService,
-                "_legacy_alias_object_types",
-                new_callable=AsyncMock,
-                return_value=["knowledge_space"],
-            ),
             patch.object(PermissionService, "_get_resource_creator", new_callable=AsyncMock, return_value=None),
         ):
             result = await PermissionService.get_permission_level(
@@ -808,7 +783,7 @@ class TestPermissionServiceGetPermissionLevel:
                 login_user=mock_login_user_normal,
             )
 
-        assert result == "can_edit"
+        assert result is None
 
 
 class TestExpandSubject:

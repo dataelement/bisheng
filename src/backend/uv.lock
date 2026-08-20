@@ -507,7 +507,7 @@ requires-dist = [
     { name = "chromadb", specifier = ">=1.3.4" },
     { name = "cryptography", specifier = ">=46.0.3" },
     { name = "dashscope", specifier = ">=1.24.9" },
-    { name = "deepagents", specifier = ">=0.6.3" },
+    { name = "deepagents", specifier = ">=0.6.3,<0.7" },
     { name = "dmasync", marker = "sys_platform != 'darwin'" },
     { name = "dmpython", marker = "sys_platform != 'darwin'" },
     { name = "dmsqlalchemy", marker = "sys_platform != 'darwin'" },

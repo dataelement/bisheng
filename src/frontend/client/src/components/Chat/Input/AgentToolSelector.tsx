@@ -46,8 +46,8 @@ interface Props {
 
 function iconForGroup(group: AvailableToolGroup) {
   const firstKey = group.children?.[0]?.tool_key;
-  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-[#999]" />;
-  return <Outlined.Hammer className="size-4 text-[#999]" />;
+  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-[#4E5969]" />;
+  return <Outlined.Hammer className="size-4 text-[#4E5969]" />;
 }
 
 export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
@@ -129,7 +129,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
               brand-blue once a tool is selected — mirrors the knowledge-space
               selector (ChatKnowledge) so both pickers signal an active selection. */}
           <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-[#999999]")} strokeWidth={1.5} />
+            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-[#4E5969]")} strokeWidth={1.5} />
           </div>
           {/* Compact: collapse to icon + chevron only to save horizontal space. */}
           {!compact && (
@@ -142,11 +142,15 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
       {/* Width fits the longest row between the clamps (`auto` skips the
           trigger-width floor); tool names come from the in-memory bsConfig, so
           the first frame already has the final width — no reflow on open. */}
-      <SelectContent auto className="bg-white rounded-[8px] min-w-[160px] max-w-[280px] max-h-[320px] overflow-y-auto">
+      <SelectContent
+        auto
+        className="bg-white rounded-2xl min-w-[160px] max-w-[280px] max-h-[320px] overflow-y-auto"
+        viewportClassName="flex flex-col gap-1 p-3"
+      >
         {availableTools.map((group) => (
           // Explicit gap: with the content-fit popup, justify-between alone
           // lets the name butt against the switch at max-content width.
-          <div key={group.id} className="flex justify-between items-center gap-3 px-2 py-[5px]">
+          <div key={group.id} className="flex h-8 justify-between items-center gap-3 rounded-lg px-2">
             <div className="flex gap-2 items-center min-w-0">
               {iconForGroup(group)}
               <span

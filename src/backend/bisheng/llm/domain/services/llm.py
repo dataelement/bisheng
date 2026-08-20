@@ -30,6 +30,7 @@ from bisheng.common.errcode.server import (
     NoAsrModelConfigError,
     NoTtsModelConfigError,
     TtsModelConfigDeletedError,
+    TtsSynthesisFailedError,
 )
 from bisheng.common.models.config import ConfigKeyEnum
 from bisheng.core.cache.redis_manager import get_redis_client

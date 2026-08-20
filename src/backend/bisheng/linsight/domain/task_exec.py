@@ -32,6 +32,8 @@ from bisheng.linsight.domain.models.linsight_session_version import (
     SessionVersionStatusEnum,
 )
 from bisheng.linsight.domain.services.agent_factory import _resolve_model, create_linsight_agent
+from bisheng.linsight.domain.services.binary_content_guard import CODE_INTERPRETER_TOOL
+from bisheng.linsight.domain.services.resilience_middleware import _MAX_STATE_ONLY_REFUNDS
 from bisheng.linsight.domain.services.state_message_manager import (
     LinsightStateMessageManager,
     MessageData,
@@ -40,6 +42,7 @@ from bisheng.linsight.domain.services.state_message_manager import (
 from bisheng.linsight.domain.services.stream_event_mapper import StreamEventMapper
 from bisheng.linsight.domain.services.tool_loop_middleware import LinsightToolLoopError
 from bisheng.linsight.domain.services.workbench_impl import LinsightWorkbenchImpl
+from bisheng.linsight.domain.services.workspace_backend import UPLOADS_DIR
 from bisheng.tool.domain.services.tool import ToolServices
 from bisheng_langchain.linsight.const import TaskStatus
 from bisheng_langchain.linsight.event import BaseEvent, ExecStep, GenerateSubTask, NeedUserInput, TaskEnd, TaskStart
@@ -64,16 +67,78 @@ class TaskAlreadyInProgressError(Exception):
     pass
 
 
-# Apology preamble prepended to a salvaged partial result (L3 tool-loop breaker /
-# L4 recursion ceiling). Followed by the model's intermediate analysis so the
-# user still gets meaningful output instead of a raw recursion error.
-_PARTIAL_RESULT_PREAMBLE = "抱歉，在生成报告文件时遇到问题，模型未能正确调用写入工具。以下是已完成的分析内容："
+# Apology preambles prepended to a salvaged partial result, keyed to the REAL
+# abort cause. Followed by the model's intermediate analysis so the user still
+# gets meaningful output instead of a raw error.
+#
+# Why two: a single "模型未能正确调用写入工具" string used to cover both causes,
+# and it was wrong every time it shipped — in the whole worker log the salvage
+# path fired only on GraphRecursionError, never once on the tool-loop breaker.
+# Blaming the write tool for a step-budget exhaustion sent everyone (users and
+# us) down the wrong diagnostic path.
+_PARTIAL_RESULT_PREAMBLE_TOOL_LOOP = (
+    "抱歉，在生成报告文件时遇到问题，模型未能正确调用写入工具。以下是已完成的分析内容："
+)
+_PARTIAL_RESULT_PREAMBLE_STEP_LIMIT = "抱歉，任务执行步骤数已达上限，未能完全收尾。以下是已完成的内容："
 
 # Friendly failure copy when the abort left nothing salvageable (no analysis text
 # and no captured answer) — still a classified friendly card, never a raw dump.
-_PARTIAL_NO_SALVAGE_MESSAGE = (
+# Same two-cause split as the preambles above.
+_PARTIAL_NO_SALVAGE_TOOL_LOOP = (
     "任务未能完成：模型多次未能正确调用工具，且没有可供返回的中间结果。建议简化任务范围，或更换能力更强的模型后重试。"
 )
+# Appended to a NORMAL (successful) result when the turn budget made the agent
+# wrap up ahead of schedule. Not an apology — the deliverables are real; the user
+# just deserves to know the content was closed out on the materials already
+# gathered rather than everything the task might have explored.
+_SOFT_LANDING_NOTE = "任务步骤已接近模型调用次数上限，内容基于现有材料收尾。"
+
+_PARTIAL_NO_SALVAGE_STEP_LIMIT = (
+    "任务未能完成：任务执行步骤数已达上限，且没有可供返回的中间结果。建议简化任务范围，或拆成多轮执行。"
+)
+
+
+# Super-steps consumed per model turn on the main graph. Measured, not guessed:
+# replaying a real run's Redis checkpoints yields the node cycle
+#   model -> LinsightToolLoopBreakerMain.after_model -> TodoListMiddleware.after_model -> tools
+# (213 checkpoints / 53 model turns, step counter ending at 211). Every middleware
+# that implements before_model/after_model becomes its OWN graph node — and its own
+# super-step — so adding one raises this number.
+_STEPS_PER_MODEL_TURN = 4
+# Headroom for the once-per-run before_agent nodes and the closing turn.
+_RECURSION_LIMIT_MARGIN = 20
+
+
+def _resolve_recursion_limit(linsight_conf) -> int:
+    """LangGraph ``recursion_limit`` for one task run — always above the turn budget.
+
+    ``max_steps`` is only a fuse; ``max_model_turns`` is the real gate, and the
+    soft-landing ladder can only work if the fuse blows LATER than the budget.
+    That is not automatic: ``get_linsight_conf()`` overlays values from the DB
+    (``initdb_config``), which on any pre-existing deployment still holds the old
+    ``max_steps: 200`` — far below the ~460 super-steps 115 turns needs. Raising
+    the floor here means existing installs get the new behaviour without a DBA
+    touching the config; an operator who deliberately raises ``max_steps`` still
+    wins, since we only ever take the max.
+    """
+    configured = int(getattr(linsight_conf, "max_steps", 500) or 0)
+    turn_limit = int(getattr(linsight_conf, "max_model_turns", 115) or 0)
+    # Pure state-maintenance turns (a model call that only re-published the todo list)
+    # are refunded, up to ``_MAX_STATE_ONLY_REFUNDS`` per budget bucket, so a run may
+    # legitimately make more model calls than ``max_model_turns``. The fuse must still
+    # blow LATER than the budget, or the soft-landing ladder is bypassed and the run
+    # aborts into the partial-salvage path instead of finishing normally.
+    floor = (turn_limit + _MAX_STATE_ONLY_REFUNDS) * _STEPS_PER_MODEL_TURN + _RECURSION_LIMIT_MARGIN
+    if configured >= floor:
+        return configured
+    logger.warning(
+        "linsight max_steps={} is below the {} super-steps needed by max_model_turns={}; "
+        "raising the recursion ceiling so the turn budget stays the effective gate",
+        configured,
+        floor,
+        turn_limit,
+    )
+    return floor
 
 
 class LinsightWorkflowTask:
@@ -104,7 +169,24 @@ class LinsightWorkflowTask:
         self._partial_pending: bool = False
         self._partial_salvage: str | None = None
         self._partial_error: BaseException | None = None
+        # Whether the LAST AIMessage of the most recent values snapshot still had
+        # tool calls waiting to run. False means the model produced its closing
+        # answer, so an abort raised right after it (a recursion ceiling hit on
+        # the very step that would have ended the graph) must NOT be rendered as
+        # a failed/partial run. Defaults True (conservative: assume mid-loop).
+        self._last_ai_has_pending_tool_calls: bool = True
+        # Shared with the MAIN graph's resilience middleware, which sets
+        # ``soft_landing`` when the turn budget forced the run to wrap up early.
+        # The result then carries a one-line note so the user knows the content
+        # was closed out on the materials already gathered.
+        self._turn_budget: dict = {}
         self.file_dir: str | None = None
+        # Files present in ``file_dir`` before the agent ran (set by
+        # _init_file_directory); the deliverable scan diffs against it.
+        self._baseline_files: set[str] = set()
+        # Set per run in _create_agent; gates every prompt hint that names the
+        # code interpreter (prompt ⟺ tool lockstep).
+        self._has_code_interpreter: bool = False
         self.session_version_id: str | None = None
         self.llm: BaseChatModel | None = None  # For storageLLMInstances
 
@@ -171,10 +253,12 @@ class LinsightWorkflowTask:
         except TaskAlreadyInProgressError:
             logger.warning(f"Task already in progress: session_version_id={self.session_version_id}")
         except TaskExecutionError as e:
-            logger.error(
-                f"Task execution failed: {e} : session_version_id={self.session_version_id}",
-                exc_info=True,
-            )
+            # NEVER pass exc_info= to loguru: it has no such kwarg, so ANY kwarg makes
+            # it str.format() the message. Provider errors embed literal braces
+            # (``Error code: 429 - {'error': {...}}``), which format() reads as a
+            # replacement field -> KeyError raised inside this except clause, skipping
+            # _handle_execution_error and stranding the session IN_PROGRESS forever.
+            logger.exception(f"Task execution failed: {e} : session_version_id={self.session_version_id}")
             await self._handle_execution_error(e)
         except Exception as e:
             logger.exception(f"Unknown error: session_version_id={self.session_version_id}")
@@ -321,7 +405,7 @@ class LinsightWorkflowTask:
         mapper = StreamEventMapper(svid=session_model.id)
         config = {
             "configurable": {"thread_id": session_model.id},
-            "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+            "recursion_limit": _resolve_recursion_limit(linsight_conf),
         }
         try:
             async for chunk in agent.astream(
@@ -332,9 +416,7 @@ class LinsightWorkflowTask:
             ):
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
                 if mode == "values" and not namespace and isinstance(raw, dict):
-                    text = self._extract_last_message_text(raw.get("messages"))
-                    if text:
-                        self._last_assistant_text = text
+                    self._capture_values_snapshot(raw)
                 for event in mapper.normalize(mode, raw, namespace=namespace):
                     await self._handle_event(agent, event, session_model)
         except (LinsightToolLoopError, GraphRecursionError) as e:
@@ -414,7 +496,7 @@ class LinsightWorkflowTask:
         mapper = StreamEventMapper(svid=session_model.id)
         config = {
             "configurable": {"thread_id": session_model.id},
-            "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+            "recursion_limit": _resolve_recursion_limit(linsight_conf),
         }
         # Prepend the current-time block (same rationale as _build_agent_input):
         # per-task time awareness without busting the static system-prompt cache.
@@ -430,9 +512,7 @@ class LinsightWorkflowTask:
             ):
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
                 if mode == "values" and not namespace and isinstance(raw, dict):
-                    text = self._extract_last_message_text(raw.get("messages"))
-                    if text:
-                        self._last_assistant_text = text
+                    self._capture_values_snapshot(raw)
                 for event in mapper.normalize(mode, raw, namespace=namespace):
                     await self._handle_event(agent, event, session_model)
         except (LinsightToolLoopError, GraphRecursionError) as e:
@@ -458,6 +538,9 @@ class LinsightWorkflowTask:
         # the prior turn's deliverables. New-turn path only (resume reuses the same
         # svid workspace). Best-effort — never blocks the turn.
         await self._seed_workspace_from_previous(session_model)
+        # Must run between the seed and tool construction: the code interpreter's
+        # file list is snapshotted from file_dir when the tool is built.
+        await self._sync_workspace_originals(session_model)
 
         # Initialization Execution Component
         self.llm = await self._get_llm(session_model)
@@ -556,29 +639,48 @@ class LinsightWorkflowTask:
         file_dir = os.path.normpath(file_dir)
         os.makedirs(file_dir, exist_ok=True)
 
-        if not session_model.files:
-            return file_dir
+        if session_model.files:
+            # Only entries that carry a parsed-markdown object can be prefetched. A
+            # file without ``markdown_file_path`` (e.g. an org-KB reference, or a file
+            # still parsing) must be SKIPPED — not crash task startup. (The agent reads
+            # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
+            # this local prefetch is best-effort cache warming, not the access path.)
+            downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
+            skipped = len(session_model.files) - len(downloadable)
+            if skipped:
+                logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
 
-        # Only entries that carry a parsed-markdown object can be prefetched. A
-        # file without ``markdown_file_path`` (e.g. an org-KB reference, or a file
-        # still parsing) must be SKIPPED — not crash task startup. (The agent reads
-        # uploaded sources through the WorkspaceBackend ``uploads/`` keys anyway, so
-        # this local prefetch is best-effort cache warming, not the access path.)
-        downloadable = [f for f in session_model.files if isinstance(f, dict) and f.get("markdown_file_path")]
-        skipped = len(session_model.files) - len(downloadable)
-        if skipped:
-            logger.warning(f"{skipped} uploaded file(s) without markdown_file_path skipped for local prefetch")
+            # Concurrent downloads
+            download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
 
-        # Concurrent downloads
-        download_tasks = [self._download_file(file_info, file_dir) for file_info in downloadable]
+            results = await asyncio.gather(*download_tasks, return_exceptions=True)
 
-        results = await asyncio.gather(*download_tasks, return_exceptions=True)
+            # Record Download Failed Files
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
+                    logger.error(f"This content failed to load {file_name}: {result}")
 
-        # Record Download Failed Files
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                file_name = os.path.basename(downloadable[i].get("markdown_file_path") or "")
-                logger.error(f"This content failed to load {file_name}: {result}")
+            # Second track: the ORIGINAL spreadsheets / documents. The code
+            # interpreter's file list is built from ``os.walk(file_dir)``
+            # (workbench_impl._init_bisheng_code_tool), so an original that never
+            # lands here is invisible to pandas / python-docx / fitz — which is the
+            # whole point of keeping it. Best-effort: a miss costs the precise-data
+            # track, never the task.
+            raw_files = [f for f in downloadable if f.get("raw_filename") and f.get("original_file_path")]
+            if raw_files:
+                raw_results = await asyncio.gather(
+                    *[self._download_raw_original(f, file_dir) for f in raw_files], return_exceptions=True
+                )
+                for i, result in enumerate(raw_results):
+                    if isinstance(result, Exception):
+                        logger.warning(f"Original not prefetched {raw_files[i].get('raw_filename')}: {result}")
+
+        # Baseline for deliverable detection: everything present BEFORE the agent
+        # runs (i.e. the prefetched upload sources). Captured here — after the
+        # prefetch, at the single point every driver goes through — so the
+        # completion scan can tell what the agent actually produced.
+        self._baseline_files = linsight_execute_utils.snapshot_file_paths(file_dir)
 
         return file_dir
 
@@ -607,6 +709,34 @@ class LinsightWorkflowTask:
             logger.error(f"Download failed {object_name}: {e}")
             raise
 
+    async def _download_raw_original(self, file_info: dict, target_dir: str) -> str:
+        """Prefetch the ORIGINAL upload next to its markdown view.
+
+        Mirrors ``_download_file`` but reads ``original_file_path`` (formal bucket)
+        and lands under ``uploads/<raw_filename>``. The subdirectory is load-bearing:
+        the workspace key is ``uploads/x.xlsx`` and that is the path the pointer
+        block hands the model, while the code interpreter resolves paths relative to
+        ``file_dir``. Landing the original flat here (the original implementation)
+        meant the one path the model was told about did not exist in the sandbox —
+        the whole point of carrying the original was lost. The markdown track stays
+        flat on purpose: it is only ever read through ``read_file``, which goes to
+        the workspace, so it needs no local path parity.
+        """
+        object_name = file_info["original_file_path"]
+        file_path = os.path.join(target_dir, UPLOADS_DIR, file_info["raw_filename"])
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        minio_client = await get_minio_storage()
+        file_url = await minio_client.get_share_link(object_name, clear_host=False)
+        http_client = await get_http_client()
+
+        with open(file_path, "wb") as f:
+            async for chunk in http_client.stream(method="GET", url=str(file_url)):
+                f.write(chunk)
+
+        if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+            raise ValueError(f"Original download failed or empty: {object_name}")
+        return file_path
+
     async def _generate_tools(self, session_model: LinsightSessionVersion) -> list:
         """Build Tool List"""
         if not session_model.tools:
@@ -632,6 +762,13 @@ class LinsightWorkflowTask:
         from bisheng.linsight.domain.services.skill_provisioning import materialize_session_skills
         from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
 
+        # Whether the code interpreter is actually bound this run (it is injected
+        # only when the user selected it). Everything that points the model at it —
+        # the uploaded-files pointer block and the binary read guard — must stay in
+        # lockstep with this flag, or we recreate the "told to call a tool that
+        # isn't there" failure mode.
+        self._has_code_interpreter = any(getattr(t, "name", None) == CODE_INTERPRETER_TOOL for t in tools)
+
         minio = await get_minio_storage()
         backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
         # F035 Fork X: copy this run's allowed skill bundles into the workspace
@@ -650,6 +787,7 @@ class LinsightWorkflowTask:
             checkpointer=checkpointer,
             backend=backend,
             skills_present=bool(copied_skills),
+            turn_budget_sink=self._turn_budget,
         )
 
     async def _seed_workspace_from_previous(self, session_model: LinsightSessionVersion) -> None:
@@ -683,6 +821,54 @@ class LinsightWorkflowTask:
                 )
         except Exception as e:
             logger.warning(f"workspace seed-from-previous skipped (non-fatal): {e}")
+
+    async def _sync_workspace_originals(self, session_model: LinsightSessionVersion) -> None:
+        """Make workspace originals reachable by the code interpreter this turn.
+
+        ``_init_file_directory`` prefetches originals from THIS turn's ``files``,
+        which is empty on a follow-up ("总结一下刚才那个表") — the originals only
+        exist in the workspace, copied there by the seed. The code interpreter's
+        file list is built from the local ``file_dir``, so without this step the
+        model sees ``uploads/x.xlsx`` in ``ls``, is told by the pointer block that
+        it can compute on it, and then finds nothing in the sandbox.
+
+        Runs after the seed and before tools are built. Idempotent: on a fresh turn
+        the prefetch already wrote these files and ``_materialize`` serves them from
+        cache. Best-effort — losing the precise-data track must never fail the turn.
+        """
+        try:
+            from bisheng.linsight.domain.services.workspace_backend import WorkspaceBackend
+
+            minio = await get_minio_storage()
+            backend = WorkspaceBackend(svid=session_model.id, minio=minio, file_dir=self.file_dir)
+            ls_res = await backend.als(UPLOADS_DIR)
+            if getattr(ls_res, "error", None):
+                return
+
+            synced: list[str] = []
+            for entry in ls_res.entries or []:
+                rel = str(entry.get("path") or "").lstrip("/")
+                # Markdown views are already local (or are read through read_file,
+                # which goes to MinIO anyway); only the originals need a local copy.
+                if not rel.startswith(f"{UPLOADS_DIR}/") or rel.endswith(".md"):
+                    continue
+                local_path = os.path.join(self.file_dir, rel)
+                if os.path.exists(local_path):
+                    continue
+                if await asyncio.to_thread(backend.ensure_local, rel):
+                    synced.append(local_path)
+
+            if synced:
+                # These arrived AFTER _init_file_directory took the baseline, so
+                # without this they would look like files the agent produced and be
+                # delivered back to the user as this turn's output.
+                self._baseline_files.update(synced)
+                logger.info(
+                    "Synced {} workspace original(s) into the local task dir for the code interpreter",
+                    len(synced),
+                )
+        except Exception as e:
+            logger.warning(f"workspace original sync skipped (non-fatal): {e}")
 
     # ==================== Mission Execution ====================
 
@@ -735,6 +921,22 @@ class LinsightWorkflowTask:
         except Exception as e:
             logger.warning(f"Failed to finalize session pseudo task: {e}")
 
+    async def _converge_task_rows_on_completion(self) -> None:
+        """Close out task rows a NORMALLY finished run left hanging.
+
+        ``linsight_execute_task`` used to be append-only: rows were inserted from the
+        first ``write_todos`` snapshot and only ever updated on a status flip, so a run
+        that finished after the model reshaped its plan left rows stuck at
+        NOT_STARTED/IN_PROGRESS forever. The panel then reported a fake ratio on a
+        COMPLETED session — measured on 180: "任务已完成 4/7" with 1 IN_PROGRESS and 2
+        NOT_STARTED still in the table.
+
+        ⚠️ ORDERING: must run AFTER ``_complete_session_pseudo_task``. The sweep walks
+        every row including the svid pseudo task; finalizing that one first is what
+        makes the sweep skip it instead of marking the session's own row TERMINATED.
+        """
+        await self._terminate_unfinished_tasks()
+
     async def _save_task_info(self, session_model: LinsightSessionVersion, task_info: list[dict]):
         """Save Task Information.
 
@@ -776,6 +978,24 @@ class LinsightWorkflowTask:
             if new_tasks:
                 await LinsightExecuteTaskDao.batch_create_tasks(new_tasks)
 
+            # Positional alignment reuses an existing row id when the model REWRITES a
+            # todo's wording, so without this the row would keep the title from the
+            # very first plan for the rest of the run. Status/result are untouched.
+            for task in tasks:
+                prev = existing_by_id.get(task.id)
+                if prev is None:
+                    continue
+                if (prev.task_data or {}).get("name") == (task.task_data or {}).get("name"):
+                    continue
+                # DAO directly (like the batch insert above): the state-manager helper
+                # requires a ``status`` and returns a plain dict, both of which would
+                # be wrong here — the status must not move, and ``merged`` below has
+                # to stay a list of models. Redis is refreshed by the
+                # ``set_execution_tasks(merged)`` call a few lines down.
+                refreshed = await LinsightExecuteTaskDao.update_by_id(task.id, task_data=task.task_data)
+                if refreshed is not None:
+                    existing_by_id[task.id] = refreshed
+
             merged = [existing_by_id.get(t.id, t) for t in tasks]
             await self._state_manager.set_execution_tasks(merged)
 
@@ -808,7 +1028,9 @@ class LinsightWorkflowTask:
 
         async def agent_execution():
             """Agent performs a task via astream + mapper."""
-            file_list = await LinsightWorkbenchImpl.prepare_file_list(session_model)
+            file_list = await LinsightWorkbenchImpl.prepare_file_list(
+                session_model, has_code_interpreter=self._has_code_interpreter
+            )
             # F035 Track J: rebuild prior conversation context (by chat_id) so a
             # fresh task turn answers with the whole conversation in view, not just
             # this turn's question (the per-session checkpointer can't see earlier
@@ -824,7 +1046,7 @@ class LinsightWorkflowTask:
             config = {
                 "configurable": {"thread_id": self.session_version_id},
                 # max_steps -> recursion_limit (design §2.5)
-                "recursion_limit": getattr(linsight_conf, "max_steps", 200),
+                "recursion_limit": _resolve_recursion_limit(linsight_conf),
             }
             # subgraphs=True so subagent (子图) events冒泡父流 with a namespace
             # prefix the mapper uses to归并 nested step cards (design §3.1/§3.7).
@@ -842,11 +1064,10 @@ class LinsightWorkflowTask:
                 mode, raw, namespace = self._unpack_stream_chunk(chunk)
                 # Capture the agent's latest top-level reply as a fallback
                 # answer for the no-TaskEnd case (e.g. a greeting the planner
-                # answers directly without spawning sub-tasks).
+                # answers directly without spawning sub-tasks), plus whether it
+                # left tool calls pending (drives the abort classification).
                 if mode == "values" and not namespace and isinstance(raw, dict):
-                    text = self._extract_last_message_text(raw.get("messages"))
-                    if text:
-                        self._last_assistant_text = text
+                    self._capture_values_snapshot(raw)
                 for event in mapper.normalize(mode, raw, namespace=namespace):
                     await self._handle_event(agent, event, session_model)
             return True
@@ -1098,6 +1319,41 @@ class LinsightWorkflowTask:
                 return text
         return None
 
+    @staticmethod
+    def _last_ai_pending_tool_calls(messages) -> bool:
+        """True when the LAST AIMessage still has tool calls waiting to run.
+
+        This is the "did the model actually finish?" test. It must look at the
+        *last* AIMessage — NOT the last one carrying text, which is what
+        ``_extract_last_message_text`` walks back to. A closing turn ends with a
+        text-only AIMessage (no tool_calls); a run cut off mid-loop ends with a
+        ToolMessage whose preceding AIMessage still carries the pending call. If
+        we reused the text-based walk, a tool-call-only AIMessage would be
+        skipped and an unfinished run would look finished.
+
+        Returns True (assume mid-loop) when no AIMessage exists at all, so the
+        conservative partial-salvage path stays the default.
+        """
+        for msg in reversed(messages or []):
+            if not LinsightWorkflowTask._is_assistant_message(msg):
+                continue
+            tool_calls = msg.get("tool_calls") if isinstance(msg, dict) else getattr(msg, "tool_calls", None)
+            return bool(tool_calls)
+        return True
+
+    def _capture_values_snapshot(self, raw: dict) -> None:
+        """Record what the agent's latest top-level ``values`` snapshot tells us.
+
+        Two things, both consumed only on the completion paths: the last
+        assistant text (fallback answer when no TaskEnd is emitted) and whether
+        that turn left tool calls pending (see ``_last_ai_pending_tool_calls``).
+        """
+        messages = raw.get("messages")
+        text = self._extract_last_message_text(messages)
+        if text:
+            self._last_assistant_text = text
+        self._last_ai_has_pending_tool_calls = self._last_ai_pending_tool_calls(messages)
+
     # ==================== Event processing ====================
 
     async def _handle_event(self, agent, event: BaseEvent, session_model: LinsightSessionVersion):
@@ -1132,9 +1388,18 @@ class LinsightWorkflowTask:
 
     async def _handle_task_end(self, agent, event: TaskEnd, session_model: LinsightSessionVersion):
         """Handle task end events"""
-        status = (
-            ExecuteTaskStatusEnum.SUCCESS if event.status == TaskStatus.SUCCESS.value else ExecuteTaskStatusEnum.FAILED
-        )
+        # A "terminated" TaskEnd is a todo the model DROPPED from its plan (see
+        # StreamEventMapper._diff_todos), not a task that failed. Mapping it to FAILED
+        # would paint an error row in the panel — and, far worse, feed
+        # ``self._final_result`` below, which ``_handle_task_completion`` routes into
+        # ``_handle_task_failure`` for anything != success: a pruned todo arriving last
+        # would fail the WHOLE session.
+        if event.status == ExecuteTaskStatusEnum.TERMINATED.value:
+            status = ExecuteTaskStatusEnum.TERMINATED
+        elif event.status == TaskStatus.SUCCESS.value:
+            status = ExecuteTaskStatusEnum.SUCCESS
+        else:
+            status = ExecuteTaskStatusEnum.FAILED
 
         # F035 fix: TaskEnd.data is frequently empty for deepagents tasks; passing
         # it as task_data would OVERWRITE the task_data stored at write_todos time
@@ -1149,8 +1414,9 @@ class LinsightWorkflowTask:
 
         await self._state_manager.push_message(MessageData(event_type=MessageEventType.TASK_END, data=task_data))
 
-        # Save Final Result
-        self._final_result = event
+        # Save Final Result — a dropped todo is never the run's outcome.
+        if status is not ExecuteTaskStatusEnum.TERMINATED:
+            self._final_result = event
 
     async def _handle_need_user_input(self, agent, event: NeedUserInput, session_model: LinsightSessionVersion):
         """Handle events that require user input (park-and-release, F035 §4.6).
@@ -1266,8 +1532,8 @@ class LinsightWorkflowTask:
 
         await self._state_manager.set_session_version_info(session_model)
 
-        # Set all tasks to failed
-        await self._set_tasks_failed()
+        # Converge every task row the run never finished
+        await self._terminate_unfinished_tasks()
 
         # Push termination message
         await self._state_manager.push_message(
@@ -1304,11 +1570,25 @@ class LinsightWorkflowTask:
             logger.info("Task parked on user input; skipping completion handling")
             return
 
-        if self._partial_pending:
-            # L3/L4: aborted by the tool-loop breaker or recursion ceiling.
-            # Render the salvaged intermediate result instead of a raw failure.
+        if self._partial_pending and self._last_ai_has_pending_tool_calls:
+            # L3/L4: aborted by the tool-loop breaker or recursion ceiling while
+            # the model was still mid-loop. Render the salvaged intermediate
+            # result instead of a raw failure.
             await self._handle_task_partial(session_model)
             return
+
+        if self._partial_pending:
+            # The abort landed AFTER the model had already produced its closing
+            # answer: LangGraph's ``tick()`` checks ``step > stop`` BEFORE it
+            # computes whether any task remains, so the very step that would have
+            # ended the graph raises GraphRecursionError instead. Falling through
+            # here hands the run to the normal completion paths below (TaskEnd ->
+            # success, otherwise direct-answer), which collect the ``output/``
+            # deliverables the model did write. No apology: nothing failed.
+            logger.info(
+                "Step ceiling hit after the model had already closed out "
+                f"({type(self._partial_error).__name__}); completing normally"
+            )
 
         if not self._final_result:
             # No TaskEnd was emitted — the agent answered directly without
@@ -1342,6 +1622,7 @@ class LinsightWorkflowTask:
         if not answer:
             await self._handle_task_failure(session_model, "Task produced no result")
             return
+        answer = self._with_soft_landing_note(answer)
 
         session_model.status = SessionVersionStatusEnum.COMPLETED
         # A direct-answer completion with NO sub-tasks is a genuine trivial reply
@@ -1366,7 +1647,7 @@ class LinsightWorkflowTask:
         # for an empty output/, so a greeting still yields nothing here.
         file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
         final_files = await linsight_execute_utils.get_final_result_file(
-            session_model=session_model, file_details=file_details, answer=answer
+            session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
         # Synthesize a fallback report ONLY when the model actually planned work but
         # produced no deliverable — never for a trivial greeting/Q&A with no output.
@@ -1379,16 +1660,48 @@ class LinsightWorkflowTask:
             "final_files": final_files,
             "all_from_session_files": [],
         }
+        self._flag_phantom_deliverables(session_model, answer, final_files)
         await self._state_manager.set_session_version_info(session_model)
         # F035 problem 2: finalize the session pseudo task carrying any
         # planning/direct-answer steps so it isn't left stuck in_progress.
         await self._complete_session_pseudo_task(session_model)
+        await self._converge_task_rows_on_completion()
         # F035 Track J: land the answer in the unified conversation stream.
         await linsight_execute_utils.persist_task_turn_message(session_model)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
         )
         logger.info(f"Task completed via direct-answer fallback ({len(final_files)} report files)")
+
+    def _flag_phantom_deliverables(self, session_model, answer: str, final_files: list[dict]) -> None:
+        """Record deliverables the answer claims but the run never produced.
+
+        Diagnosis only — deliberately does NOT repair. The prompt already forbids
+        claiming a save without write_file, so a phantom means the model ignored
+        it, and that is worth measuring: an earlier revision answered the false
+        claim by creating the file, which made the run look healthy and left no
+        trace of how often it happens.
+        """
+        phantom = linsight_execute_utils.detect_phantom_deliverables(answer, final_files)
+        if not phantom:
+            return
+        logger.warning(
+            "[linsight-phantom-deliverable] session={} answer claims {} file(s) the run never wrote: {}",
+            session_model.id,
+            len(phantom),
+            ", ".join(phantom),
+        )
+        session_model.output_result["phantom_deliverables"] = phantom
+
+    def _with_soft_landing_note(self, answer: str) -> str:
+        """Append the wrap-up note when the turn budget cut the run short.
+
+        Applied to the NORMAL completion paths only: the partial-salvage path
+        already carries its own step-limit preamble.
+        """
+        if not self._turn_budget.get("soft_landing"):
+            return answer
+        return f"{answer}\n\n{_SOFT_LANDING_NOTE}" if answer else _SOFT_LANDING_NOTE
 
     def _stash_partial_abort(self, e: BaseException) -> None:
         """Record an L3/L4 abort so ``_handle_task_completion`` renders a salvaged
@@ -1412,19 +1725,25 @@ class LinsightWorkflowTask:
         ``_handle_direct_answer_completion``. If nothing is salvageable, degrade to
         a friendly classified failure (never a raw dump).
         """
+        # Copy follows the REAL cause: only the tool-loop breaker means "the model
+        # kept calling a tool wrong"; a recursion ceiling means the step budget ran
+        # out, which has nothing to do with the write tools.
+        is_tool_loop = isinstance(self._partial_error, LinsightToolLoopError)
         body = (self._partial_salvage or "").strip() or (self._last_assistant_text or "").strip()
         if not body:
-            await self._handle_task_failure(session_model, _PARTIAL_NO_SALVAGE_MESSAGE, exc=self._partial_error)
+            no_salvage = _PARTIAL_NO_SALVAGE_TOOL_LOOP if is_tool_loop else _PARTIAL_NO_SALVAGE_STEP_LIMIT
+            await self._handle_task_failure(session_model, no_salvage, exc=self._partial_error)
             return
 
-        answer = f"{_PARTIAL_RESULT_PREAMBLE}\n\n{body}"
+        preamble = _PARTIAL_RESULT_PREAMBLE_TOOL_LOOP if is_tool_loop else _PARTIAL_RESULT_PREAMBLE_STEP_LIMIT
+        answer = f"{preamble}\n\n{body}"
         session_model.status = SessionVersionStatusEnum.COMPLETED
         # Collect any output/ deliverable the model managed to write before looping;
         # otherwise synthesize a report from the salvaged answer (same backstop as
         # the success / direct-answer paths).
         file_details = await linsight_execute_utils.read_file_directory(self.file_dir)
         final_files = await linsight_execute_utils.get_final_result_file(
-            session_model=session_model, file_details=file_details, answer=answer
+            session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
         )
         if not final_files:
             final_files = await linsight_execute_utils.build_fallback_report_file(
@@ -1438,8 +1757,10 @@ class LinsightWorkflowTask:
             # even though it renders as a normal result (no frontend change required).
             "partial": True,
         }
+        self._flag_phantom_deliverables(session_model, answer, final_files)
         await self._state_manager.set_session_version_info(session_model)
         await self._complete_session_pseudo_task(session_model)
+        await self._converge_task_rows_on_completion()
         await linsight_execute_utils.persist_task_turn_message(session_model)
         await self._state_manager.push_message(
             MessageData(event_type=MessageEventType.FINAL_RESULT, data=session_model.model_dump())
@@ -1458,9 +1779,10 @@ class LinsightWorkflowTask:
             # the last streamed assistant text so the answer field — and the
             # synthesized report below — still carry the real content.
             answer = (self._final_result.answer or "").strip() or (self._last_assistant_text or "").strip()
+            answer = self._with_soft_landing_note(answer)
 
             final_result_files = await linsight_execute_utils.get_final_result_file(
-                session_model=session_model, file_details=file_details, answer=answer
+                session_model=session_model, file_details=file_details, baseline_paths=self._baseline_files
             )
             # F035 backstop: weak models can finish without ever writing an output/
             # deliverable (they loop on write_todos), leaving no report. Synthesize
@@ -1481,12 +1803,14 @@ class LinsightWorkflowTask:
                 "final_files": final_result_files,
                 "all_from_session_files": all_from_session_files,
             }
+            self._flag_phantom_deliverables(session_model, answer, final_result_files)
 
             # Save session information and push messages
             await self._state_manager.set_session_version_info(session_model)
             # F035 problem 2: finalize the session pseudo task carrying any
             # planning/wrap-up steps so it isn't left stuck in_progress.
             await self._complete_session_pseudo_task(session_model)
+            await self._converge_task_rows_on_completion()
             # F035 Track J: land the answer in the unified conversation stream.
             await linsight_execute_utils.persist_task_turn_message(session_model)
             await self._state_manager.push_message(
@@ -1500,8 +1824,17 @@ class LinsightWorkflowTask:
             raise TaskExecutionError(f"An error occurred while processing the task successfully: {e}")
 
     # Modify All Task Failure Processing Logic
-    async def _set_tasks_failed(self):
-        """Set all tasks to failed"""
+    async def _terminate_unfinished_tasks(self):
+        """Converge every non-terminal task row to TERMINATED.
+
+        Named for what it DOES — the old name (``_set_tasks_failed``) described
+        neither the action nor the status it writes. Three callers, three meanings,
+        one action: user stop, task failure, and normal completion, where the model
+        simply stopped updating todos it never finished.
+
+        Rows already SUCCESS / FAILED / TERMINATED are left alone, so this is
+        idempotent and can never downgrade a delivered result.
+        """
         try:
             # Get All Execute Tasks
             execution_tasks = await self._state_manager.get_execution_tasks()
@@ -1517,7 +1850,7 @@ class LinsightWorkflowTask:
                         task_id=task.id, status=ExecuteTaskStatusEnum.TERMINATED
                     )
         except Exception as e:
-            logger.warning(f"Error setting task failed: {e}")
+            logger.warning("Error converging unfinished task rows: {}", e)
 
     async def _handle_task_failure(
         self, session_model: LinsightSessionVersion, error_msg: str, *, exc: Exception | None = None
@@ -1546,8 +1879,8 @@ class LinsightWorkflowTask:
         # whose detail panel shows the failure.
         await linsight_execute_utils.persist_task_turn_message(session_model)
 
-        # Set all tasks to failed
-        await self._set_tasks_failed()
+        # Converge every task row the run never finished
+        await self._terminate_unfinished_tasks()
 
         # error_message event: keep ``error`` for backward compatibility (old
         # clients display it raw); new fields drive the classified friendly card.

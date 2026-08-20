@@ -387,6 +387,23 @@ config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/seed_overflow_skill.py
 
 ## Tenant / Data Fix Scripts
 
+### `backfill_message_citation_relations.py`
+
+把历史 `message_citation.message_id` 回填到新的 `message_citation_relation` 关联表，使同一个全局 `citation_id` 可以被多条工作流输出消息复用。脚本默认 dry-run、分批执行且幂等；必须在升级后的服务已经创建 `message_citation_relation` 表后运行。
+
+可选 `--recover-markers` 会额外扫描消息正文中的引用标记，恢复旧版本中“消息已提交、随后引用唯一键冲突”留下的关联。恢复时会校验 `chat_id/flow_id`，找不到引用实体或作用域不匹配的标记只统计、不写入。
+
+Usage (from `src/backend/`):
+
+```bash
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_message_citation_relations.py
+config=config.yaml PYTHONPATH=./ .venv/bin/python scripts/backfill_message_citation_relations.py --recover-markers --apply
+
+# 或用 shell 包装（自动探测解释器 / PYTHONPATH / config）：
+bash scripts/backfill_message_citation_relations.sh
+bash scripts/backfill_message_citation_relations.sh --recover-markers apply
+```
+
 ### `dedupe_gpts_tools.py`
 
 清理同一租户下 `(tool_key, tenant_id)` 重复的**预置**工具 / 工具类型行。历史上"复制内置工具到子租户"未显式带 `tenant_id`，在 root 上下文下被 `server_default=1` 盖成 root，加上 `t_gpts_tools.tool_key` 当时没有唯一约束，导致 root 下同一 `tool_key` 堆了多份（如 `web_search` ×3）。这会让 `get_tool_by_tool_key().first()` 解析到非预期的那条（工作流读到旧配置），也会阻止后续添加 `UNIQUE(tool_key, tenant_id)` 约束。

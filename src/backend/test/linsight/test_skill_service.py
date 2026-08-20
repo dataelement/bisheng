@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.common.errcode.linsight import (
+    SkillBundleTooLargeError,
     SkillFileTooLargeError,
     SkillNameDuplicateError,
     SkillNotFoundError,
@@ -18,7 +19,12 @@ from bisheng.linsight.domain.models.linsight_skill import LinsightSkill
 from bisheng.linsight.domain.schemas.skill_schema import SkillCreateForm
 from bisheng.linsight.domain.services import skill_service as service_module
 from bisheng.linsight.domain.services.skill_service import SkillService
-from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, SKILL_MD, SkillStore
+from bisheng.linsight.domain.services.skill_store import (
+    MAX_BUNDLE_SIZE,
+    MAX_UNPACKED_SIZE,
+    SKILL_MD,
+    SkillStore,
+)
 
 TENANT = 1
 USER = 7
@@ -116,9 +122,9 @@ def _md_bytes(name="demo-skill", description="demo desc", display_name="演示�
     ).encode()
 
 
-def _zip_bytes(entries: dict[str, bytes]) -> bytes:
+def _zip_bytes(entries: dict[str, bytes], compression: int = zipfile.ZIP_STORED) -> bytes:
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
+    with zipfile.ZipFile(buf, "w", compression=compression) as zf:
         for path, content in entries.items():
             zf.writestr(path, content)
     return buf.getvalue()
@@ -172,6 +178,32 @@ class TestCreate:
     async def test_oversize_rejected(self, service):
         with pytest.raises(SkillFileTooLargeError):
             await service.create_from_upload(TENANT, USER, "big.md", b"x" * (MAX_BUNDLE_SIZE + 1))
+
+    async def test_well_compressing_bundle_over_upload_limit_when_unpacked_accepted(self, service):
+        """Regression: an archive under the upload limit whose contents expand past it.
+
+        A pptx/font/image bundle compresses well — the .zip stays at a few MB while the
+        extracted files exceed 10MB. That used to be rejected as "file exceeds 10MB",
+        which reads as a bug on a 7MB file. Only the unpacked limit may reject it now.
+        """
+        asset = b"x" * (MAX_BUNDLE_SIZE + 1)  # deflates to a few KB
+        data = _zip_bytes(
+            {"demo-skill/SKILL.md": _md_bytes(), "demo-skill/assets/template.bin": asset},
+            compression=zipfile.ZIP_DEFLATED,
+        )
+        assert len(data) < MAX_BUNDLE_SIZE
+        detail = await service.create_from_upload(TENANT, USER, "demo-skill.zip", data)
+        assert {f.path for f in detail.files} == {SKILL_MD, "assets/template.bin"}
+
+    async def test_unpacked_oversize_rejected(self, service):
+        asset = b"x" * (MAX_UNPACKED_SIZE + 1)
+        data = _zip_bytes(
+            {"demo-skill/SKILL.md": _md_bytes(), "demo-skill/assets/bomb.bin": asset},
+            compression=zipfile.ZIP_DEFLATED,
+        )
+        assert len(data) < MAX_BUNDLE_SIZE  # passes the upload gate, must trip the unpacked one
+        with pytest.raises(SkillBundleTooLargeError):
+            await service.create_from_upload(TENANT, USER, "demo-skill.zip", data)
 
     async def test_unsupported_extension_rejected(self, service):
         with pytest.raises(SkillValidationError, match="unsupported"):
@@ -263,3 +295,70 @@ class TestUpdateDelete:
         assert not service.store.exists(TENANT, "ji-du-cai-bao-fen-xi")
         with pytest.raises(SkillNotFoundError):
             await service.get_detail(TENANT, "ji-du-cai-bao-fen-xi")
+
+
+class TestImportNameNormalization:
+    """An illegal frontmatter name on the import paths is auto-normalized
+    (external skills commonly ship capitalized names), never silently rejected;
+    the form-create path stays strict — the user typed that ID explicitly."""
+
+    async def test_uppercase_name_normalized_on_upload(self, service):
+        md = b"---\nname: Presentations\ndescription: Create or edit PowerPoint decks.\n---\n\n# body\n"
+        detail = await service.create_from_upload(TENANT, USER, "presentations.md", md)
+        assert detail.name == "presentations"
+        assert detail.display_name == "Presentations"
+        assert detail.normalized_from == "Presentations"
+        # stored SKILL.md is rewritten so frontmatter name == bundle dir name
+        text = service.store.read_text(TENANT, "presentations")
+        assert "name: presentations" in text
+        assert "display-name: Presentations" in text
+
+    async def test_chinese_name_normalized_via_pinyin(self, service):
+        md = b"---\nname: \xe6\xbc\x94\xe7\xa4\xba\xe6\x96\x87\xe7\xa8\xbf\ndescription: demo\n---\n\nbody"
+        detail = await service.create_from_upload(TENANT, USER, "s.md", md)
+        assert detail.name == "yan-shi-wen-gao"
+        assert detail.display_name == "演示文稿"
+        assert detail.normalized_from == "演示文稿"
+
+    async def test_foreign_frontmatter_keys_survive_rewrite(self, service):
+        md = b"---\nname: My-Skill\ndescription: demo\nlicense: Apache-2.0\nallowed-tools: Bash, Read\n---\n\nbody"
+        await service.create_from_upload(TENANT, USER, "s.md", md)
+        text = service.store.read_text(TENANT, "my-skill")
+        assert "license: Apache-2.0" in text
+        assert "allowed-tools: Bash, Read" in text
+
+    async def test_existing_display_name_metadata_wins(self, service):
+        md = (
+            b"---\n"
+            b"name: Presentations\n"
+            b"description: demo\n"
+            b"metadata:\n"
+            b"  display-name: \xe6\xbc\x94\xe7\xa4\xba\xe6\x8a\x80\xe8\x83\xbd\n"
+            b"---\n\nbody"
+        )
+        detail = await service.create_from_upload(TENANT, USER, "s.md", md)
+        assert detail.display_name == "演示技能"
+        text = service.store.read_text(TENANT, "presentations")
+        assert "display-name: 演示技能" in text
+        assert "display-name: Presentations" not in text
+
+    async def test_legal_name_bundle_untouched(self, service):
+        raw = _md_bytes()
+        detail = await service.create_from_upload(TENANT, USER, "demo-skill.md", raw)
+        assert detail.normalized_from is None
+        assert service.store.read_text(TENANT, "demo-skill").encode() == raw
+
+    async def test_unsalvageable_name_still_rejected(self, service):
+        md = b"---\nname: '!!!'\ndescription: demo\n---\n\nbody"
+        with pytest.raises(SkillValidationError):
+            await service.create_from_upload(TENANT, USER, "s.md", md)
+
+    async def test_update_upload_accepts_normalizable_name(self, service):
+        await service.create_from_upload(
+            TENANT, USER, "presentations.md", b"---\nname: presentations\ndescription: demo\n---\n\nv1"
+        )
+        detail = await service.update_from_upload(
+            TENANT, "presentations", "p.md", b"---\nname: Presentations\ndescription: demo v2\n---\n\nv2"
+        )
+        assert detail.description == "demo v2"
+        assert detail.normalized_from == "Presentations"

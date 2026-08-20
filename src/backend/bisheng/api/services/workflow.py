@@ -760,6 +760,18 @@ class WorkFlowService(BaseService):
         return [one for one in data if permission_id in permission_map.get(str(one.get("id")), set())]
 
     @classmethod
+    async def aget_writeable_app_ids(cls, user: UserPayload, data: list[dict]) -> set[str] | None:
+        """Resolve editable apps without falling back to sync checks in async callers."""
+        if user.is_admin() and not cls._is_scoped_super_admin(user):
+            return None
+        permission_map = await ApplicationPermissionService.get_app_permission_map_async(
+            user,
+            data,
+            ["edit_app"],
+        )
+        return {app_id for app_id, permissions in permission_map.items() if "edit_app" in permissions}
+
+    @classmethod
     def run_once(cls, login_user: UserPayload, node_input: dict[str, any], node_data: dict[any, any], workflow_id: str):
         workflow_info = FlowDao.get_flow_by_id(workflow_id)
         if not workflow_info:
@@ -1012,7 +1024,8 @@ class WorkFlowService(BaseService):
         end_index = start_index + page_size
         data = data[start_index:end_index]
 
-        data = cls.add_extra_field(user, data)
+        writeable_ids = await cls.aget_writeable_app_ids(user, data)
+        data = cls.add_extra_field(user, data, writeable_ids=writeable_ids)
         data = await cls.aenrich_apps_can_share(user, data)
 
         return data, total

@@ -8,6 +8,7 @@ import bisheng.approval.domain.services.approval_center_service as approval_cent
 import bisheng.approval.domain.services.user_menu_access_service as user_menu_access_service_module
 import bisheng.user.domain.services.auth as auth_module
 from bisheng.common.errcode.approval import ApprovalMenuApplyDisabledError
+from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 
 
 def test_expand_menu_keys_with_dependencies_adds_parent_entries():
@@ -105,6 +106,11 @@ async def test_apply_menu_access_request_uses_gate_when_mode_enabled():
             return_value=[],
         ),
         patch(
+            "bisheng.approval.domain.services.approval_center_service.UserDepartmentDao.aget_user_primary_department",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
             "bisheng.approval.domain.services.approval_center_service.LoginUser.get_roles_web_menu",
             new_callable=AsyncMock,
             return_value=([2], ["apps"]),
@@ -117,7 +123,12 @@ async def test_apply_menu_access_request_uses_gate_when_mode_enabled():
         patch(
             "bisheng.approval.domain.services.approval_center_service.ApprovalGate.request_or_pass",
             new_callable=AsyncMock,
-            return_value=SimpleNamespace(model_dump=lambda: {"decision": "pending", "instance_id": 99}),
+            return_value=SimpleNamespace(
+                decision="pending",
+                instance_id=99,
+                task_ids=[],
+                model_dump=lambda: {"decision": "pending", "instance_id": 99},
+            ),
         ) as mock_request,
     ):
         result = await ApprovalCenterService.apply_menu_access_request(
@@ -212,6 +223,11 @@ async def test_revoke_menu_grant_uses_instance_payload_menu_key():
             "bisheng.approval.domain.services.approval_center_service.ApprovalCenterService._write_audit_log",
             new_callable=AsyncMock,
         ) as mock_audit_log,
+        patch(
+            "bisheng.approval.domain.services.approval_center_service.UserDao.aget_user",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         result = await ApprovalCenterService.revoke_menu_grant(
             instance_id=22,
@@ -254,7 +270,11 @@ async def test_get_roles_web_menu_includes_personal_menu_grants():
             return_value=["workstation", "home"],
         ) as mock_personal_menu,
     ):
-        role, web_menu = await LoginUser.get_roles_web_menu(user, is_department_admin=False)
+        tenant_token = set_current_tenant_id(3)
+        try:
+            role, web_menu = await LoginUser.get_roles_web_menu(user, is_department_admin=False)
+        finally:
+            current_tenant_id.reset(tenant_token)
 
     assert role == [2]
     assert set(web_menu) == {"apps", "workstation", "home"}

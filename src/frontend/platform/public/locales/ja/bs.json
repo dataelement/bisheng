@@ -286,7 +286,6 @@
       "sectionKnowledgeSpace": "ナレッジスペース",
       "sectionTool": "ツール",
       "share_app": "アプリを共有",
-      "share_file": "ファイルを共有",
       "share_space": "スペースを共有",
       "unpublish_app": "アプリを非公開",
       "upload_file": "ファイルをアップロード",
@@ -2014,13 +2013,14 @@
       "requirementsTitle": "ファイル要件",
       "reqMd": ".md ファイルは YAML frontmatter（name と description 必須）を含むこと",
       "reqZip": ".zip / .skill はルートに SKILL.md を含むこと。付属ファイル可",
-      "reqSize": "全体サイズ ≤ 10MB",
+      "reqSize": "アップロードファイル ≤ 10MB、解凍後の内容 ≤ 100MB",
       "githubUrlPlaceholder": "https://github.com/owner/repo/tree/main/path/to/skill",
       "githubHint": "スキルディレクトリを指す GitHub URL を貼り付け（SKILL.md を含むこと）",
       "githubReqHost": "公開 github.com リポジトリのみ対応",
       "githubReqDir": "URL は SKILL.md を含むディレクトリを指すこと。スラッシュを含むブランチ名は非対応",
       "unsupported": "未対応のファイル形式です（.md / .zip / .skill）",
-      "confirm": "インポート"
+      "confirm": "インポート",
+      "normalized": "インポートしました。スキル ID を {{to}} に正規化しました（元の名前: {{from}}）"
     },
     "detailSheet": {
       "files": "ファイル",
@@ -2029,8 +2029,10 @@
       "readonlyAsset": "付属ファイルは読み取り専用。更新はバンドル再アップロードで"
     },
     "errors": {
-      "validation": "検証に失敗：frontmatter またはスキル ID が不正（アーカイブに SKILL.md が必要）",
-      "tooLarge": "ファイルが 10MB の上限を超えています",
+      "validation": "検証に失敗：frontmatter またはスキル ID が不正",
+      "validationDetail": "検証に失敗：{{detail}}",
+      "tooLarge": "アップロードファイルが 10MB の上限を超えています。整理して再アップロードしてください",
+      "bundleTooLarge": "解凍後の内容が 100MB の上限を超えています。付属ファイルを整理して再アップロードしてください",
       "notFound": "スキルが見つかりません",
       "noPermission": "この操作の権限がありません",
       "duplicate": "同じ表示名またはスキル ID が既に存在します",

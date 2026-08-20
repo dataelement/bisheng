@@ -208,7 +208,11 @@ class FGAClient:
         return body if body else None
 
     async def read_tuples(
-        self, user: str | None = None, relation: str | None = None, object: str | None = None
+        self,
+        user: str | None = None,
+        relation: str | None = None,
+        object: str | None = None,
+        consistency: str | None = None,
     ) -> list[dict]:
         """Read tuples matching the given filter.
 
@@ -225,6 +229,8 @@ class FGAClient:
         continuation_token: str | None = None
         while True:
             body: dict[str, Any] = {"tuple_key": tuple_key, "page_size": 100}
+            if consistency:
+                body["consistency"] = consistency
             if continuation_token:
                 body["continuation_token"] = continuation_token
             data = await self._post(f"/stores/{self._store_id}/read", body)

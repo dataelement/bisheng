@@ -70,6 +70,38 @@ class FakeApprovalRepo:
         self.action_logs.append(row)
         return row
 
+    async def withdraw_pending_instance(
+        self,
+        *,
+        instance_id: int,
+        applicant_user_id: int,
+        operator_user_name: str | None,
+        reason: str | None,
+    ) -> ApprovalInstance | None:
+        instance = self.instances.get(instance_id)
+        if (
+            instance is None
+            or instance.status != ApprovalInstanceStatus.PENDING
+            or instance.applicant_user_id != applicant_user_id
+        ):
+            return None
+        for task in self.tasks.values():
+            if task.instance_id == instance_id and task.status == ApprovalTaskStatus.PENDING:
+                task.status = ApprovalTaskStatus.CANCELLED
+                task.comment = reason
+        instance.status = ApprovalInstanceStatus.WITHDRAWN
+        await self.create_action_log(
+            ApprovalActionLog(
+                tenant_id=instance.tenant_id,
+                instance_id=instance.id,
+                action="withdrawn",
+                operator_user_id=applicant_user_id,
+                operator_user_name=operator_user_name,
+                detail={"reason": reason},
+            )
+        )
+        return instance
+
 
 def _build_instance(status: str = ApprovalInstanceStatus.PENDING) -> ApprovalInstance:
     return ApprovalInstance(
@@ -173,10 +205,15 @@ async def test_withdraw_instance_cancels_pending_tasks_and_records_log(monkeypat
     monkeypatch.setattr(ApprovalInstanceRepository, 'get_instance', repo.get_instance)
     monkeypatch.setattr(ApprovalInstanceRepository, 'update_instance', repo.update_instance)
     monkeypatch.setattr(ApprovalInstanceRepository, 'list_tasks', repo.list_tasks)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'update_task', repo.update_task)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'create_action_log', repo.create_action_log)
-    monkeypatch.setattr(ApprovalInstanceRepository, 'list_action_logs', AsyncMock(return_value=[]))
+    monkeypatch.setattr(ApprovalInstanceRepository, 'withdraw_pending_instance', repo.withdraw_pending_instance)
     monkeypatch.setattr(ApprovalCenterService, '_write_audit_log', audit_log)
+    monkeypatch.setattr(ApprovalCenterService, '_send_approval_notify', AsyncMock())
+    monkeypatch.setattr(ApprovalCenterService, '_run_terminal_hook_best_effort', AsyncMock())
+    monkeypatch.setattr(
+        ApprovalCenterService,
+        'get_instance_detail',
+        AsyncMock(return_value={'status': ApprovalInstanceStatus.WITHDRAWN}),
+    )
 
     result = await ApprovalCenterService.withdraw_instance(
         instance_id=1,

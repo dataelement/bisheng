@@ -142,16 +142,34 @@ class GrantSubjectQueryService:
         grants: Iterable,
         login_user: UserPayload,
     ) -> None:
+        items = list(grants or [])
+        if any(item.subject_type == "user" and int(item.subject_id) == int(login_user.user_id) for item in items):
+            raise PermissionDeniedError(msg="不能修改自己的权限")
+        tenant_id = await self.validate_creation_grant_request(
+            resource_type=resource_type,
+            grants=items,
+            login_user=login_user,
+        )
+        await self.validate_creation_grant_subjects(
+            resource_type=resource_type,
+            grants=items,
+            login_user=login_user,
+            tenant_id=tenant_id,
+        )
+
+    async def validate_creation_grant_request(
+        self,
+        *,
+        resource_type: str,
+        grants: Iterable,
+        login_user: UserPayload,
+    ) -> int:
+        """Validate request-level grant structure and inviter capability."""
         if resource_type not in _CREATION_RESOURCE_TYPES:
             raise PermissionInvalidResourceError()
         items = list(grants or [])
         if not items:
-            return
-        if any(
-            item.subject_type == "user" and int(item.subject_id) == int(login_user.user_id)
-            for item in items
-        ):
-            raise PermissionDeniedError(msg="不能修改自己的权限")
+            return await self.resolve_creation_tenant_id(login_user)
         if any(
             item.subject_type not in _VALID_SUBJECT_TYPES or (item.relation == "owner" and item.subject_type != "user")
             for item in items
@@ -173,7 +191,25 @@ class GrantSubjectQueryService:
             relation_models=relation_models,
         )
 
-        tenant_id = await self.resolve_creation_tenant_id(login_user)
+        return await self.resolve_creation_tenant_id(login_user)
+
+    async def validate_creation_grant_subjects(
+        self,
+        *,
+        resource_type: str,
+        grants: Iterable,
+        login_user: UserPayload,
+        tenant_id: int,
+    ) -> None:
+        """Validate only subjects that must fail the whole creation request."""
+        if resource_type not in _CREATION_RESOURCE_TYPES:
+            raise PermissionInvalidResourceError()
+        items = list(grants or [])
+        if not items:
+            return
+        if any(item.subject_type == "user" and int(item.subject_id) == int(login_user.user_id) for item in items):
+            raise PermissionDeniedError(msg="不能修改自己的权限")
+
         user_ids = {int(item.subject_id) for item in items if item.subject_type == "user"}
         department_ids = {int(item.subject_id) for item in items if item.subject_type == "department"}
         user_group_ids = {int(item.subject_id) for item in items if item.subject_type == "user_group"}

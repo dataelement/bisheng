@@ -13,6 +13,8 @@ import {
 } from "~/api/channels";
 import {
   getCreationGrantableRelationModels,
+  getFailedAuthorizationGrants,
+  type AuthorizationResult,
   type GrantItem,
   type PermissionEntry,
   type RelationModel,
@@ -57,6 +59,8 @@ function toPermissionDraftRows(entries: PermissionEntry[]): PermissionDraftRow[]
     modelId: entry.model_id,
     includeChildren: entry.include_children,
     immutableCreator: entry.is_creator === true,
+    authorizationStatus: entry.authorizationStatus ?? "active",
+    approvalInstanceId: entry.approvalInstanceId ?? null,
   }));
 }
 
@@ -204,15 +208,26 @@ export function useChannelSettingsForm(channelId?: string) {
           ...(grants.length > 0 ? { initialPermissions: { grants } } : {}),
         });
         if (result.initialPermissionResult?.status === "failed") {
+          const failedGrants = getFailedAuthorizationGrants(
+            grants,
+            result.initialPermissionResult.results,
+          );
           setAuthorizationRecovery({
             channelId: result.id,
-            grants,
+            grants: failedGrants,
             errorCode: result.initialPermissionResult.errorCode,
           });
-          return { status: "permission_failed" as const, channelId: result.id };
+          return {
+            status: "permission_failed" as const,
+            channelId: result.id,
+            authorizationResult: result.initialPermissionResult,
+          };
         }
-        await finish(result.id);
-        return { status: "success" as const, channelId: result.id };
+        return {
+          status: "success" as const,
+          channelId: result.id,
+          authorizationResult: result.initialPermissionResult ?? null,
+        };
       }
 
       if (canEditBusiness) {
@@ -225,22 +240,28 @@ export function useChannelSettingsForm(channelId?: string) {
           throw createApiStatusError(updateResult);
         }
       }
+      let authorizationResult: AuthorizationResult | null = null;
       if (
         showPermissionSection
         && formData.visibility !== "private"
         && permissionDraft.hasChanges
       ) {
-        await authorizeChannelApi(channelId, permissionDraft.diff);
+        authorizationResult = await authorizeChannelApi(channelId, permissionDraft.diff);
       }
-      await finish(channelId);
-      return { status: "success" as const, channelId };
+      if (authorizationResult?.failedCount) {
+        return {
+          status: "permission_failed" as const,
+          channelId,
+          authorizationResult,
+        };
+      }
+      return { status: "success" as const, channelId, authorizationResult };
     } finally {
       setSubmitting(false);
     }
   }, [
     canEditBusiness,
     channelId,
-    finish,
     formData,
     isChannelCreator,
     permissionDraft.diff,
@@ -252,10 +273,22 @@ export function useChannelSettingsForm(channelId?: string) {
     if (!authorizationRecovery) return;
     setSubmitting(true);
     try {
-      await authorizeChannelApi(authorizationRecovery.channelId, {
+      const result = await authorizeChannelApi(authorizationRecovery.channelId, {
         grants: authorizationRecovery.grants,
         revokes: [],
       });
+      const failedGrants = getFailedAuthorizationGrants(
+        authorizationRecovery.grants,
+        result.results,
+      );
+      if (failedGrants.length > 0) {
+        setAuthorizationRecovery((current) => current
+          ? { ...current, grants: failedGrants, errorCode: result.results.find(
+            (item) => item.outcome === "failed",
+          )?.errorCode ?? current.errorCode }
+          : current);
+        return;
+      }
       await finish(authorizationRecovery.channelId);
     } finally {
       setSubmitting(false);
@@ -287,6 +320,7 @@ export function useChannelSettingsForm(channelId?: string) {
     authorizationRecovery,
     submit,
     retryAuthorization,
+    completeSubmission: finish,
     enterCreatedChannel: authorizationRecovery
       ? () => finish(authorizationRecovery.channelId)
       : undefined,

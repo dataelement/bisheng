@@ -228,6 +228,15 @@ class UploadFileResponse(BaseModel):
     repeat: bool = False  # Duplicate in Knowledge Base
     repeat_file_name: str | None = None  # Returns the file name of a duplicate file if it is a duplicate
     repeat_update_time: datetime | None = None  # Returns the update time of a duplicate file if it is a duplicate
+    # Knowledge-space uploads keep the legacy file_path contract and also
+    # expose an opaque stage id used by the F046 mutation registration API.
+    upload_id: str | None = None
+    space_id: int | None = None
+    file_size: int | None = None
+    content_hash: str | None = None
+    state: str | None = None
+    expire_at: datetime | None = None
+    create_time: datetime | None = None
 
 
 class StreamData(BaseModel):

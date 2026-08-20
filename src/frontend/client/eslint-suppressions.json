@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 19
+      "count": 16
     }
   },
   "src/api/index.ts": {
@@ -75,7 +75,7 @@
   },
   "src/api/knowledge.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 66
+      "count": 62
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -804,7 +804,7 @@
   },
   "src/components/Chat/Messages/ThinkingContent.tsx": {
     "no-restricted-syntax": {
-      "count": 1
+      "count": 2
     }
   },
   "src/components/Chat/Messages/ToolCallDisplay.tsx": {
@@ -872,11 +872,6 @@
   "src/components/Endpoints/Settings/Plugins.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/FileListRow.tsx": {
-    "no-restricted-syntax": {
-      "count": 11
     }
   },
   "src/components/Files/ActionButton.tsx": {
@@ -977,11 +972,6 @@
       "count": 4
     }
   },
-  "src/components/Linsight/Artifacts/ResultSection.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    }
-  },
   "src/components/Linsight/Artifacts/WorkspacePanel.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -992,12 +982,22 @@
       "count": 10
     },
     "no-restricted-syntax": {
-      "count": 19
+      "count": 35
     }
   },
   "src/components/Linsight/Artifacts/artifactUtils.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
+    }
+  },
+  "src/components/Linsight/Artifacts/markdownOutlineUtils.test.ts": {
+    "no-restricted-syntax": {
+      "count": 4
+    }
+  },
+  "src/components/Linsight/Artifacts/resolveArtifactUrl.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 9
     }
   },
   "src/components/Linsight/Execution/ConversationRound.tsx": {
@@ -1046,19 +1046,44 @@
       "count": 7
     }
   },
-  "src/components/Linsight/Execution/stepUtils.test.ts": {
+  "src/components/Linsight/Execution/clarify.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
     "no-restricted-syntax": {
-      "count": 133
+      "count": 1
     }
   },
-  "src/components/Linsight/Execution/stepUtils.ts": {
+  "src/components/Linsight/Execution/execTypes.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
-    },
+      "count": 5
+    }
+  },
+  "src/components/Linsight/Execution/narration.realSession.test.ts": {
+    "no-restricted-syntax": {
+      "count": 5
+    }
+  },
+  "src/components/Linsight/Execution/narration.ts": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    },
+    }
+  },
+  "src/components/Linsight/Execution/stepTree.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/components/Linsight/Execution/stepUtils.test.ts": {
     "no-restricted-syntax": {
+      "count": 141
+    }
+  },
+  "src/components/Linsight/Execution/taskStatus.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -1399,7 +1424,7 @@
   },
   "src/components/NotificationsDialog.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 23
+      "count": 20
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 4
@@ -1408,7 +1433,7 @@
       "count": 8
     },
     "react-hooks/exhaustive-deps": {
-      "count": 3
+      "count": 2
     }
   },
   "src/components/PreviewFile/DocxFileViewer.tsx": {
@@ -2243,9 +2268,6 @@
     "no-restricted-imports": {
       "count": 1
     },
-    "no-restricted-syntax": {
-      "count": 2
-    },
     "react-hooks/exhaustive-deps": {
       "count": 2
     }
@@ -2259,6 +2281,9 @@
     },
     "no-restricted-syntax": {
       "count": 3
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
     }
   },
   "src/hooks/useAutoScroll.ts": {
@@ -2401,6 +2426,9 @@
     },
     "no-restricted-syntax": {
       "count": 4
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
     }
   },
   "src/locales/i18n.ts": {
@@ -2425,7 +2453,7 @@
   },
   "src/pages/ChannelSquare.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -2439,7 +2467,7 @@
   },
   "src/pages/ChannelSquareCard.tsx": {
     "no-restricted-syntax": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/DevLogin/index.tsx": {
@@ -2564,9 +2592,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -3051,7 +3076,7 @@
   },
   "src/pages/appChat/useChatHelpers.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 11
+      "count": 12
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -3093,9 +3118,6 @@
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
     },
-    "no-case-declarations": {
-      "count": 8
-    },
     "no-console": {
       "count": 4
     },
@@ -3132,11 +3154,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 3
-    }
-  },
-  "src/pages/apps/components/AgentNavigation.tsx": {
-    "no-restricted-syntax": {
-      "count": 2
     }
   },
   "src/pages/apps/components/MarkLabel.tsx": {
@@ -3198,9 +3215,6 @@
     }
   },
   "src/pages/knowledge/FilePreview/index.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }
@@ -3300,16 +3314,6 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/SpaceDetail/FileTable.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
-  "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceShareDialog.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -3357,6 +3361,11 @@
       "count": 1
     }
   },
+  "src/pages/knowledge/hooks/useFileChangeApproval.ts": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
   "src/pages/knowledge/hooks/useFileDragDrop.ts": {
     "no-restricted-syntax": {
       "count": 1
@@ -3374,13 +3383,13 @@
   },
   "src/pages/knowledge/hooks/useFileUpload.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 3
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 5
+      "count": 2
     }
   },
   "src/pages/knowledge/hooks/useInlineRename.ts": {
@@ -3704,6 +3713,11 @@
   "src/utils/resetConvo.ts": {
     "no-console": {
       "count": 1
+    }
+  },
+  "src/utils/shareToken.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
     }
   },
   "src/vite-env.d.ts": {

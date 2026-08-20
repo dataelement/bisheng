@@ -100,61 +100,92 @@ class WorkStationService(BaseService):
             config.models = models
         return config
 
+    # Builtin tools pre-selected (and pre-checked) on a fresh install: the two the
+    # daily chat + linsight task mode are expected to work with out of the box.
+    # (tool_key, display-name fallback, description fallback) — the fallbacks are
+    # only used when the parent tool type row cannot be read.
+    _DEFAULT_DAILY_TOOL_KEYS: tuple[tuple[str, str, str], ...] = (
+        ("web_search", "联网搜索", "Search the internet for real-time information"),
+        ("bisheng_code_interpreter", "代码执行器", "通过执行代码完成图表绘制、文件处理等编程类操作"),
+    )
+
+    @classmethod
+    def _lookup_builtin_tool(cls, tool_key: str) -> GptsTools | None:
+        """Read one builtin tool row within the current tenant, or None."""
+        try:
+            with strict_tenant_filter():
+                return GptsToolsDao.get_tool_by_tool_key(tool_key)
+        except Exception:
+            # Best-effort: a missing/unreadable builtin row only means this tool is
+            # absent from the default config; the config itself must still build.
+            logger.warning("default daily config: builtin tool lookup failed for tool_key={}", tool_key)
+            return None
+
     @classmethod
     async def _abuild_default_daily_config(cls) -> WorkstationConfig:
         """Return the historical daily-chat defaults when no workstation config exists."""
         current_tenant_id = cls._current_tenant_id()
-        web_search_db = None
-        parent = None
 
-        try:
-            with strict_tenant_filter():
-                web_search_db = GptsToolsDao.get_tool_by_tool_key("web_search")
-        except Exception:
-            web_search_db = None
+        tool_rows = {tool_key: cls._lookup_builtin_tool(tool_key) for tool_key, _, _ in cls._DEFAULT_DAILY_TOOL_KEYS}
 
-        if web_search_db is None and cls._multi_tenant_enabled() and current_tenant_id != DEFAULT_TENANT_ID:
+        # A child tenant may not have had the root builtin tools copied over yet.
+        # Copy once (idempotent) and re-read only the misses.
+        if (
+            any(row is None for row in tool_rows.values())
+            and cls._multi_tenant_enabled()
+            and current_tenant_id != DEFAULT_TENANT_ID
+        ):
             try:
                 await cls.acopy_root_builtin_tools_to_tenant(current_tenant_id)
-                with strict_tenant_filter():
-                    web_search_db = GptsToolsDao.get_tool_by_tool_key("web_search")
             except Exception:
-                web_search_db = None
+                # Best-effort: without the copy the affected tools simply stay out
+                # of the default config (same degradation as a lookup miss).
+                logger.warning(
+                    "default daily config: copying root builtin tools to tenant={} failed", current_tenant_id
+                )
+            else:
+                for tool_key in [key for key, row in tool_rows.items() if row is None]:
+                    tool_rows[tool_key] = cls._lookup_builtin_tool(tool_key)
 
-        if web_search_db is not None:
+        tools = []
+        for tool_key, fallback_name, fallback_desc in cls._DEFAULT_DAILY_TOOL_KEYS:
+            tool_db = tool_rows.get(tool_key)
+            if tool_db is None:
+                continue
+            parent = None
             try:
-                parent_types = GptsToolsDao.get_all_tool_type([web_search_db.type])
+                parent_types = GptsToolsDao.get_all_tool_type([tool_db.type])
                 parent = parent_types[0] if parent_types else None
             except Exception:
-                parent = None
-
-        tools = None
-        if web_search_db is not None:
-            tools = [
+                # Best-effort: fall back to the hardcoded display name/description.
+                logger.warning("default daily config: tool type lookup failed for tool_key={}", tool_key)
+            tools.append(
                 ToolConfig(
-                    id=web_search_db.type,
-                    name=parent.name if parent else "联网搜索",
+                    id=tool_db.type,
+                    name=parent.name if parent else fallback_name,
                     is_preset=parent.is_preset if parent else 1,
-                    description=parent.description if parent else "Search the internet for real-time information",
+                    description=parent.description if parent else fallback_desc,
                     default_checked=True,
                     children=[
                         {
-                            "id": web_search_db.id,
-                            "name": web_search_db.name,
-                            "tool_key": web_search_db.tool_key,
-                            "desc": web_search_db.desc,
+                            "id": tool_db.id,
+                            "name": tool_db.name,
+                            "tool_key": tool_db.tool_key,
+                            "desc": tool_db.desc,
                         }
                     ],
                 )
-            ]
+            )
 
         return WorkstationConfig(
             knowledgeBase=WSPrompt(enabled=True, prompt=""),
             fileUpload=WSPrompt(enabled=True, prompt=""),
             webSearch=WSPrompt(enabled=True, prompt=""),
-            # F035 (v2.6): the client Add-Skill entry stays hidden until admin opts in.
-            skillEntry=WSPrompt(enabled=False, prompt=""),
-            tools=tools,
+            # F035 (v2.6): the client Add-Skill entry ships on for a fresh install
+            # (admins can still turn it off); legacy configs without the field keep
+            # their historical default-off state, see the frontend merge.
+            skillEntry=WSPrompt(enabled=True, prompt=""),
+            tools=tools or None,
             orgKbs=[],
         )
 
@@ -1099,8 +1130,7 @@ class WorkStationService(BaseService):
                 org_kb_ids = permitted_org_ids
 
             vectorstore_targets = [(kb_id, False) for kb_id in org_kb_ids] + [
-                (int(kb_id), True)
-                for kb_id in visibility_filter["space_kb_ids"]
+                (int(kb_id), True) for kb_id in visibility_filter["space_kb_ids"]
             ]
 
             knowledge_vector_list = {}

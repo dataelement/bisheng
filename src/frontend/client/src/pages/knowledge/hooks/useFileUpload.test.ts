@@ -2,7 +2,12 @@ import { extractKnowledgeFileError, FileStatus, FileType, type KnowledgeFile } f
 import {
   extractDuplicateFileEntries,
   mergeVisibleRegisteredFiles,
-} from "./useFileUpload";
+  partitionUploadMutationResults,
+  registerFolderStagesWithRetry,
+  registerUploadedStagesWithRetry,
+  retryApprovedUploadIngest,
+} from "./fileUploadUtils";
+import type { FileMutationItemResult } from "~/api/knowledge";
 
 function makeKnowledgeFile(overrides: Partial<KnowledgeFile>): KnowledgeFile {
   return {
@@ -19,29 +24,139 @@ function makeKnowledgeFile(overrides: Partial<KnowledgeFile>): KnowledgeFile {
 }
 
 describe("useFileUpload helpers", () => {
+  test("mixed upload registration only exposes direct files to the formal list", () => {
+    const directFile = makeKnowledgeFile({ id: "31", name: "direct.docx" });
+    const results: FileMutationItemResult[] = [
+      {
+        inputId: "upload-direct",
+        resourceType: "file",
+        decision: "direct",
+        resource: directFile,
+      },
+      {
+        inputId: "upload-pending",
+        resourceType: "file",
+        decision: "pending",
+        approvalInstanceId: 41,
+        changeRequestId: 51,
+      },
+      {
+        inputId: "upload-invalid",
+        resourceType: "file",
+        decision: "invalid",
+        errorCode: 18072,
+        errorMessage: "conflict",
+      },
+    ];
+
+    expect(partitionUploadMutationResults(results)).toEqual({
+      directFiles: [directFile],
+      pending: [results[1]],
+      invalid: [results[2]],
+    });
+  });
+
+  test("registration timeout retries once with the same opaque upload ids", async () => {
+    const response: FileMutationItemResult[] = [
+      {
+        inputId: "upload-stable",
+        resourceType: "file",
+        decision: "pending",
+        approvalInstanceId: 61,
+        changeRequestId: 71,
+      },
+    ];
+    const register = jest
+      .fn<Promise<FileMutationItemResult[]>, [string, { upload_ids: string[]; parent_id?: number | null }]>()
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValueOnce(response);
+
+    await expect(
+      registerUploadedStagesWithRetry({
+        spaceId: "9",
+        uploadIds: ["upload-stable"],
+        parentId: 3,
+        register,
+      }),
+    ).resolves.toEqual(response);
+
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(register.mock.calls[0]).toEqual([
+      "9",
+      { upload_ids: ["upload-stable"], parent_id: 3 },
+    ]);
+    expect(register.mock.calls[1]).toEqual(register.mock.calls[0]);
+  });
+
+  test("a new multipart upload registers its newly issued upload id", async () => {
+    const register = jest
+      .fn<Promise<FileMutationItemResult[]>, [string, { upload_ids: string[]; parent_id?: number | null }]>()
+      .mockResolvedValue([]);
+
+    await registerUploadedStagesWithRetry({
+      spaceId: "9",
+      uploadIds: ["upload-new-content"],
+      parentId: null,
+      register,
+    });
+
+    expect(register).toHaveBeenCalledWith("9", {
+      upload_ids: ["upload-new-content"],
+      parent_id: null,
+    });
+  });
+
+  test("folder registration retry preserves upload ids and relative paths", async () => {
+    const items = [{ upload_id: "folder-stage", relative_path: "Docs/a.pdf" }];
+    const register = jest
+      .fn<Promise<FileMutationItemResult[]>, [string, { parent_id?: number | null; items: typeof items }]>()
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValueOnce([]);
+
+    await registerFolderStagesWithRetry({
+      spaceId: "9",
+      items,
+      parentId: null,
+      register,
+    });
+
+    expect(register).toHaveBeenCalledTimes(2);
+    expect(register.mock.calls[0]).toEqual(["9", { parent_id: null, items }]);
+    expect(register.mock.calls[1]).toEqual(register.mock.calls[0]);
+  });
+
+  test("parse retry reuses the approved request instead of registering an upload", async () => {
+    const retry = jest.fn().mockResolvedValue({ requestId: 71, status: "parsing" });
+
+    await retryApprovedUploadIngest("9", 71, retry);
+
+    expect(retry).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledWith("9", 71);
+  });
+
   test("extractDuplicateFileEntries only returns real duplicate conflicts", () => {
     const duplicateFile = makeKnowledgeFile({
       id: "11",
       name: "duplicate.docx",
       status: FileStatus.FAILED,
       oldFileLevelPath: "/root/folder",
-    }) as KnowledgeFile & { _raw: Record<string, unknown> };
-    duplicateFile._raw = { id: 11 };
+    });
+    duplicateFile._raw = { id: 11, name: "duplicate.docx", type: "file" };
 
     const parseFailedFile = makeKnowledgeFile({
       id: "12",
       name: "parse-failed.docx",
       status: FileStatus.FAILED,
       errorMessage: "parse failed",
-    }) as KnowledgeFile & { _raw: Record<string, unknown> };
-    parseFailedFile._raw = { id: 12 };
+    });
+    parseFailedFile._raw = { id: 12, name: "parse-failed.docx", type: "file" };
 
     expect(extractDuplicateFileEntries([duplicateFile, parseFailedFile])).toEqual([
       {
         fileId: "11",
         fileName: "duplicate.docx",
         oldFileLevelPath: "/root/folder",
-        rawObj: { id: 11 },
+        rawObj: { id: 11, name: "duplicate.docx", type: "file" },
       },
     ]);
   });

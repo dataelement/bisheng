@@ -6,6 +6,7 @@ from celery.signals import celeryd_after_setup, worker_shutting_down
 from loguru import logger
 
 import bisheng.worker.tenant_context  # noqa: F401 — register tenant signals
+from bisheng.bootstrap.approval_scenarios import bootstrap_approval_scenarios
 from bisheng.common.services.config_service import settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.logger import set_logger_config
@@ -16,6 +17,7 @@ def create_celery_app():
     Celery Asynchronous Tasks
     :return:
     """
+    bootstrap_approval_scenarios()
     set_logger_config(settings.logger_conf)
     # loop = app_ctx.get_event_loop()
     bisheng_celery = Celery("bisheng", include=["bisheng.worker"])

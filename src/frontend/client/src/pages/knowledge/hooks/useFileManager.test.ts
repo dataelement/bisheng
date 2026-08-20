@@ -17,11 +17,127 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 
+import { FileType, type KnowledgeFile } from "~/api/knowledge";
+
+import {
+  applyBatchDeleteDecision,
+  applyBatchRenameDecision,
+  applyDeleteDecision,
+  applyRenameDecision,
+  buildDirectMoveUndoEntries,
+  isFileChangeMutationLocked,
+  shouldRetryLegacyPartialMove,
+} from "./fileMutationUtils";
+
 const repoRoot = join(__dirname, "..", "..", "..", "..");
 
 function read(rel: string): string {
   return readFileSync(join(repoRoot, rel), "utf8");
 }
+
+function file(id: string, name: string, type = FileType.PDF): KnowledgeFile {
+  return {
+    id,
+    name,
+    type,
+    tags: [],
+    path: name,
+    spaceId: "101",
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+describe("knowledge file mutation decisions", () => {
+  const original = [file("1", "old.pdf"), file("2", "folder", FileType.FOLDER), file("3", "keep.pdf")];
+
+  it("renames only a direct item and keeps the old name while approval is pending", () => {
+    expect(applyRenameDecision(original, "1", "new.pdf", { decision: "direct" })[0].name).toBe("new.pdf");
+    expect(applyRenameDecision(original, "1", "new.pdf", { decision: "pending" })).toEqual(original);
+  });
+
+  it("removes only a direct delete and never optimistically removes a pending delete", () => {
+    expect(applyDeleteDecision(original, "1", { decision: "direct" }).map((item) => item.id)).toEqual(["2", "3"]);
+    expect(applyDeleteDecision(original, "1", { decision: "pending" })).toEqual(original);
+  });
+
+  it("keeps files and names unchanged for single-item invalid rename/delete decisions", () => {
+    expect(applyRenameDecision(original, "1", "new.pdf", {
+      decision: "invalid",
+      errorMessage: "locked",
+    })).toEqual(original);
+    expect(applyDeleteDecision(original, "1", {
+      decision: "invalid",
+      errorMessage: "locked",
+    })).toEqual(original);
+  });
+
+  it("keeps successful batch deletes when siblings are pending or invalid", () => {
+    const next = applyBatchDeleteDecision(original, {
+      completed: [{ id: 1, type: "file" }],
+      pending: [{ id: 2, type: "folder" }],
+      invalid: [{ id: 3, type: "file", errorMessage: "locked" }],
+    });
+    expect(next.map((item) => item.id)).toEqual(["2", "3"]);
+  });
+
+  it("updates only successful batch renames and preserves pending/invalid names", () => {
+    const next = applyBatchRenameDecision(
+      original,
+      new Map([["1", "renamed.pdf"], ["2", "renamed-folder"], ["3", "invalid.pdf"]]),
+      {
+        completed: [{ id: 1, type: "file" }],
+        pending: [{ id: 2, type: "folder" }],
+        invalid: [{ id: 3, type: "file", errorMessage: "locked" }],
+      },
+    );
+    expect(next.map((item) => item.name)).toEqual(["renamed.pdf", "folder", "keep.pdf"]);
+  });
+
+  it("blocks repeat mutations for both root and inherited approval locks", () => {
+    const approval = {
+      status: "pending" as const,
+      action: "move" as const,
+      instanceId: 8,
+      requestId: 9,
+      canApprove: false,
+      inherited: false,
+      rootResourceId: 1,
+    };
+    expect(isFileChangeMutationLocked({ ...original[0], fileChangeApproval: approval })).toBe(true);
+    expect(isFileChangeMutationLocked({
+      ...original[1],
+      fileChangeApproval: { ...approval, inherited: true, rootResourceId: 2 },
+    })).toBe(true);
+    expect(isFileChangeMutationLocked(original[2])).toBe(false);
+  });
+
+  it("builds undo only for directly moved entries and derives old parents for the new response", () => {
+    const moved = buildDirectMoveUndoEntries(
+      [{ id: 1, type: "file" }],
+      [{ ...original[0], parentId: "7" }, { ...original[1], parentId: "8" }],
+      false,
+    );
+    expect(moved).toEqual([{ id: 1, type: "file", old_parent_id: 7, cross_space: false }]);
+  });
+
+  it("never offers undo for direct cross-space file and folder moves", () => {
+    expect(buildDirectMoveUndoEntries(
+      [{ id: 1, type: "file" }, { id: 2, type: "folder" }],
+      original.slice(0, 2),
+      true,
+    )).toEqual([]);
+  });
+
+  it("only retries the legacy reject-all move shape, never a new partial-success response", () => {
+    expect(shouldRetryLegacyPartialMove({
+      moved: [], pending: [], invalid: [{ id: 3, type: "file", name: "x", reason: "name_conflict" }],
+    })).toBe(true);
+    expect(shouldRetryLegacyPartialMove({
+      moved: [{ id: 1, type: "file" }], pending: [], invalid: [{ id: 3, type: "file", errorMessage: "locked" }],
+    })).toBe(false);
+  });
+});
 
 describe("useFileManager — F027 infinite-scroll guards", () => {
   const src = read("src/pages/knowledge/hooks/useFileManager.ts");

@@ -16,6 +16,7 @@ from bisheng.common.errcode.http_error import NotFoundError, ServerError
 from bisheng.common.errcode.knowledge import KnowledgeTypeNotSupportedError
 from bisheng.common.services import telemetry_service
 from bisheng.core.cache.utils import async_file_download, save_download_file
+from bisheng.core.context.tenant import get_current_tenant_id
 from bisheng.core.logger import trace_id_var
 from bisheng.knowledge.api.dependencies import (
     get_knowledge_document_repository,
@@ -54,6 +55,28 @@ router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
 
 
 _KB_TYPES = (KnowledgeTypeEnum.NORMAL.value, KnowledgeTypeEnum.QA.value)
+
+
+def _require_resolved_tenant(login_user, resource=None) -> int:
+    tenant_id = getattr(login_user, "tenant_id", None)
+    try:
+        normalized_tenant_id = int(tenant_id)
+    except (TypeError, ValueError):
+        raise NotFoundError.http_exception()
+    if isinstance(tenant_id, bool) or normalized_tenant_id <= 0:
+        raise NotFoundError.http_exception()
+    current_tenant_id = get_current_tenant_id()
+    if current_tenant_id is None or int(current_tenant_id) != normalized_tenant_id:
+        raise NotFoundError.http_exception()
+    if resource is not None:
+        resource_tenant_id = getattr(resource, "tenant_id", None)
+        try:
+            normalized_resource_tenant_id = int(resource_tenant_id)
+        except (TypeError, ValueError):
+            raise NotFoundError.http_exception()
+        if normalized_resource_tenant_id != normalized_tenant_id:
+            raise NotFoundError.http_exception()
+    return normalized_tenant_id
 
 
 def _build_space_service(
@@ -376,9 +399,11 @@ async def get_filelist(request: Request,
     scopes visibility to that user (AD-02). Returns ``PageInfiniteCursorData`` + ``writeable``.
     """
     login_user = await resolve_operator(user_id)
+    _require_resolved_tenant(login_user)
     db_knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
     if not db_knowledge:
         raise NotFoundError.http_exception()
+    _require_resolved_tenant(login_user, db_knowledge)
 
     if db_knowledge.type == KnowledgeTypeEnum.SPACE.value:
         space_svc = _build_space_service(request, login_user, version_repo, doc_repo)

@@ -1661,7 +1661,10 @@ export default function ApprovalPage() {
                       </span>
                       <div className="flex items-center gap-1 shrink-0">
                         <StatusBadge enabled={s.enabled} />
-                        {/* action icons — shown on hover */}
+                        {/* action icons — shown on hover. The system file-change
+                            scenario has a fixed name/flow, so only its enable/disable
+                            toggle is available; hide rename and delete for it. */}
+                        {s.scenario_code !== "knowledge_space_file_change_request" && (
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         type="button"
@@ -1686,6 +1689,7 @@ export default function ApprovalPage() {
                         <Trash2 size={13} />
                       </button>
                         </div>
+                        )}
                       </div>
                     </div>
                   </button>

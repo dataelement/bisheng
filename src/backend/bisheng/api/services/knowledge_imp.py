@@ -307,7 +307,7 @@ def addEmbedding(
                         f"similar_scan_sync file_id={db_file.id} skipped: no simhash in memory"
                     )
             except Exception:
-                logger.warning("similar scan (sync) failed", exc_info=True)
+                logger.opt(exception=True).warning("similar scan (sync) failed")
 
             if enable_auto_tags:
                 KnowledgeSpaceAutoTagService.apply_after_upload_parse(

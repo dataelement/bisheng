@@ -50,6 +50,13 @@ const mergeOptionsByValue = (currentOptions, nextOptions) => {
     ]
 }
 
+export function hasTempKnowledgeMode(fileParseMode: unknown): boolean {
+    if (Array.isArray(fileParseMode)) {
+        return fileParseMode.includes('ingest_to_temp_kb')
+    }
+    return fileParseMode === 'ingest_to_temp_kb'
+}
+
 export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent, onValidate, i18nPrefix }) {
     const { flow } = useFlowStore()
     const { t } = useTranslation('flow')
@@ -90,11 +97,12 @@ export default function KnowledgeSelectItem({ data, nodeId, onChange, onVarEvent
                 group.params.forEach(param => {
                     if (param.key === 'form_input') {
                         param.value.forEach(val => {
-                            val.file_parse_mode === 'ingest_to_temp_kb' && val.type === 'file'
-                                && files.push({
+                            if (val.type === 'file' && hasTempKnowledgeMode(val.file_parse_mode)) {
+                                files.push({
                                     label: `${val.key}(${val.value})`,
                                     value: `${node.id}.${val.key}`
                                 })
+                            }
                         })
                     }
                 })

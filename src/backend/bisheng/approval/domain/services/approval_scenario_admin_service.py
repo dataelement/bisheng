@@ -11,12 +11,32 @@ from bisheng.approval.domain.models.approval_scenario import (
 )
 from bisheng.approval.domain.repositories.approval_query_repository import ApprovalQueryRepository
 from bisheng.approval.domain.repositories.approval_scenario_repository import ApprovalScenarioRepository
-from bisheng.approval.domain.services.approval_registry import ApprovalRegistry
+from bisheng.approval.domain.services.approval_registry import (
+    SYSTEM_FILE_CHANGE_FLOW_CODE,
+    SYSTEM_FILE_CHANGE_SCENARIO_CODE,
+    ApprovalRegistry,
+)
 from bisheng.common.errcode.approval import ApprovalFlowInUseByRoutesError
 from bisheng.database.models.audit_log import AuditLogDao
 
 
 class ApprovalScenarioAdminService:
+    _SYSTEM_SCENARIO_READ_ONLY_MESSAGE = 'system fixed approval scenario is read-only'
+
+    @classmethod
+    async def _require_mutable_scenario(cls, *, tenant_id: int, scenario_id: int) -> ApprovalScenario:
+        scenario = await ApprovalScenarioRepository.get_scenario(scenario_id)
+        if scenario is None or scenario.tenant_id != tenant_id:
+            raise ValueError(f'scenario not found: {scenario_id}')
+        if scenario.scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE:
+            raise ValueError(cls._SYSTEM_SCENARIO_READ_ONLY_MESSAGE)
+        return scenario
+
+    @classmethod
+    def _require_mutable_flow(cls, flow: ApprovalFlowDefinition) -> None:
+        if flow.flow_code == SYSTEM_FILE_CHANGE_FLOW_CODE:
+            raise ValueError(cls._SYSTEM_SCENARIO_READ_ONLY_MESSAGE)
+
     @classmethod
     async def list_presets(cls):
         return [item.model_dump() for item in ApprovalRegistry.with_default_presets().list_presets()]
@@ -36,6 +56,8 @@ class ApprovalScenarioAdminService:
         operator_user_name: str | None = None,
     ):
         scenario_code = str(payload['scenario_code'])
+        if scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE:
+            raise ValueError(cls._SYSTEM_SCENARIO_READ_ONLY_MESSAGE)
         existing = await ApprovalScenarioRepository.get_scenario_by_code(tenant_id, scenario_code)
         if existing:
             return existing.model_dump()
@@ -75,6 +97,12 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_scenario(scenario_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f'scenario not found: {scenario_id}')
+        if row.scenario_code == SYSTEM_FILE_CHANGE_SCENARIO_CODE and (
+            payload.get('scenario_name') or 'display_name' in payload
+        ):
+            # The system file-change scenario's identity and flow are fixed; only
+            # its enabled on/off switch may be toggled from the Approval Center.
+            raise ValueError(cls._SYSTEM_SCENARIO_READ_ONLY_MESSAGE)
         before_enabled = row.enabled
         if payload.get('scenario_name'):
             row.scenario_name = payload['scenario_name']
@@ -120,6 +148,7 @@ class ApprovalScenarioAdminService:
         scenario_id: int,
         payload: dict,
     ):
+        await cls._require_mutable_scenario(tenant_id=tenant_id, scenario_id=scenario_id)
         row = await ApprovalScenarioRepository.create_route_rule(
             ApprovalRouteRule(
                 tenant_id=tenant_id,
@@ -144,6 +173,7 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_route_rule(route_rule_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f'route not found: {route_rule_id}')
+        await cls._require_mutable_scenario(tenant_id=tenant_id, scenario_id=row.scenario_id)
         if payload.get('route_name'):
             row.route_name = payload['route_name']
         if payload.get('route_type'):
@@ -172,6 +202,7 @@ class ApprovalScenarioAdminService:
         scenario_id: int,
         payload: dict,
     ):
+        await cls._require_mutable_scenario(tenant_id=tenant_id, scenario_id=scenario_id)
         flow = await ApprovalScenarioRepository.create_flow_definition(
             ApprovalFlowDefinition(
                 tenant_id=tenant_id,
@@ -203,6 +234,7 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f'flow not found: {flow_definition_id}')
+        cls._require_mutable_flow(row)
         if payload.get('flow_name'):
             row.flow_name = payload['flow_name']
         # flow_code is auto-generated and not user-editable
@@ -224,9 +256,7 @@ class ApprovalScenarioAdminService:
 
     @classmethod
     async def delete_scenario(cls, *, tenant_id: int, scenario_id: int) -> None:
-        row = await ApprovalScenarioRepository.get_scenario(scenario_id)
-        if row is None or row.tenant_id != tenant_id:
-            raise ValueError(f'scenario not found: {scenario_id}')
+        await cls._require_mutable_scenario(tenant_id=tenant_id, scenario_id=scenario_id)
         await ApprovalScenarioRepository.delete_scenario(scenario_id)
 
     @classmethod
@@ -234,10 +264,12 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_route_rule(route_rule_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f'route not found: {route_rule_id}')
+        await cls._require_mutable_scenario(tenant_id=tenant_id, scenario_id=row.scenario_id)
         await ApprovalScenarioRepository.delete_route_rule(route_rule_id)
 
     @classmethod
     async def reorder_routes(cls, *, tenant_id: int, scenario_id: int, ordered_route_ids: list[int]) -> None:
+        await cls._require_mutable_scenario(tenant_id=tenant_id, scenario_id=scenario_id)
         existing = await ApprovalScenarioRepository.list_route_rules(tenant_id, scenario_id)
         existing_ids = {r.id for r in existing}
         for rid in ordered_route_ids:
@@ -250,6 +282,7 @@ class ApprovalScenarioAdminService:
         row = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
         if row is None or row.tenant_id != tenant_id:
             raise ValueError(f'flow not found: {flow_definition_id}')
+        cls._require_mutable_flow(row)
         referencing_routes = await ApprovalScenarioRepository.list_route_rules_by_flow_definition(
             tenant_id, flow_definition_id
         )
@@ -282,6 +315,7 @@ class ApprovalScenarioAdminService:
         flow = await ApprovalScenarioRepository.get_flow_definition(flow_definition_id)
         if flow is None or flow.tenant_id != tenant_id:
             raise ValueError(f'flow not found: {flow_definition_id}')
+        cls._require_mutable_flow(flow)
         current_version = await ApprovalScenarioRepository.get_active_flow_version(tenant_id, flow_definition_id)
         before_snapshot: dict | None = None
         if current_version:

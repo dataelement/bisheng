@@ -130,6 +130,123 @@ class FineGrainedPermissionService:
         subject_strings.update(f"department:{item.department_id}#member" for item in user_departments)
         return subject_strings
 
+    @classmethod
+    async def has_effective_permission_id_strict(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_id: str | int,
+        permission_id: str,
+        *,
+        tenant_id: int,
+        space_id: int | None = None,
+        allowed_unbound_direct_tuples: set[tuple[str, str, str]] | None = None,
+    ) -> bool:
+        """Evaluate one permission from strong tuples without DB fallback.
+
+        Binding metadata only interprets a tuple that OpenFGA just returned; it
+        is never an alternative authority. Legacy unbound tuples are accepted
+        only for caller-supplied direct-user projections (space creator/member
+        rows), preventing stale manager/editor bindings from reviving access.
+        """
+        from bisheng.core.context.tenant import get_current_tenant_id
+        from bisheng.core.openfga.exceptions import FGAConnectionError
+        from bisheng.permission.domain.repositories.grant_subject_query_repository import (
+            GrantSubjectQueryRepository,
+        )
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            raise RuntimeError("a matching tenant context is required for strict permission evaluation")
+
+        fga = await PermissionService._aget_fga()
+        if fga is None:
+            raise FGAConnectionError("OpenFGA client is unavailable")
+
+        direct_user = f"user:{int(login_user.user_id)}"
+        subject_repository = GrantSubjectQueryRepository()
+        if not await subject_repository.is_active_user_in_any_active_tenant(int(login_user.user_id)):
+            return False
+        if await fga.check(
+            user=direct_user,
+            relation="super_admin",
+            object="system:global",
+            consistency="HIGHER_CONSISTENCY",
+        ):
+            return True
+        subject_strings = await subject_repository.resolve_active_subject_strings_for_user(
+            user_id=int(login_user.user_id),
+            tenant_id=int(tenant_id),
+        )
+        if direct_user not in subject_strings:
+            return False
+        if await fga.check(
+            user=direct_user,
+            relation="admin",
+            object=f"tenant:{int(tenant_id)}",
+            consistency="HIGHER_CONSISTENCY",
+        ):
+            return True
+
+        models = await cls.get_relation_models_map()
+        bindings = await _get_bindings()
+        binding_index = cls.build_binding_index(bindings)
+        binding_department_paths = await cls.get_binding_department_paths(bindings)
+        lineage = await cls.build_resource_lineage(object_type, object_id, space_id=space_id)
+        nearest_binding_wins = object_type in {"folder", "knowledge_file"}
+        allowed_unbound = allowed_unbound_direct_tuples or set()
+        tuple_department_paths: dict[int, str] = {}
+
+        for resource_type, resource_id in lineage:
+            level_saw_matching_tuple = False
+            level_allowed = False
+            # hotfix/2.6.0-2 (cd2e78a7e) dropped the knowledge_library→knowledge_space
+            # legacy tuple alias, so a resource only ever carries tuples under its own
+            # type; the former per-alias loop collapses to this single read.
+            for tuple_resource_type in (resource_type,):
+                tuples = await fga.read_tuples(
+                    object=f"{tuple_resource_type}:{resource_id}",
+                    consistency="HIGHER_CONSISTENCY",
+                )
+                binding_resource_type = resource_type
+                for tuple_data in tuples or []:
+                    tuple_user = tuple_data.get("user")
+                    relation = tuple_data.get("relation")
+                    if tuple_user not in subject_strings or not relation:
+                        continue
+                    level_saw_matching_tuple = True
+                    binding = await cls._resolve_binding_for_tuple(
+                        binding_resource_type,
+                        resource_id,
+                        tuple_user,
+                        relation,
+                        bindings,
+                        binding_department_paths,
+                        tuple_department_paths,
+                        binding_index=binding_index,
+                    )
+                    if binding is not None:
+                        model_id = binding.get("model_id")
+                        model = models.get(model_id) if model_id else None
+                        if model_id and model is None:
+                            continue
+                        granted = cls._permission_ids_for_relation(resource_type, relation, model)
+                    elif tuple_user == direct_user and (
+                        resource_type,
+                        str(resource_id),
+                        relation,
+                    ) in allowed_unbound:
+                        granted = cls.default_permission_ids_for_relation(resource_type, relation)
+                    else:
+                        granted = set()
+                    if str(permission_id) in granted:
+                        level_allowed = True
+            if level_allowed:
+                return True
+            if nearest_binding_wins and level_saw_matching_tuple:
+                return False
+        return False
+
     @staticmethod
     async def get_binding_department_paths(bindings: list[dict]) -> dict[int, str]:
         department_ids = {
@@ -420,15 +537,6 @@ class FineGrainedPermissionService:
 
         return [(object_type, str(object_id))]
 
-    @staticmethod
-    async def _tuple_resource_types(resource_type: str, resource_id: str) -> list[str]:
-        resource_types = [resource_type]
-        if resource_type == "knowledge_library":
-            resource_types.extend(
-                await PermissionService._legacy_alias_object_types(resource_type, resource_id),
-            )
-        return list(dict.fromkeys(resource_types))
-
     @classmethod
     async def get_effective_permission_ids_async(
         cls,
@@ -477,49 +585,43 @@ class FineGrainedPermissionService:
                 for resource_type, resource_id in lineage:
                     level_permissions: set[str] = set()
                     level_saw_tuple = False
-                    for tuple_resource_type in await cls._tuple_resource_types(resource_type, str(resource_id)):
-                        tuple_object = f"{tuple_resource_type}:{resource_id}"
-                        if tuple_cache is not None and tuple_object in tuple_cache:
-                            tuples = tuple_cache[tuple_object]
-                        else:
-                            tuples = await fga.read_tuples(object=tuple_object)
-                            if tuple_cache is not None:
-                                tuple_cache[tuple_object] = tuples
-                        binding_resource_type = (
-                            resource_type
-                            if tuple_resource_type != "knowledge_space" or resource_type != "knowledge_library"
-                            else "knowledge_library"
+                    tuple_object = f"{resource_type}:{resource_id}"
+                    if tuple_cache is not None and tuple_object in tuple_cache:
+                        tuples = tuple_cache[tuple_object]
+                    else:
+                        tuples = await fga.read_tuples(object=tuple_object)
+                        if tuple_cache is not None:
+                            tuple_cache[tuple_object] = tuples
+                    for tuple_data in tuples:
+                        tuple_user = tuple_data.get("user")
+                        relation = tuple_data.get("relation")
+                        if tuple_user not in user_subject_strings:
+                            continue
+                        binding = await cls._resolve_binding_for_tuple(
+                            resource_type,
+                            resource_id,
+                            tuple_user,
+                            relation,
+                            bindings,
+                            binding_department_paths,
+                            tuple_department_paths,
+                            binding_index=binding_index,
                         )
-                        for tuple_data in tuples:
-                            tuple_user = tuple_data.get("user")
-                            relation = tuple_data.get("relation")
-                            if tuple_user not in user_subject_strings:
-                                continue
-                            binding = await cls._resolve_binding_for_tuple(
-                                binding_resource_type,
-                                resource_id,
-                                tuple_user,
-                                relation,
-                                bindings,
-                                binding_department_paths,
-                                tuple_department_paths,
-                                binding_index=binding_index,
-                            )
-                            if cls._is_legacy_subscription_viewer_tuple(
-                                tuple_resource_type,
-                                tuple_user,
-                                relation,
-                                binding,
-                            ):
-                                saw_legacy_subscription_viewer_tuple = True
-                                continue
-                            model = models.get(binding.get("model_id")) if binding and binding.get("model_id") else None
-                            if binding and binding.get("model_id"):
-                                saw_bound_model_tuple = True
-                            level_saw_tuple = True
-                            level_permissions.update(
-                                cls._permission_ids_for_relation(resource_type, relation, model),
-                            )
+                        if cls._is_legacy_subscription_viewer_tuple(
+                            resource_type,
+                            tuple_user,
+                            relation,
+                            binding,
+                        ):
+                            saw_legacy_subscription_viewer_tuple = True
+                            continue
+                        model = models.get(binding.get("model_id")) if binding and binding.get("model_id") else None
+                        if binding and binding.get("model_id"):
+                            saw_bound_model_tuple = True
+                        level_saw_tuple = True
+                        level_permissions.update(
+                            cls._permission_ids_for_relation(resource_type, relation, model),
+                        )
                     if nearest_binding_wins and level_saw_tuple:
                         matched_lineage_binding = True
                         effective_permissions.update(level_permissions)
@@ -570,6 +672,112 @@ class FineGrainedPermissionService:
         effective_permissions = cls.default_permission_ids_for_relation(object_type, relation or "")
         if return_match_metadata:
             return effective_permissions, matched_lineage_binding
+        return effective_permissions
+
+    @classmethod
+    async def get_effective_permission_ids_from_verified_bindings_async(
+        cls,
+        login_user: UserPayload,
+        object_type: str,
+        object_id: str | int,
+    ) -> set[str]:
+        """Resolve list-management access without scanning every resource tuple.
+
+        Bindings only select current-user candidates. Each candidate must still
+        have its exact OpenFGA tuple before its relation model contributes any
+        permission IDs. This narrow path is for knowledge-space/channel list
+        reads; general permission evaluation keeps using the full evaluator.
+        """
+        if login_user.is_admin():
+            return cls.default_permission_ids_for_relation(object_type, "owner")
+
+        models = await cls.get_relation_models_map()
+        bindings = [
+            binding
+            for binding in await _get_bindings()
+            if binding.get("resource_type") == object_type
+            and str(binding.get("resource_id")) == str(object_id)
+        ]
+        user_subject_strings = await cls.get_current_user_subject_strings(login_user)
+        binding_department_paths = await cls.get_binding_department_paths(bindings)
+        user_department_paths = await cls.get_current_user_department_paths(user_subject_strings)
+        candidates = [
+            binding
+            for binding in bindings
+            if cls._binding_matches_current_user(
+                binding,
+                user_subject_strings,
+                binding_department_paths,
+                user_department_paths,
+            )
+        ]
+
+        verified_bindings: list[dict] = []
+        fga = await PermissionService._aget_fga()
+        if fga is not None and candidates:
+            semaphore = asyncio.Semaphore(20)
+
+            async def exact_tuple_exists(binding: dict) -> bool:
+                subject_type = binding.get("subject_type")
+                try:
+                    subject_id = int(binding.get("subject_id"))
+                except (TypeError, ValueError):
+                    return False
+                if subject_type not in {"user", "department", "user_group"}:
+                    return False
+                member_suffix = "" if subject_type == "user" else "#member"
+                async with semaphore:
+                    try:
+                        tuples = await fga.read_tuples(
+                            user=f"{subject_type}:{subject_id}{member_suffix}",
+                            relation=binding.get("relation"),
+                            object=f"{object_type}:{object_id}",
+                        )
+                    except FGAClientError as exc:
+                        logger.error(
+                            "OpenFGA failed while verifying bound permission for %s:%s: %s",
+                            object_type,
+                            object_id,
+                            exc,
+                        )
+                        return False
+                return bool(tuples)
+
+            verified = await asyncio.gather(*(exact_tuple_exists(binding) for binding in candidates))
+            verified_bindings = [binding for binding, exists in zip(candidates, verified, strict=True) if exists]
+
+        effective_permissions: set[str] = set()
+        verified_relations: set[str] = set()
+        for binding in verified_bindings:
+            relation = binding.get("relation") or ""
+            verified_relations.add(relation)
+            model = models.get(binding.get("model_id")) if binding.get("model_id") else None
+            effective_permissions.update(cls._permission_ids_for_relation(object_type, relation, model))
+
+        implicit_level = await PermissionService.get_implicit_permission_level(
+            user_id=login_user.user_id,
+            object_type=object_type,
+            object_id=str(object_id),
+            login_user=login_user,
+        )
+        implicit_relation = _PERMISSION_LEVEL_TO_RELATION.get(implicit_level or "")
+        effective_permissions.update(
+            cls.default_permission_ids_for_relation(object_type, implicit_relation or ""),
+        )
+
+        # Preserve legacy unbound coarse tuples without treating an explicitly
+        # bound custom model as the default model for the same relation.
+        level = await PermissionService.get_permission_level(
+            user_id=login_user.user_id,
+            object_type=object_type,
+            object_id=str(object_id),
+            login_user=login_user,
+        )
+        fallback_relation = _PERMISSION_LEVEL_TO_RELATION.get(level or "")
+        if fallback_relation and fallback_relation not in verified_relations:
+            effective_permissions.update(
+                cls.default_permission_ids_for_relation(object_type, fallback_relation),
+            )
         return effective_permissions
 
     @classmethod

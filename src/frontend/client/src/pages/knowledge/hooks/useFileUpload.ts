@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import i18next, { type TOptions } from "i18next";
 import {
     FileStatus,
@@ -6,35 +6,18 @@ import {
     KnowledgeFile,
     KnowledgeSpace,
     createFolderApi,
-    renameFolderApi,
-    deleteFolderApi,
-    uploadFileToServerApi,
-    uploadFolderApi,
-    addFilesApi,
-    type FolderUploadItemPayload,
-    renameFileApi,
-    deleteFileApi,
-    batchDeleteApi,
-    retryDuplicateFilesApi,
-    listKnowledgeFolders,
-    type UploadFileResponse,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import {
-    filterFolderUploadFiles,
-    getFileTypeFromName,
-    getRootFolderName,
-    isHiddenName,
-    isKnowledgeItemPending,
     MAX_FOLDER_DEPTH,
-    MAX_FOLDER_UPLOAD_COUNT,
-    type UploadSizeLimits,
 } from "../knowledgeUtils";
 import { useLocalize, type TranslationKeys } from "~/hooks";
 import { useRefreshEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useStorageQuotaGuard } from "~/hooks/usePersonalStorageQuota";
 import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
+import { useKnowledgeStageUpload } from "./useKnowledgeStageUpload";
+import { useKnowledgeFileMutations } from "./useKnowledgeFileMutations";
 
 /** Errors from uploadFileToServerApi: its manual throw (statusCode/errorData) or an axios rejection body. */
 interface UploadErrorLike {
@@ -249,22 +232,29 @@ export function useFileUpload({
     setFiles,
     setTotal,
     loadFiles,
-    currentPage,
-    markPendingDeletion,
-    clearPendingDeletion,
 }: UseFileUploadOptions) {
     const localize = useLocalize();
-    const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
     const [creatingFolder, setCreatingFolder] = useState<KnowledgeFile | null>(null);
-    // Placeholder folder card shown while a dragged/picked folder batch is uploading +
-    // registering. Rendered with a translucent "uploading" overlay and not clickable,
-    // so the rest of the list stays interactive instead of being hidden behind a
-    // full-pane spinner. Cleared (replaced by the real folder) once the batch lands.
-    const [uploadingFolder, setUploadingFolder] = useState<KnowledgeFile | null>(null);
-    // Duplicate file detection state
-    const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
-
     const { showToast } = useToastContext();
+        const stageUpload = useKnowledgeStageUpload({
+        activeSpace,
+        currentFolderId,
+        files,
+        setFiles,
+        setTotal,
+        loadFiles,
+        localize,
+        showToast,
+    });
+    const fileMutations = useKnowledgeFileMutations({
+        activeSpace,
+        files,
+        setFiles,
+        setTotal,
+        loadFiles,
+        localize,
+        showToast,
+    });
     const isStorageBlocked = useStorageQuotaGuard();
     const refreshQuota = useRefreshEffectiveQuota();
     /** Guard against re-entry of handleUploadFolder while one batch is in flight. */
@@ -645,6 +635,7 @@ export function useFileUpload({
                 return;
             }
 
+            await fileMutations.handleRenameExisting(fileId, newName);
             // ── Rename existing item ──
             const target = files.find(f => f.id === fileId);
             if (!target) return;
@@ -666,6 +657,7 @@ export function useFileUpload({
             }
         },
         [activeSpace, creatingFolder, currentFolderId, files, setFiles, showToast]
+        [activeSpace, creatingFolder, currentFolderId, fileMutations, setFiles, showToast]
     );
 
     // ─── Delete file/folder ──────────────────────────────────────────────
@@ -768,7 +760,7 @@ export function useFileUpload({
             void refreshQuota();
             return true;
         },
-        [activeSpace, files, setFiles, setTotal, loadFiles, markPendingDeletion, clearPendingDeletion, refreshQuota]
+        [activeSpace, files, setFiles, setTotal, loadFiles, markPendingDeletion, clearPendingDeletion]
     );
 
     const handleEditTags = useCallback(
@@ -779,19 +771,20 @@ export function useFileUpload({
     );
 
     return {
-        uploadingFiles,
+        uploadingFiles: stageUpload.uploadingFiles,
         creatingFolder,
-        uploadingFolder,
-        duplicateFiles,
-        handleUploadFile,
-        handleUploadFolder,
+        uploadingFolder: stageUpload.uploadingFolder,
+        duplicateFiles: stageUpload.duplicateFiles,
+        handleUploadFile: stageUpload.handleUploadFile,
+        handleUploadFolder: stageUpload.handleUploadFolder,
         handleCreateFolder,
         handleCancelCreateFolder,
         handleRenameFile,
-        handleDeleteFile,
-        handleBatchDelete,
+        handleDeleteFile: fileMutations.handleDeleteFile,
+        handleBatchDelete: fileMutations.handleBatchDelete,
+        handleBatchRename: fileMutations.handleBatchRename,
         handleEditTags,
-        handleDuplicateOverwrite,
-        handleDuplicateSkip,
+        handleDuplicateOverwrite: stageUpload.handleDuplicateOverwrite,
+        handleDuplicateSkip: stageUpload.handleDuplicateSkip,
     };
 }

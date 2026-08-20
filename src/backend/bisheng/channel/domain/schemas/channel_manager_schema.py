@@ -5,10 +5,13 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from bisheng.channel.domain.models.channel import ChannelFilterRules, ChannelVisibilityEnum
-from bisheng.channel.domain.schemas.channel_authorization_schema import ChannelGrantItem
+from bisheng.channel.domain.schemas.channel_authorization_schema import (
+    ChannelAuthorizationItemResult,
+    ChannelGrantItem,
+)
 
 
-class SubscriptionStatusEnum(str, Enum):
+class SubscriptionStatusEnum(str, Enum):  # noqa: UP042 - public enum compatibility
     """Subscription Status Enum"""
 
     SUBSCRIBED = "subscribed"
@@ -59,6 +62,11 @@ class ChannelInitialPermissions(BaseModel):
 class ChannelInitialPermissionResult(BaseModel):
     status: Literal["success", "failed"]
     error_code: int | None = None
+    direct_applied_count: int = 0
+    invite_created_count: int = 0
+    invite_existing_count: int = 0
+    failed_count: int = 0
+    results: list[ChannelAuthorizationItemResult] = Field(default_factory=list)
 
 
 class CreateChannelRequest(BaseModel):
@@ -95,14 +103,14 @@ class CrawlWebsiteRequest(BaseModel):
     url: str = Field(..., description="URL of the website to crawl")
 
 
-class QueryTypeEnum(str, Enum):
+class QueryTypeEnum(str, Enum):  # noqa: UP042 - public enum compatibility
     """Get My Channels Query Type Enum"""
 
     CREATED = "created"
     FOLLOWED = "followed"
 
 
-class SortByEnum(str, Enum):
+class SortByEnum(str, Enum):  # noqa: UP042 - public enum compatibility
     """Get My Channels Sort By Enum"""
 
     LATEST_UPDATE = "latest_update"

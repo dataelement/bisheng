@@ -28,6 +28,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import uuid4
 
 from loguru import logger
 
@@ -77,6 +78,16 @@ def _strip_pseudo_tool_call(text: str) -> str:
 def _stable_task_id(svid: str, content: str) -> str:
     """``md5(svid + ":" + content)[:8]`` — design §3.3.1 rule 1."""
     return hashlib.md5(f"{svid}:{content}".encode()).hexdigest()[:8]
+
+
+# Todo statuses that count as delivered. A todo dropped from the plan AFTER it was
+# completed stays completed — pruning the plan does not un-deliver work.
+_TODO_DONE_STATUSES = frozenset({"completed", "done"})
+
+# Status carried by the TaskEnd emitted for a todo the model pruned. Matches
+# ``ExecuteTaskStatusEnum.TERMINATED`` (imported as a literal to keep this pure
+# mapper free of the persistence layer); ``task_exec._handle_task_end`` maps it back.
+_TODO_DROPPED_STATUS = "terminated"
 
 
 def _truncate(text: str | None) -> tuple[str | None, bool]:
@@ -147,6 +158,17 @@ class StreamContext:
     thinking_call_ids: dict[str, str] = field(default_factory=dict)
     # monotonic counter giving each thinking segment a distinct, stable call_id
     thinking_seq: int = 0
+    # Per-mapper-instance discriminator mixed into every thinking call_id.
+    #
+    # ``thinking_seq`` restarts at 0 for every new mapper, and a mapper is built
+    # fresh per RUN of the same session version (first execute, ask_user resume,
+    # follow-up turn — all share one svid). Without this token the resumed run's
+    # first thinking segment reuses ``thinking:<svid>:1``, and the persistence
+    # layer treats a colliding call_id as the SAME segment: it concatenates the
+    # new text onto the first run's and rewrites the row IN PLACE. That is what
+    # welded reasoning from different runs into one block, spliced new text into
+    # the middle of old text, and left history ordered against its own timestamps.
+    run_token: str = field(default_factory=lambda: uuid4().hex[:8])
     # terminal收口 dedup: first terminal wins, later ones dropped (§3.7)
     terminated: bool = False
 
@@ -299,6 +321,7 @@ class StreamEventMapper:
         used_old_idx: set[int] = set()
         new_projection: list[_TodoProjection] = []
         newly_generated: list[_TodoProjection] = []
+        renamed: list[_TodoProjection] = []
         status_events: list[BaseEvent] = []
 
         for pos, item in enumerate(new_todos):
@@ -322,6 +345,12 @@ class StreamEventMapper:
             if matched is not None:
                 proj = _TodoProjection(task_id=matched.task_id, content=content, status=status)
                 new_projection.append(proj)
+                if matched.content != content:
+                    # Level-2 alignment reused an existing row id while the model
+                    # REWROTE the wording. Re-announce it so the DB row's task_data
+                    # (and therefore the panel after a refresh) follows the current
+                    # plan instead of keeping the very first draft's title.
+                    renamed.append(proj)
                 status_events.extend(self._status_transition(matched.status, status, proj))
             else:
                 # Level 3: brand new
@@ -334,15 +363,33 @@ class StreamEventMapper:
                 newly_generated.append(proj)
                 status_events.extend(self._status_transition(None, status, proj))
 
-        # Tasks that vanished from the new list are marked TERMINATED (not
-        # deleted) — projection drop is enough at the mapper layer. The todo
-        # projection still drives TaskPanel signals (GenerateSubTask / TaskStart /
-        # TaskEnd); it no longer needs an in_progress cursor because steps are no
-        # longer attributed to a todo (B2 段流重构 2026-06).
+        # Todos that vanished from the new snapshot: the model pruned them from its
+        # plan. Emit a terminal event so the DB row converges instead of sitting at
+        # NOT_STARTED/IN_PROGRESS forever — measured on 180, a COMPLETED session left
+        # 1 IN_PROGRESS + 2 NOT_STARTED behind and the panel was stuck at "4/7".
+        # Rows that already reached a done state are left alone: they were delivered,
+        # dropping them from the plan afterwards does not un-deliver them.
+        terminated_events: list[BaseEvent] = [
+            TaskEnd(
+                task_id=o.task_id,
+                name=o.content,
+                status=_TODO_DROPPED_STATUS,
+                answer="",
+                # Non-empty data on purpose: _handle_task_end only refreshes
+                # ``task_data`` when the event carries some, so this also repairs the
+                # row's title on the way out.
+                data={"id": o.task_id, "task_id": o.task_id, "name": o.content, "status": _TODO_DROPPED_STATUS},
+            )
+            for i, o in enumerate(old)
+            if i not in used_old_idx and o.status not in _TODO_DONE_STATUSES
+        ]
+        # The todo projection drives TaskPanel signals (GenerateSubTask / TaskStart /
+        # TaskEnd); it needs no in_progress cursor because steps are no longer
+        # attributed to a todo (B2 段流重构 2026-06).
         self.ctx.todos = new_projection
 
         events: list[BaseEvent] = []
-        if newly_generated:
+        if newly_generated or renamed:
             events.append(
                 GenerateSubTask(
                     task_id=self.ctx.svid,
@@ -353,11 +400,12 @@ class StreamEventMapper:
                             "name": p.content,
                             "status": p.status,
                         }
-                        for p in newly_generated
+                        for p in (*newly_generated, *renamed)
                     ],
                 )
             )
         events.extend(status_events)
+        events.extend(terminated_events)
         return events
 
     def _status_transition(self, old_status: str | None, new_status: str, proj: _TodoProjection) -> list[BaseEvent]:
@@ -398,7 +446,15 @@ class StreamEventMapper:
 
         # Thinking stream: reasoning_content (DeepSeek-R1) or thinking blocks.
         thinking = self._extract_thinking(message)
-        if thinking:
+        # A whitespace-only delta is the model's own line break and MUST survive:
+        # dropping it split the segment (``normalize`` closes a segment on any
+        # non-thinking chunk, and a dropped chunk emitted nothing to keep it open),
+        # and the frontend re-joins segments with "" — so the newline was gone for
+        # good. "13. 未来展望" + "14. 封底" then read as one sentence whose "14. "
+        # looked like a terminator, which is how the narration surfaced the bare
+        # fragment "未来展望14.". Only forward it while a segment is already OPEN,
+        # so leading whitespace never mints an empty thinking row of its own.
+        if thinking and (thinking.strip() or self._has_open_thinking(ns)):
             return [*enriched, self._build_thinking_step(thinking, ns)]
 
         # Tool-call start frames live on AIMessage.tool_calls.
@@ -626,11 +682,13 @@ class StreamEventMapper:
         # ``normalize`` resets that namespace's segment once a non-thinking chunk
         # closes it, so a thinking block resuming after a tool call gets a fresh
         # row, and parallel subagents never share an id (no interleaved garble).
+        # ``run_token`` keeps the id unique across RUNS of the same svid as well —
+        # see StreamContext.run_token for why a collision there is destructive.
         key = ns or ""
         call_id = self.ctx.thinking_call_ids.get(key)
         if call_id is None:
             self.ctx.thinking_seq += 1
-            call_id = f"thinking:{task_id}:{self.ctx.thinking_seq}"
+            call_id = f"thinking:{task_id}:{self.ctx.run_token}:{self.ctx.thinking_seq}"
             self.ctx.thinking_call_ids[key] = call_id
         return ExecStep(
             task_id=task_id,
@@ -681,6 +739,10 @@ class StreamEventMapper:
             return "knowledge"
         return "tool"
 
+    def _has_open_thinking(self, ns: str | None) -> bool:
+        """Is a thinking segment currently accumulating for this namespace?"""
+        return (ns or "") in self.ctx.thinking_call_ids
+
     @staticmethod
     def _extract_thinking(message: Any) -> str | None:
         # DeepSeek-R1 style
@@ -693,9 +755,12 @@ class StreamEventMapper:
             # reasoning stream (a reasoning-parser boundary artifact); strip the
             # markers while keeping the reasoning, so they don't leak as bare
             # tags into the narration. A marker-only chunk (e.g. a lone "<think>",
-            # or a stream-truncated "<think") reduces to whitespace -> emit nothing.
+            # or a stream-truncated "<think") reduces to EMPTY -> emit nothing.
+            # Whitespace is NOT empty: a "\n" delta is a real line break in the
+            # model's reasoning and is forwarded (the caller decides whether a
+            # segment is open to receive it).
             reasoning = strip_reasoning_tags(reasoning)
-            return reasoning if reasoning.strip() else None
+            return reasoning or None
         # Anthropic thinking blocks in content list
         content = getattr(message, "content", None)
         if isinstance(content, list):
@@ -707,7 +772,7 @@ class StreamEventMapper:
             chunks = [c for c in chunks if c]
             if chunks:
                 joined = strip_reasoning_tags("".join(chunks))
-                return joined if joined.strip() else None
+                return joined or None
         return None
 
     @staticmethod

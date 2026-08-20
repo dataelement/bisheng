@@ -4,13 +4,19 @@ import KnowledgeSpace from "@/pages/BuildPage/bench/KnowledgeSpace";
 import { userContext } from "@/contexts/userContext";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const translationMock = vi.hoisted(() => ({
+  t: (key: string, fallback?: string | { defaultValue?: string }) => {
+    if (typeof fallback === "string") return fallback;
+    if (fallback && typeof fallback === "object" && "defaultValue" in fallback) {
+      return fallback.defaultValue || key;
+    }
+    return key;
+  },
+}));
+
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string, fallback?: string | { defaultValue?: string }) => {
-      if (typeof fallback === "string") return fallback;
-      if (fallback && typeof fallback === "object" && "defaultValue" in fallback) return fallback.defaultValue || key;
-      return key;
-    },
+    t: translationMock.t,
   }),
 }));
 
@@ -47,7 +53,12 @@ vi.mock("@/components/bs-ui/input", async () => {
 });
 
 vi.mock("@/controllers/request", () => ({
-  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
+  default: {
+    get: vi.fn(() => Promise.resolve({})),
+    post: vi.fn(() => Promise.resolve({})),
+    put: vi.fn(() => Promise.resolve({})),
+    delete: vi.fn(() => Promise.resolve({})),
+  },
   captureAndAlertRequestErrorHoc: vi.fn((promise: Promise<unknown>) => Promise.resolve(promise)),
 }));
 
@@ -63,6 +74,12 @@ vi.mock("@/controllers/API/departmentKnowledgeSpace", () => ({
   setDepartmentKnowledgeSpacesVisibilityApi: vi.fn(),
 }));
 
+vi.mock("@/controllers/API/knowledgeSpaceFileChange", () => ({
+  getFileChangePolicyApi: vi.fn(),
+  getFileChangeSettingsApi: vi.fn(),
+  updateFileChangeConfigurationApi: vi.fn(),
+}));
+
 vi.mock("@/controllers/API", () => ({
   getKnowledgeConfigApi: vi.fn(),
   setKnowledgeConfigApi: vi.fn(),
@@ -74,11 +91,17 @@ import {
   getDepartmentKnowledgeSpacesApi,
   setDepartmentKnowledgeSpacesVisibilityApi,
 } from "@/controllers/API/departmentKnowledgeSpace";
+import {
+  getFileChangePolicyApi,
+  getFileChangeSettingsApi,
+} from "@/controllers/API/knowledgeSpaceFileChange";
 
 const mockedGetKnowledgeConfigApi = vi.mocked(getKnowledgeConfigApi);
 const mockedChildren = vi.mocked(getDepartmentChildrenApi);
 const mockedGetDepartmentKnowledgeSpacesApi = vi.mocked(getDepartmentKnowledgeSpacesApi);
 const mockedSetVisibility = vi.mocked(setDepartmentKnowledgeSpacesVisibilityApi);
+const mockedGetFileChangePolicy = vi.mocked(getFileChangePolicyApi);
+const mockedGetFileChangeSettings = vi.mocked(getFileChangeSettingsApi);
 
 // Build a lazy children-map mock: parent_id (null=root) -> child DepartmentTreeNodes.
 const lazyNode = (id: number, name: string, parent_id: number | null, has_children: boolean) => ({
@@ -97,6 +120,8 @@ describe("department knowledge space dialogs", () => {
     vi.clearAllMocks();
     mockedGetKnowledgeConfigApi.mockResolvedValue(null);
     mockedGetDepartmentKnowledgeSpacesApi.mockResolvedValue([]);
+    mockedGetFileChangePolicy.mockResolvedValue({ enabled: true, scope: "per_space" });
+    mockedGetFileChangeSettings.mockResolvedValue({ data: [], total: 0 });
   });
 
   it("renders child departments with a deeper tree level", async () => {
@@ -119,7 +144,7 @@ describe("department knowledge space dialogs", () => {
     expect(childRow).toHaveAttribute("data-depth", "1");
   });
 
-  it("does not render approval settings controls in the department knowledge space list", async () => {
+  it("renders file-change approval settings before department knowledge spaces", async () => {
     mockedGetDepartmentKnowledgeSpacesApi.mockResolvedValue([
       {
         id: 10,
@@ -145,14 +170,20 @@ describe("department knowledge space dialogs", () => {
     );
 
     await screen.findByText("研发知识空间");
+    const approvalTitle = await screen.findByText("fileChangeApproval.title");
+    const departmentTitle = screen.getByText("部门知识空间");
 
     await waitFor(() => {
       expect(mockedGetDepartmentKnowledgeSpacesApi).toHaveBeenCalled();
     });
 
-    expect(screen.queryByText("审批设置")).not.toBeInTheDocument();
-    expect(screen.queryByText("审批关闭")).not.toBeInTheDocument();
-    expect(screen.queryByText("内容安全关闭")).not.toBeInTheDocument();
+    expect(
+      approvalTitle.compareDocumentPosition(departmentTitle)
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("switch", { name: "fileChangeApproval.enabled" }),
+    ).toBeInTheDocument();
   });
 
   it("renders configured/hidden badges and stages a hide on uncheck + save", async () => {

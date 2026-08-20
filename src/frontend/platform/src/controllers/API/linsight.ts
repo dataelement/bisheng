@@ -24,6 +24,9 @@ export interface SkillDetail extends SkillBrief {
   preview: string;
   source_text: string;
   files: SkillFileEntry[];
+  // Import-time only: original frontmatter name when the backend auto-normalized
+  // it to a spec-legal skill ID (e.g. "Presentations" -> "presentations").
+  normalized_from?: string | null;
 }
 
 export interface SkillPage {

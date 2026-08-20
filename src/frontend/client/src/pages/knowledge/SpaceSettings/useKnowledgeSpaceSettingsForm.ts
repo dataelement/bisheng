@@ -17,16 +17,27 @@ import {
   authorizeResource,
   checkPermission,
   getCreationGrantableRelationModels,
+  getFailedAuthorizationGrants,
   getGrantableRelationModels,
   getResourcePermissions,
 } from "~/api/permission";
-import type { RelationModel } from "~/api/permission";
+import type {
+  AuthorizationResult,
+  GrantItem,
+  InitialPermissionResult,
+  RelationModel,
+} from "~/api/permission";
 import { usePermissionDraft } from "~/components/permission/usePermissionDraft";
 import type { PermissionDraftRow } from "~/components/permission/usePermissionDraft";
 
 const MAX_CUSTOM_TAGS = 200;
 
 export type KnowledgeSpaceSettingsMode = "create" | "edit";
+
+export interface KnowledgeSpaceSettingsSubmitOutcome {
+  space: KnowledgeSpace | null;
+  authorizationFeedback: AuthorizationResult | InitialPermissionResult | null;
+}
 
 export interface KnowledgeSpaceSettingsFormState {
   name: string;
@@ -43,7 +54,7 @@ const INITIAL_FORM: KnowledgeSpaceSettingsFormState = {
   name: "",
   description: "",
   visibility: VisibilityType.APPROVAL,
-  isReleased: true,
+  isReleased: false,
   autoTagEnabled: false,
   autoTagMode: "library",
   autoTagLibraryId: null,
@@ -61,6 +72,8 @@ function permissionEntryToDraftRow(
     modelId: entry.model_id,
     includeChildren: entry.include_children,
     immutableCreator: entry.is_creator === true,
+    authorizationStatus: entry.authorizationStatus ?? "active",
+    approvalInstanceId: entry.approvalInstanceId ?? null,
   };
 }
 
@@ -96,6 +109,12 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [canManagePermissions, setCanManagePermissions] = useState(false);
   const [relationModels, setRelationModels] = useState<RelationModel[]>([]);
   const [createdSpace, setCreatedSpace] = useState<KnowledgeSpace | null>(null);
+  const [permissionRetryGrants, setPermissionRetryGrants] = useState<
+    GrantItem[]
+  >([]);
+  const [authorizationFeedback, setAuthorizationFeedback] = useState<
+    AuthorizationResult | InitialPermissionResult | null
+  >(null);
   const [permissionRetryStatus, setPermissionRetryStatus] = useState<
     "idle" | "retrying" | "success" | "failed"
   >("idle");
@@ -104,6 +123,10 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     KnowledgeSpaceTagLibraryListItem[]
   >([]);
   const [autoTagPreview, setAutoTagPreview] = useState<string[]>([]);
+  const [spaceKind, setSpaceKind] = useState<"normal" | "department">(
+    "normal",
+  );
+  const isDepartmentSpace = mode === "edit" && spaceKind === "department";
 
   const updateForm = useCallback(
     <K extends keyof KnowledgeSpaceSettingsFormState>(
@@ -170,6 +193,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
 
     const load = async () => {
       if (mode === "create") {
+        setSpaceKind("normal");
         try {
           const models =
             await getCreationGrantableRelationModels("knowledge_space");
@@ -203,10 +227,16 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
         ]);
         if (cancelled) return;
         setCanEdit(Boolean(editResult.allowed));
+        const loadedSpaceKind = space.spaceKind ?? "normal";
+        setSpaceKind(loadedSpaceKind);
         setForm({
           name: space.name,
           description: space.description ?? "",
-          visibility: space.visibility,
+          visibility:
+            loadedSpaceKind === "department" &&
+            space.visibility === VisibilityType.PRIVATE
+              ? VisibilityType.APPROVAL
+              : space.visibility,
           isReleased: space.isReleased,
           autoTagEnabled: Boolean(space.autoTagEnabled),
           autoTagMode: space.autoTagMode ?? "library",
@@ -247,12 +277,16 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const buildResourcePayload = useCallback(() => {
     const customTags = parseKnowledgeSpaceCustomTags(form.autoTagCustomText);
     const autoTagEnabled = autoTagFeatureVisible && form.autoTagEnabled;
+    const visibility =
+      isDepartmentSpace && form.visibility === VisibilityType.PRIVATE
+        ? VisibilityType.APPROVAL
+        : form.visibility;
     return {
       name: form.name.trim(),
       description: form.description.trim(),
-      auth_type: form.visibility,
+      auth_type: visibility,
       is_released:
-        form.visibility === VisibilityType.PRIVATE ? false : form.isReleased,
+        visibility === VisibilityType.PRIVATE ? false : form.isReleased,
       auto_tag_enabled: autoTagEnabled,
       auto_tag_library_id:
         autoTagEnabled && form.autoTagMode === "library"
@@ -261,12 +295,13 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       auto_tag_custom_tags:
         autoTagEnabled && form.autoTagMode === "custom" ? customTags : null,
     };
-  }, [autoTagFeatureVisible, form]);
+  }, [autoTagFeatureVisible, form, isDepartmentSpace]);
 
   const submit = useCallback(async () => {
     if (!form.name.trim() || submitting || (!canEdit && !canManagePermissions))
       return null;
     setSubmitting(true);
+    setAuthorizationFeedback(null);
     try {
       const payload = buildResourcePayload();
       if (mode === "create") {
@@ -289,30 +324,52 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
           ...(grants.length > 0 ? { initialPermissions: { grants } } : {}),
         });
         setCreatedSpace(result);
+        if (result.initialPermissionResult) {
+          setAuthorizationFeedback(result.initialPermissionResult);
+          if (result.initialPermissionResult.status === "failed") {
+            setPermissionRetryGrants(
+              getFailedAuthorizationGrants(
+                grants,
+                result.initialPermissionResult.results,
+              ),
+            );
+          }
+        }
         await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-        return result;
+        return {
+          space: result,
+          authorizationFeedback: result.initialPermissionResult ?? null,
+        } satisfies KnowledgeSpaceSettingsSubmitOutcome;
       }
 
       if (!spaceId) return null;
       let result: KnowledgeSpace | null = null;
+      let submitAuthorizationFeedback: AuthorizationResult | null = null;
       if (canEdit) result = await updateSpaceApi(spaceId, payload);
       if (
         form.visibility !== VisibilityType.PRIVATE &&
         canManagePermissions &&
         permissionHasChanges
       ) {
-        await authorizeResource(
+        const authorizationResult = await authorizeResource(
           "knowledge_space",
           spaceId,
           permissionDiff.grants,
           permissionDiff.revokes,
         );
-        resetPermissionDraft(permissionRows);
+        submitAuthorizationFeedback = authorizationResult;
+        setAuthorizationFeedback(authorizationResult);
+        if (authorizationResult.failedCount === 0) {
+          resetPermissionDraft(permissionRows);
+        }
       } else if (form.visibility === VisibilityType.PRIVATE) {
         resetPermissionDraft([]);
       }
       await queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-      return result;
+      return {
+        space: result,
+        authorizationFeedback: submitAuthorizationFeedback,
+      } satisfies KnowledgeSpaceSettingsSubmitOutcome;
     } finally {
       setSubmitting(false);
     }
@@ -334,28 +391,30 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   ]);
 
   const retryInitialPermissions = useCallback(async () => {
-    if (!createdSpace || permissionRows.length === 0) return false;
+    if (!createdSpace || permissionRetryGrants.length === 0) return false;
     setPermissionRetryStatus("retrying");
     try {
-      const grants = permissionRows
-        .filter((row) => !row.immutableCreator)
-        .map((row) => ({
-          subject_type: row.subjectType,
-          subject_id: row.subjectId,
-          relation: row.relation,
-          ...(row.modelId ? { model_id: row.modelId } : {}),
-          ...(row.includeChildren === undefined
-            ? {}
-            : { include_children: row.includeChildren }),
-        }));
-      await authorizeResource("knowledge_space", createdSpace.id, grants, []);
+      const result = await authorizeResource(
+        "knowledge_space",
+        createdSpace.id,
+        permissionRetryGrants,
+        [],
+      );
+      setAuthorizationFeedback(result);
+      setPermissionRetryGrants(
+        getFailedAuthorizationGrants(permissionRetryGrants, result.results),
+      );
+      if (result.failedCount > 0) {
+        setPermissionRetryStatus("failed");
+        return false;
+      }
       setPermissionRetryStatus("success");
       return true;
     } catch {
       setPermissionRetryStatus("failed");
       return false;
     }
-  }, [createdSpace, permissionRows]);
+  }, [createdSpace, permissionRetryGrants]);
 
   return {
     mode,
@@ -366,6 +425,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     loadError,
     canEdit,
     canManagePermissions,
+    isDepartmentSpace,
     relationModels,
     canAddNonUserSubjects: relationModels.some(
       (model) => model.relation !== "owner",
@@ -377,6 +437,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     addPermissionRows,
     createdSpace,
     permissionRetryStatus,
+    authorizationFeedback,
     retryInitialPermissions,
     autoTagFeatureVisible,
     tagLibraries,

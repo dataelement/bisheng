@@ -18,6 +18,48 @@ type userContextType = {
     delComponent: (name: string) => void;
 }
 
+type PlatformEntry = 'platform' | 'workspace' | 'forbidden'
+
+interface PlatformEntryUser {
+    role?: string
+    has_admin_console?: boolean | null
+    has_workbench?: boolean | null
+    is_department_admin?: boolean | null
+    can_manage_user_groups?: boolean | null
+}
+
+export function resolvePlatformEntry(user: PlatformEntryUser, webMenu: string[]): PlatformEntry {
+    const adminMenuKeys = new Set([
+        'backend',
+        'admin',
+        'board',
+        'model',
+        'log',
+        'knowledge',
+        'build',
+        'evaluation',
+        'system_config',
+        'mark_task',
+    ])
+    const canAccessPlatform =
+        user.has_admin_console
+        ?? (
+            user.role === 'admin'
+            || Boolean(user.is_department_admin)
+            || Boolean(user.can_manage_user_groups)
+            || webMenu.some((key) => adminMenuKeys.has(key))
+        )
+    if (canAccessPlatform) return 'platform'
+
+    const canAccessWorkspace =
+        user.has_workbench
+        ?? (
+            webMenu.includes('workstation')
+            || webMenu.includes('frontend')
+        )
+    return canAccessWorkspace ? 'workspace' : 'forbidden'
+}
+
 // const userInfoLocalStr = localStorage.getItem('UUR_INFO')
 const initialValue = {
     user: {}, // userInfoLocalStr ? JSON.parse(atob(userInfoLocalStr)) : null,
@@ -142,47 +184,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
             const BASE_URL = __APP_ENV__.BASE_URL
 
-            // v2.5 角色菜单使用 admin 作为管理端父级；旧数据可能仍为 backend（WebMenuResource 遗留）
-            const adminMenuKeys = new Set([
-                'backend',
-                'admin',
-                'board',
-                'model',
-                'log',
-                'knowledge',
-                'build',
-                'evaluation',
-                'system_config',
-                'mark_task',
-            ])
-            // 部门管理员在 v2.5 允许进入管理端（至少可管理其权限范围内数据）；
-            // 仅依赖 web_menu 会把这类账号误判成无权限（error=90001）。
-            const canAccessPlatform =
-                res.has_admin_console
-                ?? (
-                    res.role === 'admin'
-                    || Boolean(res.is_department_admin)
-                    || Boolean(res.can_manage_user_groups)
-                    || web_menu.some((k: string) => adminMenuKeys.has(k))
-                )
-            if (!canAccessPlatform) {
-                // Check if the user can at least access the workspace client.
-                // If neither platform nor workspace is accessible, redirect to /403
-                // to avoid a back-and-forth redirect loop between the two apps.
-                const canAccessWorkspace =
-                    res.has_workbench
-                    ?? (
-                        web_menu.includes('workstation')
-                        || web_menu.includes('frontend')
-                    )
-                if (!canAccessWorkspace) {
+            const platformEntry = resolvePlatformEntry(res, web_menu)
+            if (platformEntry !== 'platform') {
+                if (platformEntry === 'forbidden') {
+                    toast({
+                        variant: 'error',
+                        description: i18next.t('menu.noAdminConsoleAccess'),
+                    })
                     history.pushState(null, '', BASE_URL + '/403')
                     return
                 }
-                toast({
-                    variant: 'error',
-                    description: i18next.t('menu.noAdminConsoleAccess'),
-                })
                 // Hard-navigate to the workspace client. Must NOT use history.back()
                 // here: under the SSO flow the previous history entry is the IdP /
                 // portal page, so "going back" silently re-triggers SSO and produces

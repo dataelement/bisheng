@@ -80,6 +80,9 @@ from bisheng.permission.domain.services.relation_model_store import (
 from bisheng.permission.domain.services.relation_model_store import (
     save_relation_models as _store_save_relation_models,
 )
+from bisheng.permission.domain.services.resource_user_invite_application_service import (
+    build_runtime_resource_user_invite_application_service,
+)
 from bisheng.permission.domain.tool_permission_template import (
     TOOL_PERMISSION_TEMPLATE,
 )
@@ -234,7 +237,7 @@ def _roster_cache_tenant_id() -> int:
 
 
 async def _get_relation_models() -> list[dict]:
-    """只读；若库中无记录则初始化默认四条，禁止每次读取都覆盖已保存的自定义模型。
+    """只读; 若库中无记录则初始化默认四条, 禁止每次读取都覆盖已保存的自定义模型。
 
     F040 (E): served from a process-local cache keyed by the config row's
     ``update_time``; on a version match the parse is skipped. Version unavailable
@@ -251,7 +254,7 @@ async def _save_relation_models(models: list[dict]) -> None:
 
 
 async def _get_bindings() -> list[dict]:
-    """只读；禁止每次读取都把绑定表写回空数组。
+    """只读; 禁止每次读取都把绑定表写回空数组。
 
     F040 (E): served from a process-local cache keyed by the config row's
     ``update_time`` — this collapses the repeated DB read + ``json.loads`` + legacy
@@ -579,6 +582,7 @@ async def _has_resource_permission_management_access(
     resource_type: str,
     resource_id: str,
     login_user: UserPayload,
+    use_binding_index: bool = False,
 ) -> bool:
     from bisheng.permission.domain.services.permission_service import PermissionService
 
@@ -586,12 +590,21 @@ async def _has_resource_permission_management_access(
     if management_permission_ids:
         from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
 
-        effective_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
-            login_user,
-            resource_type,
-            resource_id,
-            nearest_binding_wins=_lineage_binding_can_override(resource_type),
-        )
+        if use_binding_index and resource_type in {"knowledge_space", "channel"}:
+            effective_permission_ids = (
+                await FineGrainedPermissionService.get_effective_permission_ids_from_verified_bindings_async(
+                    login_user,
+                    resource_type,
+                    resource_id,
+                )
+            )
+        else:
+            effective_permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+                login_user,
+                resource_type,
+                resource_id,
+                nearest_binding_wins=_lineage_binding_can_override(resource_type),
+            )
         return bool(management_permission_ids & effective_permission_ids)
 
     return await PermissionService.check(
@@ -873,7 +886,7 @@ async def authorize_resource(
     """Grant or revoke permissions on a resource.
 
     调用方在资源上的档位需覆盖本次操作涉及的「关系模型授权级别」
-    （所有者级 / 管理级 / 使用级），与 PRD 管理应用所有者/管理者/使用者对齐。
+    (所有者级 / 管理级 / 使用级), 与 PRD 管理应用所有者/管理者/使用者对齐。
     """
     from bisheng.permission.domain.services.resource_authorization_service import (
         ResourceAuthorizationService,
@@ -898,12 +911,13 @@ async def authorize_resource(
         dispatch_notifications=_dispatch_authorize_notifications_in_background,
     )
     try:
-        await service.authorize(resource_type, resource_id, request, login_user)
+        result = await service.authorize(resource_type, resource_id, request, login_user)
     except PermissionTupleWriteError as error:
         return error.return_resp_instance()
     except BaseErrorCode as error:
         return error.__class__.return_resp(msg=error.message)
-    return resp_200(None)
+    return resp_200(result)
+
 
 
 @router.get("/creation-grant-subjects")
@@ -1112,41 +1126,48 @@ async def get_resource_permissions(
         resource_type=resource_type,
         resource_id=resource_id,
         login_user=login_user,
+        use_binding_index=resource_type == "knowledge_space",
     )
     if not allowed:
         return PermissionDeniedError.return_resp()
 
-    permissions = await PermissionService.get_resource_permissions(
-        object_type=resource_type,
-        object_id=resource_id,
-    )
     models = await _get_relation_models()
     model_map = {m["id"]: _normalize_model_dict(m) for m in models}
-    binding_map = {
-        b.get("key"): b
+    bindings = [
+        b
         for b in await _get_bindings()
         if b.get("resource_type") == resource_type and str(b.get("resource_id")) == str(resource_id)
-    }
-    bindings = list(binding_map.values())
-    visible_permissions = []
-    for p in permissions:
-        matched = _binding_from_map(
-            binding_map,
-            resource_type,
-            str(resource_id),
-            p.subject_type,
-            p.subject_id,
-            p.relation,
-            getattr(p, "include_children", None),
+    ]
+    binding_map = {b.get("key"): b for b in bindings if b.get("key")}
+    if resource_type == "knowledge_space":
+        permissions = await PermissionService.get_resource_permissions_from_bindings(
+            bindings,
+            model_map,
         )
-        if matched:
-            p.model_id = matched.get("model_id")
-            p.model_name = model_map.get(p.model_id, {}).get("name")
-            p.include_children = matched.get("include_children")
+    else:
+        permissions = await PermissionService.get_resource_permissions(
+            object_type=resource_type,
+            object_id=resource_id,
+        )
+        visible_permissions = []
+        for p in permissions:
+            matched = _binding_from_map(
+                binding_map,
+                resource_type,
+                str(resource_id),
+                p.subject_type,
+                p.subject_id,
+                p.relation,
+                getattr(p, "include_children", None),
+            )
+            if matched:
+                p.model_id = matched.get("model_id")
+                p.model_name = model_map.get(p.model_id, {}).get("name")
+                p.include_children = matched.get("include_children")
 
-        visible_permissions.append(p)
-    permissions = visible_permissions
-    permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
+            visible_permissions.append(p)
+        permissions = visible_permissions
+        permissions = await _apply_binding_metadata_to_permissions(permissions, bindings, model_map)
     permissions = await _add_creator_owner_entry(
         resource_type=resource_type,
         resource_id=resource_id,
@@ -1160,7 +1181,37 @@ async def get_resource_permissions(
         model_map=model_map,
         login_user=login_user,
     )
+    from bisheng.permission.domain.services.resource_authorization_service import (
+        ResourceAuthorizationService,
+    )
+
+    resource_tenant_id = await PermissionService._resolve_resource_tenant(resource_type, resource_id)
+    if resource_tenant_id is None:
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        resource_tenant_id = get_current_tenant_id() or login_user.tenant_id
+    permissions = await ResourceAuthorizationService().list_pending_permissions(
+        tenant_id=int(resource_tenant_id),
+        resource_type=resource_type,
+        resource_id=resource_id,
+        active_permissions=permissions,
+    )
     return resp_200(permissions)
+
+
+@router.post("/resource-user-invites/{request_id}/retry")
+async def retry_resource_user_invite(
+    request_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """Re-dispatch an approved F045 request whose Permission execution failed."""
+
+    service = build_runtime_resource_user_invite_application_service()
+    result = await service.retry_failed_invite(
+        tenant_id=int(login_user.tenant_id),
+        request_id=request_id,
+    )
+    return resp_200(result)
 
 
 @router.get("/relation-models")
@@ -1374,7 +1425,7 @@ async def delete_relation_model(
 async def rebac_schema_summary(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """PRD §3.2.3 资源权限模板：返回当前内置 OpenFGA 模型类型与关系名（仅超管）。"""
+    """PRD §3.2.3 资源权限模板: 返回当前内置 OpenFGA 模型类型与关系名 (仅超管)。"""
     if not login_user.is_admin():
         return PermissionDeniedError.return_resp()
 
@@ -1384,7 +1435,7 @@ async def rebac_schema_summary(
     types_out = []
     for td in model.get("type_definitions", []):
         tname = td.get("type")
-        rels = sorted(list((td.get("relations") or {}).keys()))
+        rels = sorted((td.get("relations") or {}).keys())
         types_out.append({"type": tname, "relations": rels})
     return resp_200(
         {"schema_version": model.get("schema_version"), "model_version": MODEL_VERSION, "types": types_out},

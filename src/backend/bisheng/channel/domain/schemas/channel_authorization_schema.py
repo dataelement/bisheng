@@ -1,34 +1,41 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from bisheng.common.models.space_channel_member import ChannelRelationEnum
+from bisheng.permission.domain.schemas.permission_schema import (
+    AuthorizationItemResult,
+    AuthorizationResult,
+)
 
 
 class ChannelGrantItem(BaseModel):
-    subject_type: str = Field(..., description='user | department | user_group')
+    subject_type: str = Field(..., description="user | department | user_group")
     subject_id: int
-    relation: ChannelRelationEnum = Field(..., description='owner | manager | editor | viewer')
+    relation: ChannelRelationEnum = Field(..., description="owner | manager | editor | viewer")
     include_children: bool = True
-    model_id: Optional[str] = None
+    model_id: str | None = None
 
 
 class ChannelRevokeItem(BaseModel):
-    subject_type: str = Field(..., description='user | department | user_group')
+    subject_type: str = Field(..., description="user | department | user_group")
     subject_id: int
-    relation: ChannelRelationEnum = Field(..., description='owner | manager | editor | viewer')
+    relation: ChannelRelationEnum = Field(..., description="owner | manager | editor | viewer")
     include_children: bool = True
-    model_id: Optional[str] = None
+    model_id: str | None = None
 
 
 class ChannelAuthorizeRequest(BaseModel):
-    grants: List[ChannelGrantItem] = Field(default_factory=list)
-    revokes: List[ChannelRevokeItem] = Field(default_factory=list)
+    grants: list[ChannelGrantItem] = Field(default_factory=list)
+    revokes: list[ChannelRevokeItem] = Field(default_factory=list)
 
 
-class ChannelAuthorizeResponse(BaseModel):
+ChannelAuthorizationItemResult = AuthorizationItemResult
+
+
+class ChannelAuthorizeResponse(AuthorizationResult):
     synced_user_count: int = 0
     affected_member_count: int = 0
 
@@ -36,23 +43,25 @@ class ChannelAuthorizeResponse(BaseModel):
 class ChannelPermissionEntry(BaseModel):
     subject_type: str
     subject_id: int
-    subject_name: Optional[str] = None
-    subject_group_names: Optional[List[str]] = None
-    subject_member_names: Optional[List[str]] = None
+    subject_name: str | None = None
+    subject_group_names: list[str] | None = None
+    subject_member_names: list[str] | None = None
     relation: ChannelRelationEnum
-    include_children: Optional[bool] = None
-    model_id: Optional[str] = None
-    model_name: Optional[str] = None
+    include_children: bool | None = None
+    model_id: str | None = None
+    model_name: str | None = None
     # True for the channel creator's entry: their permission level is permanent
     # and must not be editable in the UI.
     is_creator: bool = False
+    authorization_status: Literal["active", "pending"] = "active"
+    approval_instance_id: int | None = None
 
 
 class ChannelRelationModelItem(BaseModel):
     id: str
     name: str
     relation: ChannelRelationEnum
-    permissions: List[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
     permissions_explicit: bool = False
     is_system: bool = False
-    grant_tier: str = 'usage'
+    grant_tier: str = "usage"

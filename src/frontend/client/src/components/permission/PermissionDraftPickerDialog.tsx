@@ -6,16 +6,17 @@ import { Checkbox } from "~/components/ui/Checkbox";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/Dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/Tabs";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
 import {
   INCLUDE_CHILDREN_CHECKBOX_CLASS,
   INCLUDE_CHILDREN_LABEL_CLASS,
   PERMISSION_DIALOG_CONTENT_CLASS,
+  PERMISSION_FOOTER_ACTIONS_CLASS,
   PERMISSION_FOOTER_LABEL_CLASS,
   SUBJECT_TAB_LIST_CLASS,
   SUBJECT_TAB_TRIGGER_CLASS,
@@ -170,7 +171,10 @@ export function PermissionDraftPickerDialog({
             <SubjectSearchUserGroup {...searchProps} grantUserGroupsApi={searchApi?.grantUserGroupsApi} />
           </TabsContent>
         </Tabs>
-        <DialogFooter className="mt-3 shrink-0 items-center border-t pt-3 sm:justify-between">
+        {/* Mobile stacks the relation picker above a full-width action pair, with
+            the divider directly above the buttons — matching the resource grant
+            dialog. Desktop keeps both on one bordered row. */}
+        <div className="mt-3 flex shrink-0 flex-col gap-3 min-[769px]:flex-row min-[769px]:items-center min-[769px]:justify-between min-[769px]:border-t min-[769px]:pt-3">
           <div className="flex items-center gap-2">
             <span className={PERMISSION_FOOTER_LABEL_CLASS}>
               {localize("com_permission.uniform_grant")}
@@ -183,7 +187,12 @@ export function PermissionDraftPickerDialog({
               className="w-[132px]"
             />
           </div>
-          <div className="flex gap-2">
+          <div
+            className={cn(
+              "max-[768px]:border-t max-[768px]:pt-3",
+              PERMISSION_FOOTER_ACTIONS_CLASS,
+            )}
+          >
             <Button color="default" variant="outlined" size="medium" onClick={() => onOpenChange(false)}>
               {localize("com_unified_permission.cancel")}
             </Button>
@@ -197,7 +206,7 @@ export function PermissionDraftPickerDialog({
               {localize("com_unified_permission.add_authorization")}
             </Button>
           </div>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

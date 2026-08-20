@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from bisheng.common.errcode.linsight import (
-    SkillFileTooLargeError,
+    SkillBundleTooLargeError,
     SkillGitHubFetchError,
     SkillGitHubRateLimitError,
     SkillGitHubUrlInvalidError,
@@ -24,7 +24,7 @@ from bisheng.linsight.domain.services.github_skill_fetcher import (
     fetch_skill_files,
     parse_github_url,
 )
-from bisheng.linsight.domain.services.skill_store import MAX_BUNDLE_SIZE, SKILL_MD, SkillStore
+from bisheng.linsight.domain.services.skill_store import MAX_UNPACKED_SIZE, SKILL_MD, SkillStore
 
 TENANT = 1
 USER = 7
@@ -179,14 +179,14 @@ class TestFetchSkillFiles:
                     {
                         "name": "SKILL.md",
                         "type": "file",
-                        "size": MAX_BUNDLE_SIZE + 1,
+                        "size": MAX_UNPACKED_SIZE + 1,
                         "download_url": f"{RAW}/SKILL.md",
                     },
                 ]
             )
 
         _patch_httpx(monkeypatch, handler)
-        with pytest.raises(SkillFileTooLargeError):
+        with pytest.raises(SkillBundleTooLargeError):
             await fetch_skill_files(GithubTarget("o", "r", "main", ""))
 
     async def test_download_from_unexpected_host_rejected(self, monkeypatch):

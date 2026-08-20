@@ -153,17 +153,6 @@ class PermissionService:
                 consistency=consistency,
             )
 
-            if not allowed:
-                for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
-                    allowed = await fga.check(
-                        user=f"user:{user_id}",
-                        relation=relation,
-                        object=f"{legacy_type}:{object_id}",
-                        consistency=consistency,
-                    )
-                    if allowed:
-                        break
-
             # L4: Owner fallback — if FGA says no, check DB creator field. Owner
             # and creator are decoupled, so an explicitly revoked creator-owner
             # must not be resurrected: only fall back to creator ownership when no
@@ -272,19 +261,6 @@ class PermissionService:
                 if len(parts) == 2:
                     ids.append(parts[1])
 
-            for legacy_type in await cls._legacy_alias_object_types(object_type):
-                legacy_objects = await fga.list_objects(
-                    user=f"user:{user_id}",
-                    relation=relation,
-                    type=legacy_type,
-                )
-                legacy_ids = []
-                for obj in legacy_objects:
-                    parts = obj.split(":", 1)
-                    if len(parts) == 2:
-                        legacy_ids.append(parts[1])
-                ids.extend(await cls._filter_legacy_alias_ids(object_type, legacy_ids))
-
             ids = await cls._finalize_accessible_ids(
                 ids,
                 user_id,
@@ -319,6 +295,8 @@ class PermissionService:
         grants: list[AuthorizeGrantItem] = None,
         revokes: list[AuthorizeRevokeItem] = None,
         enforce_fga_success: bool = False,
+        recovery_owner: str = "service",
+        dispatch_file_change_approver_reconcile: bool = True,
     ) -> None:
         """Grant or revoke permissions on a resource.
 
@@ -327,9 +305,7 @@ class PermissionService:
         """
         operations: list[TupleOperation] = []
         affected_user_ids: set[int] = set()
-        fga_objects = [f"{object_type}:{object_id}"]
-        for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
-            fga_objects.append(f"{legacy_type}:{object_id}")
+        fga_object = f"{object_type}:{object_id}"
 
         for grant in grants or []:
             fga_users = await cls._expand_subject(
@@ -338,15 +314,14 @@ class PermissionService:
                 grant.include_children,
             )
             for fga_user in fga_users:
-                for fga_object in fga_objects:
-                    operations.append(
-                        TupleOperation(
-                            action="write",
-                            user=fga_user,
-                            relation=grant.relation,
-                            object=fga_object,
-                        )
+                operations.append(
+                    TupleOperation(
+                        action="write",
+                        user=fga_user,
+                        relation=grant.relation,
+                        object=fga_object,
                     )
+                )
             affected_user_ids.update(
                 await cls._affected_user_ids_for_subject(
                     grant.subject_type,
@@ -362,15 +337,14 @@ class PermissionService:
                 revoke.include_children,
             )
             for fga_user in fga_users:
-                for fga_object in fga_objects:
-                    operations.append(
-                        TupleOperation(
-                            action="delete",
-                            user=fga_user,
-                            relation=revoke.relation,
-                            object=fga_object,
-                        )
+                operations.append(
+                    TupleOperation(
+                        action="delete",
+                        user=fga_user,
+                        relation=revoke.relation,
+                        object=fga_object,
                     )
+                )
             affected_user_ids.update(
                 await cls._affected_user_ids_for_subject(
                     revoke.subject_type,
@@ -398,7 +372,28 @@ class PermissionService:
             operations,
             raise_on_failure=enforce_fga_success,
             stop_on_failure=enforce_fga_success,
+            recovery_owner=recovery_owner,
         )
+
+        if enforce_fga_success and dispatch_file_change_approver_reconcile:
+            from bisheng.permission.domain.services.file_change_approver_reconcile_dispatcher import (
+                dispatch_file_change_approver_reconcile_for_permission_change,
+            )
+
+            resource_tenant_id = await cls.resolve_resource_tenant_id(
+                object_type,
+                object_id,
+            )
+            # This runs only after the authoritative OpenFGA write succeeds.
+            # Strict resolver failures propagate so callers cannot mistake an
+            # unavailable approver source for an authoritative empty set.
+            await dispatch_file_change_approver_reconcile_for_permission_change(
+                resource_type=object_type,
+                resource_id=object_id,
+                grants=grants or (),
+                revokes=revokes or (),
+                tenant_id=resource_tenant_id,
+            )
 
         # Invalidate cache for directly affected users
         if affected_user_ids:
@@ -417,6 +412,7 @@ class PermissionService:
         crash_safe: bool = False,
         raise_on_failure: bool = False,
         stop_on_failure: bool = False,
+        recovery_owner: str = "service",
     ) -> None:
         """Batch write/delete tuples to OpenFGA.
 
@@ -431,6 +427,10 @@ class PermissionService:
                 deleted. Used by ChangeHandler callsites where the DB transaction
                 has already committed.
         """
+        if recovery_owner not in {"service", "caller"}:
+            raise ValueError("recovery_owner must be 'service' or 'caller'")
+        if recovery_owner == "caller" and crash_safe:
+            raise ValueError("caller-owned recovery cannot use crash_safe FailedTuple records")
         if not operations:
             return
         operations = cls._dedupe_operations(operations)
@@ -444,7 +444,7 @@ class PermissionService:
         try:
             fga = await cls._aget_fga()
             if fga is None:
-                if not crash_safe:
+                if not crash_safe and recovery_owner == "service":
                     await cls._save_failed_tuples(operations, "FGAClient not available")
                 if raise_on_failure:
                     raise FGAConnectionError("FGAClient not available")
@@ -494,7 +494,7 @@ class PermissionService:
                     raise_on_failure,
                     crash_safe,
                 )
-                if not crash_safe:
+                if not crash_safe and recovery_owner == "service":
                     await cls._save_failed_tuples(
                         failed_ops,
                         "OpenFGA single-tuple fallback failed",
@@ -512,7 +512,7 @@ class PermissionService:
 
         except Exception as e:
             logger.error("Failed to batch write tuples: %s", e)
-            if not crash_safe and not saved_failure_ops:
+            if not crash_safe and not saved_failure_ops and recovery_owner == "service":
                 await cls._save_failed_tuples(operations, str(e))
             # If crash_safe, pre-recorded entries remain as 'pending' for retry
             if raise_on_failure:
@@ -604,8 +604,8 @@ class PermissionService:
             deduped.append(op)
         return deduped
 
-    # Regex to parse FGA subject: "user:7", "department:5#member", "user_group:3#member"
-    _SUBJECT_RE = re.compile(r"^(user|department|user_group):(\d+)(#member)?$")
+    # Regex to parse FGA subject usersets supported by the permission model.
+    _SUBJECT_RE = re.compile(r"^(user|department|user_group):(\d+)(#member|#admin)?$")
 
     @classmethod
     async def get_resource_permissions(
@@ -624,8 +624,6 @@ class PermissionService:
                 return []
 
             tuples = await fga.read_tuples(object=f"{object_type}:{object_id}")
-            for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
-                tuples.extend(await fga.read_tuples(object=f"{legacy_type}:{object_id}"))
             if not tuples:
                 return []
 
@@ -638,6 +636,220 @@ class PermissionService:
         except Exception as e:
             logger.error("Error reading resource permissions: %s", e)
             return []
+
+    @classmethod
+    async def resolve_resource_relation_user_ids_strict(
+        cls,
+        *,
+        tenant_id: int,
+        object_type: str,
+        object_id: str,
+        relations: tuple[str, ...],
+    ) -> set[int]:
+        """Resolve relation subjects to concrete users without outage fallback.
+
+        Unlike :meth:`get_resource_permissions`, this authorization-boundary API
+        never converts OpenFGA or subject-expansion failures into an empty result.
+        Callers may therefore treat an empty set as an authoritative answer.
+        Department grants are already expanded to one tuple per included
+        department when written, so each ``department:id#member`` tuple expands
+        only that exact department here.
+        """
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            raise RuntimeError("a matching tenant context is required for strict permission resolution")
+        if not object_type or not object_id:
+            raise ValueError("object_type and object_id are required")
+
+        normalized_relations = tuple(dict.fromkeys(str(relation) for relation in relations if relation))
+        if not normalized_relations:
+            raise ValueError("at least one relation is required")
+
+        fga = await cls._aget_fga()
+        if fga is None:
+            raise FGAConnectionError("OpenFGA client is unavailable")
+
+        from bisheng.permission.domain.repositories.grant_subject_query_repository import (
+            GrantSubjectQueryRepository,
+        )
+
+        object_ref = f"{object_type}:{object_id}"
+        subject_repository = GrantSubjectQueryRepository()
+        direct_user_ids: set[int] = set()
+        department_ids: set[int] = set()
+        group_member_ids: set[int] = set()
+        group_admin_ids: set[int] = set()
+        for relation in normalized_relations:
+            tuples = await fga.read_tuples(
+                object=object_ref,
+                relation=relation,
+                consistency="HIGHER_CONSISTENCY",
+            )
+            for item in tuples or []:
+                if item.get("object") != object_ref or item.get("relation") != relation:
+                    raise ValueError("OpenFGA returned a tuple outside the requested relation scope")
+
+                raw_subject = item.get("user", "")
+                match = cls._SUBJECT_RE.fullmatch(raw_subject)
+                if match is None:
+                    raise ValueError(f"Unsupported OpenFGA subject: {raw_subject!r}")
+                subject_type, subject_id_text, member_suffix = match.groups()
+                if (
+                    (subject_type == "user" and member_suffix is not None)
+                    or (subject_type == "department" and member_suffix != "#member")
+                    or (subject_type == "user_group" and member_suffix not in {"#member", "#admin"})
+                ):
+                    raise ValueError(f"Unsupported OpenFGA subject: {raw_subject!r}")
+
+                subject_id = int(subject_id_text)
+                if subject_type == "user":
+                    direct_user_ids.add(subject_id)
+                elif subject_type == "department":
+                    department_ids.add(subject_id)
+                elif member_suffix == "#admin":
+                    group_admin_ids.add(subject_id)
+                else:
+                    group_member_ids.add(subject_id)
+
+        department_members = (
+            await subject_repository.resolve_exact_department_member_user_ids_batch(
+                department_ids=department_ids,
+                tenant_id=int(tenant_id),
+            )
+            if department_ids
+            else {}
+        )
+        invalid_department_ids = department_ids.difference(department_members)
+        if invalid_department_ids:
+            raise ValueError(
+                f"OpenFGA department subjects are outside tenant {tenant_id}: {sorted(invalid_department_ids)}"
+            )
+
+        group_members = (
+            await subject_repository.resolve_user_group_member_user_ids_batch(
+                group_ids=group_member_ids,
+                tenant_id=int(tenant_id),
+            )
+            if group_member_ids
+            else {}
+        )
+        invalid_group_ids = group_member_ids.difference(group_members)
+        if invalid_group_ids:
+            raise ValueError(f"OpenFGA user-group subjects are outside tenant {tenant_id}: {sorted(invalid_group_ids)}")
+
+        group_admins = (
+            await subject_repository.resolve_user_group_admin_user_ids_batch(
+                group_ids=group_admin_ids,
+                tenant_id=int(tenant_id),
+            )
+            if group_admin_ids
+            else {}
+        )
+        invalid_admin_group_ids = group_admin_ids.difference(group_admins)
+        if invalid_admin_group_ids:
+            raise ValueError(
+                f"OpenFGA user-group subjects are outside tenant {tenant_id}: {sorted(invalid_admin_group_ids)}"
+            )
+
+        user_ids = direct_user_ids.union(
+            *(member_ids for member_ids in department_members.values()),
+            *(member_ids for member_ids in group_members.values()),
+            *(member_ids for member_ids in group_admins.values()),
+        )
+        if not user_ids:
+            return set()
+        return await subject_repository.filter_active_user_ids_in_tenant(
+            user_ids=user_ids,
+            tenant_id=int(tenant_id),
+        )
+
+    @classmethod
+    async def resolve_permanent_creator_user_ids_strict(
+        cls,
+        *,
+        tenant_id: int,
+        object_type: str,
+        object_id: str,
+    ) -> set[int]:
+        """Resolve active creators whose resource type defines permanent ownership.
+
+        The OpenFGA availability boundary remains the caller's responsibility;
+        this method only projects the established knowledge-space creator rule
+        after the caller has completed its strict relation read.
+        """
+        from bisheng.core.context.tenant import get_current_tenant_id
+
+        current_tenant_id = get_current_tenant_id()
+        if current_tenant_id is None or int(current_tenant_id) != int(tenant_id):
+            raise RuntimeError("a matching tenant context is required for permanent creator resolution")
+        if object_type != "knowledge_space":
+            return set()
+
+        creator_id = await cls._get_resource_creator(object_type, object_id)
+        if creator_id is None:
+            return set()
+
+        from bisheng.permission.domain.repositories.grant_subject_query_repository import (
+            GrantSubjectQueryRepository,
+        )
+
+        return await GrantSubjectQueryRepository().filter_active_user_ids_in_tenant(
+            user_ids={int(creator_id)},
+            tenant_id=int(tenant_id),
+        )
+
+    @classmethod
+    async def get_resource_permissions_from_bindings(
+        cls,
+        bindings: list[dict],
+        model_map: dict[str, dict],
+    ) -> list[ResourcePermissionItem]:
+        """Build the permission-management list from persisted UI bindings.
+
+        This is intentionally a display-only read path. It does not query
+        OpenFGA and must never be used for permission decisions. Callers remain
+        responsible for access checks through the normal permission service.
+        """
+        tuple_rows: list[dict] = []
+        binding_map: dict[tuple[str, int, str], dict] = {}
+        seen: set[tuple[str, int, str]] = set()
+
+        for binding in bindings:
+            subject_type = binding.get("subject_type")
+            relation = binding.get("relation")
+            if subject_type not in {"user", "department", "user_group"}:
+                continue
+            if relation not in {"owner", "manager", "editor", "viewer"}:
+                continue
+            try:
+                subject_id = int(binding.get("subject_id"))
+            except (TypeError, ValueError):
+                continue
+
+            key = (subject_type, subject_id, relation)
+            binding_map[key] = binding
+            if key in seen:
+                continue
+            seen.add(key)
+            member_suffix = "" if subject_type == "user" else "#member"
+            tuple_rows.append(
+                {
+                    "user": f"{subject_type}:{subject_id}{member_suffix}",
+                    "relation": relation,
+                }
+            )
+
+        permissions = await cls._enrich_permission_tuples(tuple_rows)
+        for item in permissions:
+            binding = binding_map.get((item.subject_type, int(item.subject_id), item.relation))
+            if binding is None:
+                continue
+            item.include_children = binding.get("include_children")
+            item.model_id = binding.get("model_id")
+            item.model_name = model_map.get(item.model_id, {}).get("name")
+        return permissions
 
     @classmethod
     async def _enrich_permission_tuples(
@@ -927,16 +1139,6 @@ class PermissionService:
                 if allowed:
                     return level.value
 
-            for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
-                legacy_checks = [
-                    {"user": f"user:{user_id}", "relation": level.value, "object": f"{legacy_type}:{object_id}"}
-                    for level in PermissionLevel
-                ]
-                legacy_results = await fga.batch_check(legacy_checks)
-                for level, allowed in zip(PermissionLevel, legacy_results):
-                    if allowed:
-                        return level.value
-
             # Owner/creator decoupled: creator counts as owner only when no other
             # owner tuple remains (FGA reachable here). See check() L4 fallback.
             return await cls._get_implicit_permission_level_after_gate(
@@ -1109,8 +1311,6 @@ class PermissionService:
             if fga is None:
                 return False
             tuples = await fga.read_tuples(object=f"{object_type}:{object_id}", relation="owner")
-            for legacy_type in await cls._legacy_alias_object_types(object_type, object_id):
-                tuples.extend(await fga.read_tuples(object=f"{legacy_type}:{object_id}", relation="owner"))
             exclude_user = f"user:{exclude_user_id}" if exclude_user_id is not None else None
             return any(t.get("relation") == "owner" and t.get("user") != exclude_user for t in (tuples or []))
         except Exception as e:
@@ -1447,46 +1647,6 @@ class PermissionService:
         )
 
     @classmethod
-    async def _legacy_alias_object_types(
-        cls,
-        object_type: str,
-        object_id: str | None = None,
-    ) -> list[str]:
-        if object_type != "knowledge_library":
-            return []
-        if object_id is None:
-            return ["knowledge_space"]
-        try:
-            from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-
-            obj = await KnowledgeDao.aquery_by_id(int(object_id))
-            if obj and obj.type != KnowledgeTypeEnum.SPACE.value:
-                return ["knowledge_space"]
-        except Exception as e:
-            logger.debug("Could not resolve legacy alias object type for %s:%s: %s", object_type, object_id, e)
-        return []
-
-    @classmethod
-    async def _filter_legacy_alias_ids(
-        cls,
-        object_type: str,
-        ids: list[str],
-    ) -> list[str]:
-        if object_type != "knowledge_library" or not ids:
-            return ids
-        try:
-            from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
-
-            numeric_ids = [int(one) for one in ids if str(one).isdigit()]
-            if not numeric_ids:
-                return []
-            objects = await KnowledgeDao.aget_list_by_ids(numeric_ids)
-            return [str(obj.id) for obj in objects if obj.type != KnowledgeTypeEnum.SPACE.value]
-        except Exception as e:
-            logger.debug("Could not filter legacy alias ids for %s: %s", object_type, e)
-            return []
-
-    @classmethod
     async def _expand_subject(
         cls,
         subject_type: str,
@@ -1738,6 +1898,15 @@ class PermissionService:
         return cls._get_fga()
 
     # ── F013 helpers (Tenant tree) ──────────────────────────────
+
+    @classmethod
+    async def resolve_resource_tenant_id(cls, object_type: str, object_id: str) -> int | None:
+        """Public owner API for the authoritative resource tenant id."""
+
+        tenant_id = await cls._resolve_resource_tenant(object_type, object_id)
+        if tenant_id is None or isinstance(tenant_id, bool) or int(tenant_id) <= 0:
+            return None
+        return int(tenant_id)
 
     @classmethod
     async def _resolve_resource_tenant(cls, object_type: str, object_id: str):

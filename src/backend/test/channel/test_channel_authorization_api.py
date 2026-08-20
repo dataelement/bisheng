@@ -9,11 +9,13 @@ from starlette.testclient import TestClient
 
 from bisheng.channel.api.endpoints.channel_manager import router
 from bisheng.channel.domain.schemas.channel_authorization_schema import (
+    ChannelAuthorizationItemResult,
     ChannelAuthorizeResponse,
     ChannelPermissionEntry,
     ChannelRelationModelItem,
 )
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.approval import ApprovalScenarioDisabledError
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.channel import ChannelPermissionDeniedError
 
@@ -113,6 +115,94 @@ def test_authorize_channel_endpoint(app_with_auth_service):
     body = response.json()
     assert body["status_code"] == 200
     assert body["data"]["synced_user_count"] == 0
+    service.authorize_channel.assert_awaited_once()
+
+
+def test_channel_authorize_returns_item_results(app_with_auth_service):
+    app, service = app_with_auth_service
+    service.authorize_channel.return_value = ChannelAuthorizeResponse(
+        invite_created_count=1,
+        results=[
+            ChannelAuthorizationItemResult(
+                operation="grant",
+                subject_type="user",
+                subject_id=11,
+                relation="viewer",
+                model_id="viewer",
+                outcome="invite_created",
+                approval_instance_id=1201,
+            )
+        ],
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/channel/manager/channel-1/authorize",
+            json={
+                "grants": [{"subject_type": "user", "subject_id": 11, "relation": "viewer"}],
+                "revokes": [],
+            },
+        )
+
+    data = response.json()["data"]
+    assert data["synced_user_count"] == 0
+    assert data["affected_member_count"] == 0
+    assert data["invite_created_count"] == 1
+    assert data["results"][0]["approval_instance_id"] == 1201
+
+
+def test_channel_disabled_scenario_returns_18106(app_with_auth_service):
+    app, service = app_with_auth_service
+    service.authorize_channel.side_effect = ApprovalScenarioDisabledError(
+        msg="个人用户邀请确认场景未启用，无法新增个人用户权限"  # noqa: RUF001
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/channel/manager/channel-1/authorize",
+            json={
+                "grants": [{"subject_type": "user", "subject_id": 11, "relation": "viewer"}],
+                "revokes": [],
+            },
+        )
+
+    body = response.json()
+    assert body["status_code"] == 18106
+    assert body["status_message"] == "个人用户邀请确认场景未启用，无法新增个人用户权限"  # noqa: RUF001
+
+
+def test_channel_permissions_include_pending(app_with_auth_service):
+    app, service = app_with_auth_service
+    service.list_permissions.return_value = [
+        ChannelPermissionEntry(
+            subject_type="user",
+            subject_id=11,
+            subject_name="Alice",
+            relation="viewer",
+            model_id="viewer",
+            authorization_status="pending",
+            approval_instance_id=1201,
+        )
+    ]
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/channel/manager/channel-1/permissions")
+
+    entry = response.json()["data"][0]
+    assert entry["authorization_status"] == "pending"
+    assert entry["approval_instance_id"] == 1201
+
+
+def test_channel_old_request_compatible(app_with_auth_service):
+    app, service = app_with_auth_service
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/channel/manager/channel-1/authorize",
+            json={"grants": [], "revokes": []},
+        )
+
+    assert response.json()["status_code"] == 200
     service.authorize_channel.assert_awaited_once()
 
 

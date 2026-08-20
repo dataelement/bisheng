@@ -6,7 +6,7 @@
  * so no Recoil atom is needed.
  */
 import { useEffect, useState } from 'react';
-import { openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
+import { isHtmlArtifact, openHtmlArtifactViewer, type ArtifactFile } from './artifactUtils';
 
 export function useArtifactsPanel(versionId: string) {
     const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -32,7 +32,7 @@ export function useArtifactsPanel(versionId: string) {
         // html artifacts open in the standalone sandboxed viewer tab (the side
         // panel can't render a full HTML document); needs versionId to resolve
         // the MinIO object key into a presigned link.
-        if (file.file_name?.toLowerCase().endsWith('.html')) {
+        if (isHtmlArtifact(file)) {
             openHtmlArtifactViewer(file, versionId);
             return;
         }

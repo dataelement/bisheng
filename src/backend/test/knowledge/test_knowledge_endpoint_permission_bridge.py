@@ -111,6 +111,8 @@ def _install_endpoint_stubs() -> None:
         dependencies_module = ModuleType("bisheng.knowledge.api.dependencies")
         dependencies_module.get_knowledge_service = lambda: None
         dependencies_module.get_knowledge_file_service = lambda: None
+        dependencies_module.get_knowledge_space_service = lambda: None
+        dependencies_module.get_knowledge_space_upload_stage_service = lambda: None
         sys.modules["bisheng.knowledge.api.dependencies"] = dependencies_module
 
     if "bisheng.role.domain.services.quota_service" not in sys.modules:
@@ -309,6 +311,12 @@ async def test_get_filelist_uses_async_knowledge_files_service_bridge():
             "get_knowledge_files",
             side_effect=AssertionError("sync file_list bridge should not be used"),
         ),
+        patch.object(
+            module.KnowledgeDao,
+            "aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(type=module.KnowledgeTypeEnum.NORMAL.value),
+        ),
     ):
         result = await module.get_filelist(
             request=request,
@@ -319,6 +327,7 @@ async def test_get_filelist_uses_async_knowledge_files_service_bridge():
             page_size=100,
             page_num=1,
             status=[2],
+            space_service=MagicMock(),
         )
 
     mock_aget_files.assert_awaited_once_with(
@@ -332,6 +341,69 @@ async def test_get_filelist_uses_async_knowledge_files_service_bridge():
         None,
     )
     assert result.data["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_filelist_space_dispatches_to_guarded_owner_service():
+    module = _load_endpoint_module()
+    login_user = SimpleNamespace(user_id=7, tenant_id=11)
+    request = MagicMock()
+    owner = SimpleNamespace(
+        search_space_children=AsyncMock(
+            return_value={
+                "data": [{"id": 51, "file_name": "published.pdf"}],
+                "page": 2,
+                "page_size": 20,
+                "has_more": True,
+            }
+        ),
+        can_write_space_container=AsyncMock(return_value=False),
+    )
+
+    with (
+        patch.object(
+            module.KnowledgeDao,
+            "aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(type=module.KnowledgeTypeEnum.SPACE.value, tenant_id=11),
+        ),
+        patch.object(
+            module.KnowledgeService,
+            "aget_knowledge_files",
+            new_callable=AsyncMock,
+            side_effect=AssertionError("SPACE must not use the raw knowledge-file list"),
+        ),
+    ):
+        result = await module.get_filelist(
+            request=request,
+            login_user=login_user,
+            file_name="published",
+            file_ids=[51],
+            knowledge_id=50,
+            page_size=20,
+            page_num=2,
+            status=[2],
+            space_service=owner,
+        )
+
+    owner.search_space_children.assert_awaited_once_with(
+        50,
+        parent_id=None,
+        keyword="published",
+        page=2,
+        page_size=20,
+        file_status=[2],
+        file_ids=[51],
+    )
+    owner.can_write_space_container.assert_awaited_once_with(50, None)
+    assert result.data == {
+        "data": [{"id": 51, "file_name": "published.pdf"}],
+        "total": None,
+        "writeable": False,
+        "page": 2,
+        "page_size": 20,
+        "has_more": True,
+    }
 
 
 def test_get_filelist_file_ids_is_a_query_parameter():

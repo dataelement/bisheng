@@ -25,6 +25,8 @@ async def engine():
             text(
                 'CREATE TABLE "user" ('
                 "user_id INTEGER PRIMARY KEY, user_name VARCHAR(256) NOT NULL, "
+                # F049: grant-subject queries filter leadership job grades out.
+                "job_grade VARCHAR(64), "
                 'external_id VARCHAR(128), "delete" INTEGER NOT NULL DEFAULT 0)'
             )
         )

@@ -279,7 +279,15 @@ describe("KnowledgeSpaceSettingsPage", () => {
     mockedGetPermissions.mockResolvedValue([]);
     mockedGetSpaceInfo.mockResolvedValue(baseSpace);
     mockedUpdateSpace.mockResolvedValue(baseSpace);
-    mockedAuthorize.mockResolvedValue(null);
+    mockedAuthorize.mockResolvedValue({
+      syncedUserCount: 0,
+      affectedMemberCount: 0,
+      directAppliedCount: 1,
+      inviteCreatedCount: 0,
+      inviteExistingCount: 0,
+      failedCount: 0,
+      results: [],
+    });
   });
 
   it("fills the available content area without a fixed page width", async () => {
@@ -291,6 +299,11 @@ describe("KnowledgeSpaceSettingsPage", () => {
     const settingsSurface = settingsPage.firstElementChild;
     expect(settingsSurface?.className).toContain("w-full");
     expect(settingsSurface?.className).not.toContain("max-w-[1368px]");
+    expect(
+      screen
+        .getByText("com_unified_permission.confirm_create")
+        .closest("footer")?.className,
+    ).toContain("h-16");
     expect(
       screen.getByPlaceholderText(
         "com_subscription.enter_knowledge_space_name",
@@ -366,6 +379,79 @@ describe("KnowledgeSpaceSettingsPage", () => {
     ).toBe("true");
   });
 
+  it("keeps department spaces shared while join review and member permissions remain configurable", async () => {
+    mockEditCapabilities(true, true);
+    mockedGetSpaceInfo.mockResolvedValue({
+      ...baseSpace,
+      spaceKind: "department",
+      visibility: VisibilityType.APPROVAL,
+    });
+    renderPage("/knowledge/space/7/settings");
+
+    const privateOption = await screen.findByRole("radio", {
+      name: /com_unified_permission\.private/,
+    });
+    const sharedOption = screen.getByRole("radio", {
+      name: /com_unified_permission\.shared/,
+    });
+    const reviewJoin = screen.getByRole("switch", {
+      name: "com_unified_permission.review_join",
+    });
+
+    expect((privateOption as HTMLButtonElement).disabled).toBe(true);
+    expect(sharedOption.getAttribute("data-state")).toBe("checked");
+    expect((reviewJoin as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("authorization-list")).not.toBeNull();
+
+    fireEvent.click(reviewJoin);
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_unified_permission.save" }),
+    );
+
+    await waitFor(() =>
+      expect(mockedUpdateSpace).toHaveBeenCalledWith(
+        "7",
+        expect.objectContaining({ auth_type: VisibilityType.PUBLIC }),
+      ),
+    );
+  });
+
+  it("normalizes historical private department spaces back to shared approval on save", async () => {
+    mockEditCapabilities(true, true);
+    mockedGetSpaceInfo.mockResolvedValue({
+      ...baseSpace,
+      spaceKind: "department",
+      visibility: VisibilityType.PRIVATE,
+    });
+
+    renderPage("/knowledge/space/7/settings");
+
+    const privateOption = await screen.findByRole("radio", {
+      name: /com_unified_permission\.private/,
+    });
+    const sharedOption = screen.getByRole("radio", {
+      name: /com_unified_permission\.shared/,
+    });
+    const reviewJoin = screen.getByRole("switch", {
+      name: "com_unified_permission.review_join",
+    });
+
+    expect((privateOption as HTMLButtonElement).disabled).toBe(true);
+    expect(sharedOption.getAttribute("data-state")).toBe("checked");
+    expect(reviewJoin.getAttribute("data-state")).toBe("checked");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_unified_permission.save" }),
+    );
+
+    await waitFor(() =>
+      expect(mockedUpdateSpace).toHaveBeenCalledWith(
+        "7",
+        expect.objectContaining({ auth_type: VisibilityType.APPROVAL }),
+      ),
+    );
+  });
+
   it("applies the model selected in the reused authorization dialog", async () => {
     mockedGetCreationModels.mockResolvedValue([
       relationModels[0],
@@ -400,7 +486,15 @@ describe("KnowledgeSpaceSettingsPage", () => {
     mockedCreateSpace.mockResolvedValue({
       ...baseSpace,
       id: "88",
-      initialPermissionResult: { status: "failed", errorCode: 21009 },
+      initialPermissionResult: {
+        status: "failed",
+        errorCode: 21009,
+        directAppliedCount: 0,
+        inviteCreatedCount: 0,
+        inviteExistingCount: 0,
+        failedCount: 1,
+        results: [],
+      },
     });
     renderPage("/knowledge/create");
     await screen.findByTestId("permission-section");
@@ -574,7 +668,15 @@ describe("KnowledgeSpaceSettingsPage", () => {
       ...baseSpace,
       visibility: VisibilityType.PRIVATE,
     });
-    mockedAuthorize.mockResolvedValue(null);
+    mockedAuthorize.mockResolvedValue({
+      syncedUserCount: 0,
+      affectedMemberCount: 0,
+      directAppliedCount: 1,
+      inviteCreatedCount: 0,
+      inviteExistingCount: 0,
+      failedCount: 0,
+      results: [],
+    });
     mockEditCapabilities(true, true);
     renderPage("/knowledge/space/7/settings");
     await screen.findByTestId("permission-section");
@@ -596,6 +698,57 @@ describe("KnowledgeSpaceSettingsPage", () => {
       ),
     );
     expect(mockedAuthorize).not.toHaveBeenCalled();
+  });
+
+  it("stays on edit settings and does not report success for partial authorization failure", async () => {
+    mockEditCapabilities(true, true);
+    mockedGetPermissions.mockResolvedValue([
+      {
+        subject_type: "user",
+        subject_id: 9,
+        subject_name: "Ada",
+        relation: "owner",
+        model_id: "owner",
+        is_creator: false,
+      },
+    ]);
+    mockedAuthorize.mockResolvedValue({
+      syncedUserCount: 0,
+      affectedMemberCount: 0,
+      directAppliedCount: 0,
+      inviteCreatedCount: 0,
+      inviteExistingCount: 0,
+      failedCount: 1,
+      results: [
+        {
+          operation: "grant",
+          subjectType: "user",
+          subjectId: 9,
+          relation: "editor",
+          modelId: "editor",
+          outcome: "failed",
+          approvalInstanceId: null,
+          errorCode: 18118,
+          errorMessage: "failed",
+        },
+      ],
+    });
+    renderPage("/knowledge/space/7/settings");
+    await screen.findByText("change-relation");
+    fireEvent.click(screen.getByText("change-relation"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "com_unified_permission.save" }),
+    );
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "com_invite.partial_failed" }),
+      ),
+    );
+    expect(screen.queryByText("space-detail")).toBeNull();
+    expect(mockShowToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: "com_knowledge.space_updated" }),
+    );
   });
 
   it("leaves business-error feedback to the global request interceptor", async () => {

@@ -7,6 +7,7 @@ service code runs end-to-end inside the test.
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -129,6 +130,7 @@ async def test_outbox_success_emits_handler_success_audit():
         scenario_code="menu_access_request",
         handler_key="menu_access_request",
         business_name="菜单权限申请",
+        applicant_user_id=7,
         status="approved",
     )
     outbox = SimpleNamespace(
@@ -137,15 +139,15 @@ async def test_outbox_success_emits_handler_success_audit():
         status="pending",
         retry_count=0,
         error_summary=None,
+        execution_token=None,
+        update_time=datetime.utcnow(),
         payload_snapshot={"menu_key": "flow"},
     )
 
     repo = SimpleNamespace(
         get_outbox=AsyncMock(return_value=outbox),
-        update_outbox=AsyncMock(),
-        get_instance=AsyncMock(return_value=instance),
-        update_instance=AsyncMock(),
-        create_exception=AsyncMock(),
+        claim_outbox=AsyncMock(return_value=outbox),
+        finalize_outbox_success=AsyncMock(return_value=(outbox, instance)),
     )
 
     with patch(
@@ -173,6 +175,7 @@ async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
         scenario_code="menu_access_request",
         handler_key="menu_access_request",
         business_name="菜单权限申请",
+        applicant_user_id=7,
         status="approved",
     )
     outbox = SimpleNamespace(
@@ -181,14 +184,14 @@ async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
         status="pending",
         retry_count=0,
         error_summary=None,
+        execution_token=None,
+        update_time=datetime.utcnow(),
         payload_snapshot={"menu_key": "flow"},
     )
     repo = SimpleNamespace(
         get_outbox=AsyncMock(return_value=outbox),
-        update_outbox=AsyncMock(),
-        get_instance=AsyncMock(return_value=instance),
-        update_instance=AsyncMock(),
-        create_exception=AsyncMock(),
+        claim_outbox=AsyncMock(return_value=outbox),
+        finalize_outbox_failure=AsyncMock(return_value=(outbox, instance)),
     )
 
     with patch(
@@ -207,7 +210,70 @@ async def test_outbox_failure_emits_handler_failed_audit_with_error_summary():
     assert row["action"] == "approval.handler.failed"
     assert row["reason"] == "boom: downstream 500"
     assert row["metadata"]["error_stack_summary"] == "boom: downstream 500"
-    assert row["metadata"]["payload_snapshot"] == {"menu_key": "flow"}
+    assert "payload_snapshot" not in row["metadata"]
+
+
+async def test_invite_outbox_no_longer_owns_scenario_specific_execution_audits():
+    captured: list[dict] = []
+    instance = SimpleNamespace(
+        id=11,
+        tenant_id=1,
+        scenario_code="resource_user_invite_confirmation",
+        handler_key="resource_user_invite_confirmation",
+        business_name="知识空间",
+        applicant_user_id=7,
+        payload_snapshot={"target_user_id": 9},
+    )
+    success_outbox = SimpleNamespace(
+        id=77,
+        instance_id=11,
+        status="pending",
+        execution_token=None,
+        update_time=datetime.utcnow(),
+        payload_snapshot={},
+    )
+    success_repo = SimpleNamespace(
+        get_outbox=AsyncMock(return_value=success_outbox),
+        claim_outbox=AsyncMock(return_value=success_outbox),
+        finalize_outbox_success=AsyncMock(return_value=(success_outbox, instance)),
+    )
+    failed_outbox = SimpleNamespace(
+        id=78,
+        instance_id=11,
+        status="pending",
+        execution_token=None,
+        update_time=datetime.utcnow(),
+        payload_snapshot={},
+    )
+    failed_repo = SimpleNamespace(
+        get_outbox=AsyncMock(return_value=failed_outbox),
+        claim_outbox=AsyncMock(return_value=failed_outbox),
+        finalize_outbox_failure=AsyncMock(return_value=(failed_outbox, instance)),
+    )
+
+    with (
+        patch(
+            "bisheng.approval.domain.services.approval_outbox_service.AuditLogDao.ainsert_v2",
+            new=AsyncMock(side_effect=lambda **kw: captured.append(kw)),
+        ),
+        patch(
+            "bisheng.approval.domain.services.approval_notification_service.ApprovalNotificationService.notify_admins",
+            new=AsyncMock(),
+        ),
+    ):
+        assert await ApprovalOutboxService(instance_repository=success_repo).execute_outbox(
+            outbox_id=77,
+            executor=lambda _outbox: (True, None),
+        )
+        assert not await ApprovalOutboxService(instance_repository=failed_repo).execute_outbox(
+            outbox_id=78,
+            executor=lambda _outbox: (False, "grant failed"),
+        )
+
+    assert [row["action"] for row in captured] == [
+        "approval.handler.success",
+        "approval.handler.failed",
+    ]
 
 
 async def _run_gate_for_exception(*, exception_type: str):

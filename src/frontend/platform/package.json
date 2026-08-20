@@ -1,6 +1,6 @@
 {
   "name": "bisheng",
-  "version": "2.6.0",
+  "version": "2.6.0-fix2",
   "private": true,
   "dependencies": {
     "@bisheng/file-viewers": "workspace:*",

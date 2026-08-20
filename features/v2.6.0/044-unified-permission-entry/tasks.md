@@ -343,6 +343,20 @@
   **覆盖 AC**: AC-05, AC-09, AC-12, AC-13, AC-20, AC-21, AC-25
   **依赖**: T040, T041, T042, T043, T044
 
+### Wave 7 — 中粮集团/部门空间固定分享
+
+- [x] **T046**: 集团/部门空间 private 后端最终门禁
+  **文件**: `src/backend/bisheng/knowledge/domain/services/knowledge_space_service.py`, `src/backend/test/department/test_department_space_private_forbidden.py`
+  **逻辑**: 保留管理后台批量创建的 super-admin 门禁及 public/approval 选择；创建和更新显式 private 均在清理或资源写入前返回 18075，历史 private 的无 auth_type 维护不受影响。
+  **覆盖 AC**: AC-26, AC-28
+  **依赖**: F033
+
+- [x] **T047**: 前台私密禁选且保留审核与成员权限
+  **文件**: `src/frontend/client/src/components/permission/UnifiedPermissionControls.tsx`, `src/frontend/client/src/pages/knowledge/SpaceSettings/useKnowledgeSpaceSettingsForm.ts`, `src/frontend/client/src/pages/knowledge/SpaceSettings/KnowledgeSpaceSettingsPage.tsx`, `src/frontend/client/src/pages/knowledge/SpaceSettings/KnowledgeSpaceSettingsPage.test.tsx`
+  **逻辑**: `space_kind=department` 时展示但单独禁用 private，shared 下 public/approval 与权限草稿保持可用；历史 private 在页面初始化为 approval 并在下次保存修正。
+  **覆盖 AC**: AC-27, AC-28
+  **依赖**: T025, T040, T046
+
 ---
 
 ## 验证记录（2026-08-07）
@@ -352,6 +366,12 @@
 - **架构与差异**：`scripts/arch-guard.sh`、`git diff --check` 通过；domain 未反向 import permission endpoint；空间/频道旧独立权限组件无生产调用，文件/文件夹权限弹窗仍在。
 - **真实 E2E（未通过）**：4 个用例因本机 API/中间件不可达而明确 `skipped`，均报告 `All connection attempts failed`；已生成独立 fixture、唯一资源名前缀、`finally` 清理和残留证据，等待可用环境复跑。
 - **仓库基线阻塞**：client `typecheck` 与 Vite build 均停在既有 `packages/ui/ErrorPage.tsx` 缺少 `qrcode.react`；全量 Jest 在注入本机 canvas 兼容层后为 `190 passed`、4 个既有 suite 失败（`filenamify`/`sse.js` ESM、历史结构断言与通知断言）；未将这些结果标记为本 Feature 通过。
+
+## 验证补充（2026-08-11）
+
+- **中粮固定分享规则**：部门服务与 private 最终门禁聚焦测试 `20 passed`；知识空间设置页 Jest `10 passed`，覆盖私密禁选、加入审核切换、成员权限区域保留和历史 private 归一化。
+- **静态与架构检查**：变更文件 Ruff、ESLint、`scripts/arch-guard.sh`、`git diff --check` 通过。
+- **仓库基线阻塞**：client `typecheck` 仍有 6 个既有错误（聊天图标/配置类型、文件与文件夹上传可选值、该测试文件既有 matcher 类型声明）；本次新增 matcher 类型错误已清零。
 
 ---
 

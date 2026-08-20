@@ -23,9 +23,15 @@ import pytest
 
 from bisheng_langchain.gpts.tools.code_interpreter.base_executor import (
     ABSOLUTE_PATH_NOTICE,
+    ABSOLUTE_PROVISIONED_PATH_NOTICE,
     BaseExecutor,
 )
-from bisheng_langchain.gpts.tools.code_interpreter.local_executor import LocalExecutor
+from bisheng_langchain.gpts.tools.code_interpreter.local_executor import (
+    LOG_TRUNCATED_NOTICE,
+    MAX_FAILURE_LOG_CHARS,
+    TIMEOUT_MSG,
+    LocalExecutor,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -110,9 +116,74 @@ def test_run_failure_path_returns_without_notice(monkeypatch):
     monkeypatch.setattr(exe, "run_with_dir", lambda code, dir_path, lang: (1, "boom\n", []))
     result = exe.run("open('/output/x.pdf', 'wb')")
     assert result["exitcode"] == 1
-    assert "log" in result
+    # The failing block's stderr MUST reach the model. Asserting only `"log" in result`
+    # (the previous assertion) passed while the value was a bare "" — which is exactly
+    # how the swallow-the-traceback regression shipped: the early return handed back the
+    # not-yet-accumulated `logs_all`, so every failure reported {"exitcode": 1, "log": ""}
+    # and the model had to debug blind.
+    assert "boom" in result["log"]
     # failure path returns early — no file_list, no notice appended
     assert "file_list" not in result
+
+
+def test_run_failure_keeps_earlier_blocks_and_appends_the_failing_one(monkeypatch):
+    """A multi-block script reports the successful prefix AND the block that broke."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = None
+    monkeypatch.setattr(exe, "insert_set_font_code", lambda code: code)
+    outcomes = iter([(0, "first-ok\n", []), (1, "Traceback: NameError\n", [])])
+    monkeypatch.setattr(exe, "run_with_dir", lambda code, dir_path, lang: next(outcomes))
+    result = exe.run("```python\nprint(1)\n```\n```python\nboom\n```")
+    assert result["exitcode"] == 1
+    assert "first-ok" in result["log"]
+    assert "NameError" in result["log"]
+
+
+def test_run_does_not_duplicate_the_log(tmp_path):
+    """``run_with_dir`` used to do ``logs += "\\n" + logs`` (a typo for ``logs_all``),
+    returning every line to the model twice. Real subprocess — a stubbed
+    ``run_with_dir`` cannot catch this, the duplication happened inside it."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = str(tmp_path)
+    result = exe.run("print('only-once')")
+    assert result["exitcode"] == 0
+    assert result["log"].count("only-once") == 1
+
+
+def test_run_surfaces_a_real_traceback(tmp_path):
+    """End-to-end guard on the swallowed-stderr regression: a script that raises must
+    hand its traceback back to the model, not ``{"exitcode": 1, "log": ""}``."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = str(tmp_path)
+    result = exe.run("raise RuntimeError('boom-from-subprocess')")
+    assert result["exitcode"] != 0
+    assert "RuntimeError" in result["log"]
+    assert "boom-from-subprocess" in result["log"]
+
+
+def test_run_failure_log_is_tail_truncated(monkeypatch):
+    """An oversized failure log is capped from the FRONT — a traceback names its cause
+    on the last lines, so the tail is the part worth spending context on."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = None
+    monkeypatch.setattr(exe, "insert_set_font_code", lambda code: code)
+    noise = "x" * (MAX_FAILURE_LOG_CHARS + 5000)
+    monkeypatch.setattr(exe, "run_with_dir", lambda code, dir_path, lang: (1, noise + "\nValueError: the cause\n", []))
+    result = exe.run("boom")
+    assert "ValueError: the cause" in result["log"]
+    assert LOG_TRUNCATED_NOTICE in result["log"]
+    assert len(result["log"]) <= MAX_FAILURE_LOG_CHARS + len(LOG_TRUNCATED_NOTICE)
+
+
+def test_run_surfaces_the_timeout_notice(monkeypatch):
+    """A killed-on-timeout run also exits non-zero, so it rode the same swallow path —
+    the model could not tell a timeout apart from a silent failure."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = None
+    monkeypatch.setattr(exe, "insert_set_font_code", lambda code: code)
+    monkeypatch.setattr(exe, "run_with_dir", lambda code, dir_path, lang: (1, TIMEOUT_MSG, []))
+    result = exe.run("while True: pass")
+    assert TIMEOUT_MSG in result["log"]
 
 
 # ---------------------------------------------------------------------------
@@ -131,5 +202,106 @@ def test_description_guides_to_installed_pdf_and_data_libs():
     # names an installed PDF generator + core data lib so the model won't guess
     assert "reportlab" in d
     assert "pandas" in d
+    # Office writers: without python-pptx here the model concludes PPT is
+    # impossible and reaches for node/pptxgenjs, which is not installed either.
+    assert "python-docx" in d
+    assert "python-pptx" in d
     # shared, offline env — must not encourage pip install
     assert "pip install" in d
+
+
+# ---------------------------------------------------------------------------
+# Read-side advisory: /skills and /uploads are READ zones
+#
+# The write-side notice says files were "DISCARDED", which is exactly wrong for a
+# read: `open('/skills/x/SKILL.md')` raises FileNotFoundError and nothing is lost.
+# Telling the model its file vanished sent it hunting a data-loss problem that
+# never happened (180 POC, 2026-08-08).
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "code",
+    [
+        "open('/skills/html-ppt-templates/SKILL.md')",
+        'Path("/uploads/report.xlsx").read_bytes()',
+        "open('/skills')",
+        "open('/uploads')",
+    ],
+)
+def test_advisory_flags_absolute_provisioned_paths(code):
+    assert BaseExecutor.absolute_path_advisory(code) == ABSOLUTE_PROVISIONED_PATH_NOTICE
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "open('skills/x/SKILL.md')",  # relative — correct
+        "open('./skills/x')",
+        "open('/skillset/x')",  # different word
+        "url = 'https://host/skills/x'",  # mid-string, not a path root
+        "open('/data/skills/x')",  # path root is /data
+    ],
+)
+def test_read_advisory_silent_for_relative_or_unrelated(code):
+    assert BaseExecutor.absolute_path_advisory(code) == ""
+
+
+def test_write_and_read_advisories_compose():
+    code = "open('/skills/x/SKILL.md'); open('/output/a.pdf','wb')"
+    advisory = BaseExecutor.absolute_path_advisory(code)
+    assert ABSOLUTE_PATH_NOTICE in advisory
+    assert ABSOLUTE_PROVISIONED_PATH_NOTICE in advisory
+    # write side first, matching the pre-existing single-notice ordering
+    assert advisory.index(ABSOLUTE_PATH_NOTICE) < advisory.index(ABSOLUTE_PROVISIONED_PATH_NOTICE)
+
+
+def test_run_appends_the_read_advisory_on_the_failure_path(monkeypatch):
+    """The advisory used to hang off the SUCCESS return only. An absolute
+    `/skills/...` read raises FileNotFoundError → non-zero exit → early return, so
+    the one failure this notice exists to explain never saw it."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = None
+    monkeypatch.setattr(exe, "insert_set_font_code", lambda code: code)
+    monkeypatch.setattr(
+        exe,
+        "run_with_dir",
+        lambda code, dir_path, lang: (1, "FileNotFoundError: '/skills/x/SKILL.md'\n", []),
+    )
+    result = exe.run("open('/skills/x/SKILL.md')")
+    assert result["exitcode"] == 1
+    assert "FileNotFoundError" in result["log"]
+    assert ABSOLUTE_PROVISIONED_PATH_NOTICE in result["log"]
+
+
+def test_failure_advisory_survives_log_truncation(monkeypatch):
+    """Appended AFTER ``_tail`` — the tail-keeping truncation must not eat it."""
+    exe = LocalExecutor(minio={})
+    exe.local_sync_path = None
+    monkeypatch.setattr(exe, "insert_set_font_code", lambda code: code)
+    monkeypatch.setattr(
+        exe,
+        "run_with_dir",
+        lambda code, dir_path, lang: (1, "x" * (MAX_FAILURE_LOG_CHARS * 2), []),
+    )
+    result = exe.run("open('/skills/x/SKILL.md')")
+    assert LOG_TRUNCATED_NOTICE in result["log"]
+    assert ABSOLUTE_PROVISIONED_PATH_NOTICE in result["log"]
+
+
+# ---------------------------------------------------------------------------
+# Tool descriptions carry the namespace mapping
+# ---------------------------------------------------------------------------
+def test_local_description_explains_both_namespaces():
+    d = LocalExecutor(minio={}).description
+    assert "working directory" in d.lower()
+    assert "leading slash" in d.lower()
+    assert "skills/" in d
+
+
+def test_e2b_description_omits_skills():
+    """E2B copy-in snapshots the working dir BEFORE skills are materialised, so
+    promising `skills/` there would point the model at nothing."""
+    from bisheng_langchain.gpts.tools.code_interpreter.base_executor import path_namespace_rules
+
+    rules = path_namespace_rules(include_skills=False)
+    assert "skills/" not in rules
+    assert "`/output/x` is `output/x`" in rules
