@@ -322,6 +322,54 @@ describe("普通知识空间文件发布入口", () => {
         expect(screen.getByText("解析中")).toBeInTheDocument();
     });
 
+    test("投影未完成时表格和卡片不展示内部同步状态", () => {
+        const syncingFile = {
+            ...baseFile,
+            entryType: "share",
+            projectionReady: false,
+        } as KnowledgeFile;
+
+        render(
+            <>
+                <FileTable
+                    files={[syncingFile]}
+                    selectedFiles={new Set()}
+                    handleSelectAll={jest.fn()}
+                    handleSelectFile={jest.fn()}
+                    isAdmin={false}
+                    currentUserRole={SpaceRole.MEMBER}
+                    onDownload={jest.fn()}
+                    onEditTags={jest.fn()}
+                    onRename={jest.fn()}
+                    onDelete={jest.fn()}
+                    onRetry={jest.fn()}
+                    onNavigateFolder={jest.fn()}
+                    onPreview={jest.fn()}
+                    onValidateName={() => null}
+                    sortBy={SortType.UPDATE_TIME}
+                    sortDirection={SortDirection.DESC}
+                    onSort={jest.fn()}
+                />
+                <FileCard
+                    file={syncingFile}
+                    userRole={SpaceRole.MEMBER}
+                    isSelected={false}
+                    onSelect={jest.fn()}
+                    onDownload={jest.fn()}
+                    onRename={jest.fn()}
+                    onDelete={jest.fn()}
+                    onEditTags={jest.fn()}
+                    onRetry={jest.fn()}
+                    onNavigateFolder={jest.fn()}
+                    onPreview={jest.fn()}
+                />
+            </>
+        );
+
+        expect(screen.getAllByText("分享文件")).toHaveLength(2);
+        expect(screen.queryByText("同步中")).not.toBeInTheDocument();
+    });
+
     test("移动端卡片菜单展示发布并触发发布回调", () => {
         render(
             <FileCard

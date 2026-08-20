@@ -475,16 +475,30 @@ class DepartmentKnowledgeSpaceService:
             raise DepartmentKnowledgeSpaceExistsError(msg="目标部门已被其他知识库绑定")
 
         space_service = KnowledgeSpaceService(request=request, login_user=login_user)
+        if int(current_binding.department_id) == int(department_id):
+            return await space_service.get_space_info(space_id)
         await space_service.update_knowledge_space(
             space_id=space_id,
             department_id=department_id,
         )
+        from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+            KnowledgeSpaceContentStat,
+        )
+
+        await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
         return await space_service.get_space_info(space_id)
 
     @classmethod
     async def unbind_space(cls, login_user, *, space_id: int) -> None:
         cls._ensure_super_admin(login_user)
-        await DepartmentKnowledgeSpaceDao.adelete_by_space_id(space_id)
+        deleted = await DepartmentKnowledgeSpaceDao.adelete_by_space_id(space_id)
+        if not deleted:
+            return
+        from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+            KnowledgeSpaceContentStat,
+        )
+
+        await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
 
     @classmethod
     async def list_bindings(cls, login_user) -> list:

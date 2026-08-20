@@ -52,6 +52,7 @@ async def test_bind_rejects_already_bound_space():
 
 @pytest.mark.asyncio
 async def test_bind_success_creates_row():
+    enqueue = AsyncMock()
     with (
         patch(f"{MOD}.KnowledgeSpaceScopeDao.aget_space_ids_by_level", new=AsyncMock(return_value=[10])),
         patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=None)),
@@ -64,10 +65,16 @@ async def test_bind_success_creates_row():
             new=AsyncMock(return_value=SimpleNamespace(space_id=10, department_id=3)),
         ) as create,
         patch(f"{MOD}.KnowledgeSpaceScopeDao.aupdate_level", new=AsyncMock()) as update_level,
+        patch(
+            "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+            "KnowledgeSpaceContentStat.enqueue_space_rename_stat_async",
+            new=enqueue,
+        ),
     ):
         await Svc.bind_space_to_department(_admin(), space_id=10, department_id=3)
         create.assert_awaited_once()
         update_level.assert_awaited_once_with(10, KnowledgeSpaceLevelEnum.TEAM_KS)
+        enqueue.assert_awaited_once_with(10)
 
 
 @pytest.mark.asyncio
@@ -81,9 +88,33 @@ async def test_bind_rejects_non_team_space():
 
 @pytest.mark.asyncio
 async def test_unbind_calls_dao():
-    with patch(f"{MOD}.DepartmentKnowledgeSpaceDao.adelete_by_space_id", new=AsyncMock(return_value=True)) as d:
+    enqueue = AsyncMock()
+    with (
+        patch(f"{MOD}.DepartmentKnowledgeSpaceDao.adelete_by_space_id", new=AsyncMock(return_value=True)) as d,
+        patch(
+            "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+            "KnowledgeSpaceContentStat.enqueue_space_rename_stat_async",
+            new=enqueue,
+        ),
+    ):
         await Svc.unbind_space(_admin(), space_id=10)
         d.assert_awaited_once_with(10)
+        enqueue.assert_awaited_once_with(10)
+
+
+@pytest.mark.asyncio
+async def test_unbind_missing_binding_does_not_enqueue():
+    enqueue = AsyncMock()
+    with (
+        patch(f"{MOD}.DepartmentKnowledgeSpaceDao.adelete_by_space_id", new=AsyncMock(return_value=False)),
+        patch(
+            "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+            "KnowledgeSpaceContentStat.enqueue_space_rename_stat_async",
+            new=enqueue,
+        ),
+    ):
+        await Svc.unbind_space(_admin(), space_id=10)
+    enqueue.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -142,6 +173,7 @@ async def test_rebind_rejects_archived_target_department():
 @pytest.mark.asyncio
 async def test_rebind_success_updates_binding():
     current_binding = SimpleNamespace(space_id=10, department_id=3)
+    enqueue = AsyncMock()
     with (
         patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_space_id", new=AsyncMock(return_value=current_binding)),
         patch(
@@ -150,6 +182,11 @@ async def test_rebind_success_updates_binding():
         ),
         patch(f"{MOD}.DepartmentKnowledgeSpaceDao.aget_by_department_id", new=AsyncMock(return_value=None)),
         patch(f"{MOD}.KnowledgeSpaceService") as ServiceMock,
+        patch(
+            "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+            "KnowledgeSpaceContentStat.enqueue_space_rename_stat_async",
+            new=enqueue,
+        ),
     ):
         instance = ServiceMock.return_value
         instance.update_knowledge_space = AsyncMock()
@@ -157,6 +194,7 @@ async def test_rebind_success_updates_binding():
         result = await Svc.rebind_space_to_department(request=Mock(), login_user=_admin(), space_id=10, department_id=4)
         instance.update_knowledge_space.assert_awaited_once_with(space_id=10, department_id=4)
         instance.get_space_info.assert_awaited_once_with(10)
+        enqueue.assert_awaited_once_with(10)
         assert result.id == 10
 
 
@@ -176,7 +214,7 @@ async def test_rebind_idempotent_when_same_department():
         instance.update_knowledge_space = AsyncMock()
         instance.get_space_info = AsyncMock(return_value=SimpleNamespace(id=10, department_id=3))
         result = await Svc.rebind_space_to_department(request=Mock(), login_user=_admin(), space_id=10, department_id=3)
-        instance.update_knowledge_space.assert_awaited_once_with(space_id=10, department_id=3)
+        instance.update_knowledge_space.assert_not_awaited()
         assert result.id == 10
 
 

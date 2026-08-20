@@ -144,6 +144,12 @@ class DepartmentOrgLevelService:
                 labeled += 1
             await session.commit()
 
+        from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+            KnowledgeSpaceContentStat,
+        )
+
+        await KnowledgeSpaceContentStat.enqueue_department_stat_async([int(company.id)])
+
         return SetCompanyRootResponse(
             company_id=int(company.id),
             labeled_count=labeled,
@@ -184,5 +190,11 @@ class DepartmentOrgLevelService:
                 .values(org_level=None)
             )
             await session.commit()
+
+        from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+            KnowledgeSpaceContentStat,
+        )
+
+        await KnowledgeSpaceContentStat.enqueue_department_stat_async([int(company.id)])
 
         return ClearCompanyRootResponse(cleared_count=cleared_count)

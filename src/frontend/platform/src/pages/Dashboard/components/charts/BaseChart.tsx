@@ -40,6 +40,36 @@ interface BaseChartProps {
   styleConfig: ComponentStyleConfig
 }
 
+type AxisLabelTooltip = {
+  text: string
+  x: number
+  y: number
+  alignRight: boolean
+  alignBottom: boolean
+}
+
+const CATEGORY_LABEL_MAX_LENGTH = 10
+
+export const formatCategoryAxisLabel = (value: unknown) => {
+  if (!value) return ''
+
+  return String(value)
+    .split('\n')
+    .map(line => line.length > CATEGORY_LABEL_MAX_LENGTH
+      ? `${line.slice(0, CATEGORY_LABEL_MAX_LENGTH)}...`
+      : line)
+    .join('\n')
+}
+
+export const getTruncatedAxisLabelText = (params: any) => {
+  const isAxisLabel = (params?.componentType === 'xAxis' || params?.componentType === 'yAxis')
+    && params?.targetType === 'axisLabel'
+  if (!isAxisLabel) return null
+
+  const text = String(params.value ?? '')
+  return formatCategoryAxisLabel(text) === text ? null : text
+}
+
 export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: BaseChartProps) {
   const { t } = useTranslation("dashboard")
 
@@ -47,6 +77,7 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
   const domRef = useRef<HTMLDivElement>(null)
   const echartsLibRef = useRef(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [axisLabelTooltip, setAxisLabelTooltip] = useState<AxisLabelTooltip | null>(null)
 
   // load ECharts
   useEffect(() => {
@@ -99,6 +130,29 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
       echartsLibRef.current.registerTheme(themeName, themeConfig);
       // init echarts
       chartRef.current = echartsLibRef.current.init(domRef.current, themeName)
+
+      const handleAxisLabelMouseOver = (params: any) => {
+        const text = getTruncatedAxisLabelText(params)
+        if (!text || !domRef.current) {
+          setAxisLabelTooltip(null)
+          return
+        }
+
+        const pointerEvent = params.event?.event ?? params.event
+        const x = pointerEvent?.offsetX ?? pointerEvent?.zrX ?? 0
+        const y = pointerEvent?.offsetY ?? pointerEvent?.zrY ?? 0
+        setAxisLabelTooltip({
+          text,
+          x,
+          y,
+          alignRight: x > domRef.current.clientWidth / 2,
+          alignBottom: y > domRef.current.clientHeight / 2,
+        })
+      }
+      const handleAxisLabelMouseOut = () => setAxisLabelTooltip(null)
+
+      chartRef.current.on('mouseover', handleAxisLabelMouseOver)
+      chartRef.current.on('mouseout', handleAxisLabelMouseOut)
 
       renderChart();
     } catch (err) {
@@ -157,7 +211,23 @@ export function BaseChart({ isDark, data, chartType, dataConfig, styleConfig }: 
     )
   }
 
-  return <div ref={domRef} style={{ width: '100%', height: `100%` }} />
+  return (
+    <div className="relative size-full">
+      <div ref={domRef} className="size-full" />
+      {axisLabelTooltip && (
+        <div
+          className="pointer-events-none absolute z-10 max-w-[320px] whitespace-pre-wrap break-words rounded bg-white px-3 py-2 text-xs text-gray-700 shadow-lg ring-1 ring-black/10 dark:bg-gray-800 dark:text-gray-100"
+          style={{
+            left: axisLabelTooltip.x + (axisLabelTooltip.alignRight ? -12 : 12),
+            top: axisLabelTooltip.y + (axisLabelTooltip.alignBottom ? -12 : 12),
+            transform: `translate(${axisLabelTooltip.alignRight ? '-100%' : '0'}, ${axisLabelTooltip.alignBottom ? '-100%' : '0'})`,
+          }}
+        >
+          {axisLabelTooltip.text}
+        </div>
+      )}
+    </div>
+  )
 }
 
 
@@ -316,15 +386,12 @@ const getCartesianChartOption = (
   const categoryAxis = {
     type: 'category',
     data: dimensions,
+    triggerEvent: true,
     axisLabel: {
       show: styleConfig.showAxis ?? true,
       rotate: 0,
       interval: 'auto',
-      formatter: function (value) {
-        if (!value) return '';
-        const lines = value.split('\n');
-        return lines.map(line => line.length > 10 ? line.slice(0, 10) + '...' : line).join('\n');
-      },
+      formatter: formatCategoryAxisLabel,
       hideOverlap: true,
       color: '#666'
       // interval: 0,
