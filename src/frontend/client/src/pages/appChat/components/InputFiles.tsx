@@ -161,7 +161,11 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 : undefined,
         previewUrl: f.previewUrl,
         mediaPreviewUrl: f.mediaPreviewUrl,
-        mediaCoverUrl: f.mediaCoverUrl,
+        // The composer poster is a local blob that is revoked the moment the
+        // message is sent. Handing it to the message would pin a dead URL that
+        // also outranks the server cover once that arrives, leaving the bubble
+        // with no thumbnail at all.
+        mediaCoverUrl: f.mediaCoverUrl?.startsWith('blob:') ? undefined : f.mediaCoverUrl,
         cover_filepath: f.cover_filepath,
         mediaDurationSec: f.mediaDurationSec,
     }));

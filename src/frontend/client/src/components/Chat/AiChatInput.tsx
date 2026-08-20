@@ -519,7 +519,11 @@ const AiChatInput = memo(
                                                 : undefined,
                                         previewUrl: f.previewUrl,
                                         mediaPreviewUrl: f.mediaPreviewUrl,
-                                        mediaCoverUrl: f.mediaCoverUrl,
+                                        // Composer-local poster blobs stop here: they are
+                                        // revoked on send and would outrank the server cover.
+                                        mediaCoverUrl: f.mediaCoverUrl?.startsWith('blob:')
+                                            ? undefined
+                                            : f.mediaCoverUrl,
                                         cover_filepath: f.cover_filepath,
                                         mediaDurationSec: f.mediaDurationSec,
                                     }));
