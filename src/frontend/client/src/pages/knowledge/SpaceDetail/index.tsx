@@ -59,6 +59,8 @@ import {
     useKnowledgeSpaceActionPermissions,
 } from "../hooks/useKnowledgeSpacePermissions";
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef, useVersionManagementEnabled } from "~/hooks";
+import { useRefreshEffectiveQuota } from "~/hooks/useEffectiveQuota";
+import { useStorageQuotaGuard } from "~/hooks/usePersonalStorageQuota";
 import {
     knowledgeSpaceDropdownSurfaceClassName,
     SidebarListMoreMenuContent,
@@ -404,6 +406,8 @@ export function KnowledgeSpaceContent({
 
     const { showToast } = useToastContext();
     const confirm = useConfirm();
+    const isStorageBlocked = useStorageQuotaGuard();
+    const refreshQuota = useRefreshEffectiveQuota();
 
     useEffect(() => {
         let cancelled = false;
@@ -617,6 +621,7 @@ export function KnowledgeSpaceContent({
         queryClient.invalidateQueries({ queryKey: ["file-versions"] });
         dispatchKnowledgeSpaceFilesRefresh(space.id);
         onDeleteFile("");
+        void refreshQuota();
     };
 
     const resetWebLinkDialog = () => {
@@ -625,6 +630,7 @@ export function KnowledgeSpaceContent({
     };
 
     const submitWebLink = async (overwrite = false) => {
+        if (isStorageBlocked()) return;
         const trimmedUrl = webLinkUrl.trim();
         const normalizedTitle = normalizeWebLinkTitle(webLinkTitle);
         if (!trimmedUrl) {

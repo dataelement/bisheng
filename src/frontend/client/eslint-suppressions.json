@@ -1136,9 +1136,6 @@
     }
   },
   "src/components/Nav/MobileNav.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
     "no-restricted-imports": {
       "count": 1
     }
@@ -2984,7 +2981,7 @@
       "count": 1
     },
     "no-restricted-syntax": {
-      "count": 4
+      "count": 3
     }
   },
   "src/pages/appChat/index.tsx": {
@@ -3377,7 +3374,7 @@
   },
   "src/pages/knowledge/hooks/useFileUpload.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 8
+      "count": 7
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1

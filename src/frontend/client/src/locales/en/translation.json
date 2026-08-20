@@ -2077,6 +2077,14 @@
     }
   },
   "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)",
+  "com_storage_quota": {
+    "title": "Personal storage",
+    "usage": "{{0}} of {{1}} used",
+    "unlimited": "Unlimited",
+    "full_hint": "Your personal storage is full, so uploads are paused. Delete files to free up space, or ask an administrator to adjust your role quota.",
+    "exceeded_hint": "Your personal storage exceeds the current effective capacity, so uploads are paused. Delete files to free up space, or ask an administrator to adjust your role quota.",
+    "insufficient_hint": "There is not enough space left in your personal storage, so the upload cannot continue."
+  },
   "com_error_page": {
     "title": "Oops, something went wrong",
     "description": "Don't worry — your data is safe. The quickest way to get help: screenshot this page and send it to support or your engineering contact.",

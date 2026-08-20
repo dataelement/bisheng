@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import i18next from "i18next";
+import i18next, { type TOptions } from "i18next";
 import {
     FileStatus,
     FileType,
@@ -31,8 +31,18 @@ import {
     MAX_FOLDER_UPLOAD_COUNT,
     type UploadSizeLimits,
 } from "../knowledgeUtils";
-import { useLocalize } from "~/hooks";
+import { useLocalize, type TranslationKeys } from "~/hooks";
+import { useRefreshEffectiveQuota } from "~/hooks/useEffectiveQuota";
+import { useStorageQuotaGuard } from "~/hooks/usePersonalStorageQuota";
 import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
+
+/** Errors from uploadFileToServerApi: its manual throw (statusCode/errorData) or an axios rejection body. */
+interface UploadErrorLike {
+    statusCode?: number;
+    errorData?: TOptions;
+    message?: string;
+    response?: { data?: { status_code?: number } };
+}
 
 /**
  * Resolve a human-friendly reason from an upload error.
@@ -42,10 +52,12 @@ import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
  * Returns "" when the error carries no actionable info — caller may then
  * append the generic browser-upload hint as a last-resort fallback.
  */
-function resolveUploadErrorReason(err: any): string {
+function resolveUploadErrorReason(err: UploadErrorLike): string {
     const statusCode = err?.statusCode ?? err?.response?.data?.status_code;
     if (statusCode != null) {
-        const codeKey = `api_errors.${statusCode}`;
+        // Typed i18next keys reject a runtime-built string; TranslationKeys is
+        // the codebase's escape hatch for exactly this (same as useLocalize).
+        const codeKey = `api_errors.${statusCode}` as TranslationKeys;
         if (i18next.exists(codeKey)) {
             return String(i18next.t(codeKey, err?.errorData ?? {}));
         }
@@ -63,6 +75,9 @@ function resolveUploadErrorReason(err: any): string {
  * toast line instead of N identical rows.
  */
 const COLLAPSIBLE_CODES = new Set([18024, 19402, 19403]);
+
+/** Total byte size of an upload batch, for the personal-storage pre-check. */
+const sumFileSizes = (files: File[]): number => files.reduce((sum, file) => sum + file.size, 0);
 
 interface UploadFailure { name: string; reason: string; statusCode?: number }
 interface EarlyStop { reason: string; statusCode: number; skippedCount: number }
@@ -91,9 +106,10 @@ async function uploadFilesSequential(
             // statusCode is set by uploadFileToServerApi on a manual throw
             // (HTTP 200 + body.status_code != 200). Fall back to the axios error
             // body in case a non-2xx ever rejects before that check.
+            const uploadErr = err as UploadErrorLike;
             const statusCode: number | undefined =
-                (err as any)?.statusCode ?? (err as any)?.response?.data?.status_code;
-            const reason = resolveUploadErrorReason(err);
+                uploadErr.statusCode ?? uploadErr.response?.data?.status_code;
+            const reason = resolveUploadErrorReason(uploadErr);
             failures.push({ name: file.name, reason, statusCode });
             if (statusCode && COLLAPSIBLE_CODES.has(statusCode)) {
                 earlyStop = { reason, statusCode, skippedCount: files.length - i - 1 };
@@ -249,6 +265,8 @@ export function useFileUpload({
     const [duplicateFiles, setDuplicateFiles] = useState<DuplicateFileEntry[]>([]);
 
     const { showToast } = useToastContext();
+    const isStorageBlocked = useStorageQuotaGuard();
+    const refreshQuota = useRefreshEffectiveQuota();
     /** Guard against re-entry of handleUploadFolder while one batch is in flight. */
     const folderUploadInFlightRef = useRef(false);
 
@@ -261,6 +279,10 @@ export function useFileUpload({
             }
 
             const fileArray = Array.from(fileList);
+
+            // Reject the whole batch up front when it cannot fit into the
+            // remaining personal storage (dialog); exhausted storage toasts.
+            if (isStorageBlocked(sumFileSizes(fileArray))) return;
 
             // Create placeholder uploading entries for UI
             const placeholders: KnowledgeFile[] = fileArray.map(file => ({
@@ -286,6 +308,9 @@ export function useFileUpload({
                 fileArray,
                 (res) => uploadedPaths.push(res.file_path),
             );
+            // Usage moved on every stored byte, and a rejection means the
+            // server's view moved too — re-read it either way.
+            void refreshQuota();
             const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
             if (failureMessage) {
                 showToast({ message: failureMessage, severity: NotificationSeverity.ERROR });
@@ -359,22 +384,24 @@ export function useFileUpload({
                 prev.filter(f => !placeholders.some(p => p.id === f.id))
             );
         },
-        [activeSpace, currentFolderId, currentPage, files, loadFiles, localize, setFiles, setTotal, showToast]
+        [activeSpace, currentFolderId, currentPage, files, isStorageBlocked, loadFiles, localize, refreshQuota, setFiles, setTotal, showToast]
     );
 
     /** User chose to replace duplicate files */
     const handleDuplicateOverwrite = useCallback(async () => {
         if (!activeSpace || duplicateFiles.length === 0) return;
+        if (isStorageBlocked()) return;
         const fileObjs = duplicateFiles.map(d => d.rawObj).filter(Boolean);
         try {
             await retryDuplicateFilesApi(activeSpace.id, fileObjs);
+            void refreshQuota();
             await loadFiles(1); // refresh from page 1 (cursor mode: page>1 = append)
         } catch {
             showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
         } finally {
             setDuplicateFiles([]);
         }
-    }, [activeSpace, duplicateFiles, currentPage, loadFiles, showToast]);
+    }, [activeSpace, duplicateFiles, currentPage, isStorageBlocked, loadFiles, localize, refreshQuota, showToast]);
 
     /** User chose NOT to overwrite — just discard duplicates */
     const handleDuplicateSkip = useCallback(() => {
@@ -402,6 +429,7 @@ export function useFileUpload({
             options: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
         ) => {
             if (!activeSpace || !fileList || fileList.length === 0) return;
+            if (isStorageBlocked()) return;
             // Re-entry guard. Ignore a second call while the first is still
             // running (a stray double-fire from the input would otherwise
             // upload every file twice and trigger spurious dup warnings).
@@ -492,6 +520,11 @@ export function useFileUpload({
                 return;
             }
 
+            // Pre-flight capacity check on what will actually be stored (the
+            // filtered set), not on the raw picked files. The finally block
+            // clears the placeholder folder card shown above.
+            if (isStorageBlocked(sumFileSizes(validFiles))) return;
+
             // Upload each file body to object storage (sequential, mirrors the
             // single-file upload — keeps load predictable for 1k batches and
             // stops early on a quota error instead of grinding through every
@@ -509,6 +542,7 @@ export function useFileUpload({
                 }),
                 (file) => file.name,
             );
+            void refreshQuota();
             const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
             if (failureMessage) {
                 showToast({ message: failureMessage, severity: NotificationSeverity.ERROR });
@@ -543,7 +577,7 @@ export function useFileUpload({
                 if (placeholderShown) setUploadingFolder(null);
             }
         },
-        [activeSpace, currentFolderId, currentPage, loadFiles, localize, showToast],
+        [activeSpace, currentFolderId, currentPage, isStorageBlocked, loadFiles, localize, refreshQuota, showToast],
     );
 
     // ─── Folder creation ─────────────────────────────────────────────────
@@ -684,8 +718,9 @@ export function useFileUpload({
                 dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             }
             clearPendingDeletion([fileId]);
+            void refreshQuota();
         },
-        [activeSpace, files, setFiles, loadFiles, showToast, setTotal, markPendingDeletion, clearPendingDeletion, localize]
+        [activeSpace, files, setFiles, loadFiles, showToast, setTotal, markPendingDeletion, clearPendingDeletion, localize, refreshQuota]
     );
 
     // ─── Batch delete file/folders ───────────────────────────────────────
@@ -730,9 +765,10 @@ export function useFileUpload({
             //    pending-deletion mark is cleared below) re-adds them to the list.
             if (hasFolder) dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             clearPendingDeletion(strIds);
+            void refreshQuota();
             return true;
         },
-        [activeSpace, files, setFiles, setTotal, loadFiles, markPendingDeletion, clearPendingDeletion]
+        [activeSpace, files, setFiles, setTotal, loadFiles, markPendingDeletion, clearPendingDeletion, refreshQuota]
     );
 
     const handleEditTags = useCallback(
