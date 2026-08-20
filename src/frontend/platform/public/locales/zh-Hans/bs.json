@@ -12,7 +12,10 @@
     "totalRecords": "共 {{total}} 条记录",
     "totalWithPageSize": "共 {{total}} 条数据，每页 {{pageSize}} 条",
     "totalPrefix": "共 ",
-    "totalSuffixWithPageSize": " 条数据，每页 {{pageSize}} 条"
+    "totalSuffixWithPageSize": " 条数据，每页 {{pageSize}} 条",
+    "perPage": "{{size}} 条/页",
+    "jumpTo": "跳至",
+    "pageUnit": "页"
   },
   "example": {
     "buttons": "按钮",
@@ -1420,6 +1423,10 @@
     "tagConsole": {
       "searchLibrary": "搜索标签库名",
       "pendingEntry": "待审核标签",
+      "autoTagFeature": "自动打标",
+      "autoTagFeatureOffConfirm": "关闭后，知识空间内的自动打标功能将对本租户所有用户隐藏。已有标签不受影响。确认关闭？",
+      "reviewTagFeature": "待审核标签",
+      "reviewTagFeatureOffConfirm": "关闭后，AI 打标将不再产生新的待审核标签。已提交的待审核标签仍可在此处理。确认关闭？",
       "noLibrary": "暂无标签库",
       "noBoundSpace": "暂无关联知识空间",
       "status": "标签状态",

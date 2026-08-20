@@ -11,7 +11,10 @@
     "totalRecords": "Total {{total}}",
     "totalWithPageSize": "Total {{total}} items, {{pageSize}} per page",
     "totalPrefix": "Total ",
-    "totalSuffixWithPageSize": " items, {{pageSize}} per page"
+    "totalSuffixWithPageSize": " items, {{pageSize}} per page",
+    "perPage": "{{size}} / page",
+    "jumpTo": "Go to",
+    "pageUnit": "page"
   },
   "example": {
     "buttons": "Buttons",
@@ -1431,6 +1434,10 @@
     "tagConsole": {
       "searchLibrary": "Search tag library",
       "pendingEntry": "Pending tags",
+      "autoTagFeature": "Auto tagging",
+      "autoTagFeatureOffConfirm": "Turning this off hides auto tagging from every user in this tenant. Existing tags are unaffected. Turn it off?",
+      "reviewTagFeature": "Pending review",
+      "reviewTagFeatureOffConfirm": "Turning this off stops AI tagging from producing new pending tags. Tags already submitted can still be handled here. Turn it off?",
       "noLibrary": "No tag library",
       "noBoundSpace": "No linked knowledge space",
       "status": "Status",

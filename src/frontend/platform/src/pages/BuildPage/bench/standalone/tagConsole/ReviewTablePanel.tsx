@@ -32,7 +32,8 @@ import {
 } from "./tagConsoleTypes"
 import { distinctSourceSpaceIds, useApprovableLibraries } from "./useApprovableLibraries"
 
-const PAGE_SIZE = 20
+const DEFAULT_PAGE_SIZE = 20
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
 function refOf(row: TagConsoleReviewItem): TagConsoleReviewRef {
     return { name: row.name, resource_type: row.resource_type }
@@ -87,6 +88,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
     const [rejectedCount, setRejectedCount] = useState(0)
     const [approvedCount, setApprovedCount] = useState(0)
     const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
     const [loading, setLoading] = useState(false)
     const [selectedKeys, setSelectedKeys] = useState<string[]>([])
     const [reviewTarget, setReviewTarget] = useState<TagConsoleReviewRef | null>(null)
@@ -100,7 +102,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
             setLoading(true)
             const res = await captureAndAlertRequestErrorHoc(
                 searchTagConsoleReviewApi({
-                    ...buildSearchParams(appliedFilters, targetPage, PAGE_SIZE),
+                    ...buildSearchParams(appliedFilters, targetPage, pageSize),
                     status: reviewRequestStatus(tab, appliedFilters.status),
                 }),
             )
@@ -112,7 +114,9 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
             setSelectedKeys([])
             setLoading(false)
         },
-        [appliedFilters, tab],
+        // See TagTablePanel: pageSize belongs here so a size change resets to
+        // page 1 through the same path a filter change already takes.
+        [appliedFilters, tab, pageSize],
     )
 
     useEffect(() => {
@@ -277,7 +281,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                                         </td>
                                     )}
                                     <td className="px-3 py-3 text-muted-foreground">
-                                        {(page - 1) * PAGE_SIZE + index + 1}
+                                        {(page - 1) * pageSize + index + 1}
                                     </td>
                                     <td className="px-3 py-3 font-medium">
                                         <TagSourceIcon resourceType={row.resource_type} />
@@ -350,8 +354,13 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
             <div className="flex justify-end border-t border-[#E5E6EB] bg-background px-4 py-2">
                 <AutoPagination
                     page={page}
-                    pageSize={PAGE_SIZE}
+                    pageSize={pageSize}
                     total={total}
+                    showJumpInput
+                    jumpToText={t("pagination.jumpTo", "跳至")}
+                    pageText={t("pagination.pageUnit", "页")}
+                    pageSizeOptions={PAGE_SIZE_OPTIONS}
+                    onPageSizeChange={setPageSize}
                     onChange={(value) => {
                         setPage(value)
                         void load(value)
