@@ -170,6 +170,92 @@ def _type_rank(file_info: dict) -> int:
     return _DELIVERABLE_TYPE_RANK.get(ext, _DEFAULT_TYPE_RANK)
 
 
+# --- Deliverable format guard ------------------------------------------------
+# Leading bytes every container format is REQUIRED to start with. A run that
+# cannot actually build one of these has been observed writing prose under the
+# name instead — a 310-byte outline opening with 「虚拟生成的PPT文件内容」 saved as
+# ``output/presentation.pptx`` — and every downstream check passed it: right zone,
+# new file, non-empty. The user downloads something PowerPoint refuses to open and
+# nothing in the run says why.
+#
+# Only formats whose first bytes are FIXED appear here. A text deliverable
+# (.md / .csv / .html / .svg / .txt) may legitimately begin with any byte, so it
+# has no entry and is never judged; neither is an extension outside this table.
+# Being narrow is the point: a wrongly dropped real deliverable is worse than a
+# fake one getting through, since the fake at least leaves the answer to explain.
+_ZIP_SIGNATURES = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_OLE2_SIGNATURE = (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",)
+_FORMAT_SIGNATURES: dict[str, tuple[bytes, ...]] = {
+    # OOXML and OpenDocument are zip containers
+    ".docx": _ZIP_SIGNATURES,
+    ".xlsx": _ZIP_SIGNATURES,
+    ".pptx": _ZIP_SIGNATURES,
+    ".odt": _ZIP_SIGNATURES,
+    ".ods": _ZIP_SIGNATURES,
+    ".odp": _ZIP_SIGNATURES,
+    # legacy Office is an OLE2 compound file
+    ".doc": _OLE2_SIGNATURE,
+    ".xls": _OLE2_SIGNATURE,
+    ".ppt": _OLE2_SIGNATURE,
+    ".pdf": (b"%PDF-",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".gif": (b"GIF87a", b"GIF89a"),
+}
+_SIGNATURE_READ_BYTES = 8
+
+
+def deliverable_format_error(file_info: dict) -> str | None:
+    """Why this file cannot be what its name promises — ``None`` when it can.
+
+    Reads the first few bytes only. Deliberately silent (returns ``None``) for
+    formats with no fixed header, extensions outside the table, and files that
+    could not be opened at all: an unreadable file is a different failure that the
+    upload reports on its own, and accusing it here would just add noise.
+    """
+    name = file_info.get("file_name") or os.path.basename(file_info.get("file_path") or "")
+    ext = os.path.splitext(name)[1].lower()
+    signatures = _FORMAT_SIGNATURES.get(ext)
+    if not signatures:
+        return None
+    try:
+        with open(file_info.get("file_path") or "", "rb") as fh:
+            head = fh.read(_SIGNATURE_READ_BYTES)
+    except OSError:
+        return None
+    if any(head.startswith(signature) for signature in signatures):
+        return None
+    return f"content does not match its {ext} extension (starts with {head!r})"
+
+
+def detect_invalid_deliverables(file_details: list[dict], baseline_paths: set[str] | None = None) -> list[dict]:
+    """Selected deliverables whose bytes contradict the format their name promises.
+
+    The diagnostic twin of :func:`detect_phantom_deliverables`: that one reports a
+    file the answer claims but the run never wrote, this one reports a file that
+    exists but is not what it says it is. Both only ever describe — the fake is
+    dropped from the result, never "repaired" into something it isn't, because a
+    repair would once again leave the run looking healthy.
+
+    Judged over :func:`select_deliverables` rather than the whole listing: a stray
+    half-written file under ``scratch/`` is not being delivered to anyone, and
+    reporting it would bury the finding that matters.
+    """
+    invalid: list[dict] = []
+    for file_info in select_deliverables(file_details, baseline_paths):
+        reason = deliverable_format_error(file_info)
+        if reason:
+            invalid.append(
+                {
+                    "file_name": file_info.get("file_name"),
+                    "rel_path": file_info.get("rel_path"),
+                    "reason": reason,
+                }
+            )
+    return invalid
+
+
 # Read File Directory File Details
 async def read_file_directory(file_dir: str) -> list[dict[str, Any]]:
     """Read file details in file directory"""
@@ -268,16 +354,30 @@ async def get_final_result_file(
     :param baseline_paths: absolute paths present at task start (see snapshot_file_paths)
     :return: List containing final result file information
     """
-    # Final Result File
-    final_result_files = [
-        {
-            "file_name": file_info["file_name"],
-            "file_path": file_info["file_path"],
-            "file_md5": file_info["file_md5"],
-            "file_id": file_info["file_id"],
-        }
-        for file_info in select_deliverables(file_details, baseline_paths)
-    ]
+    # Final Result File. A file whose bytes contradict its extension is dropped
+    # here rather than uploaded: handing the user a .pptx PowerPoint cannot open is
+    # worse than handing them nothing, and "nothing" is at least visible. The drop
+    # is recorded on the session by the caller (detect_invalid_deliverables) and
+    # logged here so it is never silent.
+    final_result_files = []
+    for file_info in select_deliverables(file_details, baseline_paths):
+        reason = deliverable_format_error(file_info)
+        if reason:
+            logger.warning(
+                "[linsight-invalid-deliverable] session={} dropping {!r}: {}",
+                session_model.id,
+                file_info.get("rel_path") or file_info.get("file_name"),
+                reason,
+            )
+            continue
+        final_result_files.append(
+            {
+                "file_name": file_info["file_name"],
+                "file_path": file_info["file_path"],
+                "file_md5": file_info["file_md5"],
+                "file_id": file_info["file_id"],
+            }
+        )
 
     async def upload_file_to_minio(final_file_info: dict) -> dict | None:
         """Upload files toMinIOand returns file information"""
