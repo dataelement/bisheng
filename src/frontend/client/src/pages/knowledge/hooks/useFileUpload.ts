@@ -636,28 +636,8 @@ export function useFileUpload({
             }
 
             await fileMutations.handleRenameExisting(fileId, newName);
-            // ── Rename existing item ──
-            const target = files.find(f => f.id === fileId);
-            if (!target) return;
-
-            try {
-                if (target.type === FileType.FOLDER) {
-                    await renameFolderApi(activeSpace.id, fileId, newName);
-                } else {
-                    await renameFileApi(activeSpace.id, fileId, newName);
-                }
-                setFiles(prev => prev.map(f => f.id === fileId ? { ...f, name: newName } : f));
-                if (target.type === FileType.FOLDER) {
-                    // Folder rename changes a tree node label — sync the left tree.
-                    dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-                }
-                showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS } as any);
-            } catch {
-                showToast({ message: localize("com_knowledge.rename_failed"), severity: NotificationSeverity.ERROR });
-            }
         },
-        [activeSpace, creatingFolder, currentFolderId, files, setFiles, showToast]
-        [activeSpace, creatingFolder, currentFolderId, fileMutations, setFiles, showToast]
+        [activeSpace, creatingFolder, currentFolderId, fileMutations]
     );
 
     // ─── Delete file/folder ──────────────────────────────────────────────
