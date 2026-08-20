@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -11,13 +13,14 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.review_tags import ReviewTagLink
 from bisheng.database.models.tag import TagLink
-from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_document import KnowledgeDocument
 from bisheng.knowledge.domain.models.knowledge_document_version import (
     KnowledgeDocumentVersion,
 )
 from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFile,
+    KnowledgeFileDao,
     KnowledgeFileEntryStatus,
     KnowledgeFileEntryType,
     KnowledgeFileProjectionStatus,
@@ -41,7 +44,9 @@ from bisheng.knowledge.domain.services.knowledge_document_distribution_service i
 from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
     KnowledgeDocumentPermissionActivationService,
 )
+from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+from bisheng.permission.domain.services.permission_service import PermissionService
 
 
 def _service(
@@ -137,6 +142,146 @@ async def _seed_manager(session: AsyncSession) -> None:
     await session.commit()
 
 
+@pytest.mark.asyncio
+async def test_manager_metadata_update_syncs_only_active_distribution_entries(
+    async_db_session: AsyncSession,
+):
+    """Manager classification metadata is copied only to active entries."""
+    await _seed_manager(async_db_session)
+    old_split_rule = json.dumps(
+        {"file_category_code": "STD", "business_domain_code": "EM"},
+        ensure_ascii=False,
+    )
+    manager = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    manager.split_rule = old_split_rule
+    manager.file_encoding = "SGGF-STD-EM-20260800000001"
+    manager.file_subcategory_code = "STD"
+    manager.file_subcategory_source = "ai"
+    async_db_session.add_all(
+        [
+            manager,
+            KnowledgeFile(
+                id=101,
+                tenant_id=7,
+                knowledge_id=30,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                split_rule=old_split_rule,
+                file_encoding="SGGF-STD-EM-20260800000001",
+                file_subcategory_code="STD",
+                file_subcategory_source="ai",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.PUBLISH.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                file_level_path="/301",
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+            KnowledgeFile(
+                id=102,
+                tenant_id=7,
+                knowledge_id=40,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                split_rule=old_split_rule,
+                file_encoding="SGGF-STD-EM-20260800000001",
+                file_subcategory_code="STD",
+                file_subcategory_source="ai",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.SHARE.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                file_level_path="/401",
+                allow_download=True,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+            KnowledgeFile(
+                id=103,
+                tenant_id=7,
+                knowledge_id=50,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                split_rule=old_split_rule,
+                file_encoding="SGGF-STD-EM-20260800000001",
+                file_subcategory_code="STD",
+                file_subcategory_source="ai",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.SHARE.value,
+                entry_status=KnowledgeFileEntryStatus.INVALID.value,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+            KnowledgeFile(
+                id=104,
+                tenant_id=7,
+                knowledge_id=60,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                split_rule=old_split_rule,
+                file_encoding="SGGF-STD-EM-20260800000001",
+                file_subcategory_code="STD",
+                file_subcategory_source="ai",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.PUBLISH.value,
+                entry_status=KnowledgeFileEntryStatus.DELETING.value,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    new_split_rule = json.dumps(
+        {"file_category_code": "RPT", "business_domain_code": "PP"},
+        ensure_ascii=False,
+    )
+    updated = await _service(async_db_session).update_manager_metadata(
+        tenant_id=7,
+        document_id=91,
+        manager_file_id=100,
+        split_rule=new_split_rule,
+        file_encoding="SGGF-RPT-PP-20260800000001",
+        file_subcategory_code="RPT",
+        file_subcategory_source="manual",
+        updater_id=700,
+        updater_name="元数据管理员",
+    )
+
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    entries = {
+        int(item.id): item
+        for item in await repository.find_distribution_entries_by_document_id(91)
+    }
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+
+    assert updated.manager_file.id == 100
+    assert updated.active_entry_ids == (100, 101, 102)
+    assert document.content_generation == 4
+    for entry_id in (100, 101, 102):
+        entry = entries[entry_id]
+        assert entry.split_rule == new_split_rule
+        assert entry.file_encoding == "SGGF-RPT-PP-20260800000001"
+        assert entry.file_subcategory_code == "RPT"
+        assert entry.file_subcategory_source == "manual"
+        assert entry.desired_content_generation == 4
+        assert entry.projection_status == KnowledgeFileProjectionStatus.PENDING.value
+        assert entry.projection_next_retry_at is None
+
+    assert entries[101].file_level_path == "/301"
+    assert entries[102].file_level_path == "/401"
+    assert entries[102].allow_download is True
+    for entry_id in (103, 104):
+        entry = entries[entry_id]
+        assert entry.split_rule == old_split_rule
+        assert entry.file_encoding == "SGGF-STD-EM-20260800000001"
+        assert entry.file_subcategory_code == "STD"
+        assert entry.file_subcategory_source == "ai"
+
+
 async def _seed_ordinary_file(
     session: AsyncSession,
     *,
@@ -186,6 +331,40 @@ def _command() -> PublishKnowledgeDocumentCommand:
         target_space_id=20,
         target_file_level_path="/88",
         target_level=2,
+    )
+
+
+@pytest.mark.asyncio
+async def test_initial_upload_permission_initialization_keeps_parent_and_uploader_owner():
+    service = object.__new__(KnowledgeSpaceService)
+    service.login_user = SimpleNamespace(user_id=501)
+
+    with patch.object(
+        service,
+        '_write_resource_parent_tuple',
+        new_callable=AsyncMock,
+    ) as write_parent, patch(
+        'bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple',
+        new_callable=AsyncMock,
+    ) as write_owner:
+        await service._initialize_child_resource_permissions(
+            object_type='knowledge_file',
+            object_id=100,
+            parent_type='knowledge_space',
+            parent_id=10,
+        )
+
+    write_parent.assert_awaited_once_with(
+        'knowledge_file',
+        100,
+        'knowledge_space',
+        10,
+    )
+    write_owner.assert_awaited_once_with(
+        501,
+        'knowledge_file',
+        '100',
+        enforce_fga_success=True,
     )
 
 
@@ -415,6 +594,109 @@ async def test_publish_moves_manager_and_creates_payload_free_source_entry(
     assert {file.knowledge_id for file in physical_files} == {20}
     assert len(versions) == 2
     assert tuple_writer.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_publish_owner_fallback_follows_target_knowledge_creator(
+    async_db_session: AsyncSession,
+    mock_openfga,
+):
+    await _seed_manager(async_db_session)
+    source_space = await async_db_session.get(Knowledge, 10)
+    target_space = await async_db_session.get(Knowledge, 20)
+    source_space.user_id = 501
+    target_space.user_id = 602
+    async_db_session.add_all([source_space, target_space])
+    await async_db_session.commit()
+
+    tuple_writer = AsyncMock()
+    permission_snapshot_loader = AsyncMock(return_value=[
+        TupleOperation(
+            action='write',
+            user='user:501',
+            relation='owner',
+            object='knowledge_file:100',
+        ),
+    ])
+    result = await _service(
+        async_db_session,
+        tuple_writer=tuple_writer,
+        permission_snapshot_loader=permission_snapshot_loader,
+    ).publish_approved(_command())
+
+    manager = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    assert manager.user_id == 501
+    assert manager.knowledge_id == 20
+
+    prewrite_operations = tuple_writer.await_args_list[0].args[0]
+    cleanup_operations = tuple_writer.await_args_list[1].args[0]
+    assert TupleOperation(
+        action='write',
+        user='folder:88',
+        relation='parent',
+        object='knowledge_file:100',
+    ) in prewrite_operations
+    assert TupleOperation(
+        action='write',
+        user='user:501',
+        relation='owner',
+        object=f'knowledge_file:{result.publish_entry_id}',
+    ) in prewrite_operations
+    assert TupleOperation(
+        action='delete',
+        user='user:501',
+        relation='owner',
+        object='knowledge_file:100',
+    ) in cleanup_operations
+
+    async def load_files(file_ids):
+        repository = KnowledgeFileRepositoryImpl(async_db_session)
+        return [
+            file_record
+            for file_id in file_ids
+            if (file_record := await repository.find_by_id(int(file_id))) is not None
+        ]
+
+    async def load_knowledge(knowledge_id):
+        return await async_db_session.get(Knowledge, int(knowledge_id))
+
+    with patch.object(
+        KnowledgeFileDao,
+        'aget_file_by_ids',
+        new_callable=AsyncMock,
+        side_effect=load_files,
+    ), patch.object(
+        KnowledgeDao,
+        'aquery_by_id',
+        new_callable=AsyncMock,
+        side_effect=load_knowledge,
+    ), patch.object(
+        PermissionService,
+        '_get_fga',
+        return_value=mock_openfga,
+    ), patch(
+        'bisheng.permission.domain.services.permission_cache.PermissionCache.get_check',
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        'bisheng.permission.domain.services.permission_cache.PermissionCache.set_check',
+        new_callable=AsyncMock,
+    ):
+        uploader_allowed = await PermissionService.check(
+            user_id=501,
+            relation='can_delete',
+            object_type='knowledge_file',
+            object_id='100',
+        )
+        target_creator_allowed = await PermissionService.check(
+            user_id=602,
+            relation='can_delete',
+            object_type='knowledge_file',
+            object_id='100',
+        )
+
+    assert uploader_allowed is False
+    assert target_creator_allowed is True
 
 
 @pytest.mark.asyncio

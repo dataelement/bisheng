@@ -283,18 +283,94 @@ async def test_clinic_binding_is_selected_for_responsible_person_dynamic_source(
     )
 
 
-async def test_clinic_dynamic_source_does_not_walk_up_org_tree():
+async def test_responsible_person_target_space_falls_back_to_nearest_department_library():
+    department = _department(3, "三级科室", "/1/2/3/")
+    department_space = Knowledge(id=22, name="二级部门库", type=3)
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(return_value=department_space),
+    )
+    resolve = AsyncMock(side_effect=[None, 22])
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=resolve,
+    ):
+        space = await _service(repository)._find_department_space(
+            department,
+            dynamic_source="responsible_person_id",
+        )
+    assert space.id == 22
+    assert resolve.await_args_list == [
+        call([3], kind=DepartmentSpaceTargetKind.CLINIC, allow_legacy=False),
+        call([3, 2, 1], kind=DepartmentSpaceTargetKind.DEPARTMENT, allow_legacy=False),
+    ]
+
+
+async def test_responsible_person_target_space_prefers_clinic_before_department_walk():
+    department = _department(3, "三级科室", "/1/2/3/")
+    clinic_space = Knowledge(id=33, name="三级科室库", type=3)
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(return_value=clinic_space),
+    )
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=33),
+    ) as resolve:
+        space = await _service(repository)._find_department_space(
+            department,
+            dynamic_source="responsible_person_id",
+        )
+    assert space.id == 33
+    resolve.assert_awaited_once_with(
+        [3],
+        kind=DepartmentSpaceTargetKind.CLINIC,
+        allow_legacy=False,
+    )
+
+
+async def test_responsible_person_target_space_picks_first_clinic_when_ambiguous():
+    department = _department(3, "三级科室", "/1/2/3/")
+    clinic_space = Knowledge(id=100, name="科室库A", type=3)
+    repository = SimpleNamespace(
+        find_knowledge_by_id=AsyncMock(return_value=clinic_space),
+    )
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(
+            side_effect=DepartmentKnowledgeSpaceAmbiguousError(
+                department_id=3,
+                candidate_space_ids=[101, 100],
+            ),
+        ),
+    ) as resolve:
+        space = await _service(repository)._find_department_space(
+            department,
+            dynamic_source="responsible_person_id",
+        )
+    assert space.id == 100
+    resolve.assert_awaited_once_with(
+        [3],
+        kind=DepartmentSpaceTargetKind.CLINIC,
+        allow_legacy=False,
+    )
+    repository.find_knowledge_by_id.assert_awaited_once_with(100)
+
+
+async def test_responsible_person_target_space_raises_when_clinic_and_department_missing():
     department = _department(3, "三级科室", "/1/2/3/")
     repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
-    service = _service(repository)
-    assert service._target_department_ids(
-        department,
-        DepartmentSpaceTargetKind.CLINIC,
-    ) == [3]
-    assert service._target_department_ids(
-        department,
-        DepartmentSpaceTargetKind.DEPARTMENT,
-    ) == [3, 2, 1]
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=None),
+    ) as resolve:
+        with pytest.raises(FilelibSyncNotFoundError, match="不存在知识库"):
+            await _service(repository)._find_department_space(
+                department,
+                dynamic_source="responsible_person_id",
+            )
+    assert resolve.await_args_list == [
+        call([3], kind=DepartmentSpaceTargetKind.CLINIC, allow_legacy=False),
+        call([3, 2, 1], kind=DepartmentSpaceTargetKind.DEPARTMENT, allow_legacy=False),
+    ]
 
 
 async def test_nearest_department_binding_is_selected():
@@ -677,10 +753,10 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
         "developer_token_id": 42,
         "developer_token_name": "token-42",
     }
-    assert knowledge_file.user_id == 1
-    assert knowledge_file.user_name == "caller"
-    assert knowledge_file.updater_id == 1
-    assert knowledge_file.updater_name == "caller"
+    assert knowledge_file.user_id == 2
+    assert knowledge_file.user_name == "owner"
+    assert knowledge_file.updater_id == 2
+    assert knowledge_file.updater_name == "owner"
     assert knowledge_file.original_uploader_id == 2
     service._ensure_domain_bound.assert_not_called()
     assert persist_update.call_count == 2

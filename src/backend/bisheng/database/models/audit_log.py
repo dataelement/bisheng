@@ -200,6 +200,10 @@ _UI_VISIBLE_V2_ACTIONS: Tuple[str, ...] = (
     'approval.scenario.create',
     'approval.exception.skip_node',
     'approval.menu_access.revoke_grant',
+    'filelib_sync.upload.success',
+    'filelib_sync.upload.failed',
+    'filelib_sync.inspection_standard.batch.success',
+    'filelib_sync.inspection_standard.batch.failed',
 )
 
 # Synthetic system_id namespace → action prefix. The frontend `getModulesApi`
@@ -209,6 +213,7 @@ _V2_NAMESPACE_TO_ACTION_PREFIX: Dict[str, str] = {
     'tenant': 'tenant.',
     'llm': 'llm.server.',
     'approval': 'approval.',
+    'filelib_sync': 'filelib_sync.',
 }
 
 
@@ -237,9 +242,31 @@ class AuditLogDao(AuditLogBase):
         )
 
     @classmethod
+    def _metadata_responsible_user_ids_predicate(cls, user_ids: List[int]):
+        """Match v2 filelib_sync rows by ``metadata.responsible_user_id``."""
+        if not user_ids:
+            return None
+        dialect = _db_dialect()
+        metadata_col = AuditLog.audit_metadata
+        clauses = []
+        for user_id in user_ids:
+            uid = int(user_id)
+            if dialect == 'sqlite':
+                extracted = func.json_extract(metadata_col, '$.responsible_user_id')
+                clauses.append(or_(extracted == uid, extracted == str(uid)))
+            elif dialect in ('mysql', 'mariadb'):
+                extracted = func.json_unquote(func.json_extract(metadata_col, '$.responsible_user_id'))
+                clauses.append(or_(extracted == str(uid), extracted == uid))
+            else:
+                clauses.append(metadata_col.like(f'%"responsible_user_id": {uid}%'))
+                clauses.append(metadata_col.like(f'%"responsible_user_id":"{uid}"%'))
+        return or_(*clauses)
+
+    @classmethod
     async def get_audit_logs(cls, group_ids: List[int], operator_ids: List[int] = 0,
                              start_time: datetime = None,
                              end_time: datetime = None, system_id: str = None, event_type: str = None,
+                             responsible_user_ids: Optional[List[int]] = None,
                              page: int = 0, limit: int = 0,
                              tenant_scope: Optional[int] = None) -> (List[AuditLog], int):
         """
@@ -304,6 +331,12 @@ class AuditLogDao(AuditLogBase):
                 action_predicate = AuditLog.event_type == event_type
             statement = statement.where(action_predicate)
             count_statement = count_statement.where(action_predicate)
+        responsible_predicate = cls._metadata_responsible_user_ids_predicate(
+            list(responsible_user_ids or []),
+        )
+        if responsible_predicate is not None:
+            statement = statement.where(responsible_predicate)
+            count_statement = count_statement.where(responsible_predicate)
         if tenant_scope is not None:
             tenant_predicate = cls._visible_for_tenant(tenant_scope)
             statement = statement.where(tenant_predicate)
@@ -356,6 +389,50 @@ class AuditLogDao(AuditLogBase):
         with bypass_tenant_filter(), get_sync_db_session() as session:
             return session.exec(statement).all()
 
+    @classmethod
+    def get_all_responsible_persons(
+        cls,
+        group_ids: List[int],
+        tenant_scope: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Distinct filelib sync responsible persons for the audit filter dropdown."""
+        statement = select(AuditLog.audit_metadata).where(
+            col(AuditLog.action).like('filelib_sync.%'),
+            cls._ui_visible_predicate(),
+        )
+        if group_ids:
+            group_filters = []
+            for one in group_ids:
+                group_filters.append(json_array_contains(AuditLog.group_ids, str(one), _db_dialect()))
+            statement = statement.where(or_(*group_filters))
+        if tenant_scope is not None:
+            statement = statement.where(cls._visible_for_tenant(tenant_scope))
+
+        persons: Dict[int, Dict[str, Any]] = {}
+        with bypass_tenant_filter(), get_sync_db_session() as session:
+            for metadata in session.exec(statement).all():
+                if not isinstance(metadata, dict):
+                    continue
+                raw_user_id = metadata.get('responsible_user_id')
+                if raw_user_id in (None, ''):
+                    continue
+                user_id = int(raw_user_id)
+                if user_id in persons:
+                    continue
+                external_id = str(metadata.get('responsible_person_external_id') or '').strip()
+                user_name = str(metadata.get('responsible_user_name') or '').strip()
+                if external_id and user_name and external_id != user_name:
+                    label = f'{external_id} ({user_name})'
+                else:
+                    label = external_id or user_name or f'#{user_id}'
+                persons[user_id] = {
+                    'user_id': user_id,
+                    'external_id': external_id or None,
+                    'user_name': user_name or None,
+                    'label': label,
+                }
+        return sorted(persons.values(), key=lambda item: str(item['label']).lower())
+
     # -----------------------------------------------------------------------
     # v2.5.1 F011: structured audit_log API.
     # Callers: F011 mount/unmount/migrate, F012 relocate, F016 quota,
@@ -373,6 +450,7 @@ class AuditLogDao(AuditLogBase):
         target_type: Optional[str] = None,
         target_id: Optional[str] = None,
         reason: Optional[str] = None,
+        note: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         ip_address: Optional[str] = None,
         operator_name: Optional[str] = None,
@@ -421,6 +499,7 @@ class AuditLogDao(AuditLogBase):
             target_type=target_type,
             target_id=target_id,
             reason=reason,
+            note=note or reason,
             audit_metadata=metadata,
             ip_address=ip_address,
             object_name=object_name,

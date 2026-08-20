@@ -51,6 +51,7 @@ def patches(monkeypatch):
         uds_module.UserTenantSyncService,
         "force_sync_user_for_maintenance",
         force_sync_mock,
+        raising=False,
     )
     dept_execute = AsyncMock(name="DepartmentChangeHandler.execute_async")
     monkeypatch.setattr(
@@ -98,11 +99,19 @@ def patches(monkeypatch):
 
     monkeypatch.setattr(uds_module, "get_async_db_session", _fake_get_session)
 
+    enqueue_stat = AsyncMock(name="enqueue_user_stat_async", return_value=True)
+    monkeypatch.setattr(
+        "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+        "KnowledgeSpaceContentStat.enqueue_user_stat_async",
+        enqueue_stat,
+    )
+
     return SimpleNamespace(
         primary=primary_mock,
         sync=sync_mock,
         force_sync=force_sync_mock,
         dept_execute=dept_execute,
+        enqueue_stat=enqueue_stat,
         session_calls=session_calls,
     )
 
@@ -120,6 +129,7 @@ class TestNoOp:
         assert result["changed"] is False
         patches.sync.assert_not_awaited()
         patches.dept_execute.assert_not_awaited()
+        patches.enqueue_stat.assert_not_awaited()
         assert patches.session_calls["commit"] == 0
 
 
@@ -147,6 +157,7 @@ class TestHappyPath:
         # DB writes happened (1 commit).
         assert patches.session_calls["commit"] == 1
         patches.dept_execute.assert_awaited_once()
+        patches.enqueue_stat.assert_awaited_once_with([100])
         ops = patches.dept_execute.await_args.args[0]
         assert [(op.action, op.user, op.relation, op.object) for op in ops] == [
             ("write", "user:100", "member", "department:12"),
@@ -160,6 +171,7 @@ class TestHappyPath:
         result = asyncio.run(UserDepartmentService.change_primary_department(101, 20))
         assert result["changed"] is True
         patches.sync.assert_awaited_once()
+        patches.enqueue_stat.assert_awaited_once_with([101])
 
 
 # -------------------------------------------------------------------------
@@ -176,6 +188,7 @@ class TestBlockedPropagation:
 
         with pytest.raises(TenantRelocateBlockedError):
             asyncio.run(UserDepartmentService.change_primary_department(102, 12))
+        patches.enqueue_stat.assert_awaited_once_with([102])
 
 
 # -------------------------------------------------------------------------

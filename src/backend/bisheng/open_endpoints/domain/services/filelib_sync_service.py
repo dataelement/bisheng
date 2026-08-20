@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.filelib_sync import (
     FilelibSyncConflictError,
+    FilelibSyncError,
     FilelibSyncInvalidParamsError,
     FilelibSyncNotFoundError,
     FilelibSyncPermissionDeniedError,
@@ -43,9 +44,11 @@ from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_reposito
     FilelibSyncRepository,
 )
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncParams, FilelibSyncResponseData
+from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import FilelibSyncAuditWriter
 from bisheng.open_endpoints.domain.services.filelib_sync_version_link_service import (
     FILELIB_SYNC_PENDING_VERSION_LINK_KEY,
     build_filelib_sync_pending_version_link_metadata,
+    resolve_version_link_target_document_id,
 )
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     PortalDocumentTypeChildConfig,
@@ -146,6 +149,10 @@ class FilelibSyncService:
         file_persisted = False
         staged_upload_path = local_file_path
         extra_cleanup_paths: list[str] = []
+        identity: ResolvedIdentity | None = None
+        target: ResolvedFileSyncTarget | None = None
+        business_domain_code: str | None = None
+        replaced_file_id: int | None = None
         try:
             identity = await self._resolve_identity(params)
             portal_config = await self._get_portal_config()
@@ -194,6 +201,7 @@ class FilelibSyncService:
 
             replaced_file_id, target_document_id = await self._resolve_same_name_version_overwrite(
                 knowledge_id=int(target.space.id),
+                folder_id=target.folder_id,
                 file_name=params.file_name,
             )
 
@@ -234,15 +242,15 @@ class FilelibSyncService:
                 created_file = await self.repository.find_by_id(file_id)
             if created_file is None:
                 raise FilelibSyncNotFoundError(msg="created knowledge file does not exist")
-            token_user_id = int(self.login_user.user_id)
-            token_user_name = str(self.login_user.user_name or "")
-            # File owner (DB user_id) is the API token user; original_uploader_id tracks
-            # the responsible person from params, defaulting to the token user when omitted.
-            created_file.user_id = token_user_id
-            created_file.user_name = token_user_name
-            created_file.updater_id = token_user_id
-            created_file.updater_name = token_user_name
-            created_file.original_uploader_id = int(identity.responsible_user_id)
+            owner_user_id = int(identity.responsible_user_id)
+            owner_user_name = str(identity.responsible_user_name or "")
+            # File owner follows params.responsible_person_id/responsible_person when provided;
+            # otherwise defaults to the token-bound user via _resolve_responsible_user().
+            created_file.user_id = owner_user_id
+            created_file.user_name = owner_user_name
+            created_file.updater_id = owner_user_id
+            created_file.updater_name = owner_user_name
+            created_file.original_uploader_id = owner_user_id
             user_metadata = {
                 **(created_file.user_metadata or {}),
                 "external_file_id": params.external_file_id,
@@ -299,7 +307,7 @@ class FilelibSyncService:
                 endpoint_tag,
                 trigger_type,
             )
-            return FilelibSyncResponseData(
+            response = FilelibSyncResponseData(
                 external_file_id=params.external_file_id,
                 file_id=int(created_file.id),
                 file_encoding=str(created_file.file_encoding),
@@ -309,7 +317,83 @@ class FilelibSyncService:
                 version_link_pending=replaced_file_id is not None,
                 replaced_file_id=replaced_file_id,
             )
-        except Exception:
+            folder_display_name = await self._resolve_folder_display_label(
+                identity=identity,
+                target=target,
+            )
+            await FilelibSyncAuditWriter.write_upload_success(
+                request=self.request,
+                login_user=self.login_user,
+                token_id=self.token_id,
+                token_name=self.token_name,
+                params=params,
+                identity=identity,
+                target=target,
+                created_file=created_file,
+                response=response,
+                endpoint_tag=endpoint_tag,
+                trigger_type=trigger_type,
+                business_domain_code=business_domain_code,
+                category_code=self.file_sync_rule.category.code,
+                subcategory_code=self.file_sync_rule.category.subcategory_code,
+                replaced_file_id=replaced_file_id,
+                extra_user_metadata=extra_user_metadata,
+                folder_display_name=folder_display_name,
+            )
+            return response
+        except FilelibSyncError as exc:
+            folder_display_name = await self._resolve_folder_display_label(
+                identity=identity,
+                target=target,
+            )
+            await FilelibSyncAuditWriter.write_upload_failed(
+                request=self.request,
+                login_user=self.login_user,
+                token_id=self.token_id,
+                token_name=self.token_name,
+                params=params,
+                endpoint_tag=endpoint_tag,
+                trigger_type=trigger_type,
+                identity=identity,
+                target=target,
+                business_domain_code=business_domain_code,
+                category_code=self.file_sync_rule.category.code,
+                subcategory_code=self.file_sync_rule.category.subcategory_code,
+                replaced_file_id=replaced_file_id,
+                extra_user_metadata=extra_user_metadata,
+                error=exc,
+                created_file=created_file if file_persisted else None,
+                folder_display_name=folder_display_name,
+            )
+            if not file_persisted:
+                await self._cleanup_failed_sync(created_file, local_file_path)
+                for extra_path in extra_cleanup_paths:
+                    await self._cleanup_failed_sync(None, extra_path)
+            raise
+        except Exception as exc:
+            folder_display_name = await self._resolve_folder_display_label(
+                identity=identity,
+                target=target,
+            )
+            await FilelibSyncAuditWriter.write_upload_failed(
+                request=self.request,
+                login_user=self.login_user,
+                token_id=self.token_id,
+                token_name=self.token_name,
+                params=params,
+                endpoint_tag=endpoint_tag,
+                trigger_type=trigger_type,
+                identity=identity,
+                target=target,
+                business_domain_code=business_domain_code,
+                category_code=self.file_sync_rule.category.code,
+                subcategory_code=self.file_sync_rule.category.subcategory_code,
+                replaced_file_id=replaced_file_id,
+                extra_user_metadata=extra_user_metadata,
+                error=exc,
+                created_file=created_file if file_persisted else None,
+                folder_display_name=folder_display_name,
+            )
             if not file_persisted:
                 await self._cleanup_failed_sync(created_file, local_file_path)
                 for extra_path in extra_cleanup_paths:
@@ -678,6 +762,23 @@ class FilelibSyncService:
             return None
         return int(folder.id)
 
+    async def _resolve_folder_display_label(
+        self,
+        *,
+        identity: ResolvedIdentity | None,
+        target: ResolvedFileSyncTarget | None,
+    ) -> str | None:
+        if target is None:
+            return None
+        if target.used_personal_fallback and identity is not None:
+            return self.build_personal_fallback_folder_path(identity)
+        if target.folder_id is None:
+            return "根目录"
+        folder = await self.repository.find_by_id(int(target.folder_id))
+        if folder is None:
+            return f"目录#{target.folder_id}"
+        return str(folder.file_name or f"#{target.folder_id}")
+
     async def _resolve_folder_path_override(
         self,
         knowledge_id: int,
@@ -753,32 +854,47 @@ class FilelibSyncService:
             return str(identity.caller_department.name or "")
         raise FilelibSyncInvalidParamsError(msg="invalid folder dynamic source in token rule")
 
-    @staticmethod
-    def _target_space_kind_for_dynamic_source(dynamic_source: str) -> DepartmentSpaceTargetKind:
-        if dynamic_source == "responsible_person_id":
-            return DepartmentSpaceTargetKind.CLINIC
-        if dynamic_source == "department_id":
-            return DepartmentSpaceTargetKind.DEPARTMENT
-        raise FilelibSyncInvalidParamsError(msg="invalid dynamic source in token rule")
-
-    @staticmethod
-    def _target_department_ids(
-        department: Department,
-        kind: DepartmentSpaceTargetKind,
-    ) -> list[int]:
-        """Department libraries walk up the org tree; clinic spaces match self only."""
-        if kind == DepartmentSpaceTargetKind.CLINIC:
-            return [int(department.id)]
-        return FilelibSyncService._department_chain(department)
-
     async def _find_department_space(
         self,
         department: Department,
         *,
         dynamic_source: str = "department_id",
     ) -> Knowledge:
-        kind = self._target_space_kind_for_dynamic_source(dynamic_source)
-        department_ids = self._target_department_ids(department, kind)
+        if dynamic_source == "responsible_person_id":
+            return await self._find_responsible_person_target_space(department)
+        return await self._resolve_bound_space(
+            department,
+            department_ids=self._department_chain(department),
+            kind=DepartmentSpaceTargetKind.DEPARTMENT,
+        )
+
+    async def _find_responsible_person_target_space(self, department: Department) -> Knowledge:
+        """Clinic library on the responsible person's department, then nearest department library."""
+        clinic_space = await self._resolve_bound_space(
+            department,
+            department_ids=[int(department.id)],
+            kind=DepartmentSpaceTargetKind.CLINIC,
+            missing_is_error=False,
+            ambiguous_picks_first=True,
+        )
+        if clinic_space is not None:
+            return clinic_space
+        return await self._resolve_bound_space(
+            department,
+            department_ids=self._department_chain(department),
+            kind=DepartmentSpaceTargetKind.DEPARTMENT,
+        )
+
+    async def _resolve_bound_space(
+        self,
+        department: Department,
+        *,
+        department_ids: list[int],
+        kind: DepartmentSpaceTargetKind,
+        missing_is_error: bool = True,
+        ambiguous_picks_first: bool = False,
+    ) -> Knowledge | None:
+        space_id: int | None
         try:
             space_id = await DepartmentSpaceTargetResolver.resolve(
                 department_ids,
@@ -786,15 +902,38 @@ class FilelibSyncService:
                 allow_legacy=False,
             )
         except DepartmentKnowledgeSpaceAmbiguousError as exc:
-            space_label = "clinic" if kind == DepartmentSpaceTargetKind.CLINIC else "department"
-            raise FilelibSyncConflictError(
-                msg=f"multiple target {space_label} knowledge spaces are bound to the department",
-            ) from exc
-        if space_id is not None:
-            space = await self.repository.find_knowledge_by_id(space_id)
-            if space is not None:
-                return space
-        raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
+            if ambiguous_picks_first:
+                candidate_space_ids = sorted(
+                    int(one) for one in (exc.kwargs.get("candidate_space_ids") or [])
+                )
+                if not candidate_space_ids:
+                    if missing_is_error:
+                        raise FilelibSyncConflictError(
+                            msg="multiple target clinic knowledge spaces are bound to the department",
+                        ) from exc
+                    return None
+                space_id = candidate_space_ids[0]
+                logger.warning(
+                    "filelib sync picked first clinic knowledge space department_id={} space_id={} candidates={}",
+                    int(department.id),
+                    space_id,
+                    candidate_space_ids,
+                )
+            else:
+                space_label = "clinic" if kind == DepartmentSpaceTargetKind.CLINIC else "department"
+                raise FilelibSyncConflictError(
+                    msg=f"multiple target {space_label} knowledge spaces are bound to the department",
+                ) from exc
+        if space_id is None:
+            if missing_is_error:
+                raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
+            return None
+        space = await self.repository.find_knowledge_by_id(space_id)
+        if space is None:
+            if missing_is_error:
+                raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
+            return None
+        return space
 
     async def _find_nearest_department_space(self, department: Department) -> Knowledge:
         return await self._find_department_space(department, dynamic_source="department_id")
@@ -841,20 +980,60 @@ class FilelibSyncService:
         self,
         *,
         knowledge_id: int,
+        folder_id: int | None,
         file_name: str,
     ) -> tuple[int | None, int | None]:
-        """Remove same-name files so the incoming upload replaces rather than duplicates."""
+        """Replace same-name files in the target folder via version link or delete."""
+        file_level_path = await self._resolve_upload_file_level_path(
+            knowledge_id=knowledge_id,
+            folder_id=folder_id,
+        )
         existing_files = await asyncio.to_thread(
             KnowledgeFileDao.get_file_by_condition,
             knowledge_id=knowledge_id,
             file_name=file_name,
+            file_level_path=file_level_path,
         )
         if not existing_files:
             return None, None
 
         for existing_file in existing_files:
+            if int(existing_file.status) != KnowledgeFileStatus.SUCCESS.value:
+                continue
+            try:
+                target_document_id = await resolve_version_link_target_document_id(
+                    request=self.request,
+                    login_user=self.login_user,
+                    existing_file=existing_file,
+                )
+            except ValueError as exc:
+                logger.warning(
+                    "filelib sync version-link overwrite skipped file_id={} error={}",
+                    existing_file.id,
+                    exc,
+                )
+                continue
+            return int(existing_file.id), int(target_document_id)
+
+        for existing_file in existing_files:
+            if int(existing_file.status) == KnowledgeFileStatus.SUCCESS.value:
+                continue
             await self._remove_same_name_file_for_sync_replace(int(existing_file.id))
         return None, None
+
+    @staticmethod
+    async def _resolve_upload_file_level_path(
+        *,
+        knowledge_id: int,
+        folder_id: int | None,
+    ) -> str:
+        if folder_id is None:
+            return ""
+        folder = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, int(folder_id))
+        if folder is None or int(folder.knowledge_id) != int(knowledge_id):
+            raise FilelibSyncNotFoundError(msg="target folder does not exist")
+        parent_path = folder.file_level_path or ""
+        return f"{parent_path}/{int(folder_id)}" if parent_path else str(int(folder_id))
 
     async def _remove_same_name_file_for_sync_replace(self, file_id: int) -> None:
         try:

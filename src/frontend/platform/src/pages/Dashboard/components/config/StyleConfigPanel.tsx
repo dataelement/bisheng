@@ -20,6 +20,7 @@ import { SketchPicker } from 'react-color';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/bs-ui/popover"
 import { cn } from "@/utils"
 import { resolveStyleConfigDefaults } from "./componentConfigDraft"
+import { CHART_TITLE_MAX_LENGTH, limitChartTitleLength } from "../../chartTitle"
 
 interface StyleConfigPanelProps {
   config: ComponentStyleConfig
@@ -480,12 +481,9 @@ export function StyleConfigPanel({ config, onChange, type, FULL_DEFAULT_STYLE_CO
             placeholder={t('styleConfigPanel.placeholders.enterTitle')}
             value={localConfig.title || ""}
             onChange={(e) => {
-              const value = e.target.value
-              if (value.length <= 15) {
-                handleChange("title", value)
-              }
+              handleChange("title", limitChartTitleLength(e.target.value))
             }}
-            maxLength={15}
+            maxLength={CHART_TITLE_MAX_LENGTH}
           />
         </FormBlock>
         <FormBlock label={t('styleConfigPanel.labels.textFormat')}>

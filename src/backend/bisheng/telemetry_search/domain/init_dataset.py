@@ -725,7 +725,7 @@ DASHBOARD_DATASET = [
         dataset_name="知识空间内容统计",
         dataset_code=KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
         es_index_name=KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
-        description="知识空间成功文件与文件预览统计数据表",
+        description="知识空间成功文件与预览、下载、收藏统计数据表",
         is_commercial_only=False,
         schema_config=SchemaConfig(
             metrics=[
@@ -834,6 +834,25 @@ DASHBOARD_DATASET = [
                         )
                     ]
                 ),
+                MetricConfig(
+                    field="favorite_count",
+                    name="收藏次数",
+                    is_virtual=True,
+                    filter=FilterExpression(bool_operator="must", filters=[
+                        TermOp(field="record_type", value="favorite_daily"),
+                        TermsOp(
+                            field="space_level",
+                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                        ),
+                    ]),
+                    aggregations=[
+                        AggregationExpression(
+                            name="favorite_count",
+                            type=AggsTypeEnum.SUM,
+                            field="favorite_count"
+                        )
+                    ]
+                ),
             ],
             dimensions=[
                 DimensionConfig(
@@ -882,22 +901,14 @@ DASHBOARD_DATASET = [
                     name="业务域",
                     field="business_domain_name"
                 ),
-                DimensionConfig(
-                    name="所属部门ID",
-                    field="space_department_id"
-                ),
-                DimensionConfig(
-                    name="所属部门",
-                    field="space_department_name"
-                ),
-                DimensionConfig(
-                    name="上传人所在部门ID",
-                    field="primary_department_id"
-                ),
-                DimensionConfig(
-                    name="上传人所在部门",
-                    field="primary_department_name"
-                ),
+                DimensionConfig(name="上传人公司", field="uploader_company_name"),
+                DimensionConfig(name="上传人部门", field="uploader_department_name"),
+                DimensionConfig(name="上传人科室", field="uploader_office_name"),
+                DimensionConfig(name="上传人班组", field="uploader_squad_name"),
+                DimensionConfig(name="所属公司", field="belonging_company_name"),
+                DimensionConfig(name="所属部门", field="belonging_department_name"),
+                DimensionConfig(name="所属科室", field="belonging_office_name"),
+                DimensionConfig(name="所属班组", field="belonging_squad_name"),
                 DimensionConfig(
                     name="上传人ID",
                     field="uploader_user_id"
@@ -905,14 +916,6 @@ DASHBOARD_DATASET = [
                 DimensionConfig(
                     name="上传人名称",
                     field="uploader_user_name"
-                ),
-                DimensionConfig(
-                    name="上传人部门ID",
-                    field="uploader_department_infos.department_id"
-                ),
-                DimensionConfig(
-                    name="上传人部门名称",
-                    field="uploader_department_infos.department_name"
                 ),
                 DimensionConfig(
                     name="文件ID",

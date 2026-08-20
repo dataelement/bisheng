@@ -3255,6 +3255,49 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByText("权限管理")).not.toBeInTheDocument();
     });
 
+    test("原文件删除导致的失效入口显示对应原因", async () => {
+        const departmentSpace = makeSpace("department-file-invalid", "接收知识库", {
+            role: SpaceRole.ADMIN,
+            spaceLevel: SpaceLevel.DEPARTMENT,
+        });
+        const invalidFile = makeFile("320", "原文件已删除制度.pdf", {
+            type: FileType.PDF,
+            spaceId: departmentSpace.id,
+            entryType: "share",
+            entryStatus: "invalid",
+            distributionInvalidReason: "manager_file_deleted",
+            capabilities: {
+                canView: false,
+                canPreview: false,
+                canDownload: false,
+                canMove: false,
+                canManageMembers: false,
+                canEditContent: false,
+                canPublish: false,
+                canShare: false,
+                canDelete: true,
+            },
+        });
+        jest.mocked(getGroupedSpacesApi).mockResolvedValue({
+            publicSpaces: [],
+            departmentSpaces: [departmentSpace],
+            teamSpaces: [],
+            personalSpaces: [],
+        } as any);
+        jest.mocked(getSpaceChildrenApi).mockResolvedValue({
+            data: [invalidFile],
+            page_size: 20,
+            has_more: false,
+            next_cursor: null,
+        });
+        jest.mocked(getSpaceInfoApi).mockResolvedValue(departmentSpace as any);
+
+        renderWorkbench(`/knowledge-portal?spaceId=${departmentSpace.id}`);
+
+        const row = await screen.findByTestId("file-tree-row-320");
+        expect(within(row).getByText("已失效：原文件已删除")).toBeInTheDocument();
+    });
+
     test("keeps share deletion hidden when the live delete permission is denied", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
         const departmentSpace = makeSpace("department-delete-denied", "接收知识库", {
@@ -3907,7 +3950,7 @@ describe("PortalKnowledgeWorkbench", () => {
         });
     });
 
-    test("shows reparse action only for a failed single file in portal row menu", async () => {
+    test("shows reparse action for failed, violation and timeout files in portal row menu", async () => {
         const personalSpace = makeSpace("personal-1", "我的技术文档", {
             role: SpaceRole.ADMIN,
         });
@@ -3920,6 +3963,9 @@ describe("PortalKnowledgeWorkbench", () => {
         const violationFile = makeFile("203", "违规文档.md", {
             status: FileStatus.VIOLATION,
         });
+        const timeoutFile = makeFile("204", "超时文档.md", {
+            status: FileStatus.TIMEOUT,
+        });
         jest.mocked(getGroupedSpacesApi).mockResolvedValue({
             publicSpaces: [],
             departmentSpaces: [],
@@ -3927,8 +3973,8 @@ describe("PortalKnowledgeWorkbench", () => {
             personalSpaces: [personalSpace],
         } as any);
         jest.mocked(getSpaceChildrenApi).mockResolvedValue({
-            data: [failedFile, successFile, violationFile],
-            total: 3,
+            data: [failedFile, successFile, violationFile, timeoutFile],
+            total: 4,
         } as any);
 
         renderWorkbench();
@@ -3936,13 +3982,16 @@ describe("PortalKnowledgeWorkbench", () => {
         const failedRow = await screen.findByTestId("file-tree-row-201");
         const successRow = screen.getByTestId("file-tree-row-202");
         const violationRow = screen.getByTestId("file-tree-row-203");
+        const timeoutRow = screen.getByTestId("file-tree-row-204");
         fireEvent.mouseEnter(failedRow);
         fireEvent.mouseEnter(successRow);
         fireEvent.mouseEnter(violationRow);
+        fireEvent.mouseEnter(timeoutRow);
 
         expect(within(failedRow).getByRole("button", { name: "重新解析" })).toBeInTheDocument();
+        expect(within(violationRow).getByRole("button", { name: "重新解析" })).toBeInTheDocument();
+        expect(within(timeoutRow).getByRole("button", { name: "重新解析" })).toBeInTheDocument();
         expect(within(successRow).queryByRole("button", { name: "重新解析" })).not.toBeInTheDocument();
-        expect(within(violationRow).queryByRole("button", { name: "重新解析" })).not.toBeInTheDocument();
 
         fireEvent.click(within(failedRow).getByRole("button", { name: "重新解析" }));
 

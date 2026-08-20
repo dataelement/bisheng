@@ -33,7 +33,7 @@ async def set_company_root(
     body: SetCompanyRootRequest | None = None,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """指定唯一公司根并级联打标；非超管 18201，冲突 18205。"""
+    """指定唯一公司根并级联打标；非超管 18201，嵌套 18205，已有其他公司 18208。"""
     _ = body  # confirm 预留；当前一次调用即执行。
     try:
         data = await _service.set_company_root(login_user, dept_id)

@@ -97,7 +97,10 @@ class PortalTelemetryEventService:
                     "must": [
                         {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value}},
                         {"term": {"event_data.portal_document_read_file_id": file_id}},
-                    ]
+                    ],
+                    "must_not": [
+                        {"exists": {"field": "event_data.portal_document_read_content_stat_schema_version"}}
+                    ],
                 }
             },
         }
@@ -136,7 +139,10 @@ class PortalTelemetryEventService:
             "size": 0,
             "query": {
                 "bool": {
-                    "filter": filters
+                    "filter": filters,
+                    "must_not": [
+                        {"exists": {"field": "event_data.portal_document_read_content_stat_schema_version"}}
+                    ],
                 }
             },
             "aggs": {
@@ -186,7 +192,10 @@ class PortalTelemetryEventService:
                     "must": [
                         {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD.value}},
                         {"term": {"event_data.portal_document_download_file_id": file_id}},
-                    ]
+                    ],
+                    "must_not": [
+                        {"exists": {"field": "event_data.portal_document_download_content_stat_schema_version"}}
+                    ],
                 }
             },
         }
@@ -203,7 +212,51 @@ class PortalTelemetryEventService:
         event_values = [event_type.value for event_type in PORTAL_HOME_EVENT_TYPES]
         body = {
             "size": 0,
-            "query": {"terms": {"event_type": event_values}},
+            "query": {
+                "bool": {
+                    "filter": [{"terms": {"event_type": event_values}}],
+                    "must_not": [
+                        {
+                            "bool": {
+                                "filter": [
+                                    {
+                                        "term": {
+                                            "event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value,
+                                        }
+                                    },
+                                    {
+                                        "exists": {
+                                            "field": (
+                                                "event_data.portal_document_read_"
+                                                "content_stat_schema_version"
+                                            )
+                                        }
+                                    },
+                                ]
+                            }
+                        },
+                        {
+                            "bool": {
+                                "filter": [
+                                    {
+                                        "term": {
+                                            "event_type": BaseTelemetryTypeEnum.PORTAL_FAVORITE.value,
+                                        }
+                                    },
+                                    {
+                                        "exists": {
+                                            "field": (
+                                                "event_data.portal_favorite_"
+                                                "content_stat_schema_version"
+                                            )
+                                        }
+                                    },
+                                ]
+                            }
+                        },
+                    ],
+                }
+            },
             "aggs": {
                 "by_event_type": {
                     "terms": {

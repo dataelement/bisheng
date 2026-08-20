@@ -1060,7 +1060,6 @@ class ShougangApprovalService:
             scope = scope_map.get(int(space.id))
             if scope is None or scope.level not in allowed_levels:
                 continue
-            can_browse_files = True
             try:
                 await space_service._require_permission_id(
                     "knowledge_space",
@@ -1068,7 +1067,7 @@ class ShougangApprovalService:
                     "view_space",
                 )
             except SpacePermissionDeniedError:
-                can_browse_files = False
+                continue
             items.append(
                 ShougangFilePublishTargetSpace(
                     id=int(space.id),
@@ -1078,7 +1077,7 @@ class ShougangApprovalService:
                         getattr(space, "owner_name", None)
                         or getattr(space, "user_name", None)
                     ),
-                    can_browse_files=can_browse_files,
+                    can_browse_files=True,
                 )
             )
         return ShougangFilePublishTargetSpacesResp(data=items, total=len(items))
@@ -1105,6 +1104,7 @@ class ShougangApprovalService:
             target_space_id,
             source_level=source_level,
             space_service=space_service,
+            require_view_space=True,
         )
         await self._ensure_publish_target_folder(
             target_space_id,
@@ -1335,6 +1335,7 @@ class ShougangApprovalService:
             req.target_space_id,
             source_level=source_level,
             space_service=space_service,
+            require_view_space=True,
         )
         try:
             ensure_file_publish_business_domain_matches(source_file, target_space)

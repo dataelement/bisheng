@@ -1,6 +1,6 @@
 import { TreeDepartmentSelect } from "@/components/bs-comp/department/TreeDepartmentSelect"
 import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
-import { Button } from "@/components/bs-ui/button"
+import { Button, LoadButton } from "@/components/bs-ui/button"
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,10 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import type { DepartmentMember, DepartmentTreeNode } from "@/types/api/department"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import {
+  buildLocalMemberDeleteConfirmDesc,
+  buildLocalMemberDeleteSuccessDescription,
+} from "./localMemberDeleteHelpers"
 
 type Props = {
   open: boolean
@@ -63,6 +67,7 @@ export function OrganizationMemberEditDialog({
   const [primaryAssignableList, setPrimaryAssignableList] = useState<
     { id: number; role_name: string }[]
   >([])
+  const [deleting, setDeleting] = useState(false)
 
   const resetLocal = useCallback(() => {
     setForm(null)
@@ -168,49 +173,47 @@ export function OrganizationMemberEditDialog({
     }))
   }, [form, primaryAssignableList])
 
-  const handleDeleteLocalMember = useCallback(() => {
+  const handleDeleteLocalMember = useCallback(async () => {
     if (!member || !form) return
-    bsConfirm({
-      desc: t("bs:department.deleteLocalMemberConfirm"),
-      onOk: async (close) => {
-        const chk = await captureAndAlertRequestErrorHoc(
-          checkDepartmentMemberDeleteApi(deptId, member.user_id)
-        )
-        if (chk === false) {
-          close()
-          return
-        }
-        if (chk?.has_assets) {
-          const c = chk.counts
-          toast({
-            title: t("prompt"),
-            variant: "warning",
-            description: t("bs:department.deleteLocalMemberBlocked", {
-              k: c.knowledge_spaces,
-              f: c.flows,
-              a: c.assistants,
-            }),
-          })
-          close()
-          return
-        }
-        const delRes = await captureAndAlertRequestErrorHoc(
-          deleteDepartmentLocalMemberApi(deptId, member.user_id)
-        )
-        if (delRes === false) {
-          close()
-          return
-        }
+    setDeleting(true)
+    try {
+      const preview = await captureAndAlertRequestErrorHoc(
+        checkDepartmentMemberDeleteApi(deptId, member.user_id)
+      )
+      if (preview === false) return
+
+      if (preview.transfer_count > 0 && !preview.proposed_receiver) {
         toast({
           title: t("prompt"),
-          variant: "success",
-          description: t("bs:department.deleteLocalMemberDone"),
+          variant: "warning",
+          description: t("bs:department.deleteLocalMemberNoReceiver"),
         })
-        onSaved()
-        onClose()
-        close()
-      },
-    })
+        return
+      }
+
+      bsConfirm({
+        desc: buildLocalMemberDeleteConfirmDesc(preview, t),
+        okLoadingTxt: t("bs:department.deleteLocalMemberProcessing"),
+        onOk: async (close) => {
+          const result = await captureAndAlertRequestErrorHoc(
+            deleteDepartmentLocalMemberApi(deptId, member.user_id)
+          )
+          if (result === false) {
+            return
+          }
+          toast({
+            title: t("prompt"),
+            variant: "success",
+            description: buildLocalMemberDeleteSuccessDescription(result, t),
+          })
+          onSaved()
+          onClose()
+          close()
+        },
+      })
+    } finally {
+      setDeleting(false)
+    }
   }, [deptId, form, member, onClose, onSaved, t])
 
   const title = useMemo(() => {
@@ -455,14 +458,17 @@ export function OrganizationMemberEditDialog({
         <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             {form?.edit_mode === "local_primary" && (
-              <Button
+              <LoadButton
                 type="button"
                 variant="destructive"
+                loading={deleting}
                 disabled={saving || loading}
-                onClick={() => handleDeleteLocalMember()}
+                onClick={() => void handleDeleteLocalMember()}
               >
-                {t("bs:department.deleteLocalMember")}
-              </Button>
+                {deleting
+                  ? t("bs:department.deleteLocalMemberChecking")
+                  : t("bs:department.deleteLocalMember")}
+              </LoadButton>
             )}
           </div>
           <div className="flex justify-end gap-2">

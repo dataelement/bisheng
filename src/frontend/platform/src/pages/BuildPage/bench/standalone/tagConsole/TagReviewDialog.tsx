@@ -13,6 +13,9 @@ import {
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { ReviewTagSimilarBanner } from "../../reviewTag/ReviewTagSimilarBanner"
+import { ReviewTagSimilarConfirmDialog } from "../../reviewTag/ReviewTagSimilarConfirmDialog"
+import { useReviewTagSimilarCheck } from "../../reviewTag/useReviewTagSimilarCheck"
 import { SourceFileLinks } from "./SourceFileLinks"
 import { tagSourceLabel } from "./TagSourceIcon"
 import { distinctSourceSpaceIds, useApprovableLibraries } from "./useApprovableLibraries"
@@ -24,7 +27,7 @@ interface TagReviewDialogProps {
     libraries: KnowledgeSpaceTagLibraryListItem[]
     saving: boolean
     onClose: () => void
-    onApprove: (libraryId: number) => void
+    onApprove: (libraryId: number, ackSimilar?: boolean) => void
     onReject: (reason: string) => void
 }
 
@@ -43,6 +46,12 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
     const [loading, setLoading] = useState(false)
     const [libraryId, setLibraryId] = useState("")
     const [rejectReason, setRejectReason] = useState("")
+    const [similarConfirmOpen, setSimilarConfirmOpen] = useState(false)
+
+    const { result: similarResult, loading: similarLoading, hasSimilar } = useReviewTagSimilarCheck(
+        detail?.name,
+        libraryId,
+    )
 
     // Only libraries bound to this tag's own knowledge base can take it; the
     // rest are refused server-side with "该标签库未关联此知识空间".
@@ -57,6 +66,7 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
         }
         setLibraryId("")
         setRejectReason("")
+        setSimilarConfirmOpen(false)
         setLoading(true)
         captureAndAlertRequestErrorHoc(getTagConsoleReviewDetailApi(target)).then((res) => {
             if (res) {
@@ -67,12 +77,33 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
         })
     }, [target])
 
+    useEffect(() => {
+        setSimilarConfirmOpen(false)
+    }, [libraryId, detail?.name])
+
+    const submitApprove = (ackSimilar = false) => {
+        if (!libraryId) {
+            toast({ variant: "error", description: t("build.reviewTagSelectLibraryRequired", "请选择导入的标签库") })
+            return
+        }
+        onApprove(Number(libraryId), ackSimilar)
+    }
+
     const handleApprove = () => {
         if (!libraryId) {
             toast({ variant: "error", description: t("build.reviewTagSelectLibraryRequired", "请选择导入的标签库") })
             return
         }
-        onApprove(Number(libraryId))
+        if (hasSimilar) {
+            setSimilarConfirmOpen(true)
+            return
+        }
+        submitApprove()
+    }
+
+    const handleSimilarConfirm = () => {
+        setSimilarConfirmOpen(false)
+        submitApprove(true)
     }
 
     const handleReject = () => {
@@ -136,6 +167,9 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
                                     </SelectContent>
                                 </Select>
                             </div>
+                            {libraryId && (
+                                <ReviewTagSimilarBanner result={similarResult} loading={similarLoading} />
+                            )}
 
                             <div>
                                 <Label className="bisheng-label">{t("build.tagConsole.rejectReason", "驳回原因")}</Label>
@@ -159,10 +193,20 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
                         {t("build.tagConsole.reject", "驳回")}
                     </Button>
                     <Button className="px-8" disabled={saving || loading} onClick={handleApprove}>
-                        {t("build.tagConsole.approve", "同意")}
+                        {hasSimilar
+                            ? t("build.reviewTagProceedWithSimilar", "继续审核")
+                            : t("build.tagConsole.approve", "同意")}
                     </Button>
                 </DialogFooter>
             </DialogContent>
+            <ReviewTagSimilarConfirmDialog
+                open={similarConfirmOpen}
+                tagName={detail?.name || ""}
+                similarMatches={similarResult?.similar_matches ?? []}
+                saving={saving}
+                onOpenChange={setSimilarConfirmOpen}
+                onConfirm={handleSimilarConfirm}
+            />
         </Dialog>
     )
 }

@@ -14,6 +14,8 @@ router = APIRouter(prefix='/audit', tags=['AuditLog'])
 async def get_audit_logs(*,
                          group_ids: Optional[List[str]] = Query(default=[], description='GroupingidVertical'),
                          operator_ids: Optional[List[int]] = Query(default=[], description='WhoidVertical'),
+                         responsible_user_ids: Optional[List[int]] = Query(
+                             default=[], description='Filelib sync responsible person user ids'),
                          start_time: Optional[datetime] = Query(default=None, description='Start when'),
                          end_time: Optional[datetime] = Query(default=None, description='End time'),
                          system_id: Optional[str] = Query(default=None, description='Module Item'),
@@ -23,8 +25,15 @@ async def get_audit_logs(*,
                          login_user: UserPayload = Depends(UserPayload.get_login_user)):
     group_ids = [one for one in group_ids if one]
     operator_ids = [one for one in operator_ids if one]
+    responsible_user_ids = [one for one in responsible_user_ids if one]
     return await AuditLogService.get_audit_log(login_user, group_ids, operator_ids,
-                                               start_time, end_time, system_id, event_type, page, limit)
+                                               start_time, end_time, system_id, event_type, page, limit,
+                                               responsible_user_ids=responsible_user_ids or None)
+
+
+@router.get('/responsible-persons')
+async def get_all_responsible_persons(*, login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    return resp_200(data=await AuditLogService.get_all_responsible_persons(login_user))
 
 
 @router.get('/operators')

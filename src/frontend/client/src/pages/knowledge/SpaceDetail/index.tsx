@@ -31,6 +31,7 @@ import {
     getMaxFileSizeMBForFile,
     resolveUploadSizeLimits,
     triggerUrlDownload,
+    isKnowledgeFileReparseRetryable,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import {
@@ -388,7 +389,7 @@ export function KnowledgeSpaceContent({
     // deleting a folder whose children carry similar marks) where the visible
     // displayFiles slice doesn't see the cascaded removals.
     const similarFileIdsKey = displayFiles
-        .filter((f) => f.has_similar && !f.is_multi_version)
+        .filter((f) => f.has_similar)
         .map((f) => f.id)
         .sort()
         .join(",");
@@ -467,6 +468,9 @@ export function KnowledgeSpaceContent({
                     && isReadonlyDistributionEntry
                     && (capability === "canEditContent" || capability === "canPublish")
                 ) {
+                    return false;
+                }
+                if (capability === "canPublish" && file.status !== FileStatus.SUCCESS) {
                     return false;
                 }
                 if (file.type === FileType.FOLDER || !file.capabilities) {
@@ -1342,12 +1346,30 @@ export function KnowledgeSpaceContent({
         }
     };
 
+    const confirmDeleteMultiVersionFile = async (filesToDelete: KnowledgeFile[]): Promise<boolean> => {
+        if (
+            !versionManagementEnabled
+            || !filesToDelete.some((file) => file.type !== FileType.FOLDER && file.is_multi_version)
+        ) {
+            return true;
+        }
+        return confirm({
+            title: localize("com_knowledge.version.confirm_delete_with_history_title"),
+            description: localize("com_knowledge.version.confirm_delete_with_history_description"),
+            cancelText: localize("com_knowledge.cancel"),
+            confirmText: localize("com_knowledge.confirm"),
+            variant: "destructive",
+        });
+    };
+
     const handleBatchDelete = async () => {
-        // Soft-delete to recycle bin — no confirmation dialog.
         if (!canBatchDelete) {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
             return;
         }
+
+        const ok = await confirmDeleteMultiVersionFile(selectedList);
+        if (!ok) return;
 
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
@@ -1419,19 +1441,16 @@ export function KnowledgeSpaceContent({
             return;
         }
 
-        // Soft-delete to recycle bin — no confirmation dialog.
+        const ok = await confirmDeleteMultiVersionFile([file]);
+        if (!ok) return;
+
         onDeleteFile(fileId);
     };
 
     const handleBatchRetry = async () => {
-        // Find selected files/folders that have FAILED status or partial failures
         const retryIds = displayFiles
-            .filter(f => selectedFiles.has(f.id) && (
-                f.status === FileStatus.FAILED ||
-                f.status === FileStatus.VIOLATION ||
-                (f.successFileNum !== undefined && f.fileNum !== undefined && f.successFileNum < f.fileNum)
-            ))
-            .map(f => Number(f.id));
+            .filter((file) => selectedFiles.has(file.id) && isKnowledgeFileReparseRetryable(file))
+            .map((file) => Number(file.id));
 
         if (retryIds.length === 0) return;
 
@@ -1476,12 +1495,8 @@ export function KnowledgeSpaceContent({
         return null;
     };
 
-    const hasFailedFiles = displayFiles.some(f =>
-        selectedFiles.has(f.id) && (
-            f.status === FileStatus.FAILED ||
-            f.status === FileStatus.VIOLATION ||
-            (f.type === FileType.FOLDER && f.successFileNum! < f.fileNum!)
-        )
+    const hasFailedFiles = displayFiles.some(
+        (file) => selectedFiles.has(file.id) && isKnowledgeFileReparseRetryable(file),
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));

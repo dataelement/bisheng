@@ -2,18 +2,24 @@ FROM dataelement/bisheng-backend:base.v8
 
 WORKDIR /app
 
-COPY ./ ./
-
 # 从 uv.lock 导出并安装依赖，避免构建时重新解析到不兼容版本。
 # dmPython / dmSQLAlchemy / dmAsync 在 Linux 上由 pyproject.toml 自动包含。
 # dmPython 安装时会附带 dmssl 包，其中已包含所需的原生 .so 文件，
 # 无需额外安装达梦客户端或下载 DPI 驱动包。
-ENV UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple
+ENV UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple \
+    UV_HTTP_TIMEOUT=120 \
+    UV_HTTP_RETRIES=5 \
+    UV_LINK_MODE=copy
 
-RUN uv export --quiet --frozen --no-dev --format requirements.txt --output-file requirements.txt && \
-    uv pip install -r requirements.txt --system --no-cache-dir && \
-    uv cache clean && \
+# Copy dependency manifests first so application changes keep this layer cached.
+COPY pyproject.toml uv.lock ./
+
+RUN --mount=type=cache,target=/root/.cache/uv,sharing=locked \
+    uv export --quiet --frozen --no-dev --format requirements.txt --output-file requirements.txt && \
+    uv pip install -r requirements.txt --system && \
     rm -f requirements.txt
+
+COPY ./ ./
 
 # Patch SQLAlchemy's aiomysql adapter: AsyncAdapt_aiomysql_connection.ping is
 # declared with `reconnect: bool` (no default) in every released 2.0.x, but

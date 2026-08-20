@@ -6,6 +6,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import fitz
 import pytest
@@ -63,6 +64,50 @@ def _pdf_bytes() -> bytes:
 
 
 _DEFAULT_PDF_BYTES = _pdf_bytes()
+
+
+@pytest.mark.asyncio
+async def test_default_download_telemetry_keeps_legacy_event_and_queues_content_stat(
+    monkeypatch,
+) -> None:
+    from bisheng.common.telemetry.portal_event_service import PortalTelemetryEventService
+    from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+        KnowledgeSpaceContentStat,
+    )
+
+    legacy_events = []
+    enqueue = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        PortalTelemetryEventService,
+        "log_event_sync",
+        lambda **kwargs: legacy_events.append(kwargs),
+    )
+    monkeypatch.setattr(
+        KnowledgeSpaceContentStat,
+        "enqueue_success_event_async",
+        enqueue,
+    )
+
+    await PortalPdfDownloadService._record_download_telemetry(
+        {
+            "user_id": 7,
+            "space_id": 12,
+            "file_id": 1580,
+            "entry_point": "detail",
+        }
+    )
+
+    assert len(legacy_events) == 1
+    assert legacy_events[0]["event_data"].file_id == 1580
+    enqueue.assert_awaited_once_with(
+        file_id=1580,
+        user_id=7,
+        event_type="portal_document_download",
+        record_type="download_daily",
+        source_app="shougang_portal",
+        scene="document_download",
+        entry_point="detail",
+    )
 
 
 class FakeFileRepository:

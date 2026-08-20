@@ -139,6 +139,12 @@ class UserDepartmentService:
 
         invalidate_portal_recommendation_users_best_effort([user_id])
 
+        from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+            KnowledgeSpaceContentStat,
+        )
+
+        await KnowledgeSpaceContentStat.enqueue_user_stat_async([int(user_id)])
+
         ops = DepartmentChangeHandler.on_members_added(new_dept_id, [user_id])
         await DepartmentChangeHandler.execute_async(ops)
 

@@ -50,6 +50,46 @@ describe("PortalInfoDrawer original origin", () => {
         expect(screen.queryByText("原始上传人")).not.toBeInTheDocument();
         expect(screen.queryByText("原始上传知识库")).not.toBeInTheDocument();
     });
+
+    it("shows local upload ingest method by default", () => {
+        renderSourceDrawer("normal");
+
+        expect(screen.getByText("入库方式")).toBeInTheDocument();
+        expect(screen.getByText("本地上传")).toBeInTheDocument();
+    });
+
+    it("shows api sync ingest method when filelib metadata is present", () => {
+        render(
+            <PortalInfoDrawer
+                activePanel="source"
+                activeSpace={{ id: "20", name: "当前知识库" } as any}
+                selectedFile={{
+                    id: "100",
+                    name: "制度.pdf",
+                    type: "pdf",
+                    tags: [],
+                    path: "",
+                    spaceId: "20",
+                    createdAt: "",
+                    updatedAt: "",
+                    userMetadata: {
+                        filelib_sync_endpoint: "inspection_standard_sync",
+                        external_file_id: "INSPECTION-STD-DEPT-A-abc",
+                    },
+                } as any}
+                documentPath="/制度.pdf"
+                fileCategoryGroups={[]}
+                businessDomainOptions={[]}
+                encodingPrefix=""
+                onClose={jest.fn()}
+                onCopyShareLink={jest.fn()}
+                onPanelChange={jest.fn()}
+            />,
+        );
+
+        expect(screen.getByText("入库方式")).toBeInTheDocument();
+        expect(screen.getByText("接口同步")).toBeInTheDocument();
+    });
 });
 
 describe("PortalInfoDrawer version number", () => {

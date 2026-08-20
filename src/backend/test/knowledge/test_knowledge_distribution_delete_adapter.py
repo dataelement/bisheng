@@ -7,7 +7,6 @@ import pytest
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import (
-    KnowledgeDocumentActiveShareError,
     KnowledgeDocumentDownloadDeniedError,
     KnowledgeDocumentEntryTypeInvalidError,
     KnowledgeDocumentManagerRequiredError,
@@ -113,7 +112,7 @@ async def test_publish_direct_delete_is_always_rejected() -> None:
     service.document_distribution_service.delete_manager.assert_not_awaited()
 
 
-async def test_manager_delete_maps_active_share_conflict_to_18099() -> None:
+async def test_manager_delete_does_not_preserve_legacy_active_share_error() -> None:
     service = _service()
     service.document_distribution_service.delete_manager.side_effect = (
         KnowledgeDocumentDistributionError(
@@ -121,12 +120,12 @@ async def test_manager_delete_maps_active_share_conflict_to_18099() -> None:
         )
     )
 
-    with pytest.raises(KnowledgeDocumentActiveShareError) as exc_info:
+    with pytest.raises(KnowledgeDocumentStateConflictError) as exc_info:
         await service._handle_distribution_file_delete(
             _entry(KnowledgeFileEntryType.MANAGER)
         )
 
-    assert exc_info.value.code == 18099
+    assert exc_info.value.code == 18098
 
 
 async def test_manager_delete_enqueues_all_due_document_entries() -> None:
@@ -135,8 +134,7 @@ async def test_manager_delete_enqueues_all_due_document_entries() -> None:
         DeleteManagerResult(
             document_id=91,
             manager_file_id=101,
-            action="rollback",
-            tombstone_entry_id=102,
+            action="final_delete",
         )
     )
 

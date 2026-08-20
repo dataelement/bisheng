@@ -220,7 +220,7 @@ function VersionTableRow({
             </td>
 
             {/* File encoding (doc_code per version) */}
-            <td className="max-w-[180px] px-4 py-3">
+            <td className="max-w-[240px] px-4 py-3">
                 <span className="block truncate text-sm text-[#4e5969]" title={version.file_code ?? undefined}>
                     {version.file_code ?? "—"}
                 </span>
@@ -242,7 +242,7 @@ function VersionTableRow({
             </td>
 
             {/* Actions */}
-            <td className="px-4 py-3">
+            <td className="whitespace-nowrap px-4 py-3">
                 <div className="flex items-center gap-1.5">
                     {onPreview && (
                         <ActionButton
@@ -411,7 +411,7 @@ export function VersionHistorySheet({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="flex max-h-[80vh] w-[860px] max-w-[90vw] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:max-w-[860px] [&>button]:hidden"
+                className="flex max-h-[85vh] w-[1080px] max-w-[95vw] flex-col gap-0 overflow-hidden rounded-xl p-0 sm:max-w-[1080px] [&>button]:hidden"
             >
                 {/* Header */}
                 <DialogHeader className="relative shrink-0 px-6 pt-5 pb-3 text-left">
@@ -456,8 +456,17 @@ export function VersionHistorySheet({
                             —
                         </div>
                     ) : (
-                        <div className="overflow-x-auto rounded-[8px] border border-[#EBECF0]">
-                            <table className="w-full min-w-[720px] border-collapse text-sm">
+                        <div className="rounded-[8px] border border-[#EBECF0]">
+                            <table className="w-full table-fixed border-collapse text-sm">
+                                <colgroup>
+                                    <col className="w-[96px]" />
+                                    <col className="w-[16%]" />
+                                    <col className="w-[24%]" />
+                                    <col className="w-[10%]" />
+                                    <col className="w-[14%]" />
+                                    <col className="w-[10%]" />
+                                    <col className="w-[168px]" />
+                                </colgroup>
                                 <thead>
                                     <tr className="border-b border-[#EBECF0] bg-[#FAFAFA]">
                                         <th className="px-4 py-2.5 text-left text-xs font-medium text-[#86909c]">

@@ -9,6 +9,7 @@ from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidErro
 from bisheng.common.errcode.tag import (
     ReviewTagNotFoundError,
     ReviewTagPermissionDeniedError,
+    ReviewTagSimilarAckRequiredError,
     ReviewTagSpaceOutOfScopeError,
     ReviewTagTypeMismatchError,
     TagNameParamsIsEmptyError,
@@ -305,6 +306,102 @@ class WorkStationTagsService(BaseService):
                 )
             await self.session.commit()
 
+    @staticmethod
+    async def _load_similar_matches_for_tag(
+        *,
+        tag_name: str,
+        tag_library_id: int,
+        tenant_id: int,
+    ) -> list[dict]:
+        import asyncio
+
+        from bisheng.knowledge.domain.services.tag_library_tag_config_service import (
+            resolve_review_tag_similarity_threshold_async,
+        )
+        from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
+
+        normalized_name = (tag_name or "").strip()
+        if not normalized_name:
+            return []
+
+        similarity_threshold = await resolve_review_tag_similarity_threshold_async(tenant_id)
+        _, similar_rows = await asyncio.to_thread(
+            TagLibraryTagService.check_review_tag_similar_in_library_sync,
+            tag_name=normalized_name,
+            library_id=int(tag_library_id),
+            similarity_threshold=similarity_threshold,
+        )
+        return [
+            {
+                "name": name,
+                "match_kind": kind,
+                "score": score,
+            }
+            for name, kind, score in similar_rows
+        ]
+
+    async def ensure_review_tag_similar_acknowledged(
+        self,
+        *,
+        tag_name: str,
+        tag_library_id: int,
+        tenant_id: int,
+        ack_similar: bool,
+    ) -> None:
+        if ack_similar:
+            return
+        similar_matches = await self._load_similar_matches_for_tag(
+            tag_name=tag_name,
+            tag_library_id=tag_library_id,
+            tenant_id=tenant_id,
+        )
+        if not similar_matches:
+            return
+        raise ReviewTagSimilarAckRequiredError(
+            msg="目标库存在相似标签，请确认后再提交",
+            tag_name=(tag_name or "").strip(),
+            similar_matches=similar_matches,
+        )
+
+    async def ensure_review_tags_similar_acknowledged(
+        self,
+        *,
+        tag_names: list[str],
+        tag_library_id: int,
+        tenant_id: int,
+        ack_similar: bool,
+    ) -> None:
+        if ack_similar:
+            return
+
+        seen: set[str] = set()
+        blocking: list[dict] = []
+        for raw_name in tag_names:
+            normalized_name = (raw_name or "").strip()
+            if not normalized_name or normalized_name in seen:
+                continue
+            seen.add(normalized_name)
+            similar_matches = await self._load_similar_matches_for_tag(
+                tag_name=normalized_name,
+                tag_library_id=tag_library_id,
+                tenant_id=tenant_id,
+            )
+            if similar_matches:
+                blocking.append(
+                    {
+                        "tag_name": normalized_name,
+                        "similar_matches": similar_matches,
+                    }
+                )
+        if not blocking:
+            return
+        preview = "、".join(item["tag_name"] for item in blocking[:5])
+        raise ReviewTagSimilarAckRequiredError(
+            msg=f"以下标签在目标库中存在相似项，请确认后再提交：{preview}",
+            tag_names=[item["tag_name"] for item in blocking],
+            items=blocking,
+        )
+
     async def approve_or_reject_review_tag(self, data: ApproveOrRejectRequest, tenant_id: int):
         scope = await self.resolve_review_tag_scope()
         existed_tag_list = []
@@ -332,6 +429,12 @@ class WorkStationTagsService(BaseService):
             )
             if not review_tag_list:
                 raise ReviewTagNotFoundError.http_exception()
+            await self.ensure_review_tag_similar_acknowledged(
+                tag_name=data.tag_name,
+                tag_library_id=int(data.tag_library_id),
+                tenant_id=tenant_id,
+                ack_similar=bool(data.ack_similar),
+            )
             bound_ids = await KnowledgeSpaceTagLibraryService.resolve_bound_library_ids(int(data.knowledge_id))
             tag_has_library = any(
                 getattr(tag, "business_type", None) == TagBusinessTypeEnum.TAG_LIBRARY.value
@@ -574,3 +677,120 @@ class WorkStationTagsService(BaseService):
                 if tag_obj:
                     result_list.append(tag_obj)
         return result_list
+
+    async def check_review_tag_similar_in_library(
+        self,
+        *,
+        tag_name: str,
+        tag_library_id: int,
+        tenant_id: int,
+    ):
+        import asyncio
+
+        from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
+        from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibraryDao
+        from bisheng.knowledge.domain.services.tag_library_tag_config_service import (
+            resolve_review_tag_similarity_threshold_async,
+        )
+        from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
+        from bisheng.workstation.domain.schemas.review_tags_schema import (
+            ReviewTagSimilarCheckResponse,
+            ReviewTagSimilarMatchItem,
+        )
+
+        normalized_name = (tag_name or "").strip()
+        if not normalized_name:
+            raise TagNameParamsIsEmptyError.http_exception()
+        if not tag_library_id or int(tag_library_id) <= 0:
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="请选择导入的标签库")
+
+        library = await KnowledgeSpaceTagLibraryDao.aget(int(tag_library_id))
+        if not library:
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="标签库不存在")
+        if int(library.tenant_id) != int(tenant_id):
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="该标签库未关联此知识空间")
+
+        similarity_threshold = await resolve_review_tag_similarity_threshold_async(tenant_id)
+        exact_rows, similar_rows = await asyncio.to_thread(
+            TagLibraryTagService.check_review_tag_similar_in_library_sync,
+            tag_name=normalized_name,
+            library_id=int(tag_library_id),
+            similarity_threshold=similarity_threshold,
+        )
+        return ReviewTagSimilarCheckResponse(
+            exact_matches=[
+                ReviewTagSimilarMatchItem(name=name, match_kind=kind, score=score)
+                for name, kind, score in exact_rows
+            ],
+            similar_matches=[
+                ReviewTagSimilarMatchItem(name=name, match_kind=kind, score=score)
+                for name, kind, score in similar_rows
+            ],
+            similarity_threshold=similarity_threshold,
+        )
+
+    async def check_review_tag_similar_in_library_batch(
+        self,
+        *,
+        tag_names: list[str],
+        tag_library_id: int,
+        tenant_id: int,
+    ):
+        import asyncio
+
+        from bisheng.common.errcode.knowledge import KnowledgeSpaceTagLibraryInvalidError
+        from bisheng.knowledge.domain.models.knowledge_space_tag_library import KnowledgeSpaceTagLibraryDao
+        from bisheng.knowledge.domain.services.tag_library_tag_config_service import (
+            resolve_review_tag_similarity_threshold_async,
+        )
+        from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
+        from bisheng.workstation.domain.schemas.review_tags_schema import (
+            ReviewTagSimilarBatchCheckResponse,
+            ReviewTagSimilarBatchItem,
+            ReviewTagSimilarMatchItem,
+        )
+        from bisheng.workstation.domain.schemas.tag_console_schema import MAX_BATCH_SIZE
+
+        if not tag_library_id or int(tag_library_id) <= 0:
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="请选择导入的标签库")
+        if not tag_names:
+            raise TagNameParamsIsEmptyError.http_exception()
+        if len(tag_names) > MAX_BATCH_SIZE:
+            raise TagPageSizeParamsIsError.http_exception()
+
+        library = await KnowledgeSpaceTagLibraryDao.aget(int(tag_library_id))
+        if not library:
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="标签库不存在")
+        if int(library.tenant_id) != int(tenant_id):
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="该标签库未关联此知识空间")
+
+        similarity_threshold = await resolve_review_tag_similarity_threshold_async(tenant_id)
+        rows = await asyncio.to_thread(
+            TagLibraryTagService.check_review_tag_similar_in_library_batch_sync,
+            tag_names=tag_names,
+            library_id=int(tag_library_id),
+            similarity_threshold=similarity_threshold,
+        )
+        items: list[ReviewTagSimilarBatchItem] = []
+        similar_tag_count = 0
+        for tag_name, exact_rows, similar_rows in rows:
+            if similar_rows:
+                similar_tag_count += 1
+            items.append(
+                ReviewTagSimilarBatchItem(
+                    tag_name=tag_name,
+                    exact_matches=[
+                        ReviewTagSimilarMatchItem(name=name, match_kind=kind, score=score)
+                        for name, kind, score in exact_rows
+                    ],
+                    similar_matches=[
+                        ReviewTagSimilarMatchItem(name=name, match_kind=kind, score=score)
+                        for name, kind, score in similar_rows
+                    ],
+                )
+            )
+        return ReviewTagSimilarBatchCheckResponse(
+            items=items,
+            similar_tag_count=similar_tag_count,
+            similarity_threshold=similarity_threshold,
+        )

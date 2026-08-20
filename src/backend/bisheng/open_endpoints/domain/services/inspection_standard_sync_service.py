@@ -36,6 +36,7 @@ from bisheng.open_endpoints.domain.schemas.inspection_standard_sync import (
     InspectionStandardSyncResponseData,
 )
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
+from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import FilelibSyncAuditWriter
 from bisheng.open_endpoints.domain.services.inspection_standard_excel_builder import (
     build_inspection_standard_xlsx_bytes,
 )
@@ -59,13 +60,14 @@ class InspectionStandardSyncService:
         start_dt, end_dt = self._parse_time_window(request.start_time, request.end_time)
         year_dir = str(start_dt.year)
         groups = self._build_groups(request)
-        generated_file_name = self._build_generated_file_name(start_dt, end_dt)
         base_folder_path = self._resolve_base_folder_path(self.filelib_sync_service.file_sync_rule)
         knowledge_id = int(self.filelib_sync_service.file_sync_rule.target_space.knowledge_id)
+        knowledge = await self.filelib_sync_service.repository.find_knowledge_by_id(knowledge_id)
+        knowledge_name = str(knowledge.name) if knowledge is not None else None
 
         staged_paths: list[str] = []
+        file_results: list[InspectionStandardSyncFileResult] = []
         try:
-            file_results: list[InspectionStandardSyncFileResult] = []
             for group in groups:
                 target_folder_id, folder_path = await self._resolve_group_target_folder(
                     knowledge_id=knowledge_id,
@@ -79,6 +81,11 @@ class InspectionStandardSyncService:
                 )
                 staged_path = self._write_temp_xlsx(xlsx_bytes)
                 staged_paths.append(staged_path)
+                generated_file_name = self._build_generated_file_name(
+                    create_dept_id=group.create_dept_id,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                )
                 params = FilelibSyncParams(
                     external_file_id=self._build_external_file_id(
                         create_dept_id=group.create_dept_id,
@@ -113,13 +120,39 @@ class InspectionStandardSyncService:
                         sync_result=sync_result,
                     )
                 )
-            return InspectionStandardSyncResponseData(
+            response = InspectionStandardSyncResponseData(
                 data_start_time=request.start_time,
                 data_end_time=request.end_time,
                 group_count=len(file_results),
                 files=file_results,
             )
-        except FilelibSyncError:
+            await FilelibSyncAuditWriter.write_inspection_batch_success(
+                request=self.filelib_sync_service.request,
+                login_user=self.filelib_sync_service.login_user,
+                token_id=self.filelib_sync_service.token_id,
+                token_name=self.filelib_sync_service.token_name,
+                knowledge_id=knowledge_id,
+                knowledge_name=knowledge_name,
+                data_start_time=request.start_time,
+                data_end_time=request.end_time,
+                group_count=len(file_results),
+                file_count=len(file_results),
+            )
+            return response
+        except Exception as exc:
+            await FilelibSyncAuditWriter.write_inspection_batch_failed(
+                request=self.filelib_sync_service.request,
+                login_user=self.filelib_sync_service.login_user,
+                token_id=self.filelib_sync_service.token_id,
+                token_name=self.filelib_sync_service.token_name,
+                knowledge_id=knowledge_id,
+                knowledge_name=knowledge_name,
+                data_start_time=request.start_time,
+                data_end_time=request.end_time,
+                group_count=len(groups),
+                success_count=len(file_results),
+                error=exc,
+            )
             raise
         finally:
             for path in staged_paths:
@@ -297,10 +330,11 @@ class InspectionStandardSyncService:
         return int(folder.id), folder_path
 
     @staticmethod
-    def _build_generated_file_name(start_dt: datetime, end_dt: datetime) -> str:
+    def _build_generated_file_name(*, create_dept_id: str, start_dt: datetime, end_dt: datetime) -> str:
         start_date = start_dt.date().isoformat()
         end_date = end_dt.date().isoformat()
-        return f"{start_date}至{end_date}.xlsx"
+        safe_dept = re.sub(r"[^A-Za-z0-9._-]+", "-", str(create_dept_id or "").strip()).strip("-") or "DEPT"
+        return f"{safe_dept}_{start_date}至{end_date}.xlsx"
 
     @staticmethod
     def _build_external_file_id(

@@ -515,9 +515,9 @@ async def _resume_rollback_async(
             document_id=document_id,
             manager_file_id=manager_file_id,
         )
-        if result.action != "rollback":
+        if result.action != "final_delete":
             raise RuntimeError(
-                "F059 rollback reconcile reached an unexpected lifecycle"
+                "F059 legacy rollback reconcile reached an unexpected lifecycle"
             )
         return result.action
 

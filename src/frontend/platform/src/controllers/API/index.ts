@@ -1165,7 +1165,9 @@ export async function setSubConfigApi(data): Promise<any> {
 }
 // 工作台知识空间配置
 export async function getKnowledgeConfigApi(): Promise<any> {
-    return await axios.get(`api/v1/workstation/config/knowledge_space`);
+    return await axios.get(`api/v1/workstation/config/knowledge_space`, {
+        params: { _t: Date.now() },
+    });
 }
 export async function setKnowledgeConfigApi(data): Promise<any> {
     return await axios.post(`api/v1/workstation/config/knowledge_space`, data);

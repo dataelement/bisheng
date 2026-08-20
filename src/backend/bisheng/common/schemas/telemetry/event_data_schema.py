@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -170,6 +170,10 @@ class PortalEventData(BaseEventData):
     source_space_id: int | str | None = None
     source_file_id: int | str | None = None
     conversation_id: str | None = None
+    content_stat_schema_version: int | None = None
+    content_stat_local_date: str | None = None
+    content_stat_daily_id: str | None = None
+    content_stat_snapshot: dict[str, Any] | None = None
 
 
 class PortalFavoriteEventData(PortalEventData):

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type UIEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
 import {
     getShougangFilePublishSimilarCandidatesApi,
     getShougangFilePublishTargetFoldersApi,
@@ -55,6 +55,7 @@ export function FilePublishDialog({
 }: FilePublishDialogProps) {
     const { showToast } = useToastContext();
     const [targetSpaces, setTargetSpaces] = useState<ShougangFilePublishTargetSpace[]>([]);
+    const [targetSpaceKeyword, setTargetSpaceKeyword] = useState("");
     const [targetSpaceId, setTargetSpaceId] = useState("");
     const [targetFolderId, setTargetFolderId] = useState<string | null>(null);
     const [reason, setReason] = useState("");
@@ -70,15 +71,22 @@ export function FilePublishDialog({
     const [nextSearchCursor, setNextSearchCursor] = useState<number | null>(null);
     const [versionTarget, setVersionTarget] = useState<VersionTarget | null>(null);
     const debouncedSearchKeyword = useDebounce(searchKeyword, 300);
+    const filteredTargetSpaces = useMemo(() => {
+        const keyword = targetSpaceKeyword.trim().toLocaleLowerCase();
+        if (!keyword) return targetSpaces;
+        return targetSpaces.filter((space) => space.name.toLocaleLowerCase().includes(keyword));
+    }, [targetSpaceKeyword, targetSpaces]);
     const selectedTargetSpace = targetSpaces.find(
         (space) => String(space.id) === targetSpaceId,
     );
-    const canBrowseTargetFiles = selectedTargetSpace?.can_browse_files !== false;
+    const canBrowseTargetFiles = Boolean(selectedTargetSpace)
+        && selectedTargetSpace?.can_browse_files !== false;
     const canUseVersionManagement = versionManagementEnabled && canBrowseTargetFiles;
 
     useEffect(() => {
         if (!open) {
             setTargetSpaces([]);
+            setTargetSpaceKeyword("");
             setTargetSpaceId("");
             setTargetFolderId(null);
             setReason("");
@@ -106,8 +114,11 @@ export function FilePublishDialog({
         getShougangFilePublishTargetSpacesApi(activeSpace.id, file.id)
             .then((res) => {
                 if (cancelled) return;
-                setTargetSpaces(res.data || []);
-                const first = res.data?.[0]?.id;
+                const visibleTargetSpaces = (res.data || []).filter(
+                    (space) => space.can_browse_files !== false,
+                );
+                setTargetSpaces(visibleTargetSpaces);
+                const first = visibleTargetSpaces[0]?.id;
                 setTargetSpaceId(first !== undefined ? String(first) : "");
                 setTargetFolderId(null);
             })
@@ -124,6 +135,24 @@ export function FilePublishDialog({
             cancelled = true;
         };
     }, [activeSpace?.id, file?.id, open, showToast]);
+
+    useEffect(() => {
+        if (!targetSpaceId || filteredTargetSpaces.some(
+            (space) => String(space.id) === targetSpaceId,
+        )) {
+            return;
+        }
+        setTargetSpaceId("");
+        setTargetFolderId(null);
+        setVersionTarget(null);
+        setCandidates([]);
+        setCandidatesLoading(false);
+        setCandidateError(false);
+        setSearchResults([]);
+        setSearchLoading(false);
+        setSearchHasMore(false);
+        setNextSearchCursor(null);
+    }, [filteredTargetSpaces, targetSpaceId]);
 
     useEffect(() => {
         if (!open || !file || !targetSpaceId || !canUseVersionManagement) {
@@ -356,10 +385,17 @@ export function FilePublishDialog({
                     </div>
                     <div className="space-y-1.5">
                         <label className="text-sm font-medium text-[#1d2129]">发布目标位置</label>
+                        <input
+                            aria-label="搜索候选知识库"
+                            className="h-9 w-full rounded-md border border-[#dcdfe6] px-3 text-sm outline-none focus:border-[#165dff]"
+                            value={targetSpaceKeyword}
+                            placeholder="搜索候选知识库"
+                            onChange={(event) => setTargetSpaceKeyword(event.target.value)}
+                        />
                         <div className="max-h-64 overflow-y-auto rounded-md border border-[#dcdfe6] bg-white p-2">
                             <FilePublishTargetTree
                                 loading={loading}
-                                targetSpaces={targetSpaces}
+                                targetSpaces={filteredTargetSpaces}
                                 targetSpaceId={targetSpaceId}
                                 targetFolderId={targetFolderId}
                                 onSelectRoot={handleSelectTargetRoot}
@@ -395,11 +431,6 @@ export function FilePublishDialog({
                             ))}
                         </select>
                     </div>
-                    {!canBrowseTargetFiles && (
-                        <div className="rounded-md bg-[#f7f8fa] px-3 py-2 text-sm text-[#86909c]">
-                            无目标库读取权限，仅可选择发布目录
-                        </div>
-                    )}
                     <div className="flex gap-2">
                         <input
                             className="h-9 min-w-0 flex-1 rounded-md border border-[#dcdfe6] px-3 text-sm outline-none focus:border-[#165dff]"

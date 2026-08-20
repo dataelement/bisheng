@@ -80,18 +80,26 @@ async def test_admin_list_users_intersects_dept_and_user_type_filters():
 
 
 @pytest.mark.asyncio
-async def test_admin_user_filter_options_returns_departments_and_roles():
+async def test_admin_user_filter_options_returns_company_dept_hierarchy():
+    """筛选项仅公司→部门两级；科室/未打标剔除。"""
     service = PointsQueryService(session=None, repository=SimpleNamespace(), ledger=None)
-    fake_dept = SimpleNamespace(id=3, name="研发部", short_name=None)
+    company = SimpleNamespace(id=1, name="首钢股份", short_name=None, org_level="company", parent_id=None)
+    dept = SimpleNamespace(id=10, name="技术部", short_name="技术", org_level="dept", parent_id=1)
+    office = SimpleNamespace(id=11, name="研发科", short_name=None, org_level="office", parent_id=10)
+    unlabeled = SimpleNamespace(id=99, name="未打标", short_name=None, org_level=None, parent_id=1)
     with patch(
         "bisheng.database.models.department.DepartmentDao.aget_all_active",
-        AsyncMock(return_value=[fake_dept]),
+        AsyncMock(return_value=[office, dept, unlabeled, company]),
     ):
         out = await service.admin_user_filter_options(
             SimpleNamespace(is_admin=lambda: True, is_global_super=True),
         )
-    assert out.departments[0].id == 3
-    assert out.departments[0].name == "研发部"
+    assert [item.org_level for item in out.departments] == ["company", "dept"]
+    assert out.departments[0].id == 1
+    assert out.departments[0].parent_id is None
+    assert out.departments[1].id == 10
+    assert out.departments[1].parent_id == 1
+    assert out.departments[1].name == "技术"  # short_name 优先展示
     assert "普通用户" in out.user_types
     assert "公共库管理员" in out.user_types
 

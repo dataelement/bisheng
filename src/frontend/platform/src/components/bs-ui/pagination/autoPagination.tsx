@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from './index';
 import { Input } from '../input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select';
 import { useTranslation } from 'react-i18next';
 
 interface IProps {
@@ -22,7 +23,19 @@ interface IProps {
     /** Text for "page" label */
     pageText?: string,
     /** Whether to show total count */
-    showTotal?: boolean
+    showTotal?: boolean,
+    /**
+     * Page sizes the user may pick from. Supplying this (together with
+     * `onPageSizeChange`) turns on the selector; leaving it out keeps the
+     * pagination exactly as it was for callers that do not want it.
+     */
+    pageSizeOptions?: number[],
+    /**
+     * Reports the newly picked size. The caller owns `pageSize`, so it is also
+     * responsible for going back to page 1 — a size change can otherwise leave
+     * the view on a page that no longer exists.
+     */
+    onPageSizeChange?: (size: number) => void
 }
 
 const AutoPagination = ({
@@ -35,11 +48,19 @@ const AutoPagination = ({
     showJumpInput = false,
     jumpToText = 'Go to',
     pageText = 'page',
-    showTotal = false
+    showTotal = false,
+    pageSizeOptions,
+    onPageSizeChange
 }: IProps) => {
     const { t } = useTranslation();
     const totalPages = Math.ceil(total / pageSize);
     const [jumpPage, setJumpPage] = useState<string>("");
+    const showPageSize = Boolean(pageSizeOptions?.length && onPageSizeChange);
+    // The current size is always offered, even when it is not one of the
+    // configured options — otherwise the trigger would render blank.
+    const sizeOptions = showPageSize
+        ? Array.from(new Set([...(pageSizeOptions as number[]), pageSize])).sort((a, b) => a - b)
+        : [];
 
     const handlePageChange = (newPage: number) => {
         if (newPage >= 1 && newPage <= totalPages && newPage !== page) {
@@ -95,6 +116,29 @@ const AutoPagination = ({
                             <span className="text-[#335CFF]">{total}</span>
                             {t('pagination.totalSuffixWithPageSize', { ns: 'bs', pageSize })}
                         </span>
+                    </PaginationItem>
+                )}
+
+                {showPageSize && (
+                    <PaginationItem key="page-size">
+                        <Select
+                            value={String(pageSize)}
+                            onValueChange={(value) => onPageSizeChange?.(Number(value))}
+                        >
+                            {/* Width follows the label instead of a fixed size: the trigger clamps
+                                its text, and "20 条/页" already overflowed 92px — the longest
+                                option in ja is longer still. */}
+                            <SelectTrigger className="h-7 w-auto gap-1 whitespace-nowrap px-2 mr-2 text-sm">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {sizeOptions.map((size) => (
+                                    <SelectItem key={size} value={String(size)}>
+                                        {t('pagination.perPage', { ns: 'bs', size })}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </PaginationItem>
                 )}
 

@@ -14,7 +14,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Badge } from "~/components/ui/Badge";
@@ -262,7 +262,9 @@ export function FileCard({
         const entryBadge = !isFolder && file.entryType && file.entryType !== "normal" && (
             <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
                 {file.entryStatus === "invalid"
-                    ? "已失效：原管理知识库已删除"
+                    ? file.distributionInvalidReason === "manager_file_deleted"
+                        ? "已失效：原文件已删除"
+                        : "已失效：原管理知识库已删除"
                     : file.entryType === "manager"
                     ? "管理文件"
                     : file.entryType === "publish"
@@ -270,12 +272,7 @@ export function FileCard({
                         : "分享文件"}
             </span>
         );
-        const projectionBadge = !isFolder && file.projectionReady === false && (
-            <span className="flex h-5 shrink-0 items-center rounded bg-[#fff7e8] px-1.5 text-xs text-[#f77234]">
-                同步中
-            </span>
-        );
-        const similarIndicator = versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && !file.is_multi_version && (
+        const similarIndicator = versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && (
             <button
                 type="button"
                 onClick={(e) => {
@@ -295,7 +292,6 @@ export function FileCard({
                     {versionBadge}
                     {similarIndicator}
                     {entryBadge}
-                    {projectionBadge}
                     <span className={cn("truncate", nameToneClass)}>{file.name}</span>
                 </div>
             );
@@ -305,7 +301,6 @@ export function FileCard({
                 {versionBadge}
                 {similarIndicator}
                 {entryBadge}
-                {projectionBadge}
                 <span className={cn("min-w-0 flex-1 truncate", nameToneClass)}>{file.name}</span>
                 {renderStatusBadge()}
             </div>
@@ -329,17 +324,19 @@ export function FileCard({
         onPreview?.(file.id);
     };
 
-    const defaultCanRetry = (
-        file.status === FileStatus.FAILED ||
-        file.status === FileStatus.VIOLATION ||
-        (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
-    );
+    const defaultCanRetry = isKnowledgeFileReparseRetryable(file);
     const hasRetryOption = Boolean(onRetry && (canRetryFile ? canRetryFile(file) : defaultCanRetry));
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
     const canEditTags = isAdmin && !isFolder && !isReadonlyDistributionEntry;
     const canRenameContent = canRename && !isReadonlyDistributionEntry;
     const canRetry = isAdmin && hasRetryOption && file.entryStatus !== "invalid";
-    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder && !isReadonlyDistributionEntry;
+    const showPublish = (
+        file.status === FileStatus.SUCCESS
+        && canPublish
+        && Boolean(onPublishFile)
+        && !isFolder
+        && !isReadonlyDistributionEntry
+    );
     const showShare = canShare && Boolean(onShareFile) && !isFolder && file.entryType !== "share";
     const showMoreMenu = showPublish || showShare || canEditTags || canRenameContent || canRetry || canDelete || Boolean(onManagePermission);
     /** 有「更多」时下载只在菜单内；无更多（普通成员/预览）时单独显示下载图标 */

@@ -51,7 +51,7 @@ def _sample_standard(**overrides) -> InspectionStandardRecord:
         "DEVICE_STATUS": "1-运转",
         "ENFORCE_CODE": "1-点检",
         "SAFETY_BOARD": "N-否",
-        "CHECK_PERIOD": 1,
+        "CHECK_PERIOD": "1",
         "PERIOD_UNIT": "W-周",
         "INTERFACE_SYSTEM": "1-智能点检系统",
         "NEXT_SCHE_DATE": "2026-05-06",
@@ -114,6 +114,15 @@ def _build_service(*, rule: DeveloperTokenFileSyncRule | None = None) -> Inspect
                 status=5,
             )
         ),
+        repository=SimpleNamespace(
+            find_knowledge_by_id=AsyncMock(
+                return_value=SimpleNamespace(name="智能制造室(制造)"),
+            ),
+        ),
+        request=None,
+        login_user=SimpleNamespace(user_id=1, user_name="admin", tenant_id=1),
+        token_id=42,
+        token_name="TEST-TOKEN",
     )
     return InspectionStandardSyncService(filelib_sync_service=filelib_sync_service)
 
@@ -127,7 +136,7 @@ async def test_sync_builds_single_group_file():
     assert len(result.files) == 1
     assert result.files[0].create_dept_id == "DEPT-A"
     assert result.files[0].folder_path == "点检标准/DEPT-A/2026"
-    assert result.files[0].generated_file_name == "2026-08-01至2026-08-14.xlsx"
+    assert result.files[0].generated_file_name == "DEPT-A_2026-08-01至2026-08-14.xlsx"
     service.filelib_sync_service.sync_from_staged_file.assert_awaited_once()
 
 
@@ -155,6 +164,10 @@ async def test_sync_builds_multiple_groups():
 
     assert result.group_count == 2
     assert {item.create_dept_id for item in result.files} == {"DEPT-A", "DEPT-B"}
+    assert {item.generated_file_name for item in result.files} == {
+        "DEPT-A_2026-08-01至2026-08-14.xlsx",
+        "DEPT-B_2026-08-01至2026-08-14.xlsx",
+    }
     assert service.filelib_sync_service.sync_from_staged_file.await_count == 2
 
 
@@ -211,9 +224,17 @@ def test_validate_create_dept_id_rejects_path_separator():
         InspectionStandardSyncService._validate_create_dept_id("DEPT/A")
 
 
-def test_build_generated_file_name_uses_date_only():
+def test_build_generated_file_name_includes_create_dept_id():
     start_dt = InspectionStandardSyncService._parse_time_value("2026-08-01T00:00:00")
     end_dt = InspectionStandardSyncService._parse_time_value("2026-08-14 23:59:59")
-    assert InspectionStandardSyncService._build_generated_file_name(start_dt, end_dt) == (
-        "2026-08-01至2026-08-14.xlsx"
-    )
+    assert InspectionStandardSyncService._build_generated_file_name(
+        create_dept_id="DEPT-A",
+        start_dt=start_dt,
+        end_dt=end_dt,
+    ) == "DEPT-A_2026-08-01至2026-08-14.xlsx"
+
+
+def test_sample_standard_coerces_numeric_check_period():
+    record = _sample_standard(CHECK_PERIOD=2)
+    assert record.CHECK_PERIOD == "2"
+    assert isinstance(record.CHECK_PERIOD, str)

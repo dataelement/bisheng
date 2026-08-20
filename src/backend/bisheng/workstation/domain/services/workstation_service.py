@@ -737,11 +737,21 @@ class WorkStationService(BaseService):
     @classmethod
     async def update_knowledge_space_config(cls, data: KnowledgeSpaceConfig) -> KnowledgeSpaceConfig:
         """Update knowledge space configuration."""
+        existing_raw, _, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION_KNOWLEDGE_SPACE)
+        if existing_raw:
+            try:
+                existing = KnowledgeSpaceConfig(**json.loads(existing_raw))
+                merged = existing.model_copy(update=data.model_dump(mode='json'))
+            except Exception:
+                merged = data
+        else:
+            merged = data
         await cls._aupsert_tenant_config(
             ConfigKeyEnum.WORKSTATION_KNOWLEDGE_SPACE,
-            payload=json.dumps(data.model_dump(mode='json'), ensure_ascii=True),
+            payload=json.dumps(merged.model_dump(mode='json'), ensure_ascii=True),
         )
-        return data
+        reloaded = await cls.get_knowledge_space_config()
+        return reloaded or merged
 
     @classmethod
     async def get_knowledge_space_config_with_meta(

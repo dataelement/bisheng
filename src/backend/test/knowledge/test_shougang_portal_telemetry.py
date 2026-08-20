@@ -136,14 +136,25 @@ async def test_portal_home_event_counts(monkeypatch):
     class FakeEsClient:
         async def search(self, **kwargs):
             assert kwargs["index"] == "base_telemetry_events"
-            assert kwargs["body"]["query"] == {
-                "terms": {
-                    "event_type": [
-                        "portal_document_read",
-                        "portal_favorite",
-                        "portal_qa",
-                    ]
+            query = kwargs["body"]["query"]["bool"]
+            assert query["filter"] == [
+                {
+                    "terms": {
+                        "event_type": [
+                            "portal_document_read",
+                            "portal_favorite",
+                            "portal_qa",
+                        ]
+                    }
                 }
+            ]
+            excluded_fields = {
+                item["bool"]["filter"][1]["exists"]["field"]
+                for item in query["must_not"]
+            }
+            assert excluded_fields == {
+                "event_data.portal_document_read_content_stat_schema_version",
+                "event_data.portal_favorite_content_stat_schema_version",
             }
             return {
                 "aggregations": {
@@ -164,6 +175,10 @@ async def test_portal_home_event_counts(monkeypatch):
         "bisheng.common.telemetry.portal_event_service.get_statistics_es_connection",
         fake_get_statistics_es_connection,
     )
+    monkeypatch.setattr(
+        "bisheng.common.telemetry.portal_event_service.telemetry_service.index_name",
+        "base_telemetry_events",
+    )
 
     assert await PortalTelemetryEventService.count_home_events() == {
         "read_count": 11,
@@ -182,6 +197,13 @@ async def test_portal_document_read_counts_by_space_ids(monkeypatch):
             assert {"term": {"event_type": "portal_document_read"}} in filters
             assert not any("event_data.portal_document_read_source_app" in item.get("term", {}) for item in filters)
             assert {"terms": {"event_data.portal_document_read_space_id": [12, 13]}} in filters
+            assert body["query"]["bool"]["must_not"] == [
+                {
+                    "exists": {
+                        "field": "event_data.portal_document_read_content_stat_schema_version"
+                    }
+                }
+            ]
             terms = body["aggs"]["by_file"]["terms"]
             assert terms["field"] == "event_data.portal_document_read_file_id"
             assert terms["order"] == [{"_count": "desc"}, {"_key": "asc"}]
@@ -207,6 +229,10 @@ async def test_portal_document_read_counts_by_space_ids(monkeypatch):
     monkeypatch.setattr(
         "bisheng.common.telemetry.portal_event_service.get_statistics_es_connection",
         fake_get_statistics_es_connection,
+    )
+    monkeypatch.setattr(
+        "bisheng.common.telemetry.portal_event_service.telemetry_service.index_name",
+        "base_telemetry_events",
     )
 
     assert await PortalTelemetryEventService.list_document_read_counts_by_space_ids(

@@ -51,7 +51,7 @@ def _success_result() -> InspectionStandardSyncResponseData:
                 knowledge_id=118,
                 knowledge_name="智能制造室(制造)",
                 folder_path="点检标准/DEPT-A/2026",
-                generated_file_name="2026-08-01至2026-08-14.xlsx",
+                generated_file_name="DEPT-A_2026-08-01至2026-08-14.xlsx",
                 status=5,
                 check_standard_count=1,
                 check_standard_item_count=1,
@@ -82,7 +82,7 @@ def test_inspection_standard_sync_api_success():
                     "DEVICE_STATUS": "1-运转",
                     "ENFORCE_CODE": "1-点检",
                     "SAFETY_BOARD": "N-否",
-                    "CHECK_PERIOD": 1,
+                    "CHECK_PERIOD": "1",
                     "PERIOD_UNIT": "W-周",
                     "INTERFACE_SYSTEM": "1-智能点检系统",
                     "NEXT_SCHE_DATE": "2026-05-06",
@@ -119,6 +119,63 @@ def test_inspection_standard_sync_api_success():
     service.sync.assert_awaited_once()
 
 
+def test_inspection_standard_sync_api_accepts_numeric_field_coercion():
+    service = SimpleNamespace(sync=AsyncMock(return_value=_success_result()))
+    payload = {
+        "start_time": "2026-08-01T00:00:00",
+        "end_time": "2026-08-14T23:59:59",
+        "data": {
+            "check_standards": [
+                {
+                    "CREATE_DEPT_ID": "DEPT-A",
+                    "CHECK_STANDARD_ID": "270101J01D01",
+                    "DEVICE_NAME": "调度大厅",
+                    "STANDARD_TYPE": "01-常规点检",
+                    "CHECK_ITEM_NAME": "调度操作台综合检查",
+                    "DEVICE_STATUS": "1-运转",
+                    "ENFORCE_CODE": "1-点检",
+                    "SAFETY_BOARD": "N-否",
+                    "CHECK_PERIOD": 1,
+                    "PERIOD_UNIT": "W-周",
+                    "INTERFACE_SYSTEM": "1-智能点检系统",
+                    "NEXT_SCHE_DATE": "2026-05-06",
+                    "MAINTAIN_REASON": "初始建立",
+                    "DEVICE_MAINTAIN_JOB_ID": "JOB001",
+                    "REC_CREATOR": "E001",
+                    "REC_CREATOR_NAME": "张三",
+                }
+            ],
+            "check_standard_items": [
+                {
+                    "CHECK_STANDARD_ID": "270101J01D01",
+                    "CHECK_STANDARD_SEQ_NO": "001",
+                    "CONTENT": "机房温度",
+                    "CHECK_WAY": "2-简易仪器",
+                    "LUBRIC_WAY": "0-无",
+                    "LUBRIC_POINT": 2,
+                    "MANAGE_CONTROL_MODE": "0-无",
+                    "DATA_TYPE": "20-定量",
+                    "CRITERI": "18-27℃",
+                    "UOM": "℃",
+                    "QLTY_TOP": 27,
+                    "QLTY_BOTTOM": 18,
+                    "STATUTORY_REQ": "0-无",
+                }
+            ],
+        },
+    }
+
+    with TestClient(_build_app(service=service)) as client:
+        response = client.post(INSPECTION_SYNC_PATH, json=payload)
+
+    assert response.status_code == 200
+    validated_request = service.sync.await_args.args[0]
+    assert validated_request.data.check_standards[0].CHECK_PERIOD == "1"
+    assert validated_request.data.check_standard_items[0].LUBRIC_POINT == "2"
+    assert validated_request.data.check_standard_items[0].QLTY_TOP == "27"
+    assert validated_request.data.check_standard_items[0].QLTY_BOTTOM == "18"
+
+
 def test_inspection_standard_sync_api_returns_token_rule_error():
     service = SimpleNamespace(
         sync=AsyncMock(
@@ -141,7 +198,7 @@ def test_inspection_standard_sync_api_returns_token_rule_error():
                     "DEVICE_STATUS": "1-运转",
                     "ENFORCE_CODE": "1-点检",
                     "SAFETY_BOARD": "N-否",
-                    "CHECK_PERIOD": 1,
+                    "CHECK_PERIOD": "1",
                     "PERIOD_UNIT": "W-周",
                     "INTERFACE_SYSTEM": "1-智能点检系统",
                     "NEXT_SCHE_DATE": "2026-05-06",

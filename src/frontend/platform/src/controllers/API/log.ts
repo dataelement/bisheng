@@ -6,11 +6,22 @@ export async function getOperatorsApi(): Promise<[]> {
     return await axios.get('/api/v1/audit/operators')
 }
 
+// 获取 filelib 同步审计中出现过的主责人
+export async function getResponsiblePersonsApi(): Promise<Array<{
+    user_id: number
+    external_id?: string | null
+    user_name?: string | null
+    label: string
+}>> {
+    return await axios.get('/api/v1/audit/responsible-persons')
+}
+
 // 分页获取审计列表
-export async function getLogsApi({ page, pageSize, userIds, groupId = '', start, end, moduleId = '', action = '' }: {
+export async function getLogsApi({ page, pageSize, userIds, responsibleUserIds, groupId = '', start, end, moduleId = '', action = '' }: {
     page: number,
     pageSize: number,
     userIds?: number[],
+    responsibleUserIds?: number[],
     groupId?: string,
     start?: string,
     end?: string,
@@ -18,10 +29,14 @@ export async function getLogsApi({ page, pageSize, userIds, groupId = '', start,
     action?: string
 }): Promise<{ data: any[], total: number }> {
     const uids = userIds?.reduce((pre, val) => `${pre}&operator_ids=${val}`, '') || ''
+    const responsibleIds = responsibleUserIds?.reduce(
+        (pre, val) => `${pre}&responsible_user_ids=${val}`,
+        '',
+    ) || ''
     const startStr = start ? `&start_time=${start}` : ''
     const endStr = end ? `&end_time=${end}` : ''
     return await axios.get(
-        `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}` +
+        `/api/v1/audit?page=${page}&limit=${pageSize}&group_ids=${groupId}${uids}${responsibleIds}` +
         `&system_id=${moduleId}&event_type=${action}` + startStr + endStr
     )
 }
@@ -44,6 +59,7 @@ export async function getModulesApi(): Promise<{ data: any[] }> {
             { name: 'log.systemIdEnum.tenant', value: 'tenant' },
             { name: 'log.systemIdEnum.llm', value: 'llm' },
             { name: 'log.systemIdEnum.approval', value: 'approval' },
+            { name: 'log.systemIdEnum.filelib_sync', value: 'filelib_sync' },
         ],
 
     }
@@ -104,6 +120,10 @@ const actions = [
     { name: 'log.eventTypeEnum.approvalScenarioToggle', value: 'approval.scenario.toggle' },
     { name: 'log.eventTypeEnum.approvalScenarioCreate', value: 'approval.scenario.create' },
     { name: 'log.eventTypeEnum.approvalMenuAccessRevokeGrant', value: 'approval.menu_access.revoke_grant' },
+    { name: 'log.eventTypeEnum.filelibSyncUploadSuccess', value: 'filelib_sync.upload.success' },
+    { name: 'log.eventTypeEnum.filelibSyncUploadFailed', value: 'filelib_sync.upload.failed' },
+    { name: 'log.eventTypeEnum.filelibSyncInspectionStandardBatchSuccess', value: 'filelib_sync.inspection_standard.batch.success' },
+    { name: 'log.eventTypeEnum.filelibSyncInspectionStandardBatchFailed', value: 'filelib_sync.inspection_standard.batch.failed' },
 ];
 
 // 全部操作行为
@@ -124,6 +144,7 @@ export async function getActionsByModuleApi(moduleId) {
         case 'tenant': return actions.filter(a => a.value.startsWith('tenant.'))
         case 'llm': return actions.filter(a => a.value.startsWith('llm.server.'))
         case 'approval': return actions.filter(a => a.value.startsWith('approval.'))
+        case 'filelib_sync': return actions.filter(a => a.value.startsWith('filelib_sync.'))
     }
 }
 

@@ -33,6 +33,10 @@ describe("audit log actions", () => {
     );
     expect(actionToI18nKey("tenant.mount")).toBe("tenantMount");
     expect(actionToI18nKey("llm.server.create")).toBe("llmServerCreate");
+    expect(actionToI18nKey("filelib_sync.upload.success")).toBe("filelibSyncUploadSuccess");
+    expect(actionToI18nKey("filelib_sync.inspection_standard.batch.failed")).toBe(
+      "filelibSyncInspectionStandardBatchFailed",
+    );
   });
 
   it("keeps approval actions visible under the approval module filter", async () => {
@@ -48,6 +52,22 @@ describe("audit log actions", () => {
     expect(actions).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ value: "approval.instance.resubmit" }),
+      ]),
+    );
+  });
+
+  it("keeps filelib sync actions visible under the filelib_sync module filter", async () => {
+    const actions = await getActionsByModuleApi("filelib_sync");
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        {
+          name: "log.eventTypeEnum.filelibSyncUploadSuccess",
+          value: "filelib_sync.upload.success",
+        },
+        {
+          name: "log.eventTypeEnum.filelibSyncUploadFailed",
+          value: "filelib_sync.upload.failed",
+        },
       ]),
     );
   });

@@ -128,10 +128,10 @@ async def delete_local_organization_member(
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     try:
-        await DepartmentService.adelete_local_organization_member(
+        result = await DepartmentService.adelete_local_organization_member(
             dept_id, user_id, login_user,
         )
-        return resp_200()
+        return resp_200(result.model_dump())
     except BaseErrorCode as e:
         return e.return_resp_instance()
 
