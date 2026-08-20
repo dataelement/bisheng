@@ -150,6 +150,39 @@ export function getLogicalViewport(): { width: number; height: number } {
   return { width: window.innerWidth / zoom, height: window.innerHeight / zoom };
 }
 
+/**
+ * How many of the units getBoundingClientRect() reports there are per CSS
+ * pixel. This is the very factor measureRectScale() probes when a level is
+ * applied; it is parked on --bs-fs-popper-unzoom, so read it back rather than
+ * probing again (the probe costs a layout, and the answer cannot have changed
+ * without applyFontSizeLevel running). 1 when no scale is applied.
+ */
+export function getRectScale(): number {
+  const raw = document.documentElement.style.getPropertyValue('--bs-fs-popper-unzoom');
+  const scale = Number.parseFloat(raw);
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
+}
+
+/**
+ * The window, expressed in the same units getBoundingClientRect() reports.
+ *
+ * This is the ONLY space in which a measured rect may be compared against the
+ * window edges, and it is also the space Radix / Floating UI reads sideOffset
+ * and alignOffset in, because those are added straight onto measured rects.
+ *
+ * Not interchangeable with getLogicalViewport(): that one answers "how big is
+ * the page in the units I write CSS lengths in" and is what a component sizing
+ * itself wants; this one answers "how big is the window in the units the rect I
+ * just measured is quoted in". The two are the same number only on the engines
+ * where the rect does NOT already carry the page zoom — mixing them up shifts
+ * anything positioned against a window edge by the zoom factor, which is
+ * invisible on those engines and plainly wrong everywhere else.
+ */
+export function getRectViewport(): { width: number; height: number } {
+  const ratio = getRectScale() / getDisplayScale();
+  return { width: window.innerWidth * ratio, height: window.innerHeight * ratio };
+}
+
 /** Persist and apply; returns false (without applying) when the write fails. */
 export function saveFontSizeLevel(level: FontSizeLevel): boolean {
   try {
