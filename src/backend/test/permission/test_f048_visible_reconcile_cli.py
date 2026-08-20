@@ -242,6 +242,23 @@ def test_orphan_cleanup_selection_can_limit_one_reviewed_resource() -> None:
     assert selection.tuples == (("user:7", "visible", "folder:97394"),)
     assert selection.tuple_checksum == cli._checksum(selection.tuples)
 
+    clean_selection = cli._select_orphan_tuples(
+        cli.OrphanTupleAudit(
+            object_filters=("folder:97394",),
+            live_direct_visible_count=1,
+            supported_tuple_count=1,
+            missing_tuple_count=0,
+            orphan_tuple_count=0,
+            missing_tuple_checksum=cli._checksum(()),
+            orphan_tuple_checksum=cli._checksum(()),
+            missing_tuples=(),
+            orphan_tuples=(),
+        ),
+        object_filters=("folder:97394",),
+    )
+    assert clean_selection.tuple_count == 0
+    assert clean_selection.tuples == ()
+
 
 @pytest.mark.asyncio
 async def test_orphan_audit_reads_only_selected_resource() -> None:

@@ -557,13 +557,6 @@ def _select_orphan_tuples(
 ) -> OrphanCleanupSelection:
     normalized_filters = tuple(sorted(dict.fromkeys(object_filters)))
     selected = tuple(row for row in audit.orphan_tuples if not normalized_filters or row[2] in normalized_filters)
-    if normalized_filters:
-        selected_objects = {row[2] for row in selected}
-        missing_objects = sorted(set(normalized_filters) - selected_objects)
-        _require(
-            not missing_objects,
-            f"selected resources have no audited orphan tuples: {missing_objects}",
-        )
     return OrphanCleanupSelection(
         object_filters=normalized_filters,
         tuple_count=len(selected),
@@ -1041,7 +1034,7 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
                         "deleted_tuple_count": cleanup_selection.tuple_count,
                         "operation_ids": cleanup_operation_ids,
                         "orphan_tuple_checksum": cleanup_selection.tuple_checksum,
-                        "remaining_global_orphan_tuple_count": audit_after.orphan_tuple_count,
+                        "remaining_audited_orphan_tuple_count": audit_after.orphan_tuple_count,
                         "remaining_selected_orphan_tuple_count": len(remaining_selected),
                     },
                     ensure_ascii=False,
