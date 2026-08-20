@@ -159,6 +159,7 @@ class ReconcileReport:
 
 @dataclass(frozen=True, slots=True)
 class OrphanTupleAudit:
+    object_filters: tuple[str, ...]
     live_direct_visible_count: int
     supported_tuple_count: int
     missing_tuple_count: int
@@ -507,8 +508,23 @@ async def _audit_orphan_tuples(
     *,
     canonical_sources: tuple[Any, ...],
     persisted: tuple[PermissionVisibleSourceProjection, ...],
+    object_filters: tuple[str, ...] = (),
 ) -> OrphanTupleAudit:
-    rows = await client.read_tuples(consistency=HIGHER_CONSISTENCY)
+    normalized_filters = tuple(sorted(dict.fromkeys(object_filters)))
+    invalid = [value for value in normalized_filters if not all(value.partition(":"))]
+    _require(not invalid, f"invalid --orphan-object resource keys: {invalid}")
+    if normalized_filters:
+        rows = [
+            row
+            for object_key in normalized_filters
+            for row in await client.read_tuples(
+                relation="visible",
+                object=object_key,
+                consistency=HIGHER_CONSISTENCY,
+            )
+        ]
+    else:
+        rows = await client.read_tuples(consistency=HIGHER_CONSISTENCY)
     live = frozenset(
         (str(row["user"]), "visible", str(row["object"]))
         for row in rows
@@ -517,9 +533,12 @@ async def _audit_orphan_tuples(
     canonical = frozenset(_tuple_key(row) for row in canonical_sources)
     persisted_active = frozenset(_tuple_key(row) for row in persisted if row.state == "ACTIVE")
     supported = canonical | persisted_active
+    if normalized_filters:
+        supported = frozenset(row for row in supported if row[2] in normalized_filters)
     missing = tuple(sorted(supported - live))
     orphans = tuple(sorted(live - supported))
     return OrphanTupleAudit(
+        object_filters=normalized_filters,
         live_direct_visible_count=len(live),
         supported_tuple_count=len(supported),
         missing_tuple_count=len(missing),
@@ -537,8 +556,6 @@ def _select_orphan_tuples(
     object_filters: tuple[str, ...],
 ) -> OrphanCleanupSelection:
     normalized_filters = tuple(sorted(dict.fromkeys(object_filters)))
-    invalid = [value for value in normalized_filters if not all(value.partition(":"))]
-    _require(not invalid, f"invalid --orphan-object resource keys: {invalid}")
     selected = tuple(row for row in audit.orphan_tuples if not normalized_filters or row[2] in normalized_filters)
     if normalized_filters:
         selected_objects = {row[2] for row in selected}
@@ -968,6 +985,7 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
                 source_client,
                 canonical_sources=canonical_sources,
                 persisted=persisted,
+                object_filters=tuple(args.orphan_object),
             )
             print(
                 json.dumps(
@@ -1009,6 +1027,7 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
                 source_client,
                 canonical_sources=canonical_sources,
                 persisted=persisted_after,
+                object_filters=tuple(args.orphan_object),
             )
             remaining_selected = tuple(sorted(set(cleanup_selection.tuples) & set(audit_after.orphan_tuples)))
             _require(

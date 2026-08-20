@@ -57,9 +57,10 @@ PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
 
 The audit treats the union of canonical Grant sources and every ACTIVE SQL
 visible-source contribution as supported, so non-Grant system/resource sources
-are not classified as orphans. It prints the global anomaly set plus an exact
-cleanup selection and stable checksum. Repeat `--orphan-object` to select more
-than one reviewed resource; omit it to select every audited orphan.
+are not classified as orphans. With `--orphan-object`, it uses an exact OpenFGA
+Read for those resources and prints the scoped anomaly set plus a stable cleanup
+checksum. Repeat the flag to select more than one reviewed resource. Omit it to
+scan the whole Store and select every audited orphan.
 
 For apply, stop ingress traffic and all API/Worker/Linsight processes, wait for
 their F048 heartbeat TTL to expire, and copy the dry-run `store_id` into the
@@ -107,9 +108,8 @@ if the selected orphan set changes. Each resource is fenced by its current
 permission version, each exact delete is recorded as a
 `VISIBLE_ORPHAN_CLEANUP` projection operation, and higher-consistency reads must
 confirm that no selected orphan direct tuple remains. Other unselected anomalies
-remain in the final global report. Effective `visible` checks can still be true
-through an inherited parent; the audit verifies exact direct tuple presence
-instead.
+are untouched. Effective `visible` checks can still be true through an inherited
+parent; the audit verifies exact direct tuple presence instead.
 Restart all permission-using processes after success; they discover the latest
 model through the stable Store name and validate the new SQL CURRENT Catalog
 pin.
