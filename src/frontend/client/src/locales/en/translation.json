@@ -1608,7 +1608,14 @@
     "fullscreen": "Full screen",
     "exit_fullscreen": "Exit full screen",
     "volume": "Volume",
-    "progress": "Playback progress"
+    "progress": "Playback progress",
+    "filter": "Filter",
+    "sort": "Sort",
+    "list_view": "List view",
+    "card_view": "Card view",
+    "filter_file_status": "Filter by status",
+    "sort_by_size_label": "Sort by size",
+    "select_all": "Select all"
   },
   "com_subscription": {
     "tab_channel": "Channels",

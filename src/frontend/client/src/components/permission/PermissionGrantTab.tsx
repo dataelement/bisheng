@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn } from "~/utils";
+import { PERMISSION_FOOTER_ACTIONS_CLASS } from "./permissionDialogStyles";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
@@ -123,6 +124,8 @@ interface PermissionGrantTabProps {
   resourceType: ResourceType;
   resourceId: string;
   onSuccess: () => void;
+  /** Dismiss without granting. The cancel button only renders when provided. */
+  onCancel?: () => void;
   prefetchedGrantableModels?: RelationModel[];
   prefetchedGrantableModelsLoaded?: boolean;
   prefetchedUseDefaultModels?: boolean;
@@ -150,6 +153,7 @@ export function PermissionGrantTab({
   resourceType,
   resourceId,
   onSuccess,
+  onCancel,
   prefetchedGrantableModels,
   prefetchedGrantableModelsLoaded = false,
   prefetchedUseDefaultModels = false,
@@ -453,14 +457,21 @@ export function PermissionGrantTab({
         </div>
       </div>
 
-      <div className="mt-3 flex shrink-0 justify-end border-t pt-3">
+      <div className={cn("mt-3 border-t pt-3", PERMISSION_FOOTER_ACTIONS_CLASS)}>
+        {onCancel && (
+          <Button color="default" variant="outlined" size="medium" onClick={onCancel}>
+            {localize("com_unified_permission.cancel")}
+          </Button>
+        )}
         <Button
+          color="primary"
+          variant="solid"
+          size="medium"
+          loading={submitting}
           onClick={handleSubmit}
           disabled={selected.length === 0 || availableModels.length === 0 || submitting}
         >
-          {submitting
-            ? localize("com_permission.action_submit") + "..."
-            : localize("com_permission.action_submit")}
+          {localize("com_permission.action_submit")}
         </Button>
       </div>
     </div>

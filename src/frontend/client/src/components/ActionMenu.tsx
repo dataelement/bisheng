@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+    DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuItem,
 } from "~/components/ui/DropdownMenu";
@@ -8,10 +9,11 @@ import { cn } from "~/utils";
 /**
  * Shared "action menu" look used by knowledge-space dropdowns
  * (sidebar more-menu, toolbar batch-operation, file-card "⋯", etc.):
- * white surface, 8px corner radius, no hard border, soft shadow.
+ * white surface, 12px corner radius (阴影与圆角规范: 下拉面板 = xl),
+ * no hard border, soft shadow.
  */
 export const actionMenuSurfaceClassName =
-    "rounded-lg border-0 bg-white shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]";
+    "rounded-xl border-0 bg-white shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]";
 
 /** Default content frame: 160px wide, 8px padding, z-100 so it sits above
  *  any mobile drawer overlays. Width can be overridden via the `width` prop
@@ -21,8 +23,9 @@ export const actionMenuContentClassName = cn(
     actionMenuSurfaceClassName,
 );
 
+// 8px row radius per 基础-阴影与圆角规范 §控件 (32px row = large).
 const itemBaseClassName =
-    "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] outline-none transition-colors";
+    "flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-[5px] text-sm leading-[22px] outline-none transition-colors";
 
 const itemRegularClassName = cn(
     itemBaseClassName,
@@ -39,6 +42,10 @@ const iconRegularClassName = cn(iconBaseClassName, "text-text-2");
 const iconDangerClassName = cn(iconBaseClassName, "text-[#F53F3F]");
 
 const labelClassName = "min-w-0 truncate text-sm leading-[22px]";
+
+/** Section heading above a group of rows: 12px/20 regular, muted, flush with the
+ *  container's 8px padding — it sits 8px left of the row labels (Figma 13198:78112). */
+export const actionMenuSectionLabelClassName = "text-xs leading-5 text-text-3";
 
 /** Item-row style tokens, exported so non-DropdownMenuItem rows (e.g. a submenu
  *  trigger or a custom header) can match the same height / radius / typography. */
@@ -125,6 +132,26 @@ export const ActionMenuItem = React.forwardRef<
     );
 });
 
+type DropdownMenuCheckboxItemProps = React.ComponentPropsWithoutRef<
+    typeof DropdownMenuCheckboxItem
+>;
+
+/** Checkable row of an action menu: same 32px geometry as ActionMenuItem, with
+ *  the check in the trailing slot so labels stay flush left (Figma 13198:78111). */
+export const ActionMenuCheckboxItem = React.forwardRef<
+    React.ElementRef<typeof DropdownMenuCheckboxItem>,
+    DropdownMenuCheckboxItemProps
+>(function ActionMenuCheckboxItem({ className, ...props }, ref) {
+    return (
+        <DropdownMenuCheckboxItem
+            ref={ref}
+            indicatorSide="right"
+            className={cn(itemRegularClassName, className)}
+            {...props}
+        />
+    );
+});
+
 function renderIcon(icon: React.ReactNode, danger?: boolean): React.ReactNode {
     if (icon == null || icon === false) return null;
     const iconClass = danger ? iconDangerClassName : iconRegularClassName;
@@ -137,7 +164,7 @@ function renderIcon(icon: React.ReactNode, danger?: boolean): React.ReactNode {
     return icon;
 }
 
-/** Thin horizontal separator that aligns with the 8px container padding. */
+/** Thin horizontal separator spanning the container's inner width (Figma 13198:78128). */
 export function ActionMenuDivider() {
-    return <div className="mx-1 my-1 h-px bg-fill-2" role="separator" />;
+    return <div className="my-1.5 h-px bg-border-base" role="separator" />;
 }

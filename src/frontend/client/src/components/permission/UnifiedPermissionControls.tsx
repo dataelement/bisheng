@@ -160,7 +160,7 @@ export function SettingsFooter({
 }: SettingsFooterProps) {
   return (
     <footer
-      className={`flex h-14 shrink-0 items-center gap-3 border-t border-border-base bg-transparent ${
+      className={`flex h-16 shrink-0 items-center gap-3 border-t border-border-base bg-transparent ${
         centered ? "justify-center" : "justify-end"
       }`}
     >

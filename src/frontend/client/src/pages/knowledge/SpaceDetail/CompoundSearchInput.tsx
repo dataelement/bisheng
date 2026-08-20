@@ -25,13 +25,19 @@ export interface CompoundSearchInputProps {
     className?: string;
     /** Render as a single search-icon button that expands into the full field on click. */
     collapsible?: boolean;
+    /**
+     * `collapsible` variant used inside the file-list toolbar (Figma 13198:75851):
+     * collapsed it is a borderless icon+label button matching its 筛选 / 排序 /
+     * 视图 siblings; expanded it becomes the normal bordered search field.
+     */
+    toolbarMode?: boolean;
     /** Full-page search: scope + tags always visible, tags rendered inline below the box. */
     pageMode?: boolean;
     /** pageMode only: element rendered to the right of the search box inside the 64px header row. */
     trailing?: React.ReactNode;
 }
 
-export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, pageMode = false, trailing }: CompoundSearchInputProps) {
+export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, toolbarMode = false, pageMode = false, trailing }: CompoundSearchInputProps) {
     const localize = useLocalize();
     const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
@@ -152,26 +158,32 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
     const scopeLabel = scope === 'current' ? localize("com_knowledge.current_location") : localize("com_knowledge.current_space");
 
+    // Toolbar variant, collapsed: a borderless icon+label button that matches the
+    // 筛选 / 排序 / 视图 buttons beside it. Any other state keeps the field skin.
+    const toolbarCollapsed = toolbarMode && collapsed;
+
     const searchField = (
         <div
             className={cn(
-                "flex flex-nowrap items-center w-full h-8 min-h-8 max-h-8 overflow-hidden",
-                "bg-white border rounded-md",
-                collapsible
+                "flex flex-nowrap items-center w-full overflow-hidden rounded-md",
+                toolbarCollapsed
+                    ? "h-7 min-h-7 max-h-7 gap-1 px-[5px] cursor-pointer text-sm text-text-2 transition-colors hover:bg-fill-1"
+                    : "h-8 min-h-8 max-h-8 bg-white border",
+                !toolbarCollapsed && (collapsible
                     ? cn(
                         // Animate gap so icon → input transition feels continuous, not snapped.
                         "transition-[gap,background-color,border-color,box-shadow] duration-200 ease-out px-2",
                         collapsed ? "gap-0 cursor-pointer" : "gap-1"
                     )
-                    : "gap-1 px-2 sm:px-3 transition-[border-color,box-shadow]",
+                    : "gap-1 px-2 sm:px-3 transition-[border-color,box-shadow]"),
                 // Active state per Figma 11495:16479 — gray border + gray ring (not blue).
                 // Collapsed = behaves like the sibling icon buttons (bg change on hover, border steady);
                 // expanded = behaves like an input field (border darkens on hover before focus).
-                isFocused
+                !toolbarCollapsed && (isFocused
                     ? "border-[#ddd] shadow-[0_0_0_2px_#f1f5f9]"
                     : collapsed
                         ? "border-border-base hover:bg-fill-1"
-                        : "border-border-base hover:border-[#ddd]"
+                        : "border-border-base hover:border-[#ddd]")
             )}
             onClick={() => {
                 inputRef.current?.focus();
@@ -179,7 +191,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 setIsFocused(true);
             }}
         >
-                <Outlined.Search className="size-4 text-text-3 shrink-0" />
+                <Outlined.Search className={cn("size-4 shrink-0", toolbarCollapsed ? "text-current" : "text-text-3")} />
+                {toolbarCollapsed && (
+                    <span className="whitespace-nowrap">{localize("com_ui_search")}</span>
+                )}
 
                 {/* 范围选择：仅在输入框聚焦（或菜单已打开）时显示，高亮表示已选范围；仅文案随 current / all 切换 */}
                 {!isRoot && isExpanded && (
@@ -319,7 +334,9 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 collapsible
                     ? cn(
                         "shrink-0 transition-[width] duration-200 ease-out",
-                        collapsed ? "w-8" : "w-[min(340px,60vw)] sm:w-[340px]"
+                        collapsed
+                            ? (toolbarMode ? "w-[58px]" : "w-8")
+                            : "w-[min(340px,60vw)] sm:w-[340px]"
                     )
                     : "w-full",
                 className

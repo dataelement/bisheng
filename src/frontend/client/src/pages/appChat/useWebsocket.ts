@@ -309,7 +309,7 @@ export const useWebSocket = (helpers) => {
             const action = submitData.action
 
             switch (action) {
-                case ActionType.RESTART:
+                case ActionType.RESTART: {
                     sendWsMsg({ action: 'stop' })
                     const { data, ...other } = submitData.flow
                     const flow = { ...other, edges: data.edges, nodes: data.nodes, viewport: data.viewport }
@@ -322,6 +322,7 @@ export const useWebSocket = (helpers) => {
                         })
                     }
                     break
+                }
                 case ActionType.INPUT: {
                     const sessionInfo = sessionInfoMap.get(helpers.chatId)
                     const node = submitData.flow.data.nodes.find(node => node.id === sessionInfo?.node_id)

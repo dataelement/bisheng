@@ -21,6 +21,14 @@ describe("F044 unified permission entry structure", () => {
     expect(routes).toContain("default: module.ChannelSettingsPage");
   });
 
+  it("gives knowledge create and settings pages an inner scrolling shell", () => {
+    const layout = source("layouts/MainLayout.tsx");
+
+    expect(layout).toContain("path: '/knowledge/create'");
+    expect(layout).toContain("path: '/knowledge/space/:spaceId/settings'");
+    expect(layout).toContain("isKnowledgeSettingsRoute ||");
+  });
+
   it("uses one settings callback and retains unrelated channel actions", () => {
     const articleMenu = source("pages/Subscription/ArticleList/ChannelActionsMenu.tsx");
     const sidebarItem = source("pages/Subscription/Sidebar/ChannelItem.tsx");

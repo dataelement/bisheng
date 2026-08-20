@@ -12,7 +12,9 @@ interface ChannelSquareCardProps {
   creatorAvatars?: string[];
   articleCount: number;
   subscriberCount: number;
-  status: "join" | "joined" | "pending" | "private" | "rejected";
+  /** A rejected application is not a state of its own — it maps back to "join",
+   *  since the user may apply again. */
+  status: "join" | "joined" | "pending" | "private";
   visibility?: "public" | "private" | "review";
   isHighlighted?: boolean;
   onAction?: () => void;
@@ -42,8 +44,6 @@ export function ChannelSquareCard({
         return { text: localize("pending"), variant: "secondary" as const, disabled: true };
       case "private":
         return { text: localize("private"), variant: "secondary" as const, disabled: true };
-      case "rejected":
-        return { text: localize("rejected") || "已驳回", variant: "secondary" as const, disabled: true };
       default:
         return { text: localize("subscribe") || "订阅", variant: "outline" as const, disabled: false };
     }
@@ -105,25 +105,32 @@ export function ChannelSquareCard({
         </p>
 
         {/* 创建者和统计信息 */}
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-text-3 touch-desktop:flex-nowrap touch-desktop:gap-2.5 touch-desktop:text-[14px] touch-desktop:leading-[20px]">
-          <div className="flex shrink-0 items-center gap-1.5">
-            {creatorAvatars && creatorAvatars.length > 0 ? (
-              <div className="flex -space-x-1.5">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] leading-[18px] text-[#A9AEB8] touch-desktop:flex-nowrap touch-desktop:gap-2.5">
+          {/* Source icons. A channel can legitimately have none (freshly created,
+              or no favicon crawled) — render nothing rather than a placeholder
+              image, and let a single dead icon degrade to its neutral circle,
+              so neither case shows the browser's broken-image glyph. */}
+          {creatorAvatars && creatorAvatars.length > 0 && (
+            <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex -space-x-3">
                 {creatorAvatars.slice(0, 3).map((src, idx) => (
                   <Avatar
                     key={idx}
-                    className="h-5 w-5 border border-white"
+                    className="h-5 w-5 border border-white bg-[#F2F3F5]"
                   >
-                    <AvatarImage src={src} alt={creator} className="object-cover" />
+                    <AvatarImage
+                      src={src}
+                      alt={creator}
+                      className="object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.visibility = "hidden";
+                      }}
+                    />
                   </Avatar>
                 ))}
               </div>
-            ) : (
-              <Avatar className="h-[20px] w-[20px] border border-white">
-                <AvatarImage src="/default-avatar.png" alt={creator} className="object-cover" />
-              </Avatar>
-            )}
-          </div>
+            </div>
+          )}
           <span className="whitespace-nowrap">
             {articleCount}{localize("com_subscription.articles")}
           </span>

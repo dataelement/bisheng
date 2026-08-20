@@ -100,23 +100,37 @@ DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
 
 const DropdownMenuCheckboxItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>
->(({ className = '', children, checked, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem> & {
+    /** Where the check sits. "left" indents every label to keep them aligned;
+     *  "right" keeps labels flush and puts the check in a trailing slot. */
+    indicatorSide?: 'left' | 'right';
+  }
+>(({ className = '', children, checked, indicatorSide = 'left', ...props }, ref) => (
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center rounded-lg py-1.5 pl-8 pr-2 text-sm text-text-1 outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-fill-2 data-[highlighted]:text-text-1',
+      'relative flex cursor-pointer select-none items-center rounded-lg py-1.5 text-sm text-text-1 outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-fill-2 data-[highlighted]:text-text-1',
+      indicatorSide === 'left' ? 'pl-8 pr-2' : 'px-2',
       className,
     )}
     checked={checked}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-      <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-primary" />
-      </DropdownMenuPrimitive.ItemIndicator>
-    </span>
+    {indicatorSide === 'left' && (
+      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <Check className="h-4 w-4 text-primary" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+    )}
     {children}
+    {indicatorSide === 'right' && (
+      <span className="ml-auto flex size-4 shrink-0 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <Check className="size-4 text-primary" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+    )}
   </DropdownMenuPrimitive.CheckboxItem>
 ));
 DropdownMenuCheckboxItem.displayName = DropdownMenuPrimitive.CheckboxItem.displayName;

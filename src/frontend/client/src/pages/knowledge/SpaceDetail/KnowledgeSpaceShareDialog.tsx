@@ -253,6 +253,7 @@ export function KnowledgeSpaceShareDialog({
                                 resourceType={resourceType}
                                 resourceId={resourceId}
                                 onSuccess={handleGrantSuccess}
+                                onCancel={() => setGrantDialogOpen(false)}
                                 prefetchedGrantableModels={grantableModels}
                                 prefetchedGrantableModelsLoaded={grantableModelsLoaded}
                                 prefetchedUseDefaultModels={useDefaultModels}

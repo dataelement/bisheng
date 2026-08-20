@@ -205,6 +205,12 @@ export interface KnowledgeFile {
     user_name?: string;           // mapped from user_name — original uploader of this file
     // Transient UI-only fields
     isCreating?: boolean;
+    /**
+     * The unmapped server row, kept only for duplicate entries (status 3) so the
+     * retry API can echo it back verbatim. Set by the list mappers below; nothing
+     * reads its fields, so it travels as the raw shape it arrived in.
+     */
+    _raw?: RawSpaceChild;
 }
 
 // ─────────────────────────────────────────────
@@ -254,7 +260,7 @@ export interface KnowledgeSpaceTagLibraryPage {
     total: number;
 }
 
-interface RawSpaceChild {
+export interface RawSpaceChild {
     id: number;
     name: string;
     /** "folder" | "file" */
@@ -1491,7 +1497,7 @@ export async function addFilesApi(
         const file = mapChild(raw, space_id);
         // Preserve raw object for status 3 (duplicate) so retry API can use it
         if (raw?.status === 3) {
-            (file as any)._raw = raw;
+            file._raw = raw;
         }
         return file;
     });
@@ -1551,7 +1557,7 @@ export async function uploadFolderApi(
         const file = mapChild(raw, space_id);
         // Preserve raw object for status 3 (duplicate) so retry API can use it
         if (raw?.status === 3) {
-            (file as any)._raw = raw;
+            file._raw = raw;
         }
         return file;
     });

@@ -292,6 +292,11 @@ describe("KnowledgeSpaceSettingsPage", () => {
     expect(settingsSurface?.className).toContain("w-full");
     expect(settingsSurface?.className).not.toContain("max-w-[1368px]");
     expect(
+      screen
+        .getByText("com_unified_permission.confirm_create")
+        .closest("footer")?.className,
+    ).toContain("h-16");
+    expect(
       screen.getByPlaceholderText(
         "com_subscription.enter_knowledge_space_name",
       ).className,
