@@ -1417,10 +1417,6 @@
     "tagConsole": {
       "searchLibrary": "タグライブラリを検索",
       "pendingEntry": "審査待ちタグ",
-      "autoTagFeature": "自動タグ付け",
-      "autoTagFeatureOffConfirm": "オフにすると、このテナントの全ユーザーから自動タグ付けが非表示になります。既存のタグは影響を受けません。オフにしますか？",
-      "reviewTagFeature": "審査待ちタグ",
-      "reviewTagFeatureOffConfirm": "オフにすると、AI タグ付けは新しい審査待ちタグを生成しなくなります。提出済みのタグはここで処理できます。オフにしますか？",
       "noLibrary": "タグライブラリなし",
       "noBoundSpace": "関連ナレッジスペースなし",
       "status": "ステータス",

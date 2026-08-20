@@ -1,4 +1,3 @@
-import { bsConfirm } from "@/components/bs-ui/alertDialog/useConfirm"
 import { Switch } from "@/components/bs-ui/switch"
 import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { userContext } from "@/contexts/userContext"
@@ -17,17 +16,18 @@ interface TagFeatureState {
 }
 
 /**
- * Tenant-level feature switches, mirrored from the workbench config page.
+ * The two switches from the workbench knowledge-space config, mirrored here.
  *
- * These are **not** display toggles for this page: `auto_tag_visible` decides
- * whether end users see the auto-tagging UI in a knowledge space, and
- * `review_tag_visible` decides whether AI tagging still produces pending tags at
- * all. Turning either off must therefore not hide anything here — an admin still
- * has to be able to clear leftover tags and finish the pending queue after the
- * feature is switched off.
+ * Labels are taken from that page rather than from the field names: the section
+ * `auto_tag_visible` belongs to is called 标签库管理 there. Naming it after the
+ * field ("自动打标") reads as a master switch for tagging, which it is not —
+ * that mistake produced a bug report and a round of wrong fixes.
+ *
+ * Turning one off hides nothing on this page: an admin still has to be able to
+ * clear leftover tags and work the pending queue afterwards.
  *
  * Only a tenant admin may change them (the config endpoint requires it), so for
- * anyone else the block is not rendered rather than rendered disabled: a
+ * anyone else the block is not rendered rather than rendered disabled — a
  * department admin can reach this page but has nothing to do with these.
  */
 export function TagFeatureToggles() {
@@ -56,8 +56,8 @@ export function TagFeatureToggles() {
                 })
             })
             .catch(() => {
-                // Read-only failure: leaving the block unrendered is better than
-                // showing switches whose position is a guess.
+                // Read-only failure: leaving the block unrendered beats showing
+                // switches whose position is a guess.
                 if (!cancelled) setState(null)
             })
         return () => {
@@ -75,6 +75,7 @@ export function TagFeatureToggles() {
             const { data } = resolveConfigEnvelope<Record<string, unknown>>(current)
             if (!data) {
                 setSaving(null)
+                setState((prev) => (prev ? { ...prev, [key]: !next } : prev))
                 return
             }
             const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi({ ...data, [key]: next }))
@@ -89,33 +90,12 @@ export function TagFeatureToggles() {
         [t, toast],
     )
 
-    const handleToggle = (key: ToggleKey, next: boolean, offConfirm: string) => {
-        if (next) {
-            // Optimistic: the switch itself is the feedback, and persist() puts
-            // it back if the write fails.
-            setState((prev) => (prev ? { ...prev, [key]: true } : prev))
-            void persist(key, true)
-            return
-        }
-        // Switching off takes effect immediately and reaches beyond this page,
-        // so unlike the config form — which has a save step to pause at — it
-        // asks first.
-        //
-        // The switch is deliberately *not* flipped yet: the dialog can be
-        // dismissed by cancel, by the close button or by the overlay, and only
-        // the first of those reports back. Moving it after confirmation instead
-        // means every dismissal leaves it showing the real setting.
-        bsConfirm({
-            title: t("prompt", "提示"),
-            desc: offConfirm,
-            okTxt: t("system.confirm", "确认"),
-            canelTxt: t("cancel", { ns: "bs" }),
-            onOk(close) {
-                setState((prev) => (prev ? { ...prev, [key]: false } : prev))
-                void persist(key, false)
-                close?.()
-            },
-        })
+    // No confirmation step: the workbench page these came from has none, and
+    // the switch itself plus the toast is the feedback. persist() rolls the
+    // switch back if the write fails.
+    const handleToggle = (key: ToggleKey, next: boolean) => {
+        setState((prev) => (prev ? { ...prev, [key]: next } : prev))
+        void persist(key, next)
     }
 
     if (!canEdit || !state) return null
@@ -123,37 +103,19 @@ export function TagFeatureToggles() {
     return (
         <div className="flex shrink-0 items-center gap-5">
             <label className="flex items-center gap-2 text-xs text-[#4E5969]">
-                <span>{t("build.tagConsole.autoTagFeature", "自动打标")}</span>
+                <span>{t("build.tagLibraryManagementTitle", "标签库管理")}</span>
                 <Switch
                     checked={state.auto_tag_visible}
                     disabled={saving === "auto_tag_visible"}
-                    onCheckedChange={(checked) =>
-                        handleToggle(
-                            "auto_tag_visible",
-                            checked,
-                            t(
-                                "build.tagConsole.autoTagFeatureOffConfirm",
-                                "关闭后，知识空间内的自动打标功能将对本租户所有用户隐藏。已有标签不受影响。确认关闭？",
-                            ),
-                        )
-                    }
+                    onCheckedChange={(checked) => handleToggle("auto_tag_visible", checked)}
                 />
             </label>
             <label className="flex items-center gap-2 text-xs text-[#4E5969]">
-                <span>{t("build.tagConsole.reviewTagFeature", "待审核标签")}</span>
+                <span>{t("build.autoTagGenerationTitle", "待审核标签")}</span>
                 <Switch
                     checked={state.review_tag_visible}
                     disabled={saving === "review_tag_visible"}
-                    onCheckedChange={(checked) =>
-                        handleToggle(
-                            "review_tag_visible",
-                            checked,
-                            t(
-                                "build.tagConsole.reviewTagFeatureOffConfirm",
-                                "关闭后，AI 打标将不再产生新的待审核标签。已提交的待审核标签仍可在此处理。确认关闭？",
-                            ),
-                        )
-                    }
+                    onCheckedChange={(checked) => handleToggle("review_tag_visible", checked)}
                 />
             </label>
         </div>
