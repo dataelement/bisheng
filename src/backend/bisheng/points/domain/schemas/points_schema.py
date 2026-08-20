@@ -97,10 +97,15 @@ class PointAdminUserItem(BaseModel):
 
 
 class PointAdminDepartmentOption(BaseModel):
-    """用户积分列表部门筛选项。"""
+    """用户积分列表部门筛选项（仅公司 / 部门两级）。"""
 
     id: int
     name: str
+    org_level: str = Field(description="company 或 dept")
+    parent_id: int | None = Field(
+        default=None,
+        description="部门所属公司 id；公司节点为 null",
+    )
 
 
 class PointAdminUserFilterOptions(BaseModel):
