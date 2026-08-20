@@ -74,6 +74,8 @@ def test_parse_defaults_to_dry_run_and_apply_requires_store_confirmation() -> No
             "--operator-id",
             "7",
             "--audit-orphan-tuples",
+            "--orphan-object",
+            "folder:97394",
             "--cleanup-orphan-tuples",
             "--confirm-orphan-checksum",
             "a" * 64,
@@ -81,6 +83,7 @@ def test_parse_defaults_to_dry_run_and_apply_requires_store_confirmation() -> No
     )
     assert args.cleanup_orphan_tuples is True
     assert args.confirm_orphan_checksum == "a" * 64
+    assert args.orphan_object == ["folder:97394"]
 
 
 def test_report_deduplicates_only_the_same_projected_subject_tuple() -> None:
@@ -204,6 +207,33 @@ async def test_orphan_audit_uses_canonical_and_all_active_persisted_sources() ->
     assert audit.supported_tuple_count == 2
     assert audit.missing_tuple_count == 0
     assert audit.orphan_tuples == (("user:9", "visible", "knowledge_space:42"),)
+
+
+def test_orphan_cleanup_selection_can_limit_one_reviewed_resource() -> None:
+    tuples = (
+        ("user:7", "visible", "folder:97394"),
+        ("user:8", "visible", "knowledge_space:4166"),
+    )
+    audit = cli.OrphanTupleAudit(
+        live_direct_visible_count=2,
+        supported_tuple_count=0,
+        missing_tuple_count=0,
+        orphan_tuple_count=2,
+        missing_tuple_checksum=cli._checksum(()),
+        orphan_tuple_checksum=cli._checksum(tuples),
+        missing_tuples=(),
+        orphan_tuples=tuples,
+    )
+
+    selection = cli._select_orphan_tuples(
+        audit,
+        object_filters=("folder:97394",),
+    )
+
+    assert selection.object_filters == ("folder:97394",)
+    assert selection.tuple_count == 1
+    assert selection.tuples == (("user:7", "visible", "folder:97394"),)
+    assert selection.tuple_checksum == cli._checksum(selection.tuples)
 
 
 def test_build_orphan_cleanup_plan_is_exact_and_resource_fenced() -> None:
