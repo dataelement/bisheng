@@ -337,5 +337,36 @@ class BaseTelemetryService(object):
         except Exception as e:
             logger.error(f"Failed to log telemetry event sync: {e}", exc_info=True)
 
+    def record_event_sync_strict(
+        self,
+        *,
+        event_id: str,
+        user_id: int,
+        event_type: BaseTelemetryTypeEnum,
+        timestamp: int,
+        trace_id: str | None,
+        event_data: T_EventData,
+    ) -> None:
+        """Persist a retryable event with a deterministic Elasticsearch ID."""
+        if not self._es_client_sync:
+            self._es_client_sync = get_statistics_es_connection_sync()
+        if not self._index_initialized:
+            self._ensure_index_sync()
+        event_info = BaseTelemetryEvent(
+            event_id=event_id,
+            tenant_id=get_current_tenant_id() or DEFAULT_TENANT_ID,
+            event_type=event_type,
+            timestamp=timestamp,
+            user_context=self._init_user_context_sync(user_id),
+            trace_id=trace_id,
+            event_data=event_data,
+        )
+        self._es_client_sync.index(
+            index=self.index_name,
+            id=event_id,
+            document=event_info.model_dump(),
+            refresh="wait_for",
+        )
+
 
 telemetry_service = BaseTelemetryService()

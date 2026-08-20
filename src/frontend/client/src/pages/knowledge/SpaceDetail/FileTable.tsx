@@ -41,7 +41,7 @@ import {
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, getKnowledgeIngestMethodLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -118,6 +118,7 @@ const COLUMN_CONFIG = {
     tags: { minWidth: 140, initialWidth: 200 },
     businessDomain: { minWidth: 140, initialWidth: 170 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
+    ingestMethod: { minWidth: 100, initialWidth: 120 },
     uploader: { minWidth: 100, initialWidth: 140 },
     originalUploader: { minWidth: 100, initialWidth: 140 },
     updater: { minWidth: 100, initialWidth: 140 },
@@ -613,6 +614,21 @@ function FileTableHeader({
                         <ResizeHandle columnKey="fileEncoding" onResizeStart={onResizeStart} />
                     </TableHead>
                 )}
+
+                {/* 入库方式 */}
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    style={{
+                        width: columnWidths.ingestMethod,
+                        minWidth: columnWidths.ingestMethod,
+                        maxWidth: columnWidths.ingestMethod,
+                    }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        {localize("com_knowledge.ingest_method")}
+                    </div>
+                    <ResizeHandle columnKey="ingestMethod" onResizeStart={onResizeStart} />
+                </TableHead>
 
                 {/* 上传人 */}
                 <TableHead
@@ -1537,11 +1553,6 @@ function FileRow({
                                                 : "分享文件"}
                                     </span>
                                 )}
-                                {!isFolder && file.projectionReady === false && (
-                                    <span className="flex h-5 shrink-0 items-center rounded bg-[#fff7e8] px-1.5 text-xs text-[#f77234]">
-                                        同步中
-                                    </span>
-                                )}
                                 {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
                                     <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
                                         {`V${file.version_no}`}
@@ -1824,6 +1835,20 @@ function FileRow({
                     </div>
                 </TableCell>
             )}
+
+            {/* 入库方式 */}
+            <TableCell
+                className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
+                style={{
+                    width: columnWidths.ingestMethod,
+                    minWidth: columnWidths.ingestMethod,
+                    maxWidth: columnWidths.ingestMethod,
+                }}
+            >
+                <span className="block truncate whitespace-nowrap">
+                    {isFolder ? EMPTY_FIELD_PLACEHOLDER : getKnowledgeIngestMethodLabel(file, localize)}
+                </span>
+            </TableCell>
 
             {/* 上传人 */}
             <TableCell

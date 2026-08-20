@@ -1474,6 +1474,7 @@ class TestMoveDepartmentSubtreeSync:
 
         login_user = _MockLoginUser(user_id=1, tenant_id=1)
         sync_mock = AsyncMock(return_value={"synced": [101], "failed": []})
+        enqueue_stat = AsyncMock(return_value=True)
 
         with (
             patch(
@@ -1498,8 +1499,19 @@ class TestMoveDepartmentSubtreeSync:
                 return_value=None,
             ),
             patch(
+                "bisheng.department.domain.services.department_service."
+                "aassert_default_root_parent_immutable",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
                 "bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users",
                 sync_mock,
+            ),
+            patch(
+                "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+                "KnowledgeSpaceContentStat.enqueue_department_stat_async",
+                new=enqueue_stat,
             ),
         ):
             await DepartmentService.amove_department(
@@ -1513,6 +1525,7 @@ class TestMoveDepartmentSubtreeSync:
         # New path of moved dept = parent.path + dept.id + /
         assert kwargs["dept_path"] == "/1/9/7/"
         assert kwargs["trigger"] == UserTenantSyncTrigger.DEPT_MOVED
+        enqueue_stat.assert_awaited_once_with([7])
 
     @pytest.mark.asyncio
     async def test_move_to_same_parent_skips_sync(self):
@@ -1531,6 +1544,7 @@ class TestMoveDepartmentSubtreeSync:
 
         login_user = _MockLoginUser(user_id=1, tenant_id=1)
         sync_mock = AsyncMock()
+        enqueue_stat = AsyncMock(return_value=True)
 
         with (
             patch(
@@ -1555,8 +1569,19 @@ class TestMoveDepartmentSubtreeSync:
                 return_value=None,
             ),
             patch(
+                "bisheng.department.domain.services.department_service."
+                "aassert_default_root_parent_immutable",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
                 "bisheng.tenant.domain.services.user_tenant_sync_service.UserTenantSyncService.sync_subtree_primary_users",
                 sync_mock,
+            ),
+            patch(
+                "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+                "KnowledgeSpaceContentStat.enqueue_department_stat_async",
+                new=enqueue_stat,
             ),
         ):
             await DepartmentService.amove_department(
@@ -1566,6 +1591,7 @@ class TestMoveDepartmentSubtreeSync:
             )
 
         sync_mock.assert_not_awaited()
+        enqueue_stat.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_sync_failure_does_not_propagate(self):

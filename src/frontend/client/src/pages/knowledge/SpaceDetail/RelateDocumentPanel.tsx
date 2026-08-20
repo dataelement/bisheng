@@ -11,7 +11,7 @@ import { useConfirm } from "~/Providers";
 import {
     getVersionRecommendationsApi,
     searchVersionSourcesApi,
-    mergeIntoCurrentApi,
+    linkAsNewVersionApi,
     dismissSimilarApi,
     type SimilarCandidateEntry,
     type SearchableDocumentEntry,
@@ -35,7 +35,6 @@ interface RelateDocumentPanelProps {
 interface LinkTarget {
     document_id: number;
     title: string;
-    force?: boolean;
 }
 
 // ─── Recommendation card ───────────────────────────────────────────────────────
@@ -149,7 +148,7 @@ function SearchResultRow({ entry, disabled, onLink, onView }: SearchResultRowPro
                     type="button"
                     size="sm"
                     disabled={disabled}
-                    onClick={() => onLink({ document_id: entry.document_id, title: entry.title, force: true })}
+                    onClick={() => onLink({ document_id: entry.document_id, title: entry.title })}
                     className="h-8 rounded-[6px] bg-[#165DFF] px-4 text-[12px] text-white hover:bg-[#4080FF]"
                 >
                     <Link2 className="mr-1.5 size-4" />
@@ -197,11 +196,15 @@ export function RelateDocumentPanel({
     });
 
     const linkMutation = useMutation({
-        mutationFn: (target: { source_document_id: number; force?: boolean }) =>
-            mergeIntoCurrentApi({
-                current_knowledge_file_id: fileId,
-                source_document_id: target.source_document_id,
-                force: target.force,
+        // Same direction as the similar-file dialog: the file being managed
+        // joins the document the user picked. It used to be the reverse — the
+        // picked file was absorbed as this document's primary — which read
+        // backwards next to the other dialog and moved a file the user had not
+        // opened.
+        mutationFn: (target: { source_document_id: number }) =>
+            linkAsNewVersionApi({
+                knowledge_file_id: fileId,
+                target_document_id: target.source_document_id,
             }),
         onSuccess: (response) => {
             showToast({
@@ -220,16 +223,13 @@ export function RelateDocumentPanel({
     const handleLink = async (targetDoc: LinkTarget) => {
         const ok = await confirm({
             title: localize("com_knowledge.version.confirm_link_title"),
-            description: localize("com_knowledge.version.confirm_merge_description", {
+            description: localize("com_knowledge.version.confirm_link_description", {
                 name: file.name,
                 target: targetDoc.title,
             }),
         });
         if (ok) {
-            linkMutation.mutate({
-                source_document_id: targetDoc.document_id,
-                force: targetDoc.force,
-            });
+            linkMutation.mutate({ source_document_id: targetDoc.document_id });
         }
     };
 
@@ -290,7 +290,7 @@ export function RelateDocumentPanel({
                         {localize("com_knowledge.version.section_recommendations")}
                     </h3>
                     <p className="mb-3 text-[12px] text-[#86909c]">
-                        {localize("com_knowledge.version.section_recommendations_subtitle_merge")}
+                        {localize("com_knowledge.version.section_recommendations_subtitle")}
                     </p>
                     {candidatesLoading ? (
                         <div className="flex h-16 items-center justify-center border border-[#EBECF0] bg-[#FAFAFA] rounded-[6px]">

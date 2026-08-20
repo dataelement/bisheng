@@ -331,19 +331,50 @@ class PointsQueryService:
             logger.warning("points.overview cache write failed key=%s", key, exc_info=True)
 
     async def admin_user_filter_options(self, user: UserPayload) -> PointAdminUserFilterOptions:
-        """用户积分列表筛选项：部门树扁平列表 + PRD 四类角色。"""
+        """用户积分列表筛选项：公司→部门两级 + PRD 四类角色。
+
+        仅返回 org_level 为 company / dept 的活跃节点；科室/班组与未打标不进入下拉。
+        """
         require_platform_admin(user)
         from bisheng.database.models.department import DepartmentDao
         from bisheng.department.domain.services.department_display_service import get_department_display_name
         from bisheng.points.domain.constants.admin_user_type import USER_TYPE_FILTER_OPTIONS
+        from bisheng.points.domain.constants.org_levels import ORG_LEVEL_COMPANY
 
-        departments: list[PointAdminDepartmentOption] = []
-        for row in await DepartmentDao.aget_all_active():
+        rows = await DepartmentDao.aget_all_active()
+        companies: list[PointAdminDepartmentOption] = []
+        depts: list[PointAdminDepartmentOption] = []
+        company_ids: set[int] = set()
+        for row in rows:
+            level = getattr(row, "org_level", None)
+            if level not in (ORG_LEVEL_COMPANY, "dept"):
+                continue
             name = get_department_display_name(row.name, getattr(row, "short_name", None))
-            departments.append(PointAdminDepartmentOption(id=int(row.id), name=name))
-        departments.sort(key=lambda item: item.name)
+            item = PointAdminDepartmentOption(
+                id=int(row.id),
+                name=name,
+                org_level=str(level),
+                parent_id=None
+                if level == ORG_LEVEL_COMPANY
+                else (int(row.parent_id) if row.parent_id is not None else None),
+            )
+            if level == ORG_LEVEL_COMPANY:
+                companies.append(item)
+                company_ids.add(int(row.id))
+            else:
+                depts.append(item)
+
+        # 部门必须挂在已知公司下；孤儿 dept（parent 不是公司）剔除，避免破坏两级展示。
+        depts = [d for d in depts if d.parent_id is not None and d.parent_id in company_ids]
+        companies.sort(key=lambda item: item.name)
+        depts.sort(key=lambda item: (item.parent_id or 0, item.name))
+        # 扁平输出：公司在前，其后各部门（FE 按 parent_id 分组）；保持稳定顺序便于测试。
+        ordered: list[PointAdminDepartmentOption] = []
+        for company in companies:
+            ordered.append(company)
+            ordered.extend(d for d in depts if d.parent_id == company.id)
         return PointAdminUserFilterOptions(
-            departments=departments,
+            departments=ordered,
             user_types=list(USER_TYPE_FILTER_OPTIONS),
         )
 

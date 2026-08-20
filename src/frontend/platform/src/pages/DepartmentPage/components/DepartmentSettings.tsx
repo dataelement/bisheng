@@ -53,6 +53,8 @@ interface DepartmentSettingsProps {
   orgLevel?: string | null
   /** 仅平台超管可设公司根 */
   canSetCompanyRoot?: boolean
+  /** 租户内是否已有其他节点被标为公司（组织树唯一公司） */
+  hasOtherCompanyRoot?: boolean
   /** 打标成功后刷新树侧徽章 */
   onOrgLevelChanged?: () => void
 }
@@ -86,6 +88,7 @@ export function DepartmentSettings({
   onMarkAsTenant,
   orgLevel = null,
   canSetCompanyRoot = false,
+  hasOtherCompanyRoot = false,
   onOrgLevelChanged,
 }: DepartmentSettingsProps) {
   const { t } = useTranslation()
@@ -113,20 +116,28 @@ export function DepartmentSettings({
   const canEditParent = !isArchived && !isDefaultRootDept
 
   /**
-   * 可编辑：未落入任何公司子树（未打标），或当前就是公司根（可清除）。
-   * 同级可另设公司；子树内自动标注节点只读。
+   * 可编辑：当前就是公司根（可清除/重算），或未打标且租户尚无其他公司。
+   * 子树自动标注节点、已有其他公司时的未打标节点只读。
    */
   const canEditOrgLevel = useMemo(() => {
     if (!canSetCompanyRoot) return false
     if (orgLevel === "company") return true
-    return orgLevel == null
-  }, [canSetCompanyRoot, orgLevel])
+    if (orgLevel != null) return false
+    if (hasOtherCompanyRoot) return false
+    return true
+  }, [canSetCompanyRoot, hasOtherCompanyRoot, orgLevel])
 
   const orgLevelDisabledReason = useMemo(() => {
     if (!canSetCompanyRoot || canEditOrgLevel) return null
     if (orgLevel != null && orgLevel !== "company") return "underSubtree" as const
+    if (hasOtherCompanyRoot) return "alreadyExists" as const
     return null
-  }, [canEditOrgLevel, canSetCompanyRoot, orgLevel])
+  }, [canEditOrgLevel, canSetCompanyRoot, hasOtherCompanyRoot, orgLevel])
+
+  const orgLevelDisabledTooltipKey =
+    orgLevelDisabledReason === "alreadyExists"
+      ? "bs:department.setCompanyRootDisabledAlreadyExists"
+      : "bs:department.setCompanyRootDisabledUnderSubtree"
 
   /** 最近一次从服务端加载成功的快照（父部门变更判断、保存后更新） */
   const baselineRef = useRef<{
@@ -539,9 +550,7 @@ export function DepartmentSettings({
             <div className="flex items-center gap-1.5">
               <Label>{t("bs:department.orgLevelLabel")}</Label>
               {orgLevelDisabledReason ? (
-                <QuestionTooltip
-                  content={t("bs:department.setCompanyRootDisabledUnderSubtree")}
-                />
+                <QuestionTooltip content={t(orgLevelDisabledTooltipKey)} />
               ) : null}
             </div>
             {canEditOrgLevel ? (

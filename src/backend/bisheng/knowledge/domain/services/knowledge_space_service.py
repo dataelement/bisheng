@@ -4736,6 +4736,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "points.award.hooks favorite notify failed source_file_id=%s",
                 source_file_id,
             )
+        try:
+            await KnowledgeSpaceContentStat.enqueue_success_event_async(
+                file_id=source_file_id,
+                user_id=self.login_user.user_id,
+                event_type=BaseTelemetryTypeEnum.PORTAL_FAVORITE.value,
+                record_type="favorite_daily",
+                source_app="shougang_portal",
+                scene="document_favorite",
+                entry_point="favorite_action",
+            )
+        except Exception:
+            _logger.exception(
+                "knowledge content favorite projection failed source_file_id=%s",
+                source_file_id,
+            )
         title = Path(ref_file.file_name or source_file.file_name or "").stem
         return ShougangPortalFavoriteCreateResp(
             favorite_file_id=int(ref_file.id),
@@ -8575,6 +8590,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
             enqueue_portal_recommendation_projection_refresh(file_id=int(file_id))
         except Exception:
             logger.exception("failed to enqueue recommendation file projection refresh id={}", file_id)
+
+    @staticmethod
+    def _enqueue_recommendation_files_refresh(file_ids: list[int]) -> None:
+        try:
+            from bisheng.worker.knowledge.portal_recommendation import (
+                enqueue_portal_recommendation_projection_refresh_batch,
+            )
+
+            enqueue_portal_recommendation_projection_refresh_batch(
+                file_ids=file_ids,
+                deleted=False,
+            )
+        except Exception:
+            logger.exception("failed to enqueue recommendation projection refreshes count={}", len(file_ids))
 
     @staticmethod
     def _enqueue_recommendation_deleted_files(file_ids: list[int]) -> None:
@@ -16887,6 +16916,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         old_subcategory_code = self.normalize_file_category_code(
             getattr(file_record, "file_subcategory_code", None),
         )
+        old_subcategory_source = getattr(file_record, "file_subcategory_source", None)
+        old_split_rule = file_record.split_rule
         encoding_changed = (old_encoding or "") != cleaned
         if encoding_changed:
             cleaned = await self._ensure_unique_file_encoding(cleaned, file_id)
@@ -16909,7 +16940,32 @@ class KnowledgeSpaceService(KnowledgeUtils):
             file_record.file_subcategory_source = "manual" if normalized_file_subcategory_code else None
         file_record.updater_id = self.login_user.user_id
         file_record.updater_name = self.login_user.user_name
-        updated_file = await KnowledgeFileDao.async_update(file_record)
+        distribution_metadata_changed = bool(
+            encoding_changed
+            or subcategory_changed
+            or old_split_rule != file_record.split_rule
+            or old_subcategory_source != file_record.file_subcategory_source
+        )
+        if resolved is not None and distribution_metadata_changed:
+            if self.document_distribution_service is None:
+                raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
+            try:
+                metadata_result = await self.document_distribution_service.update_manager_metadata(
+                    tenant_id=int(file_record.tenant_id),
+                    document_id=int(file_record.reference_document_id),
+                    manager_file_id=int(file_record.id),
+                    split_rule=file_record.split_rule,
+                    file_encoding=file_record.file_encoding,
+                    file_subcategory_code=file_record.file_subcategory_code,
+                    file_subcategory_source=file_record.file_subcategory_source,
+                    updater_id=int(self.login_user.user_id),
+                    updater_name=self.login_user.user_name,
+                )
+                updated_file = metadata_result.manager_file
+            except Exception as exc:
+                raise KnowledgeDocumentStateConflictError() from exc
+        else:
+            updated_file = await KnowledgeFileDao.async_update(file_record)
         if business_domain_changed:
             await self._notify_favorite_source_changed(
                 source_space_id=int(updated_file.knowledge_id),
@@ -16944,10 +17000,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ),
             )
         if encoding_changed or subcategory_changed:
-            await KnowledgeSpaceContentStat.enqueue_file_stat_async([file_id])
-            self._enqueue_recommendation_file_refresh(file_id)
-            if resolved is not None:
-                await self._mark_document_content_changed(updated_file)
+            affected_file_ids = (
+                list(metadata_result.active_entry_ids)
+                if resolved is not None and distribution_metadata_changed
+                else [file_id]
+            )
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async(affected_file_ids)
+            if len(affected_file_ids) > 1:
+                self._enqueue_recommendation_files_refresh(affected_file_ids)
+            else:
+                self._enqueue_recommendation_file_refresh(file_id)
+            if resolved is not None and distribution_metadata_changed:
+                await self._enqueue_document_distribution_projection(
+                    tenant_id=int(updated_file.tenant_id),
+                    entry_ids=affected_file_ids,
+                )
         return updated_file
 
     async def _plan_cascade_version_links_on_delete(

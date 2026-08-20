@@ -60,7 +60,6 @@ class InspectionStandardSyncService:
         start_dt, end_dt = self._parse_time_window(request.start_time, request.end_time)
         year_dir = str(start_dt.year)
         groups = self._build_groups(request)
-        generated_file_name = self._build_generated_file_name(start_dt, end_dt)
         base_folder_path = self._resolve_base_folder_path(self.filelib_sync_service.file_sync_rule)
         knowledge_id = int(self.filelib_sync_service.file_sync_rule.target_space.knowledge_id)
         knowledge = await self.filelib_sync_service.repository.find_knowledge_by_id(knowledge_id)
@@ -82,6 +81,11 @@ class InspectionStandardSyncService:
                 )
                 staged_path = self._write_temp_xlsx(xlsx_bytes)
                 staged_paths.append(staged_path)
+                generated_file_name = self._build_generated_file_name(
+                    create_dept_id=group.create_dept_id,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                )
                 params = FilelibSyncParams(
                     external_file_id=self._build_external_file_id(
                         create_dept_id=group.create_dept_id,
@@ -326,10 +330,11 @@ class InspectionStandardSyncService:
         return int(folder.id), folder_path
 
     @staticmethod
-    def _build_generated_file_name(start_dt: datetime, end_dt: datetime) -> str:
+    def _build_generated_file_name(*, create_dept_id: str, start_dt: datetime, end_dt: datetime) -> str:
         start_date = start_dt.date().isoformat()
         end_date = end_dt.date().isoformat()
-        return f"{start_date}至{end_date}.xlsx"
+        safe_dept = re.sub(r"[^A-Za-z0-9._-]+", "-", str(create_dept_id or "").strip()).strip("-") or "DEPT"
+        return f"{safe_dept}_{start_date}至{end_date}.xlsx"
 
     @staticmethod
     def _build_external_file_id(

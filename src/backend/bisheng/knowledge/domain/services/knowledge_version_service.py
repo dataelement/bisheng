@@ -135,17 +135,12 @@ class KnowledgeVersionService:
             KnowledgeDocumentEntryResolutionError,
         )
 
-        if (
-            file_record.reference_document_id is None
-            and file_record.entry_type is None
-        ):
+        if file_record.reference_document_id is None and file_record.entry_type is None:
             return None
         if file_record.entry_type != KnowledgeFileEntryType.MANAGER.value:
             raise KnowledgeDocumentManagerRequiredError()
         if self.document_entry_resolver is None:
-            raise KnowledgeDocumentStateConflictError(
-                msg="文档入口解析服务不可用"
-            )
+            raise KnowledgeDocumentStateConflictError(msg="文档入口解析服务不可用")
         try:
             resolved = await self.document_entry_resolver.resolve(
                 tenant_id=int(self.login_user.tenant_id),
@@ -156,10 +151,8 @@ class KnowledgeVersionService:
             raise KnowledgeDocumentStateConflictError() from exc
         if (
             resolved.entry_type != KnowledgeFileEntryType.MANAGER.value
-            or int(resolved.entry_file_id)
-            != int(resolved.manager_file_id or 0)
-            or int(resolved.content_file_id)
-            != int(resolved.entry_file_id)
+            or int(resolved.entry_file_id) != int(resolved.manager_file_id or 0)
+            or int(resolved.content_file_id) != int(resolved.entry_file_id)
         ):
             raise KnowledgeDocumentManagerRequiredError()
         if not resolved.capabilities.can_edit_content:
@@ -183,8 +176,7 @@ class KnowledgeVersionService:
             )
         except Exception:
             logger.exception(
-                "F059 projection enqueue failed after version transition: "
-                "tenant_id={} entry_ids={}",
+                "F059 projection enqueue failed after version transition: tenant_id={} entry_ids={}",
                 tenant_id,
                 entry_ids,
             )
@@ -406,6 +398,7 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
+
         await self._require_version_management_enabled()
 
         from bisheng.common.errcode.knowledge_space import (
@@ -425,10 +418,7 @@ class KnowledgeVersionService:
             raise VersionLinkSourceFileMissingError()
         if current_kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise VersionLinkFileNotReadyError()
-        if (
-            current_kf.reference_document_id is not None
-            or current_kf.entry_type is not None
-        ):
+        if current_kf.reference_document_id is not None or current_kf.entry_type is not None:
             raise KnowledgeDocumentEntryConflictError()
 
         # 2) source document must not already be a multi-version chain — moving
@@ -436,11 +426,8 @@ class KnowledgeVersionService:
         source_version = await self.version_repo.find_by_knowledge_file_id(knowledge_file_id)
         source_chain: list[KnowledgeDocumentVersion] = []
         if source_version is not None:
-            source_entries = (
-                await self.knowledge_file_repo
-                .find_distribution_entries_by_document_id(
-                    int(source_version.document_id)
-                )
+            source_entries = await self.knowledge_file_repo.find_distribution_entries_by_document_id(
+                int(source_version.document_id)
             )
             if source_entries:
                 raise KnowledgeDocumentEntryConflictError()
@@ -465,11 +452,8 @@ class KnowledgeVersionService:
         target_primary_kf = await self.knowledge_file_repo.find_by_id(target_primary_v.knowledge_file_id)
         if target_primary_kf is None or target_primary_kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise VersionLinkTargetUnavailableError()
-        target_entries = (
-            await self.knowledge_file_repo
-            .find_distribution_entries_by_document_id(
-                int(target_document_id)
-            )
+        target_entries = await self.knowledge_file_repo.find_distribution_entries_by_document_id(
+            int(target_document_id)
         )
         if target_entries:
             raise KnowledgeDocumentEntryConflictError()
@@ -494,11 +478,7 @@ class KnowledgeVersionService:
         # Capture the original document before moving the unique physical-file
         # relationship. The version row itself must be migrated, not copied:
         # ``knowledge_file_id`` is globally unique.
-        original_document_id = (
-            int(source_version.document_id)
-            if source_version is not None
-            else None
-        )
+        original_document_id = int(source_version.document_id) if source_version is not None else None
 
         # Snapshot the old primary; we'll demote it AFTER the new primary is
         # in place so an interruption never leaves the chain without any
@@ -533,11 +513,7 @@ class KnowledgeVersionService:
         # A one-version source document is now empty and can be removed. When
         # moving a historical version, its source document still owns the
         # remaining primary chain and must stay intact.
-        if (
-            original_document_id is not None
-            and len(source_chain) == 1
-            and original_document_id != target_document_id
-        ):
+        if original_document_id is not None and len(source_chain) == 1 and original_document_id != target_document_id:
             await self.doc_repo.delete(original_document_id)
 
         # Mark file similar_status as resolved (Plan 3 sets this proactively; we ensure it here too)
@@ -596,6 +572,7 @@ class KnowledgeVersionService:
         from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import (
             KnowledgeAuditTelemetryService,
         )
+
         await self._require_version_management_enabled()
 
         target_version = await self.version_repo.find_by_id(version_id)
@@ -606,21 +583,15 @@ class KnowledgeVersionService:
         if target_kf is None or target_kf.status != KnowledgeFileStatus.SUCCESS.value:
             raise HTTPException(status_code=412, detail="target version not parsed successfully")
 
-        document = await self.doc_repo.find_by_id(
-            int(target_version.document_id)
-        )
+        document = await self.doc_repo.find_by_id(int(target_version.document_id))
         if document is None or document.primary_version_id is None:
             raise HTTPException(
                 status_code=409,
                 detail="version document has no authoritative primary",
             )
-        current_primary = await self.version_repo.find_by_id(
-            int(document.primary_version_id)
-        )
+        current_primary = await self.version_repo.find_by_id(int(document.primary_version_id))
         current_manager = (
-            await self.knowledge_file_repo.find_by_id(
-                int(current_primary.knowledge_file_id)
-            )
+            await self.knowledge_file_repo.find_by_id(int(current_primary.knowledge_file_id))
             if current_primary is not None
             else None
         )
@@ -629,9 +600,7 @@ class KnowledgeVersionService:
                 status_code=409,
                 detail="current primary version is unavailable",
             )
-        resolved_manager = await self._require_document_content_manager(
-            current_manager
-        )
+        resolved_manager = await self._require_document_content_manager(current_manager)
         if resolved_manager is not None:
             from bisheng.common.errcode.knowledge_space import (
                 KnowledgeDocumentStateConflictError,
@@ -641,18 +610,13 @@ class KnowledgeVersionService:
             )
 
             if self.document_distribution_service is None:
-                raise KnowledgeDocumentStateConflictError(
-                    msg="文档分发生命周期服务不可用"
-                )
+                raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
             try:
-                result = (
-                    await self.document_distribution_service
-                    .switch_primary_manager(
-                        tenant_id=int(self.login_user.tenant_id),
-                        document_id=int(document.id),
-                        current_manager_file_id=int(current_manager.id),
-                        target_version_id=int(target_version.id),
-                    )
+                result = await self.document_distribution_service.switch_primary_manager(
+                    tenant_id=int(self.login_user.tenant_id),
+                    document_id=int(document.id),
+                    current_manager_file_id=int(current_manager.id),
+                    target_version_id=int(target_version.id),
                 )
             except KnowledgeDocumentDistributionError as exc:
                 raise KnowledgeDocumentStateConflictError() from exc
@@ -679,9 +643,7 @@ class KnowledgeVersionService:
                     tenant_id=int(self.login_user.tenant_id),
                     entry_ids=None,
                 )
-                await KnowledgeSpaceContentStat.enqueue_file_stat_async(
-                    [target_kf.id, current_manager.id]
-                )
+                await KnowledgeSpaceContentStat.enqueue_file_stat_async([target_kf.id, current_manager.id])
             KnowledgeAuditTelemetryService.audit_set_primary_version(
                 self.login_user,
                 self.request,
@@ -731,9 +693,7 @@ class KnowledgeVersionService:
                 before_value=f"V{old_primary.version_no}",
                 after_value=f"V{target_version.version_no}",
             )
-            await KnowledgeSpaceContentStat.enqueue_file_stat_async(
-                [target_kf.id, current_manager.id]
-            )
+            await KnowledgeSpaceContentStat.enqueue_file_stat_async([target_kf.id, current_manager.id])
 
         KnowledgeAuditTelemetryService.audit_set_primary_version(
             self.login_user,
@@ -776,11 +736,8 @@ class KnowledgeVersionService:
             )
 
         kf = await self.knowledge_file_repo.find_by_id(v.knowledge_file_id)
-        distribution_entries = (
-            await self.knowledge_file_repo
-            .find_distribution_entries_by_document_id(
-                int(v.document_id)
-            )
+        distribution_entries = await self.knowledge_file_repo.find_distribution_entries_by_document_id(
+            int(v.document_id)
         )
         if distribution_entries:
             document = await self.doc_repo.find_by_id(int(v.document_id))
@@ -789,13 +746,9 @@ class KnowledgeVersionService:
                     status_code=409,
                     detail="version document has no authoritative primary",
                 )
-            current_primary = await self.version_repo.find_by_id(
-                int(document.primary_version_id)
-            )
+            current_primary = await self.version_repo.find_by_id(int(document.primary_version_id))
             current_manager = (
-                await self.knowledge_file_repo.find_by_id(
-                    int(current_primary.knowledge_file_id)
-                )
+                await self.knowledge_file_repo.find_by_id(int(current_primary.knowledge_file_id))
                 if current_primary is not None
                 else None
             )
@@ -810,9 +763,7 @@ class KnowledgeVersionService:
         version_no = v.version_no
         kf_knowledge_id = kf.knowledge_id if kf else None
         kf_file_name = kf.file_name if kf else ""
-        favorite_delete_events = (
-            await self._prepare_favorite_version_delete_events(kf, version_no)
-        )
+        favorite_delete_events = await self._prepare_favorite_version_delete_events(kf, version_no)
 
         # Look up the knowledge space BEFORE deleting DB rows so the object is still
         # accessible even if the backing store flushes references on delete.
@@ -999,7 +950,6 @@ class KnowledgeVersionService:
         cached_rows: list[KnowledgeFileSimilarityCandidate],
         *,
         limit: int,
-        require_single_version: bool = False,
     ) -> list:
         from bisheng.knowledge.domain.schemas.knowledge_version_schema import SimilarCandidateEntry
 
@@ -1034,10 +984,6 @@ class KnowledgeVersionService:
                 continue
             if int(version.knowledge_file_id) != int(row.candidate_file_id):
                 continue
-            if require_single_version:
-                chain = await self.version_repo.find_by_document_id(int(doc.id))
-                if len(chain) != 1:
-                    continue
             candidate = await self.knowledge_file_repo.find_by_id(int(version.knowledge_file_id))
             if candidate is None:
                 continue
@@ -1077,15 +1023,15 @@ class KnowledgeVersionService:
 
         out: list[PendingSimilarFileEntry] = []
         for kf in pending:
+            # A file already sitting in a multi-version chain used to be skipped
+            # here, on the theory that its similarity had been "processed". That
+            # is not the same question: a document can gain a version and still
+            # have an unrelated near-duplicate elsewhere in the space, and hiding
+            # it left no way to act on that.
+            #
+            # Still read the file's own version row: the row below reports which
+            # version of its chain this file currently is.
             v = await self.version_repo.find_by_knowledge_file_id(kf.id)
-            # Skip files whose logical document is already multi-version: the user
-            # has already processed similarity (by merging another doc into this
-            # chain). A multi-version doc is no longer an "independent document"
-            # that needs the link-or-dismiss decision.
-            if v is not None:
-                chain = await self.version_repo.find_by_document_id(v.document_id)
-                if len(chain) >= 2:
-                    continue
             cached = await self.similar_candidate_repo.find_by_source_file_id(kf.id)
             if not cached:
                 # Historical rows may have similar_status=1 from the old synchronous
@@ -1096,7 +1042,6 @@ class KnowledgeVersionService:
                 kf.id,
                 cached,
                 limit=3,
-                require_single_version=True,
             )
             if not candidates:
                 kf.similar_status = 0
@@ -1192,7 +1137,6 @@ class KnowledgeVersionService:
             current_file_id,
             cached,
             limit=limit,
-            require_single_version=True,
         )
 
     async def search_version_sources(
@@ -1219,10 +1163,12 @@ class KnowledgeVersionService:
                 continue
             if doc.primary_version_id is None:
                 continue
-            chain = await self.version_repo.find_by_document_id(doc.id)
-            if len(chain) != 1:
+            # Multi-version documents are offered too: linking into one is
+            # allowed by link_file_to_document, so filtering them out of the
+            # picker only hid valid targets.
+            primary_v = await self.version_repo.find_by_id(int(doc.primary_version_id))
+            if primary_v is None:
                 continue
-            primary_v = chain[0]
             kf = await self.knowledge_file_repo.find_by_id(primary_v.knowledge_file_id)
             # Hide documents whose primary file is gone or has not parsed
             # successfully — they're effectively unusable as a link target

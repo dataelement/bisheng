@@ -551,7 +551,7 @@ class PortalPdfDownloadService:
         return f"{stem or 'document'}.pdf"
 
     @staticmethod
-    def _record_download_telemetry(payload: dict[str, Any]) -> None:
+    async def _record_download_telemetry(payload: dict[str, Any]) -> None:
         PortalTelemetryEventService.log_event_sync(
             user_id=int(payload["user_id"]),
             event_type=BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD,
@@ -564,6 +564,19 @@ class PortalPdfDownloadService:
                 file_id=int(payload["file_id"]),
                 status="success",
             ),
+        )
+        from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+            KnowledgeSpaceContentStat,
+        )
+
+        await KnowledgeSpaceContentStat.enqueue_success_event_async(
+            file_id=int(payload["file_id"]),
+            user_id=int(payload["user_id"]),
+            event_type=BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD.value,
+            record_type="download_daily",
+            source_app="shougang_portal",
+            scene="document_download",
+            entry_point=str(payload["entry_point"]),
         )
 
     @staticmethod

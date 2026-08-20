@@ -29,6 +29,9 @@ from test.open_endpoints.inspection_standard_bulk_factory import (
     build_create_dept_id,
 )
 
+SINGLE_REQUEST_DEPT_COUNT = 10
+SINGLE_REQUEST_RECORDS_PER_DEPT = 2000
+
 
 pytestmark = pytest.mark.slow
 
@@ -226,3 +229,68 @@ async def test_bulk_sync_single_dept_real_xlsx_10k():
     assert result.files[0].check_standard_item_count == DEFAULT_RECORDS_PER_DEPT
     service.filelib_sync_service.sync_from_staged_file.assert_awaited_once()
     print(f"\n[bulk] sync single dept real xlsx: elapsed={elapsed}s")
+
+
+def test_bulk_payload_single_request_multi_dept_2000_each():
+    payload = build_bulk_payload_dict(
+        dept_count=SINGLE_REQUEST_DEPT_COUNT,
+        records_per_dept=SINGLE_REQUEST_RECORDS_PER_DEPT,
+    )
+    standards = payload["data"]["check_standards"]
+    items = payload["data"]["check_standard_items"]
+    dept_ids = {row["CREATE_DEPT_ID"] for row in standards}
+
+    assert len(standards) == SINGLE_REQUEST_DEPT_COUNT * SINGLE_REQUEST_RECORDS_PER_DEPT
+    assert len(items) == SINGLE_REQUEST_DEPT_COUNT * SINGLE_REQUEST_RECORDS_PER_DEPT
+    assert dept_ids == {build_create_dept_id(i) for i in range(SINGLE_REQUEST_DEPT_COUNT)}
+
+
+@pytest.mark.asyncio
+async def test_bulk_sync_single_request_multi_dept_2000_each():
+    """Single request carries multiple CREATE_DEPT_ID groups; each group has 2000 records."""
+    request = build_bulk_request(
+        dept_count=SINGLE_REQUEST_DEPT_COUNT,
+        records_per_dept=SINGLE_REQUEST_RECORDS_PER_DEPT,
+    )
+    service = _build_mock_service()
+    captured_dept_ids: list[str] = []
+    captured_file_names: list[str] = []
+
+    async def _capture_sync(*, params, **kwargs):
+        captured_file_names.append(params.file_name)
+        create_dept_id = kwargs.get("extra_user_metadata", {}).get("inspection_standard_create_dept_id")
+        if create_dept_id:
+            captured_dept_ids.append(str(create_dept_id))
+        return FilelibSyncResponseData(
+            external_file_id=params.external_file_id,
+            file_id=456,
+            file_encoding="ENC-BULK",
+            knowledge_id=118,
+            knowledge_name="智能制造室(制造)",
+            status=5,
+        )
+
+    service.filelib_sync_service.sync_from_staged_file = AsyncMock(side_effect=_capture_sync)
+
+    start = time.perf_counter()
+    with (
+        patch.object(FilelibSyncAuditWriter, "write_inspection_batch_success", new_callable=AsyncMock),
+        patch.object(FilelibSyncAuditWriter, "write_inspection_batch_failed", new_callable=AsyncMock),
+    ):
+        result = await service.sync(request)
+    elapsed = _elapsed_seconds(start)
+
+    expected_depts = {build_create_dept_id(i) for i in range(SINGLE_REQUEST_DEPT_COUNT)}
+    assert result.group_count == SINGLE_REQUEST_DEPT_COUNT
+    assert len(result.files) == SINGLE_REQUEST_DEPT_COUNT
+    assert {item.create_dept_id for item in result.files} == expected_depts
+    assert all(item.check_standard_count == SINGLE_REQUEST_RECORDS_PER_DEPT for item in result.files)
+    assert all(item.check_standard_item_count == SINGLE_REQUEST_RECORDS_PER_DEPT for item in result.files)
+    assert len(captured_file_names) == SINGLE_REQUEST_DEPT_COUNT
+    assert len(set(captured_file_names)) == SINGLE_REQUEST_DEPT_COUNT
+    assert captured_dept_ids == sorted(expected_depts)
+    assert service.filelib_sync_service.sync_from_staged_file.await_count == SINGLE_REQUEST_DEPT_COUNT
+    print(
+        f"\n[bulk] single-request multi-dept: groups={SINGLE_REQUEST_DEPT_COUNT}, "
+        f"records_per_dept={SINGLE_REQUEST_RECORDS_PER_DEPT}, elapsed={elapsed}s"
+    )

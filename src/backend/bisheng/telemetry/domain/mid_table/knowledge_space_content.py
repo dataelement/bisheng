@@ -1,18 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
-from elasticsearch import exceptions as es_exceptions
 from elasticsearch import helpers
 from loguru import logger
 from pydantic import BaseModel, Field
 
 from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
-from bisheng.common.schemas.telemetry.base_telemetry_schema import UserDepartmentInfo
 from bisheng.core.cache.redis_manager import get_redis_client, get_redis_client_sync
 from bisheng.knowledge.domain.constants import (
     BUSINESS_DOMAIN_OPTIONS,
@@ -23,6 +22,11 @@ from bisheng.knowledge.domain.constants import (
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.telemetry.domain.mid_table.base import BaseMidTable
+from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import (
+    CONTENT_DIMENSION_FIELDS,
+    OrganizationNameSnapshot,
+    build_daily_document_id,
+)
 from bisheng.utils import generate_uuid
 
 CHINA_STANDARD_TIME = timezone(timedelta(hours=8))
@@ -57,21 +61,41 @@ class KnowledgeSpaceContentRecord(BaseModel):
     file_subcategory_name: str | None = None
     business_domain_code: str | None = None
     business_domain_name: str | None = None
-    space_department_id: int | None = None
-    space_department_name: str | None = None
-    primary_department_id: int | None = None
-    primary_department_name: str | None = None
     projection_updated_at: int | None = None
     uploader_user_id: int
     uploader_user_name: str
-    uploader_department_infos: list[UserDepartmentInfo] = Field(default_factory=list)
+    uploader_company_name: str | None = None
+    uploader_department_name: str | None = None
+    uploader_office_name: str | None = None
+    uploader_squad_name: str | None = None
+    belonging_company_name: str | None = None
+    belonging_department_name: str | None = None
+    belonging_office_name: str | None = None
+    belonging_squad_name: str | None = None
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        kwargs.setdefault("exclude_none", True)
+        return super().model_dump(*args, **kwargs)
+
+
+class KnowledgeSpacePreviewDailyRecord(KnowledgeSpaceContentRecord):
+    record_type: Literal["preview_daily"] = "preview_daily"
+    local_date: str
+    preview_count: int = Field(ge=0)
 
 
 class KnowledgeSpaceDownloadDailyRecord(KnowledgeSpaceContentRecord):
     """Daily portal download aggregate enriched with the current file dimensions."""
 
+    record_type: Literal["download_daily"] = "download_daily"
     local_date: str
     download_count: int = Field(ge=0)
+
+
+class KnowledgeSpaceFavoriteDailyRecord(KnowledgeSpaceContentRecord):
+    record_type: Literal["favorite_daily"] = "favorite_daily"
+    local_date: str
+    favorite_count: int = Field(ge=0)
 
 
 @dataclass(frozen=True)
@@ -88,6 +112,20 @@ class ProjectionWorkItem:
         return int(self.member.partition(":")[2])
 
 
+class ContentStatEventEnvelope(BaseModel):
+    event_id: str
+    event_type: str
+    record_type: str
+    user_id: int
+    occurred_at: int
+    local_date: str
+    daily_id: str
+    source_app: str
+    scene: str
+    entry_point: str
+    dimensions: dict[str, Any]
+
+
 class KnowledgeSpaceContentStat(BaseMidTable):
     INDEX_NAME: ClassVar[str] = KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
     _index_name: str = KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
@@ -101,6 +139,12 @@ class KnowledgeSpaceContentStat(BaseMidTable):
     PROCESSING_META_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:processing_meta"
     SCHEDULED_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:scheduled"
     LOCK_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:owner_lock"
+    EVENT_PENDING_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:event_pending"
+    EVENT_PROCESSING_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:event_processing"
+    EVENT_PROCESSING_META_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:event_processing_meta"
+    EVENT_PAYLOAD_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:event_payload"
+    EVENT_SCHEDULED_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:event_scheduled"
+    REPLAY_FLOOR_KEY: ClassVar[str] = f"telemetry:{REDIS_HASH_TAG}:replay_floor"
 
     # Exact legacy keys are retained only for rebuild preflight and cleanup reporting.
     LEGACY_FILE_PENDING_KEY: ClassVar[str] = "telemetry:knowledge_space_content:file_pending"
@@ -182,6 +226,18 @@ if redis.call('get', KEYS[1]) == ARGV[1] then
 end
 return 0
 """
+    ACK_EVENT_SCRIPT: ClassVar[str] = """
+if redis.call('get', KEYS[4]) ~= ARGV[1] then
+  return 0
+end
+local removed = 0
+for index = 2, #ARGV do
+  removed = removed + redis.call('zrem', KEYS[1], ARGV[index])
+  redis.call('hdel', KEYS[2], ARGV[index])
+  redis.call('hdel', KEYS[3], ARGV[index])
+end
+return removed
+"""
 
     _mappings: dict[str, Any] = {
         "record_type": {"type": "keyword"},
@@ -193,6 +249,7 @@ return 0
         "local_date": {"type": "keyword"},
         "preview_count": {"type": "long"},
         "download_count": {"type": "long"},
+        "favorite_count": {"type": "long"},
         "space_id": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "space_name": {"type": "keyword", "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}}},
         "space_level": {"type": "keyword"},
@@ -218,16 +275,6 @@ return 0
             "type": "keyword",
             "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
         },
-        "space_department_id": {"type": "keyword"},
-        "space_department_name": {
-            "type": "keyword",
-            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
-        },
-        "primary_department_id": {"type": "keyword"},
-        "primary_department_name": {
-            "type": "keyword",
-            "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
-        },
         "projection_updated_at": {"type": "date", "format": "strict_date_optional_time||epoch_second"},
         "uploader_user_id": {
             "type": "keyword",
@@ -237,40 +284,25 @@ return 0
             "type": "keyword",
             "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
         },
-        "uploader_department_infos": {
-            "type": "nested",
-            "properties": {
-                "department_id": {"type": "keyword"},
-                "department_name": {
-                    "type": "keyword",
-                    "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
-                },
-            },
+        **{
+            field: {
+                "type": "keyword",
+                "fields": {"text": {"type": "text", "analyzer": "single_char_analyzer"}},
+            }
+            for field in (
+                "uploader_company_name",
+                "uploader_department_name",
+                "uploader_office_name",
+                "uploader_squad_name",
+                "belonging_company_name",
+                "belonging_department_name",
+                "belonging_office_name",
+                "belonging_squad_name",
+            )
         },
     }
 
-    PREVIEW_DIMENSION_FIELDS: ClassVar[tuple[str, ...]] = (
-        "space_id",
-        "space_name",
-        "space_level",
-        "space_level_name",
-        "file_id",
-        "file_name",
-        "file_type",
-        "file_category_code",
-        "file_category_name",
-        "file_subcategory_code",
-        "file_subcategory_name",
-        "business_domain_code",
-        "business_domain_name",
-        "space_department_id",
-        "space_department_name",
-        "primary_department_id",
-        "primary_department_name",
-        "uploader_user_id",
-        "uploader_user_name",
-        "uploader_department_infos",
-    )
+    PREVIEW_DIMENSION_FIELDS: ClassVar[tuple[str, ...]] = CONTENT_DIMENSION_FIELDS
 
     @staticmethod
     def _now_ms() -> int:
@@ -367,6 +399,96 @@ return 0
         sync_pending_knowledge_space_content_stat.apply_async(countdown=countdown)
 
     @classmethod
+    async def _schedule_event_pending_async(
+        cls,
+        redis_client=None,
+        *,
+        countdown: int = SCHEDULE_DELAY_SECONDS,
+    ) -> None:
+        redis_client = redis_client or await get_redis_client()
+        if not await redis_client.asetNx(
+            cls.EVENT_SCHEDULED_KEY,
+            1,
+            expiration=cls.SCHEDULE_TTL_SECONDS,
+        ):
+            return
+        from bisheng.worker.telemetry.mid_table import sync_pending_knowledge_space_content_events
+
+        sync_pending_knowledge_space_content_events.apply_async(countdown=countdown)
+
+    @classmethod
+    async def enqueue_success_event_async(
+        cls,
+        *,
+        file_id: int,
+        user_id: int,
+        event_type: str,
+        record_type: str,
+        source_app: str,
+        scene: str,
+        entry_point: str,
+        occurred_at: datetime | None = None,
+    ) -> bool:
+        """Capture fresh dimensions and durably queue one successful action."""
+        try:
+            from bisheng.worker.telemetry.mid_table import build_knowledge_space_content_event_record
+
+            record = await asyncio.to_thread(
+                build_knowledge_space_content_event_record,
+                int(file_id),
+            )
+            if record is None:
+                return False
+            local_time = (occurred_at or datetime.now(CHINA_STANDARD_TIME)).astimezone(CHINA_STANDARD_TIME)
+            dimensions = {
+                field: getattr(record, field)
+                for field in CONTENT_DIMENSION_FIELDS
+                if getattr(record, field) is not None
+            }
+            local_date = local_time.date().isoformat()
+            daily_id = build_daily_document_id(
+                record_type=record_type,
+                file_id=int(file_id),
+                local_date=local_date,
+                dimensions=dimensions,
+            )
+            event_id = generate_uuid()
+            envelope = ContentStatEventEnvelope(
+                event_id=event_id,
+                event_type=event_type,
+                record_type=record_type,
+                user_id=int(user_id),
+                occurred_at=int(local_time.timestamp()),
+                local_date=local_date,
+                daily_id=daily_id,
+                source_app=source_app,
+                scene=scene,
+                entry_point=entry_point,
+                dimensions=dimensions,
+            )
+            redis_client = await get_redis_client()
+            await redis_client.acluster_nodes(cls.EVENT_PENDING_KEY)
+            await redis_client.async_connection.hset(
+                cls.EVENT_PAYLOAD_KEY,
+                event_id,
+                envelope.model_dump_json(),
+            )
+            await redis_client.async_connection.zadd(
+                cls.EVENT_PENDING_KEY,
+                {event_id: cls._now_ms()},
+                nx=True,
+            )
+            await cls._schedule_event_pending_async(redis_client)
+            return True
+        except Exception:
+            logger.exception(
+                "Knowledge space content event enqueue failed. degraded=true file_id={} record_type={}",
+                file_id,
+                record_type,
+            )
+            return False
+
+    @classmethod
     def enqueue_file_stat_sync(cls, file_ids: Iterable[int]) -> bool:
         members = cls._work_members("file", file_ids)
         if not members:
@@ -417,6 +539,32 @@ return 0
                 ids,
             )
             return False
+
+    @classmethod
+    async def _enqueue_resources_async(cls, kind: str, ids: Iterable[int]) -> bool:
+        members = cls._work_members(kind, ids)
+        if not members:
+            return True
+        try:
+            redis_client = await get_redis_client()
+            await cls._zadd_pending_async(redis_client, members)
+            await cls._schedule_pending_async(redis_client)
+            return True
+        except Exception:
+            logger.exception(
+                "Knowledge space content projection enqueue failed. degraded=true operation={} ids={}",
+                kind,
+                ids,
+            )
+            return False
+
+    @classmethod
+    async def enqueue_user_stat_async(cls, user_ids: Iterable[int]) -> bool:
+        return await cls._enqueue_resources_async("user", user_ids)
+
+    @classmethod
+    async def enqueue_department_stat_async(cls, department_ids: Iterable[int]) -> bool:
+        return await cls._enqueue_resources_async("department", department_ids)
 
     @classmethod
     async def enqueue_space_rename_stat_async(cls, space_id: int) -> bool:
@@ -575,6 +723,196 @@ return 0
         return int(reclaimed or 0)
 
     @classmethod
+    def clear_event_scheduled_sync(cls) -> None:
+        try:
+            get_redis_client_sync().delete(cls.EVENT_SCHEDULED_KEY)
+        except Exception:
+            logger.exception("Failed to clear knowledge space content event schedule flag.")
+
+    @classmethod
+    def claim_event_pending_sync(
+        cls,
+        owner_token: str,
+        batch_size: int = FILE_BATCH_SIZE,
+    ) -> list[str]:
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.EVENT_PENDING_KEY)
+        now_ms = cls._now_ms()
+        values = redis_client.connection.eval(
+            cls.CLAIM_SCRIPT,
+            4,
+            cls.EVENT_PENDING_KEY,
+            cls.EVENT_PROCESSING_KEY,
+            cls.EVENT_PROCESSING_META_KEY,
+            cls.LOCK_KEY,
+            owner_token,
+            now_ms,
+            now_ms + cls.PROCESSING_LEASE_SECONDS * 1000,
+            min(max(int(batch_size), 1), cls.FILE_BATCH_SIZE),
+        )
+        return [
+            event_id
+            for index in range(0, len(values or []), 2)
+            if (event_id := cls._decode_text(values[index])) is not None
+        ]
+
+    @classmethod
+    def get_event_payload_sync(cls, event_id: str) -> ContentStatEventEnvelope | None:
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.EVENT_PAYLOAD_KEY)
+        payload = redis_client.connection.hget(cls.EVENT_PAYLOAD_KEY, event_id)
+        if payload is None:
+            return None
+        return ContentStatEventEnvelope.model_validate_json(cls._decode_text(payload))
+
+    @classmethod
+    def renew_event_claims_sync(
+        cls,
+        owner_token: str,
+        event_ids: Iterable[str],
+        *,
+        now_ms: int | None = None,
+    ) -> bool:
+        values = [event_id for event_id in event_ids if event_id]
+        if not values:
+            return True
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.EVENT_PROCESSING_KEY)
+        deadline_ms = (now_ms or cls._now_ms()) + cls.PROCESSING_LEASE_SECONDS * 1000
+        renewed = redis_client.connection.eval(
+            cls.RENEW_CLAIMS_SCRIPT,
+            2,
+            cls.EVENT_PROCESSING_KEY,
+            cls.LOCK_KEY,
+            owner_token,
+            deadline_ms,
+            *values,
+        )
+        return int(renewed or 0) == len(values)
+
+    @classmethod
+    def ack_event_claimed_sync(cls, owner_token: str, event_ids: Iterable[str]) -> bool:
+        values = [event_id for event_id in event_ids if event_id]
+        if not values:
+            return True
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.EVENT_PROCESSING_KEY)
+        removed = redis_client.connection.eval(
+            cls.ACK_EVENT_SCRIPT,
+            4,
+            cls.EVENT_PROCESSING_KEY,
+            cls.EVENT_PROCESSING_META_KEY,
+            cls.EVENT_PAYLOAD_KEY,
+            cls.LOCK_KEY,
+            owner_token,
+            *values,
+        )
+        return int(removed or 0) == len(values)
+
+    @classmethod
+    def reclaim_expired_events_sync(cls, *, now_ms: int | None = None) -> int:
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.EVENT_PENDING_KEY)
+        reclaimed = redis_client.connection.eval(
+            cls.RECLAIM_SCRIPT,
+            3,
+            cls.EVENT_PENDING_KEY,
+            cls.EVENT_PROCESSING_KEY,
+            cls.EVENT_PROCESSING_META_KEY,
+            now_ms or cls._now_ms(),
+        )
+        return int(reclaimed or 0)
+
+    @classmethod
+    def has_event_pending_sync(cls) -> bool:
+        try:
+            redis_client = get_redis_client_sync()
+            redis_client.cluster_nodes(cls.EVENT_PENDING_KEY)
+            return int(redis_client.connection.zcard(cls.EVENT_PENDING_KEY) or 0) > 0
+        except Exception:
+            logger.exception("Failed to inspect knowledge space content event queue.")
+            return False
+
+    @classmethod
+    def event_queue_status_sync(cls) -> dict[str, int]:
+        redis_client = get_redis_client_sync()
+        redis_client.cluster_nodes(cls.EVENT_PENDING_KEY)
+        pending_count = int(redis_client.connection.zcard(cls.EVENT_PENDING_KEY) or 0)
+        processing_count = int(redis_client.connection.zcard(cls.EVENT_PROCESSING_KEY) or 0)
+        oldest_rows = redis_client.connection.zrange(
+            cls.EVENT_PENDING_KEY,
+            0,
+            0,
+            withscores=True,
+        )
+        oldest_pending_age_ms = 0
+        if oldest_rows:
+            oldest_pending_age_ms = max(
+                0,
+                cls._now_ms() - int(float(oldest_rows[0][1])),
+            )
+        return {
+            "event_pending_count": pending_count,
+            "event_processing_count": processing_count,
+            "event_oldest_pending_age_ms": oldest_pending_age_ms,
+        }
+
+    @classmethod
+    def schedule_event_pending_sync_now(cls, *, countdown: int = 0) -> None:
+        from bisheng.worker.telemetry.mid_table import sync_pending_knowledge_space_content_events
+
+        sync_pending_knowledge_space_content_events.apply_async(countdown=max(int(countdown), 0))
+
+    @classmethod
+    def get_replay_floor_sync(cls) -> int:
+        value = get_redis_client_sync().get(cls.REPLAY_FLOOR_KEY)
+        return int(cls._decode_text(value) or 0)
+
+    @classmethod
+    def set_replay_floor_sync(cls, timestamp: int) -> None:
+        get_redis_client_sync().set(
+            cls.REPLAY_FLOOR_KEY,
+            int(timestamp),
+            expiration=None,
+        )
+
+    def upsert_event_daily_sync(
+        self,
+        envelope: ContentStatEventEnvelope,
+        absolute_count: int,
+    ) -> None:
+        metric_field = {
+            "preview_daily": "preview_count",
+            "download_daily": "download_count",
+            "favorite_daily": "favorite_count",
+        }[envelope.record_type]
+        local_day = datetime.strptime(envelope.local_date, "%Y-%m-%d").date()
+        day_start = datetime.combine(local_day, datetime.min.time(), tzinfo=CHINA_STANDARD_TIME)
+        upsert = {
+            **envelope.dimensions,
+            "record_type": envelope.record_type,
+            "local_date": envelope.local_date,
+            "timestamp": int(day_start.timestamp()),
+            metric_field: int(absolute_count),
+        }
+        self.ensure_index_exists_sync()
+        self._es_client_sync.update(
+            index=self.INDEX_NAME,
+            id=envelope.daily_id,
+            retry_on_conflict=5,
+            script={
+                "lang": "painless",
+                "source": (
+                    f"if (ctx._source.{metric_field} == null || "
+                    f"ctx._source.{metric_field} < params.count) "
+                    f"{{ ctx._source.{metric_field} = params.count; }}"
+                ),
+                "params": {"count": int(absolute_count)},
+            },
+            upsert=upsert,
+        )
+
+    @classmethod
     def has_pending_sync(cls) -> bool:
         try:
             redis_client = get_redis_client_sync()
@@ -613,36 +951,16 @@ return 0
         space: Knowledge,
         uploader=None,
         space_level: str | None = None,
-        space_department=None,
-        primary_department=None,
+        uploader_organization: OrganizationNameSnapshot | None = None,
+        belonging_organization: OrganizationNameSnapshot | None = None,
         file_category_labels: dict[str, str] | None = None,
         file_subcategory_labels: dict[str, str] | None = None,
         sync_run_id: str | None = None,
     ) -> KnowledgeSpaceContentRecord:
         uploader_user_id = int(file_record.user_id or 0)
         uploader_user_name = file_record.user_name or (uploader.user_name if uploader else str(uploader_user_id or ""))
-        uploader_departments = (
-            [
-                UserDepartmentInfo(department_id=dept.id, department_name=dept.name)
-                for dept in getattr(uploader, "departments", []) or []
-            ]
-            if uploader
-            else []
-        )
-        if primary_department is None and uploader:
-            raw_primary_department_id = getattr(uploader, "dept_id", None)
-            try:
-                primary_department_id = int(raw_primary_department_id or 0)
-            except (TypeError, ValueError):
-                primary_department_id = 0
-            primary_department = next(
-                (
-                    department
-                    for department in getattr(uploader, "departments", []) or []
-                    if int(getattr(department, "id", 0) or 0) == primary_department_id
-                ),
-                None,
-            )
+        uploader_organization = uploader_organization or OrganizationNameSnapshot()
+        belonging_organization = belonging_organization or OrganizationNameSnapshot()
         normalized_space_level = str(getattr(space_level, "value", space_level) or "unknown").strip().lower()
         if normalized_space_level not in SPACE_LEVEL_LABELS:
             normalized_space_level = "unknown"
@@ -671,18 +989,11 @@ return 0
             file_subcategory_name=file_subcategory_labels.get(file_subcategory_code, file_subcategory_code),
             business_domain_code=business_domain_code,
             business_domain_name=BUSINESS_DOMAIN_OPTIONS.get(business_domain_code, business_domain_code),
-            space_department_id=(
-                int(getattr(space_department, "id", None) or getattr(space_department, "department_id", 0)) or None
-            ),
-            space_department_name=getattr(space_department, "name", None),
-            primary_department_id=(
-                int(getattr(primary_department, "id", None) or getattr(primary_department, "department_id", 0)) or None
-            ),
-            primary_department_name=getattr(primary_department, "name", None),
             projection_updated_at=int(datetime.now().timestamp()),
             uploader_user_id=uploader_user_id,
             uploader_user_name=uploader_user_name,
-            uploader_department_infos=uploader_departments,
+            **uploader_organization.prefixed("uploader"),
+            **belonging_organization.prefixed("belonging"),
         )
 
     @classmethod
@@ -697,56 +1008,17 @@ return 0
     ) -> None:
         if getattr(space, "is_favorite", False):
             return
-        del viewer_user_id, viewer_user_name
-        file_id = int(file_record.id)
-        mid_table = cls(ensure_sync_index=False)
-        try:
-            await mid_table.ensure_index_exists()
-            snapshot = await mid_table._es_client.get(index=cls.INDEX_NAME, id=str(file_id))
-            source = snapshot.get("_source") or {}
-            if source.get("record_type") != "file":
-                logger.error(
-                    "Knowledge space preview projection skipped. index={} file_id={} failure_stage=snapshot_invalid",
-                    cls.INDEX_NAME,
-                    file_id,
-                )
-                return
-
-            local_time = (occurred_at or datetime.now(CHINA_STANDARD_TIME)).astimezone(CHINA_STANDARD_TIME)
-            local_date = local_time.date().isoformat()
-            day_start = datetime.combine(local_time.date(), datetime.min.time(), tzinfo=CHINA_STANDARD_TIME)
-            upsert = {field: source.get(field) for field in cls.PREVIEW_DIMENSION_FIELDS}
-            upsert.update(
-                {
-                    "record_type": "preview_daily",
-                    "local_date": local_date,
-                    "timestamp": int(day_start.timestamp()),
-                    "preview_count": 1,
-                }
-            )
-            await mid_table._es_client.update(
-                index=cls.INDEX_NAME,
-                id=f"preview_{file_id}_{local_date}",
-                retry_on_conflict=5,
-                script={
-                    "lang": "painless",
-                    "source": "ctx._source.preview_count += params.increment",
-                    "params": {"increment": 1},
-                },
-                upsert=upsert,
-            )
-        except es_exceptions.NotFoundError:
-            logger.error(
-                "Knowledge space preview projection skipped. index={} file_id={} failure_stage=snapshot_missing",
-                cls.INDEX_NAME,
-                file_id,
-            )
-        except Exception:
-            logger.exception(
-                "Knowledge space preview projection failed. index={} file_id={} failure_stage=preview_update",
-                cls.INDEX_NAME,
-                file_id,
-            )
+        del viewer_user_name
+        await cls.enqueue_success_event_async(
+            file_id=int(file_record.id),
+            user_id=int(viewer_user_id),
+            event_type="portal_document_read",
+            record_type="preview_daily",
+            source_app="bisheng_my_knowledge",
+            scene="document_preview",
+            entry_point="my_knowledge_preview",
+            occurred_at=occurred_at,
+        )
 
     @classmethod
     def build_download_daily_record(
@@ -761,7 +1033,12 @@ return 0
         day_start = datetime.combine(local_day, datetime.min.time(), tzinfo=CHINA_STANDARD_TIME)
         dimensions = {field: getattr(file_record, field) for field in cls.PREVIEW_DIMENSION_FIELDS}
         return KnowledgeSpaceDownloadDailyRecord(
-            es_id=f"download_{file_record.file_id}_{local_date}",
+            es_id=build_daily_document_id(
+                record_type="download_daily",
+                file_id=file_record.file_id,
+                local_date=local_date,
+                dimensions=dimensions,
+            ),
             record_type="download_daily",
             sync_run_id=sync_run_id,
             timestamp=int(day_start.timestamp()),

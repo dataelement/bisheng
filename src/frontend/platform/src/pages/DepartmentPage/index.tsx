@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useState } from "react"
+import { useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
 import {
@@ -58,6 +58,14 @@ export default function DepartmentPage() {
       setOrgLevelById(map)
     })
   }, [])
+
+  /** 当前选中节点之外是否已有公司根（组织树唯一公司）。 */
+  const hasOtherCompanyRoot = useMemo(() => {
+    if (!selectedDept) return false
+    return Object.entries(orgLevelById).some(
+      ([id, level]) => level === "company" && Number(id) !== selectedDept.id,
+    )
+  }, [orgLevelById, selectedDept])
 
   const loadTree = useCallback((removedDeptId?: string) => {
     setLoadingTree(true)
@@ -256,6 +264,7 @@ export default function DepartmentPage() {
                 onMarkAsTenant={canMountTenant ? handleMarkAsTenant : undefined}
                 orgLevel={orgLevelById[selectedDept.id] ?? null}
                 canSetCompanyRoot={canSetCompanyRoot}
+                hasOtherCompanyRoot={hasOtherCompanyRoot}
                 onOrgLevelChanged={loadOrgLevels}
               />
             </TabsContent>

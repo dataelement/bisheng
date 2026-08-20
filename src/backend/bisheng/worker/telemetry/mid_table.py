@@ -14,15 +14,21 @@ from bisheng.common.constants.enums.telemetry import (
 )
 from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS
 from bisheng.common.schemas.telemetry.base_telemetry_schema import UserGroupInfo, UserRoleInfo, UserDepartmentInfo
+from bisheng.common.schemas.telemetry.event_data_schema import (
+    PortalDocumentDownloadEventData,
+    PortalDocumentReadEventData,
+    PortalFavoriteEventData,
+)
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.config_service import settings
+from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_sync_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.core.search.elasticsearch.manager import (
     get_statistics_es_connection_sync,
 )
-from bisheng.database.models.department import Department, UserDepartmentDao
+from bisheng.database.models.department import Department, UserDepartment, UserDepartmentDao
 from bisheng.database.models.tenant import Tenant, UserTenant
 from bisheng.database.models.flow import FlowType
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
@@ -34,6 +40,7 @@ from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, Knowle
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
+    KnowledgeSpaceScope,
     KnowledgeSpaceScopeDao,
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
@@ -51,6 +58,9 @@ from bisheng.telemetry.domain.mid_table.daily_participation import (
 )
 from bisheng.telemetry.domain.mid_table.knowledge_increment import KnowledgeIncrement, KnowledgeIncrementRecord
 from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentStat
+from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import (
+    resolve_organization_names,
+)
 from bisheng.telemetry.domain.mid_table.user_increment import UserIncrement, UserIncrementRecord
 from bisheng.telemetry.domain.mid_table.user_interact import UserInteract, UserInteractRecord
 from bisheng.user.domain.services.user import UserService
@@ -530,6 +540,55 @@ def _get_knowledge_space_department_map(
     return result
 
 
+def _get_dimension_department_map(start_departments: list[Department | None]) -> dict[int, Department]:
+    department_ids: set[int] = set()
+    for department in start_departments:
+        if department is None:
+            continue
+        for value in str(getattr(department, "path", "") or "").strip("/").split("/"):
+            if value.isdigit():
+                department_ids.add(int(value))
+        if getattr(department, "id", None) is not None:
+            department_ids.add(int(department.id))
+
+    filters = [Department.org_level == "company"]
+    if department_ids:
+        filters.append(Department.id.in_(sorted(department_ids)))
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            rows = session.exec(
+                select(Department).where(
+                    Department.status == "active",
+                    or_(*filters),
+                )
+            ).all()
+    return {int(row.id): row for row in rows if row.id is not None}
+
+
+def _resolve_belonging_start_department(
+    *,
+    scope,
+    space_department: Department | None,
+    primary_department_map: dict[int, Department],
+    company_departments: list[Department],
+) -> Department | None:
+    level = _resolve_content_stat_space_level(scope)
+    if level == KnowledgeSpaceLevelEnum.PUBLIC.value:
+        return company_departments[0] if len(company_departments) == 1 else None
+    if level in {
+        KnowledgeSpaceLevelEnum.DEPARTMENT.value,
+        KnowledgeSpaceLevelEnum.TEAM_KS.value,
+    }:
+        return space_department
+    if level == KnowledgeSpaceLevelEnum.TEAM.value:
+        created_by = int(getattr(scope, "created_by", 0) or 0)
+        return primary_department_map.get(created_by)
+    if level == KnowledgeSpaceLevelEnum.PERSONAL.value:
+        owner_id = int(getattr(scope, "owner_id", 0) or 0)
+        return primary_department_map.get(owner_id)
+    return None
+
+
 def _build_knowledge_space_content_records(
     rows,
     user_map: dict,
@@ -566,12 +625,28 @@ def _build_knowledge_space_content_records(
             )
         )
 
-    all_user_ids = sorted({int(file_record.user_id) for file_record, _ in rows if file_record.user_id})
+    all_user_ids = {int(file_record.user_id) for file_record, _ in rows if file_record.user_id}
+    for scope in space_scope_map.values():
+        level = _resolve_content_stat_space_level(scope)
+        if level == KnowledgeSpaceLevelEnum.TEAM.value and getattr(scope, "created_by", None):
+            all_user_ids.add(int(scope.created_by))
+        elif level == KnowledgeSpaceLevelEnum.PERSONAL.value and getattr(scope, "owner_id", None):
+            all_user_ids.add(int(scope.owner_id))
+    all_user_ids = sorted(all_user_ids)
     missing_primary_user_ids = [user_id for user_id in all_user_ids if user_id not in primary_department_map]
     if missing_primary_user_ids:
         primary_department_map.update(
             UserDepartmentDao.get_primary_department_map_by_user_ids(missing_primary_user_ids)
         )
+
+    departments_by_id = _get_dimension_department_map(
+        list(primary_department_map.values()) + list(space_department_map.values())
+    )
+    company_departments = [
+        department
+        for department in departments_by_id.values()
+        if str(getattr(department, "org_level", "") or "") == "company"
+    ]
 
     records = []
     for file_record, space in rows:
@@ -581,20 +656,102 @@ def _build_knowledge_space_content_records(
             category_label_cache[tenant_id] = FileClassificationLabelService.get_label_lookup_for_tenant(tenant_id)
         category_labels, subcategory_labels = category_label_cache[tenant_id]
         scope = space_scope_map.get(int(space.id))
+        uploader_department = primary_department_map.get(int(file_record.user_id or 0))
+        belonging_department = _resolve_belonging_start_department(
+            scope=scope,
+            space_department=space_department_map.get(int(space.id)),
+            primary_department_map=primary_department_map,
+            company_departments=company_departments,
+        )
         records.append(
             KnowledgeSpaceContentStat.build_file_record(
                 file_record=file_record,
                 space=space,
                 uploader=uploader,
                 space_level=_resolve_content_stat_space_level(scope),
-                space_department=space_department_map.get(int(space.id)),
-                primary_department=primary_department_map.get(int(file_record.user_id or 0)),
+                uploader_organization=resolve_organization_names(
+                    uploader_department,
+                    departments_by_id,
+                ),
+                belonging_organization=resolve_organization_names(
+                    belonging_department,
+                    departments_by_id,
+                ),
                 file_category_labels=category_labels,
                 file_subcategory_labels=subcategory_labels,
                 sync_run_id=sync_run_id,
             )
         )
     return records, user_map
+
+
+def build_knowledge_space_content_event_record(file_id: int):
+    """Build one fresh dimension snapshot for a successful user action."""
+    rows = _get_knowledge_space_content_rows_by_file_ids([int(file_id)])
+    visible_rows = [
+        (file_record, space)
+        for file_record, space in rows
+        if _is_file_content_stat_visible(file_record, space)
+    ]
+    records, _ = _build_knowledge_space_content_records(visible_rows, {})
+    return records[0] if records else None
+
+
+def _expand_content_stat_user_work(user_id: int) -> tuple[list[int], list[int]]:
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            file_ids = session.exec(
+                select(KnowledgeFile.id).where(KnowledgeFile.user_id == int(user_id))
+            ).all()
+            space_ids = session.exec(
+                select(KnowledgeSpaceScope.space_id).where(
+                    or_(
+                        (
+                            (KnowledgeSpaceScope.level == KnowledgeSpaceLevelEnum.TEAM.value)
+                            & (KnowledgeSpaceScope.created_by == int(user_id))
+                        ),
+                        (
+                            (KnowledgeSpaceScope.level == KnowledgeSpaceLevelEnum.PERSONAL.value)
+                            & (KnowledgeSpaceScope.owner_id == int(user_id))
+                        ),
+                    )
+                )
+            ).all()
+    return [int(value) for value in file_ids], [int(value) for value in space_ids]
+
+
+def _expand_content_stat_department_work(department_id: int) -> tuple[list[int], list[int]]:
+    with bypass_tenant_filter():
+        with get_sync_db_session() as session:
+            department = session.exec(
+                select(Department).where(Department.id == int(department_id))
+            ).first()
+            if department is None or not department.path:
+                return [], []
+            user_ids = session.exec(
+                select(UserDepartment.user_id)
+                .join(Department, Department.id == UserDepartment.department_id)
+                .where(
+                    UserDepartment.is_primary == 1,
+                    Department.path.like(f"{department.path}%"),
+                )
+            ).all()
+            space_ids = session.exec(
+                select(DepartmentKnowledgeSpace.space_id)
+                .join(Department, Department.id == DepartmentKnowledgeSpace.department_id)
+                .where(Department.path.like(f"{department.path}%"))
+            ).all()
+            # A company label may already have been cleared when this work item
+            # is consumed, so every organization change also refreshes public
+            # spaces whose ownership depends on the unique company label.
+            space_ids.extend(
+                session.exec(
+                    select(KnowledgeSpaceScope.space_id).where(
+                        KnowledgeSpaceScope.level == KnowledgeSpaceLevelEnum.PUBLIC.value
+                    )
+                ).all()
+            )
+    return [int(value) for value in user_ids], [int(value) for value in space_ids]
 
 
 def _is_file_content_stat_visible(file_record: KnowledgeFile, space: Knowledge) -> bool:
@@ -801,15 +958,9 @@ def rebuild_knowledge_space_content_file_projection(owner_token: str) -> dict[st
     deleted_favorite_count = mid_table.delete_space_records_sync(
         _get_favorite_space_ids()
     )
-    download_result = rebuild_knowledge_space_content_download_projection(
-        owner_token=owner_token,
-        mid_table=mid_table,
-        sync_run_id=sync_run_id,
-    )
     queue_status = KnowledgeSpaceContentStat.queue_status_sync()
     return {
         **queue_status,
-        **download_result,
         "synced": synced_count,
         "deleted_stale": deleted_count,
         "deleted_favorite": deleted_favorite_count,
@@ -884,7 +1035,13 @@ def sync_pending_knowledge_space_content_stat():
         members = [item.member for item in claimed]
         file_items = [item for item in claimed if item.kind == "file"]
         space_items = [item for item in claimed if item.kind == "space"]
-        invalid_items = [item for item in claimed if item.kind not in {"file", "space"}]
+        user_items = [item for item in claimed if item.kind == "user"]
+        department_items = [item for item in claimed if item.kind == "department"]
+        invalid_items = [
+            item
+            for item in claimed
+            if item.kind not in {"file", "space", "user", "department"}
+        ]
 
         if invalid_items:
             failure_stage = "invalid_work_item"
@@ -897,6 +1054,30 @@ def sync_pending_knowledge_space_content_stat():
                 [item.member for item in invalid_items],
             ):
                 raise RuntimeError("Failed to acknowledge invalid knowledge space content work items")
+
+        for item in user_items:
+            failure_stage = "user_projection_expand"
+            file_ids, space_ids = _expand_content_stat_user_work(item.resource_id)
+            redis_client = get_redis_client_sync()
+            KnowledgeSpaceContentStat._zadd_pending_sync(
+                redis_client,
+                KnowledgeSpaceContentStat._work_members("file", file_ids)
+                + KnowledgeSpaceContentStat._work_members("space", space_ids),
+            )
+            if not KnowledgeSpaceContentStat.ack_claimed_sync(owner_token, [item.member]):
+                raise RuntimeError("Failed to acknowledge knowledge space content user work item")
+
+        for item in department_items:
+            failure_stage = "department_projection_expand"
+            user_ids, space_ids = _expand_content_stat_department_work(item.resource_id)
+            redis_client = get_redis_client_sync()
+            KnowledgeSpaceContentStat._zadd_pending_sync(
+                redis_client,
+                KnowledgeSpaceContentStat._work_members("user", user_ids)
+                + KnowledgeSpaceContentStat._work_members("space", space_ids),
+            )
+            if not KnowledgeSpaceContentStat.ack_claimed_sync(owner_token, [item.member]):
+                raise RuntimeError("Failed to acknowledge knowledge space content department work item")
 
         file_ids = [item.resource_id for item in file_items]
         if file_ids:
@@ -1026,23 +1207,139 @@ def sync_pending_knowledge_space_content_stat():
             KnowledgeSpaceContentStat.schedule_pending_sync_now()
 
 
+def _content_stat_event_data(envelope):
+    event_type = BaseTelemetryTypeEnum(envelope.event_type)
+    data_cls = {
+        BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ: PortalDocumentReadEventData,
+        BaseTelemetryTypeEnum.PORTAL_DOCUMENT_DOWNLOAD: PortalDocumentDownloadEventData,
+        BaseTelemetryTypeEnum.PORTAL_FAVORITE: PortalFavoriteEventData,
+    }[event_type]
+    return event_type, data_cls(
+        source_app=envelope.source_app,
+        scene=envelope.scene,
+        entry_point=envelope.entry_point,
+        resource_type="document",
+        space_id=envelope.dimensions.get("space_id"),
+        file_id=envelope.dimensions.get("file_id"),
+        status="success",
+        content_stat_schema_version=2,
+        content_stat_local_date=envelope.local_date,
+        content_stat_daily_id=envelope.daily_id,
+        content_stat_snapshot=envelope.dimensions,
+    )
+
+
+def _count_content_stat_raw_events(envelope) -> int:
+    prefix = envelope.event_type
+    response = get_statistics_es_connection_sync().count(
+        index=telemetry_service.index_name,
+        body={
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"term": {"event_type": envelope.event_type}},
+                        {
+                            "term": {
+                                f"event_data.{prefix}_content_stat_schema_version": 2,
+                            }
+                        },
+                        {
+                            "term": {
+                                f"event_data.{prefix}_content_stat_daily_id.keyword": envelope.daily_id,
+                            }
+                        },
+                    ]
+                }
+            }
+        },
+    )
+    return int(response.get("count", 0) or 0)
+
+
+@bisheng_celery.task()
+def sync_pending_knowledge_space_content_events():
+    """Persist raw events and reconcile daily aggregates with at-least-once delivery."""
+    KnowledgeSpaceContentStat.clear_event_scheduled_sync()
+    owner_token = KnowledgeSpaceContentStat.acquire_lock_sync()
+    if owner_token is None:
+        KnowledgeSpaceContentStat.schedule_event_pending_sync_now(
+            countdown=KnowledgeSpaceContentStat.SCHEDULE_DELAY_SECONDS,
+        )
+        return {"degraded": True, "failure_stage": "owner_lock"}
+    processed = 0
+    try:
+        event_ids = KnowledgeSpaceContentStat.claim_event_pending_sync(owner_token)
+        for event_id in event_ids:
+            if not KnowledgeSpaceContentStat.renew_lock_sync(
+                owner_token
+            ) or not KnowledgeSpaceContentStat.renew_event_claims_sync(
+                owner_token,
+                [event_id],
+            ):
+                raise RuntimeError("Knowledge space content event projection lease lost")
+            envelope = KnowledgeSpaceContentStat.get_event_payload_sync(event_id)
+            if envelope is None:
+                KnowledgeSpaceContentStat.ack_event_claimed_sync(owner_token, [event_id])
+                continue
+            if envelope.occurred_at < KnowledgeSpaceContentStat.get_replay_floor_sync():
+                KnowledgeSpaceContentStat.ack_event_claimed_sync(owner_token, [event_id])
+                continue
+            event_type, event_data = _content_stat_event_data(envelope)
+            telemetry_service.record_event_sync_strict(
+                event_id=envelope.event_id,
+                user_id=envelope.user_id,
+                event_type=event_type,
+                timestamp=envelope.occurred_at,
+                trace_id=trace_id_var.get(),
+                event_data=event_data,
+            )
+            count = _count_content_stat_raw_events(envelope)
+            KnowledgeSpaceContentStat().upsert_event_daily_sync(envelope, count)
+            if not KnowledgeSpaceContentStat.ack_event_claimed_sync(owner_token, [event_id]):
+                raise RuntimeError(f"Failed to acknowledge content stat event {event_id}")
+            processed += 1
+        status = KnowledgeSpaceContentStat.event_queue_status_sync()
+        return {
+            **status,
+            "processed_count": processed,
+            "degraded": (
+                status["event_pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE
+                or status["event_oldest_pending_age_ms"] >= 300_000
+            ),
+        }
+    finally:
+        KnowledgeSpaceContentStat.release_lock_sync(owner_token)
+        if KnowledgeSpaceContentStat.has_event_pending_sync():
+            KnowledgeSpaceContentStat.schedule_event_pending_sync_now()
+
+
 @bisheng_celery.task()
 def recover_knowledge_space_content_stat_leases():
     trace_id_var.set(f"recover_knowledge_space_content_stat_leases_task_{generate_uuid()}")
     try:
         reclaimed_count = KnowledgeSpaceContentStat.reclaim_expired_sync()
+        reclaimed_event_count = KnowledgeSpaceContentStat.reclaim_expired_events_sync()
         status = KnowledgeSpaceContentStat.queue_status_sync()
+        event_status = KnowledgeSpaceContentStat.event_queue_status_sync()
         result = {
             **status,
+            **event_status,
             "reclaimed_count": reclaimed_count,
+            "reclaimed_event_count": reclaimed_event_count,
             "batch_duration_ms": 0,
             "projection_lag_ms": status["oldest_pending_age_ms"],
             "last_success_at": int(datetime.now().timestamp()),
             "failure_stage": None,
-            "degraded": status["pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE,
+            "degraded": (
+                status["pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE
+                or event_status["event_pending_count"] > KnowledgeSpaceContentStat.FILE_BATCH_SIZE
+                or event_status["event_oldest_pending_age_ms"] >= 300_000
+            ),
         }
         if reclaimed_count or status["pending_count"]:
             KnowledgeSpaceContentStat.schedule_pending_sync_now()
+        if reclaimed_event_count or KnowledgeSpaceContentStat.has_event_pending_sync():
+            KnowledgeSpaceContentStat.schedule_event_pending_sync_now()
         logger.info("Knowledge space content lease recovery completed. {}", result)
         return result
     except Exception:
