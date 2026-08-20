@@ -274,7 +274,7 @@ export function Toaster({ className, closeLabel = 'Close' }: ToasterProps) {
         // Always top-center, 16px below the viewport edge, above everything —
         // a toast fired from inside a dialog has to be visible (§3). The exact
         // layer number lands with the Modal-era z-index table (§11.7).
-        'pointer-events-none fixed inset-x-0 top-4 z-[9999] flex flex-col items-stretch max-md:px-4',
+        'pointer-events-none fixed inset-x-0 top-4 z-toast flex flex-col items-stretch max-md:px-4',
         className,
       )}
     >

@@ -75,7 +75,7 @@
 
 - Popover 可以出现在弹窗、抽屉之上——弹窗里同样会有筛选、信息卡。
 - Tooltip 永远压在 Popover 之上，提示是最贴近指针的一层。
-- 具体 z-index 阶梯归 [01-设计规范.md](01-设计规范.md) §5 统一定稿，本文不定数值。
+- 具体 z-index 归 [组件-Modal弹窗.md](组件-Modal弹窗.md) §5 的四档层级表，气泡卡片取 `1100`，本文不另立。
 
 ## 7. 移动端适配
 
@@ -95,11 +95,12 @@
 2. 样式 token：`bg-background`（跟暗色）、1px 描边（中性描边色，色彩规范接线）、圆角 12px、`p-4`（16px）、`max-w-[320px]`、浮层投影档；箭头同底色带描边。组件内不留裸 hex。
 3. hover 档时序与 Tooltip 共用同一组常量（进入延时 100ms、移入保持、150ms 淡入）；封装处统一，禁止业务页自调 delay。
 4. 触屏降级：`coarse-pointer` 媒体查询下 hover 档自动走 click 行为，处理惯例参照 Button 落地 §6。
-5. z-index 待 [01-设计规范.md](01-设计规范.md) §5 阶梯定稿后接线；过渡期保证 Popover ≥ 弹窗层、< Tooltip 层。
+5. z-index 取 `1100`（[组件-Modal弹窗.md](组件-Modal弹窗.md) §5 层级表），在弹窗 / 抽屉之上、Tooltip 之下。
 6. 现状扫描待做：口径 `src/frontend/client/src`，排除 `ui/` 与 `_gallery/`，盘 Popover / HoverCard / 自造 hover 卡片（手写 absolute 浮层）的实现与用量，作迁移排批参考；Dropdown 菜单不算在内（另有规范待建）。
 
 ## 改动记录
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
+| 2026-08-20 | 层级随 [组件-Modal弹窗.md](组件-Modal弹窗.md) v1 定稿的四档层级表回填：气泡卡片取 `1100`（在弹窗 / 抽屉之上、Tooltip 之下）；原「归 [01-设计规范.md](01-设计规范.md) §5 定稿」的指针改为具体数值。本文其余规则未增未减未改 | 待 committer 窗口提交 |
 | 2026-07-30 | 建档 v1：调研 antd 5 / Arco / TDesign / Apple HIG / Fluent 2 / Radix / WAI-ARIA / WCAG 1.4.13 → 设计师拍板（默认 hover 触发）→ 成文。与 Tooltip 的判定归 Tooltip 文档 §2 引用；「不做 Popconfirm」写入 §1.1 | 待 committer 窗口提交 |

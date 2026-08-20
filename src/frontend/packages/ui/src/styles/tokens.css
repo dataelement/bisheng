@@ -122,6 +122,28 @@
    * Carried as vars so dark mode can retune them without touching components. */
   --shadow-popup: 0 2px 16px -2px rgba(0, 23, 66, 0.10);
   --shadow-modal: 0 0 16px 0 rgba(3, 7, 117, 0.05);
+
+  /* ---------- Focus ring (组件-Input输入框.md §5.1) ----------
+   * NOT a third elevation tier: it is a focus INDICATOR, it does not express
+   * height, and every value in it comes from existing tokens (圆角与阴影规范
+   * §4 exception clause).
+   *
+   * Only the COLOR is a variable — the ring geometry lives in the Tailwind
+   * `shadow-focus` utility. A pre-composed `--shadow-focus: 0 0 0 2px
+   * rgb(var(--shadow-focus-ring))` declared here would NOT work: var() inside a
+   * custom property is substituted where that property is DECLARED, so the ring
+   * color would freeze to this :root value and a field in error / warning could
+   * never swap it. */
+  --shadow-focus-ring: var(--fill-2);
+
+  /* ---------- Overlay stacking (组件-Modal弹窗.md §5) — four tiers, nothing else ----------
+   * Each tier must be able to cover the one below it: a dropdown opens inside a
+   * dialog, a toast shows over both, a tooltip beats everything. Carried as vars
+   * so a host app that must sit under a legacy layer can retune them centrally. */
+  --z-modal: 1000;
+  --z-popover: 1100;
+  --z-toast: 1200;
+  --z-tooltip: 1300;
 }
 
 /* Dark mode — neutral + semantic layers auto-flip (custom props resolve lazily
@@ -240,5 +262,40 @@
     width: max(100%, 44px);
     height: max(100%, 44px);
     transform: translate(-50%, -50%);
+  }
+}
+
+/* Input hit-area expansion (组件-Input输入框.md §6): the field keeps its 24/32/40
+ * height while the tappable area grows to ≥44px on touch. Two strips above and
+ * below — NOT one overlay like the button's: an overlay lying on the field would
+ * swallow the tap that places the caret. The shell sets `relative` + this class
+ * and focuses the field when a strip is tapped. */
+@media (hover: none) and (pointer: coarse) {
+  .input-touch-hit::before,
+  .input-touch-hit::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: max(0px, calc((44px - 100%) / 2));
+  }
+  .input-touch-hit::before {
+    bottom: 100%;
+  }
+  .input-touch-hit::after {
+    top: 100%;
+  }
+}
+
+/* iOS anti-zoom (组件-Input输入框.md §6): Safari zooms the whole page when a
+ * field smaller than 16px takes focus. Every size档 therefore types at 16px on
+ * touch / narrow screens — the 双判定 of 多端适配原则 §4. Element+class selector
+ * on purpose: it must beat the size档's own `text-[length:…]` utility whatever
+ * order the stylesheets end up in. */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  input.input-no-zoom,
+  textarea.input-no-zoom {
+    font-size: 16px;
+    line-height: 24px;
   }
 }

@@ -78,7 +78,7 @@ export default () => (
 | 部位 | 值 | 备注 |
 |---|---|---|
 | 弹窗容器 | `rounded-2xl p-5 gap-4` + border `#ebebeb` + 淡投影 | 圆角 16 / padding 20 |
-| 遮罩 | `bg-gray-500/90` + `backdrop-blur-md` | 灰底毛玻璃 |
+| 遮罩 | `bg-gray-500/90`（不带模糊） | **待迁移旧值**：遮罩规则已归「Modal 弹窗」§5——黑 40% 不加模糊。毛玻璃 2026-08-04 已全量清除，颜色随 `ConfirmContext` 一处改 |
 | 标题 | `text-base font-medium leading-6` | |
 | 确认按钮 | 两档：danger `#f53f3f` / primary 品牌主色 | 语义红不换肤；特例可自定义 |
 | 取消按钮 | 白底描边 `hover:bg-fill-1`（`#f8f8f8`），`focus-visible` 焦点环 | 默认文案「暂不」；`hideCancel` 时不渲染 |

@@ -13,6 +13,13 @@ export * from './components/ErrorPage';
 // Empty-state / status illustrations. Inline SVG driven by the --illus-* palette
 // (blue ⇄ green + grey draft) — artwork only, so the contract above holds.
 export * from './components/Illustration';
+// Modal — the centered interrupting overlay (组件-Modal弹窗.md). Sizes, mask,
+// z-tier, motion and the three exits are baked in; every string is a prop.
+export * from './components/Modal';
+// Input family — one shell for every single-line field plus the multi-line one
+// (组件-Input输入框.md). Sizes, the gray focus chain, the four states and the
+// touch rules are baked in; every string (placeholder, a11y labels) is a prop.
+export * from './components/Input';
 // State page shell — illustration + copy + buttons for an area with no normal
 // content (组件-State状态页.md). Every string comes from the caller.
 export * from './components/StateView';

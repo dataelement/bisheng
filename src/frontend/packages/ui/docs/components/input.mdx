@@ -1,0 +1,216 @@
+# 输入框 Input
+
+用户自己敲字的地方。组件库 `@bisheng/ui` 导出 **`Input`**（单行基座）、**`Textarea`**（多行）、**`PasswordInput`** 与 **`SearchInput`**（同一基座填不同插槽的组合形态）。规范全文见「文档 → 组件规范 → 输入框 Input」。
+
+**壳把规范写死的部分**：24 / 32 / 40 三档高度与对应圆角 4 / 6 / 8、内边距 8 / 12 / 12（含 1px 描边即 7 / 11 / 11）、图标 14 / 16 / 18；聚焦不用主题色——描边加深到 `border-deep` + 2px 灰阴影环（`shadow-focus`）；错误 / 警告只换描边与环色；触屏关掉 hover、字号升到 16px 防 iOS 缩放、上下各补一条透明热区把可点区域撑到 44px。这些没有 prop。
+
+## 基础用法
+
+宽度跟随布局，所以 `className` 落在外壳上（`w-64`、`w-full` 写在这里），`inputClassName` 才是 `<input>` 自己的。`placeholder` 写例子不写字段名——字段名交给 label。
+
+```tsx
+import { Input } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
+    <Input placeholder="如 138xxxx0000" />
+    <Input defaultValue="产品手册" />
+  </div>
+);
+```
+
+## 三档尺寸
+
+高度与按钮同一套阶梯，同排控件天然对齐——**不要手写 height / padding 去凑**。
+
+```tsx
+import { Button, Input } from '@bisheng/ui';
+
+const SIZES = [
+  { size: 'small', hint: 'small 24 · 表格行内、紧凑工具条' },
+  { size: 'medium', hint: 'medium 32 · 默认，绝大多数表单' },
+  { size: 'large', hint: 'large 40 · 登录页、大表单' },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, maxWidth: 420 }}>
+    {SIZES.map(({ size, hint }) => (
+      <div key={size} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <Input size={size} placeholder={hint} />
+        <Button size={size} color="default" variant="outlined">搜索</Button>
+      </div>
+    ))}
+  </div>
+);
+```
+
+## 前缀 / 后缀 与 一键清除
+
+前缀说明「这个框是什么」，后缀承载「对内容的动作」或单位。`allowClear` 在悬停或聚焦、且框里有内容时才露出清除按钮——搜索、筛选类默认开，正式表单字段别开，误触清掉一整段输入的代价太大。
+
+```tsx
+import { Input, SearchInput } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, maxWidth: 320 }}>
+    <SearchInput placeholder="搜索知识库" onSearch={(value) => console.log('search:', value)} />
+    <Input suffix="元" placeholder="0.00" />
+    <Input allowClear clearLabel="清空" defaultValue="鼠标移上来看清除按钮" />
+  </div>
+);
+```
+
+`SearchInput` 就是基座 + 放大镜前缀：回车触发 `onSearch`（输入即筛的场景仍然用 `onChange`），清除默认开启。
+
+## 密码框
+
+后缀放「明暗切换」——这个动作属于这个框，做成框外按钮会把表单排版撑乱。
+
+> 图标由调用方传入：`bisheng-icons` 目前没有 eye 图标，而组件库不允许自己画图标（库契约）。图标包补上之后这两个 prop 会有默认值。
+
+```tsx
+import { PasswordInput } from '@bisheng/ui';
+import { Eye, EyeOff } from 'lucide-react';
+
+export default () => (
+  <div style={{ maxWidth: 320 }}>
+    <PasswordInput
+      placeholder="8-20 位，含字母和数字"
+      revealIcon={<Eye />}
+      hideIcon={<EyeOff />}
+      revealLabel="显示密码"
+      hideLabel="隐藏密码"
+      allowClear
+      clearLabel="清空"
+    />
+  </div>
+);
+```
+
+## 前后置标签 addon
+
+固定的协议前缀、单位这类「内容的一部分」放 addon：与输入框共享一条外描边，浅灰底 + 次要文字色，看上去属于框而不是一个按钮。清除、明暗切换这类**动作**不做 addon。
+
+```tsx
+import { Input } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, maxWidth: 380 }}>
+    <Input addonBefore="https://" placeholder="dataelem.com" />
+    <Input addonAfter="元" placeholder="0.00" />
+  </div>
+);
+```
+
+## 状态
+
+常态 → 悬停 → 聚焦是同一条灰色渐进链，只变深浅、不换色相：**聚焦不上主题色**。表单里输入框成片出现，聚焦只回答「光标在哪」，颜色留给校验。错误阻断提交，警告不阻断（「能提交，但值得再看一眼」）；错误提示写在框下方，说清怎么改。
+
+内容有效、只是不让改，用 `readOnly`；整个字段当前无意义才用 `disabled`——禁用的内容读屏读不到、也复制不走。
+
+```tsx
+import { Input } from '@bisheng/ui';
+
+const Field = ({ label, tip, tipColor, ...props }) => (
+  <div style={{ display: 'grid', gap: 4 }}>
+    <span style={{ fontSize: 14, color: 'rgb(var(--text-2))' }}>{label}</span>
+    <Input {...props} />
+    {tip && <span style={{ fontSize: 12, color: tipColor }}>{tip}</span>}
+  </div>
+);
+
+export default () => (
+  <div style={{ display: 'grid', gap: 16, maxWidth: 320 }}>
+    <Field label="常态 / 悬停 / 聚焦" placeholder="点进来看聚焦环" />
+    <Field
+      label="错误 error"
+      status="error"
+      defaultValue="1380000"
+      tip="请输入 11 位手机号"
+      tipColor="rgb(var(--danger))"
+    />
+    <Field
+      label="警告 warning"
+      status="warning"
+      defaultValue="12345678"
+      tip="这个密码太容易猜到了，建议换一个"
+      tipColor="rgb(var(--warning))"
+    />
+    <Field label="只读 readonly" readOnly defaultValue="kb_9f2c1a77" />
+    <Field label="禁用 disabled" disabled placeholder="选中知识库后可填" />
+  </div>
+);
+```
+
+## 多行文本域
+
+`Textarea` 默认三行高，只允许纵向拉伸、禁止横向——横着长出去会把表单的栏宽撑破。自动长高没有内建：规范要求它必须有上限，等真有场景再定。
+
+```tsx
+import { Textarea } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 380 }}>
+    <Textarea placeholder="这个知识库收了哪些资料、给谁用" />
+  </div>
+);
+```
+
+## 字数统计
+
+**需要限长才显示**，格式「当前 / 上限」：单行放后缀区，多行放框内右下角。达到上限停止录入、计数转危险色。上限宽裕、几乎碰不到的字段不要开——满屏计数只制造焦虑。
+
+```tsx
+import { Input, Textarea } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'grid', gap: 12, maxWidth: 380 }}>
+    <Input showCount maxLength={20} placeholder="知识库名称" />
+    <Textarea showCount maxLength={50} defaultValue="试着一直打字，看计数到上限时变红并停止录入" />
+  </div>
+);
+```
+
+## API
+
+`Input` 之外的三个组件都透传基座的 props（`size` / `status` / `allowClear` / `showCount` / 原生 `<input>` 属性），下表只列组件自己加的。
+
+### Input
+
+| prop | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `size` | `'small' \| 'medium' \| 'large'` | `'medium'` | 三档高度 24 / 32 / 40 |
+| `status` | `'default' \| 'error' \| 'warning'` | `'default'` | `error` 同时置 `aria-invalid` |
+| `prefix` / `suffix` | `ReactNode` | — | 前缀说明是什么，后缀放动作或单位 |
+| `addonBefore` / `addonAfter` | `ReactNode` | — | 与框共享描边的固定前后缀 |
+| `allowClear` | `boolean` | `false` | 悬停 / 聚焦且有内容时出现 |
+| `clearLabel` | `string` | — | 清除按钮的无障碍名称（文案由调用方给） |
+| `onClear` | `() => void` | — | 清空后触发；空值的 `onChange` 也会照常触发 |
+| `showCount` | `boolean` | `false` | 需配 `maxLength`，否则不渲染 |
+| `className` / `inputClassName` | `string` | — | 前者落在外壳（宽度写这里），后者落在 `<input>` |
+
+### PasswordInput
+
+| prop | 类型 | 说明 |
+|---|---|---|
+| `revealIcon` / `hideIcon` | `ReactNode` | 必填，明暗切换的两个图标（图标包补 eye 后改为默认值） |
+| `revealLabel` / `hideLabel` | `string` | 切换按钮的无障碍名称 |
+| `defaultVisible` | `boolean` | 默认 `false`；生成的密钥这类「本来就要给人看」的内容才置 `true` |
+| `onVisibleChange` | `(visible: boolean) => void` | 明暗切换回调 |
+
+### SearchInput
+
+| prop | 类型 | 说明 |
+|---|---|---|
+| `onSearch` | `(value: string) => void` | 回车触发（输入法组字中的回车不算） |
+| `prefixIcon` | `ReactNode` | 换掉默认放大镜 |
+| `allowClear` | `boolean` | 默认 `true` |
+
+### Textarea
+
+| prop | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `status` | `'default' \| 'error' \| 'warning'` | `'default'` | 同单行 |
+| `rows` | `number` | `3` | 默认三行高 |
+| `showCount` | `boolean` | `false` | 计数在框内右下角 |
+| `className` / `textareaClassName` | `string` | — | 前者落在外壳，后者落在 `<textarea>` |

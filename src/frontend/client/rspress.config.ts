@@ -80,6 +80,12 @@ export default defineConfig({
           ],
         },
         {
+          text: '数据录入 Data Entry',
+          items: [
+            { text: '输入框 Input', link: '/components/input' },
+          ],
+        },
+        {
           text: '数据展示 Data Display',
           items: [
             { text: '文字提示 Tooltip', link: '/components/tooltip' },
@@ -122,6 +128,7 @@ export default defineConfig({
           text: '组件规范',
           items: [
             { text: '按钮 Button', link: '/组件-Button按钮' },
+            { text: '输入框 Input', link: '/组件-Input输入框' },
             { text: '文字提示 Tooltip', link: '/组件-Tooltip文字提示' },
             { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
             { text: '面包屑 Breadcrumb', link: '/组件-Breadcrumb面包屑' },

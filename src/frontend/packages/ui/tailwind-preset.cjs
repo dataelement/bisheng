@@ -130,6 +130,51 @@ module.exports = {
       boxShadow: {
         popup: 'var(--shadow-popup)',
         modal: 'var(--shadow-modal)',
+        // `shadow-focus` is the control focus RING (组件-Input输入框.md §5.1),
+        // not a third elevation tier — see the exception note in tokens.css.
+        // The geometry is spelled out here rather than carried in a var so the
+        // color resolves ON THE ELEMENT: a field in error / warning overrides
+        // `--shadow-focus-ring` and the ring follows.
+        focus: '0 0 0 2px rgb(var(--shadow-focus-ring))',
+      },
+      // Overlay stacking (组件-Modal弹窗.md §5 / design-token.cjs Z_INDEX) — the
+      // only four layers there are. `z-modal` < `z-popover` < `z-toast` <
+      // `z-tooltip`; anything else is a hand-rolled value and off-spec.
+      zIndex: {
+        modal: 'var(--z-modal)',
+        popover: 'var(--z-popover)',
+        toast: 'var(--z-toast)',
+        tooltip: 'var(--z-tooltip)',
+      },
+      keyframes: {
+        'modal-overlay-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'modal-overlay-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+        // `scale` (the standalone property), NOT `transform: scale()` — the card
+        // is centred with `translate(-50%, -50%)` on the desktop档 and with
+        // `inset: 0` on the phone档, so the animation must not own `transform`.
+        'modal-content-in': {
+          from: { opacity: '0', scale: '0.96' },
+          to: { opacity: '1', scale: '1' },
+        },
+        'modal-content-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+      },
+      animation: {
+        // Modal / dialog motion (组件-Modal弹窗.md §6): 200ms in (fade + 96%→100%),
+        // 160ms out (fade ONLY — shrinking on exit reads as "it went back
+        // somewhere"). Same curve both ways.
+        'modal-overlay-in': 'modal-overlay-in 200ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-overlay-out': 'modal-overlay-out 160ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-content-in': 'modal-content-in 200ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-content-out': 'modal-content-out 160ms cubic-bezier(0.2, 0, 0, 1)',
       },
     },
   },

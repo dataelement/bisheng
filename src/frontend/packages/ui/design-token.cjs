@@ -239,6 +239,32 @@ const SHADOW = [
   },
 ];
 
+/* Focus ring — deliberately NOT a member of SHADOW above. It is a focus
+ * INDICATOR (组件-Input输入框.md §5.1: 灰描边加深 + 一圈灰阴影), it expresses no
+ * elevation, and every value in it comes from existing tokens, which is the
+ * exception 圆角与阴影规范 §4 allows. The ring COLOR sits in its own var so a
+ * field in error / warning swaps it for the matching tint (danger-tint /
+ * warning-tint) without inventing a second shadow token. */
+const FOCUS_RING = {
+  name: 'focus',
+  colorVar: '--shadow-focus-ring',
+  colorDefault: '--fill-2',
+  value: '0 0 0 2px rgb(var(--shadow-focus-ring))',
+  usage: '控件聚焦指示环：输入框、文本域；错误 / 警告态由 --shadow-focus-ring 换成对应 tint',
+};
+
+/* Overlay stacking — exactly four tiers (组件-Modal弹窗.md §5 is the SSOT for
+ * layering). Every new overlay picks one of these; hand-rolled `z-[…]` values
+ * are what produced the old z-50 / z-[100] / z-[110] / z-[9999] zoo. Ordered so
+ * each tier can cover the one below: a dropdown opens inside a dialog, a toast
+ * shows over both, and a tooltip beats everything. */
+const Z_INDEX = [
+  { name: 'modal',   cssVar: '--z-modal',   value: 1000, usage: '弹窗、抽屉（含各自的遮罩）' },
+  { name: 'popover', cssVar: '--z-popover', value: 1100, usage: '气泡卡片、下拉菜单' },
+  { name: 'toast',   cssVar: '--z-toast',   value: 1200, usage: '轻提示 Toast' },
+  { name: 'tooltip', cssVar: '--z-tooltip', value: 1300, usage: '文字提示 Tooltip' },
+];
+
 const ICON_SIZE = [
   { name: 'xs',  px: 12, strokeWidth: 2.5, usage: '极小标记（badge、密集表格角标），仅纯展示' },
   { name: 'sm',  px: 14, usage: 'small / medium 按钮的文字+icon' },
@@ -289,8 +315,14 @@ const boxShadow = {};
 SHADOW.forEach((s) => {
   boxShadow[s.name] = `var(${s.cssVar})`;
 });
+boxShadow[FOCUS_RING.name] = FOCUS_RING.value;
 
-const tailwindTheme = { colors, fontSize, boxShadow };
+const zIndex = {};
+Z_INDEX.forEach((z) => {
+  zIndex[z.name] = `var(${z.cssVar})`;
+});
+
+const tailwindTheme = { colors, fontSize, boxShadow, zIndex };
 
 /* ================================================================== *
  * Migration map — old numeric class → new role class, for the app's
@@ -320,6 +352,8 @@ module.exports = {
   TAG,
   RADIUS,
   SHADOW,
+  FOCUS_RING,
+  Z_INDEX,
   ICON_SIZE,
   tailwindTheme,
   MIGRATION,
