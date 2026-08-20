@@ -72,7 +72,13 @@ export function readMediaDurationFromFile(file: File): Promise<number | undefine
     });
 }
 
-/** Capture a JPEG poster from the first decoded video frame for local chip preview. */
+/** How long to wait for the browser to decode a first frame before giving up.
+ *  A codec it cannot handle usually errors out at once, but some containers just
+ *  never fire an event — without this the promise would hang and leak the URL. */
+const VIDEO_POSTER_TIMEOUT_MS = 5000;
+
+/** Capture a JPEG poster from the first decoded video frame for local chip preview.
+ *  Best effort: resolves undefined when the browser cannot decode the file. */
 export function captureVideoPosterFromFile(file: File): Promise<string | undefined> {
     return new Promise((resolve) => {
         const url = URL.createObjectURL(file);
@@ -81,11 +87,24 @@ export function captureVideoPosterFromFile(file: File): Promise<string | undefin
         video.playsInline = true;
         video.preload = 'auto';
 
+        let settled = false;
+        const settle = (poster?: string) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeoutId);
+            resolve(poster);
+        };
+
         const cleanup = () => {
             URL.revokeObjectURL(url);
             video.removeAttribute('src');
             video.load();
         };
+
+        const timeoutId = window.setTimeout(() => {
+            cleanup();
+            settle(undefined);
+        }, VIDEO_POSTER_TIMEOUT_MS);
 
         video.onloadeddata = () => {
             video.currentTime = 0.001;
@@ -96,7 +115,7 @@ export function captureVideoPosterFromFile(file: File): Promise<string | undefin
                 const height = video.videoHeight;
                 if (!width || !height) {
                     cleanup();
-                    resolve(undefined);
+                    settle(undefined);
                     return;
                 }
                 const canvas = document.createElement('canvas');
@@ -105,26 +124,26 @@ export function captureVideoPosterFromFile(file: File): Promise<string | undefin
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
                     cleanup();
-                    resolve(undefined);
+                    settle(undefined);
                     return;
                 }
                 ctx.drawImage(video, 0, 0, width, height);
                 canvas.toBlob(
                     (blob) => {
                         cleanup();
-                        resolve(blob ? URL.createObjectURL(blob) : undefined);
+                        settle(blob ? URL.createObjectURL(blob) : undefined);
                     },
                     'image/jpeg',
                     0.85,
                 );
             } catch {
                 cleanup();
-                resolve(undefined);
+                settle(undefined);
             }
         };
         video.onerror = () => {
             cleanup();
-            resolve(undefined);
+            settle(undefined);
         };
         video.src = url;
     });

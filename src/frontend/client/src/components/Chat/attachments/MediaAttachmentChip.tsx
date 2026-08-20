@@ -1,5 +1,5 @@
 import { Loader2, Play, Video } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useLocalize from '~/hooks/useLocalize';
 import usePrefersMobileLayout from '~/hooks/usePrefersMobileLayout';
@@ -63,7 +63,15 @@ export function MediaAttachmentChip({
     const isUploading = !!file.isUploading;
     const isParsing = file.parsingState === 'parsing';
     const playbackUrl = resolveMediaPlaybackUrl(file);
-    const coverUrl = kind === 'video' ? resolveMediaCoverUrl(file) : undefined;
+    const resolvedCoverUrl = kind === 'video' ? resolveMediaCoverUrl(file) : undefined;
+    // A composer poster is a local blob that is revoked once the message is sent;
+    // the sent bubble then holds a dead URL until the server cover arrives. Fall
+    // back to the icon instead of rendering a broken image.
+    const [coverFailed, setCoverFailed] = useState(false);
+    useEffect(() => {
+        setCoverFailed(false);
+    }, [resolvedCoverUrl]);
+    const coverUrl = coverFailed ? undefined : resolvedCoverUrl;
     const mediaFilepath = extractMediaFilepath(file);
     const canPlay = !!playbackUrl && !isUploading;
     const parsingLabel = localize('com_chat.media_parsing');
@@ -118,7 +126,12 @@ export function MediaAttachmentChip({
                     }
                 >
                     {coverUrl ? (
-                        <img src={coverUrl} alt="" className="size-full object-cover" />
+                        <img
+                            src={coverUrl}
+                            alt=""
+                            className="size-full object-cover"
+                            onError={() => setCoverFailed(true)}
+                        />
                     ) : (
                         <>
                             <div className="flex size-full items-center justify-center text-[#999]">
