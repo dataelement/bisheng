@@ -24,6 +24,7 @@ from bisheng.common.errcode.permission import (
     PermissionProjectionFailedError,
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
+    SameLevelGrantRequiresManagePermissionError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
@@ -74,6 +75,7 @@ from bisheng.permission.domain.services.model_policy import (
     ModelReferenceSummary,
     PermissionModelImpact,
     PermissionModelRelease,
+    SameLevelGrantRequiresManagePermission,
     derive_permission_models,
     effective_model_action_codes,
 )
@@ -1567,6 +1569,11 @@ class F048CatalogApi:
             )
         except (InvalidCatalogActionError, ImmutableStandardModelError):
             raise
+        except SameLevelGrantRequiresManagePermission as exc:
+            raise SameLevelGrantRequiresManagePermissionError(
+                exception=exc,
+                msg=str(exc),
+            ) from exc
         except ValueError as exc:
             raise InvalidCatalogActionError(
                 exception=exc,
@@ -1818,6 +1825,11 @@ class F048CatalogApi:
                 custom_models=custom_by_key.values(),
                 standard_allow_same_level=standard_policy,
             )
+        except SameLevelGrantRequiresManagePermission as exc:
+            raise SameLevelGrantRequiresManagePermissionError(
+                exception=exc,
+                msg=str(exc),
+            ) from exc
         except ValueError as exc:
             if touched_standard_keys:
                 raise ImmutableStandardModelError(

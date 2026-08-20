@@ -15,6 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
+    SameLevelGrantRequiresManagePermissionError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.openfga.authorization_model_f048 import (
@@ -519,6 +520,38 @@ async def test_action_level_draft_reports_custom_model_level_only_change(
         "removed_action_codes": [],
         "affected_assignee_count": 0,
     }
+
+
+async def test_action_level_draft_reports_same_level_policy_conflict(
+    session_factory: SessionFactory,
+) -> None:
+    fga = InMemoryCatalogFGA()
+    marker = FakeCatalogMarker()
+    current = await _seed_current(session_factory, fga)
+    api = _api(session_factory, fga, marker)
+
+    with pytest.raises(SameLevelGrantRequiresManagePermissionError) as raised:
+        await api.create_draft(
+            request=CatalogDraftRequest(
+                idempotency_key="manager-same-level-conflict",
+                base_release_id=int(current.id),
+                changes=(
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.SET_ALLOW_SAME_LEVEL,
+                        model_key="manager",
+                        allow_same_level=True,
+                    ),
+                    CatalogChangeRequest(
+                        type=CatalogChangeType.ASSIGN_ACTION_LEVEL,
+                        action_code="manage_permission",
+                        level=4,
+                    ),
+                ),
+            ),
+            operator_id=7,
+        )
+
+    assert raised.value.Code == 25015
 
 
 async def test_catalog_publish_allows_visibility_only_grant_after_action_level_change(
