@@ -1,3 +1,4 @@
+# ruff: noqa: RUF002
 """积分排行快照：周期键、公司/部门桶解析、稠密名次与按公司刷榜。"""
 
 from datetime import datetime
@@ -13,6 +14,7 @@ from bisheng.points.domain.services.points_rank_service import (
     period_keys,
     resolve_company_id,
     resolve_dept_bucket_id,
+    resolve_first_company_id,
     select_top_n_with_score_ties,
 )
 
@@ -39,6 +41,20 @@ def test_resolve_company_id_none_when_unlabeled():
     primary = SimpleNamespace(id=9, path="/9/")
     assert resolve_company_id(primary, departments) is None
     assert resolve_company_id(None, departments) is None
+
+
+def test_resolve_first_company_id_follows_org_tree_sort_order():
+    """同级按 sort_order：sort 更小的公司是组织架构第一个公司。"""
+    root = SimpleNamespace(id=1, path="/1/", org_level=None, sort_order=0)
+    later = SimpleNamespace(id=10, path="/1/10/", org_level="company", sort_order=2)
+    first = SimpleNamespace(id=20, path="/1/20/", org_level="company", sort_order=0)
+    departments = {1: root, 10: later, 20: first}
+    assert resolve_first_company_id(departments) == 20
+
+
+def test_resolve_first_company_id_none_when_unlabeled():
+    leaf = SimpleNamespace(id=9, path="/9/", org_level=None, sort_order=0)
+    assert resolve_first_company_id({9: leaf}) is None
 
 
 def test_resolve_dept_bucket_walks_path_to_nearest_dept():

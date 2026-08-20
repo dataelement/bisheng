@@ -5,6 +5,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.exceptions.auth import JWTDecodeError
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.message.api.dependencies import get_message_service
 from bisheng.points.domain.repositories.points_repository import PointsRepository
@@ -12,6 +13,7 @@ from bisheng.points.domain.services.points_ledger_service import PointsLedgerSer
 from bisheng.points.domain.services.points_notify_service import PointsNotifyService
 from bisheng.points.domain.services.points_query_service import PointsQueryService
 from bisheng.points.domain.services.points_rule_service import PointsRuleService
+from bisheng.user.domain.services.auth import AuthJwt
 
 
 def get_login_user(user: UserPayload = Depends(UserPayload.get_login_user)) -> UserPayload:
@@ -19,9 +21,18 @@ def get_login_user(user: UserPayload = Depends(UserPayload.get_login_user)) -> U
     return user
 
 
-def resolve_tenant_id(user: UserPayload) -> int:
-    """解析当前请求租户；优先中间件注入的 tenant context。"""
-    return int(get_current_tenant_id() or user.tenant_id or DEFAULT_TENANT_ID)
+async def get_optional_login_user(auth_jwt: AuthJwt = Depends()) -> UserPayload | None:
+    """解析登录用户；无 Cookie / Token 无效时返回 None，供首页公开积分榜使用。"""
+    try:
+        return await UserPayload.get_login_user(auth_jwt)
+    except JWTDecodeError:
+        return None
+
+
+def resolve_tenant_id(user: UserPayload | None = None) -> int:
+    """解析当前请求租户；未登录时用中间件租户或默认租户。"""
+    tenant_from_user = getattr(user, "tenant_id", None) if user is not None else None
+    return int(get_current_tenant_id() or tenant_from_user or DEFAULT_TENANT_ID)
 
 
 async def get_points_repository(

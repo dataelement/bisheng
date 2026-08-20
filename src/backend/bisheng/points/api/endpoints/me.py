@@ -8,6 +8,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.schemas.api import resp_200
 from bisheng.points.api.dependencies import (
+    get_optional_login_user,
     get_points_query_service,
     get_points_rule_service,
     resolve_tenant_id,
@@ -90,14 +91,15 @@ async def get_public_rules(
 @router.get("/leaderboard")
 async def get_leaderboard(
     period: str = Query("month", pattern="^(month|year|all)$"),
-    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    login_user: UserPayload | None = Depends(get_optional_login_user),
     service: PointsQueryService = Depends(get_points_query_service),
 ):
-    """读取小时快照排行榜。"""
+    """读取小时快照排行榜。
+
+    未登录与平台系统管理员默认看组织架构第一个公司；普通登录用户看所属公司。
+    """
     try:
-        data = await service.leaderboard(
-            resolve_tenant_id(login_user), period, int(login_user.user_id)
-        )
+        data = await service.leaderboard(resolve_tenant_id(login_user), period, login_user)
         return resp_200(data.model_dump())
     except BaseErrorCode as exc:
         return exc.return_resp_instance()
