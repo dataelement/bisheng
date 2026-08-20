@@ -339,3 +339,61 @@ async def test_scan_loop_regular_user_runs_batch_check(
     assert action_map_calls, "BatchCheck must run for non-admin users"
     assert len(visible) == 2  # both have "use"
     assert writeable_ids == {"50"}  # only "50" has "edit"
+
+
+# ---------------------------------------------------------------------------
+# F054: the enumerated resource types follow enabled_app_types()
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_hosted_apps_are_enumerated_when_the_runtime_layer_is_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The visible-ids pre-filter must span every type the list can return.
+
+    A type missing from the enumeration does not raise — it silently removes
+    every row of that type from the list, for non-admins only. Hosted
+    applications were exactly that case: the pre-filter asked OpenFGA about
+    workflow and assistant alone, so an app the user could plainly use never
+    reached the DB scan.
+    """
+    monkeypatch.setattr(wf_mod.settings.app_runtime, "enabled", True)
+    runtime = SimpleNamespace(
+        list_visible_objects=AsyncMock(
+            side_effect=lambda _actor, *, resource_type, max_results: _visible(resource_type, "x1")
+        )
+    )
+    monkeypatch.setattr(wf_mod, "get_f048_runtime", AsyncMock(return_value=runtime))
+
+    await WorkFlowService._collect_visible_app_ids(_actor(), None)
+
+    queried = {call.kwargs["resource_type"] for call in runtime.list_visible_objects.await_args_list}
+    assert queried == {"workflow", "assistant", "app"}
+
+    # A single type still narrows to exactly that type.
+    runtime.list_visible_objects.reset_mock()
+    await WorkFlowService._collect_visible_app_ids(_actor(), FlowType.HOSTED_APP.value)
+    assert {call.kwargs["resource_type"] for call in runtime.list_visible_objects.await_args_list} == {"app"}
+
+
+@pytest.mark.asyncio
+async def test_hosted_apps_are_not_enumerated_when_the_layer_is_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With the layer off the type is not listed at all, so asking for it is empty."""
+    monkeypatch.setattr(wf_mod.settings.app_runtime, "enabled", False)
+    runtime = SimpleNamespace(
+        list_visible_objects=AsyncMock(
+            side_effect=lambda _actor, *, resource_type, max_results: _visible(resource_type, "x1")
+        )
+    )
+    monkeypatch.setattr(wf_mod, "get_f048_runtime", AsyncMock(return_value=runtime))
+
+    await WorkFlowService._collect_visible_app_ids(_actor(), None)
+    queried = {call.kwargs["resource_type"] for call in runtime.list_visible_objects.await_args_list}
+    assert queried == {"workflow", "assistant"}
+
+    runtime.list_visible_objects.reset_mock()
+    assert await WorkFlowService._collect_visible_app_ids(_actor(), FlowType.HOSTED_APP.value) == []
+    assert runtime.list_visible_objects.await_count == 0
