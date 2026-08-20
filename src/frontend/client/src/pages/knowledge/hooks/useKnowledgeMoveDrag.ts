@@ -14,7 +14,7 @@ interface UseKnowledgeMoveDragArgs {
 
 /**
  * Shared same-space drag-to-folder move wiring (F034), used by both the table
- * (FileTable) and card grid (FileCard) views. Rows/cards are drag sources;
+ * (FileListView) and card grid (FileCard) views. Rows/cards are drag sources;
  * folder rows/cards are drop targets that highlight while a valid drag hovers.
  *
  * Dragging an item that is part of the current multi-selection drags the whole

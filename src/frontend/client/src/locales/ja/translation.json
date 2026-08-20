@@ -1531,7 +1531,14 @@
     "fullscreen": "全画面",
     "exit_fullscreen": "全画面を終了",
     "volume": "音量",
-    "progress": "再生位置"
+    "progress": "再生位置",
+    "filter": "絞り込み",
+    "sort": "並べ替え",
+    "list_view": "リスト表示",
+    "card_view": "カード表示",
+    "filter_file_status": "ファイル状態で絞り込み",
+    "sort_by_size_label": "サイズで並べ替え",
+    "select_all": "すべて選択"
   },
   "com_subscription": {
     "tab_channel": "チャンネル",

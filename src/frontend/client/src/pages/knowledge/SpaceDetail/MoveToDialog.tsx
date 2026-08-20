@@ -72,7 +72,7 @@ function statusFilterFor(space?: KnowledgeSpace): number[] | undefined {
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
 
-/** Right-panel file glyph — mirrors the table-mode icon (FileTable.tsx). */
+/** Right-panel file glyph — mirrors the list-mode icon (FileIcon.tsx). */
 function fileGlyph(name: string) {
     const ext = name.split(".").pop()?.toLowerCase() || "";
     if ((AUDIO_FILE_EXTENSIONS as readonly string[]).includes(ext)) return Outlined.FileAudio;

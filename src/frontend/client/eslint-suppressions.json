@@ -3297,14 +3297,9 @@
       "count": 1
     }
   },
-  "src/pages/knowledge/SpaceDetail/FileTable.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    }
-  },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceHeader.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 1
     }
   },
   "src/pages/knowledge/SpaceDetail/KnowledgeSpaceShareDialog.tsx": {
