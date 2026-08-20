@@ -1766,6 +1766,8 @@
       "history_confirm_set_primary_description": "V{{version}} will become the primary version. RAG retrieval and chat will use the new version immediately.",
       "history_confirm_delete_title": "Delete history version",
       "history_confirm_delete_description": "V{{version}} will be permanently deleted. This cannot be undone.",
+      "confirm_delete_with_history_title": "Confirm delete",
+      "confirm_delete_with_history_description": "This file has older versions. Deleting it will also remove all historical versions. This cannot be undone. Continue?",
       "history_cannot_delete_primary": "Cannot delete the primary version. Promote another version first.",
       "toast_link_success": "Linked successfully",
       "toast_link_failure": "Link failed",

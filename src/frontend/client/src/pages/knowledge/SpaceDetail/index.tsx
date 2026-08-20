@@ -1346,12 +1346,30 @@ export function KnowledgeSpaceContent({
         }
     };
 
+    const confirmDeleteMultiVersionFile = async (filesToDelete: KnowledgeFile[]): Promise<boolean> => {
+        if (
+            !versionManagementEnabled
+            || !filesToDelete.some((file) => file.type !== FileType.FOLDER && file.is_multi_version)
+        ) {
+            return true;
+        }
+        return confirm({
+            title: localize("com_knowledge.version.confirm_delete_with_history_title"),
+            description: localize("com_knowledge.version.confirm_delete_with_history_description"),
+            cancelText: localize("com_knowledge.cancel"),
+            confirmText: localize("com_knowledge.confirm"),
+            variant: "destructive",
+        });
+    };
+
     const handleBatchDelete = async () => {
-        // Soft-delete to recycle bin — no confirmation dialog.
         if (!canBatchDelete) {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
             return;
         }
+
+        const ok = await confirmDeleteMultiVersionFile(selectedList);
+        if (!ok) return;
 
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
@@ -1423,7 +1441,9 @@ export function KnowledgeSpaceContent({
             return;
         }
 
-        // Soft-delete to recycle bin — no confirmation dialog.
+        const ok = await confirmDeleteMultiVersionFile([file]);
+        if (!ok) return;
+
         onDeleteFile(fileId);
     };
 

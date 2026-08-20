@@ -1694,6 +1694,8 @@
       "history_confirm_set_primary_description": "V{{version}} 将成为主版本,RAG 检索和对话立即生效。",
       "history_confirm_delete_title": "删除历史版本",
       "history_confirm_delete_description": "V{{version}} 将被永久删除,无法恢复。",
+      "confirm_delete_with_history_title": "确认删除",
+      "confirm_delete_with_history_description": "该文件存在旧版本，本次将同步删除历史文档，删除后无法恢复，是否删除？",
       "history_cannot_delete_primary": "不能删除主版本,请先切换主版本。",
       "toast_link_success": "关联成功",
       "toast_link_failure": "关联失败",
