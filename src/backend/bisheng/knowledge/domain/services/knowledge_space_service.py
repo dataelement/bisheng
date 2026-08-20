@@ -959,6 +959,26 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await self._require_action("knowledge_space", space_id, "visible")
         return space
 
+    async def _load_space_listing_scope(
+        self,
+        space_id: int,
+        parent_id: int | None,
+    ) -> tuple[Knowledge, KnowledgeFile | None]:
+        """Load the business scope for a super-admin file listing.
+
+        This helper intentionally performs no permission decision. The caller
+        must restrict it to the platform-super-admin system path. Tenant
+        filtering remains active on both business queries, and a parent folder
+        must still belong to the requested knowledge space.
+        """
+        space = await KnowledgeDao.aquery_by_id(space_id)
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+            raise SpaceNotFoundError()
+        parent_folder = None
+        if parent_id:
+            parent_folder = await self._get_folder_for_action(space_id, parent_id)
+        return space, parent_folder
+
     @staticmethod
     def _is_square_preview_space(space: Knowledge) -> bool:
         return space.is_released and space.auth_type in {
@@ -1918,11 +1938,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             fga_elapsed_ms=fga_elapsed_ms,
             total_elapsed_ms=(perf_counter() - started) * 1000,
             returned_count=len(result),
-            alert=(
-                "capacity_80_percent"
-                if len(visible_ids) >= _JOINED_VISIBLE_MAX_RESULTS * 0.8
-                else None
-            ),
+            alert=("capacity_80_percent" if len(visible_ids) >= _JOINED_VISIBLE_MAX_RESULTS * 0.8 else None),
         )
         return result
 
@@ -2444,6 +2460,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         page_size: int,
         cursor: list | None = None,
         exclude_file_ids: list[int] | None = None,
+        system_scope: bool = False,
     ) -> tuple[list[KnowledgeFile], bool, list | None]:
         """F027 cursor-paginated scan: keep fetching batches via keyset, fold
         through ReBAC filtering, stop once we've accumulated ``page_size + 1``
@@ -2456,7 +2473,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         visible_page_items: list[KnowledgeFile] = []
-        permission_context = await self._build_child_permission_context(space_id)
+        permission_context = None if system_scope else await self._build_child_permission_context(space_id)
         batch_cursor: list | None = list(cursor) if cursor else None
         resume_cursor: list | None = None
         scanned_candidates = 0
@@ -2486,11 +2503,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if not batch_items:
                 break
 
-            visible_batch = await self._filter_visible_child_items(
-                batch_items,
-                space_id=space_id,
-                context=permission_context,
-            )
+            visible_batch = batch_items
+            if not system_scope:
+                visible_batch = await self._filter_visible_child_items(
+                    batch_items,
+                    space_id=space_id,
+                    context=permission_context,
+                )
             visible_ids = {item.id for item in visible_batch}
             for item in batch_items:
                 if item.id in visible_ids:
@@ -2556,6 +2575,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         exclude_file_ids: list[int] | None,
         page: int,
         page_size: int,
+        system_scope: bool = False,
     ) -> tuple[list[KnowledgeFile], bool]:
         """F040 batch-scan for keyword search: fetch the candidate set in
         successive OFFSET windows (``id``-tie-broken for a stable order across
@@ -2571,7 +2591,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         batch (same idea as ``_scan_visible_child_items``).
         """
         needed = page * page_size + 1
-        permission_context = await self._build_child_permission_context(space_id)
+        permission_context = None if system_scope else await self._build_child_permission_context(space_id)
         visible: list[KnowledgeFile] = []
         batch_num = 0
 
@@ -2594,7 +2614,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             if not batch:
                 break
-            visible.extend(await self._filter_visible_child_items(batch, space_id=space_id, context=permission_context))
+            if system_scope:
+                visible.extend(batch)
+            else:
+                visible.extend(
+                    await self._filter_visible_child_items(
+                        batch,
+                        space_id=space_id,
+                        context=permission_context,
+                    )
+                )
             if len(batch) < _SEARCH_SCAN_BATCH_SIZE:
                 break
 
@@ -2624,15 +2653,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.errcode.knowledge_space import KnowledgeSpaceInvalidCursorError
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
-        await self._require_read_permission(space_id)
-        if parent_id:
-            await self._require_folder_action(
-                space_id,
-                parent_id,
-                "visible",
-            )
+        system_scope = bool(self.login_user.is_global_super)
+        if system_scope:
+            await self._load_space_listing_scope(space_id, parent_id)
         else:
-            await self._require_action("knowledge_space", space_id, "visible")
+            await self._require_read_permission(space_id)
+            if parent_id:
+                await self._require_folder_action(
+                    space_id,
+                    parent_id,
+                    "visible",
+                )
+            else:
+                await self._require_action("knowledge_space", space_id, "visible")
 
         context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
         try:
@@ -2660,6 +2693,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             page_size=page_size,
             cursor=decoded,
             exclude_file_ids=exclude_file_ids,
+            system_scope=system_scope,
         )
 
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).
@@ -2690,19 +2724,27 @@ class KnowledgeSpaceService(KnowledgeUtils):
         order_field: str = "file_type",
         order_sort: str = "asc",
     ) -> dict:
-        space = await self._require_read_permission(space_id)
-        if not parent_id:
-            await self._require_action("knowledge_space", space_id, "visible")
+        system_scope = bool(self.login_user.is_global_super)
+        parent_folder = None
+        if system_scope:
+            space, parent_folder = await self._load_space_listing_scope(space_id, parent_id)
+        else:
+            space = await self._require_read_permission(space_id)
+            if not parent_id:
+                await self._require_action("knowledge_space", space_id, "visible")
 
         file_level_path = None
         filter_files = []
 
         if parent_id:
-            parent_folder = await self._require_folder_action(
-                space_id,
-                parent_id,
-                "visible",
-            )
+            if not system_scope:
+                parent_folder = await self._require_folder_action(
+                    space_id,
+                    parent_id,
+                    "visible",
+                )
+            if parent_folder is None:
+                raise SpaceFolderNotFoundError()
             file_level_path = f"{parent_folder.file_level_path}/{parent_folder.id}"
             children_ids = await SpaceFileDao.get_children_by_prefix(space_id, file_level_path)
             if not children_ids:
@@ -2792,6 +2834,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             exclude_file_ids=exclude_file_ids,
             page=page,
             page_size=page_size,
+            system_scope=system_scope,
         )
 
         # Enrich page items with version fields (version_no, is_multi_version, has_similar).

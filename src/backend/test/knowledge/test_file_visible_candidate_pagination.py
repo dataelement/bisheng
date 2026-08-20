@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bisheng.common.cursor import decode_cursor
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
@@ -21,6 +22,10 @@ class _User:
 
     def is_admin(self) -> bool:
         return False
+
+
+class _SuperUser(_User):
+    is_global_super = True
 
 
 def _item(file_id: int, *, file_type: int = FileType.FILE.value) -> KnowledgeFile:
@@ -154,3 +159,73 @@ async def test_list_cursor_uses_scan_boundary_and_is_retry_stable() -> None:
         expected_key_len=4,
         expected_context="space_children|order=file_type_asc",
     ) == [visible.file_type, 1, visible.update_time.isoformat(), 39]
+
+
+async def test_super_admin_children_reads_business_rows_without_permission_checks() -> None:
+    service = KnowledgeSpaceService(request=None, login_user=_SuperUser())
+    file_row = _item(2)
+    space = MagicMock(type=KnowledgeTypeEnum.SPACE.value)
+    permission_call = AsyncMock(side_effect=AssertionError("super-admin listing must not check permission"))
+
+    with (
+        patch(f"{_SERVICE}.KnowledgeDao.aquery_by_id", new=AsyncMock(return_value=space)) as load_space,
+        patch(
+            f"{_SERVICE}.SpaceFileDao.async_list_children",
+            new=AsyncMock(return_value=[file_row]),
+        ) as list_children,
+        patch.object(service, "_require_read_permission", new=permission_call),
+        patch.object(service, "_require_action", new=permission_call),
+        patch.object(service, "_require_folder_action", new=permission_call),
+        patch.object(service, "_build_child_permission_context", new=permission_call),
+        patch.object(service, "_filter_visible_child_items", new=permission_call),
+        patch.object(service, "_enrich_with_version_info", new=AsyncMock()),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new=AsyncMock(return_value=[{"id": file_row.id}]),
+        ),
+    ):
+        page = await service.list_space_children(space_id=9, page_size=80)
+
+    assert page.data == [{"id": file_row.id}]
+    assert page.has_more is False
+    load_space.assert_awaited_once_with(9)
+    list_children.assert_awaited_once()
+    permission_call.assert_not_awaited()
+
+
+async def test_super_admin_search_reads_business_rows_without_permission_checks() -> None:
+    service = KnowledgeSpaceService(request=None, login_user=_SuperUser())
+    file_row = _item(2)
+    space = MagicMock(type=KnowledgeTypeEnum.SPACE.value)
+    permission_call = AsyncMock(side_effect=AssertionError("super-admin search must not check permission"))
+
+    with (
+        patch(f"{_SERVICE}.KnowledgeDao.aquery_by_id", new=AsyncMock(return_value=space)) as load_space,
+        patch(
+            f"{_SERVICE}.KnowledgeFileDao.aget_file_by_filters",
+            new=AsyncMock(return_value=[file_row]),
+        ) as list_files,
+        patch.object(service, "_require_read_permission", new=permission_call),
+        patch.object(service, "_require_action", new=permission_call),
+        patch.object(service, "_require_folder_action", new=permission_call),
+        patch.object(service, "_build_child_permission_context", new=permission_call),
+        patch.object(service, "_filter_visible_child_items", new=permission_call),
+        patch.object(service, "_enrich_with_version_info", new=AsyncMock()),
+        patch.object(
+            service,
+            "_handle_file_folder_extra_info",
+            new=AsyncMock(return_value=[{"id": file_row.id}]),
+        ),
+    ):
+        result = await service.search_space_children(space_id=9, page_size=80)
+
+    assert result == {
+        "page": 1,
+        "page_size": 80,
+        "data": [{"id": file_row.id}],
+        "has_more": False,
+    }
+    load_space.assert_awaited_once_with(9)
+    list_files.assert_awaited_once()
+    permission_call.assert_not_awaited()

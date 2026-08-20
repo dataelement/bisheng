@@ -27,6 +27,9 @@ from bisheng.permission.domain.services.mode_service import (
     ModeService,
 )
 from bisheng.permission.domain.services.projection_service import ProjectionOutcome
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompiler,
+)
 
 
 class FakeProjection:
@@ -75,14 +78,15 @@ class FakeModeState:
         context,
         draft,
         grants,
+        visibility,
         *,
         idempotency_key: str,
         operation_id: int,
     ) -> None:
-        self.prepared.append((context, draft, grants, idempotency_key, operation_id))
+        self.prepared.append((context, draft, grants, visibility, idempotency_key, operation_id))
 
-    async def finalize(self, context, draft, grants, outcome) -> None:
-        self.finalized.append((context, draft, grants, outcome))
+    async def finalize(self, context, draft, grants, visibility, outcome) -> None:
+        self.finalized.append((context, draft, grants, visibility, outcome))
 
 
 class FakeEvents:
@@ -137,6 +141,16 @@ def _context(
     local_grants: tuple[GrantSnapshot, ...] | None = None,
     inherited_grants: tuple[GrantSnapshot, ...] = (),
 ) -> ModeContext:
+    resolved_local_grants = local_grants or (_grant("editor"), _grant("owner"))
+    visible_sources = (
+        VisibilityProjectionCompiler()
+        .compile(
+            tenant_id=7,
+            grants=resolved_local_grants,
+            existing_sources=(),
+        )
+        .active_sources
+    )
     return ModeContext(
         target=target or _target(),
         mode=mode,
@@ -144,8 +158,9 @@ def _context(
         store_id="store",
         model_id="model",
         operator_id=100,
-        local_grants=local_grants or (_grant("editor"), _grant("owner")),
+        local_grants=resolved_local_grants,
         inherited_grants=inherited_grants,
+        existing_visible_sources=visible_sources,
     )
 
 
@@ -250,7 +265,7 @@ async def test_inherit_to_custom_snapshots_ordinary_and_dedups_protected() -> No
 
 
 @pytest.mark.asyncio
-async def test_apply_switches_only_mode_gate_and_keeps_canonical_parent() -> None:
+async def test_apply_stages_visible_and_switches_mode_without_changing_parent() -> None:
     service, sources, projection, state, events = _service()
     inherited = sources.canonicalize_source(
         source_id=1,
@@ -273,10 +288,11 @@ async def test_apply_switches_only_mode_gate_and_keeps_canonical_parent() -> Non
     assert result.mode == "CUSTOM"
     plan = projection.plans[0]
     commit = [row for row in plan.deltas if row.phase == "COMMIT"]
-    assert [(row.action, row.relation) for row in commit] == [
+    assert {(row.action, row.relation) for row in commit} == {
         ("DELETE", "inherit_mode"),
         ("WRITE", "custom_mode"),
-    ]
+    }
+    assert any(row.phase == "STAGE" and row.action == "WRITE" and row.relation == "visible" for row in plan.deltas)
     assert all(row.relation != "parent" for row in plan.deltas)
     assert len(state.prepared) == len(state.finalized) == 1
     assert events.rows[-1][0] == "permission_mode_switch"
@@ -336,7 +352,7 @@ async def test_stale_mode_draft_fails_before_projection() -> None:
 
 @pytest.mark.asyncio
 async def test_custom_to_inherit_retires_ordinary_but_preserves_protected() -> None:
-    service, sources, _, state, _ = _service()
+    service, sources, projection, state, _ = _service()
     ordinary = sources.canonicalize_source(
         source_id=1,
         subject_type="user",
@@ -366,6 +382,13 @@ async def test_custom_to_inherit_retires_ordinary_but_preserves_protected() -> N
     assert result.mode == "INHERIT"
     assert result.grants[0].sources == ()
     assert result.grants[1].sources[0].protected is True
+    visible_deltas = [row for row in projection.plans[0].deltas if row.relation == "visible"]
+    assert [(row.action, row.user) for row in visible_deltas] == [
+        ("DELETE", "user:200"),
+    ]
+    prepared_visibility = state.prepared[0][3]
+    assert [row.projected_subject for row in prepared_visibility.active_sources] == ["user:201"]
+    assert [row.projected_subject for row in prepared_visibility.retired_sources] == ["user:200"]
     assert state.finalized
 
 
