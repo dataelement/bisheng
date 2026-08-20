@@ -25,13 +25,19 @@ export interface CompoundSearchInputProps {
     className?: string;
     /** Render as a single search-icon button that expands into the full field on click. */
     collapsible?: boolean;
+    /**
+     * `collapsible` variant used inside the file-list toolbar (Figma 13198:75851):
+     * collapsed it is a borderless icon+label button matching its 筛选 / 排序 /
+     * 视图 siblings; expanded it becomes the normal bordered search field.
+     */
+    toolbarMode?: boolean;
     /** Full-page search: scope + tags always visible, tags rendered inline below the box. */
     pageMode?: boolean;
     /** pageMode only: element rendered to the right of the search box inside the 64px header row. */
     trailing?: React.ReactNode;
 }
 
-export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, pageMode = false, trailing }: CompoundSearchInputProps) {
+export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, className, collapsible = false, toolbarMode = false, pageMode = false, trailing }: CompoundSearchInputProps) {
     const localize = useLocalize();
     const [scope, setScope] = useState<'current' | 'all'>('current');
     const [selectedTags, setSelectedTags] = useState<SpaceTag[]>([]);
@@ -152,26 +158,32 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
 
     const scopeLabel = scope === 'current' ? localize("com_knowledge.current_location") : localize("com_knowledge.current_space");
 
+    // Toolbar variant, collapsed: a borderless icon+label button that matches the
+    // 筛选 / 排序 / 视图 buttons beside it. Any other state keeps the field skin.
+    const toolbarCollapsed = toolbarMode && collapsed;
+
     const searchField = (
         <div
             className={cn(
-                "flex flex-nowrap items-center w-full h-8 min-h-8 max-h-8 overflow-hidden",
-                "bg-white border rounded-md",
-                collapsible
+                "flex flex-nowrap items-center w-full overflow-hidden rounded-md",
+                toolbarCollapsed
+                    ? "h-7 min-h-7 max-h-7 gap-1 px-[5px] cursor-pointer text-sm text-text-2 transition-colors hover:bg-fill-1"
+                    : "h-8 min-h-8 max-h-8 bg-white border",
+                !toolbarCollapsed && (collapsible
                     ? cn(
                         // Animate gap so icon → input transition feels continuous, not snapped.
                         "transition-[gap,background-color,border-color,box-shadow] duration-200 ease-out px-2",
                         collapsed ? "gap-0 cursor-pointer" : "gap-1"
                     )
-                    : "gap-1 px-2 sm:px-3 transition-[border-color,box-shadow]",
+                    : "gap-1 px-2 sm:px-3 transition-[border-color,box-shadow]"),
                 // Active state per Figma 11495:16479 — gray border + gray ring (not blue).
                 // Collapsed = behaves like the sibling icon buttons (bg change on hover, border steady);
                 // expanded = behaves like an input field (border darkens on hover before focus).
-                isFocused
+                !toolbarCollapsed && (isFocused
                     ? "border-[#ddd] shadow-[0_0_0_2px_#f1f5f9]"
                     : collapsed
-                        ? "border-[#e5e6eb] hover:bg-[#f7f8fa]"
-                        : "border-[#e5e6eb] hover:border-[#ddd]"
+                        ? "border-border-base hover:bg-fill-1"
+                        : "border-border-base hover:border-[#ddd]")
             )}
             onClick={() => {
                 inputRef.current?.focus();
@@ -179,7 +191,10 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 setIsFocused(true);
             }}
         >
-                <Outlined.Search className="size-4 text-[#818181] shrink-0" />
+                <Outlined.Search className={cn("size-4 shrink-0", toolbarCollapsed ? "text-current" : "text-text-3")} />
+                {toolbarCollapsed && (
+                    <span className="whitespace-nowrap">{localize("com_ui_search")}</span>
+                )}
 
                 {/* 范围选择：仅在输入框聚焦（或菜单已打开）时显示，高亮表示已选范围；仅文案随 current / all 切换 */}
                 {!isRoot && isExpanded && (
@@ -187,7 +202,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
-                                className="flex items-center gap-1 h-6 max-w-[min(120px,40vw)] shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#F7F7F7] text-[#212121] hover:bg-[#F1F1F1]"
+                                className="flex items-center gap-1 h-6 max-w-[min(120px,40vw)] shrink-0 rounded px-2 text-sm outline-none transition-colors bg-[#F7F7F7] text-text-1 hover:bg-[#F1F1F1]"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <span className="truncate">{scopeLabel}</span>
@@ -220,7 +235,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     maxLength={100}
                     placeholder={collapsed ? "" : localize("com_knowledge.search_in_current_space")}
                     className={cn(
-                        "min-w-0 bg-transparent outline-none text-[13px] text-[#1d2129] placeholder:text-[#86909c] h-[22px]",
+                        "min-w-0 bg-transparent outline-none text-[13px] text-text-1 placeholder:text-text-3 h-[22px]",
                         collapsed ? "w-0 flex-none p-0" : "flex-1 min-w-[50px]"
                     )}
                     onFocus={() => { if (!isFocused) refreshTags(); setIsFocused(true); }}
@@ -229,7 +244,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             {/* Clear button */}
             {isSearching && (
                 <button
-                    className="ml-auto w-4 h-4 rounded-full bg-[#f2f3f5] flex items-center justify-center hover:bg-[#e5e6eb] shrink-0 transition-colors"
+                    className="ml-auto w-4 h-4 rounded-full bg-fill-2 flex items-center justify-center hover:bg-fill-3 shrink-0 transition-colors"
                     onMouseDown={(e) => {
                         // Keep input focused to avoid focus-within width flicker.
                         e.preventDefault();
@@ -240,7 +255,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                     }}
                     type="button"
                 >
-                    <X className="size-3 text-[#86909c]" />
+                    <X className="size-3 text-text-3" />
                 </button>
             )}
         </div>
@@ -255,7 +270,7 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
             <div className="text-sm font-medium text-gray-800 mb-2">{localize("com_knowledge.existing_tags")}</div>
             <div className="flex flex-wrap gap-2">
                 {spaceTags.length === 0 && (
-                    <span className="text-sm text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
+                    <span className="text-sm text-text-3">{localize("com_knowledge.no_tags")}</span>
                 )}
                 {spaceTags.map((tag) => {
                     const isSelected = selectedTags.some((t) => t.id === tag.id);
@@ -270,8 +285,8 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                                 // in-between state. On touch we only show default vs selected.
                                 isSelected
                                     ? "bg-primary/10 text-primary border-transparent fine-pointer:hover:bg-primary/15"
-                                    : "bg-[#f2f3f5] text-[#4e5969] border-[#f2f3f5] fine-pointer:hover:bg-[#e5e6eb]",
-                                atLimit && "opacity-50 cursor-not-allowed fine-pointer:hover:bg-[#f2f3f5]"
+                                    : "bg-fill-2 text-text-2 border-fill-2 fine-pointer:hover:bg-fill-3",
+                                atLimit && "opacity-50 cursor-not-allowed fine-pointer:hover:bg-fill-2"
                             )}
                             onMouseDown={(e) => {
                                 // Keep focus on input to avoid focus-within width flicker.
@@ -319,7 +334,9 @@ export function CompoundSearchInput({ spaceId, isRoot = false, onSearch, classNa
                 collapsible
                     ? cn(
                         "shrink-0 transition-[width] duration-200 ease-out",
-                        collapsed ? "w-8" : "w-[min(340px,60vw)] sm:w-[340px]"
+                        collapsed
+                            ? (toolbarMode ? "w-[58px]" : "w-8")
+                            : "w-[min(340px,60vw)] sm:w-[340px]"
                     )
                     : "w-full",
                 className

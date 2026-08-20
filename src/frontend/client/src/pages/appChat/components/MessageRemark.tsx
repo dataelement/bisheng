@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import Markdown from "~/components/Chat/Messages/Content/Markdown";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 

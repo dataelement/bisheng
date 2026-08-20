@@ -11,7 +11,9 @@ module.exports = {
   future: {
     hoverOnlyWhenSupported: true,
   },
-  content: ['./src/**/*.{js,jsx,ts,tsx}'],
+  // packages/ui is source-shipped: its classes must be scanned here too,
+  // or shared components (e.g. @bisheng/ui Button) lose their styles.
+  content: ['./src/**/*.{js,jsx,ts,tsx}', '../packages/ui/src/**/*.{ts,tsx}'],
   // darkMode: 'class',
   darkMode: ['class'],
   theme: {
@@ -45,6 +47,7 @@ module.exports = {
       // classNames never change per breakpoint. Each entry carries its own
       // font-weight (400 body tier / 500 heading tier) — no extra font-medium needed.
       fontSize: {
+        'caption-sm': ['var(--text-caption-sm)', { lineHeight: 'var(--leading-caption-sm)', fontWeight: '400' }],
         caption: ['var(--text-caption)', { lineHeight: 'var(--leading-caption)', fontWeight: '400' }],
         'body-sm': ['var(--text-body-sm)', { lineHeight: 'var(--leading-body-sm)', fontWeight: '400' }],
         body: ['var(--text-body)', { lineHeight: 'var(--leading-body)', fontWeight: '400' }],
@@ -59,6 +62,25 @@ module.exports = {
         authPageWidth: '370px',
       },
       keyframes: {
+        'modal-overlay-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'modal-overlay-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
+        // `scale` (the standalone property), NOT `transform: scale()` — the card
+        // is centred with `translate(-50%, -50%)` on the desktop档 and with
+        // `inset: 0` on the phone档, so the animation must not own `transform`.
+        'modal-content-in': {
+          from: { opacity: '0', scale: '0.96' },
+          to: { opacity: '1', scale: '1' },
+        },
+        'modal-content-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
         'accordion-down': {
           from: { height: 0 },
           to: { height: 'var(--radix-accordion-content-height)' },
@@ -107,8 +129,22 @@ module.exports = {
           '0%': { backgroundPosition: '200% 0' },
           '100%': { backgroundPosition: '0% 0' },
         },
+        // Share login handoff: a dot runs the track and comes BACK, because the
+        // login trip is a round trip (we return the user to the shared page).
+        // Paired with animation-direction: alternate — hence 0%→100% only.
+        'return-trace': {
+          '0%': { left: '0%' },
+          '100%': { left: '100%' },
+        },
       },
       animation: {
+        // Modal / dialog motion (组件-Modal弹窗.md §6): 200ms in (fade + 96%→100%),
+        // 160ms out (fade ONLY — shrinking on exit reads as "it went back
+        // somewhere"). Same curve both ways.
+        'modal-overlay-in': 'modal-overlay-in 200ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-overlay-out': 'modal-overlay-out 160ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-content-in': 'modal-content-in 200ms cubic-bezier(0.2, 0, 0, 1)',
+        'modal-content-out': 'modal-content-out 160ms cubic-bezier(0.2, 0, 0, 1)',
         'fade-in': 'fadeIn 0.5s ease-out forwards',
         'crawl-slide': 'crawl-slide 1.4s linear infinite',
         'sheen-sweep': 'sheen-sweep 2s linear infinite',
@@ -120,6 +156,8 @@ module.exports = {
         // Slower, calmer handoff; staggered opacity keyframes do the no-overlap work.
         'narration-in': 'narration-in 0.5s ease-out',
         'narration-out': 'narration-out 0.5s ease-in forwards',
+        // `alternate` is what encodes "round trip" — do not switch to a plain loop.
+        'return-trace': 'return-trace 1.6s ease-in-out infinite alternate',
       },
       colors: {
         gray: {
@@ -171,6 +209,7 @@ module.exports = {
         // RGB-channel vars defined in src/style.css :root; channel form keeps
         // `/<alpha>` modifiers working. Neutral fill ramp is shared Arco grays.
         'btn-gray-text': 'rgb(var(--btn-gray-text) / <alpha-value>)',
+        'btn-gray-solid-bg': 'rgb(var(--btn-gray-solid-bg) / <alpha-value>)',
         'btn-gray-border': 'rgb(var(--btn-gray-border) / <alpha-value>)',
         'btn-fill-1': 'rgb(var(--btn-fill-1) / <alpha-value>)',
         'btn-fill-2': 'rgb(var(--btn-fill-2) / <alpha-value>)',
@@ -179,6 +218,8 @@ module.exports = {
         'btn-danger': 'rgb(var(--btn-danger) / <alpha-value>)',
         'btn-danger-hover': 'rgb(var(--btn-danger-hover) / <alpha-value>)',
         'btn-danger-active': 'rgb(var(--btn-danger-active) / <alpha-value>)',
+        'btn-disabled-bg': 'rgb(var(--btn-disabled-bg) / <alpha-value>)',
+        'btn-disabled-text': 'rgb(var(--btn-disabled-text) / <alpha-value>)',
         'btn-disabled-border': 'rgb(var(--btn-disabled-border) / <alpha-value>)',
         // Arco color tokens (docs-ui-refactor/基础-色彩规范.md §2/§3/§7) — semantic
         // layer only; the --arco-gray-* primitives are intentionally NOT wired so
@@ -198,6 +239,8 @@ module.exports = {
         'fill-4': 'rgb(var(--fill-4) / <alpha-value>)',
         'border-base': 'rgb(var(--border-base) / <alpha-value>)',
         'border-deep': 'rgb(var(--border-deep) / <alpha-value>)',
+        // Page surface (bg-bg-page): white in light, #121212 in dark.
+        'bg-page': 'rgb(var(--bg-page) / <alpha-value>)',
         success: {
           DEFAULT: 'rgb(var(--success) / <alpha-value>)',
           hover: 'rgb(var(--success-hover) / <alpha-value>)',
@@ -282,7 +325,34 @@ module.exports = {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        // Tailwind's ladder ends at 3xl (24px); the spec's largest container
+        // step is 32px (design-token.cjs RADIUS) — extend so it has a class.
+        '4xl': '2rem',
       },
+      // Two shadow tiers only (基础-圆角与阴影规范.mdx §2.1 / design-token.cjs
+      // SHADOW): `shadow-popup` for click-away overlays (dropdown, popover,
+      // toast), `shadow-modal` for interrupting ones (dialog, drawer).
+      // Tailwind's own shadow-sm/md/lg/xl presets are off-spec — don't use them.
+      boxShadow: {
+        popup: 'var(--shadow-popup)',
+        modal: 'var(--shadow-modal)',
+        // `shadow-focus` is the control focus RING (组件-Input输入框.md §5.1),
+        // not a third elevation tier — see the exception note in tokens.css.
+        // The geometry is spelled out here rather than carried in a var so the
+        // color resolves ON THE ELEMENT: a field in error / warning overrides
+        // `--shadow-focus-ring` and the ring follows.
+        focus: '0 0 0 2px rgb(var(--shadow-focus-ring))',
+      },
+      // Overlay stacking (组件-Modal弹窗.md §5 / design-token.cjs Z_INDEX) — the
+      // only four layers there are. `z-modal` < `z-popover` < `z-toast` <
+      // `z-tooltip`; anything else is a hand-rolled value and off-spec.
+      zIndex: {
+        modal: 'var(--z-modal)',
+        popover: 'var(--z-popover)',
+        toast: 'var(--z-toast)',
+        tooltip: 'var(--z-tooltip)',
+      },
+
     },
   },
   plugins: [

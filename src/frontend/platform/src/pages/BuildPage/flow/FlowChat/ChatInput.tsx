@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FormIcon } from "@/components/bs-icons/form";
 import { SendIcon } from "@/components/bs-icons/send";
 import { Button } from "@/components/bs-ui/button";
@@ -277,12 +278,12 @@ export default function ChatInput({ autoRun, version, clear, form, wsUrl, onBefo
                 setInputLock({ locked: true, reason: data.message.message })
             } else {
                 // 特殊状态吗支持输入框展示reason
-                const reason = [10421, 13002, 13010].includes(status_code) ? t(`errors.${status_code}`, params) : ' '
+                const reason = [10421, 13002, 13010].includes(status_code) ? t(`api_errors:${status_code}`, params) : ' '
                 setInputLock({ locked: true, reason })
             }
 
             // 记录
-            const errorMsg = status_code == 500 ? status_message || data.message.message : t(`errors.${status_code}`, params)
+            const errorMsg = status_code == 500 ? status_message || data.message.message : t(`api_errors:${status_code}`, { ...(params || {}), defaultValue: status_message || t('api_errors:fallback') })
             addNotification({
                 type: 'error',
                 title: 'runtime error',

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // DashboardConfigPanel.tsx
 "use client"
 

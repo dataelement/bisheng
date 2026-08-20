@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';

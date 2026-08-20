@@ -1,0 +1,171 @@
+# 轻提示 Toast
+
+组件库 `@bisheng/ui` Toast 的实时预览（client 经 `~/components/ui/Toast` 挂载同一实现）。**命令式 API**：业务代码任何地方 `toast.success('已保存')` 即可，不需要为它维护 state；页面只在根节点挂一个 `<Toaster />` 容器。规范全文见「文档 → 组件规范 → 轻提示 Toast」。
+
+> 本页每个 demo 都自带一个 `<Toaster />`，但**只有第一个挂载的容器会真正渲染**（同一队列，单例容器），所以下面任一按钮弹出的提示都出现在页面顶部同一处。
+
+## 四种类型
+
+靠**图标 + 浅色底**区分语义。每种类型必须带图标——颜色分不清的用户靠图标读语义；拿不准用哪种就用 Info，别把「没成功」的事包装成 Info。
+
+```tsx
+import { Button, Toaster, toast } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Toaster />
+    <Button color="default" variant="outlined" onClick={() => toast.success('已保存')}>
+      成功 Success
+    </Button>
+    <Button color="default" variant="outlined" onClick={() => toast.error('上传失败，请压缩后重试')}>
+      失败 Error
+    </Button>
+    <Button color="default" variant="outlined" onClick={() => toast.warning('已保存，2 份文件超出大小未上传')}>
+      警告 Warning
+    </Button>
+    <Button color="default" variant="outlined" onClick={() => toast.info('链接已复制')}>
+      信息 Info
+    </Button>
+  </div>
+);
+```
+
+## 堆叠与去重
+
+最多同时 3 条，新的追加在最下方；第 4 条来的时候最旧的立即让位。**同一条消息重复触发只更新已有那条并重新计时**——用户连点三次保存，只该看到一条「已保存」。
+
+```tsx
+import { Button, Toaster, toast } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Toaster />
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() => {
+        ['已删除 1 个文件', '已删除 2 个文件', '已删除 3 个文件', '已删除 4 个文件'].forEach(
+          (message, index) => window.setTimeout(() => toast.success(message), index * 400),
+        );
+      }}
+    >
+      连发 4 条（只留最新 3 条）
+    </Button>
+    <Button color="default" variant="outlined" onClick={() => toast.success('已保存')}>
+      连点我（始终只有一条）
+    </Button>
+  </div>
+);
+```
+
+## 操作按钮
+
+最多一个操作按钮，链接按钮样式，放在文案右侧。**必须是能撤回或跟进的实际动作**（撤销、查看），不许是「关闭」「取消」「知道了」——那是轻提示自己会做的事。带按钮时停留时长自动翻倍，按钮短到来不及点等于没给。
+
+```tsx
+import { Button, Toaster, toast } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Toaster />
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        toast.success('已移动到「产品文档」', {
+          action: { label: '撤销', onClick: () => toast.info('已撤销移动') },
+        })
+      }
+    >
+      带「撤销」
+    </Button>
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() =>
+        toast.info('报告已生成', {
+          action: { label: '查看', onClick: () => toast.info('打开报告') },
+        })
+      }
+    >
+      带「查看」
+    </Button>
+  </div>
+);
+```
+
+## 停留时长
+
+默认 3 秒；文案超过 20 字的部分每多一个字加 100 毫秒，最终钳制在 3～10 秒。**鼠标悬停或键盘焦点落在提示上时暂停计时**，移开后从头重新计时（触屏没有悬停，计时照常走）。按 ESC 关掉最新的一条。
+
+算出来超过 10 秒说明文案太长了，回去改文案，不是靠延长时间硬撑。
+
+```tsx
+import { Button, Toaster, computeDuration, toast } from '@bisheng/ui';
+
+const SHORT = '已保存';
+const LONG = '已保存草稿，其中 3 项配置因为超出当前空间的容量上限没有同步，请清理后重试';
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+    <Toaster />
+    <Button color="default" variant="outlined" onClick={() => toast.success(SHORT)}>
+      短文案（{computeDuration(SHORT, false) / 1000}s）
+    </Button>
+    <Button color="default" variant="outlined" onClick={() => toast.info(LONG)}>
+      长文案（{computeDuration(LONG, false) / 1000}s，换行）
+    </Button>
+    <Button
+      color="default"
+      variant="outlined"
+      onClick={() => toast.warning('导出进行中，离开页面会中断', { duration: 0 })}
+    >
+      不自动关闭（配关闭按钮）
+    </Button>
+  </div>
+);
+```
+
+`duration: 0` 是「必须等用户处理完」的极少数场景才用的档位，且强制带关闭按钮——不会自己消失的东西必须给用户一个出口。这种情况多半说明该用弹窗，用前先想清楚。
+
+## 规格
+
+| 项 | 值 |
+|---|---|
+| 位置 | 顶部居中，距视口顶部 16px，随页面滚动不动 |
+| 堆叠 | 最多 3 条，纵向间距 8px，新的在最下方 |
+| 高度 | 单行 40px（不设垂直内边距）；换行时上下各 12px，高度自适应 |
+| 宽度 | 跟内容走，最宽 480px；窄屏左右各留 16px |
+| 圆角 / 投影 | `rounded-xl`（12px）· `shadow-popup` · 无边框 |
+| 底色 / 文字 | 对应类型的功能色浅底 + 主文字色（`text-text-1`） |
+| 图标 | 16px 功能色主色，文字左侧间距 8px |
+| 动效 | 进 200ms（上方 8px 滑入淡入）/ 出 160ms / 补位 200ms，`cubic-bezier(0.2,0,0,1)` |
+
+## 使用规则
+
+- **只有用户主动做了什么才给轻提示**。后台任务、别人的操作不要用它弹——用户毫无准备时闪一下就没了。
+- **重要的失败不要用轻提示**。它三秒就走、也不进历史记录：支付失败、导入中断这类要用弹窗。
+- **文案一句话说清结果，20 字以内**，动词开头说已经发生的事（「已保存」而不是「保存成功！」），句末不加标点；失败要说怎么办。
+- 不做「加载中」类型——异步等待期间的反馈由触发它的按钮自己承担（Button 的 loading 态），轻提示只报最终结果。
+- 无障碍：成功 / 信息礼貌播报（`role="status"`），失败 / 警告打断播报（`role="alert"`）；出现时不抢焦点，图标 `aria-hidden`。
+
+## API
+
+```ts
+toast.success(message, options?)
+toast.error(message, options?)
+toast.warning(message, options?)
+toast.info(message, options?)
+toast.show({ type, message, ...options })   // type 是运行时变量时用
+toast.dismiss(id)
+toast.clear()
+
+interface ToastOptions {
+  id?: string;        // 去重键，默认「类型 + 文案」
+  duration?: number;  // 毫秒；省略走动态时长，0 = 不自动关闭
+  action?: { label: string; onClick: () => void };
+  closable?: boolean; // duration: 0 时自动为 true
+}
+```
+
+client 里存量的 `showToast({ message, severity })` 调用点全部照旧可用（`useToastContext()` 已转接到这套实现），新代码直接 `import { toast } from '@bisheng/ui'`。

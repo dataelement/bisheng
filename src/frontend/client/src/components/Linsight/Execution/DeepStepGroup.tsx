@@ -266,8 +266,8 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
                     dark gray instead of fading in and out. */}
                 <span
                     className={cn(
-                        'min-w-0 truncate transition-colors group-hover:text-[#212121]',
-                        open && 'text-[#212121]',
+                        'min-w-0 truncate transition-colors group-hover:text-text-1',
+                        open && 'text-text-1',
                         running && 'animate-pulse group-hover:animate-none',
                     )}
                 >
@@ -285,7 +285,7 @@ const DeepStepGroupBase: FC<DeepStepGroupProps> = ({ group, compact = false, sub
                 <Outlined.Down
                     size={16}
                     className={cn(
-                        'shrink-0 transform-gpu text-[#8C8C8C] transition duration-200 group-hover:text-[#212121]',
+                        'shrink-0 transform-gpu text-text-3 transition duration-200 group-hover:text-text-1',
                         !open && '-rotate-90',
                     )}
                 />

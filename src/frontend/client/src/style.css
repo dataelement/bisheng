@@ -56,7 +56,10 @@
    * text-caption / text-body / text-h1 ...). Line height = size + 8px.
    * Components must reference the semantic layer only.
    * ============================================================ */
-  /* Primitive — desktop scale */
+  /* Primitive — desktop scale. font-size-0 sits below the original 1–9
+   * ladder (exception tier: pure display only, never clickable text) so
+   * existing numbers stay stable. */
+  --font-size-0: 0.625rem;   --line-height-0: 1.125rem;  /* 10 / 18 */
   --font-size-1: 0.75rem;    --line-height-1: 1.25rem;   /* 12 / 20 */
   --font-size-2: 0.8125rem;  --line-height-2: 1.3125rem; /* 13 / 21 */
   --font-size-3: 0.875rem;   --line-height-3: 1.375rem;  /* 14 / 22 */
@@ -68,6 +71,7 @@
   --font-size-9: 2.25rem;    --line-height-9: 2.75rem;   /* 36 / 44 */
 
   /* Semantic — referenced by tailwind.config.cjs theme.extend.fontSize */
+  --text-caption-sm: var(--font-size-0); --leading-caption-sm: var(--line-height-0);
   --text-caption: var(--font-size-1);  --leading-caption: var(--line-height-1);
   --text-body-sm: var(--font-size-2);  --leading-body-sm: var(--line-height-2);
   --text-body: var(--font-size-3);     --leading-body: var(--line-height-3);
@@ -94,15 +98,15 @@
    * (dark mode inherits them — known debt, same as --btn-*).
    * ============================================================ */
   /* Primitive — Arco gray 1-10 */
-  --arco-gray-1: 247 248 250;   /* #F7F8FA */
-  --arco-gray-2: 242 243 245;   /* #F2F3F5 */
-  --arco-gray-3: 229 230 235;   /* #E5E6EB */
-  --arco-gray-4: 201 205 212;   /* #C9CDD4 */
+  --arco-gray-1: 248 248 248;   /* #F8F8F8 — neutral, not Arco's blue-tinted #F7F8FA */
+  --arco-gray-2: 243 243 244;   /* #F3F3F4 */
+  --arco-gray-3: 229 230 233;   /* #E5E6E9 */
+  --arco-gray-4: 202 205 212;   /* #CACDD4 */
   --arco-gray-5: 169 174 184;   /* #A9AEB8 */
-  --arco-gray-6: 134 144 156;   /* #86909C */
-  --arco-gray-7: 107 119 133;   /* #6B7785 */
-  --arco-gray-8: 78 89 105;     /* #4E5969 */
-  --arco-gray-9: 39 46 59;      /* #272E3B */
+  --arco-gray-6: 137 143 156;   /* #898F9C */
+  --arco-gray-7: 111 118 131;   /* #6F7683 */
+  --arco-gray-8: 82 88 101;     /* #525865 */
+  --arco-gray-9: 41 46 55;      /* #292E37 */
   --arco-gray-10: 29 33 41;     /* #1D2129 */
 
   /* Semantic — neutral text / fill / border */
@@ -116,6 +120,7 @@
   --fill-4: var(--arco-gray-4);       /* filled active */
   --border-base: var(--arco-gray-3);  /* regular border ("border" in the spec) */
   --border-deep: var(--arco-gray-4);  /* emphasized divider / hover border */
+  --bg-page: 255 255 255;             /* page surface: white, darkens in .dark */
 
   /* Semantic — functional (never themed) */
   --success: 0 180 42;          /* #00B42A (Arco green-6) */
@@ -131,6 +136,35 @@
   --danger-active: 208 47 51;   /* #D02F33 (= --btn-danger-active) */
   --danger-tint: 255 236 232;   /* #FFECE8 (Arco red-1) — TAG bg only; buttons
                                    use alpha over the main red (bg-danger/10 …) */
+
+  /* Shadow scale (基础-圆角与阴影规范.mdx §2.1) — only two tiers exist.
+   * popup: temporary overlays that open on click and leave on click-away
+   *        (dropdown, select panel, popover, toast) → `shadow-popup`.
+   * modal: interrupting overlays the user must dismiss (dialog, drawer)
+   *        → `shadow-modal`. Carried as vars so dark mode can retune them
+   * without touching components. Kept value-identical with
+   * packages/ui/src/styles/tokens.css. */
+  --shadow-popup: 0 2px 16px -2px rgba(0, 23, 66, 0.10);
+  --shadow-modal: 0 0 16px 0 rgba(3, 7, 117, 0.05);
+
+  /* Focus ring (组件-Input输入框.md §5.1) — NOT a third elevation tier: it is a
+   * focus INDICATOR, it does not express height, and every value comes from
+   * existing tokens (圆角与阴影规范 §4 exception clause). Only the COLOR is a
+   * variable; the ring geometry lives in the Tailwind `shadow-focus` utility,
+   * because a pre-composed `--shadow-focus` declared here would freeze the
+   * color at :root (var() in a custom property is substituted where it is
+   * DECLARED) and error / warning could never swap it. Kept value-identical
+   * with packages/ui/src/styles/tokens.css. */
+  --shadow-focus-ring: var(--fill-2);
+
+  /* ---------- Overlay stacking (组件-Modal弹窗.md §5) — four tiers, nothing else ----------
+   * Each tier must be able to cover the one below it: a dropdown opens inside a
+   * dialog, a toast shows over both, a tooltip beats everything. Carried as vars
+   * so a host app that must sit under a legacy layer can retune them centrally. */
+  --z-modal: 1000;
+  --z-popover: 1100;
+  --z-toast: 1200;
+  --z-tooltip: 1300;
 }
 
 /* Mobile (narrow viewport ≤768px) remap of the SEMANTIC layer only:
@@ -233,15 +267,20 @@ html {
      Neutral grays follow the Arco ramp; danger red is FIXED — never themed.
      RGB channels so the Tailwind `btn-*` colors keep `/<alpha>` working.
      Light-mode values only for now (dark mode inherits them — known debt). */
-  --btn-gray-text: 78 89 105;      /* #4E5969 — default-color button text */
-  --btn-gray-border: 229 230 235;  /* #E5E6EB — default-color button border */
-  --btn-fill-1: 247 248 250;       /* #F7F8FA — neutral fill ramp: hover bg */
-  --btn-fill-2: 242 243 245;       /* #F2F3F5 — active bg / filled base */
-  --btn-fill-3: 229 230 235;       /* #E5E6EB — filled hover */
-  --btn-fill-4: 201 205 212;       /* #C9CDD4 — filled active */
+  --btn-gray-text: 82 88 101;      /* #525865 — default-color button text */
+  --btn-gray-solid-bg: 82 88 101;  /* #525865 — default SOLID fill (+white text);
+                                      split from gray-text so dark can flip the
+                                      TEXT role light without breaking the fill */
+  --btn-gray-border: 229 230 233;  /* #E5E6E9 — default-color button border */
+  --btn-fill-1: 248 248 248;       /* #F8F8F8 — neutral fill ramp: hover bg (= fill-1) */
+  --btn-fill-2: 243 243 244;       /* #F3F3F4 — active bg / filled base */
+  --btn-fill-3: 229 230 233;       /* #E5E6E9 — filled hover */
+  --btn-fill-4: 202 205 212;       /* #CACDD4 — filled active */
   --btn-danger: 245 63 63;         /* #F53F3F */
   --btn-danger-hover: 214 55 58;   /* #D6373A */
   --btn-danger-active: 208 47 51;  /* #D02F33 */
+  --btn-disabled-bg: 245 245 245;     /* #F5F5F5 — disabled fill (was black/4% flat) */
+  --btn-disabled-text: 191 191 191;   /* #BFBFBF — disabled text (was black/25% flat) */
   --btn-disabled-border: 217 217 217; /* #D9D9D9 — bordered variants, disabled */
 
   /* Illustration palette — empty-state SVG illustrations use --illus-* instead
@@ -356,6 +395,41 @@ html {
   }
 }
 
+/* Input hit-area expansion (组件-Input输入框.md §6): the field keeps its 24/32/40
+   height while the tappable area grows to ≥44px on touch. Two strips above and
+   below — NOT one overlay like the button's: an overlay lying on the field would
+   swallow the tap that places the caret. The Input shell sets `relative` + this
+   class and focuses the field when a strip is tapped. */
+@media (hover: none) and (pointer: coarse) {
+  .input-touch-hit::before,
+  .input-touch-hit::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: max(0px, calc((44px - 100%) / 2));
+  }
+  .input-touch-hit::before {
+    bottom: 100%;
+  }
+  .input-touch-hit::after {
+    top: 100%;
+  }
+}
+
+/* iOS anti-zoom (组件-Input输入框.md §6): Safari zooms the whole page when a field
+   smaller than 16px takes focus. Every size档 therefore types at 16px on touch /
+   narrow screens — the 双判定 of 多端适配原则 §4. Element+class selector on
+   purpose: it must beat the size档's own `text-[length:…]` utility whatever order
+   the stylesheets end up in. */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  input.input-no-zoom,
+  textarea.input-no-zoom {
+    font-size: 16px;
+    line-height: 24px;
+  }
+}
+
 .dark {
   --presentation: var(--gray-800);
   --text-primary: var(--gray-100);
@@ -412,6 +486,45 @@ html {
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
   --switch-unchecked: 0 0% 40%;
+
+  /* Arco gray ramp — dark theme (official @arco-design/color gray.dark).
+   * Lightness inverts (gray-1 darkest, gray-10 lightest), so the semantic
+   * text / fill / border tokens defined in :root as var(--arco-gray-N)
+   * auto-flip under .dark (custom props resolve lazily at use time).
+   * Neutral + semantic only this round; brand and functional dark ramps
+   * are still pending (they keep light values in dark — known debt). */
+  --arco-gray-1: 23 23 26;      /* #17171A */
+  --arco-gray-2: 46 46 48;      /* #2E2E30 */
+  --arco-gray-3: 72 72 73;      /* #484849 */
+  --arco-gray-4: 95 95 96;      /* #5F5F60 */
+  --arco-gray-5: 120 120 122;   /* #78787A */
+  --arco-gray-6: 146 146 147;   /* #929293 */
+  --arco-gray-7: 171 171 172;   /* #ABABAC */
+  --arco-gray-8: 197 197 197;   /* #C5C5C5 */
+  --arco-gray-9: 223 223 223;   /* #DFDFDF */
+  --arco-gray-10: 246 246 246;  /* #F6F6F6 */
+  --bg-page: 18 18 18;          /* #121212 — page surface, dark */
+
+  /* Disabled button, dark: a subtle raised inert fill + muted (not invisible)
+     text/border. Light used black overlays on white; dark mirrors with a
+     lightened neutral so disabled reads as greyed-out on #121212, not gone. */
+  --btn-disabled-bg: 42 42 42;      /* #2A2A2A */
+  --btn-disabled-text: 120 120 122; /* gray-5 dark — muted but legible */
+  --btn-disabled-border: 95 95 96;  /* gray-4 dark — visible edge */
+
+  /* Button neutral (default color), dark: text flips light, border + the
+     fill ramp follow the dark gray ramp so filled/hover/active lighten (the
+     correct elevation direction on #121212). Danger stays as-is (red is
+     dark-safe); brand tints are handled per-variant in Button.tsx. */
+  --btn-gray-text: 197 197 197;    /* gray-8 dark #C5C5C5 — light text */
+  --btn-gray-solid-bg: 95 95 96;   /* gray-4 dark #5F5F60 — solid fill, white text 4.9:1 */
+  --btn-gray-border: 72 72 73;     /* gray-3 dark #484849 */
+  --btn-fill-1: 38 38 40;          /* #262628 — text/outlined hover: raised a
+                                      notch above gray-1 (#17171A ≈ page #121212,
+                                      hover was invisible) yet below fill-2 */
+  --btn-fill-2: 46 46 48;          /* gray-2 dark — filled base */
+  --btn-fill-3: 72 72 73;          /* gray-3 dark — filled hover */
+  --btn-fill-4: 95 95 96;          /* gray-4 dark — filled active */
 }
 
 .gizmo {
@@ -2221,76 +2334,6 @@ button.scroll-convo {
 
 .hidden-visibility {
   visibility: hidden;
-}
-
-.toast-root {
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  height: 0;
-  transition: all 0.24s cubic-bezier(0, 0, 0.2, 1);
-}
-
-.toast-root[data-state='open'] {
-  -webkit-animation: toast-open 0.24s cubic-bezier(0.175, 0.885, 0.32, 1.175) both;
-  animation: toast-open 0.24s cubic-bezier(0.175, 0.885, 0.32, 1.175) both;
-}
-
-.toast-root[data-state='closed'] {
-  -webkit-animation: toast-close 0.12s cubic-bezier(0.4, 0, 1, 1) both;
-  animation: toast-close 0.12s cubic-bezier(0.4, 0, 1, 1) both;
-}
-
-.toast-root .alert-root {
-  box-shadow: 0 0 1px rgba(67, 90, 111, 0.3), 0 5px 8px -4px rgba(67, 90, 111, 0.3);
-  flex-shrink: 0;
-  pointer-events: all;
-}
-
-@-webkit-keyframes toast-open {
-  0% {
-    opacity: 0;
-    -webkit-transform: translateY(-100%);
-    transform: translateY(-100%);
-  }
-
-  to {
-    -webkit-transform: translateY(0);
-    transform: translateY(0);
-  }
-}
-
-@keyframes toast-open {
-  0% {
-    opacity: 0;
-    -webkit-transform: translateY(-100%);
-    transform: translateY(-100%);
-  }
-
-  to {
-    -webkit-transform: translateY(0);
-    transform: translateY(0);
-  }
-}
-
-@-webkit-keyframes toast-close {
-  0% {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
-}
-
-@keyframes toast-close {
-  0% {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
 }
 
 @-webkit-keyframes pulseSize {

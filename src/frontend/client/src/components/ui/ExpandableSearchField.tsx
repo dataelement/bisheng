@@ -138,9 +138,9 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     expanded
                         ? cn(
                             expandedWidthClassName,
-                            showActiveChrome ? "border-[#DDDDDD] shadow-[0_0_0_2px_#F1F5F9]" : "border-[#E5E6EB]"
+                            showActiveChrome ? "border-[#DDDDDD] shadow-[0_0_0_2px_#F1F5F9]" : "border-border-base"
                         )
-                        : "w-8 border-[#E5E6EB] cursor-pointer hover:bg-[#F7F8FA]",
+                        : "w-8 border-border-base cursor-pointer hover:bg-fill-1",
                     disabled && "pointer-events-none opacity-50",
                     containerClassName
                 )}
@@ -155,7 +155,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                 <div
                     className={cn(
                         "flex items-center justify-center px-[7px] h-full shrink-0 transition-colors duration-300 ease-out",
-                        showActiveChrome ? "text-[#4E5969]" : "text-[#86909C]"
+                        showActiveChrome ? "text-text-2" : "text-text-3"
                     )}
                 >
                     <Search className="size-4 shrink-0" aria-hidden />
@@ -174,7 +174,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                     onBlur={handleBlur}
                     tabIndex={expanded || alwaysExpanded ? 0 : -1}
                     className={cn(
-                        "flex-1 min-w-0 h-full text-[14px] font-normal text-[#1d2129] bg-transparent outline-none placeholder:text-[#C9CDD4] placeholder:font-normal",
+                        "flex-1 min-w-0 h-full text-[14px] font-normal text-text-1 bg-transparent outline-none placeholder:text-text-4 placeholder:font-normal",
                         "transition-[opacity] duration-200 ease-out motion-reduce:transition-none",
                         showClearButton && value ? "pr-1" : "pr-3",
                         expanded ? "opacity-100" : "opacity-0 pointer-events-none",
@@ -185,7 +185,7 @@ export const ExpandableSearchField = forwardRef<HTMLInputElement, ExpandableSear
                 {showClearButton && expanded && value ? (
                     <button
                         type="button"
-                        className="pr-2 text-[#86909C] hover:text-[#4E5969] shrink-0"
+                        className="pr-2 text-text-3 hover:text-text-2 shrink-0"
                         onClick={(e) => {
                             e.stopPropagation();
                             onChange("");

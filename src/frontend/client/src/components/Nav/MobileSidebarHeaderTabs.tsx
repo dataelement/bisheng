@@ -27,14 +27,14 @@ export function MobileSidebarHeaderTabs({
               alt={localize("com_nav_home")}
             />
           ) : (
-            <div className="h-8 w-8 rounded-md bg-[#F2F3F5]" />
+            <div className="h-8 w-8 rounded-md bg-fill-2" />
           )}
           {onClose ? (
             <button
               type="button"
               onClick={onClose}
               aria-label={localize("com_nav_close_sidebar")}
-              className="inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+              className="inline-flex size-8 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
             >
               <X className="size-4" />
             </button>

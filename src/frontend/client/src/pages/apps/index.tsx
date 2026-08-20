@@ -6,12 +6,14 @@ import { AgentCard } from './components/AgentCard';
 import { AppEmptyState } from './components/AppEmptyState';
 import { AppSearchBar } from './components/AppSearchBar';
 import { useAppCenter } from './hooks/useAppCenter';
-import { useLocalize, usePrefersMobileLayout } from '~/hooks';
+import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from '~/hooks';
 import { ChannelBlocksArrowsIcon } from '~/components/icons/channels';
 import { cn } from '~/utils';
 
 export default function AppCenter() {
     const localize = useLocalize();
+    // 页面标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const recentAppsHint = localize('com_app.recent_apps_hint');
     const {
         apps,
@@ -110,10 +112,10 @@ export default function AppCenter() {
     const exploreLink = (
         <Link
             to="/apps/explore"
-            className="backdrop-blur-[4px] flex shrink-0 items-center justify-center gap-[6px] rounded-[8px] px-[10px] py-[6px] transition-colors fine-pointer:hover:bg-gray-50"
+            className="flex shrink-0 items-center justify-center gap-[6px] rounded-lg px-[10px] py-[6px] transition-colors fine-pointer:hover:bg-gray-50"
         >
             <ChannelBlocksArrowsIcon className="size-4 text-blue-500" />
-            <span className="font-['PingFang_SC'] text-[#212121] text-[12px] leading-[20px] whitespace-nowrap">
+            <span className="font-['PingFang_SC'] text-text-1 text-[12px] leading-[20px] whitespace-nowrap">
                 {localize('com_app.explore_more')}
             </span>
         </Link>
@@ -148,7 +150,7 @@ export default function AppCenter() {
                 <>
                     <header className="relative flex w-full max-w-[1000px] shrink-0 items-center leading-8">
                         <h1 className="font-['PingFang_SC'] font-semibold leading-[32px] text-blue-500 text-[24px]">
-                            {localize('com_app.center_title')}
+                            {menuNames.apps}
                         </h1>
                     </header>
 

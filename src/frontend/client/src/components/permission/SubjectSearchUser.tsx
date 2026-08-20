@@ -1,17 +1,24 @@
 import { Checkbox } from "~/components/ui/Checkbox";
-import { getResourceGrantUsers, searchUsers } from "~/api/permission";
+import {
+  getCreationGrantSubjects,
+  getResourceGrantUsers,
+  searchUsers,
+} from "~/api/permission";
 import type { GrantUser, ResourceType, SelectedSubject } from "~/api/permission";
 import { User as UserIcon, Search } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { PermissionEmptyState } from "./PermissionEmptyState";
 
 interface SubjectSearchUserProps {
   value: SelectedSubject[];
   onChange: (v: SelectedSubject[]) => void;
   resourceType?: ResourceType;
   resourceId?: string;
+  mode?: "create" | "resource";
   disabledIds?: number[];
   grantUsersApi?: typeof getResourceGrantUsers;
+  creationGrantSubjectsApi?: typeof getCreationGrantSubjects;
 }
 
 type UserRow = GrantUser;
@@ -23,8 +30,10 @@ export function SubjectSearchUser({
   onChange,
   resourceType,
   resourceId,
+  mode = "resource",
   disabledIds = [],
   grantUsersApi,
+  creationGrantSubjectsApi,
 }: SubjectSearchUserProps) {
   const localize = useLocalize();
   const [keyword, setKeyword] = useState("");
@@ -53,6 +62,20 @@ export function SubjectSearchUser({
       pageNum: number,
       signal: AbortSignal,
     ): Promise<UserRow[]> => {
+      if (mode === "create") {
+        if (resourceType !== "knowledge_space" && resourceType !== "channel") return [];
+        const getCreationSubjects = creationGrantSubjectsApi ?? getCreationGrantSubjects;
+        const rows = await getCreationSubjects({
+          resourceType,
+          subjectType: "user",
+          operation: "list",
+          keyword: name,
+          page: pageNum,
+          pageSize: PAGE_SIZE,
+        }, { signal });
+        if (signal.aborted) return [];
+        return Array.isArray(rows) ? rows : [];
+      }
       if (resourceType && resourceId) {
         const getGrantUsers = grantUsersApi ?? getResourceGrantUsers;
         const rows = await getGrantUsers(
@@ -72,7 +95,7 @@ export function SubjectSearchUser({
       if (signal.aborted) return [];
       return res.data || [];
     },
-    [grantUsersApi, resourceId, resourceType],
+    [creationGrantSubjectsApi, grantUsersApi, mode, resourceId, resourceType],
   );
 
   const resetAndLoad = useCallback(
@@ -179,13 +202,13 @@ export function SubjectSearchUser({
     timerRef.current = setTimeout(() => resetAndLoad(val), 300);
   };
 
-  const selectedIds = new Set(value.map((s) => s.id));
+  const selectedIds = new Set(value.filter((s) => s.type === "user").map((s) => s.id));
   const disabledIdSet = new Set(disabledIds);
 
   const toggle = (user: UserRow) => {
     if (disabledIdSet.has(user.user_id)) return;
     if (selectedIds.has(user.user_id)) {
-      onChange(value.filter((s) => s.id !== user.user_id));
+      onChange(value.filter((s) => s.type !== "user" || s.id !== user.user_id));
     } else {
       onChange([
         ...value,
@@ -197,18 +220,18 @@ export function SubjectSearchUser({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
         <input
           type="text"
           placeholder={localize("com_permission.search_user")}
           value={keyword}
           onChange={handleInput}
-          className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+          className="h-8 w-full rounded-md border border-border-base bg-white pl-9 pr-3 text-[14px] text-text-1 outline-none transition-colors placeholder:text-text-3 focus:border-border-deep"
         />
       </div>
       <div
         ref={scrollRef}
-        className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-[6px] border border-[#EBECF0]"
+        className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base"
       >
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">
@@ -216,9 +239,7 @@ export function SubjectSearchUser({
           </div>
         )}
         {!loading && results.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-500">
-            {localize("com_permission.empty_search")}
-          </div>
+          <PermissionEmptyState message={localize("com_permission.empty_search")} />
         )}
         {!loading &&
           results.map((user) => {
@@ -250,7 +271,7 @@ export function SubjectSearchUser({
                   {showUserId && (
                     <>
                       <span className="h-3 w-px shrink-0 bg-[#D9D9D9]" aria-hidden />
-                      <span className="shrink-0 truncate text-xs text-[#999999]" title={user.external_id ?? undefined}>{user.external_id}</span>
+                      <span className="shrink-0 truncate text-xs text-text-3" title={user.external_id ?? undefined}>{user.external_id}</span>
                     </>
                   )}
                   {/* "Already granted" badge sits right after the name/id; it stays at
@@ -262,7 +283,7 @@ export function SubjectSearchUser({
                     </span>
                   )}
                 </div>
-                <span className="max-w-[45%] shrink-0 truncate text-xs text-[#999999]" title={departmentPath}>{departmentPath}</span>
+                <span className="max-w-[45%] shrink-0 truncate text-xs text-text-3" title={departmentPath}>{departmentPath}</span>
               </div>
             );
           })}

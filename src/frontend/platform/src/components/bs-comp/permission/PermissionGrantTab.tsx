@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Button } from "@/components/bs-ui/button"
 import { Checkbox } from "@/components/bs-ui/checkBox"
 import { useToast } from "@/components/bs-ui/toast/use-toast"

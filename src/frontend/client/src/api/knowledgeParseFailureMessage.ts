@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import i18next from "i18next";
 
 const ASR_ERROR_CODES = new Set([10014, 10015, 10016, 10017, 10018, 10019]);

@@ -610,6 +610,57 @@ class PermissionService:
             return []
 
     @classmethod
+    async def get_resource_permissions_from_bindings(
+        cls,
+        bindings: list[dict],
+        model_map: dict[str, dict],
+    ) -> list[ResourcePermissionItem]:
+        """Build the permission-management list from persisted UI bindings.
+
+        This is intentionally a display-only read path. It does not query
+        OpenFGA and must never be used for permission decisions. Callers remain
+        responsible for access checks through the normal permission service.
+        """
+        tuple_rows: list[dict] = []
+        binding_map: dict[tuple[str, int, str], dict] = {}
+        seen: set[tuple[str, int, str]] = set()
+
+        for binding in bindings:
+            subject_type = binding.get("subject_type")
+            relation = binding.get("relation")
+            if subject_type not in {"user", "department", "user_group"}:
+                continue
+            if relation not in {"owner", "manager", "editor", "viewer"}:
+                continue
+            try:
+                subject_id = int(binding.get("subject_id"))
+            except (TypeError, ValueError):
+                continue
+
+            key = (subject_type, subject_id, relation)
+            binding_map[key] = binding
+            if key in seen:
+                continue
+            seen.add(key)
+            member_suffix = "" if subject_type == "user" else "#member"
+            tuple_rows.append(
+                {
+                    "user": f"{subject_type}:{subject_id}{member_suffix}",
+                    "relation": relation,
+                }
+            )
+
+        permissions = await cls._enrich_permission_tuples(tuple_rows)
+        for item in permissions:
+            binding = binding_map.get((item.subject_type, int(item.subject_id), item.relation))
+            if binding is None:
+                continue
+            item.include_children = binding.get("include_children")
+            item.model_id = binding.get("model_id")
+            item.model_name = model_map.get(item.model_id, {}).get("name")
+        return permissions
+
+    @classmethod
     async def _enrich_permission_tuples(
         cls,
         tuples: list[dict],

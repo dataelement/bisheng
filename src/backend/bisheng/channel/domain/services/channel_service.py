@@ -62,6 +62,7 @@ from bisheng.common.errcode.channel import (
     ChannelPermissionDeniedError,
 )
 from bisheng.common.errcode.knowledge_space import SpaceFileNameDuplicateError, SpacePermissionDeniedError
+from bisheng.common.errcode.permission import PermissionTupleWriteError
 from bisheng.common.models.space_channel_member import (
     CHANNEL_ROLE_TO_RELATION,
     REJECTED_STATUS_DISPLAY_WINDOW,
@@ -234,7 +235,9 @@ class ChannelService:
         binding index build) into one. The object-specific ``lineage`` is
         intentionally *not* included so every channel still gets its own lineage.
         """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
 
         bindings = await _get_bindings()
         models = await FineGrainedPermissionService.get_relation_models_map()
@@ -1240,7 +1243,7 @@ class ChannelService:
         - Supports fuzzy search by channel name and description
         - Unsubscribed/unapplied channels are shown first
         - Subscribed/applied channels are shown last
-        - Within each group, sorted by update_time descending
+        - Within each group, sorted by unique active subscriber count descending
         """
         # 1. Multi-table join query for channels with subscription info
         rows = await self.channel_repository.find_square_channels(
@@ -1613,6 +1616,8 @@ class ChannelService:
             raise ChannelPermissionDeniedError(
                 msg="Only the owner, manager, or editor can update the channel information"
             )
+        if req.knowledge_sync is not None and int(channel.user_id) != int(login_user.user_id):
+            raise ChannelPermissionDeniedError(msg="Only the channel creator can update knowledge sync")
 
         bisheng_information_client = await get_bisheng_information_client()
 
@@ -1630,62 +1635,47 @@ class ChannelService:
             old_visibility = channel.visibility
             if old_visibility != new_visibility:
                 # When changing to PRIVATE (from PUBLIC or REVIEW), revoke every
-                # non-owner permission relation so the channel is only reachable
-                # by its owner(s): square subscribers, directly authorized users,
-                # and department/user_group grants alike.
+                # permission except the actual creator's owner relation.
                 if new_visibility == ChannelVisibilityEnum.PRIVATE:
-                    owners = await self.space_channel_member_repository.find_members_by_role(
-                        channel_id,
-                        UserRoleEnum.CREATOR,
-                    )
-                    owner_user_ids = {owner.user_id for owner in owners}
                     # Capture active non-owner members before removal so we can
                     # notify everyone who loses access.
+                    existing_members = await self.space_channel_member_repository.find_all(
+                        business_id=channel_id,
+                        business_type=BusinessTypeEnum.CHANNEL,
+                    )
                     removed_user_ids = []
                     if self.message_service:
-                        existing_members = await self.space_channel_member_repository.find_all(
-                            business_id=channel_id,
-                            business_type=BusinessTypeEnum.CHANNEL,
-                        )
                         removed_user_ids = [
                             member.user_id
                             for member in existing_members
-                            if member.status == MembershipStatusEnum.ACTIVE and member.user_id not in owner_user_ids
+                            if member.status == MembershipStatusEnum.ACTIVE
+                            and int(member.user_id) != int(channel.user_id)
                         ]
-                    # 1. Drop every non-owner membership row.
-                    await self.space_channel_member_repository.remove_non_creator_members(channel_id)
-                    # 2. Revoke every non-owner ReBAC relation (users, departments,
-                    #    user groups) at the FGA layer.
-                    try:
-                        await OwnerService.delete_non_owner_resource_tuples("channel", channel_id)
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to revoke non-owner FGA tuples after PRIVATE switch for channel %s: %s",
-                            channel_id,
-                            e,
-                        )
-                    # 3. Drop their relation-model bindings so a later re-grant
-                    #    cannot resurrect a stale model.
-                    try:
-                        from bisheng.channel.domain.services.channel_authorization_service import (
-                            ChannelAuthorizationService,
-                        )
 
-                        await ChannelAuthorizationService.clear_non_owner_bindings(channel_id)
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to clear non-owner relation-model bindings after PRIVATE switch for channel %s: %s",
-                            channel_id,
-                            e,
-                        )
-                    # 4. Re-assert owner FGA tuples defensively.
+                    from bisheng.channel.domain.services.channel_authorization_service import (
+                        ChannelAuthorizationService,
+                    )
+
+                    # Clear FGA tuples and relation-model bindings before committing
+                    # the private state; a failure keeps the existing permission error
+                    # contract and prevents a successful-but-still-shared response.
+                    await ChannelAuthorizationService.clear_authorization_for_private(
+                        channel_id,
+                        channel.user_id,
+                    )
                     try:
-                        for owner in owners:
-                            await OwnerService.write_owner_tuple(owner.user_id, "channel", channel_id)
-                    except Exception as e:
-                        logger.warning(
-                            "Failed to ensure owner FGA tuples after PRIVATE switch for channel %s: %s", channel_id, e
+                        await OwnerService.write_owner_tuple(
+                            channel.user_id,
+                            "channel",
+                            channel_id,
+                            enforce_fga_success=True,
                         )
+                    except Exception as error:
+                        logger.exception("Failed to ensure creator owner tuple for private channel %s", channel_id)
+                        raise PermissionTupleWriteError(exception=error) from error
+                    for member in existing_members:
+                        if int(member.user_id) != int(channel.user_id):
+                            await self.space_channel_member_repository.delete(member.id)
                     if removed_user_ids and self.message_service:
                         final_removed_user_ids = []
                         for user_id in removed_user_ids:
@@ -1886,9 +1876,7 @@ class ChannelService:
         # Knowledge-sync config — only returned for the channel creator since
         # the feature is creator-only (Module D). Members don't need to see it.
         knowledge_sync_cfg: KnowledgeSyncConfig | None = None
-        is_creator = (
-            current_membership is not None and resolve_channel_relation(current_membership) == ChannelRelationEnum.OWNER
-        )
+        is_creator = int(channel.user_id) == int(login_user.user_id)
         if is_creator:
             knowledge_sync_cfg = await self._load_knowledge_sync(channel.id)
 
@@ -2213,7 +2201,9 @@ class ChannelService:
         Detects member-management grants that exist only as ReBAC tuples + a UI binding
         (no membership row), so unsubscribe can revoke them like a self-subscribe.
         """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
 
         bindings = await _get_bindings()
         return any(self._is_direct_channel_user_binding(binding, channel_id, user_id) for binding in bindings)
@@ -2225,7 +2215,9 @@ class ChannelService:
         since ``list_accessible_ids`` returns None (can-read-all) for admins and would
         otherwise hide channels the admin was granted but is not a member of.
         """
-        from bisheng.permission.api.endpoints.resource_permission import _get_bindings
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
 
         bindings = await _get_bindings()
         return [
@@ -2251,10 +2243,14 @@ class ChannelService:
         plus the matching UI binding so they surface in the channel authorization list.
         The owner relation is never mirrored here; it is managed by OwnerService.
         """
-        from bisheng.permission.api.endpoints.resource_permission import (
-            _binding_key_with_scope,
-            _get_bindings,
-            _save_bindings,
+        from bisheng.permission.domain.services.relation_model_store import (
+            binding_key_with_scope as _binding_key_with_scope,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            get_bindings as _get_bindings,
+        )
+        from bisheng.permission.domain.services.relation_model_store import (
+            save_bindings as _save_bindings,
         )
 
         desired_relation: str | None = None

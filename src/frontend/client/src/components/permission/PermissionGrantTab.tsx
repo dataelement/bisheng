@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { cn } from "~/utils";
+import { PERMISSION_FOOTER_ACTIONS_CLASS } from "./permissionDialogStyles";
 import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
@@ -105,7 +106,7 @@ function SelectedSubjectChips({ subjects, fullText }: { subjects: SelectedSubjec
           {subjects.map((subject) => (
             <span
               key={subject.id}
-              className="inline-flex shrink-0 items-center rounded-[4px] bg-[#F2F3F5] px-2 py-0.5 text-[14px] leading-[22px] text-[#4E5969]"
+              className="inline-flex shrink-0 items-center rounded-[4px] bg-fill-2 px-2 py-0.5 text-[14px] leading-[22px] text-text-2"
             >
               {subject.name}
             </span>
@@ -123,6 +124,8 @@ interface PermissionGrantTabProps {
   resourceType: ResourceType;
   resourceId: string;
   onSuccess: () => void;
+  /** Dismiss without granting. The cancel button only renders when provided. */
+  onCancel?: () => void;
   prefetchedGrantableModels?: RelationModel[];
   prefetchedGrantableModelsLoaded?: boolean;
   prefetchedUseDefaultModels?: boolean;
@@ -150,6 +153,7 @@ export function PermissionGrantTab({
   resourceType,
   resourceId,
   onSuccess,
+  onCancel,
   prefetchedGrantableModels,
   prefetchedGrantableModelsLoaded = false,
   prefetchedUseDefaultModels = false,
@@ -372,7 +376,7 @@ export function PermissionGrantTab({
           </div>
 
           {showDepartmentIncludeChildrenControl && (
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-[#212121]">
+            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-text-1">
               <Checkbox
                 className="border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
                 checked={includeChildren}
@@ -434,14 +438,14 @@ export function PermissionGrantTab({
         )}
       >
         <div className="min-w-0 flex flex-1 items-center gap-2 overflow-hidden">
-          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
+          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-text-3">
             {`${localize("com_permission.selected_prefix")}${subjectLabel(subjectType)}:`}
           </span>
           <SelectedSubjectChips subjects={selectedSubjectList} fullText={selectedSummaryText} />
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-[#999999]">
+          <span className="shrink-0 text-[14px] font-normal leading-[22px] text-text-3">
             {localize("com_permission.uniform_grant")}
           </span>
           <RelationSelect
@@ -453,14 +457,21 @@ export function PermissionGrantTab({
         </div>
       </div>
 
-      <div className="mt-3 flex shrink-0 justify-end border-t pt-3">
+      <div className={cn("mt-3 border-t pt-3", PERMISSION_FOOTER_ACTIONS_CLASS)}>
+        {onCancel && (
+          <Button color="default" variant="outlined" size="medium" onClick={onCancel}>
+            {localize("com_unified_permission.cancel")}
+          </Button>
+        )}
         <Button
+          color="primary"
+          variant="solid"
+          size="medium"
+          loading={submitting}
           onClick={handleSubmit}
           disabled={selected.length === 0 || availableModels.length === 0 || submitting}
         >
-          {submitting
-            ? localize("com_permission.action_submit") + "..."
-            : localize("com_permission.action_submit")}
+          {localize("com_permission.action_submit")}
         </Button>
       </div>
     </div>

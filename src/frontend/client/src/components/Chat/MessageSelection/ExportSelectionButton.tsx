@@ -59,7 +59,7 @@ export function ExportSelectionButton({
             type="button"
             onClick={handleClick}
             className={cn(
-                'flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]',
+                'flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1',
                 active && 'bg-[#F0F0F0]',
                 className,
             )}
@@ -69,7 +69,7 @@ export function ExportSelectionButton({
         >
             <Outlined.FileExport
                 size={14}
-                className={cn(active ? 'text-blue-500' : 'text-[#818181]')}
+                className={cn(active ? 'text-blue-500' : 'text-text-3')}
             />
         </button>
     );

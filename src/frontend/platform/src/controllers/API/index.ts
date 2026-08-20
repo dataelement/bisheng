@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { AppNumType, AppType } from "@/types/app";
 import originAxios from "axios";
 import { AppConfig } from "../../types/api/app";
@@ -267,8 +268,7 @@ export async function deleteBrandAssetApi(
 export async function readTempsDatabase(type, id?: number): Promise<FlowType[]> {
     const typeMap = {
         [AppType.FLOW]: 10,
-        [AppType.ASSISTANT]: 5,
-        [AppType.SKILL]: 1
+        [AppType.ASSISTANT]: 5
     }
     return await axios.get(`/api/v1/skill/template?flow_type=${typeMap[type]}${id ? '&id=' + id : ''}`);
 }
@@ -505,7 +505,7 @@ export async function rebUploadFile(data) {
  * 查看文件切片（SSE 版本）
  * 取消逻辑基于 EventSource.close()，无需 CancelToken
  */
-let currentEventSource = null; // 仅保留此变量用于跟踪当前连接
+const currentEventSource = null; // 仅保留此变量用于跟踪当前连接
 
 // 用 fetch 实现 POST 方式的 SSE
 /**
@@ -888,7 +888,7 @@ export async function getFileBboxApi(file_id) {
  * 获取知识库详情
  */
 export async function getKnowledgeDetailApi(knowledge_id): Promise<any[]> {
-    let queryStr = knowledge_id.map(id => `knowledge_id=${id}`).join('&');
+    const queryStr = knowledge_id.map(id => `knowledge_id=${id}`).join('&');
     return await axios.get(`/api/v1/knowledge/info?${queryStr}`);
 }
 
@@ -1235,7 +1235,7 @@ export async function splitWordApi(word: string, messageId: string): Promise<str
 // 获取 chunks
 export async function getSourceChunksApi(chatId: string, messageId: number, keys: string) {
     try {
-        let chunks: any[] = await axios.post(`/api/v1/qa/chunk`, {
+        const chunks: any[] = await axios.post(`/api/v1/qa/chunk`, {
             chat_id: chatId,
             message_id: messageId,
             keys,

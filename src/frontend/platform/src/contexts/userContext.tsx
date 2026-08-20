@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";

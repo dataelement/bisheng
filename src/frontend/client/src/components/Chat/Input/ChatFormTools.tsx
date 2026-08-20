@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import {
   GlobeIcon,
   Hammer,
@@ -66,11 +67,11 @@ export const ChatToolDown = ({
           )}
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-[8px] w-52">
+      <SelectContent className="bg-white rounded-lg w-52">
         {config?.webSearch.enabled && (
           <div className="flex justify-between items-center px-2 py-[5px]">
             <div className="flex gap-2 items-center">
-              <GlobeIcon className="text-[#999]" size="16" />
+              <GlobeIcon className="text-text-3" size="16" />
               <span className="text-sm font-normal">
                 {localize("com_tools_web_search")}
               </span>

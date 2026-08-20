@@ -41,7 +41,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
   const flowData = chatState?.flow ?? currentApp;
 
   return (
-    <div className="relative w-[240px] h-full bg-white border-r border-[#ececec] flex flex-col gap-4 overflow-hidden py-5 px-3 text-[#212121]">
+    <div className="relative w-[240px] h-full bg-white border-r border-border-base flex flex-col gap-4 overflow-hidden py-5 px-3 text-text-1">
       <div className="hidden shrink-0 items-center justify-between max-[768px]:flex">
         {bsConfig?.sidebarIcon?.image ? (
           <img
@@ -50,18 +50,18 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
             className="size-8 rounded-md object-contain"
           />
         ) : (
-          <div className="size-8 rounded-md bg-[#F2F3F5]" />
+          <div className="size-8 rounded-md bg-fill-2" />
         )}
         <button
           type="button"
           onClick={onCloseSidebar}
           className={cn(
-            'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] transition-colors hover:bg-[#f7f8fa]',
+            'inline-flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-1',
             onCloseSidebar ? '' : 'pointer-events-none opacity-0',
           )}
           aria-label={localize('com_nav_close_sidebar')}
         >
-          <X size={16} className="text-[#4E5969]" />
+          <X size={16} className="text-text-2" />
         </button>
       </div>
       {/* App card：仅保留右侧大块 Tooltip；勿再套描述行的小 Tooltip（会与外层叠两层） */}
@@ -71,7 +71,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px] cursor-default"
+                  className="border-border-base border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px] cursor-default"
                   style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)' }}
                 >
                   <div className="flex items-center gap-[8px]">
@@ -99,7 +99,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                         createNewChat();
                       }}
                       type="button"
-                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                      className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
                     >
                       {localize('com_knowledge_start_new_chat')}
                     </button>
@@ -113,28 +113,28 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                 sideOffset={isGuest ? 8 : 0}
                 className={cn(
                   isGuest
-                    ? 'max-w-[min(100vw-2rem,320px)] !rounded-[20px] !border !border-[#E5E6EB] !bg-white !p-5 !text-sm !font-normal !leading-normal !text-[#1D2129] !shadow-[0_8px_32px_rgba(0,0,0,0.12)]'
+                    ? 'max-w-[min(100vw-2rem,320px)] !rounded-[20px] !border !border-border-base !bg-white !p-5 !text-sm !font-normal !leading-normal !text-text-1 !shadow-[0_8px_32px_rgba(0,0,0,0.12)]'
                     : 'max-w-[320px] p-3',
                 )}
               >
                 {isGuest ? (
-                  <div className="flex flex-col gap-4 text-left text-[#1D2129]">
+                  <div className="flex flex-col gap-4 text-left text-text-1">
                     {flowData?.name ? (
                       <div>
-                        <p className="mb-1.5 text-[12px] leading-[18px] text-[#86909C]">
+                        <p className="mb-1.5 text-[12px] leading-[18px] text-text-3">
                           {localize('com_standalone_guest_app_name_label')}
                         </p>
-                        <p className="break-words text-[16px] font-medium leading-[24px] text-[#1D2129]">
+                        <p className="break-words text-[16px] font-medium leading-[24px] text-text-1">
                           {flowData.name}
                         </p>
                       </div>
                     ) : null}
                     {flowData?.description ? (
                       <div>
-                        <p className="mb-1.5 text-[12px] leading-[18px] text-[#86909C]">
+                        <p className="mb-1.5 text-[12px] leading-[18px] text-text-3">
                           {localize('com_standalone_guest_desc_label')}
                         </p>
-                        <p className="whitespace-pre-wrap break-words text-[14px] leading-[22px] text-[#1D2129]">
+                        <p className="whitespace-pre-wrap break-words text-[14px] leading-[22px] text-text-1">
                           {flowData.description}
                         </p>
                       </div>
@@ -155,7 +155,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                       </h4>
                     </div>
                     {flowData?.description && (
-                      <p className="text-[12px] leading-[18px] text-[#4e5969] whitespace-pre-wrap break-words">
+                      <p className="text-[12px] leading-[18px] text-text-2 whitespace-pre-wrap break-words">
                         {flowData.description}
                       </p>
                     )}
@@ -166,7 +166,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
           </TooltipProvider>
         ) : (
           <div
-            className="border-[#ebecf0] border-[0.5px] rounded-[6px] p-[8px] flex flex-col gap-[12px] cursor-default"
+            className="border-border-base border-[0.5px] rounded-md p-[8px] flex flex-col gap-[12px] cursor-default"
             style={{ backgroundImage: 'linear-gradient(128.789deg, rgb(var(--brand-500)/0.04) 0%, rgb(255, 255, 255) 50%, rgb(var(--brand-500)/0.04) 100%)' }}
           >
             <div className="flex items-center gap-[8px]">
@@ -194,7 +194,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
                   createNewChat();
                 }}
                 type="button"
-                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-[#ececec] rounded-[6px] text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
+                className="flex-1 min-w-0 h-[28px] flex items-center justify-center gap-1 bg-white border border-border-base rounded-md text-[14px] leading-[22px] hover:bg-gray-50 transition-colors"
               >
                 {localize('com_knowledge_start_new_chat')}
               </button>
@@ -207,7 +207,7 @@ export function StandaloneSideNav({ sidebar, onCloseSidebar }: StandaloneSideNav
       <div className="flex-1 overflow-y-auto pb-[20px] flex flex-col min-h-0 px-2">
         {groups.length === 0 ? (
           <div className="flex flex-1 items-center justify-center min-h-[120px] px-0 py-6">
-            <p className="text-center text-[14px] leading-[19.5px] text-[#86909c]">
+            <p className="text-center text-[14px] leading-[19.5px] text-text-3">
               {localize('com_app_chat_sidebar_empty')}
             </p>
           </div>

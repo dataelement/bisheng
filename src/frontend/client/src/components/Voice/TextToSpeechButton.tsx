@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { Outlined } from "bisheng-icons"
@@ -90,14 +91,14 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
     // Render icon based on state
     const renderIcon = () => {
         if (isCurrentLoading) {
-            return <Outlined.Loading size={14} className="animate-spin text-[#818181]" />
+            return <Outlined.Loading size={14} className="animate-spin text-text-3" />
         }
 
         if (isCurrentPlaying) {
             return (
                 <Outlined.PlayerPause
                     size={14}
-                    className="text-[#818181]"
+                    className="text-text-3"
                 />
             )
         }
@@ -105,7 +106,7 @@ export const TextToSpeechButton = ({ messageId, text, className }: TextToSpeechB
         return (
             <Outlined.VolumeNotice
                 size={14}
-                className="text-[#818181]"
+                className="text-text-3"
             />
         )
     }

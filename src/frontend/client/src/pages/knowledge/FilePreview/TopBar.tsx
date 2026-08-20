@@ -98,7 +98,7 @@ export function TopBar({
     );
 
     return (
-        <div className="border-b border-[#ececec] bg-white shrink-0 select-none z-50">
+        <div className="border-b border-border-base bg-white shrink-0 select-none z-50">
             {/* ===== PC-narrow top row: filename only (PC <768px; hidden on mobile devices) ===== */}
             {!isMobileDevice && (
                 <div className="flex md:hidden items-center justify-center px-4 py-3 pb-0">
@@ -123,14 +123,14 @@ export function TopBar({
                                     "group h-8 w-8 rounded-md border p-1.5",
                                     sidebarOpen
                                         ? "border-primary bg-primary/10"
-                                        : "border-[#e5e6eb] bg-white hover:bg-[#f7f8fa]"
+                                        : "border-border-base bg-white hover:bg-fill-1"
                                 )}
                                 onClick={onToggleSidebar}
                             >
                                 <SidebarToggleIcon
                                     className={cn(
                                         "transition-colors",
-                                        sidebarOpen ? "text-primary" : "text-[#86909c] group-hover:text-[#4e5969]"
+                                        sidebarOpen ? "text-primary" : "text-text-3 group-hover:text-text-2"
                                     )}
                                 />
                             </Button>
@@ -157,9 +157,9 @@ export function TopBar({
                                 <ZoomOutIcon className="text-[#64698b]" />
                             </Button>
 
-                            <div className="bg-white border hover:border-blue-500 cursor-pointer transition-colors border-[#ececec] border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-[6px] shrink-0 w-[88px] h-[32px]">
+                            <div className="bg-white border hover:border-blue-500 cursor-pointer transition-colors border-border-base border-solid content-stretch flex items-center justify-between overflow-clip px-[8px] py-[3px] relative rounded-md shrink-0 w-[88px] h-[32px]">
                                 <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
-                                    <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] not-italic relative shrink-0 text-[#212121] text-[14px] whitespace-nowrap">
+                                    <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] not-italic relative shrink-0 text-text-1 text-[14px] whitespace-nowrap">
                                         {zoomLevel}%
                                     </p>
                                 </div>
@@ -174,7 +174,7 @@ export function TopBar({
 
                     {showPagination && totalPages > 0 && (
                         <div className="content-stretch flex gap-[4px] items-center relative shrink-0">
-                            <div className="bg-[#fbfbfb] content-stretch flex items-center overflow-clip px-[8px] py-[3px] relative rounded-[6px] shrink-0 w-[40px] h-[28px]">
+                            <div className="bg-[#fbfbfb] content-stretch flex items-center overflow-clip px-[8px] py-[3px] relative rounded-md shrink-0 w-[40px] h-[28px]">
                                 <input
                                     ref={inputRef}
                                     type="text"
@@ -182,13 +182,13 @@ export function TopBar({
                                     onChange={(e) => setPageInput(e.target.value)}
                                     onBlur={handlePageSubmit}
                                     onKeyDown={handleKeyDown}
-                                    className="w-full text-center bg-transparent outline-none font-['PingFang_SC:Regular',sans-serif] leading-[22px] text-[#212121] text-[14px]"
+                                    className="w-full text-center bg-transparent outline-none font-['PingFang_SC:Regular',sans-serif] leading-[22px] text-text-1 text-[14px]"
                                 />
                             </div>
-                            <div className="relative shrink-0 size-[12px] flex items-center justify-center text-[#86909c]">
+                            <div className="relative shrink-0 size-[12px] flex items-center justify-center text-text-3">
                                 /
                             </div>
-                            <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] text-[#212121] text-[14px] whitespace-nowrap pl-1">
+                            <p className="font-['PingFang_SC:Regular',sans-serif] leading-[22px] text-text-1 text-[14px] whitespace-nowrap pl-1">
                                 {totalPages}
                             </p>
                         </div>

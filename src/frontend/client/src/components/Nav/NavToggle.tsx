@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useLocalize } from '~/hooks';
 import { TooltipAnchor } from '~/components/ui';
 import { cn } from '~/utils';

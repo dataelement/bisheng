@@ -15,7 +15,7 @@ describe("resolveChatErrorMessage", () => {
         );
 
         expect(message).toBe("助手服务异常");
-        expect(translate).toHaveBeenCalledWith("errors.10499", {
+        expect(translate).toHaveBeenCalledWith("api_errors:10499", {
             defaultValue: "Assistant Service Exception",
         });
     });

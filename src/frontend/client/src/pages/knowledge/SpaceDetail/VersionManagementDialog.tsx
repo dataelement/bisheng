@@ -52,14 +52,14 @@ export function VersionManagementDialog({
             <DialogContent
                 className="flex w-full max-w-[720px] max-h-[85vh] flex-col gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none [&>button]:hidden"
             >
-                <DialogHeader className="relative shrink-0 border-b border-[#EBECF0] px-6 py-4 text-left">
-                    <DialogTitle className="text-[16px] font-semibold text-[#1d2129]">
+                <DialogHeader className="relative shrink-0 border-b border-border-base px-6 py-4 text-left">
+                    <DialogTitle className="text-[16px] font-semibold text-text-1">
                         {localize("com_knowledge.version.dialog_title")}
                     </DialogTitle>
                     <button
                         type="button"
                         onClick={() => onOpenChange(false)}
-                        className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-[#4E5969] transition-colors hover:bg-[#F2F3F5]"
+                        className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2"
                         aria-label={localize("com_knowledge.close") || "Close"}
                     >
                         <X className="size-4" />
@@ -76,11 +76,11 @@ export function VersionManagementDialog({
                     />
                 </div>
 
-                <div className="flex shrink-0 items-center justify-end border-t border-[#EBECF0] px-6 py-3">
+                <div className="flex shrink-0 items-center justify-end border-t border-border-base px-6 py-3">
                     <Button
                         type="button"
                         variant="outline"
-                        className="h-8 rounded-[6px] px-4 font-normal"
+                        className="h-8 rounded-md px-4 font-normal"
                         onClick={() => onOpenChange(false)}
                     >
                         {localize("com_knowledge.cancel")}

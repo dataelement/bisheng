@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { queryChartData } from '@/controllers/API/dashboard'
@@ -58,7 +59,7 @@ export function ChartContainer({ isPreviewMode, isDark, component }: ChartContai
           }}
         />
 
-        <div className="relative z-10 bg-white px-6 py-2 rounded-md backdrop-blur-sm">
+        <div className="relative z-10 bg-white px-6 py-2 rounded-md">
           <div className="flex items-center gap-3">
             <span className="text-[#8da9ff] font-medium text-lg tracking-wider break-keep">
               {t('updatingCharts')}

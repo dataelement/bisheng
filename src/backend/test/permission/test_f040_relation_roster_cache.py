@@ -95,40 +95,40 @@ def _version_stub(values):
 async def test_get_bindings_reuses_parse_on_same_version(monkeypatch):
     """AC-21/AC-30: same config version → ``_build_bindings`` runs once, the parse is
     reused across consecutive ``_get_bindings`` reads."""
-    import bisheng.permission.api.endpoints.resource_permission as rp
+    import bisheng.permission.domain.services.relation_model_store as rp
     from bisheng.common.models.config import ConfigDao
 
     monkeypatch.setattr(ConfigDao, "aget_config_version", _version_stub(["v1"]))
-    monkeypatch.setattr(rp, "_roster_cache_tenant_id", lambda: 1)
+    monkeypatch.setattr(rp, "roster_cache_tenant_id", lambda: 1)
     state = {"calls": 0}
 
     async def _build():
         state["calls"] += 1
         return [{"resource_type": "knowledge_space", "resource_id": "1"}]
 
-    monkeypatch.setattr(rp, "_build_bindings", _build)
+    monkeypatch.setattr(rp, "build_bindings", _build)
 
-    b1 = await rp._get_bindings()
-    b2 = await rp._get_bindings()
+    b1 = await rp.get_bindings()
+    b2 = await rp.get_bindings()
     assert b1 == b2 == [{"resource_type": "knowledge_space", "resource_id": "1"}]
     assert state["calls"] == 1
 
 
 async def test_get_bindings_rebuilds_when_version_changes(monkeypatch):
     """A config edit bumps update_time → version changes → roster rebuilt (no stale)."""
-    import bisheng.permission.api.endpoints.resource_permission as rp
+    import bisheng.permission.domain.services.relation_model_store as rp
     from bisheng.common.models.config import ConfigDao
 
     monkeypatch.setattr(ConfigDao, "aget_config_version", _version_stub(["v1", "v2"]))
-    monkeypatch.setattr(rp, "_roster_cache_tenant_id", lambda: 1)
+    monkeypatch.setattr(rp, "roster_cache_tenant_id", lambda: 1)
     state = {"calls": 0}
 
     async def _build():
         state["calls"] += 1
         return []
 
-    monkeypatch.setattr(rp, "_build_bindings", _build)
+    monkeypatch.setattr(rp, "build_bindings", _build)
 
-    await rp._get_bindings()
-    await rp._get_bindings()
+    await rp.get_bindings()
+    await rp.get_bindings()
     assert state["calls"] == 2  # version v1 → v2 forced a rebuild

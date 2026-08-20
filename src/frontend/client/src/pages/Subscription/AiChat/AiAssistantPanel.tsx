@@ -177,7 +177,7 @@ export function AiAssistantPanel({
                                     variant="ghost"
                                     type="button"
                                     size="icon"
-                                    className="size-8 shrink-0 text-[#86909c] hover:text-[#4e5969]"
+                                    className="size-8 shrink-0 text-text-3 hover:text-text-2"
                                     onClick={onClose}
                                     aria-label={localize("com_ui_collapse")}
                                 >

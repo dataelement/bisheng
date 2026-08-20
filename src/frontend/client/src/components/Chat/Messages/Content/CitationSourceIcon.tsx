@@ -246,7 +246,7 @@ export function CitationSourceIcon({
       {icon.type === 'web' ? (
         <WebSourceIcon icon={icon} iconClassName={iconClassName} />
       ) : ragIconVariant === 'knowledge' ? (
-        <Outlined.BookOpenText className={cn('size-4 text-[#86909C]', iconClassName)} />
+        <Outlined.BookOpenText className={cn('size-4 text-text-3', iconClassName)} />
       ) : (
         <CitationFileTypeIcon fileType={icon.fileType || 'txt'} className={iconClassName} />
       )}

@@ -33,8 +33,6 @@ interface ArticleListProps {
     selectedArticleId?: string;
     /** PC：顶部标题下拉切换频道（替代左侧 ChannelSidebar） */
     onChannelSelect?: (channel: Channel | null) => void;
-    /** PC：下拉内频道项管理操作 */
-    onManageMembers?: (channel: Channel) => void;
     onChannelSettings?: (channel: Channel) => void;
     /** H5：打开「我的频道」侧栏（订阅页抽屉） */
     onOpenChannelNav?: () => void;
@@ -145,7 +143,7 @@ function SubChannelTab({
                 <button type="button" onClick={onClick} className={className}>
                     <span ref={labelRef} className="block max-w-[240px] truncate">{sub.name}</span>
                     {sub.unreadCount && sub.unreadCount > 0 ? (
-                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
+                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-caption-sm font-medium text-blue-500">
                             {sub.unreadCount}
                         </span>
                     ) : null}
@@ -161,13 +159,12 @@ export function ArticleList({
     selectedArticleId,
     onArticleSelect,
     onChannelSelect,
-    onManageMembers,
     onChannelSettings,
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
 }: ArticleListProps) {
-    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]";
+    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-text-1";
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     // Browse mode (PC, no article selected): show a two-column card grid. Reading mode: single column.
@@ -492,7 +489,6 @@ export function ArticleList({
                                         variant="mobile"
                                         channel={channel}
                                         onChannelSelect={onChannelSelect}
-                                        onManageMembers={onManageMembers}
                                         onChannelSettings={onChannelSettings}
                                         onShare={canOpenChannelShare ? handleMobileShare : undefined}
                                         onOpenSourceFilter={
@@ -556,7 +552,7 @@ export function ArticleList({
                                     }
                                 />
                             ) : (
-                                <h1 className="min-w-0 flex-1 truncate text-[16px] font-medium leading-6 text-[#212121]">
+                                <h1 className="min-w-0 flex-1 truncate text-[16px] font-medium leading-6 text-text-1">
                                     {channelDetail?.name || channel.name}
                                 </h1>
                             )}
@@ -565,10 +561,10 @@ export function ArticleList({
                                 onClick={handleToggleUnread}
                                 disabled={mobileDropdownOpen}
                                 className={cn(
-                                    "shrink-0 rounded-[6px] border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
+                                    "shrink-0 rounded-md border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-transparent bg-primary/20 text-primary"
-                                        : "border-[#E5E6EB] bg-white text-gray-800",
+                                        : "border-border-base bg-white text-gray-800",
                                     mobileDropdownOpen && "pointer-events-none opacity-20",
                                 )}
                             >
@@ -578,7 +574,7 @@ export function ArticleList({
                         {/* Row 3: 子频道（横向滚动；右侧渐变提示可滑动）。无子频道时整行隐藏。 */}
                         {subChannels.length > 0 ? (
                             <div className="px-4 pb-2">
-                                <div className="relative min-w-0 border-b border-[#F2F3F5]">
+                                <div className="relative min-w-0 border-b border-fill-2">
                                     {tabsScrollShadow.left ? (
                                         <div
                                             className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0.15)_0%,rgba(153,153,153,0)_100%)]"
@@ -603,12 +599,12 @@ export function ArticleList({
                                                 "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
                                                 !selectedSubChannelName
                                                     ? "border-blue-500 text-blue-500"
-                                                    : "border-transparent text-[#212121]",
+                                                    : "border-transparent text-text-1",
                                             )}
                                         >
                                             <span>{localize("com_subscription.all")}</span>
                                             {channel.unreadCount > 0 && (
-                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-blue-500/5 px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
+                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-blue-500/5 px-1 text-caption-sm font-medium text-blue-500">
                                                     {channel.unreadCount}
                                                 </span>
                                             )}
@@ -622,7 +618,7 @@ export function ArticleList({
                                                     "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
                                                     selectedSubChannelName === sub.name
                                                         ? "border-blue-500 text-blue-500"
-                                                        : "border-transparent text-[#212121]",
+                                                        : "border-transparent text-text-1",
                                                 )}
                                             />
                                         ))}
@@ -668,7 +664,7 @@ export function ArticleList({
                                     }
                                 />
                             ) : (
-                                <h1 className="truncate text-base text-[#1d2129]">
+                                <h1 className="truncate text-base text-text-1">
                                     {channelDetail?.name || channel.name}
                                 </h1>
                             )}
@@ -705,12 +701,12 @@ export function ArticleList({
                                         "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
                                         !selectedSubChannelName
                                             ? "border-blue-500 text-blue-500"
-                                            : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
+                                            : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
                                     )}
                                 >
                                     <span>{localize("com_subscription.all")}</span>
                                     {channel.unreadCount > 0 && (
-                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-[10px] font-semibold leading-[18px] text-blue-500">
+                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-caption-sm font-medium text-blue-500">
                                             {channel.unreadCount}
                                         </span>
                                     )}
@@ -724,7 +720,7 @@ export function ArticleList({
                                             "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
                                             selectedSubChannelName === sub.name
                                                 ? "border-blue-500 text-blue-500"
-                                                : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
+                                                : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
                                         )}
                                     />
                                 ))}
@@ -743,7 +739,7 @@ export function ArticleList({
                                 className="min-w-0"
                             />
                             <MultiSourceSelect
-                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-[6px]"
+                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-md"
                                 options={sourceOptions}
                                 value={selectedSources}
                                 onChange={handleSourcesChange}
@@ -752,15 +748,15 @@ export function ArticleList({
                                 type="button"
                                 onClick={handleToggleUnread}
                                 className={cn(
-                                    "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-transparent bg-primary/20 text-primary"
-                                        : "border-[#ECECEC] bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
+                                        : "border-border-base bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
                                 )}
                             >{localize("com_subscription.show_unread_only")}</button>
 
                             {/* Divider separating the article filters from the channel-level actions */}
-                            <div className="h-5 w-px shrink-0 bg-[#ECECEC]" aria-hidden />
+                            <div className="h-5 w-px shrink-0 bg-fill-3" aria-hidden />
 
                             {canOpenChannelShare ? (
                                 <CopyShareLinkButton
@@ -769,18 +765,17 @@ export function ArticleList({
                                     successMessage={localize("com_subscription.share_link_copied")}
                                     errorMessage={localize("com_subscription.copy_failed_retry")}
                                     iconOnly
-                                    className="border-[#ECECEC]"
+                                    className="border-border-base"
                                     aria-label={localize("com_subscription.share")}
-                                    icon={<Outlined.Share className="size-4 shrink-0 text-[#4e5969]" />}
+                                    icon={<Outlined.Share className="size-4 shrink-0 text-text-2" />}
                                 />
                             ) : null}
                             {onChannelSelect ? (
                                 <ChannelActionsMenu
                                     channel={channel}
                                     onChannelSelect={onChannelSelect}
-                                    onManageMembers={onManageMembers}
                                     onChannelSettings={onChannelSettings}
-                                    triggerClassName="border-[#ECECEC]"
+                                    triggerClassName="border-border-base"
                                 />
                             ) : null}
                         </div>
@@ -802,7 +797,7 @@ export function ArticleList({
                 )}>
                     {/* Show loading spinner while channel detail or initial article list is loading */}
                     {(isChannelDetailLoading || (loading && articles.length === 0)) ? (
-                        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-[#86909c]">
+                        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-text-3">
                             <LoadingIcon className="size-20 text-primary" />
                         </div>
                     ) : articles.length === 0 ? (
@@ -810,12 +805,12 @@ export function ArticleList({
                             {(searchQuery || selectedSources.length > 0 || onlyUnread) ? (
                                 <>
                                     <EmptyStateIllustration className="size-[120px] mb-4" />
-                                    <p className="text-[14px] font-normal leading-6 text-[#999999]">{localize("com_subscription.no_results")}</p>
+                                    <p className="text-[14px] font-normal leading-6 text-text-3">{localize("com_subscription.no_results")}</p>
                                 </>
                             ) : (
                                 <>
                                     <EmptyStateIllustration className="size-[120px] mb-4" />
-                                    <p className="text-[14px] font-normal leading-6 text-[#999999]">
+                                    <p className="text-[14px] font-normal leading-6 text-text-3">
                                         {localize("com_subscription.no_related_content")}
                                     </p>
                                 </>
@@ -841,7 +836,7 @@ export function ArticleList({
                                         );
                                         return rows.map((row, rowIndex) => {
                                             const rowDivider = rowIndex < rows.length - 1
-                                                ? "border-b border-dashed border-[#EBECF0]"
+                                                ? "border-b border-dashed border-border-base"
                                                 : "";
                                             return (
                                                 <div
@@ -866,7 +861,7 @@ export function ArticleList({
                                                     </div>
                                                     {row[1] && (
                                                         <>
-                                                            <div className="my-5 border-l border-dashed border-[#EBECF0]" aria-hidden />
+                                                            <div className="my-5 border-l border-dashed border-border-base" aria-hidden />
                                                             <div>
                                                                 <ArticleCard
                                                                     article={row[1]}
@@ -904,7 +899,7 @@ export function ArticleList({
                                     {articles.map((article, i) => (
                                         <div
                                             key={article.id}
-                                            className={cn(i > 0 && "border-t border-dashed border-[#EBECF0]")}
+                                            className={cn(i > 0 && "border-t border-dashed border-border-base")}
                                         >
                                             <ArticleCard
                                                 article={article}

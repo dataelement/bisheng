@@ -22,8 +22,6 @@ import {
 } from "react";
 import { Loader2 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
-import BookOpen from "~/components/ui/icon/BookOpen";
-import BooksIcon from "~/components/ui/icon/Books";
 import type { FileType } from "~/components/ui/icon/File/FileIcon";
 import { OGDialog, OGDialogContent } from "~/components/ui";
 import { cn } from "~/utils";
@@ -84,13 +82,13 @@ const CardShell = ({
 }) => (
     <div
         className={cn(
-            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-[#212121]",
+            "group flex h-[30px] shrink-0 items-center gap-1 rounded-md bg-white px-2 text-xs text-text-1",
             onClick && "cursor-pointer",
         )}
         style={{ width: CARD_WIDTH }}
         onClick={onClick}
     >
-        <span className="flex size-4 shrink-0 items-center justify-center text-[#999]">{icon}</span>
+        <span className="flex size-4 shrink-0 items-center justify-center text-text-3">{icon}</span>
         <span className="min-w-0 flex-1 truncate text-left" title={title ?? label}>
             {label}
         </span>
@@ -115,8 +113,8 @@ const CardShell = ({
 const KbCard = ({ kb, onRemove }: { kb: any; onRemove?: () => void }) => (
     <CardShell
         icon={kb.type === "space"
-            ? <BookOpen className="size-4" />
-            : <BooksIcon className="size-4" />}
+            ? <Outlined.Book size={16} />
+            : <Outlined.Books size={16} />}
         label={kb.name ?? ""}
         onRemove={onRemove}
     />
@@ -198,7 +196,7 @@ const ArrowButton = ({
             // 8px gap only on the outer side (strip edge); the side facing the cards
             // stays flush at 0.
             className={cn(
-                "flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-[#212121]",
+                "flex size-4 shrink-0 items-center justify-center text-[#666] transition-colors hover:text-text-1",
                 direction === "left" ? "ml-2" : "mr-2",
             )}
         >
@@ -243,7 +241,13 @@ export const AttachmentBar = ({
         const all: Entry[] = [
             ...uploadingFiles.map((f) => ({ kind: "uploading" as const, key: `up-${f.id}`, data: f })),
             ...files.map((f) => ({ kind: "file" as const, key: `file-${f.file_id || f.filepath || f.name}`, data: f })),
-            ...kbs.map((k) => ({ kind: "kb" as const, key: `kb-${k.id}`, data: k })),
+            // Knowledge selections are stored newest-first (the picker prepends),
+            // the opposite of the file arrays. Feed them in oldest-first so the
+            // sequence below means the same thing for every source: without this,
+            // a set that first appears all at once — restoring a conversation from
+            // localStorage — hands the newest item the lowest sequence and the row
+            // comes back reversed, even though picking them one by one is correct.
+            ...[...kbs].reverse().map((k) => ({ kind: "kb" as const, key: `kb-${k.id}`, data: k })),
             ...skills.map((s) => ({ kind: "skill" as const, key: `skill-${s.name}`, data: s })),
         ];
         const { map } = seqRef.current;

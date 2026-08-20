@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog"

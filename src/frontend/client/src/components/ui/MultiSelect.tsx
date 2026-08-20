@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Check, X } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "~/utils";
@@ -6,7 +7,7 @@ import { SearchInput } from "./Input";
 import { Select, SelectContent, SelectTrigger } from "./Select";
 
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {
-    let timer = useRef<NodeJS.Timeout | null>();
+    const timer = useRef<NodeJS.Timeout | null>();
     const fnRef = useRef<any>(func);
     useEffect(() => { fnRef.current = func; }, [func]);
     const timerCancel = function () { if (timer.current) clearTimeout(timer.current); };
@@ -19,7 +20,7 @@ export function useDebounce(func: any, wait: number, immediate: boolean, callbac
         };
         timerCancel();
         if (immediate) {
-            let runNow = !timer.current;
+            const runNow = !timer.current;
             timer.current = setTimeout(() => { timer.current = null; }, wait);
             if (runNow) {
                 runFunction();

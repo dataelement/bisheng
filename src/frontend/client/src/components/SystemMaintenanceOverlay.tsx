@@ -31,14 +31,14 @@ export function SystemMaintenanceOverlay() {
         <div className="fixed inset-0 z-[2000] flex flex-col items-center justify-center gap-4 bg-white px-8 text-center">
             <SystemMaintenanceIllustration className="h-[120px] w-[120px]" />
             <div className="flex flex-col items-center gap-1">
-                <p className="text-base font-medium leading-6 text-[#1D2129]">
+                <p className="text-base font-medium leading-6 text-text-1">
                     {localize("com_app.service_maintenance_title")}
                 </p>
-                <p className="text-sm leading-[22px] text-[#999999]">
+                <p className="text-sm leading-[22px] text-text-3">
                     {localize("com_app.service_maintenance")}
                 </p>
             </div>
-            <Button variant="outline" className="h-8 rounded-[6px] px-4" onClick={() => window.location.reload()}>
+            <Button variant="outline" className="h-8 rounded-md px-4" onClick={() => window.location.reload()}>
                 {localize("com_app.refresh")}
             </Button>
         </div>

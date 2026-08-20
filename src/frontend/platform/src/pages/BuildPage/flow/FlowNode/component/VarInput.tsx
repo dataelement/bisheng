@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { RbDragIcon } from "@/components/bs-icons/rbDrag";
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/bs-ui/dialog";
@@ -245,7 +246,7 @@ export default function VarInput({
         e.preventDefault();
 
         // 1. Get the HTML content
-        let copiedHtml = e.clipboardData.getData('text/html');
+        const copiedHtml = e.clipboardData.getData('text/html');
         const copiedText = e.clipboardData.getData('text/plain');
 
         // If the clipboard doesn't contain HTML, directly insert the plain text and return

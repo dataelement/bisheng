@@ -1,5 +1,5 @@
 import { useLocalize } from "~/hooks";
-import { LogOut, MoreHorizontal, Pin, PinOff, Settings, UsersRound } from "lucide-react";
+import { LogOut, MoreHorizontal, Pin, PinOff, Settings } from "lucide-react";
 import { useState } from "react";
 import { canDeleteChannel, canEditChannelSettings, canManageChannelPermissions, type Channel } from "~/api/channels";
 import { NotificationSeverity } from "~/common";
@@ -33,7 +33,6 @@ interface ChannelItemProps {
     onDelete: (id: string) => void;
     onUnsubscribe: (id: string) => void;
     onPin: (id: string, pinned: boolean, type: "created" | "subscribed") => void;
-    onManageMembers: (channel: Channel) => void;
     onChannelSettings: (channel: Channel) => void;
 }
 
@@ -46,7 +45,6 @@ export default function ChannelItem({
     onDelete,
     onUnsubscribe,
     onPin,
-    onManageMembers,
     onChannelSettings
 }: ChannelItemProps) {
     const localize = useLocalize();
@@ -61,6 +59,9 @@ export default function ChannelItem({
     // independent: any subscriber can leave, including one who can also dissolve.
     const canDissolve = canDeleteChannel(channel.role, channel.permissionIds);
     const canUnsubscribe = type === "subscribed";
+    const effectivePermissionIds = channel.permissionIds ?? [];
+    const canOpenSettings = canEditChannelSettings(undefined, effectivePermissionIds)
+        || canManageChannelPermissions(undefined, effectivePermissionIds);
 
     const rename = (e) => {
         const newName = e.target.value.trim();
@@ -81,7 +82,7 @@ export default function ChannelItem({
         <div
             className={`group flex items-center justify-between h-8 px-3 py-1.5 rounded-lg cursor-pointer border ${isActive
                 ? "bg-blue-500/[0.07] border-primary shadow-sm"
-                : "border-transparent hover:bg-[#F7F7F7]"
+                : "border-transparent hover:bg-fill-1"
                 }`}
             style={{
                 transitionProperty: 'background-color',
@@ -111,7 +112,7 @@ export default function ChannelItem({
                     />
                 ) : (
                     <div className="flex items-center gap-1 flex-1 min-w-0">
-                        <span onDoubleClick={() => type === "created" && setIsEditing(true)} className="text-[14px] truncate text-[#1d2129]">
+                        <span onDoubleClick={() => type === "created" && setIsEditing(true)} className="text-[14px] truncate text-text-1">
                             {channel.name}
                         </span>
                         {channel.isPinned && (
@@ -132,7 +133,7 @@ export default function ChannelItem({
                 {channel.unreadCount > 0 && (
                     <span
                         className={cn(
-                            "flex items-center justify-center rounded-md bg-blue-500/20 px-1.5 py-[1px] text-[10px] font-medium text-primary",
+                            "flex items-center justify-center rounded-md bg-blue-500/20 px-1.5 py-[1px] text-caption-sm font-medium text-primary",
                             "coarse-pointer:relative coarse-pointer:shrink-0 coarse-pointer:opacity-100",
                             "fine-pointer:absolute fine-pointer:right-0",
                             menuOpen
@@ -161,12 +162,12 @@ export default function ChannelItem({
                             )}
                             onClick={(e) => e.stopPropagation()}
                         >
-                            <MoreHorizontal className="size-4 text-[#4e5969]" />
+                            <MoreHorizontal className="size-4 text-text-2" />
                         </button>
                     </DropdownMenuTrigger>
 
                     <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                        {canEditChannelSettings(channel.role, channel.permissionIds) && (
+                        {canOpenSettings && (
                             <DropdownMenuItem
                                 className={sidebarListMoreMenuItemClassName}
                                 onClick={() => onChannelSettings(channel)}
@@ -174,17 +175,6 @@ export default function ChannelItem({
                                 <Settings className={sidebarListMoreMenuIconClassName} />
                                 <span className={sidebarListMoreMenuLabelClassName}>
                                     {localize("com_subscription.channel_settings")}
-                                </span>
-                            </DropdownMenuItem>
-                        )}
-                        {canManageChannelPermissions(channel.role, channel.permissionIds) && (
-                            <DropdownMenuItem
-                                className={sidebarListMoreMenuItemClassName}
-                                onClick={() => onManageMembers(channel)}
-                            >
-                                <UsersRound className={sidebarListMoreMenuIconClassName} />
-                                <span className={sidebarListMoreMenuLabelClassName}>
-                                    {localize("com_subscription.member_management")}
                                 </span>
                             </DropdownMenuItem>
                         )}

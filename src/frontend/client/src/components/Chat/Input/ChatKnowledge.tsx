@@ -1,17 +1,9 @@
 import {
-  ChevronLeft,
   Glasses,
-  Loader2,
   PaperclipIcon,
-  SearchIcon,
 } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  getMineSpacesApi,
-  getJoinedSpacesApi,
-  getDepartmentSpacesApi,
-} from "~/api/knowledge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,26 +12,17 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-  Input
 } from "~/components/ui";
-import { Checkbox } from "~/components/ui/Checkbox";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/Tooltip2";
-import BookOpen from "~/components/ui/icon/BookOpen";
-import BooksIcon from "~/components/ui/icon/Books";
 import { useGetOrgToolList } from "~/hooks/queries/data-provider";
 import { BsConfig } from "~/types/chat";
-import { useLocalize, useMediaQuery, useScrollRevealRef } from "~/hooks";
+import { useCategorizedKnowledgeSpaces, useLocalize, useMediaQuery } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
+import { KnowledgeListPanel } from "./KnowledgeListPanel";
+import type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
-// --- 类型定义 ---
-export type KnowledgeType = 'org' | 'space';
-
-export interface KnowledgeItem {
-  id: string;
-  name: string;
-  type: KnowledgeType;
-}
+export type { KnowledgeItem, KnowledgeType } from "./knowledgeTypes";
 
 // --- Hooks ---
 function useDebounce<T>(value: T, delay: number): T {
@@ -51,8 +34,16 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
+/** Cap for the mobile popup / drill panels (further clamped to whatever space
+ *  the viewport actually offers — see mobileDrillMaxH). */
 const MAX_SUB_HEIGHT = 256;
+/** Cap for the desktop 知识空间 panel. Its own value: the skill / org panels sit
+ *  at 440, this one stays shorter so it still opens downward more often. */
+const KNOWLEDGE_PANEL_MAX_H = 320;
 const BOTTOM_GAP = 8;
+/** Distance from the chat input box's outer edge to its toolbar: the box's
+ *  `p-3` (12px) plus its 1px border (AiChatInput / TaskModeInput shell). */
+const INPUT_INNER_INSET = 13;
 /** 移动端：碰撞检测余量；底部勿过大，否则 flip/shift 会把整块菜单顶到视口上方导致裁切 */
 const MOBILE_MENU_COLLISION = {
   top: 56,
@@ -60,248 +51,6 @@ const MOBILE_MENU_COLLISION = {
   left: 12,
   right: 12,
 } as const;
-
-/**
- * Compute an alignOffset so the sub-content top aligns with the parent menu top,
- * and clamp maxH so the sub-content never overflows the viewport on either side.
- *
- * After the sub-content is rendered by Radix, we also observe its real position
- * and re-clamp maxH based on the actual top (handles Radix collision shifting).
- */
-function useSubMenuLayout(menuRef: React.RefObject<HTMLDivElement | null>, triggerKey: string, open: boolean) {
-  const [alignOffset, setAlignOffset] = useState(0);
-  const [maxH, setMaxH] = useState<number>(MAX_SUB_HEIGHT);
-  const subContentRef = useRef<HTMLElement | null>(null);
-
-  // Phase 1 — compute alignOffset & an initial maxH from parent menu rect
-  useLayoutEffect(() => {
-    if (!open) return;
-
-    const update = () => {
-      const menuEl = menuRef.current;
-      if (!menuEl) return;
-
-      const menuRect = menuEl.getBoundingClientRect();
-
-      const trigger = menuEl.querySelector<HTMLElement>(`[data-sub-key="${triggerKey}"]`);
-      if (trigger) {
-        const triggerRect = trigger.getBoundingClientRect();
-        setAlignOffset(Math.round(menuRect.top - triggerRect.top));
-      } else {
-        setAlignOffset(0);
-      }
-
-      // Initial estimate — will be refined in Phase 2
-      const spaceBelow = window.innerHeight - menuRect.top - BOTTOM_GAP;
-      const spaceAbove = menuRect.bottom - BOTTOM_GAP;
-      const available = Math.max(spaceBelow, spaceAbove);
-      setMaxH(Math.min(Math.max(available, 120), MAX_SUB_HEIGHT));
-    };
-
-    requestAnimationFrame(update);
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
-  }, [open, menuRef, triggerKey]);
-
-  // Phase 2 — once Radix renders the actual sub-content, observe its real
-  // position and clamp maxH so it stays within the viewport.
-  useEffect(() => {
-    if (!open) {
-      subContentRef.current = null;
-      return;
-    }
-
-    // Radix renders sub-content in a portal; locate it by role + data attribute
-    const findSubContent = (): HTMLElement | null => {
-      // Look for the sub-content element associated with this trigger
-      const menuEl = menuRef.current;
-      if (!menuEl) return null;
-
-      const trigger = menuEl.querySelector<HTMLElement>(`[data-sub-key="${triggerKey}"]`);
-      if (!trigger) return null;
-
-      // The sub-content is rendered in a portal; we find it via the Radix
-      // data-state="open" attribute on [role="menu"] elements in the document
-      const allMenus = document.querySelectorAll<HTMLElement>('[role="menu"][data-state="open"]');
-      // Pick the deepest nested one that is NOT the parent menu
-      for (const m of Array.from(allMenus)) {
-        if (m !== menuEl && !menuEl.contains(m)) {
-          return m;
-        }
-      }
-      return null;
-    };
-
-    const clampToViewport = () => {
-      const el = subContentRef.current || findSubContent();
-      if (!el) return;
-      subContentRef.current = el;
-
-      const rect = el.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.top - BOTTOM_GAP;
-      const finalH = Math.min(Math.max(spaceBelow, 120), MAX_SUB_HEIGHT);
-      setMaxH(finalH);
-    };
-
-    // Wait a tick for Radix portal to mount
-    const rafId = requestAnimationFrame(() => {
-      requestAnimationFrame(clampToViewport);
-    });
-
-    window.addEventListener('resize', clampToViewport);
-    window.addEventListener('scroll', clampToViewport, true);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      window.removeEventListener('resize', clampToViewport);
-      window.removeEventListener('scroll', clampToViewport, true);
-    };
-  }, [open, menuRef, triggerKey]);
-
-  return { alignOffset, maxH };
-}
-
-// --- 子组件：列表面板 ---
-const KnowledgeListPanel = ({
-  placeholder,
-  keyword,
-  setKeyword,
-  items,
-  selectedItems, // 这里接收的是筛选后的数组
-  onToggle,
-  isFetching,
-  hasMore,
-  onLoadMore,
-  emptyText,
-}: {
-  placeholder: string;
-  keyword: string;
-  setKeyword: (v: string) => void;
-  items: any[];
-  selectedItems: KnowledgeItem[];
-  onToggle: (item: any) => void;
-  isFetching: boolean;
-  hasMore: boolean;
-  onLoadMore: () => void;
-  emptyText: string;
-}) => {
-  const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-  // Direct ref to the scroll container so we can read scroll metrics for the
-  // edge-shadow indicators (useScrollRevealRef is callback-only and only
-  // toggles a `data-scrolling` attribute).
-  const scrollNodeRef = useRef<HTMLDivElement | null>(null);
-  const setScrollRefs = useCallback(
-    (node: HTMLDivElement | null) => {
-      scrollNodeRef.current = node;
-      listScrollRevealRef(node);
-    },
-    [listScrollRevealRef],
-  );
-
-  // Edge shadows: visible only when there is content above / below the current
-  // viewport. Shadows fade out at the top/bottom boundary.
-  const [canScrollUp, setCanScrollUp] = useState(false);
-  const [canScrollDown, setCanScrollDown] = useState(false);
-  const updateScrollIndicators = useCallback(() => {
-    const el = scrollNodeRef.current;
-    if (!el) return;
-    const { scrollTop, scrollHeight, clientHeight } = el;
-    setCanScrollUp(scrollTop > 0);
-    setCanScrollDown(scrollTop + clientHeight < scrollHeight - 1);
-  }, []);
-  useEffect(() => {
-    updateScrollIndicators();
-  }, [items, updateScrollIndicators]);
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 10 && !isFetching && hasMore) {
-      onLoadMore();
-    }
-    updateScrollIndicators();
-  };
-
-  return (
-    <div className="flex flex-col gap-1 min-h-0 flex-1">
-      {/* 搜索框 */}
-      <div className="relative shrink-0">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-        <Input
-          className="h-[28px] text-sm bg-white border border-[#ECECEC] rounded-[6px] pl-8 focus-visible:ring-1 focus-visible:ring-blue-500/20"
-          placeholder={placeholder}
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        />
-      </div>
-
-      {/* 滚动列表 — wrapped in a relative container so the top/bottom edge
-          shadows can be absolutely positioned over the scroll viewport. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        {/* Top edge fade — solid popup-white fades to transparent so list
-            content visually dissolves into the menu surface. */}
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute left-0 right-0 top-0 h-3 z-10 transition-opacity duration-150",
-            "bg-gradient-to-b from-white to-transparent",
-            canScrollUp ? "opacity-100" : "opacity-0",
-          )}
-        />
-        {/* Bottom edge fade — same idea, mirrored. */}
-        <div
-          aria-hidden
-          className={cn(
-            "pointer-events-none absolute bottom-0 left-0 right-0 h-3 z-10 transition-opacity duration-150",
-            "bg-gradient-to-t from-white to-transparent",
-            canScrollDown ? "opacity-100" : "opacity-0",
-          )}
-        />
-        <div
-          ref={setScrollRefs}
-          className="overflow-y-auto flex flex-col gap-0 scrollbar-on-scroll min-h-0 flex-1 pb-2"
-          onScroll={handleScroll}
-        >
-        {items.map((item) => {
-          // 判断是否选中 — coerce both sides to string: list items arrive from
-          // API as numeric ids, while selected items may be strings (defaults
-          // seeded via `String(k.id)` or restored from localStorage).
-          const isChecked = selectedItems.some((s) => String(s.id) === String(item.id));
-          return (
-            <DropdownMenuItem
-              key={item.id}
-              onSelect={(e) => {
-                e.preventDefault();
-                onToggle(item);
-              }}
-              className="flex items-center gap-2 px-2 py-[5px] cursor-pointer rounded-[6px] data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
-            >
-              <Checkbox
-                checked={isChecked}
-                tabIndex={-1}
-                className="pointer-events-none shrink-0 border-[#D9D9D9] data-[state=checked]:border-primary data-[state=indeterminate]:border-primary"
-              />
-              <span className="truncate flex-1 text-[14px] text-slate-700 leading-[22px]">
-                {item.name}
-              </span>
-            </DropdownMenuItem>
-          );
-        })}
-
-        {isFetching && (
-          <div className="flex justify-center py-3">
-            <Loader2 size={16} className="animate-spin text-slate-300" />
-          </div>
-        )}
-        {!isFetching && items.length === 0 && (
-          <div className="text-center text-[12px] text-slate-400 py-10">{emptyText}</div>
-        )}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 // --- main ---
 export const ChatKnowledge = ({
@@ -369,69 +118,25 @@ export const ChatKnowledge = ({
   const [allOrgKbs, setAllOrgKbs] = useState<any[]>([]);
   const [hasMoreOrg, setHasMoreOrg] = useState(true);
 
-  // --- Knowledge space data (load all on mount, no pagination) ---
+  // --- Knowledge space data (load all groups at once, no pagination) ---
   const [spaceKeyword, setSpaceKeyword] = useState("");
   const debouncedSpaceKeyword = useDebounce(spaceKeyword, 300);
-  const [allSpaces, setAllSpaces] = useState<any[]>([]);
-  const [spaceFetching, setSpaceFetching] = useState(false);
-
-  const loadSpaces = useCallback(async () => {
-    setSpaceFetching(true);
-    try {
-      // Fetch "mine" + "joined" + "department" in parallel and merge into a single list
-      const [mine, joined, department] = await Promise.all([
-        getMineSpacesApi(),
-        getJoinedSpacesApi(),
-        getDepartmentSpacesApi(),
-      ]);
-      // Dedupe by id (a space could in principle appear in more than one list)
-      const seen = new Set<string | number>();
-      const merged: any[] = [];
-      for (const s of [...mine, ...joined, ...department]) {
-        if (seen.has(s.id)) continue;
-        seen.add(s.id);
-        merged.push(s);
-      }
-      // Sort A–Z, English (ASCII-leading) names first, then Chinese names.
-      // Within each bucket, compare with the appropriate locale so that
-      // pinyin order is used for CJK and natural order for ASCII.
-      merged.sort((a, b) => {
-        const an = (a.name || "").trim();
-        const bn = (b.name || "").trim();
-        const aIsEn = an.length > 0 && an.charCodeAt(0) < 128;
-        const bIsEn = bn.length > 0 && bn.charCodeAt(0) < 128;
-        if (aIsEn !== bIsEn) return aIsEn ? -1 : 1;
-        return an.localeCompare(bn, aIsEn ? "en" : "zh-Hans-u-co-pinyin", {
-          sensitivity: "base",
-        });
-      });
-      setAllSpaces(merged);
-    } catch (err) {
-      console.error("[ChatKnowledge] Failed to load spaces:", err);
-    } finally {
-      setSpaceFetching(false);
-    }
-  }, []);
 
   // Spaces are only shown inside the open picker, so load them lazily on first
-  // open (and refresh on each reopen) instead of eagerly on mount. The eager
-  // mount-fetch fired knowledge/space/{mine,joined} every time the input box
-  // re-mounted (e.g. the send-triggered welcome→messages layout flip), causing
-  // duplicate requests on send.
+  // open instead of eagerly on mount. The eager mount-fetch fired
+  // knowledge/space/{mine,joined} every time the input box re-mounted (e.g. the
+  // send-triggered welcome→messages layout flip), causing duplicate requests on send.
   const [rootOpen, setRootOpen] = useState(false);
-  useEffect(() => {
-    if (rootOpen) loadSpaces();
-  }, [rootOpen, loadSpaces]);
 
-  // Client-side filter by keyword
-  const filteredSpaces = useMemo(
-    () =>
-      debouncedSpaceKeyword
-        ? allSpaces.filter((s) =>
-          s.name?.toLowerCase().includes(debouncedSpaceKeyword.toLowerCase())
-        )
-        : allSpaces,
-    [allSpaces, debouncedSpaceKeyword]
+  // Grouped as 部门知识空间 / 我创建的 / 我加入的, matching the 知识空间 page.
+  // Empty groups (including "no search hit in this group") are dropped by the hook.
+  const { groups: spaceGroups, isFetching: spaceFetching } = useCategorizedKnowledgeSpaces({
+    enabled: rootOpen,
+    keyword: debouncedSpaceKeyword,
+  });
+  const spaceListGroups = useMemo(
+    () => spaceGroups.map((group) => ({ key: group.key, label: group.label, items: group.spaces })),
+    [spaceGroups],
   );
 
   // Comma-separated ids of admin-configured org KBs. Passed to the backend so
@@ -518,7 +223,6 @@ export const ChatKnowledge = ({
   const isMobile = useMediaQuery('(max-width: 576px)');
   const [mobilePanel, setMobilePanel] = useState<'root' | 'org' | 'skill'>('root');
   const menuContentRef = useRef<HTMLDivElement>(null);
-  const orgLayout = useSubMenuLayout(menuContentRef, 'org', openSub === 'org');
 
   const handleRootOpenChange = useCallback((open: boolean) => {
     setRootOpen(open);
@@ -555,7 +259,7 @@ export const ChatKnowledge = ({
       // otherwise open upward to avoid being clipped by the chat input area.
       const preferBottom = below >= 240 || below >= above;
       setMobileMenuSide(preferBottom ? 'bottom' : 'top');
-      // Fixed cap aligned with the desktop popup (MAX_SUB_HEIGHT = 256), but
+      // Fixed cap, but
       // fall back to whatever space is actually available on the chosen side if
       // 256 wouldn't fit — keeps the popup from being clipped against the
       // viewport edge on smaller phones.
@@ -588,7 +292,7 @@ export const ChatKnowledge = ({
                   className={cn(
                     // `group` lets the chevron pick up the Radix-emitted
                     // `data-state` to mirror the Tools-select rotation.
-                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-[#4E5969] outline-none transition-colors hover:bg-[#f8f8f8]",
+                    "group flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2 text-[14px] font-normal text-text-2 outline-none transition-colors hover:bg-fill-1",
                     disabled && "opacity-50 cursor-not-allowed hover:bg-transparent"
                   )}
                   aria-label={localize('com_ui_knowledge_space')}
@@ -600,7 +304,7 @@ export const ChatKnowledge = ({
                       aria-hidden
                       className={cn(
                         "block size-4",
-                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-500" : "bg-[#999999]"
+                        selectedKnowledgeSpaces.length > 0 ? "bg-blue-500" : "bg-[#4E5969]"
                       )}
                       style={{
                         WebkitMaskImage: `url(${__APP_ENV__.BASE_URL || ''}/assets/channel/book-one.svg)`,
@@ -614,14 +318,14 @@ export const ChatKnowledge = ({
                   {/* Compact: collapse to icon + chevron only to save
                       horizontal space in the input toolbar. */}
                   {!compact && <span>{localize('com_ui_knowledge_space')}</span>}
-                  <Outlined.Down size={16} className={cn("text-[#999] transition-transform duration-200", rootOpen && "rotate-180")} />
+                  <Outlined.Down size={16} className={cn("text-text-3 transition-transform duration-200", rootOpen && "rotate-180")} />
                 </button>
               ) : (
                 <button
                   ref={triggerRef}
                   type="button"
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-lg text-[#4E5969] cursor-pointer hover:bg-[#f8f8f8] transition-colors outline-none",
+                    "flex h-8 w-8 items-center justify-center rounded-lg text-text-2 cursor-pointer hover:bg-fill-1 transition-colors outline-none",
                     disabled && "opacity-50 cursor-not-allowed"
                   )}
                   aria-label={localize('com_knowledge_add_file')}
@@ -644,18 +348,24 @@ export const ChatKnowledge = ({
       <DropdownMenuContent
         ref={menuContentRef}
         align="start"
+        // The "+" panel lines up with the INPUT BOX's left edge, not its own
+        // trigger: the trigger sits INPUT_INNER_INSET in from that edge, so pull
+        // the panel back by the same amount. The knowledge pill keeps trigger
+        // alignment — it sits mid-toolbar, where the input edge means nothing.
+        alignOffset={variant === 'plus' ? -INPUT_INNER_INSET : undefined}
         side={isMobile ? mobileMenuSide : 'bottom'}
         collisionPadding={isMobile ? MOBILE_MENU_COLLISION : BOTTOM_GAP}
         sticky={isMobile ? 'partial' : undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
         className={cn(
-          'flex flex-col gap-0 rounded-[8px] border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
+          'flex flex-col gap-1 rounded-2xl border-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]',
           // variant-aware width/padding: the pill (knowledge) shows a list
           // directly, so it needs the wider list layout; the "+" menu stays
-          // compact for its short action items.
+          // compact for its short action items. Bottom padding is 0 on the list
+          // variant — the scroll list carries its own so rows can reach the edge.
           variant === 'knowledge'
-            ? 'w-[240px] overflow-hidden pt-2 px-2 pb-0'
-            : 'w-[160px] p-2',
+            ? 'w-[240px] overflow-hidden pt-3 px-3 pb-0'
+            : 'w-[160px] p-3',
           // Mobile width override only applies to the knowledge variant — the
           // "+" menu shows short action items and matches the desktop 160px
           // width on phones too. (knowledge needs more room for search + list)
@@ -663,9 +373,10 @@ export const ChatKnowledge = ({
           // skill / org lists) needs the wider width; 160px is fine only for
           // the compact root of the "+" menu (short action items).
           isMobile && mobileTallPanel && 'touch-mobile:w-[min(calc(100vw-24px),320px)]',
-          // Mobile knowledge popup only: replace `p-2` with `pt-2 px-2 pb-0` so
-          // the scroll list's own `pb-2` handles the last-item spacing.
-          isMobile && variant === 'knowledge' && 'touch-mobile:pt-2 touch-mobile:px-2 touch-mobile:pb-0',
+          // Any mobile list panel (knowledge popup, or the "+" menu drilled into
+          // org / skill): replace `p-3` with `pt-3 px-3 pb-0` so the scroll list's
+          // own bottom padding is the only gap under the last row.
+          isMobile && mobileTallPanel && 'touch-mobile:pt-3 touch-mobile:px-3 touch-mobile:pb-0',
           isMobile &&
           mobileTallPanel &&
           'touch-mobile:min-h-0 touch-mobile:overflow-hidden',
@@ -676,7 +387,7 @@ export const ChatKnowledge = ({
             : // Desktop knowledge pill: cap height so the space list scrolls
               // internally instead of growing past the viewport.
               !isMobile && variant === 'knowledge'
-              ? { maxHeight: MAX_SUB_HEIGHT }
+              ? { maxHeight: KNOWLEDGE_PANEL_MAX_H }
               : undefined
         }
       >
@@ -688,47 +399,31 @@ export const ChatKnowledge = ({
               if (fileUploadDisabled) return;
               onFileUploadClick?.();
             }}
-            className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
+            className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none data-[disabled]:cursor-not-allowed data-[disabled]:opacity-40"
           >
-            <Outlined.Attachment size={16} className="text-[#999]" />
+            <Outlined.Attachment size={16} className="text-text-2" />
             <span className="text-[14px] font-normal text-slate-700">{localize('com_ui_upload_files')}</span>
           </DropdownMenuItem>
         )}
 
-        {/* Knowledge pill (mobile): show the SPACES list directly — no drill.
-            Matches the desktop layout (title + list) so both surfaces feel the
-            same; only the outer width / position adapt to the smaller screen. */}
-        {variant === 'knowledge' && isMobile && (
+        {/* Knowledge pill: show the SPACES list directly — no drill, no sub.
+            Same layout on both surfaces; only the outer width / position adapt
+            to the smaller screen, plus the mobile-only heading below. */}
+        {variant === 'knowledge' && (
           <div className="flex min-h-0 w-full flex-1 flex-col">
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-              {localize('com_ui_knowledge_space')}
-            </p>
+            {/* Mobile keeps the heading: the narrow toolbar can collapse the pill
+                trigger to icon-only (`compact`), leaving this as the only place
+                the name shows. On desktop the trigger reads "知识空间" beside it. */}
+            {isMobile && (
+              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
+                {localize('com_ui_knowledge_space')}
+              </p>
+            )}
             <KnowledgeListPanel
               placeholder={localize('com_chat_knowledge_placeholder_search_space')}
               keyword={spaceKeyword}
               setKeyword={setSpaceKeyword}
-              items={filteredSpaces}
-              selectedItems={selectedKnowledgeSpaces}
-              onToggle={(item) => handleToggle(item, 'space')}
-              isFetching={spaceFetching}
-              hasMore={false}
-              onLoadMore={() => { }}
-              emptyText={localize('com_chat_knowledge_empty_no_spaces')}
-            />
-          </div>
-        )}
-
-        {/* Knowledge pill (desktop): show the SPACES list directly — no sub. */}
-        {variant === 'knowledge' && !isMobile && (
-          <div className="flex min-h-0 w-full flex-1 flex-col">
-            <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-              {localize('com_ui_knowledge_space')}
-            </p>
-            <KnowledgeListPanel
-              placeholder={localize('com_chat_knowledge_placeholder_search_space')}
-              keyword={spaceKeyword}
-              setKeyword={setSpaceKeyword}
-              items={filteredSpaces}
+              groups={spaceListGroups}
               selectedItems={selectedKnowledgeSpaces}
               onToggle={(item) => handleToggle(item, 'space')}
               isFetching={spaceFetching}
@@ -752,13 +447,13 @@ export const ChatKnowledge = ({
             <DropdownMenuSubTrigger
               data-sub-key="org"
               className={cn(
-                'mt-0.5 flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
+                'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
               )}
             >
               <div className="flex items-center gap-2">
                 <div className="relative">
                   {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
+                  <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-text-2"} />
                 </div>
                 <span className="text-[14px] font-normal text-slate-700">
                   {localize('com_tools_org_knowledge')}
@@ -766,22 +461,24 @@ export const ChatKnowledge = ({
               </div>
             </DropdownMenuSubTrigger>
 
+            {/* `align="center"` centers the panel vertically on the trigger row
+                (same placement rule as the skill panel below). */}
             <DropdownMenuSubContent
-              alignOffset={orgLayout.alignOffset}
+              align="center"
               collisionPadding={BOTTOM_GAP}
-              className="ml-2 flex w-[240px] flex-col overflow-hidden rounded-[8px] border-slate-100 bg-white pt-2 px-2 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+              className="ml-2 flex max-h-[440px] w-[240px] flex-col overflow-hidden rounded-2xl border-slate-100 bg-white pt-3 px-3 pb-0 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
               style={
                 {
                   '--tw-enter-duration': '0.35s',
                   '--tw-enter-easing': 'ease-in-out',
-                  maxHeight: orgLayout.maxH,
                 } as React.CSSProperties
               }
             >
-              <p className="mb-1 shrink-0 px-2 py-[5px] text-[14px] font-medium leading-[22px] text-[#1A1A1A]">
-                {localize('com_tools_org_knowledge')}
-              </p>
+              {/* No heading here: this panel hangs off the "组织知识库" row, which
+                  stays visible next to it. The mobile drill panel keeps its own
+                  heading — there it is the back row's label. */}
               <KnowledgeListPanel
+                freezeHeightOnFilter
                 placeholder={localize('com_tools_knowledge_base_search')}
                 keyword={orgKeyword}
                 setKeyword={setOrgKeyword}
@@ -804,12 +501,12 @@ export const ChatKnowledge = ({
               e.preventDefault();
               setMobilePanel('org');
             }}
-            className="mt-0.5 flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+            className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none"
           >
             <div className="flex min-w-0 items-center gap-2">
               <div className="relative shrink-0">
                 {/* Icon turns brand-blue once an org KB is selected (no dot). */}
-                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-600" : "text-[#999]"} />
+                <Outlined.Books size={16} className={selectedOrgKbs.length > 0 ? "text-blue-500" : "text-text-2"} />
               </div>
               <span className="truncate text-[14px] font-normal text-slate-700">
                 {localize('com_tools_org_knowledge')}
@@ -822,10 +519,10 @@ export const ChatKnowledge = ({
         {/* Org knowledge selector (mobile): drill panel. */}
         {variant === 'plus' && isMobile && mobilePanel === 'org' && config?.knowledgeBase?.enabled !== false && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-text-3 hover:bg-fill-2"
                 aria-label={localize('com_ui_go_back')}
                 onClick={(e) => {
                   e.preventDefault();
@@ -833,8 +530,9 @@ export const ChatKnowledge = ({
                   setMobilePanel('root');
                 }}
               >
-                <ChevronLeft className="size-5" strokeWidth={2} />
+                <Outlined.ArrowLeft size={18} />
               </button>
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                 {localize('com_tools_org_knowledge')}
               </span>
@@ -867,13 +565,13 @@ export const ChatKnowledge = ({
                 setRootOpen(false);
                 onEnterTaskMode?.();
               }}
-              className="flex cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+              className="flex h-8 cursor-pointer items-center gap-2 rounded-lg px-2 outline-none"
             >
-              <Outlined.Binoculars size={16} className={taskModeActive ? 'text-blue-600' : 'text-[#999]'} />
-              <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-600' : 'text-slate-700')}>
+              <Outlined.ListSuccess size={16} className={taskModeActive ? 'text-blue-500' : 'text-text-2'} />
+              <span className={cn('flex-1 text-[14px] font-normal', taskModeActive ? 'text-blue-500' : 'text-slate-700')}>
                 {localize('com_linsight_task_mode')}
               </span>
-              {taskModeActive && <Outlined.Check size={14} className="text-blue-600" />}
+              {taskModeActive && <Outlined.Check size={14} className="text-blue-500" />}
             </DropdownMenuItem>
             {/* 添加 Skill — 桌面：悬停展开技能选择器；移动 root：下钻进技能面板。
                 选中技能即进入任务模式（由 renderSkillSubmenu 内部导航），故传入
@@ -883,18 +581,24 @@ export const ChatKnowledge = ({
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger
                     className={cn(
-                      'flex cursor-pointer items-center justify-between rounded-[6px] px-2 py-[5px] outline-none',
+                      'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-600' : 'text-[#999]'} />
+                      <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
                       <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_linsight_add_skill')}
                       </span>
                     </div>
                   </DropdownMenuSubTrigger>
-                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above). */}
-                  <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                  {/* Layout mirrors the knowledge panel shell (variant === 'knowledge' above).
+                      `align="center"` centers the panel vertically on the trigger row
+                      instead of aligning their top edges. */}
+                  <DropdownMenuSubContent
+                    align="center"
+                    collisionPadding={BOTTOM_GAP}
+                    className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                  >
                     {renderSkillSubmenu(() => setRootOpen(false))}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
@@ -904,10 +608,10 @@ export const ChatKnowledge = ({
                     e.preventDefault();
                     setMobilePanel('skill');
                   }}
-                  className="flex cursor-pointer items-center justify-between gap-2 rounded-[6px] px-2 py-[5px] outline-none"
+                  className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-lg px-2 outline-none"
                 >
                   <div className="flex min-w-0 items-center gap-2">
-                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-600' : 'text-[#999]'} />
+                    <Outlined.Newspaper size={16} className={skillSelected ? 'text-blue-500' : 'text-text-2'} />
                     <span className="truncate text-[14px] font-normal text-slate-700">
                       {localize('com_linsight_add_skill')}
                     </span>
@@ -922,10 +626,10 @@ export const ChatKnowledge = ({
         {/* 添加 Skill — 移动端下钻面板 */}
         {isMobile && mobilePanel === 'skill' && renderSkillSubmenu && (
           <div className="flex min-h-0 w-full flex-1 flex-col gap-2">
-            <div className="flex shrink-0 items-center gap-0.5 border-b border-slate-100 pb-2">
+            <div className="flex shrink-0 items-center gap-0.5">
               <button
                 type="button"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-text-3 hover:bg-fill-2"
                 aria-label={localize('com_ui_go_back')}
                 onClick={(e) => {
                   e.preventDefault();
@@ -933,8 +637,9 @@ export const ChatKnowledge = ({
                   setMobilePanel('root');
                 }}
               >
-                <ChevronLeft className="size-5" strokeWidth={2} />
+                <Outlined.ArrowLeft size={18} />
               </button>
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800">
                 {localize('com_linsight_add_skill')}
               </span>

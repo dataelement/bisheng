@@ -7,10 +7,10 @@ import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
 import { chatIdState, chatsState } from "../store/atoms";
 
 // Shared action-icon button — matches ExportSelectionButton (size-6 hit area,
-// 14px bisheng-icons Outlined glyph, #818181 idle / brand-500 active) so the
+// 14px bisheng-icons Outlined glyph, text-3 idle / brand-500 active) so the
 // whole workflow action row reads as one consistent set.
 const ACTION_BTN =
-    "flex size-6 items-center justify-center rounded-[6px] transition-colors hover:bg-[#F7F7F7]";
+    "flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1";
 
 export default function MessageButtons({ id, text, onCopy, data, children = null }) {
     const [copied, setCopied] = useState(false)
@@ -21,8 +21,9 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
     // switches back to this conversation, so the new verdict must be written back
     // to the cached message or the highlight is lost on conversation switch.
     const handleLike = (liked: number) => {
-        likeChatApi(id, liked)
-        if (!chatId) return
+        // returned so the confirmation toast waits for the request
+        const pending = likeChatApi(id, liked)
+        if (!chatId) return pending
         setChats((prev) => {
             const chat = prev[chatId]
             if (!chat?.messages) return prev
@@ -36,6 +37,7 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
                 },
             }
         })
+        return pending
     }
 
     const handleCopy = (e) => {
@@ -60,7 +62,7 @@ export default function MessageButtons({ id, text, onCopy, data, children = null
         >
             {copied
                 ? <Outlined.Copied size={14} className="text-blue-500" />
-                : <Outlined.Copy size={14} className="text-[#818181]" />}
+                : <Outlined.Copy size={14} className="text-text-3" />}
         </button>
         <MessageFeedbackButtons
             liked={data}

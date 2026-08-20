@@ -4,7 +4,7 @@ import { useSetRecoilState } from "recoil";
 import { Article, Channel, getArticleDetailApi } from "~/api/channels";
 import { subscriptionDetailPaneWidthState } from "~/store/subscriptionLayout";
 import NavToggle from "~/components/Nav/NavToggle";
-import { useLocalize, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { AiAssistantPanel } from "./AiChat/AiAssistantPanel";
 import { ArticleList } from "./ArticleList/ArticleList";
 import { ArticleDetail } from "./Article/ArticleDetail";
@@ -16,8 +16,6 @@ interface ChannelLayoutProps {
     onFullScreen?: (article: Article, aiAssistant?: boolean) => void;
     /** PC：顶部标题下拉切换频道 */
     onChannelSelect?: (channel: Channel | null) => void;
-    /** PC：下拉内频道项管理操作 */
-    onManageMembers?: (channel: Channel) => void;
     onChannelSettings?: (channel: Channel) => void;
     /** H5：打开左侧「我的频道」抽屉（由订阅页挂载） */
     onOpenChannelNav?: () => void;
@@ -54,13 +52,14 @@ export function ChannelLayout({
     channel,
     onFullScreen,
     onChannelSelect,
-    onManageMembers,
     onChannelSettings,
     onOpenChannelNav,
     onGoChannelSquare,
     onCreateChannel,
 }: ChannelLayoutProps) {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const isH5 = usePrefersMobileLayout();
     const navigate = useNavigate();
     const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -181,7 +180,6 @@ export function ChannelLayout({
                     onArticleSelect={handleArticleSelect}
                     selectedArticleId={selectedArticle?.id}
                     onChannelSelect={onChannelSelect}
-                    onManageMembers={onManageMembers}
                     onChannelSettings={onChannelSettings}
                     onOpenChannelNav={onOpenChannelNav}
                     onGoChannelSquare={onGoChannelSquare}
@@ -196,7 +194,7 @@ export function ChannelLayout({
                         onMouseDown={startResizing}
                         className="group absolute inset-y-0 left-1/2 z-10 flex w-4 -translate-x-1/2 cursor-col-resize justify-center"
                     >
-                        <div className="pointer-events-none w-px self-stretch bg-[#e5e6eb] transition-[width,background-color] duration-150 group-hover:w-[2px] group-hover:bg-[#999999] group-active:w-[2px] group-active:bg-[#999999]" />
+                        <div className="pointer-events-none w-px self-stretch bg-fill-3 transition-[width,background-color] duration-150 group-hover:w-[2px] group-hover:bg-[#999999] group-active:w-[2px] group-active:bg-[#999999]" />
                     </div>
                 </div>
             )}
@@ -227,7 +225,7 @@ export function ChannelLayout({
                     className="absolute inset-0 z-[35] flex flex-col bg-white"
                     role="dialog"
                     aria-modal="true"
-                    aria-label={localize("com_subscription.subscribe")}
+                    aria-label={menuNames.channel}
                 >
                     <div className="relative min-h-0 flex-1 overflow-hidden">
                         <ArticleDetail

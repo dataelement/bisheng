@@ -21,7 +21,7 @@ import { TaskTurnPanel } from "~/components/Linsight/Execution/TaskTurnPanel";
 import type { ArtifactFile } from "~/components/Linsight/Artifacts/artifactUtils";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { TextToSpeechButton } from "~/components/Voice/TextToSpeechButton";
-import { ServiceBusyNotice } from "~/components/ServiceBusyNotice";
+import { ChatErrorCard, isTransientErrorType } from "~/components/ChatErrorCard";
 import { MessageFeedbackButtons } from "~/components/Chat/MessageFeedbackButtons";
 import { likeChatApi, disLikeCommentApi } from "~/api/apps";
 import { useGetBsConfig } from "~/hooks/queries/data-provider";
@@ -33,42 +33,15 @@ import {
 } from "~/components/Chat/MessageSelection";
 import { copyText, cn } from "~/utils";
 import type { AgentEvent, ChatMessage } from "~/api/chatApi";
-import { getFileTypebyFileName } from "~/components/ui/icon/File/FileIcon";
+import { getFileTypeIcon, isImageFileName } from "~/components/ui/icon/File/FileIcon";
+import { MessageImage } from "~/components/Chat/Messages/Content/MessageImage";
 
 // Transient/retryable backend error codes surfaced by daily-mode chat — LLM rate
 // limit (12046), generic busy (429/503), thread-pool full (10540), dept concurrency
-// (12045). These get the calm ServiceBusyNotice + Retry; every other error keeps the
-// red error bubble. Mirrors the classifier's RETRYABLE intent on the status-code side.
+// (12045). Only consulted when the envelope carried no `error_type` (an older
+// backend, or a domain error that doesn't classify itself): a retryable code still
+// has to reach the calm "busy" card rather than the red failure one.
 const RETRYABLE_ERROR_CODES = new Set([12046, 429, 503, 10540, 12045]);
-
-// Map an uploaded file's extension to a bisheng outlined file-type icon.
-// Anything not listed falls back to the generic Outlined.File icon.
-const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
-    // FileExcel
-    xls: Outlined.FileExcel,
-    xlsx: Outlined.FileExcel,
-    csv: Outlined.FileExcel,
-    et: Outlined.FileExcel,
-    // FilePdf
-    pdf: Outlined.FilePdf,
-    ppt: Outlined.FilePdf,
-    dps: Outlined.FilePdf,
-    // FileTxt
-    txt: Outlined.FileTxt,
-    // FileWord
-    doc: Outlined.FileWord,
-    docx: Outlined.FileWord,
-    wps: Outlined.FileWord,
-    // FileImage
-    png: Outlined.FileImage,
-    jpg: Outlined.FileImage,
-    jpeg: Outlined.FileImage,
-    bmp: Outlined.FileImage,
-    // FileEditing
-    md: Outlined.FileEditing,
-    // File (generic)
-    html: Outlined.File,
-};
 
 /**
  * Uploaded-file list for a user message: a type icon + filename per row, never a
@@ -76,7 +49,7 @@ const FILE_TYPE_ICONS: Record<string, typeof Outlined.File> = {
  * mask softly fades the top/bottom edge (instead of a hard clip) whenever there
  * is more content to scroll in that direction — same fade trick used elsewhere.
  */
-function UploadedFileList({ files }: { files: any[] }) {
+function UploadedFileList({ files, conversationId }: { files: any[]; conversationId?: string }) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [fade, setFade] = useState({ top: false, bottom: false });
 
@@ -102,29 +75,50 @@ function UploadedFileList({ files }: { files: any[] }) {
 
     if (!files || files.length === 0) return null;
 
+    // Pictures are shown as pictures; everything else keeps the compact
+    // icon+name row it always had.
+    const images = files.filter((f) => isImageFileName(f.name || f.file_name));
+    const others = files.filter((f) => !isImageFileName(f.name || f.file_name));
+
     return (
-        <div
-            ref={scrollRef}
-            onScroll={updateFade}
-            style={maskStyle}
-            className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
-        >
-            {files.map((file, i) => {
-                const fileName = file.name || file.file_name || "File";
-                const fileType = getFileTypebyFileName(fileName);
-                const FileTypeIcon = FILE_TYPE_ICONS[fileType] ?? Outlined.File;
-                return (
-                    <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
-                        <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
-                        <div className="min-w-0 flex-1 overflow-hidden">
-                            <div className="truncate text-xs" title={fileName}>
-                                {fileName}
+        <>
+            {images.length > 0 && (
+                <div className="mb-2 mt-1 flex flex-wrap justify-end gap-2">
+                    {images.map((file, i) => (
+                        <MessageImage
+                            key={file.file_id ?? i}
+                            conversationId={conversationId}
+                            fileId={file.file_id}
+                            altText={file.name || file.file_name}
+                            initialUrl={file.filepath || file.file_path || file.file_url}
+                        />
+                    ))}
+                </div>
+            )}
+            {others.length > 0 && (
+                <div
+                    ref={scrollRef}
+                    onScroll={updateFade}
+                    style={maskStyle}
+                    className="scrollbar-os mb-2 mt-1 flex max-h-[120px] max-w-sm flex-col gap-3 overflow-y-auto"
+                >
+                    {others.map((file, i) => {
+                        const fileName = file.name || file.file_name || "File";
+                        const FileTypeIcon = getFileTypeIcon(fileName);
+                        return (
+                            <div key={i} className="flex shrink-0 items-center gap-1 text-text-3">
+                                <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
+                                <div className="min-w-0 flex-1 overflow-hidden">
+                                    <div className="truncate text-xs" title={fileName}>
+                                        {fileName}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
+                        );
+                    })}
+                </div>
+            )}
+        </>
     );
 }
 
@@ -155,6 +149,7 @@ interface AiMessageBubbleProps {
 
 // --- Copy button with feedback ---
 function CopyButton({ text }: { text: string }) {
+    const localize = useLocalize();
     const [copied, setCopied] = useState(false);
     const handleCopy = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
@@ -168,11 +163,11 @@ function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
-            title="复制"
-            aria-label="复制"
+            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1"
+            title={localize('com_ui_copy')}
+            aria-label={localize('com_ui_copy')}
         >
-            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
+            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-text-3" />}
         </button>
     );
 }
@@ -424,7 +419,7 @@ function UserBubble({
             <div className={cn("flex min-w-0 flex-col items-end touch-mobile:max-w-[calc(100%-40px)]", knowledgeChatLayout ? "max-w-[min(92%,56rem)]" : "max-w-[80%]")}>
                 {/* Uploaded files: icon + filename only (no preview), with soft fade
                     edges while scrolling so the 120px-clipped list never hard-cuts. */}
-                <UploadedFileList files={message.files || []} />
+                <UploadedFileList files={message.files || []} conversationId={message.conversationId} />
                 {/* min-w-0: without it this flex row's `min-width: auto` floors at
                     the URL's (unbreakable) min-content width, defeating the bubble's
                     max-width and letting long content overflow off the left edge. */}
@@ -448,16 +443,16 @@ function UserBubble({
                                 // sizing the box to a long unbreakable URL and max-width
                                 // can't clamp it — `anywhere` reduces min-content so the
                                 // box shrinks and the URL wraps inside max-w-full.
-                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-[8px]",
+                                "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg",
                                 knowledgeChatLayout
-                                    ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
-                                    : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
+                                    ? "bg-fill-2 text-text-2 text-[14px] leading-[22px]"
+                                    : "rounded-[10px] bg-blue-500/[0.07] text-text-1 text-sm"
                             )}
                         >
                             {tag && (
                                 <span
                                     className={cn(
-                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
+                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-text-1 select-none",
                                         knowledgeChatLayout
                                             ? "text-[14px] font-normal leading-[22px]"
                                             : "h-5 text-xs font-medium leading-none align-middle"
@@ -518,10 +513,17 @@ function AssistantBubble({
 }) {
     const localize = useLocalize();
 
+    // Prefer the backend's own classification; fall back to the status code so
+    // pre-classification backends still split busy-vs-failed correctly, and land
+    // on the chat-flavoured generic copy when neither says anything.
+    const resolvedErrorType = message.errorType
+        || (message.errorCode !== undefined && RETRYABLE_ERROR_CODES.has(message.errorCode)
+            ? "rate_limit"
+            : "chat_unknown");
+
     // A transient/retryable failure (rate limit / busy) renders as the calm neutral
-    // notice + Retry instead of the red error bubble.
-    const isTransientError = !!message.error && message.errorCode !== undefined
-        && RETRYABLE_ERROR_CODES.has(message.errorCode);
+    // notice + Retry instead of the red error card.
+    const isTransientError = !!message.error && isTransientErrorType(resolvedErrorType);
 
     // v2.5 Agent-native detection — when a message has structured fields set
     // (populated by useAiChatSSE.onAgentUpdate or by getAgentMessages history
@@ -689,7 +691,7 @@ function AssistantBubble({
                     thinking block so that once "思考内容" appears it sits below that node
                     (answer-pending), not above it. */}
                 {showWaiting && (
-                    <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                    <div className="flex items-center py-0.5" aria-label={localize('com_ui_ai_thinking')}>
                         <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                     </div>
                 )}
@@ -705,12 +707,12 @@ function AssistantBubble({
                             "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
                             knowledgeChatLayout
                                 ? "rounded-[2px] border-0 bg-transparent px-0 py-1 text-[14px] leading-[22px] [--markdown-font-size:14px]"
-                                : "rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 text-sm"
+                                : "rounded-[10px] bg-white border border-border-base px-3 py-2 text-sm"
                         )}
                     >
 
                         {isWaitingFirstToken ? (
-                            <div className="flex items-center py-0.5" aria-label="AI 正在思考">
+                            <div className="flex items-center py-0.5" aria-label={localize('com_ui_ai_thinking')}>
                                 <span className="inline-block w-3 h-3 rounded-full bg-black animate-pulse-scale" />
                             </div>
                         ) : (
@@ -728,33 +730,20 @@ function AssistantBubble({
                 )}
 
                 {/* Error state — replaces the body when nothing streamed in, and sits
-                    below it when a partial answer did. */}
+                    below it when a partial answer did. Same card as task mode:
+                    localized title + explanation + hint, with the upstream text
+                    (which file, which service, what it actually said) behind
+                    "view details"; transient hiccups render as the calm notice +
+                    Retry, terminal ones as the red card. */}
                 {!showWaiting && message.error && (
-                    isTransientError ? (
-                        // Transient upstream hiccup (rate limit / busy): calm neutral
-                        // notice + Retry (re-sends the last user message via regenerate),
-                        // never the red error bubble.
-                        <ServiceBusyNotice
-                            desc={
-                                hasAnswerBody
-                                    ? errorNotice
-                                    : message.errorText || localize("api_errors.12046")
-                            }
-                            onRetry={onRegenerate}
+                    <div className={cn(hasAnswerBody && "mt-2")}>
+                        <ChatErrorCard
+                            errorType={resolvedErrorType}
+                            detail={message.errorDetail}
+                            fallbackMessage={errorNotice}
+                            onRetry={isTransientError ? onRegenerate : undefined}
                         />
-                    ) : (
-                        <div
-                            className={cn(
-                                "text-red-500 bg-red-50 px-3 py-2",
-                                hasAnswerBody && "mt-2",
-                                knowledgeChatLayout
-                                    ? "rounded-[2px] text-[14px] leading-[22px]"
-                                    : "text-sm rounded-[10px]"
-                            )}
-                        >
-                            {errorNotice}
-                        </div>
-                    )
+                    </div>
                 )}
 
                 {/* Action buttons (only show when not streaming). Suppressed on the
@@ -794,7 +783,7 @@ function AssistantBubble({
                                         />
                                     )}
                                     <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-[6px] backdrop-blur-[4px] transition-colors hover:bg-[#F7F7F7]"
+                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1"
                                         messageId={message.messageId || ""}
                                         text={regularContent}
                                     />

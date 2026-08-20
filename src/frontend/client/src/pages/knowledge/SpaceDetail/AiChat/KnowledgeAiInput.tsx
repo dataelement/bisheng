@@ -47,7 +47,7 @@ const TAG_TEXT_GAP_PX = 4;
 
 /** Tag chip: background #335CFF @ ~35% alpha; label text #212121 */
 const TAG_BG = "rgb(var(--brand-500)/0.35)";
-const TAG_TEXT_CLASS = "text-[#212121]";
+const TAG_TEXT_CLASS = "text-text-1";
 
 export function KnowledgeAiInput({
     availableTags,
@@ -319,7 +319,7 @@ export function KnowledgeAiInput({
             className={cn(
                 "relative flex w-full bg-white p-3",
                 variant === "box"
-                    ? "rounded-[20px] touch-mobile:rounded-2xl border border-[#E5E6EB] shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+                    ? "rounded-[20px] touch-mobile:rounded-2xl border border-border-base shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
                     : "border-t border-[#EBEBEB]",
                 stacked ? "flex-col gap-2" : "items-center gap-2",
             )}
@@ -383,7 +383,7 @@ export function KnowledgeAiInput({
                             disabled={disabled || isStreaming}
                             placeholder={resolvedPlaceholder}
                             rows={1}
-                            className="block w-full min-h-5 resize-none overflow-hidden bg-transparent text-sm leading-5 text-text-primary outline-none placeholder-[#86909c]"
+                            className="block w-full min-h-5 resize-none overflow-hidden bg-transparent text-sm leading-5 text-text-primary outline-none placeholder-text-3"
                             style={{
                                 textIndent: selectedTag ? `${badgeIndentPx ?? 0}px` : undefined,
                             }}

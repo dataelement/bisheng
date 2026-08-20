@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
+    "target": "ES2020",
+    "plugins": [{ "name": "typescript-strict-plugin" }],
     "useDefineForClassFields": true,
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "allowJs": true,

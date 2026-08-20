@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import { useCallback } from "react";
 

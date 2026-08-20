@@ -17,6 +17,7 @@ import {
     batchDeleteApi,
     retryDuplicateFilesApi,
     listKnowledgeFolders,
+    type RawSpaceChild,
     type UploadFileResponse,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
@@ -42,18 +43,59 @@ import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
  * Returns "" when the error carries no actionable info — caller may then
  * append the generic browser-upload hint as a last-resort fallback.
  */
-function resolveUploadErrorReason(err: any): string {
-    const statusCode = err?.statusCode ?? err?.response?.data?.status_code;
+function resolveUploadErrorReason(err: unknown): string {
+    const { statusCode, errorData, message } = readUploadError(err);
     if (statusCode != null) {
         const codeKey = `api_errors.${statusCode}`;
         if (i18next.exists(codeKey)) {
-            return String(i18next.t(codeKey, err?.errorData ?? {}));
+            // The api_errors.{code} key is assembled at runtime, so it is not in
+            // i18next's generated key union; exists() above is the real guard.
+            const runtimeKey = codeKey as Parameters<typeof i18next.t>[0];
+            return String(i18next.t(runtimeKey, errorData ?? {}));
         }
     }
-    if (typeof err?.message === "string" && err.message && err.message !== "upload file failed") {
-        return err.message;
+    if (message && message !== "upload file failed") {
+        return message;
     }
     return "";
+}
+
+/**
+ * The two shapes an upload rejection arrives in: `uploadFileToServerApi` throws
+ * its own object (HTTP 200 + body.status_code != 200) carrying `statusCode` /
+ * `errorData`, while a non-2xx rejects as an axios error whose body holds
+ * `status_code`. Reading both through one narrowing keeps the call sites free of
+ * casts — and honest about the fact that neither field is guaranteed.
+ */
+function readUploadError(err: unknown): {
+    statusCode?: number;
+    /** Interpolation values for the api_errors template — scalars only. */
+    errorData?: Record<string, string | number>;
+    message?: string;
+} {
+    if (typeof err !== "object" || err === null) return {};
+    const source = err as {
+        statusCode?: unknown;
+        errorData?: unknown;
+        message?: unknown;
+        response?: { data?: { status_code?: unknown } };
+    };
+    const rawCode = source.statusCode ?? source.response?.data?.status_code;
+    return {
+        statusCode: typeof rawCode === "number" ? rawCode : undefined,
+        errorData: toInterpolationValues(source.errorData),
+        message: typeof source.message === "string" ? source.message : undefined,
+    };
+}
+
+/** Keep only the scalar entries — the rest can't be interpolated into a template anyway. */
+function toInterpolationValues(value: unknown): Record<string, string | number> | undefined {
+    if (typeof value !== "object" || value === null) return undefined;
+    const out: Record<string, string | number> = {};
+    for (const [key, entry] of Object.entries(value)) {
+        if (typeof entry === "string" || typeof entry === "number") out[key] = entry;
+    }
+    return out;
 }
 
 /**
@@ -91,8 +133,7 @@ async function uploadFilesSequential(
             // statusCode is set by uploadFileToServerApi on a manual throw
             // (HTTP 200 + body.status_code != 200). Fall back to the axios error
             // body in case a non-2xx ever rejects before that check.
-            const statusCode: number | undefined =
-                (err as any)?.statusCode ?? (err as any)?.response?.data?.status_code;
+            const { statusCode } = readUploadError(err);
             const reason = resolveUploadErrorReason(err);
             failures.push({ name: file.name, reason, statusCode });
             if (statusCode && COLLAPSIBLE_CODES.has(statusCode)) {
@@ -163,7 +204,7 @@ export interface DuplicateFileEntry {
     fileName: string;
     oldFileLevelPath: string;
     /** Raw object from addFiles response, passed to retry API as-is */
-    rawObj: any;
+    rawObj: RawSpaceChild | undefined;
 }
 
 const PENDING_REGISTERED_FILE_STATUSES = new Set<FileStatus>([
@@ -181,13 +222,13 @@ export function extractDuplicateFileEntries(registeredFiles: KnowledgeFile[]): D
         .filter((file) => (
             file.status === FileStatus.FAILED &&
             typeof file.oldFileLevelPath === "string" &&
-            Boolean((file as any)._raw)
+            Boolean(file._raw)
         ))
         .map((file) => ({
             fileId: file.id,
             fileName: file.name,
             oldFileLevelPath: file.oldFileLevelPath || "",
-            rawObj: (file as any)._raw,
+            rawObj: file._raw,
         }));
 }
 
@@ -549,7 +590,7 @@ export function useFileUpload({
     // ─── Folder creation ─────────────────────────────────────────────────
     const handleCreateFolder = useCallback(() => {
         if (currentPath.length >= MAX_FOLDER_DEPTH) {
-            showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING } as any);
+            showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING });
             return;
         }
 
@@ -597,8 +638,16 @@ export function useFileUpload({
                     setCreatingFolder(null);
                     // Keep the left-side folder tree in sync.
                     dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
-                } catch {
-                    showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                } catch (e: unknown) {
+                    // Server-authoritative depth check: the breadcrumb-based
+                    // pre-check in handleCreateFolder can race a navigation
+                    // (async currentPath), so 18011 can still come back here.
+                    if ((e as { status_code?: number } | null)?.status_code === 18011) {
+                        showToast({ message: localize("com_knowledge.max_folder_depth_reached", { 0: MAX_FOLDER_DEPTH }), severity: NotificationSeverity.WARNING });
+                        setCreatingFolder(null);
+                    } else {
+                        showToast({ message: localize("com_knowledge.create_folder_failed"), severity: NotificationSeverity.ERROR });
+                    }
                 }
                 return;
             }
@@ -618,7 +667,7 @@ export function useFileUpload({
                     // Folder rename changes a tree node label — sync the left tree.
                     dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
                 }
-                showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS } as any);
+                showToast({ message: localize("com_knowledge.rename_success"), severity: NotificationSeverity.SUCCESS });
             } catch {
                 showToast({ message: localize("com_knowledge.rename_failed"), severity: NotificationSeverity.ERROR });
             }

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useState } from "react";
 import { cn } from "~/utils";
 

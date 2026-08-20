@@ -122,7 +122,7 @@ const OGDialogTemplate = forwardRef((props: DialogTemplateProps, ref: Ref<HTMLDi
         <div className="flex h-auto gap-2 max-sm:w-full max-sm:flex-col sm:flex-row">
           {buttons != null ? buttons : null}
           {showCancelButton && (
-            <OGDialogClose className="flex h-auto items-center justify-center rounded-md border border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] transition-colors hover:bg-[#f7f8fa] focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 dark:border-gray-600 dark:bg-transparent dark:text-gray-100 dark:hover:bg-gray-700 max-sm:order-last max-sm:w-full sm:order-first">
+            <OGDialogClose className="flex h-auto items-center justify-center rounded-md border border-border-base bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] transition-colors hover:bg-fill-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 dark:border-gray-600 dark:bg-transparent dark:text-gray-100 dark:hover:bg-gray-700 max-sm:order-last max-sm:w-full sm:order-first">
               {Cancel}
             </OGDialogClose>
           )}

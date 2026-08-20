@@ -3,9 +3,8 @@
  * current task context — selected skills, knowledge spaces / org KBs and
  * attached files — each removable via "x". Tools never produce chips.
  */
+import { Outlined } from 'bisheng-icons';
 import { Loader2, Paperclip, Sparkles, X } from 'lucide-react';
-import BookOpen from '~/components/ui/icon/BookOpen';
-import BooksIcon from '~/components/ui/icon/Books';
 import type { TaskModeKnowledgeItem, TaskModeSkill } from '~/store/linsight';
 
 export interface ContextAttachmentFile {
@@ -108,7 +107,7 @@ export function ContextChips({
                 {skills.map((skill) => (
                     <Chip
                         key={`skill-${skill.name}`}
-                        icon={<Sparkles className="mr-1 size-4 shrink-0 text-[#999]" />}
+                        icon={<Sparkles className="mr-1 size-4 shrink-0 text-text-3" />}
                         label={skill.display_name}
                         onRemove={() => onRemoveSkill(skill)}
                     />
@@ -118,9 +117,9 @@ export function ContextChips({
                         key={`${item.type}-${item.id}`}
                         icon={
                             item.type === 'space' ? (
-                                <BookOpen className="mr-1 size-4 shrink-0 text-[#999]" />
+                                <Outlined.Book size={16} className="mr-1 shrink-0 text-text-3" />
                             ) : (
-                                <BooksIcon className="mr-1 size-4 shrink-0 text-[#999]" />
+                                <Outlined.Books size={16} className="mr-1 shrink-0 text-text-3" />
                             )
                         }
                         label={item.name}

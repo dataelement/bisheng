@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * AgentToolSelector — v2.5 Agent-mode tool picker for the daily chat input bar.
  *
@@ -46,8 +47,8 @@ interface Props {
 
 function iconForGroup(group: AvailableToolGroup) {
   const firstKey = group.children?.[0]?.tool_key;
-  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-[#999]" />;
-  return <Outlined.Hammer className="size-4 text-[#999]" />;
+  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-text-2" />;
+  return <Outlined.Hammer className="size-4 text-text-2" />;
 }
 
 export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
@@ -121,7 +122,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
           // Radix keeps the trigger in [data-placeholder] state; without this the
           // base `data-[placeholder]:text-gray-500` would override to #595959 and
           // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#4E5969] data-[placeholder]:text-[#4E5969] focus:ring-0 outline-none w-auto gap-1",
+          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-1 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
         )}
       >
         <div className="flex min-w-0 gap-1.5 items-center">
@@ -129,7 +130,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
               brand-blue once a tool is selected — mirrors the knowledge-space
               selector (ChatKnowledge) so both pickers signal an active selection. */}
           <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-[#999999]")} strokeWidth={1.5} />
+            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-text-2")} strokeWidth={1.5} />
           </div>
           {/* Compact: collapse to icon + chevron only to save horizontal space. */}
           {!compact && (
@@ -139,9 +140,12 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
           )}
         </div>
       </SelectTrigger>
-      <SelectContent className="bg-white rounded-[8px] w-[200px] max-h-[320px] overflow-y-auto">
+      <SelectContent
+        className="bg-white rounded-2xl w-[200px] max-h-[320px] overflow-y-auto"
+        viewportClassName="flex flex-col gap-1 p-3"
+      >
         {availableTools.map((group) => (
-          <div key={group.id} className="flex justify-between items-center px-2 py-[5px]">
+          <div key={group.id} className="flex h-8 justify-between items-center rounded-lg px-2">
             <div className="flex gap-2 items-center min-w-0">
               {iconForGroup(group)}
               <span

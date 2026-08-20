@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Rotate3DIcon } from "lucide-react";
 import { memo, useEffect, useMemo } from "react";
 import {
@@ -64,7 +65,7 @@ const AiModelSelect = memo(
                 disabled={disabled}
                 onValueChange={onChange}
             >
-                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)] touch-mobile:px-1.5 gap-1 overflow-hidden rounded-lg border-none bg-transparent px-2 text-[#4E5969] shadow-none outline-none hover:bg-[#f8f8f8] focus:ring-0">
+                <SelectTrigger className="h-8 w-auto min-w-0 max-w-[min(50vw,288px)] touch-mobile:max-w-[min(60vw,200px)] touch-mobile:px-1.5 gap-1 overflow-hidden rounded-lg border-none bg-transparent px-2 text-text-2 shadow-none outline-none hover:bg-fill-1 focus:ring-0">
                     <div className="min-w-0 flex-1 overflow-hidden">
                         <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[14px] font-normal">
                             {label}
@@ -76,15 +77,19 @@ const AiModelSelect = memo(
                     very long ones. `auto` (see SelectContent) keeps the popup
                     from being forced to the trigger's width. No flash on open:
                     the model list is already in memory via `options`. */}
-                <SelectContent auto className="bg-white w-auto min-w-[100px] max-w-[240px]">
+                <SelectContent
+                    auto
+                    className="bg-white w-auto min-w-[100px] max-w-[240px] rounded-2xl"
+                    viewportClassName="flex flex-col gap-1 p-3"
+                >
                     {uniqueOptions.map((opt) => (
-                        <SelectItem key={opt.id + ""} value={opt.id + ""} textValue={opt.displayName}>
-                            <div className="flex min-w-0 items-center py-0.5">
+                        <SelectItem key={opt.id + ""} value={opt.id + ""} textValue={opt.displayName} className="h-8 rounded-lg">
+                            <div className="flex min-w-0 items-center">
                                 <span className="shrink-0">{opt.displayName}</span>
                                 {opt.description && (
                                     <>
-                                        <span className="mx-1.5 h-3 w-px shrink-0 bg-[#E5E6EB]" />
-                                        <span className="min-w-0 truncate text-xs font-normal text-[#999999]">
+                                        <span className="mx-1.5 h-3 w-px shrink-0 bg-fill-3" />
+                                        <span className="min-w-0 truncate text-xs font-normal text-text-3">
                                             {opt.description}
                                         </span>
                                     </>

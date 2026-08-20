@@ -1,6 +1,6 @@
 /**
  * Multi-device adaptation principles — DEV-ONLY.
- * Mirrors docs-ui-refactor/基础-多端适配原则.md: cross-component responsive rules
+ * Mirrors packages/ui/docs/基础-多端适配原则.md: cross-component responsive rules
  * (touch vs width criteria, hover/active, hit-area, one code path). Principles-only
  * page — no live component demos, so it's table/text driven.
  */

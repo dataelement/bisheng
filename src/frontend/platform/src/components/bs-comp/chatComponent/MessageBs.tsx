@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { ToastIcon } from "@/components/bs-icons";
 import { LoadIcon, LoadingIcon } from "@/components/bs-icons/loading";
 import { cname } from "@/components/bs-ui/utils";

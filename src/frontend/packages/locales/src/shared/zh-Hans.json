@@ -1,0 +1,21 @@
+{
+  "knowledge": {
+    "excelPreview": {
+      "filePathEmpty": "文件路径为空",
+      "fileLoadFailed": "文件加载失败",
+      "fileContentEmpty": "文件内容为空",
+      "excelParseFailed": "Excel 文件解析失败，请检查文件是否损坏",
+      "unsupportedType": "不支持的类型: {{type}}，仅支持CSV/XLSX/XLS",
+      "unknownError": "未知错误",
+      "currentSheetNoData": "当前Sheet无数据",
+      "rowNumber": "行号",
+      "defaultColumnName": "列{{index}}",
+      "loading": "加载文件中...",
+      "supportedFormats": "支持 CSV, XLSX, XLS 格式",
+      "previewFailed": "预览失败",
+      "downloadOriginal": "下载原始文件",
+      "imageLoadFailed": "图片加载失败",
+      "imageRef": "图片引用"
+    }
+  }
+}

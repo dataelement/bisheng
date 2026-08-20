@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import type React from "react"
@@ -65,7 +66,7 @@ export function DashboardListItem({
 
     const handleBlur = (e) => {
         setIsEditing(false)
-        let trimmedTitle = title.trim()
+        const trimmedTitle = title.trim()
 
         if (!trimmedTitle) {
             // trimmedTitle = t('untitledDashboard')

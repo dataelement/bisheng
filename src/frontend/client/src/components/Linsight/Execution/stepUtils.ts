@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * Barrel for the linsight execution-flow helpers.
  *

@@ -411,18 +411,22 @@ class TestRelationModelBindings:
         }]
 
         with patch(
-            'bisheng.permission.api.endpoints.resource_permission.ConfigDao.aget_config_by_key',
+            'bisheng.permission.domain.services.relation_model_store.ConfigDao.aget_config_version',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.relation_model_store.ConfigDao.aget_config_by_key',
             new_callable=AsyncMock,
             return_value=SimpleNamespace(value='[]'),
         ), patch(
-            'bisheng.permission.api.endpoints.resource_permission.json.loads',
+            'bisheng.permission.domain.services.relation_model_store.json.loads',
             return_value=raw_bindings,
         ), patch(
             'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aget_list_by_ids',
             new_callable=AsyncMock,
             return_value=[SimpleNamespace(id=12, type=0)],
         ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            'bisheng.permission.domain.services.relation_model_store.save_bindings',
             new_callable=AsyncMock,
         ) as mock_save_bindings:
             result = await _get_bindings()
@@ -448,18 +452,22 @@ class TestRelationModelBindings:
         }]
 
         with patch(
-            'bisheng.permission.api.endpoints.resource_permission.ConfigDao.aget_config_by_key',
+            'bisheng.permission.domain.services.relation_model_store.ConfigDao.aget_config_version',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.relation_model_store.ConfigDao.aget_config_by_key',
             new_callable=AsyncMock,
             return_value=SimpleNamespace(value='[]'),
         ), patch(
-            'bisheng.permission.api.endpoints.resource_permission.json.loads',
+            'bisheng.permission.domain.services.relation_model_store.json.loads',
             return_value=raw_bindings,
         ), patch(
             'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aget_list_by_ids',
             new_callable=AsyncMock,
             return_value=[SimpleNamespace(id=22, type=3)],
         ), patch(
-            'bisheng.permission.api.endpoints.resource_permission._save_bindings',
+            'bisheng.permission.domain.services.relation_model_store.save_bindings',
             new_callable=AsyncMock,
         ) as mock_save_bindings:
             result = await _get_bindings()
@@ -627,3 +635,82 @@ class TestRelationModelBindings:
             'include_children': None,
             'model_id': 'editor',
         }]
+
+
+class TestVerifiedBindingPermissionLookup:
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ('stored_tuples', 'expected_permissions'),
+        [([{'user': 'user:7', 'relation': 'manager'}], {'manage_space_relation'}), ([], set())],
+    )
+    async def test_binding_only_selects_candidate_and_openfga_verifies_it(
+        self,
+        stored_tuples,
+        expected_permissions,
+    ):
+        from bisheng.permission.domain.services.fine_grained_permission_service import (
+            FineGrainedPermissionService,
+        )
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        login_user = SimpleNamespace(user_id=7, is_admin=lambda: False)
+        fga = SimpleNamespace(read_tuples=AsyncMock(return_value=stored_tuples))
+        binding = {
+            'resource_type': 'knowledge_space',
+            'resource_id': '81',
+            'subject_type': 'user',
+            'subject_id': 7,
+            'relation': 'manager',
+            'model_id': 'custom_manager',
+        }
+
+        with patch(
+            'bisheng.permission.domain.services.fine_grained_permission_service._get_bindings',
+            new=AsyncMock(return_value=[binding]),
+        ), patch.object(
+            FineGrainedPermissionService,
+            'get_relation_models_map',
+            new=AsyncMock(return_value={
+                'custom_manager': {
+                    'permissions': ['manage_space_relation'],
+                    'permissions_explicit': True,
+                }
+            }),
+        ), patch.object(
+            FineGrainedPermissionService,
+            'get_current_user_subject_strings',
+            new=AsyncMock(return_value={'user:7'}),
+        ), patch.object(
+            FineGrainedPermissionService,
+            'get_binding_department_paths',
+            new=AsyncMock(return_value={}),
+        ), patch.object(
+            FineGrainedPermissionService,
+            'get_current_user_department_paths',
+            new=AsyncMock(return_value={}),
+        ), patch.object(
+            PermissionService,
+            '_aget_fga',
+            new=AsyncMock(return_value=fga),
+        ), patch.object(
+            PermissionService,
+            'get_implicit_permission_level',
+            new=AsyncMock(return_value=None),
+        ), patch.object(
+            PermissionService,
+            'get_permission_level',
+            new=AsyncMock(return_value=None),
+        ):
+            permissions = await FineGrainedPermissionService.get_effective_permission_ids_from_verified_bindings_async(
+                login_user,
+                'knowledge_space',
+                '81',
+            )
+
+        assert permissions == expected_permissions
+        fga.read_tuples.assert_awaited_once_with(
+            user='user:7',
+            relation='manager',
+            object='knowledge_space:81',
+        )

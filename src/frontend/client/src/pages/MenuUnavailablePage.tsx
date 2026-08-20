@@ -3,16 +3,17 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ApprovalApiError, applyMenuAccessApi, checkMenuAccessPendingApi } from '~/api/approval';
 import { useToastContext } from '~/Providers';
 import { NotificationSeverity } from '~/common';
-import { useAuthContext, useLocalize } from '~/hooks';
+import { useAuthContext, useLocalize, useWorkbenchMenuNames, type WorkbenchMenuKey } from '~/hooks';
 import { WorkbenchEmptyIllustration } from '~/components/workbench/WorkbenchEmptyIllustration';
 import { Button } from '~/components/ui/Button';
 import { CommentDialog } from '~/components/ui/CommentDialog';
 
-const MENU_LABEL_KEYS: Record<string, string> = {
-  home: 'com_nav_home',
-  knowledge_space: 'com_knowledge.knowledge_space',
-  subscription: 'com_ui_channel',
-  apps: 'com_nav_app_center',
+/** Plugin id → workbench menu key, so the copy uses the admin-configured entry name. */
+const MENU_NAME_KEYS: Record<string, WorkbenchMenuKey> = {
+  home: 'home',
+  knowledge_space: 'knowledge',
+  subscription: 'channel',
+  apps: 'apps',
 };
 
 const PLUGIN_DEFAULT_ROUTES: Record<string, string> = {
@@ -27,6 +28,7 @@ export default function MenuUnavailablePage() {
   const { user } = useAuthContext();
   const navigate = useNavigate();
   const localize = useLocalize();
+  const menuNames = useWorkbenchMenuNames();
   const { showToast } = useToastContext();
 
   const pluginId = searchParams.get('plugin') || '';
@@ -47,7 +49,8 @@ export default function MenuUnavailablePage() {
     const target = PLUGIN_DEFAULT_ROUTES[pluginId] ?? '/';
     navigate(target, { replace: true });
   }, [hasPlugin, pluginId]);
-  const menuName = pluginId ? localize((MENU_LABEL_KEYS[pluginId] || pluginId) as any) : '';
+  const menuNameKey = MENU_NAME_KEYS[pluginId];
+  const menuName = pluginId ? (menuNameKey ? menuNames[menuNameKey] : pluginId) : '';
 
   const [showDialog, setShowDialog] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -100,18 +103,18 @@ export default function MenuUnavailablePage() {
     <div className="flex min-h-[320px] w-full flex-1 flex-col items-center justify-center gap-4 bg-white px-8 text-center">
       <WorkbenchEmptyIllustration />
       <div className="flex flex-col items-center gap-1">
-        <p className="text-base font-medium leading-6 text-[#1D2129]" role="status">
+        <p className="text-base font-medium leading-6 text-text-1" role="status">
           {localize('com_menu_unavailable_no_permission')}
         </p>
         {canApply && (
-          <p className="text-sm leading-[22px] text-[#999999]">
+          <p className="text-sm leading-[22px] text-text-3">
             {localize('com_menu_unavailable_apply_hint', { menu: menuName || pluginId } as any)}
           </p>
         )}
       </div>
       {canApply && (
         <Button
-          className="h-8 rounded-[6px] px-4"
+          className="h-8 rounded-md px-4"
           disabled={applied}
           onClick={() => setShowDialog(true)}
         >

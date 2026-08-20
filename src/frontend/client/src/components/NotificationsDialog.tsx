@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Trash2, Check, XIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
@@ -718,7 +719,7 @@ export function NotificationsDialog({
                 !isApprovalMessageType(notification.message_type, notification.action_code) &&
                 (isApproved || isDecisionActionCode(notification.action_code)));
 
-        const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#989898]" : "text-[#1d2129]";
+        const textColor = !isVisuallyUnread(notification) || isApproved ? "text-[#989898]" : "text-text-1";
 
         const onRowMouseEnter = () => {
             setDateSlotHoverId(id);
@@ -748,7 +749,7 @@ export function NotificationsDialog({
                     "flex flex-col gap-2 px-3",
                     isTouchMobile
                         ? "py-3 hover:bg-transparent"
-                        : "py-6 hover:bg-[#f7f8fa]",
+                        : "py-6 hover:bg-fill-1",
                     canOpenApprovalCenter && "group cursor-pointer",
                 )}
                 style={{
@@ -798,10 +799,10 @@ export function NotificationsDialog({
                         side="left"
                         hideArrow
                         className="shrink-0"
-                        tooltipClassName="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-[8px] border border-solid border-[#EBECF0] bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]"
+                        tooltipClassName="box-border flex h-[64px] w-[151px] flex-col justify-center overflow-hidden rounded-lg border border-solid border-border-base bg-white p-0 opacity-100 shadow-[0_4px_12px_rgba(0,0,0,0.08)] z-[100]"
                         description={
                             <div className="flex h-full w-full flex-col justify-center px-3 py-2">
-                                <div className="truncate text-[14px] font-normal leading-tight text-[#1D2129]">
+                                <div className="truncate text-[14px] font-normal leading-tight text-text-1">
                                     {userName}
                                 </div>
                                 {userGroup ? (
@@ -933,7 +934,7 @@ export function NotificationsDialog({
                             )}
                             {textSuffix}
                         </span>
-                        <span className={cn("text-[14px] tabular-nums text-[#999999]", isTouchMobile ? "inline" : "hidden")}>
+                        <span className={cn("text-[14px] tabular-nums text-text-3", isTouchMobile ? "inline" : "hidden")}>
                             {formatMessageTime(createdAt)}
                         </span>
                     </div>
@@ -942,7 +943,7 @@ export function NotificationsDialog({
                     <div className={cn("relative h-7 w-[184px] shrink-0 items-center justify-end whitespace-nowrap", isTouchMobile ? "hidden" : "flex")}>
                         <span
                             className={cn(
-                                "text-[14px] tabular-nums text-[#999999]",
+                                "text-[14px] tabular-nums text-text-3",
                                 showRightSlotDelete && "invisible"
                             )}
                             aria-hidden={showRightSlotDelete}
@@ -953,7 +954,7 @@ export function NotificationsDialog({
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); handleDelete(id); }}
-                                className="absolute right-0 top-1/2 h-7 -translate-y-1/2 appearance-none px-3 inline-flex items-center gap-1.5 text-[14px] text-[#4e5969] bg-white border border-[#e5e6eb] rounded-[6px] hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
+                                className="absolute right-0 top-1/2 h-7 -translate-y-1/2 appearance-none px-3 inline-flex items-center gap-1.5 text-[14px] text-text-2 bg-white border border-border-base rounded-md hover:text-[#f53f3f] hover:border-[#f53f3f] transition-colors active:translate-y-0"
                                 title={localize("com_notifications_delete")}
                             >
                                 <Trash2 className="size-4" />
@@ -968,7 +969,7 @@ export function NotificationsDialog({
                         <button
                             type="button"
                             disabled
-                            className="h-7 cursor-default rounded-[6px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 text-[14px] text-[#86909C]"
+                            className="h-7 cursor-default rounded-md border border-border-base bg-fill-1 px-3 text-[14px] text-text-3"
                         >
                             {isApprovedStatus(approvalStatus)
                                 ? localize("com_notifications_approved")
@@ -978,7 +979,7 @@ export function NotificationsDialog({
                 ) : null}
 
                 {supplementaryText && (
-                    <div className={cn("text-[13px] leading-6 text-[#86909C]", isTouchMobile ? "pl-0" : "pl-12")}>
+                    <div className={cn("text-[13px] leading-6 text-text-3", isTouchMobile ? "pl-0" : "pl-12")}>
                         {supplementaryText}
                     </div>
                 )}
@@ -1027,7 +1028,7 @@ export function NotificationsDialog({
                     type="button"
                     onClick={() => onOpenChange?.(false)}
                     aria-label={localize("com_ui_close")}
-                    className="absolute right-5 top-4 z-10 rounded-lg text-[#86909c] opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
+                    className="absolute right-5 top-4 z-10 rounded-lg text-text-3 opacity-70 transition-opacity hover:opacity-100 focus:outline-none"
                 >
                     <XIcon className="h-4 w-4" />
                 </button>
@@ -1041,7 +1042,7 @@ export function NotificationsDialog({
                             <div className={cn("flex-shrink-0 space-y-3 py-3", isNarrowMobileLayout ? "px-4 pb-4 pt-4 pr-4" : "px-5")}>
                                 {/* 标题 + Tab：移动端 Tab 紧挨在「消息提醒」下方并左对齐（覆盖 TabsList 默认 justify-center） */}
                                 <div className={cn("flex flex-col", isNarrowMobileLayout ? "gap-3" : "gap-4")}>
-                                    <h2 className={cn("text-[#1d2129]", isNarrowMobileLayout ? "text-[16px] font-medium leading-[1.4] text-[#212121]" : "min-h-8 text-[16px] font-semibold leading-8")}>
+                                    <h2 className={cn("text-text-1", isNarrowMobileLayout ? "text-[16px] font-medium leading-[1.4] text-text-1" : "min-h-8 text-[16px] font-semibold leading-8")}>
                                         {localize("com_notifications_title")}
                                     </h2>
                                     <div className={cn("flex gap-4", isNarrowMobileLayout ? "flex-col" : "flex-row items-center justify-between")}>
@@ -1049,7 +1050,7 @@ export function NotificationsDialog({
                                             <TabsTrigger
                                                 value="all"
                                                 className={cn(
-                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-blue-500 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-500 data-[state=active]:shadow-none",
+                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-text-1 shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-blue-500 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-500 data-[state=active]:shadow-none",
                                                 )}
                                             >
                                                 {localize("com_notifications_tab_all")}
@@ -1057,7 +1058,7 @@ export function NotificationsDialog({
                                             <TabsTrigger
                                                 value="request"
                                                 className={cn(
-                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-[#212121] shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-blue-500 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-500 data-[state=active]:shadow-none",
+                                                    "flex h-auto w-fit min-w-0 shrink-0 items-center whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none text-text-1 shadow-none transition-colors active:translate-y-0 fine-pointer:hover:text-blue-500 data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-500 data-[state=active]:shadow-none",
                                                 )}
                                             >
                                                 {localize("com_notifications_tab_request")}
@@ -1079,8 +1080,8 @@ export function NotificationsDialog({
                                                     onClick={() => setOnlyUnread((v) => !v)}
                                                     className={
                                                         onlyUnread
-                                                            ? "h-8 rounded-[6px] border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-3 py-0 text-[14px] font-normal leading-none text-blue-500 [backdrop-filter:blur(4px)] hover:bg-[rgb(var(--brand-500)/0.28)] hover:text-blue-600 active:translate-y-0"
-                                                            : "h-8 rounded-[6px] border border-[#e5e6eb] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] hover:bg-[#f7f8fa] active:translate-y-0"
+                                                            ? "h-8 rounded-md border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-3 py-0 text-[14px] font-normal leading-none text-blue-500 hover:bg-[rgb(var(--brand-500)/0.28)] hover:text-blue-600 active:translate-y-0"
+                                                            : "h-8 rounded-md border border-border-base px-3 py-0 text-[14px] font-normal leading-none text-text-2 hover:bg-fill-1 active:translate-y-0"
                                                     }
                                                 >
                                                     {localize("com_notifications_unread_only")}
@@ -1092,7 +1093,7 @@ export function NotificationsDialog({
                                                         handleMarkAllAsRead();
                                                     }}
                                                     variant="outline"
-                                                    className="h-8 rounded-[6px] border-transparent bg-[#F8F8F8] px-3 py-0 text-[14px] font-normal leading-none text-[#4e5969] [backdrop-filter:blur(4px)] hover:bg-[#f0f0f0] active:translate-y-0"
+                                                    className="h-8 rounded-md border-transparent bg-fill-1 px-3 py-0 text-[14px] font-normal leading-none text-text-2 hover:bg-[#f0f0f0] active:translate-y-0"
                                                 >
                                                     {localize("com_notifications_mark_all_read")}
                                                 </Button>
@@ -1104,14 +1105,14 @@ export function NotificationsDialog({
                                 {/* H5：与稿一致 — 搜索与「仅看未读」「已读全部」同一行，gap 12px */}
                                 {isNarrowMobileLayout && (
                                     <div className="flex min-w-0 flex-nowrap items-center gap-3 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                                        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-[#EBECF0] bg-white px-3 py-[5px]">
+                                        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border-base bg-white px-3 py-[5px]">
                                             <Search className="size-4 shrink-0 text-[#8B8FA8]" aria-hidden />
                                             <input
                                                 type="search"
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
                                                 placeholder={localize("com_notifications_search_placeholder")}
-                                                className="min-w-0 flex-1 bg-transparent text-[14px] leading-normal text-[#212121] outline-none placeholder:text-[#979797]"
+                                                className="min-w-0 flex-1 bg-transparent text-[14px] leading-normal text-text-1 outline-none placeholder:text-[#979797]"
                                                 enterKeyHint="search"
                                             />
                                         </div>
@@ -1121,8 +1122,8 @@ export function NotificationsDialog({
                                             onClick={() => setOnlyUnread((v) => !v)}
                                             className={
                                                 onlyUnread
-                                                    ? "h-8 shrink-0 rounded-[6px] border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-4 py-[5px] text-[14px] font-normal text-blue-500 [backdrop-filter:blur(8px)]"
-                                                    : "h-8 shrink-0 rounded-[6px] border border-[#EBECF0] bg-white/50 px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
+                                                    ? "h-8 shrink-0 rounded-md border border-transparent bg-[rgb(var(--brand-500)/0.2)] px-4 py-[5px] text-[14px] font-normal text-blue-500"
+                                                    : "h-8 shrink-0 rounded-md border border-border-base bg-white/50 px-4 py-[5px] text-[14px] font-normal text-text-1"
                                             }
                                         >
                                             {localize("com_notifications_unread_only")}
@@ -1134,7 +1135,7 @@ export function NotificationsDialog({
                                                 handleMarkAllAsRead();
                                             }}
                                             variant="outline"
-                                            className="h-8 shrink-0 rounded-[6px] border-transparent bg-[#F8F8F8] px-4 py-[5px] text-[14px] font-normal text-[#212121] [backdrop-filter:blur(8px)]"
+                                            className="h-8 shrink-0 rounded-md border-transparent bg-fill-1 px-4 py-[5px] text-[14px] font-normal text-text-1"
                                         >
                                             {localize("com_notifications_mark_all_read")}
                                         </Button>
@@ -1151,19 +1152,19 @@ export function NotificationsDialog({
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
-                                            <div className="flex items-center justify-center h-full text-[#86909c]">{localize("com_notifications_loading")}</div>
+                                            <div className="flex items-center justify-center h-full text-text-3">{localize("com_notifications_loading")}</div>
                                         ) : listEmpty ? (
-                                            <div className="flex items-center justify-center h-full text-[#86909c]">{localize("com_notifications_empty")}</div>
+                                            <div className="flex items-center justify-center h-full text-text-3">{localize("com_notifications_empty")}</div>
                                         ) : (
                                             <>
-                                                <div className="divide-y divide-[#ECECEC]">
+                                                <div className="divide-y divide-border-base">
                                                     {filteredNotifications.map(renderNotificationItem)}
                                                 </div>
                                                 {loadingMore && (
-                                                    <div className="py-3 text-center text-[12px] text-[#86909c]">{localize("com_notifications_loading")}</div>
+                                                    <div className="py-3 text-center text-[12px] text-text-3">{localize("com_notifications_loading")}</div>
                                                 )}
                                                 {!hasMore && filteredNotifications.length > 0 && (
-                                                    <div className="py-3 text-center text-[12px] text-[#c9cdd4]">{localize("com_notifications_no_more")}</div>
+                                                    <div className="py-3 text-center text-[12px] text-text-4">{localize("com_notifications_no_more")}</div>
                                                 )}
                                             </>
                                         )}
@@ -1178,15 +1179,15 @@ export function NotificationsDialog({
                                         onScroll={(e) => handleListScroll(e.currentTarget)}
                                     >
                                         {loading ? (
-                                            <div className="flex items-center justify-center h-full text-[#86909c]">{localize("com_notifications_loading")}</div>
+                                            <div className="flex items-center justify-center h-full text-text-3">{localize("com_notifications_loading")}</div>
                                         ) : requestEmpty ? (
-                                            <div className="flex items-center justify-center h-full text-[#86909c]">{localize("com_notifications_empty_requests")}</div>
+                                            <div className="flex items-center justify-center h-full text-text-3">{localize("com_notifications_empty_requests")}</div>
                                         ) : (
                                             <>
                                                 {requestGroups.pending.length > 0 && (
                                                     <div className="mb-3">
-                                                        <div className="text-[14px] leading-[22px] text-[#999] font-normal mb-2">{localize("com_notifications_section_pending")}</div>
-                                                        <div className="divide-y divide-[#ECECEC]">
+                                                        <div className="text-[14px] leading-[22px] text-text-3 font-normal mb-2">{localize("com_notifications_section_pending")}</div>
+                                                        <div className="divide-y divide-border-base">
                                                             {requestGroups.pending.map(renderNotificationItem)}
                                                         </div>
                                                     </div>
@@ -1194,17 +1195,17 @@ export function NotificationsDialog({
 
                                                 {requestGroups.approved.length > 0 && (
                                                     <div className="mt-2">
-                                                        <div className="text-[14px] leading-[22px] text-[#999] font-normal mb-2">{localize("com_notifications_section_reviewed")}</div>
-                                                        <div className="divide-y divide-[#ECECEC]">
+                                                        <div className="text-[14px] leading-[22px] text-text-3 font-normal mb-2">{localize("com_notifications_section_reviewed")}</div>
+                                                        <div className="divide-y divide-border-base">
                                                             {requestGroups.approved.map(renderNotificationItem)}
                                                         </div>
                                                     </div>
                                                 )}
                                                 {loadingMore && (
-                                                    <div className="py-3 text-center text-[12px] text-[#86909c]">{localize("com_notifications_loading")}</div>
+                                                    <div className="py-3 text-center text-[12px] text-text-3">{localize("com_notifications_loading")}</div>
                                                 )}
                                                 {!hasMore && (requestGroups.pending.length + requestGroups.approved.length) > 0 && (
-                                                    <div className="py-3 text-center text-[12px] text-[#c9cdd4]">{localize("com_notifications_no_more")}</div>
+                                                    <div className="py-3 text-center text-[12px] text-text-4">{localize("com_notifications_no_more")}</div>
                                                 )}
                                             </>
                                         )}

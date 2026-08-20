@@ -428,7 +428,28 @@ class DepartmentKnowledgeSpaceService:
                 (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(member_space_ids)).keys()
             )
 
-            space_ids = department_space_ids | member_bound_space_ids
+            # A user can also gain access to a department space through an ad-hoc
+            # authorization (viewer/editor/manager granted on the permission panel).
+            # That path writes only an FGA relation — no membership row, and the
+            # user need not be a member of the bound department — so neither branch
+            # above catches it and the space would only surface under "我加入的".
+            # Intersect the user's FGA-readable spaces with the department-bound set
+            # so an individually-authorized user sees it under 部门知识空间 instead.
+            accessible_ids = await PermissionService.list_accessible_ids(
+                user_id=login_user.user_id,
+                relation="can_read",
+                object_type="knowledge_space",
+                login_user=login_user,
+            )
+            authorized_bound_space_ids: set[int] = set()
+            if accessible_ids:
+                accessible_int_ids = [int(sid) for sid in accessible_ids if str(sid).isdigit()]
+                if accessible_int_ids:
+                    authorized_bound_space_ids = set(
+                        (await DepartmentKnowledgeSpaceDao.aget_department_ids_by_space_ids(accessible_int_ids)).keys()
+                    )
+
+            space_ids = department_space_ids | member_bound_space_ids | authorized_bound_space_ids
 
         if not space_ids:
             return []

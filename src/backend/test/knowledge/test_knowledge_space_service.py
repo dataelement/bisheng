@@ -10,6 +10,7 @@ from bisheng.common.errcode.base import BaseErrorCode
 from bisheng.common.errcode.knowledge_space import (
     SpaceFileNotFoundError,
     SpaceFileSizeLimitError,
+    SpaceFolderDepthError,
     SpaceFolderNotFoundError,
     SpaceNotFoundError,
     SpacePermissionDeniedError,
@@ -1904,6 +1905,105 @@ class TestTupleLifecycle:
         assert parent_tuple.object == "folder:72"
 
     @pytest.mark.asyncio
+    async def test_add_folder_under_level_9_parent_raises_depth_error(self, service):
+        from bisheng.knowledge.domain.services.knowledge_space_service import MAX_FOLDER_LEVEL
+
+        # Parent at MAX_FOLDER_LEVEL (level 9 = UI 第10层): a child would be the
+        # 11th layer, which the product rule forbids.
+        parent_folder = _make_file(
+            file_id=70,
+            knowledge_id=1,
+            file_type=FileType.DIR.value,
+            file_name="deepest",
+            file_level_path="/1/2/3/4/5/6/7/8/9",
+            level=MAX_FOLDER_LEVEL,
+        )
+
+        with (
+            patch.object(
+                service,
+                "_require_permission_id",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=parent_folder,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aadd_file",
+                new_callable=AsyncMock,
+            ) as mock_add_file,
+        ):
+            with pytest.raises(SpaceFolderDepthError) as exc_info:
+                await service.add_folder(1, "too-deep", parent_id=70)
+
+        assert exc_info.value.Code == 18011
+        mock_add_file.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_add_folder_under_level_8_parent_creates_level_9_child(self, service):
+        from bisheng.knowledge.domain.services.knowledge_space_service import MAX_FOLDER_LEVEL
+
+        # Boundary: level-8 parent may still gain a level-9 child (the 10th and
+        # deepest allowed layer).
+        parent_folder = _make_file(
+            file_id=70,
+            knowledge_id=1,
+            file_type=FileType.DIR.value,
+            file_name="parent",
+            file_level_path="/1/2/3/4/5/6/7/8",
+            level=MAX_FOLDER_LEVEL - 1,
+        )
+        added_folder = _make_file(
+            file_id=72,
+            knowledge_id=1,
+            file_type=FileType.DIR.value,
+            file_name="child",
+            file_level_path="/1/2/3/4/5/6/7/8/70",
+            level=MAX_FOLDER_LEVEL,
+        )
+
+        with (
+            patch.object(
+                service,
+                "_require_permission_id",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.query_by_id",
+                new_callable=AsyncMock,
+                return_value=parent_folder,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceFileDao.count_folder_by_name",
+                new_callable=AsyncMock,
+                return_value=0,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aadd_file",
+                new_callable=AsyncMock,
+                return_value=added_folder,
+            ) as mock_add_file,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.PermissionService.batch_write_tuples",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.OwnerService.write_owner_tuple",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await service.add_folder(1, "child", parent_id=70)
+
+        assert result.id == 72
+        assert mock_add_file.await_args.args[0].level == MAX_FOLDER_LEVEL
+
+    @pytest.mark.asyncio
     async def test_add_file_initializes_file_owner_and_parent_tuples(self, service):
         space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         added_file = _make_file(
@@ -3044,6 +3144,87 @@ class TestTupleLifecycle:
         mock_delete_members.assert_awaited_once_with(1)
 
     @pytest.mark.asyncio
+    async def test_private_cleanup_failure_does_not_persist_visibility(self, service):
+        public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ),
+            patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+                new_callable=AsyncMock,
+                return_value=public_space,
+            ) as mock_update_space,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(service, "_authorized_space_user_ids", new_callable=AsyncMock, return_value=set()),
+            patch.object(service, "_list_space_child_resources", new_callable=AsyncMock, return_value=[]),
+            patch.object(
+                service.__class__,
+                "clear_space_authorization_for_private",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("FGA cleanup failed"),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service."
+                "SpaceChannelMemberDao.async_delete_non_creator_members",
+                new_callable=AsyncMock,
+            ) as mock_delete_members,
+        ):
+            with pytest.raises(RuntimeError, match="FGA cleanup failed"):
+                await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
+
+        mock_update_space.assert_not_awaited()
+        mock_delete_members.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_explicit_private_retry_replays_cleanup_when_already_private(self, service):
+        private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE)
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=private_space,
+            ),
+            patch.object(service, "_require_permission_id", new_callable=AsyncMock),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_space",
+                new_callable=AsyncMock,
+                return_value=private_space,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.SpaceChannelMemberDao.async_get_members_by_space",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(service, "_authorized_space_user_ids", new_callable=AsyncMock, return_value=set()),
+            patch.object(service, "_list_space_child_resources", new_callable=AsyncMock, return_value=[]),
+            patch.object(
+                service.__class__,
+                "clear_space_authorization_for_private",
+                new_callable=AsyncMock,
+            ) as mock_clear_permissions,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service."
+                "SpaceChannelMemberDao.async_delete_non_creator_members",
+                new_callable=AsyncMock,
+            ) as mock_delete_members,
+            patch.object(service, "_send_space_event_notification", new_callable=AsyncMock),
+        ):
+            await service.update_knowledge_space(1, auth_type=AuthTypeEnum.PRIVATE)
+
+        mock_clear_permissions.assert_awaited_once()
+        mock_delete_members.assert_awaited_once_with(1)
+
+    @pytest.mark.asyncio
     async def test_public_to_private_notifies_authorized_users_not_only_member_rows(self, service):
         public_space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
         private_space = _make_space(auth_type=AuthTypeEnum.PRIVATE)
@@ -3296,12 +3477,12 @@ class TestTupleLifecycle:
                 return_value=True,
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                "bisheng.permission.domain.services.relation_model_store.get_bindings",
                 new_callable=AsyncMock,
                 return_value=[],
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                "bisheng.permission.domain.services.relation_model_store.save_bindings",
                 new_callable=AsyncMock,
             ) as mock_save_bindings,
             patch(
@@ -3367,12 +3548,12 @@ class TestTupleLifecycle:
                 return_value=True,
             ) as mock_delete_member,
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                "bisheng.permission.domain.services.relation_model_store.get_bindings",
                 new_callable=AsyncMock,
                 return_value=[stale_binding, other_binding],
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                "bisheng.permission.domain.services.relation_model_store.save_bindings",
                 new_callable=AsyncMock,
             ) as mock_save_bindings,
             patch(
@@ -3425,12 +3606,12 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ) as mock_delete_member,
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                "bisheng.permission.domain.services.relation_model_store.get_bindings",
                 new_callable=AsyncMock,
                 return_value=[],
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                "bisheng.permission.domain.services.relation_model_store.save_bindings",
                 new_callable=AsyncMock,
             ) as mock_save_bindings,
             patch(
@@ -3485,12 +3666,12 @@ class TestTupleLifecycle:
                 new_callable=AsyncMock,
             ) as mock_delete_member,
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._get_bindings",
+                "bisheng.permission.domain.services.relation_model_store.get_bindings",
                 new_callable=AsyncMock,
                 return_value=[target_binding],
             ),
             patch(
-                "bisheng.permission.api.endpoints.resource_permission._save_bindings",
+                "bisheng.permission.domain.services.relation_model_store.save_bindings",
                 new_callable=AsyncMock,
             ) as mock_save_bindings,
             patch(

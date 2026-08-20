@@ -1,0 +1,70 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/bs-ui/tooltip";
+import { changeCurrentVersion } from "@/controllers/API/flow";
+import { changeWorkflowCurrentVersion } from "@/controllers/API/workflow";
+import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
+import { AppNumType } from "@/types/app";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+
+interface VersionCardData {
+    id: string;
+    flow_type: number;
+    version_list: { id: number | string; name: string; is_current: number }[];
+}
+
+interface SelectCompProps {
+    value: string;
+    onChange?: (id: string) => void;
+    data: VersionCardData;
+    disabled?: boolean;
+}
+
+const SelectComp = ({ value, onChange, data, disabled = false }: SelectCompProps) => {
+
+    const handleChange = (id) => {
+        const request = data.flow_type === AppNumType.FLOW
+            ? changeWorkflowCurrentVersion
+            : changeCurrentVersion
+        captureAndAlertRequestErrorHoc(request({ flow_id: data.id, version_id: Number(id) }))
+        onChange?.(id)
+    }
+
+    return <Select value={value} onValueChange={handleChange} disabled={disabled}>
+        <SelectTrigger className="w-[120px] h-6">
+            <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+            {
+                data.version_list.length ?
+                    data.version_list.map(version => (
+                        <SelectItem key={version.id} value={String(version.id)}>{version.name}</SelectItem>
+                    ))
+                    : <SelectItem value={'0'}>v0</SelectItem>
+            }
+        </SelectContent>
+    </Select>
+}
+
+export default function CardSelectVersion(
+    { showPop, ...props }:
+        { showPop: boolean, data: VersionCardData }
+) {
+    const [value, setValue] = useState(String(props.data.version_list.find(item => item.is_current === 1)?.id ?? '0'))
+
+    const { t } = useTranslation()
+
+    if (showPop) return <TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger>
+                <SelectComp {...props} value={value} onChange={setValue} />
+            </TooltipTrigger>
+            <TooltipContent>
+                <p className="text-[white]">{t('skills.chooseOnline')}</p>
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
+
+
+    return <SelectComp {...props} value={value} disabled={!showPop} />
+};

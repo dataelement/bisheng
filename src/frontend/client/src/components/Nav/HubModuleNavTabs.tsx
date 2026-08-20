@@ -1,11 +1,11 @@
 import type { ComponentType } from 'react';
 import { useMemo } from 'react';
+import { Outlined } from 'bisheng-icons';
 import { matchPath, NavLink, useLocation } from 'react-router-dom';
-import BookOpenIcon from '~/components/ui/icon/BookOpen';
 import GlobeIcon from '~/components/ui/icon/Globe';
 import HomeIcon from '~/components/ui/icon/Home';
 import LinkIcon from '~/components/ui/icon/Link';
-import { useAuthContext, useLocalize } from '~/hooks';
+import { useAuthContext, useWorkbenchMenuNames } from '~/hooks';
 import { appsSectionLinkTarget, lastSectionPaths } from '~/layouts/appModuleNavPaths';
 import { cn } from '~/utils';
 import { canOpenWorkbench } from '~/utils/platformAccess';
@@ -38,11 +38,12 @@ const hubNavItemClassName = (
   );
 
 const hubIconClassName = (on: boolean) =>
-  cn('size-5 shrink-0', on ? 'text-blue-500' : 'text-[#818181]');
+  cn('size-5 shrink-0', on ? 'text-blue-500' : 'text-text-3');
 
 export function useHubModuleLinks(): HubModuleLink[] {
   const { pathname } = useLocation();
-  const localize = useLocalize();
+  // Admin-configured entry names; falls back to the localized defaults.
+  const menuNames = useWorkbenchMenuNames();
   const { user } = useAuthContext();
   const plugins: string[] | null = Array.isArray((user as { plugins?: unknown })?.plugins)
     ? (user as { plugins: string[] }).plugins
@@ -74,7 +75,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         section: 'home' as const,
         to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable?plugin=home',
         icon: HomeIcon,
-        label: localize('com_nav_home'),
+        label: menuNames.home,
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname),
         closeDrawerOnNavigate: true,
       },
@@ -82,15 +83,15 @@ export function useHubModuleLinks(): HubModuleLink[] {
         section: 'channel' as const,
         to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable?plugin=subscription',
         icon: LinkIcon,
-        label: localize('com_ui_channel'),
+        label: menuNames.channel,
         isActive: pathname.startsWith('/channel'),
         closeDrawerOnNavigate: true,
       },
       {
         section: 'knowledge' as const,
         to: hasPlugin('knowledge_space') || !menuApprovalMode ? (lastSectionPaths.knowledge || '/knowledge') : '/menu-unavailable?plugin=knowledge_space',
-        icon: BookOpenIcon,
-        label: localize('com_knowledge.knowledge_space'),
+        icon: Outlined.Book,
+        label: menuNames.knowledge,
         isActive: pathname.startsWith('/knowledge'),
         closeDrawerOnNavigate: true,
       },
@@ -98,7 +99,7 @@ export function useHubModuleLinks(): HubModuleLink[] {
         section: 'apps' as const,
         to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable?plugin=apps',
         icon: GlobeIcon,
-        label: localize('com_nav_app_center'),
+        label: menuNames.apps,
         isActive:
           matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps'),
         closeDrawerOnNavigate: true,
@@ -111,7 +112,9 @@ export function useHubModuleLinks(): HubModuleLink[] {
       return true;
     });
   },
-    [canOpenWorkbenchEntry, localize, pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
+    // Menu names are read field-by-field: the hook returns a fresh object each render.
+    [canOpenWorkbenchEntry, menuNames.home, menuNames.channel, menuNames.knowledge, menuNames.apps,
+      pathname, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins],
   );
 }
 
@@ -135,7 +138,7 @@ export function HubModuleNavTabs({
   return (
     <div
       className={cn(
-        'flex shrink-0 gap-2 border-b border-[#e5e6eb] px-2 py-2 touch-mobile:border-b-0',
+        'flex shrink-0 gap-2 border-b border-border-base px-2 py-2 touch-mobile:border-b-0',
         equalWidth && 'w-full min-w-0',
         squareItems ? 'items-center justify-between' : equalWidth ? 'items-stretch' : 'items-center justify-center',
         className,

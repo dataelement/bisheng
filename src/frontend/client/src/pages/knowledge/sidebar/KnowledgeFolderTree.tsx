@@ -95,7 +95,7 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect, compact
                     // Row height: 28px on desktop; 32px (compact) on the mobile switcher.
                     // pr-1 matches design's 4px right padding; left padding comes from per-depth
                     // inline style so each nested level indents 20px (one 20×20 switcher slot).
-                    "group flex cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-[#1d2129] transition-colors hover:bg-[#F4F4F4]",
+                    "group flex cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-text-1 transition-colors hover:bg-[#F4F4F4]",
                     compact ? "h-8" : "h-7",
                     // Per design: selected folder = gray bg + semibold (600) title + dark folder icon.
                     isSelected && "bg-[#EEEEEE] font-semibold hover:bg-[#EEEEEE]"
@@ -132,9 +132,9 @@ function TreeNodeRow({ node, depth, currentFolderId, onExpand, onSelect, compact
                     Per design: selected folder icon is dark (#1d2129); unselected is light gray. */}
                 <div className="flex size-5 shrink-0 items-center justify-center">
                     {hasExpandedChildren ? (
-                        <Outlined.FolderOpen className={cn(compact ? "size-3.5 shrink-0" : "size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderOpen className={cn(compact ? "size-3.5 shrink-0" : "size-4 shrink-0", isSelected ? "text-text-1" : "text-[#8D93A0]")} />
                     ) : (
-                        <Outlined.FolderClose className={cn(compact ? "size-3.5 shrink-0" : "size-4 shrink-0", isSelected ? "text-[#1d2129]" : "text-[#8D93A0]")} />
+                        <Outlined.FolderClose className={cn(compact ? "size-3.5 shrink-0" : "size-4 shrink-0", isSelected ? "text-text-1" : "text-[#8D93A0]")} />
                     )}
                 </div>
 

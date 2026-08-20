@@ -105,7 +105,7 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
                     handleCloseCitationPanel();
                   }
                 }}
-                panelClassName="h-full w-full overflow-hidden rounded-[8px] border border-[#ECECEC] bg-[#FBFBFB]"
+                panelClassName="h-full w-full overflow-hidden rounded-lg border border-border-base bg-[#FBFBFB]"
                 messageId={citationPanelPayload.messageId}
                 content={citationPanelPayload.content}
                 webContent={citationPanelPayload.webContent}
@@ -146,8 +146,8 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
         <div
           data-citation-popover-surface
           className={cn(
-            'fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300',
-            'rounded-tl-[8px]',
+            'fixed inset-y-0 right-0 z-[130] flex min-h-0 flex-col overflow-hidden border-l border-border-base bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.08)] animate-in slide-in-from-right duration-300',
+            'rounded-tl-lg',
             'min-w-[260px] w-[min(520px,42vw)] max-[580px]:min-w-[240px] max-[580px]:w-[min(360px,calc(100vw-40px))]',
           )}
           onClick={(event) => event.stopPropagation()}
@@ -167,8 +167,8 @@ export function useCitationReferencePanel({ hasMessages }: UseCitationReferenceP
         <div
           data-citation-popover-surface
           className={cn(
-            'fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden border-l border-[#ECECEC] bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300',
-            'rounded-tl-[8px]',
+            'fixed inset-y-0 right-0 z-[150] flex min-h-0 flex-col overflow-hidden border-l border-border-base bg-white shadow-[-8px_0_28px_rgba(0,0,0,0.1)] animate-in slide-in-from-right duration-300',
+            'rounded-tl-lg',
             useExpandedCitationPanel ? 'w-[min(480px,100vw)]' : 'w-[min(360px,100vw)]',
           )}
           onClick={(event) => event.stopPropagation()}

@@ -113,9 +113,9 @@ export function MobileChatHistoryDropdown({
                         onClose();
                         onNewChat();
                     }}
-                    className="flex w-full shrink-0 items-center justify-center gap-1 rounded-[8px] border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-[#212121] transition-colors fine-pointer:hover:bg-[#F7F8FA]"
+                    className="flex w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-[#E3E3E3] bg-white px-3 py-[5px] text-[14px] leading-[22px] text-text-1 transition-colors fine-pointer:hover:bg-fill-1"
                 >
-                    <Plus className="size-4 text-[#86909C]" strokeWidth={2} />
+                    <Plus className="size-4 text-text-3" strokeWidth={2} />
                     {localize('com_ui_new_chat')}
                 </button>
             </div>

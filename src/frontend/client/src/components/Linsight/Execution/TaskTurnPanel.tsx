@@ -39,7 +39,7 @@ import { QueueCard } from './QueueCard';
 import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
-import { TaskErrorCard } from './TaskErrorCard';
+import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
 import { findPendingUserInput, hasRenderableTimeline, isTaskRunning, isTaskStarted, splitSessionPseudoTask } from './stepUtils';
@@ -171,15 +171,15 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
     if (!linsight) {
         if (loadFailed) {
             return (
-                <div className="text-[14px] leading-relaxed text-[#212121]">
+                <div className="text-[14px] leading-relaxed text-text-1">
                     {answer || localize('com_linsight_detail_load_failed')}
                 </div>
             );
         }
         return answer ? (
-            <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-[#212121]">{answer}</div>
+            <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-text-1">{answer}</div>
         ) : (
-            <div className="py-2 text-sm text-[#86909c]">{localize('com_linsight_loading')}</div>
+            <div className="py-2 text-sm text-text-3">{localize('com_linsight_loading')}</div>
         );
     }
 
@@ -218,7 +218,7 @@ export function TaskTurnPanel({ versionId, liked, allowFeedback = true, conversa
 
             {/* error / terminated banners */}
             {linsight.taskError && (
-                <TaskErrorCard
+                <ChatErrorCard
                     errorType={linsight.taskErrorInfo?.error_type}
                     detail={linsight.taskErrorInfo?.detail}
                     fallbackMessage={linsight.taskError}

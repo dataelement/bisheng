@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * F028 — H5 bottom sheet that lets the user pick an export file format.
  *

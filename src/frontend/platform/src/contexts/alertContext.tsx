@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { createContext, ReactNode, useState } from "react";
 import { AlertItemType } from "../types/alerts";
 import cloneDeep from "lodash-es/cloneDeep";
@@ -68,7 +69,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
   const [notificationList, setNotificationList] = useState([]);
   const pushNotificationList = (notification: AlertItemType) => {
     setNotificationList((old) => {
-      let newNotificationList = cloneDeep(old);
+      const newNotificationList = cloneDeep(old);
       newNotificationList.unshift(notification);
       return newNotificationList;
     });

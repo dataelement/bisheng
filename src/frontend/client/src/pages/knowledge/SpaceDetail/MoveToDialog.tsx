@@ -26,6 +26,7 @@ import {
 import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { AUDIO_FILE_EXTENSIONS, VIDEO_FILE_EXTENSIONS } from "../knowledgeUtils";
 import { useDynamicEllipsis } from "../hooks/useDynamicEllipsis";
 import { DynamicEllipsisName } from "../sidebar/DynamicEllipsisName";
 import { MoveToFolderTree, type FolderSelectPayload } from "./MoveToFolderTree";
@@ -71,9 +72,11 @@ function statusFilterFor(space?: KnowledgeSpace): number[] | undefined {
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "bmp", "gif", "webp"];
 
-/** Right-panel file glyph — mirrors the table-mode icon (FileTable.tsx). */
+/** Right-panel file glyph — mirrors the list-mode icon (FileIcon.tsx). */
 function fileGlyph(name: string) {
     const ext = name.split(".").pop()?.toLowerCase() || "";
+    if ((AUDIO_FILE_EXTENSIONS as readonly string[]).includes(ext)) return Outlined.FileAudio;
+    if ((VIDEO_FILE_EXTENSIONS as readonly string[]).includes(ext)) return Outlined.FileVideo;
     return IMAGE_EXTENSIONS.includes(ext) ? Outlined.FileImage : Outlined.File;
 }
 
@@ -118,7 +121,7 @@ function SpaceRow({
         <div className="flex flex-col gap-0.5">
             <div
                 className={cn(
-                    "group flex h-7 cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-[#1d2129] transition-colors hover:bg-[#F4F4F4]",
+                    "group flex h-7 cursor-pointer select-none items-center rounded-md pr-1 text-[12px] leading-5 text-text-1 transition-colors hover:bg-[#F4F4F4]",
                     rootSelected && "bg-[#EEEEEE] font-semibold hover:bg-[#EEEEEE]",
                 )}
                 onClick={() => onSelectSpace(space)}
@@ -141,18 +144,18 @@ function SpaceRow({
 
                 <div className="flex size-5 shrink-0 items-center justify-center">
                     {category === "department" ? (
-                        <Outlined.City className={cn("size-3.5", rootSelected ? "text-[#1d2129]" : "text-[#86909C]")} />
+                        <Outlined.City className={cn("size-3.5", rootSelected ? "text-text-1" : "text-text-3")} />
                     ) : (
-                        <Outlined.Notebook className={cn("size-3.5", rootSelected ? "text-[#1d2129]" : "text-[#86909C]")} />
+                        <Outlined.Notebook className={cn("size-3.5", rootSelected ? "text-text-1" : "text-text-3")} />
                     )}
                 </div>
 
                 <DynamicEllipsisName
                     name={space.name}
-                    textClassName={cn("text-[12px] leading-5 text-[#1d2129]", rootSelected && "font-semibold")}
+                    textClassName={cn("text-[12px] leading-5 text-text-1", rootSelected && "font-semibold")}
                     trailing={
                         isCurrent ? (
-                            <span className="shrink-0 whitespace-nowrap text-[12px] text-[#86909C]">
+                            <span className="shrink-0 whitespace-nowrap text-[12px] text-text-3">
                                 {localize("com_knowledge.current_space_tag")}
                             </span>
                         ) : null
@@ -349,9 +352,9 @@ export function MoveToDialog({
                     <DialogTitle>{localize("com_knowledge.move_to")}</DialogTitle>
                 </DialogHeader>
 
-                <div className="flex h-[420px] overflow-hidden rounded-lg border border-[#ececec] max-[768px]:h-auto max-[768px]:min-h-0 max-[768px]:flex-1 max-[768px]:rounded-none max-[768px]:border-0">
+                <div className="flex h-[420px] overflow-hidden rounded-lg border border-border-base max-[768px]:h-auto max-[768px]:min-h-0 max-[768px]:flex-1 max-[768px]:rounded-none max-[768px]:border-0">
                     {/* Left: categorized space + folder tree */}
-                    <div className="flex w-72 shrink-0 flex-col border-r border-[#ececec] max-[768px]:w-full max-[768px]:border-r-0">
+                    <div className="flex w-72 shrink-0 flex-col border-r border-border-base max-[768px]:w-full max-[768px]:border-r-0">
                         <div className="p-3 max-[768px]:px-0 max-[768px]:pt-0">
                             <ExpandableSearchField
                                 alwaysExpanded
@@ -370,10 +373,10 @@ export function MoveToDialog({
                             always-on) is respected. */}
                         <div
                             ref={treeScrollRef}
-                            className="scrollbar-os flex-1 overflow-auto px-2 pb-2 max-[768px]:rounded-md max-[768px]:border max-[768px]:border-[#ECECEC] max-[768px]:p-2"
+                            className="scrollbar-os flex-1 overflow-auto px-2 pb-2 max-[768px]:rounded-md max-[768px]:border max-[768px]:border-border-base max-[768px]:p-2"
                         >
                             {categories.length === 0 ? (
-                                <div className="flex h-full items-center justify-center px-3 text-center text-[12px] text-[#86909C]">
+                                <div className="flex h-full items-center justify-center px-3 text-center text-[12px] text-text-3">
                                     {localize("com_knowledge.move_no_spaces")}
                                 </div>
                             ) : (
@@ -386,14 +389,14 @@ export function MoveToDialog({
                                                     className="group/cat flex cursor-pointer select-none items-center gap-1 px-2 py-1"
                                                     onClick={() => handleToggleCategory(cat.key)}
                                                 >
-                                                    <span className="whitespace-nowrap text-[12px] font-medium text-[#86909C] transition-colors group-hover/cat:text-[#4e5969]">
+                                                    <span className="whitespace-nowrap text-[12px] font-medium text-text-3 transition-colors group-hover/cat:text-text-2">
                                                         {cat.label}
                                                     </span>
                                                     {/* Collapse toggle sits to the RIGHT of the label, revealed on
                                                         hover (and kept visible while collapsed). */}
                                                     <Outlined.Down
                                                         className={cn(
-                                                            "size-3.5 text-[#86909C] transition-all duration-150",
+                                                            "size-3.5 text-text-3 transition-all duration-150",
                                                             catCollapsed
                                                                 ? "-rotate-90 opacity-100"
                                                                 : "rotate-0 opacity-0 group-hover/cat:opacity-100",
@@ -432,11 +435,11 @@ export function MoveToDialog({
                             16px icon in a 20px slot, p-2 container padding. */}
                         <div className="scrollbar-os flex-1 overflow-y-auto p-2">
                             {loadingChildren ? (
-                                <div className="flex h-full items-center justify-center text-[#86909C]">
+                                <div className="flex h-full items-center justify-center text-text-3">
                                     <Loader2 className="size-5 animate-spin" />
                                 </div>
                             ) : folders.length === 0 && files.length === 0 ? (
-                                <div className="flex h-full items-center justify-center text-[12px] text-[#86909C]">
+                                <div className="flex h-full items-center justify-center text-[12px] text-text-3">
                                     {localize("com_knowledge.move_empty_folder")}
                                 </div>
                             ) : (
@@ -449,10 +452,10 @@ export function MoveToDialog({
                                             className="flex h-7 w-full items-center rounded-md px-1 text-left text-[12px] leading-5 hover:bg-[#F4F4F4]"
                                         >
                                             <div className="flex size-5 shrink-0 items-center justify-center">
-                                                <Outlined.FolderClose className="size-3.5 text-[#212121]" />
+                                                <Outlined.FolderClose className="size-3.5 text-text-1" />
                                             </div>
-                                            <span className="ml-0.5 min-w-0 flex-1 truncate text-[#212121]">{f.name}</span>
-                                            <Outlined.Right className="size-3.5 shrink-0 text-[#C9CDD4]" />
+                                            <span className="ml-0.5 min-w-0 flex-1 truncate text-text-1">{f.name}</span>
+                                            <Outlined.Right className="size-3.5 shrink-0 text-text-4" />
                                         </button>
                                     ))}
                                     {/* Files are not move targets — greyed out, not selectable. */}
@@ -461,10 +464,10 @@ export function MoveToDialog({
                                         return (
                                             <div
                                                 key={f.id}
-                                                className="flex h-7 w-full cursor-default items-center px-1 text-[12px] leading-5 text-[#999]"
+                                                className="flex h-7 w-full cursor-default items-center px-1 text-[12px] leading-5 text-text-3"
                                             >
                                                 <div className="flex size-5 shrink-0 items-center justify-center">
-                                                    <Glyph className="size-3.5 text-[#999]" />
+                                                    <Glyph className="size-3.5 text-text-3" />
                                                 </div>
                                                 <span className="ml-0.5 min-w-0 flex-1 truncate">{f.name}</span>
                                             </div>

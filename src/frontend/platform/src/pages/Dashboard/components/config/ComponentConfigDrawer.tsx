@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 // ComponentConfigDrawer.tsx
 "use client"
 

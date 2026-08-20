@@ -112,6 +112,7 @@ _RATE_LIMIT_SIGNATURES: tuple[str, ...] = (
     "配额",
     "too many requests",
     "请求过于频繁",
+    "请求频率过高",  # PaddleOCR / Baidu AI Studio throttle wording (errorCode 12002)
     "限流",
 )
 

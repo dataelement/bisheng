@@ -1,8 +1,9 @@
+// @ts-strict-ignore
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
 import { setTokenHeader } from '~/api/chat/headers-helpers';
-import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
+import { redirectToLogin } from '~/utils/loginRedirect';
 import * as endpoints from '~/api/chat/api-endpoints';
 import type * as t from '~/types/chat/types';
 
@@ -120,7 +121,14 @@ export const translateApiErrorMessage = (data: any) => {
   if (statusMessageKey && i18next.exists(statusMessageKey)) {
     return i18next.t(statusMessageKey, data?.data);
   }
-  return statusMessage || (statusCodeKey ? i18next.t(statusCodeKey, data?.data) : "");
+  // Last resort keeps t(key, vars) so {{xxx}} templates still interpolate from
+  // data.data; defaultValue guards the truly-untranslated case — never the raw key.
+  return (
+    statusMessage ||
+    (statusCodeKey
+      ? String(i18next.t(statusCodeKey, { ...(data?.data || {}), defaultValue: String(i18next.t("api_errors.fallback")) }))
+      : "")
+  );
 };
 
 // License degradation (gateway returns 11001): throttle the toast so a burst of
@@ -228,20 +236,16 @@ customAxios.interceptors.response.use(
         return Promise.reject(error);
       }
 
-      // Drop the auth-state sentinel so the next /api/user/me success
-      // (after re-login or SSO bounce) is detected as a fresh session and
-      // wipes cached chat preferences.
-      try { localStorage.removeItem('bs:auth-state'); } catch { /* ignore */ }
-
-      const thirdPartyLoginUrl = localStorage.getItem('THIRD_PARTY_LOGIN_URL');
-      if (thirdPartyLoginUrl) {
-        window.location.href = thirdPartyLoginUrl;
-        return Promise.reject(error);
-      }
-
+      // redirectToLogin drops the bs:auth-state sentinel (so the next
+      // /api/user/me success counts as a fresh session), stores the full
+      // return target, prefers the SSO url, and is idempotent across the burst
+      // of parallel 401s a page load produces.
+      //
+      // Still gated on MODE: bouncing local dev to the platform origin on every
+      // 401 makes debugging painful. Routes where a blank page is useless carry
+      // their own unconditional guard instead (see routes/RequireLogin.tsx).
       if (import.meta.env.MODE === 'production') {
-        localStorage.setItem('LOGIN_PATHNAME', location.pathname)
-        location.href = getPlatformAdminPanelUrl()
+        redirectToLogin();
       }
       // } else {
       //   if (location.pathname.indexOf('login') === -1) {

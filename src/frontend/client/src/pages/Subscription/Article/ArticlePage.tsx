@@ -123,7 +123,7 @@ export default function ArticlePage() {
 
     if (isError || !article) {
         return (
-            <div className="flex h-screen items-center justify-center bg-white text-sm text-[#86909C]">
+            <div className="flex h-screen items-center justify-center bg-white text-sm text-text-3">
                 {localize("com_subscription.channel_invalid_or_inaccessible")}
             </div>
         );
@@ -209,7 +209,7 @@ export default function ArticlePage() {
                     <DropdownMenuTrigger asChild>
                         <button
                             type="button"
-                            className="inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] backdrop-blur-md transition-colors hover:bg-white/85"
+                            className="inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-text-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
                             aria-label={localize("com_subscription.channel_settings")}
                         >
                             <Outlined.MoreCircle className="size-5" />
@@ -218,27 +218,27 @@ export default function ArticlePage() {
                     <DropdownMenuContent
                         align="end"
                         sideOffset={6}
-                        className="z-[120] w-[160px] space-y-1 border border-black/5 bg-white/85 p-1 backdrop-blur-md"
+                        className="z-[120] w-[160px] space-y-1 border border-black/5 bg-white/85 p-1"
                     >
                         <DropdownMenuItem
-                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-[#212121]"
+                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-text-1"
                             onClick={handleShare}
                         >
-                            <Outlined.Share className="size-4 text-[#4E5969]" />
+                            <Outlined.Share className="size-4 text-text-2" />
                             {localize("com_subscription.share")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-[#212121]"
+                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-text-1"
                             onClick={handleOpenOriginal}
                         >
-                            <Outlined.Earth className="size-4 text-[#4E5969]" />
+                            <Outlined.Earth className="size-4 text-text-2" />
                             {localize("com_subscription.original_webpage")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-[#212121]"
+                            className="flex w-full cursor-pointer items-center gap-2 px-2 py-[5px] text-sm text-text-1"
                             onClick={() => setShowKnowledgeModal(true)}
                         >
-                            <Outlined.AddToKnowledgeBase className="size-4 text-[#4E5969]" />
+                            <Outlined.AddToKnowledgeBase className="size-4 text-text-2" />
                             {localize("com_subscription.add_to_knowledge_space")}
                         </DropdownMenuItem>
                     </DropdownMenuContent>

@@ -86,12 +86,12 @@ export function SubChannelBlock({
     };
 
     return (
-        <div className="overflow-hidden">
-            <div className="h-12 flex items-center justify-between gap-2 px-3 bg-[#F8F8F8]">
+        <div className="overflow-hidden bg-white">
+            <div className="h-12 flex items-center justify-between gap-2 px-3 bg-fill-1">
                 <button
                     type="button"
                     onClick={onToggleCollapse}
-                    className="w-6 h-6 flex items-center justify-center text-[#86909C] hover:text-[#4E5969] flex-shrink-0"
+                    className="w-6 h-6 flex items-center justify-center text-text-3 hover:text-text-2 flex-shrink-0"
                 >
                     {data.collapsed ? (
                         <ChevronRight className="size-4" />
@@ -106,7 +106,7 @@ export function SubChannelBlock({
                         onChange={(e) => handleNameChange(e.target.value)}
                         onBlur={handleSave}
                         onKeyDown={(e) => e.key === "Enter" && handleSave()}
-                        className="h-[26px] flex-1 min-w-0 px-2 text-[14px] text-[#212121] placeholder:text-[#999999] border border-[#E5E6EB] rounded focus:outline-none focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
+                        className="h-[26px] min-w-0 flex-1 rounded border border-border-base bg-white px-2 text-[14px] text-text-1 placeholder:text-text-3 focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
                         placeholder={localize("com_subscription.sub_channel_name")}
                     />
                 ) : (
@@ -117,18 +117,18 @@ export function SubChannelBlock({
                             setIsEditing(true);
                         }}
                     >
-                        <span className="text-[14px] text-[#1D2129] truncate">{data.name}</span>
+                        <span className="text-[14px] text-text-1 truncate">{data.name}</span>
                         <ChannelEditIcon className="w-4 h-4 text-blue-500 opacity-0 group-hover:opacity-100 flex-shrink-0" />
                     </div>
                 )}
                 <button
                     type="button"
                     onClick={onRemove}
-                    className="flex items-center gap-1 text-[14px] text-[#86909C] hover:text-[#F53F3F] flex-shrink-0"
+                    className="flex items-center gap-1 text-[14px] text-text-3 hover:text-[#F53F3F] flex-shrink-0"
                 >{localize("com_subscription.delete")}</button>
             </div>
             {!data.collapsed && (
-                <div className="border-t border-[#E5E6EB]">
+                <div className="border-t border-border-base">
                     <p className="px-3 pt-3 pb-1 text-[14px] leading-[22px] text-[#666]">
                         {localize("com_subscription.set_article_filter_conditions")}
                     </p>

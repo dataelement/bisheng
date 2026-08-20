@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { useState, useEffect, useRef } from "react";
 import * as mammoth from "mammoth";
 import { LoadingIcon } from "@/components/bs-icons/loading";

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useCallback, useMemo, memo } from 'react';
 import { useUserKeyQuery } from '~/hooks/queries';
 import type { TEndpointsConfig, TInterfaceConfig } from '~/types/chat';

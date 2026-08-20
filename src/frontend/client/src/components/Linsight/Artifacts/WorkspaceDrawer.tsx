@@ -69,7 +69,7 @@ export function WorkspaceDrawer({ open, onOpenChange, files, versionId, onPrevie
                     {!files.length && (
                         <div className="flex flex-col items-center justify-center py-10 text-center">
                             <EmptyStateIllustration className="mb-4 size-[120px]" />
-                            <p className="text-[14px] font-normal text-[#999999]">{localize('com_linsight_workspace_empty')}</p>
+                            <p className="text-[14px] font-normal text-text-3">{localize('com_linsight_workspace_empty')}</p>
                         </div>
                     )}
                 </div>

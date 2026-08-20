@@ -12,58 +12,15 @@ import type {
   RevokeItem,
 } from "~/api/permission";
 import { Avatar, AvatarName } from "~/components/ui/Avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "~/components/ui/DropdownMenu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-import { Building2, ChevronDown, RotateCcw, Search, User, Users } from "lucide-react";
+import { PermissionEmptyState } from "./PermissionEmptyState";
+import { Building2, RotateCcw, Search, User, Users } from "lucide-react";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { PermissionLevelMenu } from "./PermissionLevelMenu";
 import { RelationModelOption } from "./RelationSelect";
-
-// Tooltip that only shows when the wrapped element's text is truncated.
-function TruncatedTooltip({
-  content,
-  className,
-  as: Tag = "span",
-  children,
-}: {
-  content: string;
-  className?: string;
-  as?: "span" | "p" | "div";
-  children: React.ReactNode;
-}) {
-  const ref = useRef<HTMLElement | null>(null);
-  const [open, setOpen] = useState(false);
-
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setOpen(false);
-      return;
-    }
-    const el = ref.current;
-    if (el && (el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight)) {
-      setOpen(true);
-    }
-  };
-
-  return (
-    <Tooltip open={open} onOpenChange={handleOpenChange}>
-      <TooltipTrigger asChild>
-        <Tag ref={ref as React.LegacyRef<any>} className={className}>{children}</Tag>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="z-[120] max-w-xs break-all">
-        {content}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+import { TruncatedTooltip } from "./TruncatedTooltip";
 
 const SUBJECT_ICONS = {
   user: User,
@@ -520,13 +477,13 @@ export function PermissionListTab({
 
       <div className={cn("flex min-h-0 flex-1 flex-col gap-3", !fixedSubjectType && "mt-4")}>
         <div className="relative shrink-0">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
           <input
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder={getSearchPlaceholder(listTab)}
-            className="h-8 w-full rounded-[6px] border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+            className="h-8 w-full rounded-md border border-border-base bg-white pl-9 pr-3 text-[14px] text-text-1 outline-none transition-colors placeholder:text-text-3 focus:border-border-deep"
           />
         </div>
 
@@ -536,11 +493,13 @@ export function PermissionListTab({
           data-scrolling={isListScrolling ? "true" : "false"}
         >
           {visibleEntries.length === 0 ? (
-            <div className="py-10 text-center text-sm text-gray-500">
-              {normalizedSearchQuery && listTab === "user"
-                ? localize("com_permission.empty_search")
-                : localize("com_permission.list_empty_for_subject")}
-            </div>
+            <PermissionEmptyState
+              message={
+                normalizedSearchQuery && listTab === "user"
+                  ? localize("com_permission.empty_search")
+                  : localize("com_permission.list_empty_for_subject")
+              }
+            />
           ) : (
             <div className="flex flex-col">
               {visibleEntries.map((entry, index) => {
@@ -571,7 +530,7 @@ export function PermissionListTab({
                 return (
                   <div
                     key={`${entry.subject_type}-${entry.subject_id}-${index}`}
-                    className="flex items-center gap-4 border-b border-[#F2F3F5] py-3 last:border-b-0"
+                    className="flex items-center gap-4 border-b border-fill-2 py-3 last:border-b-0"
                   >
                     <div className="flex w-[200px] min-w-0 shrink items-center gap-2">
                       {entry.subject_type === "user" ? (
@@ -586,71 +545,30 @@ export function PermissionListTab({
                           <Icon className="h-4 w-4" />
                         </span>
                       )}
-                      <TruncatedTooltip content={displayName} className="truncate text-[14px] leading-[22px] text-[#212121]">
+                      <TruncatedTooltip content={displayName} className="truncate text-[14px] leading-[22px] text-text-1">
                         {displayName}
                       </TruncatedTooltip>
                     </div>
 
-                    <TruncatedTooltip content={entryCaption} as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-[#999999]">
+                    <TruncatedTooltip content={entryCaption} as="p" className="min-w-0 flex-1 truncate text-[12px] leading-5 text-text-3">
                       {entryCaption}
                     </TruncatedTooltip>
 
                     <div className="flex w-[136px] shrink-0 items-center justify-end gap-1">
-                      {(canModifyEntry && (!isOwner || canManageOwnerEntry)) || canDeleteEntrySubject ? (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-[96px] items-center justify-end gap-1 rounded-[6px] px-2 text-[14px] leading-[22px] text-[#999999] transition-colors hover:bg-[#F7F7F7]"
-                            >
-                              <span className="truncate">{getPermissionLabel(entry)}</span>
-                              <ChevronDown className="size-3.5 shrink-0 text-[#999999]" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent
-                            align="end"
-                            className="z-[120] max-h-[240px] w-[100px] overflow-x-hidden overflow-y-auto overscroll-none rounded-[8px] border-0 bg-white p-1 shadow-[0px_6px_20px_1px_rgba(117,145,212,0.12)] scrollbar-hide [&::-webkit-scrollbar]:!w-0 [&::-webkit-scrollbar]:!h-0"
-                          >
-                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && entryModelOptions.map((model) => {
-                              const active = model.id === currentModelId;
-                              return (
-                                <DropdownMenuItem
-                                  key={model.id}
-                                  className={cn(
-                                    "rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px]",
-                                    active
-                                      ? "bg-blue-500/[0.07] text-blue-500 data-[highlighted]:bg-blue-500/[0.07] data-[highlighted]:text-blue-500"
-                                      : "text-[#212121] data-[highlighted]:bg-[#F7F7F7] data-[highlighted]:text-[#212121]",
-                                  )}
-                                  onSelect={() => {
-                                    void handleModify(entry, model.id);
-                                  }}
-                                >
-                                  {model.name}
-                                </DropdownMenuItem>
-                              );
-                            })}
-                            {canModifyEntry && (!isOwner || canManageOwnerEntry) && canDeleteEntrySubject && (
-                              <DropdownMenuSeparator className="my-1 bg-[#EBECF0]" />
-                            )}
-                            {canDeleteEntrySubject && (
-                              <DropdownMenuItem
-                                aria-label={localize("com_permission.remove")}
-                                className="rounded-[6px] px-2 py-[5px] text-[14px] leading-[22px] text-[#F53F3F] data-[highlighted]:bg-[#FFF2F0] data-[highlighted]:text-[#F53F3F]"
-                                onSelect={() => {
-                                  void handleDeleteSubject(entry);
-                                }}
-                              >
-                                {localize("com_permission.remove")}
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      ) : (
-                        <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-[#999999]">
-                          {getPermissionLabel(entry)}
-                        </span>
-                      )}
+                      <PermissionLevelMenu
+                        label={getPermissionLabel(entry)}
+                        options={entryModelOptions}
+                        activeId={currentModelId}
+                        canChangeLevel={canModifyEntry && (!isOwner || canManageOwnerEntry)}
+                        onChange={(modelId) => {
+                          void handleModify(entry, modelId);
+                        }}
+                        onRemove={canDeleteEntrySubject
+                          ? () => {
+                            void handleDeleteSubject(entry);
+                          }
+                          : undefined}
+                      />
                     </div>
                   </div>
                 );

@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -36,7 +37,7 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
 
     if (loading) {
         return (
-            <div className="flex-1 flex items-center justify-center text-[#86909c]">
+            <div className="flex-1 flex items-center justify-center text-text-3">
                 {localize("com_knowledge.loading")}</div>
         );
     }
@@ -44,7 +45,7 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
     if (error) {
         return (
             <div className="flex-1 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3 text-[#86909c]">
+                <div className="flex flex-col items-center gap-3 text-text-3">
                     <div className="text-4xl">📝</div>
                     <p>{error}</p>
                 </div>
@@ -64,7 +65,7 @@ export function MarkdownViewer({ fileUrl, zoomLevel }: MarkdownViewerProps) {
                         transformOrigin: "top center",
                     }}
                 >
-                    <div className="prose prose-sm max-w-none break-words p-10 text-[#1d2129] max-[767px]:p-4 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_img]:h-auto [&_img]:max-w-full [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
+                    <div className="prose prose-sm max-w-none break-words p-10 text-text-1 max-[767px]:p-4 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_img]:h-auto [&_img]:max-w-full [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
                         <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}

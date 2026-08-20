@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { Button } from "@/components/bs-ui/button"

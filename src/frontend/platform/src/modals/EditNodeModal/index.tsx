@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useContext, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import CodeAreaComponent from "../../components/codeAreaComponent";
@@ -60,7 +61,7 @@ export default function EditNodeModal({ data }: { data: NodeDataType }) {
   const { isOnlineVersion, version, setTabsState, flow } = useContext(TabsContext);
   const { reactFlowInstance } = useContext(typesContext);
 
-  let disabled =
+  const disabled =
     reactFlowInstance?.getEdges().some((e) => e.targetHandle === data.id) ??
     false;
   if (nodeLength == 0) {

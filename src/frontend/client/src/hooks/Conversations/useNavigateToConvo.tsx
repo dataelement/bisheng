@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useSetRecoilState } from 'recoil';

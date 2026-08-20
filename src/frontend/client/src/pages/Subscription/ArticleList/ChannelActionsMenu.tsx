@@ -17,10 +17,9 @@ interface ChannelActionsMenuProps {
     /** Currently active channel (the one being viewed). */
     channel: Channel;
     onChannelSelect: (channel: Channel | null) => void;
-    onManageMembers?: (channel: Channel) => void;
     onChannelSettings?: (channel: Channel) => void;
-    /** "default" = PC labels (频道设置/成员管理/解散频道).
-     *  "mobile" = H5 labels (编辑频道/权限管理/删除频道). */
+    /** "default" = PC labels (频道设置/解散频道).
+     *  "mobile" = H5 labels (频道设置/删除频道). */
     variant?: "default" | "mobile";
     /** Mobile only: 分享 menu item — copies the share link. */
     onShare?: () => void;
@@ -34,14 +33,13 @@ interface ChannelActionsMenuProps {
 
 /**
  * Page-level (top-right ⋯) management menu for the active channel.
- * PC variant items: 频道设置 / 成员管理 / 解散频道·取消订阅.
- * Mobile variant items: 分享 / 信息源筛选 / 编辑频道 / 权限管理 / 删除频道·取消订阅.
+ * PC variant items: 频道设置 / 解散频道·取消订阅.
+ * Mobile variant items: 分享 / 信息源筛选 / 频道设置 / 删除频道·取消订阅.
  * Pinning lives on the per-channel rows in the channel-switcher dropdown, not here.
  */
 export function ChannelActionsMenu({
     channel,
     onChannelSelect,
-    onManageMembers,
     onChannelSettings,
     variant = "default",
     onShare,
@@ -88,15 +86,16 @@ export function ChannelActionsMenu({
     // list the channel sits in), mirroring the channel-sidebar (ChannelItem). A user
     // granted ownership rather than being the original creator has the channel in the
     // followed list, yet must still see 频道设置 / 解散频道.
-    const canEditSettings = canEditChannelSettings(liveChannel.role, liveChannel.permissionIds);
-    const canManageMembers = canManageChannelPermissions(liveChannel.role, liveChannel.permissionIds);
+    const effectivePermissionIds = liveChannel.permissionIds ?? [];
+    const canEditSettings = canEditChannelSettings(undefined, effectivePermissionIds);
+    const canManageMembers = canManageChannelPermissions(undefined, effectivePermissionIds);
     // Dissolving deletes the channel for everyone — gate on the delete permission, not
     // on creation. Unsubscribe is independent: any subscriber can leave (a granted owner
     // who is also a subscriber may see both).
     const canDissolve = canDeleteChannel(liveChannel.role, liveChannel.permissionIds);
     const canUnsubscribe = type === "subscribed";
-    const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-[6px] px-2 py-[5px] text-sm leading-[22px] text-[#212121]";
-    const iconCls = "size-4 text-[#4E5969]";
+    const itemCls = "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-1";
+    const iconCls = "size-4 text-text-2";
 
     return (
         <DropdownMenu>
@@ -106,8 +105,8 @@ export function ChannelActionsMenu({
                     disabled={disabled}
                     className={cn(
                         isMobile
-                            ? "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
-                            : "inline-flex size-8 items-center justify-center rounded-[6px] border border-[#EBECF0] bg-white text-[#4e5969] outline-none transition-colors fine-pointer:hover:bg-[#F7F8FA]",
+                            ? "inline-flex size-5 shrink-0 items-center justify-center text-text-1"
+                            : "inline-flex size-8 items-center justify-center rounded-md border border-border-base bg-white text-text-2 outline-none transition-colors fine-pointer:hover:bg-fill-1",
                         disabled && "pointer-events-none opacity-20",
                         triggerClassName,
                     )}
@@ -133,18 +132,10 @@ export function ChannelActionsMenu({
                         {localize("com_subscription.source_filter")}
                     </DropdownMenuItem>
                 ) : null}
-                {canEditSettings && onChannelSettings ? (
+                {(canEditSettings || canManageMembers) && onChannelSettings ? (
                     <DropdownMenuItem className={itemCls} onClick={() => onChannelSettings(liveChannel)}>
                         <Outlined.Edit className={iconCls} />
-                        {isMobile
-                            ? localize("com_subscription.edit_channel")
-                            : localize("com_subscription.channel_settings")}
-                    </DropdownMenuItem>
-                ) : null}
-                {canManageMembers && onManageMembers ? (
-                    <DropdownMenuItem className={itemCls} onClick={() => onManageMembers(liveChannel)}>
-                        <Outlined.PeopleSafe className={iconCls} />
-                        {localize("com_subscription.permission_management")}
+                        {localize("com_subscription.channel_settings")}
                     </DropdownMenuItem>
                 ) : null}
                 {canDissolve ? (

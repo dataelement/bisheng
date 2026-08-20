@@ -65,7 +65,7 @@ function AuthLayout({
           <img
             src="/assets/sg-logo.png"
             className="h-full w-full object-contain"
-            alt={localize('com_ui_logo', { 0: startupConfig?.appTitle ?? 'Deepseek' })}
+            alt={localize('com_ui_logo', { 0: startupConfig?.appTitle ?? 'BISHENG' })}
           />
         </div>
       </BlinkAnimation>

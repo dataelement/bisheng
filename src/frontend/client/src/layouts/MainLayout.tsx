@@ -9,8 +9,7 @@ import { useRecoilState } from 'recoil';
 import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
-import { useAuthContext, useLocalize } from '~/hooks';
-import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
+import { useAuthContext, useLocalize, useWorkbenchMenuNames } from '~/hooks';
 import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
@@ -41,36 +40,34 @@ interface SidebarItemProps {
 
 function SidebarItem({ icon, activeIcon, to, active, label, showLabel = false, onNavigate }: SidebarItemProps) {
   return (
-    <Tooltip delayDuration={0}>
-      <TooltipTrigger asChild>
-        <NavLink
-          to={to}
-          onClick={onNavigate}
+    <NavLink
+      to={to}
+      onClick={onNavigate}
+      className={cn(
+        'flex cursor-pointer rounded-lg transition-colors hover:bg-fill-2',
+        showLabel
+          ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2'
+          : 'w-14 flex-col items-center justify-center gap-0.5 py-2',
+      )}
+    >
+      {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
+        className: cn(showLabel ? 'size-4' : 'size-5', active ? 'text-blue-500' : 'text-text-3'),
+      })}
+      {showLabel ? (
+        <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-text-1')}>
+          {label}
+        </span>
+      ) : (
+        <span
           className={cn(
-            'flex cursor-pointer rounded-lg transition-colors',
-            showLabel
-              ? 'mx-2 h-[44px] items-center justify-start gap-2 px-2 py-2 hover:bg-[#f2f3f5]'
-              : 'items-center justify-center p-3 hover:bg-[#f2f3f5]',
+            'max-w-full break-words text-center text-caption-sm',
+            active ? 'font-medium text-blue-500' : 'text-text-3',
           )}
         >
-          {React.cloneElement((active && activeIcon ? activeIcon : icon) as React.ReactElement, {
-            className: cn(showLabel ? 'size-4' : 'size-5', active ? "text-blue-500" : "text-[#818181]"),
-          })}
-          {showLabel ? (
-            <span className={cn('text-[14px] leading-[20px]', active ? 'text-blue-500' : 'text-[#212121]')}>
-              {label}
-            </span>
-          ) : null}
-        </NavLink>
-      </TooltipTrigger>
-      {!showLabel ? (
-        // z-[110]: sit above the workspace fullscreen overlay (z-[100]) so the rail
-        // tooltip isn't clipped behind it when the preview is expanded.
-        <TooltipContent side="right" sideOffset={8} className="z-[110]">
           {label}
-        </TooltipContent>
-      ) : null}
-    </Tooltip>
+        </span>
+      )}
+    </NavLink>
   );
 }
 
@@ -93,6 +90,8 @@ function Sidebar({
   const { data: bsConfig } = useGetBsConfig();
   const { user, logout } = useAuthContext();
   const localize = useLocalize();
+  // Admin-configured sidebar entry names; blank config keeps the localized defaults.
+  const menuNames = useWorkbenchMenuNames();
   const [langcode, setLangcode] = useRecoilState(store.lang);
   const isMobile = usePrefersMobileLayout();
   const isChatSection = /^\/(c|linsight)(\/|$)/.test(pathname);
@@ -157,7 +156,7 @@ function Sidebar({
         to: hasPlugin('home') || !menuApprovalMode ? (lastSectionPaths.home || '/c/new') : '/menu-unavailable?plugin=home',
         icon: <Outlined.Home />,
         activeIcon: <Filled.Home />,
-        label: localize('com_nav_home'),
+        label: menuNames.home,
         isActive: /^\/(c|linsight)(\/|$)/.test(pathname) || menuUnavailablePlugin === 'home',
         closeDrawerOnNavigate: true,
       },
@@ -171,7 +170,7 @@ function Sidebar({
           : '/menu-unavailable?plugin=knowledge_space',
         icon: <Outlined.Book />,
         activeIcon: <Filled.Book />,
-        label: localize('com_knowledge.knowledge_space'),
+        label: menuNames.knowledge,
         isActive: pathname.startsWith('/knowledge') || menuUnavailablePlugin === 'knowledge_space',
         closeDrawerOnNavigate: true,
       },
@@ -180,7 +179,7 @@ function Sidebar({
         to: hasPlugin('subscription') || !menuApprovalMode ? (lastSectionPaths.channel || '/channel') : '/menu-unavailable?plugin=subscription',
         icon: <Outlined.Rss />,
         activeIcon: <Filled.Rss />,
-        label: localize('com_ui_channel'),
+        label: menuNames.channel,
         isActive: pathname.startsWith('/channel') || menuUnavailablePlugin === 'subscription',
         closeDrawerOnNavigate: true,
       },
@@ -189,7 +188,7 @@ function Sidebar({
         to: hasPlugin('apps') || !menuApprovalMode ? appsSectionLinkTarget() : '/menu-unavailable?plugin=apps',
         icon: <Outlined.Application />,
         activeIcon: <Filled.Application />,
-        label: localize('com_nav_app_center'),
+        label: menuNames.apps,
         isActive: matchPath('/app/:id/:fid/:type', pathname) !== null || pathname.startsWith('/apps') || menuUnavailablePlugin === 'apps',
         closeDrawerOnNavigate: true,
       },
@@ -200,7 +199,9 @@ function Sidebar({
       if (l.section === 'knowledge') return showKnowledgeSpaceTab;
       return true;
     });
-  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins, localize]);
+    // Menu names are read field-by-field: the hook returns a fresh object each render.
+  }, [canOpenWorkbenchEntry, pathname, menuUnavailablePlugin, isMobile, showKnowledgeSpaceTab, showSubscriptionTab, showHomeTab, showAppsTab, menuApprovalMode, plugins,
+    menuNames.home, menuNames.knowledge, menuNames.channel, menuNames.apps]);
 
   const changeLang = useCallback((value: string) => {
     let userLang = value;
@@ -232,14 +233,14 @@ function Sidebar({
                   alt={localize('com_nav_home')}
                 />
               ) : (
-                <div className="size-8 shrink-0 rounded-md bg-[#F2F3F5]" aria-hidden />
+                <div className="size-8 shrink-0 rounded-md bg-fill-2" aria-hidden />
               )}
               {onCloseMobileApps ? (
                 <button
                   type="button"
                   onClick={onCloseMobileApps}
                   aria-label={localize('com_nav_close_sidebar')}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
                 >
                   <X className="size-4" />
                 </button>
@@ -280,13 +281,13 @@ function Sidebar({
             <a href={getPlatformAdminPanelUrl()} target="_blank" rel="noreferrer" className="mb-2">
               <div
                 title={localize('com_nav_admin_panel')}
-                className="rounded-lg p-3 transition-colors hover:bg-[#f2f3f5]"
+                className="rounded-lg p-3 transition-colors hover:bg-fill-2"
               >
-                <Outlined.DeviceDesktopExchange className="size-5 text-[#818181]" />
+                <Outlined.DeviceDesktopExchange className="size-5 text-text-3" />
               </div>
             </a>
             {/* Divider only makes sense alongside the admin-panel entry; hide both together. */}
-            <div className="mb-4 w-full h-px bg-[#ececec]" />
+            <div className="mb-4 w-full h-px bg-fill-3" />
           </>
         )}
 
@@ -302,6 +303,7 @@ export default function MainLayout() {
   const outlet = useOutlet();
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
+  const menuNames = useWorkbenchMenuNames();
   const isMobile = usePrefersMobileLayout();
   const outletScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   const isAppSection = pathname.includes('/apps') || pathname.includes('/app/');
@@ -318,10 +320,15 @@ export default function MainLayout() {
   );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
-  /** 订阅 / 应用中心 / 应用对话：白卡片不滚动，把高度交给页面内层（含移动端 ≤767 与桌面窄窗） */
+  const isKnowledgeSettingsRoute = Boolean(
+    matchPath({ path: '/knowledge/create', end: true }, pathForMatch) ||
+    matchPath({ path: '/knowledge/space/:spaceId/settings', end: true }, pathForMatch),
+  );
+  /** These full-height surfaces keep the white shell fixed and delegate scrolling to their page content. */
   const innerScrollShell =
     /^\/(c|linsight)(\/|$)/.test(pathname) ||
     isChannelRoute ||
+    isKnowledgeSettingsRoute ||
     isAppChatRoute ||
     (isAppsArea && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
@@ -431,7 +438,7 @@ export default function MainLayout() {
   return (
     <div
       className={cn(
-        'relative flex w-screen bg-[#F8F8F8]',
+        'relative flex w-screen bg-fill-1',
         isMobile ? 'min-h-[100dvh] overflow-x-clip' : 'h-[100dvh] overflow-hidden',
       )}
     >
@@ -456,7 +463,7 @@ export default function MainLayout() {
           className="fixed inset-0 z-[55] flex"
           role="dialog"
           aria-modal="true"
-          aria-label={localize('com_nav_app_center')}
+          aria-label={menuNames.apps}
         >
           <div className="flex h-full w-[240px] max-w-[240px] shrink-0 flex-col overflow-hidden bg-white shadow-[4px_0_24px_rgba(0,0,0,0.06)]">
             <Sidebar
@@ -515,7 +522,7 @@ export default function MainLayout() {
                     type="button"
                     aria-label={localize('com_nav_open_sidebar')}
                     onClick={() => setSystemMenuOpen(true)}
-                    className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                    className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
@@ -564,13 +571,13 @@ export default function MainLayout() {
                     type="button"
                     aria-label={localize('com_nav_open_sidebar')}
                     onClick={() => setSystemMenuOpen(true)}
-                    className="inline-flex size-5 shrink-0 items-center justify-center text-[#212121]"
+                    className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
                   >
                     <Outlined.SidebarMenu className="size-5" />
                   </button>
                   {/* Centered title — same style as the chat / knowledge / subscription headers. */}
-                  <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-[#212121]">
-                    {localize('com_app_center_title')}
+                  <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
+                    {menuNames.apps}
                   </span>
                   <div className="min-w-0 flex-1" aria-hidden />
                 </div>

@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -24,7 +24,6 @@ interface ChannelSidebarProps {
     onChannelSelect: (channel: Channel | null) => void;
     onCreateChannel: () => void;
     onChannelSquare: () => void;
-    onManageMembers: (channel: Channel) => void;
     onChannelSettings: (channel: Channel) => void;
     /** Report created channel count back to parent so it doesn't need a duplicate query */
     onCreatedCountChange?: (count: number) => void;
@@ -41,7 +40,6 @@ export function ChannelSidebar({
     onChannelSelect,
     onCreateChannel,
     onChannelSquare,
-    onManageMembers,
     onChannelSettings,
     onCreatedCountChange,
     suppressAutoSelect,
@@ -49,6 +47,8 @@ export function ChannelSidebar({
     onDrawerClose,
 }: ChannelSidebarProps) {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const { data: bsConfig } = useGetBsConfig();
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
@@ -142,7 +142,7 @@ export function ChannelSidebar({
             <div
                 className={[
                     "h-full bg-white flex flex-col overflow-hidden",
-                    !mobileDrawerMode && "border-r border-[#e5e6eb]",
+                    !mobileDrawerMode && "border-r border-border-base",
                     mobileDrawerMode ? "w-full" : collapsed ? "w-0" : "w-60",
                 ].filter(Boolean).join(" ")}
                 style={
@@ -172,7 +172,7 @@ export function ChannelSidebar({
                                     onCreateChannel();
                                     onDrawerClose?.();
                                 }}
-                                className="flex h-9 w-full items-center justify-center gap-1 border border-[#EBECF0] bg-white text-[13px] text-[#212121] hover:bg-[#F7F8FA]"
+                                className="flex h-9 w-full items-center justify-center gap-1 border border-border-base bg-white text-[13px] text-text-1 hover:bg-fill-1"
                             >
                                 <Plus className="size-4" />
                                 {localize("com_subscription.create")}
@@ -183,16 +183,16 @@ export function ChannelSidebar({
                 {/* 顶部操作区 — PC */}
                 {!mobileDrawerMode ? (
                 <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
-                    <div className={collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
-                        {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
-                            <span>{localize("com_subscription.subscribe")}</span>
+                    <div className={collapsed ? "flex items-center justify-center h-7" : "border-b border-border-base space-y-4 pb-4"}>
+                        {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-semibold">
+                            <span>{menuNames.channel}</span>
                         </div>}
                         {!collapsed && (
                             <div className="flex items-center gap-3">
-                                <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-[#F7F7F7] hover:bg-[#E5E6EB] border-none gap-1">
+                                <Button variant="secondary" onClick={onCreateChannel} className="flex-1 h-8 text-[13px] bg-fill-1 hover:bg-fill-3 border-none gap-1">
                                     <Plus className="size-4" />{localize("com_subscription.create")}
                                 </Button>
-                                <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-[#F7F7F7] hover:bg-[#E5E6EB] border-none gap-1">
+                                <Button variant="secondary" onClick={onChannelSquare} className="flex-1 h-8 text-[13px] bg-fill-1 hover:bg-fill-3 border-none gap-1">
                                     <ChannelBlocksArrowsIcon className="size-4" />
                                     {localize("com_subscription.go_to_square")}
                                 </Button>
@@ -241,11 +241,10 @@ export function ChannelSidebar({
                                             onDelete={handleDeleteChannel}
                                             onUnsubscribe={handleUnsubscribeChannel}
                                             onPin={handlePinChannel}
-                                            onManageMembers={onManageMembers}
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}
-                                    {!createdChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
+                                    {!createdChannels.length && <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>}
                                 </div>
                             )}
                         </div>
@@ -272,18 +271,17 @@ export function ChannelSidebar({
                                             onDelete={handleDeleteChannel}
                                             onUnsubscribe={handleUnsubscribeChannel}
                                             onPin={handlePinChannel}
-                                            onManageMembers={onManageMembers}
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}
-                                    {!subscribedChannels.length && <div className="py-6 text-center text-sm text-[#818181]">{localize("com_subscription.no_data")}</div>}
+                                    {!subscribedChannels.length && <div className="py-6 text-center text-sm text-text-3">{localize("com_subscription.no_data")}</div>}
                                 </div>
                             )}
                         </div>
                     </div>
                 </div>
                 {mobileDrawerMode ? (
-                    <div className="shrink-0 border-t border-[#ececec] px-2 pb-2 pt-1">
+                    <div className="shrink-0 border-t border-border-base px-2 pb-2 pt-1">
                         <UserPopMenu variant="drawer" />
                     </div>
                 ) : null}

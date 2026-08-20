@@ -29,7 +29,6 @@ interface KnowledgeSpaceCardItemProps {
     onLeave: (id: string) => void;
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
-    onManageMembers?: (space: KnowledgeSpace) => void;
     /** F040: lazily resolve this space's action permissions when its menu opens. */
     onMenuOpen?: () => void;
     canEditSpace?: boolean;
@@ -51,7 +50,6 @@ export default function KnowledgeSpaceCardItem({
     onLeave,
     onPin,
     onSettings,
-    onManageMembers,
     onMenuOpen,
     canEditSpace = false,
     canDeleteSpace = false,
@@ -71,13 +69,13 @@ export default function KnowledgeSpaceCardItem({
             <KnowledgeSpaceIcon className="size-12 shrink-0" aria-hidden />
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1">
-                    <span className="truncate text-sm leading-6 text-[#212121]">{space.name}</span>
+                    <span className="truncate text-sm leading-6 text-text-1">{space.name}</span>
                     {space.isPinned ? (
-                        <Outlined.Pin className="size-3.5 shrink-0 text-[#86909C]" aria-hidden />
+                        <Outlined.Pin className="size-3.5 shrink-0 text-text-3" aria-hidden />
                     ) : null}
                 </div>
                 {space.updatedAt && (
-                    <div className="mt-1 truncate text-[12px] leading-4 text-[#86909C] tabular-nums">
+                    <div className="mt-1 truncate text-[12px] leading-4 text-text-3 tabular-nums">
                         {formatTimeCard(space.updatedAt)}
                     </div>
                 )}
@@ -88,7 +86,7 @@ export default function KnowledgeSpaceCardItem({
                     <button
                         type="button"
                         aria-label={localize("com_knowledge.space_settings")}
-                        className={`flex size-7 shrink-0 items-center justify-center rounded-md text-[#999] outline-none ${menuOpen ? "bg-[#E4E4E4]" : "active:bg-[#E4E4E4]"
+                        className={`flex size-7 shrink-0 items-center justify-center rounded-md text-text-3 outline-none ${menuOpen ? "bg-[#E4E4E4]" : "active:bg-[#E4E4E4]"
                             }`}
                         onClick={(e) => e.stopPropagation()}
                     >
@@ -97,7 +95,7 @@ export default function KnowledgeSpaceCardItem({
                 </DropdownMenuTrigger>
 
                 <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
-                    {canEditSpace && (
+                    {(canEditSpace || canManageMembers) && (
                         <DropdownMenuItem
                             className={sidebarListMoreMenuItemClassName}
                             onClick={() => onSettings?.(space)}
@@ -105,17 +103,6 @@ export default function KnowledgeSpaceCardItem({
                             <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                             <span className={sidebarListMoreMenuLabelClassName}>
                                 {localize("com_knowledge.space_settings")}
-                            </span>
-                        </DropdownMenuItem>
-                    )}
-                    {canManageMembers && (
-                        <DropdownMenuItem
-                            className={sidebarListMoreMenuItemClassName}
-                            onClick={() => onManageMembers?.(space)}
-                        >
-                            <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
-                            <span className={sidebarListMoreMenuLabelClassName}>
-                                {localize("com_knowledge.member_management")}
                             </span>
                         </DropdownMenuItem>
                     )}

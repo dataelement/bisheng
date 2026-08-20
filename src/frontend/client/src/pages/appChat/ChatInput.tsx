@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useRecoilState, useRecoilValue } from "recoil";
 import { Button, SendIcon, Textarea } from "~/components";
@@ -36,7 +37,7 @@ export default function ChatInput({ readOnly, v }) {
     // ... Placeholder 和 AutoFocus 逻辑保持不变 ...
     const placholder = useMemo(() => {
         return inputDisabled ?
-            (inputMsg.code ? localize(`api_errors.${inputMsg.code}`, inputMsg.data) : ' ')
+            (inputMsg.code ? localize(`api_errors.${inputMsg.code}`, { ...(inputMsg.data || {}), defaultValue: localize('api_errors.fallback') }) : ' ')
             : localize('com_ui_please_enter_question')
     }, [inputDisabled, inputMsg, localize]);
 
@@ -78,7 +79,7 @@ export default function ChatInput({ readOnly, v }) {
                         </div> :
                         <button
                             id="bs-send-btn"
-                            className="btn-brand-primary size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-[#E5E6EB] disabled:text-[#86909C] disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-[#4E5969]"
+                            className="btn-brand-primary size-8 flex items-center justify-center rounded-full bg-primary text-white transition-all duration-200 disabled:cursor-not-allowed disabled:bg-fill-3 disabled:text-text-3 disabled:opacity-100 [&>svg]:text-white disabled:[&>svg]:text-text-2"
                             disabled={inputDisabled || fileUploading || readOnly || audioOpening}
                             onClick={() => { !inputDisabled && !fileUploading && handleSendClick() }}>
                             <SendIcon size={18} />

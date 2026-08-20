@@ -90,7 +90,9 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         isLatestMessage={true}
                         webContent={false}
                         resolveArtifactLink={resolveArtifactLink}
-                        onArtifactPreview={onPreview}
+                        // Markdown types the callback as (file: unknown) — the resolver
+                        // it pairs with only ever yields ArtifactFile values here.
+                        onArtifactPreview={onPreview as (file: unknown) => void}
                     />
                 </div>
             )}
@@ -112,11 +114,11 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                     {/* header: icon + title + count badge. px-1 matches the file
                         rows so the list aligns under the title. */}
                     <div className="flex items-center gap-2 px-1 pb-4">
-                        <Outlined.Clap className="size-4 text-[#212121]" />
-                        <span className="text-[14px] font-medium text-[#999]">
+                        <Outlined.Clap className="size-4 text-text-1" />
+                        <span className="text-[14px] font-medium text-text-3">
                             {localize('com_linsight_output_files', { 0: '' }).trim()}
                         </span>
-                        <span className="flex h-[18px] min-w-[16px] items-center justify-center rounded-full bg-gray-100 px-1.5 text-[10px] text-[#666]">
+                        <span className="flex h-[18px] min-w-[16px] items-center justify-center rounded-full bg-gray-100 px-1.5 text-caption-sm text-[#666]">
                             {files.length}
                         </span>
                     </div>

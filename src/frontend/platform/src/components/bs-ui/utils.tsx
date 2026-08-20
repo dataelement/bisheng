@@ -23,7 +23,7 @@ export const generateUUID = (length: number) => {
 
 // 防抖
 export function useDebounce(func: any, wait: number, immediate: boolean, callback?: any,): (any?: any) => any {
-  let timer = useRef<NodeJS.Timeout | null>();
+  const timer = useRef<NodeJS.Timeout | null>();
   const fnRef = useRef<any>(func);
   useEffect(() => { fnRef.current = func; }, [func]);
   const timerCancel = function () { if (timer.current) clearTimeout(timer.current); };
@@ -36,7 +36,7 @@ export function useDebounce(func: any, wait: number, immediate: boolean, callbac
     };
     timerCancel();
     if (immediate) {
-      let runNow = !timer.current;
+      const runNow = !timer.current;
       timer.current = setTimeout(() => { timer.current = null; }, wait);
       if (runNow) {
         runFunction();

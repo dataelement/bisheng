@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 "use client"
 
 import { BoltIcon } from "lucide-react"
@@ -102,7 +103,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                     "flex shrink-0 items-center whitespace-nowrap border-b-2 px-2 py-[5px] font-['PingFang_SC'] text-[14px] leading-[22px] transition-colors",
                     isActive
                         ? "border-blue-500 text-blue-500"
-                        : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
+                        : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
                 )}
             >
                 {label}
@@ -131,7 +132,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
             {user?.role === 'admin' && (
                 <button
                     onClick={() => setIsLabelModalOpen(true)}
-                    className="flex items-center justify-cente mr-2 p-[6px] relative rounded-[6px] shrink-0 hover:bg-gray-100 transition-colors"
+                    className="flex items-center justify-cente mr-2 p-[6px] relative rounded-md shrink-0 hover:bg-gray-100 transition-colors"
                 >
                     <BoltIcon size={16} className="text-[#666]" />
                 </button>
