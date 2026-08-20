@@ -528,6 +528,7 @@ class DepartmentService:
 
             if dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
+            name_changed = data.name is not None and data.name != dept.name
 
             # Source-readonly check
             if dept.source != "local" and data.name is not None:
@@ -583,6 +584,13 @@ class DepartmentService:
                 role_ids_for_grant,
                 login_user,
             )
+
+        if name_changed:
+            from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+                KnowledgeSpaceContentStat,
+            )
+
+            await KnowledgeSpaceContentStat.enqueue_department_stat_async([int(dept.id)])
 
         return dept
 
@@ -743,6 +751,13 @@ class DepartmentService:
         # Fire change handler
         ops = DepartmentChangeHandler.on_moved(dept.id, old_parent_id, data.new_parent_id)
         await DepartmentChangeHandler.execute_async(ops)
+
+        if old_parent_id != data.new_parent_id:
+            from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+                KnowledgeSpaceContentStat,
+            )
+
+            await KnowledgeSpaceContentStat.enqueue_department_stat_async([int(dept.id)])
 
         # Re-derive user_tenant for primary users under the moved subtree —
         # crossing into a different parent's subtree may change the resolved

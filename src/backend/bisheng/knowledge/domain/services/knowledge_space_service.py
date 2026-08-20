@@ -4736,6 +4736,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "points.award.hooks favorite notify failed source_file_id=%s",
                 source_file_id,
             )
+        try:
+            await KnowledgeSpaceContentStat.enqueue_success_event_async(
+                file_id=source_file_id,
+                user_id=self.login_user.user_id,
+                event_type=BaseTelemetryTypeEnum.PORTAL_FAVORITE.value,
+                record_type="favorite_daily",
+                source_app="shougang_portal",
+                scene="document_favorite",
+                entry_point="favorite_action",
+            )
+        except Exception:
+            _logger.exception(
+                "knowledge content favorite projection failed source_file_id=%s",
+                source_file_id,
+            )
         title = Path(ref_file.file_name or source_file.file_name or "").stem
         return ShougangPortalFavoriteCreateResp(
             favorite_file_id=int(ref_file.id),

@@ -137,6 +137,7 @@ async def test_set_company_root_labels_subtree_by_depth():
     squad = SimpleNamespace(id=4, path="/1/2/3/4/", status="active", org_level=None)
     nodes = [company, dept, office, squad]
     cleared = {"ok": False}
+    enqueue = AsyncMock()
 
     class ScriptedSession:
         def __init__(self):
@@ -173,6 +174,11 @@ async def test_set_company_root_labels_subtree_by_depth():
             "bisheng.points.domain.services.department_org_level_service.get_async_db_session",
             return_value=ScriptedSession(),
         ),
+        patch(
+            "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+            "KnowledgeSpaceContentStat.enqueue_department_stat_async",
+            new=enqueue,
+        ),
     ):
         result = await service.set_company_root(
             SimpleNamespace(is_admin=lambda: True, is_global_super=False),
@@ -187,6 +193,7 @@ async def test_set_company_root_labels_subtree_by_depth():
     assert result.company_id == 1
     assert result.labeled_count == 4
     assert result.levels == {"company": 1, "dept": 1, "office": 1, "squad": 1}
+    enqueue.assert_awaited_once_with([1])
 
 
 @pytest.mark.asyncio
@@ -251,6 +258,7 @@ async def test_clear_company_root_clears_subtree_only():
         SimpleNamespace(id=2, org_level="dept"),
     ]
     cleared = {"ok": False}
+    enqueue = AsyncMock()
 
     class FakeSession:
         def __init__(self):
@@ -278,6 +286,11 @@ async def test_clear_company_root_clears_subtree_only():
             "bisheng.points.domain.services.department_org_level_service.get_async_db_session",
             return_value=FakeSession(),
         ),
+        patch(
+            "bisheng.telemetry.domain.mid_table.knowledge_space_content."
+            "KnowledgeSpaceContentStat.enqueue_department_stat_async",
+            new=enqueue,
+        ),
     ):
         result = await service.clear_company_root(
             SimpleNamespace(is_admin=lambda: True, is_global_super=False),
@@ -286,6 +299,7 @@ async def test_clear_company_root_clears_subtree_only():
 
     assert cleared["ok"] is True
     assert result.cleared_count == 2
+    enqueue.assert_awaited_once_with([1])
 
 
 @pytest.mark.asyncio

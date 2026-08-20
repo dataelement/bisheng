@@ -19,6 +19,13 @@ from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
 )
 
 TARGET_INDEX = KnowledgeSpaceContentStat.INDEX_NAME
+KNOWN_RECORD_TYPES = (
+    "file",
+    "preview_daily",
+    "download_daily",
+    "favorite_daily",
+    "portal_engagement_daily",
+)
 
 
 def _count_source_files() -> int:
@@ -66,6 +73,12 @@ def _collect_redis_status(redis_client: Any) -> dict[str, dict[str, int]]:
         "processing_meta": KnowledgeSpaceContentStat.PROCESSING_META_KEY,
         "scheduled": KnowledgeSpaceContentStat.SCHEDULED_KEY,
         "owner_lock": KnowledgeSpaceContentStat.LOCK_KEY,
+        "event_pending": KnowledgeSpaceContentStat.EVENT_PENDING_KEY,
+        "event_processing": KnowledgeSpaceContentStat.EVENT_PROCESSING_KEY,
+        "event_processing_meta": KnowledgeSpaceContentStat.EVENT_PROCESSING_META_KEY,
+        "event_payload": KnowledgeSpaceContentStat.EVENT_PAYLOAD_KEY,
+        "event_scheduled": KnowledgeSpaceContentStat.EVENT_SCHEDULED_KEY,
+        "replay_floor": KnowledgeSpaceContentStat.REPLAY_FLOOR_KEY,
     }
     legacy_keys = {
         "file_pending": KnowledgeSpaceContentStat.LEGACY_FILE_PENDING_KEY,
@@ -95,23 +108,65 @@ def _collect_index_status(es_client: Any) -> dict[str, Any]:
             "document_count": 0,
             "file_snapshot_count": 0,
             "preview_daily_count": 0,
+            "download_daily_count": 0,
+            "favorite_daily_count": 0,
+            "portal_engagement_daily_count": 0,
+            "other_record_count": 0,
+            "other_record_type_counts": {},
+            "missing_record_type_count": 0,
         }
+
+    def count_record_type(record_type: str) -> int:
+        return int(
+            es_client.count(
+                index=TARGET_INDEX,
+                body={"query": {"term": {"record_type": record_type}}},
+            )["count"]
+        )
+
+    document_count = int(es_client.count(index=TARGET_INDEX)["count"])
+    record_counts = {record_type: count_record_type(record_type) for record_type in KNOWN_RECORD_TYPES}
+    unknown_response = es_client.search(
+        index=TARGET_INDEX,
+        body={
+            "size": 0,
+            "query": {"bool": {"must_not": [{"terms": {"record_type": list(KNOWN_RECORD_TYPES)}}]}},
+            "aggs": {
+                "record_types": {
+                    "terms": {
+                        "field": "record_type",
+                        "size": 100,
+                    }
+                },
+                "missing_record_type": {
+                    "missing": {
+                        "field": "record_type",
+                    }
+                },
+            },
+        },
+    )
+    aggregations = unknown_response.get("aggregations", {})
+    other_record_type_counts = {
+        str(bucket["key"]): int(bucket.get("doc_count", 0) or 0)
+        for bucket in aggregations.get("record_types", {}).get("buckets", [])
+    }
+    missing_record_type_count = int(aggregations.get("missing_record_type", {}).get("doc_count", 0) or 0)
     return {
         "exists": True,
         "refresh_interval": _extract_refresh_interval(es_client.indices.get_settings(index=TARGET_INDEX)),
-        "document_count": int(es_client.count(index=TARGET_INDEX)["count"]),
-        "file_snapshot_count": int(
-            es_client.count(
-                index=TARGET_INDEX,
-                body={"query": {"term": {"record_type": "file"}}},
-            )["count"]
+        "document_count": document_count,
+        "file_snapshot_count": record_counts["file"],
+        "preview_daily_count": record_counts["preview_daily"],
+        "download_daily_count": record_counts["download_daily"],
+        "favorite_daily_count": record_counts["favorite_daily"],
+        "portal_engagement_daily_count": record_counts["portal_engagement_daily"],
+        "other_record_count": max(
+            0,
+            document_count - sum(record_counts.values()),
         ),
-        "preview_daily_count": int(
-            es_client.count(
-                index=TARGET_INDEX,
-                body={"query": {"term": {"record_type": "preview_daily"}}},
-            )["count"]
-        ),
+        "other_record_type_counts": other_record_type_counts,
+        "missing_record_type_count": missing_record_type_count,
     }
 
 
@@ -124,11 +179,17 @@ class RebuildRuntime:
     renew_lock: Callable[[str], bool] = KnowledgeSpaceContentStat.renew_lock_sync
     release_lock: Callable[[str], bool] = KnowledgeSpaceContentStat.release_lock_sync
     reclaim_all: Callable[[], int] = lambda: KnowledgeSpaceContentStat.reclaim_expired_sync(now_ms=2**63 - 1)
+    reclaim_all_events: Callable[[], int] = lambda: KnowledgeSpaceContentStat.reclaim_expired_events_sync(
+        now_ms=2**63 - 1
+    )
     reset_index_bootstrap: Callable[[], None] = KnowledgeSpaceContentStat.reset_index_bootstrap_state
     ensure_index: Callable[[], None] = lambda: KnowledgeSpaceContentStat()
     rebuild: Callable[[str], dict[str, Any]] = _rebuild_projection
     has_pending: Callable[[], bool] = KnowledgeSpaceContentStat.has_pending_sync
     schedule_pending: Callable[[], None] = KnowledgeSpaceContentStat.schedule_pending_sync_now
+    has_event_pending: Callable[[], bool] = KnowledgeSpaceContentStat.has_event_pending_sync
+    schedule_event_pending: Callable[[], None] = KnowledgeSpaceContentStat.schedule_event_pending_sync_now
+    set_replay_floor: Callable[[int], None] = KnowledgeSpaceContentStat.set_replay_floor_sync
 
 
 def collect_preflight(runtime: RebuildRuntime) -> tuple[Any, Any, dict[str, Any]]:
@@ -198,6 +259,10 @@ def run_rebuild(
             return 3, report
 
         reclaimed_count = runtime.reclaim_all()
+        reclaimed_event_count = runtime.reclaim_all_events()
+        replay_floor = int(datetime.now().timestamp())
+        runtime.set_replay_floor(replay_floor)
+        report["replay_floor"] = replay_floor
         if not runtime.renew_lock(owner_token):
             raise RuntimeError("projection owner lock was lost before index deletion")
 
@@ -213,6 +278,7 @@ def run_rebuild(
         report["result"] = {
             **rebuild_result,
             "reclaimed_processing_count": reclaimed_count,
+            "reclaimed_event_processing_count": reclaimed_event_count,
             "cleared_legacy_keys": cleared_legacy_keys,
             "index": _collect_index_status(es_client),
             "redis": _collect_redis_status(redis_client),
@@ -233,6 +299,11 @@ def run_rebuild(
             report["pending_rescheduled"] = True
         else:
             report["pending_rescheduled"] = False
+        if runtime.has_event_pending():
+            runtime.schedule_event_pending()
+            report["event_pending_rescheduled"] = True
+        else:
+            report["event_pending_rescheduled"] = False
         return 0, report
     except Exception as exc:
         report.update(
@@ -251,6 +322,11 @@ def run_rebuild(
                 report["pending_rescheduled"] = True
             else:
                 report["pending_rescheduled"] = False
+            if runtime.has_event_pending():
+                runtime.schedule_event_pending()
+                report["event_pending_rescheduled"] = True
+            else:
+                report["event_pending_rescheduled"] = False
 
 
 def build_parser() -> argparse.ArgumentParser:

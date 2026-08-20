@@ -272,11 +272,6 @@ export function FileCard({
                         : "分享文件"}
             </span>
         );
-        const projectionBadge = !isFolder && file.projectionReady === false && (
-            <span className="flex h-5 shrink-0 items-center rounded bg-[#fff7e8] px-1.5 text-xs text-[#f77234]">
-                同步中
-            </span>
-        );
         const similarIndicator = versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && !file.is_multi_version && (
             <button
                 type="button"
@@ -297,7 +292,6 @@ export function FileCard({
                     {versionBadge}
                     {similarIndicator}
                     {entryBadge}
-                    {projectionBadge}
                     <span className={cn("truncate", nameToneClass)}>{file.name}</span>
                 </div>
             );
@@ -307,7 +301,6 @@ export function FileCard({
                 {versionBadge}
                 {similarIndicator}
                 {entryBadge}
-                {projectionBadge}
                 <span className={cn("min-w-0 flex-1 truncate", nameToneClass)}>{file.name}</span>
                 {renderStatusBadge()}
             </div>

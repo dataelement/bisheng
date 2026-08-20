@@ -1537,11 +1537,6 @@ function FileRow({
                                                 : "分享文件"}
                                     </span>
                                 )}
-                                {!isFolder && file.projectionReady === false && (
-                                    <span className="flex h-5 shrink-0 items-center rounded bg-[#fff7e8] px-1.5 text-xs text-[#f77234]">
-                                        同步中
-                                    </span>
-                                )}
                                 {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
                                     <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
                                         {`V${file.version_no}`}

@@ -102,13 +102,16 @@ async def test_create_favorite_idempotent_returns_existing():
          patch.object(KnowledgeSpaceService, "_ensure_space_file", new=lambda self, f, sid: f), \
          patch.object(KnowledgeSpaceService, "_ensure_favorite_space", new=AsyncMock(return_value=fav_space)), \
          patch.object(KnowledgeSpaceService, "_find_favorite_reference", new=AsyncMock(return_value=existing_ref)), \
-         patch.object(KnowledgeSpaceService, "_create_favorite_reference", new=AsyncMock()) as creator:
+         patch.object(KnowledgeSpaceService, "_create_favorite_reference", new=AsyncMock()) as creator, \
+         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_success_event_async",
+               new=AsyncMock()) as enqueue_stat:
         resp = await svc.create_shougang_portal_favorite(
             ShougangPortalFavoriteCreateReq(source_space_id=1, source_file_id=2))
         assert resp.favorite_file_id == 999
         assert resp.space_id == 200
         assert resp.source_space_id == 1 and resp.source_file_id == 2
         creator.assert_not_called()
+        enqueue_stat.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -184,11 +187,16 @@ async def test_create_favorite_creates_reference_when_absent():
          patch.object(KnowledgeSpaceService, "_ensure_space_file", new=lambda self, f, sid: f), \
          patch.object(KnowledgeSpaceService, "_ensure_favorite_space", new=AsyncMock(return_value=fav_space)), \
          patch.object(KnowledgeSpaceService, "_find_favorite_reference", new=AsyncMock(return_value=None)), \
-         patch.object(KnowledgeSpaceService, "_create_favorite_reference", new=AsyncMock(return_value=new_ref)) as creator:
+         patch.object(KnowledgeSpaceService, "_create_favorite_reference", new=AsyncMock(return_value=new_ref)) as creator, \
+         patch("bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_success_event_async",
+               new=AsyncMock(return_value=True)) as enqueue_stat:
         resp = await svc.create_shougang_portal_favorite(
             ShougangPortalFavoriteCreateReq(source_space_id=1, source_file_id=2))
         assert resp.favorite_file_id == 1000
         creator.assert_awaited_once()
+        enqueue_stat.assert_awaited_once()
+        assert enqueue_stat.await_args.kwargs["record_type"] == "favorite_daily"
+        assert enqueue_stat.await_args.kwargs["file_id"] == 2
 
 
 @pytest.mark.asyncio
