@@ -1,7 +1,7 @@
 /**
  * F035 Track H: task-mode toggle button shown in the input toolbar (right of
  * tools when in task mode). Default icon matches the "+" menu task-mode entry
- * (Outlined.Binoculars); on hover it swaps to an "x" (exit affordance). No
+ * (Outlined.ListSuccess); on hover it swaps to an "x" (exit affordance). No
  * default background; hover uses a light primary tint, rounded like the other
  * toolbar buttons.
  */
@@ -54,7 +54,7 @@ export function TaskModeToggle({ active, disabled = false, onClick, compact = fa
             {showExit ? (
                 <X size={16} className="text-blue-500" />
             ) : (
-                <Outlined.Binoculars size={16} className={active ? 'text-blue-500' : 'text-[#4E5969]'} />
+                <Outlined.ListSuccess size={16} className={active ? 'text-blue-500' : 'text-[#4E5969]'} />
             )}
             {/* Compact: collapse to icon only to save horizontal space in the
                 input toolbar, matching the knowledge/tools selectors. */}

@@ -2,7 +2,11 @@ import logging
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from bisheng.channel.api.dependencies import get_channel_authorization_service, get_channel_service
+from bisheng.channel.api.dependencies import (
+    get_channel_authorization_service,
+    get_channel_creation_application_service,
+    get_channel_service,
+)
 from bisheng.channel.domain.schemas.channel_authorization_schema import ChannelAuthorizeRequest
 from bisheng.channel.domain.schemas.channel_manager_schema import (
     AddArticlesToKnowledgeSpaceRequest,
@@ -19,6 +23,9 @@ from bisheng.channel.domain.schemas.channel_manager_schema import (
     UpdateMemberRoleRequest,
 )
 from bisheng.channel.domain.services.channel_authorization_service import ChannelAuthorizationService
+from bisheng.channel.domain.services.channel_creation_application_service import (
+    ChannelCreationApplicationService,
+)
 from bisheng.channel.domain.services.channel_service import ChannelService
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
@@ -35,10 +42,10 @@ async def create_channel(
     request: Request,
     req_param: CreateChannelRequest,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
-    channel_service: "ChannelService" = Depends(get_channel_service),
+    creation_service: ChannelCreationApplicationService = Depends(get_channel_creation_application_service),
 ):
     """Endpoint to create a new channel."""
-    channel = await channel_service.create_channel(req_param, login_user, request)
+    channel = await creation_service.create(req_param, login_user, request)
 
     return resp_200(data=channel)
 

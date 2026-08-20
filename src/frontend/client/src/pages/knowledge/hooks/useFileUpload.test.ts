@@ -25,23 +25,23 @@ describe("useFileUpload helpers", () => {
       name: "duplicate.docx",
       status: FileStatus.FAILED,
       oldFileLevelPath: "/root/folder",
-    }) as KnowledgeFile & { _raw: Record<string, unknown> };
-    duplicateFile._raw = { id: 11 };
+    });
+    duplicateFile._raw = { id: 11, name: "duplicate.docx", type: "file" };
 
     const parseFailedFile = makeKnowledgeFile({
       id: "12",
       name: "parse-failed.docx",
       status: FileStatus.FAILED,
       errorMessage: "parse failed",
-    }) as KnowledgeFile & { _raw: Record<string, unknown> };
-    parseFailedFile._raw = { id: 12 };
+    });
+    parseFailedFile._raw = { id: 12, name: "parse-failed.docx", type: "file" };
 
     expect(extractDuplicateFileEntries([duplicateFile, parseFailedFile])).toEqual([
       {
         fileId: "11",
         fileName: "duplicate.docx",
         oldFileLevelPath: "/root/folder",
-        rawObj: { id: 11 },
+        rawObj: { id: 11, name: "duplicate.docx", type: "file" },
       },
     ]);
   });

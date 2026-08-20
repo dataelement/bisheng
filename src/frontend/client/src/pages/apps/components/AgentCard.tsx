@@ -48,7 +48,7 @@ export function AgentCard({
             onShare(agent);
           }}
           variant="outline"
-          className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal"
+          className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-md px-2 py-0 text-[14px] font-normal"
         >
           {localize('com_app_share_app')}
         </Button>
@@ -58,7 +58,7 @@ export function AgentCard({
           e.stopPropagation();
           onStartChat(agent);
         }}
-        className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-[6px] px-2 py-0 text-[14px] font-normal"
+        className="flex-1 min-w-0 justify-center items-center h-full max-h-full rounded-md px-2 py-0 text-[14px] font-normal"
       >
         {localize('com_app_start_chat')}
       </Button>
@@ -78,7 +78,7 @@ export function AgentCard({
       {/* Header Info */}
       <div className="flex items-start justify-between w-full relative z-10 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <AppAvator className="size-[32px] min-w-[20px] shrink-0 rounded-[6px]" url={agent.logo} id={agent.id as any} flowType={String(agent.flow_type)} />
+          <AppAvator className="size-[32px] min-w-[20px] shrink-0 rounded-md" url={agent.logo} id={agent.id as any} flowType={String(agent.flow_type)} />
           <p className="font-['PingFang_SC'] font-normal leading-[22px] text-[#212121] text-[14px] truncate">
             {agent.name}
           </p>
@@ -96,7 +96,7 @@ export function AgentCard({
             >
               {showPin && isPinned ? (
                 <span
-                  className="inline-flex size-6 items-center justify-center rounded-[6px] text-[rgb(var(--brand-muted))]"
+                  className="inline-flex size-6 items-center justify-center rounded-md text-[rgb(var(--brand-muted))]"
                   aria-label={localize('com_app_unpin_tooltip')}
                 >
                   <Outlined.Pin size={16} className="shrink-0" />
@@ -107,7 +107,7 @@ export function AgentCard({
                   <button
                     type="button"
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex size-6 items-center justify-center rounded-[6px] border border-[#E5E6EB] bg-white text-[#86909C] fine-pointer:hover:bg-[#F7F8FA]"
+                    className="inline-flex size-6 items-center justify-center rounded-md border border-[#E5E6EB] bg-white text-[#86909C] fine-pointer:hover:bg-[#F7F8FA]"
                     aria-label={localize('com_ui_more')}
                   >
                     <MoreVertical className="size-4" />
@@ -149,7 +149,7 @@ export function AgentCard({
                     onTogglePin?.(agent);
                   }}
                   className={cn(
-                    'group/pin flex shrink-0 cursor-pointer items-center justify-center rounded-[6px] p-1 transition-colors',
+                    'group/pin flex shrink-0 cursor-pointer items-center justify-center rounded-md p-1 transition-colors',
                     'border border-transparent fine-pointer:hover:border-[#E5E6EB] fine-pointer:hover:bg-[#f7f8fa]',
                     isPinned
                       ? 'opacity-100'
@@ -213,7 +213,7 @@ export function AgentCard({
             }}
             variant="outline"
             className={cn(
-              "h-6 shrink-0 rounded-[6px] border border-[#E5E6EB] bg-white px-2 py-0 text-[12px] font-normal leading-[20px] text-[#4E5969] transition-opacity fine-pointer:hover:bg-[#F7F8FA]",
+              "h-6 shrink-0 rounded-md border border-[#E5E6EB] bg-white px-2 py-0 text-[12px] font-normal leading-[20px] text-[#4E5969] transition-opacity fine-pointer:hover:bg-[#F7F8FA]",
               shouldUseHoverActionsInMobileCard
                 ? "opacity-0 pointer-events-none fine-pointer:group-hover/card:opacity-100 fine-pointer:group-hover/card:pointer-events-auto"
                 : "opacity-100 pointer-events-auto",

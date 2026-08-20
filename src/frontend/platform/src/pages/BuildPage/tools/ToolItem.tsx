@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { TitleIconBg } from "@/components/bs-comp/cardComponent";
 import { SettingIcon } from "@/components/bs-icons/setting";
 import { ToolIcon } from "@/components/bs-icons/tool";

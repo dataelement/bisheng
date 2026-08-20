@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { cloneDeep } from "lodash-es";
 import {
   Connection,
@@ -91,7 +92,7 @@ export function cleanEdges(nodes: Node[], edges: Edge[]) {
 }
 
 export function unselectAllNodes({ updateNodes, data }: unselectAllNodesType) {
-  let newNodes = cloneDeep(data);
+  const newNodes = cloneDeep(data);
   newNodes.forEach((node: Node) => {
     node.selected = false;
   });
@@ -116,7 +117,7 @@ export function isValidConnection(
         t === targetHandleObject.type
     )
   ) {
-    let targetNode = nodes.find((node) => node.id === target!)?.data?.node;
+    const targetNode = nodes.find((node) => node.id === target!)?.data?.node;
     if (!targetNode) {
       if (!edges.find((e) => e.targetHandle === targetHandle)) {
         return true;
@@ -133,7 +134,7 @@ export function isValidConnection(
 }
 
 export function removeApiKeys(flow: FlowType): FlowType {
-  let cleanFLow = cloneDeep(flow);
+  const cleanFLow = cloneDeep(flow);
   cleanFLow.data!.nodes.forEach((node) => {
     for (const key in node.data.node.template) {
       if (node.data.node.template[key].password) {
@@ -148,7 +149,7 @@ export function updateTemplate(
   reference: APITemplateType,
   objectToUpdate: APITemplateType
 ): APITemplateType {
-  let clonedObject: APITemplateType = cloneDeep(reference);
+  const clonedObject: APITemplateType = cloneDeep(reference);
 
   // Loop through each key in the reference object
   for (const key in clonedObject) {
@@ -168,7 +169,7 @@ export function updateTemplate(
 }
 
 export const processDataFromFlow = (flow: FlowType, refreshIds = true) => {
-  let data = flow?.data ? flow.data : null;
+  const data = flow?.data ? flow.data : null;
   if (data) {
     processFlowEdges(flow);
     //prevent node update for now
@@ -182,12 +183,12 @@ export const processDataFromFlow = (flow: FlowType, refreshIds = true) => {
 };
 // utils中的新方法
 export function updateIds(newFlow: ReactFlowJsonObject) {
-  let idsMap = {};
+  const idsMap = {};
 
   if (newFlow.nodes)
     newFlow.nodes.forEach((node: NodeType) => {
       // Generate a unique node ID
-      let newId = getNodeId(
+      const newId = getNodeId(
         node.data.node?.flow ? "GroupNode" : node.data.type
       );
       idsMap[node.id] = newId;
@@ -331,20 +332,20 @@ export function updateEdgesHandleIds({
   edges,
   nodes,
 }: updateEdgesHandleIdsType): Edge[] {
-  let newEdges = cloneDeep(edges);
+  const newEdges = cloneDeep(edges);
   newEdges.forEach((edge) => {
     const sourceNodeId = edge.source;
     const targetNodeId = edge.target;
     const sourceNode = nodes.find((node) => node.id === sourceNodeId);
     const targetNode = nodes.find((node) => node.id === targetNodeId);
-    let source = edge.sourceHandle;
-    let target = edge.targetHandle;
+    const source = edge.sourceHandle;
+    const target = edge.targetHandle;
     //right
     let newSource: sourceHandleType;
     //left
     let newTarget: targetHandleType;
     if (target && targetNode) {
-      let field = target.split("|")[1];
+      const field = target.split("|")[1];
       newTarget = {
         type: targetNode.data.node!.template[field].type,
         fieldName: field,
@@ -429,7 +430,7 @@ export function convertObjToArray(singleObject: object | string) {
   }
   if (Array.isArray(singleObject)) return singleObject;
 
-  let arrConverted: any[] = [];
+  const arrConverted: any[] = [];
   if (typeof singleObject === "object") {
     for (const key in singleObject) {
       if (Object.prototype.hasOwnProperty.call(singleObject, key)) {
@@ -445,7 +446,7 @@ export function convertObjToArray(singleObject: object | string) {
 export function convertArrayToObj(arrayOfObjects) {
   if (!Array.isArray(arrayOfObjects)) return arrayOfObjects;
 
-  let objConverted = {};
+  const objConverted = {};
   for (const obj of arrayOfObjects) {
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
@@ -505,7 +506,7 @@ export function scapedJSONStringfy(json: object): string {
   return customStringify(json).replace(/"/g, "œ");
 }
 export function scapeJSONParse(json: string): any {
-  let parsed = json.replace(/œ/g, '"');
+  const parsed = json.replace(/œ/g, '"');
   return JSON.parse(parsed);
 }
 
@@ -618,7 +619,7 @@ export function generateFlow(
 }
 
 export function reconnectEdges(groupNode: NodeType, excludedEdges: Edge[]) {
-  let newEdges = cloneDeep(excludedEdges);
+  const newEdges = cloneDeep(excludedEdges);
   if (!groupNode.data.node!.flow) return [];
   const { nodes, edges } = groupNode.data.node!.flow!.data!;
   const lastNode = findLastNode(groupNode.data.node!.flow!.data!);
@@ -660,13 +661,13 @@ export function findLastNode({ nodes, edges }: findLastNodeType) {
   /*
     this function receives a flow and return the last node
   */
-  let lastNode = nodes.find((n) => !edges.some((e) => e.source === n.id));
+  const lastNode = nodes.find((n) => !edges.some((e) => e.source === n.id));
   return lastNode;
 }
 
 export function updateFlowPosition(NewPosition: XYPosition, flow: FlowType) {
   const middlePoint = getMiddlePoint(flow.data!.nodes);
-  let deltaPosition = {
+  const deltaPosition = {
     x: NewPosition.x - middlePoint.x,
     y: NewPosition.y - middlePoint.y,
   };
@@ -705,15 +706,15 @@ export function validateSelection(
   }
   // get only edges that are connected to the nodes in the selection
   // first creates a set of all the nodes ids
-  let nodesSet = new Set(selection.nodes.map((n) => n.id));
+  const nodesSet = new Set(selection.nodes.map((n) => n.id));
   // then filter the edges that are connected to the nodes in the set
-  let connectedEdges = selection.edges.filter(
+  const connectedEdges = selection.edges.filter(
     (e) => nodesSet.has(e.source) && nodesSet.has(e.target)
   );
   // add the edges to the selection
   selection.edges = connectedEdges;
 
-  let errorsArray: Array<string> = [];
+  const errorsArray: Array<string> = [];
   // check if there is more than one node
   if (selection.nodes.length < 2) {
     errorsArray.push("Please select more than one node");
@@ -744,8 +745,8 @@ function updateGroupNodeTemplate(template: APITemplateType) {
   /*this function receives a template, iterates for it's items
   updating the visibility of all basic types setting it to advanced true*/
   Object.keys(template).forEach((key) => {
-    let type = template[key].type;
-    let input_types = template[key].input_types;
+    const type = template[key].type;
+    const input_types = template[key].input_types;
     if (
       LANGFLOW_SUPPORTED_TYPES.has(type) &&
       !template[key].required && // 非必填项group 中不展示
@@ -772,9 +773,9 @@ export function mergeNodeTemplates({
     if there are two keys with the same name in the flow, we will update the display name of each one
     to show from which node it came from
   */
-  let template: APITemplateType = {};
+  const template: APITemplateType = {};
   nodes.forEach((node) => {
-    let nodeTemplate = cloneDeep(node.data.node!.template);
+    const nodeTemplate = cloneDeep(node.data.node!.template);
     Object.keys(nodeTemplate)
       .filter((field_name) => field_name.charAt(0) !== "_")
       .forEach((key) => {
@@ -837,7 +838,7 @@ export function generateNodeTemplate(Flow: FlowType) {
   /*
     this function receives a flow and generate a template for the group node
   */
-  let template = mergeNodeTemplates({
+  const template = mergeNodeTemplates({
     nodes: Flow.data!.nodes,
     edges: Flow.data!.edges,
   });
@@ -852,7 +853,7 @@ export function generateNodeFromFlow(
   const { nodes } = flow.data!;
   const outputNode = cloneDeep(findLastNode(flow.data!));
   const position = getMiddlePoint(nodes);
-  let data = cloneDeep(flow);
+  const data = cloneDeep(flow);
   const id = getNodeId(outputNode?.data.type!);
   // 检查是否有 fileinput
   const hasFileInput = flow.data.nodes.some((node) => node.data.type === "InputFileNode")
@@ -929,7 +930,7 @@ function updateProxyIdsOnTemplate(
 
 function updateEdgesIds(edges: Edge[], idsMap: { [key: string]: string }) {
   edges.forEach((edge) => {
-    let targetHandle: targetHandleType = edge.data.targetHandle;
+    const targetHandle: targetHandleType = edge.data.targetHandle;
     if (targetHandle.proxy && idsMap[targetHandle.proxy!.id]) {
       targetHandle.proxy!.id = idsMap[targetHandle.proxy!.id];
     }
@@ -963,14 +964,14 @@ export function expandGroupNode(
 ) {
   // const idsMap = updateIds(flow!.data!);
   // updateProxyIdsOnTemplate(template, idsMap);
-  let flowEdges = edges;
+  const flowEdges = edges;
   // updateEdgesIds(flowEdges, idsMap);
   const gNodes: NodeType[] = cloneDeep(flow?.data?.nodes!);
   const gEdges = cloneDeep(flow!.data!.edges);
   //redirect edges to correct proxy node
-  let updatedEdges: Edge[] = [];
+  const updatedEdges: Edge[] = [];
   flowEdges.forEach((edge) => {
-    let newEdge = cloneDeep(edge);
+    const newEdge = cloneDeep(edge);
     // group 组件输入线
     if (newEdge.target === id) {
       const targetHandleArr = newEdge.targetHandle.split("|");
@@ -1025,13 +1026,13 @@ export function expandGroupNode(
   });
   //update template values
   Object.keys(template).forEach((key) => {
-    let { field, id } = template[key].proxy!;
-    let nodeIndex = gNodes.findIndex((n) => n.id === id);
+    const { field, id } = template[key].proxy!;
+    const nodeIndex = gNodes.findIndex((n) => n.id === id);
     if (nodeIndex !== -1) {
       let proxy: { id: string; field: string } | undefined;
       let display_name: string | undefined;
-      let show = gNodes[nodeIndex].data.node!.template[field].show;
-      let advanced = gNodes[nodeIndex].data.node!.template[field].advanced;
+      const show = gNodes[nodeIndex].data.node!.template[field].show;
+      const advanced = gNodes[nodeIndex].data.node!.template[field].advanced;
       if (gNodes[nodeIndex].data.node!.template[field].display_name) {
         display_name =
           gNodes[nodeIndex].data.node!.template[field].display_name;
@@ -1171,7 +1172,7 @@ export function downloadFlow(
   flowName: string,
   flowDescription?: string
 ) {
-  let clonedFlow = cloneDeep(flow);
+  const clonedFlow = cloneDeep(flow);
   removeFileNameFromComponents(clonedFlow);
   // create a data URI with the current flow data
   const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(

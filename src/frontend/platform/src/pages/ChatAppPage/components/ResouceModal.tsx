@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { checkSassUrl } from "@/components/bs-comp/FileView";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Dialog, DialogContent } from "@/components/bs-ui/dialog";
@@ -27,7 +28,7 @@ const Anwser = ({ id, msg, onInit, onAdd, fullScreen = false }) => {
                 onInit(res)
             }).catch(e => {
                 // 自动重试
-                e === t('errors.14001') && setTimeout(() => {
+                e === t('api_errors:14001') && setTimeout(() => {
                     loadData()
                 }, 1800);
             })

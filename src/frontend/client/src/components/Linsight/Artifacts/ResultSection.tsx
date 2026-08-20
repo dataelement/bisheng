@@ -90,7 +90,9 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                         isLatestMessage={true}
                         webContent={false}
                         resolveArtifactLink={resolveArtifactLink}
-                        onArtifactPreview={onPreview}
+                        // Markdown types the callback as (file: unknown) — the resolver
+                        // it pairs with only ever yields ArtifactFile values here.
+                        onArtifactPreview={onPreview as (file: unknown) => void}
                     />
                 </div>
             )}

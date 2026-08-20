@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Button } from "@/components/bs-ui/button";
 import { Card, CardContent } from "@/components/bs-ui/card";
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, Position } from "@xyflow/react";

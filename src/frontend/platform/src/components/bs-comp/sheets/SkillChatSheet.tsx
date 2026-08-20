@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { AssistantIcon, SkillIcon } from "@/components/bs-icons";
 import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";

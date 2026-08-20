@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Iterable
 
@@ -23,11 +22,12 @@ from bisheng.common.errcode.channel import (
     ChannelNotFoundError,
     ChannelPermissionDeniedError,
 )
-from bisheng.common.models.config import ConfigDao
+from bisheng.common.errcode.permission import PermissionTupleWriteError
 from bisheng.common.models.space_channel_member import ChannelRelationEnum
 from bisheng.common.repositories.interfaces.space_channel_member_repository import (
     SpaceChannelMemberRepository,
 )
+from bisheng.core.openfga.exceptions import FGAConnectionError, FGAWriteError
 from bisheng.permission.domain.channel_permission_template import (
     default_permission_ids_for_relation,
     relation_from_channel_permission_ids,
@@ -37,16 +37,19 @@ from bisheng.permission.domain.schemas.permission_schema import (
     AuthorizeGrantItem,
     AuthorizeRevokeItem,
 )
+from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 from bisheng.permission.domain.services.fine_grained_permission_service import FineGrainedPermissionService
+from bisheng.permission.domain.services.grant_subject_query_service import (
+    GrantSubjectQueryService,
+)
 from bisheng.permission.domain.services.permission_service import PermissionService
+from bisheng.permission.domain.services.relation_model_store import get_bindings, get_relation_models, save_bindings
 from bisheng.permission.domain.services.resource_permission_notification_service import (
     ResourcePermissionNotificationService,
 )
 
 logger = logging.getLogger(__name__)
 
-_RELATION_MODELS_KEY = "permission_relation_models_v1"
-_RELATION_MODEL_BINDINGS_KEY = "permission_relation_model_bindings_v1"
 _GRANT_TIER_VALUES = frozenset({"owner", "manager", "usage"})
 
 # A relation model can only be granted when the caller holds the matching
@@ -75,12 +78,14 @@ class ChannelAuthorizationService:
         channel_repository,
         space_channel_member_repository: SpaceChannelMemberRepository,
         membership_sync_service: ChannelMembershipSyncService | None = None,
+        grant_subject_query_service: GrantSubjectQueryService | None = None,
     ):
         self.channel_repository = channel_repository
         self.space_channel_member_repository = space_channel_member_repository
         self.membership_sync_service = membership_sync_service or ChannelMembershipSyncService(
             space_channel_member_repository,
         )
+        self.grant_subject_query_service = grant_subject_query_service or GrantSubjectQueryService()
 
     async def authorize_channel(
         self,
@@ -106,13 +111,20 @@ class ChannelAuthorizationService:
             )
 
         if tuple_grants or tuple_revokes:
-            await PermissionService.authorize(
-                object_type="channel",
-                object_id=channel_id,
-                grants=tuple_grants,
-                revokes=tuple_revokes,
-                enforce_fga_success=True,
-            )
+            try:
+                await PermissionService.authorize(
+                    object_type="channel",
+                    object_id=channel_id,
+                    grants=tuple_grants,
+                    revokes=tuple_revokes,
+                    enforce_fga_success=True,
+                )
+            except (FGAConnectionError, FGAWriteError) as exc:
+                logger.exception(
+                    "channel authorization tuple write failed: channel_id=%s",
+                    channel_id,
+                )
+                raise ChannelAuthorizationSyncError(exception=exc) from exc
 
         original_bindings: list[dict] | None = None
         try:
@@ -137,29 +149,37 @@ class ChannelAuthorizationService:
         )
 
     async def list_permissions(self, channel_id: str, login_user: UserPayload) -> list[ChannelPermissionEntry]:
-        await self._require_manage_access(channel_id, login_user)
+        await self._require_manage_access(channel_id, login_user, use_binding_index=True)
         channel = await self._ensure_channel(channel_id)
         creator_id = int(channel.user_id) if getattr(channel, "user_id", None) is not None else None
-        permissions = await PermissionService.get_resource_permissions("channel", channel_id)
         bindings = [
             b
             for b in await self._get_bindings()
             if b.get("resource_type") == "channel" and str(b.get("resource_id")) == str(channel_id)
         ]
         model_map = {m["id"]: m for m in await self._get_relation_models()}
-        binding_map = {b.get("key"): b for b in bindings if b.get("key")}
+        display_bindings = list(bindings)
+        if creator_id is not None and not any(
+            binding.get("subject_type") == "user"
+            and str(binding.get("subject_id")) == str(creator_id)
+            and binding.get("relation") == ChannelRelationEnum.OWNER.value
+            for binding in display_bindings
+        ):
+            display_bindings.append(
+                {
+                    "subject_type": "user",
+                    "subject_id": creator_id,
+                    "relation": ChannelRelationEnum.OWNER.value,
+                    "include_children": None,
+                    "model_id": ChannelRelationEnum.OWNER.value,
+                }
+            )
+        permissions = await PermissionService.get_resource_permissions_from_bindings(
+            display_bindings,
+            model_map,
+        )
         out: list[ChannelPermissionEntry] = []
         for item in permissions:
-            binding = self._binding_from_map(
-                binding_map,
-                channel_id,
-                item.subject_type,
-                int(item.subject_id),
-                item.relation,
-                getattr(item, "include_children", None),
-            )
-            model_id = binding.get("model_id") if binding else getattr(item, "model_id", None)
-            model = model_map.get(model_id) if model_id else None
             out.append(
                 ChannelPermissionEntry(
                     subject_type=item.subject_type,
@@ -168,11 +188,9 @@ class ChannelAuthorizationService:
                     subject_group_names=getattr(item, "subject_group_names", None),
                     subject_member_names=getattr(item, "subject_member_names", None),
                     relation=ChannelRelationEnum(item.relation),
-                    include_children=binding.get("include_children")
-                    if binding
-                    else getattr(item, "include_children", None),
-                    model_id=model_id,
-                    model_name=model.get("name") if model else getattr(item, "model_name", None),
+                    include_children=getattr(item, "include_children", None),
+                    model_id=getattr(item, "model_id", None),
+                    model_name=getattr(item, "model_name", None),
                     is_creator=(
                         item.subject_type == "user" and creator_id is not None and int(item.subject_id) == creator_id
                     ),
@@ -203,13 +221,12 @@ class ChannelAuthorizationService:
         tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
         if tenant_id is None:
             return []
-        from bisheng.permission.api.endpoints.resource_permission import _list_knowledge_space_grant_users
-
-        return await _list_knowledge_space_grant_users(
+        return await self.grant_subject_query_service.list_users(
             tenant_id=tenant_id,
             keyword=keyword,
             page=page,
             page_size=page_size,
+            restrict_dept_path=None,
         )
 
     # F038: lazy variants. Channels are never department-scoped, so restrict_root_path
@@ -222,36 +239,41 @@ class ChannelAuthorizationService:
         tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
         if tenant_id is None:
             return []
-        from bisheng.permission.api.endpoints.resource_permission import _grant_departments_children
-
-        return await _grant_departments_children(tenant_id=tenant_id, parent_id=parent_id)
+        return await self.grant_subject_query_service.list_departments_children(
+            tenant_id=tenant_id,
+            parent_id=parent_id,
+            restrict_root_path=None,
+        )
 
     async def search_grant_departments(self, channel_id: str, login_user: UserPayload, keyword: str, limit: int = 50):
         await self._require_manage_access(channel_id, login_user)
         tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
         if tenant_id is None:
             return {"roots": [], "total_matches": 0, "truncated": False}
-        from bisheng.permission.api.endpoints.resource_permission import _grant_departments_search
-
-        return await _grant_departments_search(tenant_id=tenant_id, keyword=keyword, limit=limit)
+        return await self.grant_subject_query_service.search_departments(
+            tenant_id=tenant_id,
+            keyword=keyword,
+            limit=limit,
+            restrict_root_path=None,
+        )
 
     async def get_grant_departments_path_tree(self, channel_id: str, login_user: UserPayload, dept_id: int):
         await self._require_manage_access(channel_id, login_user)
         tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
         if tenant_id is None:
             return {"roots": [], "total_matches": 0, "truncated": False}
-        from bisheng.permission.api.endpoints.resource_permission import _grant_departments_path_tree
-
-        return await _grant_departments_path_tree(tenant_id=tenant_id, dept_id=dept_id)
+        return await self.grant_subject_query_service.get_departments_path_tree(
+            tenant_id=tenant_id,
+            dept_id=dept_id,
+            restrict_root_path=None,
+        )
 
     async def list_grant_user_groups(self, channel_id: str, login_user: UserPayload, keyword: str):
         await self._require_manage_access(channel_id, login_user)
         tenant_id = await self._resolve_channel_tenant(channel_id, login_user)
         if tenant_id is None:
             return []
-        from bisheng.permission.api.endpoints.resource_permission import _list_knowledge_space_grant_user_groups
-
-        return await _list_knowledge_space_grant_user_groups(
+        return await self.grant_subject_query_service.list_user_groups(
             tenant_id=tenant_id,
             keyword=keyword,
             login_user=login_user,
@@ -411,15 +433,26 @@ class ChannelAuthorizationService:
         self,
         channel_id: str,
         login_user: UserPayload,
+        *,
+        use_binding_index: bool = False,
     ) -> ChannelRelationEnum | None:
         if login_user.is_admin():
             return ChannelRelationEnum.OWNER
         try:
-            permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
-                login_user,
-                "channel",
-                channel_id,
-            )
+            if use_binding_index:
+                permission_ids = (
+                    await FineGrainedPermissionService.get_effective_permission_ids_from_verified_bindings_async(
+                        login_user,
+                        "channel",
+                        channel_id,
+                    )
+                )
+            else:
+                permission_ids = await FineGrainedPermissionService.get_effective_permission_ids_async(
+                    login_user,
+                    "channel",
+                    channel_id,
+                )
             relation = relation_from_channel_permission_ids(permission_ids)
             if relation:
                 return ChannelRelationEnum(relation)
@@ -430,8 +463,18 @@ class ChannelAuthorizationService:
             login_user.user_id,
         )
 
-    async def _require_manage_access(self, channel_id: str, login_user: UserPayload) -> ChannelRelationEnum:
-        actor_relation = await self._actor_relation(channel_id, login_user)
+    async def _require_manage_access(
+        self,
+        channel_id: str,
+        login_user: UserPayload,
+        *,
+        use_binding_index: bool = False,
+    ) -> ChannelRelationEnum:
+        actor_relation = await self._actor_relation(
+            channel_id,
+            login_user,
+            use_binding_index=use_binding_index,
+        )
         if actor_relation not in {ChannelRelationEnum.OWNER, ChannelRelationEnum.MANAGER}:
             raise ChannelPermissionDeniedError()
         return actor_relation
@@ -662,13 +705,66 @@ class ChannelAuthorizationService:
         return None
 
     @classmethod
-    async def clear_non_owner_bindings(cls, channel_id: str) -> int:
-        """Remove every relation-model binding for a channel except owner bindings.
+    async def clear_authorization_for_private(cls, channel_id: str, creator_user_id: int) -> int:
+        """Remove every private-channel grant except the actual creator owner."""
+        try:
+            fga = await PermissionService._aget_fga()
+            if fga is None:
+                raise RuntimeError("FGAClient not available while clearing private-channel permissions")
+            tuples = await fga.read_tuples(object=f"channel:{channel_id}")
+            creator_tuple = (f"user:{creator_user_id}", "owner")
+            operations = [
+                TupleOperation(
+                    action="delete",
+                    user=tuple_item["user"],
+                    relation=tuple_item["relation"],
+                    object=tuple_item["object"],
+                )
+                for tuple_item in (tuples or [])
+                if (tuple_item.get("user"), tuple_item.get("relation")) != creator_tuple
+            ]
+            if operations:
+                await PermissionService.batch_write_tuples(
+                    operations,
+                    crash_safe=True,
+                    raise_on_failure=True,
+                    stop_on_failure=True,
+                )
+        except PermissionTupleWriteError:
+            raise
+        except Exception as error:
+            logger.exception("failed to clear private-channel tuples: channel_id=%s", channel_id)
+            raise PermissionTupleWriteError(exception=error) from error
 
-        Called when a channel switches to PRIVATE: all non-owner relations are
-        revoked, so their bindings must be dropped too — otherwise a later
-        re-grant could resurrect a stale model. Returns the number removed.
-        """
+        try:
+            bindings = await cls._get_bindings()
+            remaining: list[dict] = []
+            removed = 0
+            for binding in bindings:
+                is_channel_binding = binding.get("resource_type") == "channel" and str(
+                    binding.get("resource_id")
+                ) == str(channel_id)
+                is_creator_binding = (
+                    binding.get("subject_type") == "self"
+                    and str(binding.get("subject_id")) == str(creator_user_id)
+                    and binding.get("relation") == ChannelRelationEnum.OWNER.value
+                )
+                if is_channel_binding and not is_creator_binding:
+                    removed += 1
+                    continue
+                remaining.append(binding)
+            if removed:
+                await cls._save_bindings(remaining)
+        except PermissionTupleWriteError:
+            raise
+        except Exception as error:
+            logger.exception("failed to clear private-channel bindings: channel_id=%s", channel_id)
+            raise PermissionTupleWriteError(exception=error) from error
+        return removed
+
+    @classmethod
+    async def clear_non_owner_bindings(cls, channel_id: str) -> int:
+        """Compatibility helper for callers that only revoke non-owner grants."""
         bindings = await cls._get_bindings()
         remaining: list[dict] = []
         removed = 0
@@ -686,31 +782,15 @@ class ChannelAuthorizationService:
 
     @staticmethod
     async def _get_bindings() -> list[dict]:
-        row = await ConfigDao.aget_config_by_key(_RELATION_MODEL_BINDINGS_KEY)
-        if not row or not (row.value or "").strip():
-            return []
-        try:
-            bindings = json.loads(row.value or "[]")
-        except Exception:
-            return []
-        return bindings if isinstance(bindings, list) else []
+        return await get_bindings()
 
     @staticmethod
     async def _save_bindings(bindings: list[dict]) -> None:
-        await ConfigDao.insert_or_update_config(
-            _RELATION_MODEL_BINDINGS_KEY,
-            json.dumps(bindings, ensure_ascii=False),
-        )
+        await save_bindings(bindings)
 
     @classmethod
     async def _get_relation_models(cls) -> list[dict]:
-        row = await ConfigDao.aget_config_by_key(_RELATION_MODELS_KEY)
-        if not row or not (row.value or "").strip():
-            return cls._default_relation_models()
-        try:
-            models = json.loads(row.value or "[]")
-        except Exception:
-            return cls._default_relation_models()
+        models = await get_relation_models()
         if not isinstance(models, list) or not models:
             return cls._default_relation_models()
         return [cls._normalize_model_dict(model) for model in models]

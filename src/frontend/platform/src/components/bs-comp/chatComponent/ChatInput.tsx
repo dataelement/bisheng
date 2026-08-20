@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { ClearIcon } from "@/components/bs-icons/clear";
 import { FormIcon } from "@/components/bs-icons/form";
 import { SendIcon } from "@/components/bs-icons/send";
@@ -128,16 +129,16 @@ export default function ChatInput({ clear, form, questions, inputForm, wsUrl, on
 
         return new Promise((res, rej) => {
             try {
-                let startTime = Date.now();
+                const startTime = Date.now();
                 const ws = new WebSocket(`${webSocketProtocol}://${wsUrl}&chat_id=${chatId}`)
                 wsRef.current = ws
                 // websocket linsen
                 ws.onopen = () => {
                     // 记录连接成功的时间
-                    let endTime = Date.now();
+                    const endTime = Date.now();
 
                     // 计算连接建立所需的时间
-                    let connectionTime = endTime - startTime;
+                    const connectionTime = endTime - startTime;
 
                     // console.log('WebSocket 连接建立时间: ' + connectionTime + ' 毫秒');
                     console.log("WebSocket connection established!");

@@ -1,5 +1,7 @@
+// @ts-strict-ignore
 import { Outlined } from "bisheng-icons";
 import { useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import { KnowledgeSpace, SpaceRole, SPACE_CHILDREN_STATUS_NUMS_EXCLUDE_FAILED } from "~/api/knowledge";
 import {
@@ -32,7 +34,6 @@ interface KnowledgeSpaceItemProps {
     onLeave: (id: string) => void;
     onPin: (id: string, pinned: boolean) => void;
     onSettings?: (space: KnowledgeSpace) => void;
-    onManageMembers?: (space: KnowledgeSpace) => void;
     /** F040: lazily resolve this space's action permissions when its menu opens. */
     onMenuOpen?: () => void;
     canEditSpace?: boolean;
@@ -55,7 +56,6 @@ export default function KnowledgeSpaceItem({
     onLeave,
     onPin,
     onSettings,
-    onManageMembers,
     onMenuOpen,
     canEditSpace = false,
     canDeleteSpace = false,
@@ -98,25 +98,10 @@ export default function KnowledgeSpaceItem({
         onAfterNavigate?.();
     };
 
-    const rename = (e: React.FocusEvent<HTMLInputElement>) => {
-        const newName = e.target.value.trim();
-        setIsEditing(false);
-        if (!newName) return;
-        if (getFullWidthLength(newName) > 50) {
-            return showToast({
-                message: localize("com_knowledge.max_20_chars_spaced"),
-                severity: NotificationSeverity.ERROR
-            });
-        }
-        if (newName && newName !== space.name) {
-            onUpdate({ ...space, name: newName });
-        }
-    };
-
     // Shared action-menu items, reused by the "..." dropdown and the right-click menu.
     const moreMenuItems = (
         <>
-            {canEditSpace && (
+            {(canEditSpace || canManageMembers) && (
                 <DropdownMenuItem
                     className={sidebarListMoreMenuItemClassName}
                     onClick={() => onSettings?.(space)}
@@ -124,17 +109,6 @@ export default function KnowledgeSpaceItem({
                     <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                     <span className={sidebarListMoreMenuLabelClassName}>
                         {localize("com_knowledge.space_settings")}
-                    </span>
-                </DropdownMenuItem>
-            )}
-            {canManageMembers && (
-                <DropdownMenuItem
-                    className={sidebarListMoreMenuItemClassName}
-                    onClick={() => onManageMembers?.(space)}
-                >
-                    <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
-                    <span className={sidebarListMoreMenuLabelClassName}>
-                        {localize("com_knowledge.member_management")}
                     </span>
                 </DropdownMenuItem>
             )}
@@ -215,8 +189,14 @@ export default function KnowledgeSpaceItem({
                 onClick={() => onSelect(space)}
                 onContextMenu={handleRowContextMenu}
             >
-                {/* Right-click menu: an invisible cursor-anchored trigger drives the same items as the "..." menu. */}
-                {!hideMoreMenu && (
+                {/* Right-click menu: an invisible cursor-anchored trigger drives the same
+                    items as the "..." menu. Portaled to <body> so the trigger's
+                    `position: fixed` anchors to the viewport — the sidebar scroll container
+                    has `container-type: inline-size`, which would otherwise become the
+                    trigger's containing block and offset the popup from the cursor (visible
+                    in the WeCom WebView). React events still bubble through the component
+                    tree, so the stopPropagation calls below still guard the row's onClick. */}
+                {!hideMoreMenu && createPortal(
                     <DropdownMenu open={contextMenuOpen} onOpenChange={setContextMenuOpen}>
                         <DropdownMenuTrigger asChild>
                             <button
@@ -231,7 +211,8 @@ export default function KnowledgeSpaceItem({
                         <SidebarListMoreMenuContent onClick={(e) => e.stopPropagation()}>
                             {moreMenuItems}
                         </SidebarListMoreMenuContent>
-                    </DropdownMenu>
+                    </DropdownMenu>,
+                    document.body,
                 )}
                 <div className="flex items-center flex-1">
                     {/* Expand/collapse chevron — only shown when treeEnabled.

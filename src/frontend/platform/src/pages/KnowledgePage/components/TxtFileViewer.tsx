@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useEffect } from 'react';
 import { MarkdownView } from './PreviewParagraph';
 

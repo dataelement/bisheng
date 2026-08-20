@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

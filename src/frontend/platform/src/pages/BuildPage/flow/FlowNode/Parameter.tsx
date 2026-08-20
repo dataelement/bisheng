@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { WorkflowNode, WorkflowNodeParam } from "@/types/flow";
 import CodeInputItem from "./component/CodeInputItem";
 import CodeOutputItem from "./component/CodeOutputItem";

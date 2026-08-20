@@ -25,7 +25,7 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'flex cursor-default select-none items-center rounded-[6px] px-2 py-[5px] text-sm font-medium outline-none hover:bg-[#F2F3F5] focus:bg-[#F2F3F5] data-[state=open]:bg-[#F2F3F5] dark:hover:bg-gray-900 dark:focus:bg-gray-900 dark:data-[state=open]:bg-gray-900',
+      'flex cursor-default select-none items-center rounded-md px-2 py-[5px] text-sm font-medium outline-none hover:bg-[#F2F3F5] focus:bg-[#F2F3F5] data-[state=open]:bg-[#F2F3F5] dark:hover:bg-gray-900 dark:focus:bg-gray-900 dark:data-[state=open]:bg-gray-900',
       inset ? 'pl-8' : '',
       className,
     )}
@@ -39,12 +39,22 @@ DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayNam
 
 const DropdownMenuSubContent = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubContent>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>
->(({ className = '', ...props }, ref) => (
+  Omit<React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>, 'align'> & {
+    /**
+     * Cross-axis alignment against the sub-trigger: 'start' (default) lines up
+     * their top edges, 'center' centers the panel vertically on the trigger row.
+     * Radix types SubContent's align as 'start' | 'end' only, but the runtime
+     * hands the value straight to Popper — which does support 'center' — so we
+     * widen it here rather than hand-computing an alignOffset from panel height.
+     */
+    align?: 'start' | 'center' | 'end';
+  }
+>(({ className = '', align = 'start', ...props }, ref) => (
   <DropdownMenuPrimitive.SubContent
     ref={ref}
+    align={align as 'start' | 'end'}
     className={cn(
-      'z-50 min-w-[8rem] overflow-hidden rounded-[8px] border-0 bg-white p-2 text-gray-700 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)] animate-in slide-in-from-left-1 dark:bg-gray-800 dark:text-gray-400',
+      'z-50 min-w-[8rem] overflow-hidden rounded-lg border-0 bg-white p-2 text-gray-700 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)] animate-in slide-in-from-left-1 dark:bg-gray-800 dark:text-gray-400',
       className,
     )}
     {...props}
@@ -61,7 +71,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        'z-50 flex min-w-[8rem] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white p-2 text-gray-700 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)] animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:bg-gray-800 dark:text-gray-400',
+        'z-50 flex min-w-[8rem] flex-col gap-0 overflow-hidden rounded-lg border-0 bg-white p-2 text-gray-700 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)] animate-in data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:bg-gray-800 dark:text-gray-400',
         className,
       )}
       {...props}
@@ -79,7 +89,7 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center rounded-[6px] px-2 py-[5px] text-sm text-[#1D2129] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-[#F2F3F5] data-[highlighted]:text-[#1D2129]',
+      'relative flex cursor-pointer select-none items-center rounded-md px-2 py-[5px] text-sm text-[#1D2129] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-[#F2F3F5] data-[highlighted]:text-[#1D2129]',
       inset ? 'pl-8' : '',
       className,
     )}
@@ -90,23 +100,37 @@ DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
 
 const DropdownMenuCheckboxItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>
->(({ className = '', children, checked, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem> & {
+    /** Where the check sits. "left" indents every label to keep them aligned;
+     *  "right" keeps labels flush and puts the check in a trailing slot. */
+    indicatorSide?: 'left' | 'right';
+  }
+>(({ className = '', children, checked, indicatorSide = 'left', ...props }, ref) => (
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center rounded-[8px] py-1.5 pl-8 pr-2 text-sm text-[#1D2129] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-[#F2F3F5] data-[highlighted]:text-[#1D2129]',
+      'relative flex cursor-pointer select-none items-center rounded-lg py-1.5 text-sm text-[#1D2129] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-[#F2F3F5] data-[highlighted]:text-[#1D2129]',
+      indicatorSide === 'left' ? 'pl-8 pr-2' : 'px-2',
       className,
     )}
     checked={checked}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-      <DropdownMenuPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-primary" />
-      </DropdownMenuPrimitive.ItemIndicator>
-    </span>
+    {indicatorSide === 'left' && (
+      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <Check className="h-4 w-4 text-primary" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+    )}
     {children}
+    {indicatorSide === 'right' && (
+      <span className="ml-auto flex size-4 shrink-0 items-center justify-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <Check className="size-4 text-primary" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+    )}
   </DropdownMenuPrimitive.CheckboxItem>
 ));
 DropdownMenuCheckboxItem.displayName = DropdownMenuPrimitive.CheckboxItem.displayName;

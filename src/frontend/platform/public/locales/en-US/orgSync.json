@@ -19,8 +19,7 @@
     "running": "Running"
   },
   "triggerType": {
-    "manual": "Manual",
-    "scheduled": "Scheduled"
+    "manual": "Manual"
   },
   "columns": {
     "time": "End time",
@@ -47,59 +46,26 @@
     "remove": "Remove"
   },
   "form": {
-    "configName": "Config Name",
-    "configNamePlaceholder": "e.g. WeChat Work Production",
-    "provider": "Provider",
-    "providerImmutable": "The provider cannot be changed after creation."
+    "provider": "Provider"
   },
   "dialog": {
-    "createTitle": "New Sync Config",
-    "editTitle": "Edit Sync Config"
+    "createTitle": "New Sync Config"
   },
   "wecom": {
     "corpid": "Corp ID",
-    "corpidPlaceholder": "WeChat Work CorpID (starts with ww)",
-    "corpidRequired": "Corp ID is required",
-    "corpsecret": "Corp Secret",
-    "corpsecretPlaceholder": "Application secret",
-    "corpsecretMaskedHint": "Leave blank or keep **** to preserve the stored secret",
-    "corpsecretRequired": "Corp Secret is required",
-    "corpsecretEditHint": "The masked placeholder keeps the stored secret on save.",
-    "corpsecretCannotBeMasked": "A real secret is required when creating a new config.",
-    "agentId": "Agent ID",
-    "agentIdPlaceholder": "The application AgentId from the WeChat Work console",
-    "agentIdRequired": "Agent ID is required",
-    "allowDeptIds": "Allowed Root Department IDs",
-    "allowDeptIdsHint": "Leave empty to use WeChat Work root (id=1). Integers only; add each root separately.",
-    "allowDeptIdsPlaceholder": "Type an integer then click Add",
-    "allowDeptIdsDefault": "(default [1])"
+    "corpsecret": "Corp Secret"
   },
   "feishu": {
-    "appId": "App ID",
-    "appIdPlaceholder": "Feishu custom app ID",
-    "appIdRequired": "App ID is required",
-    "appSecret": "App Secret",
-    "appSecretPlaceholder": "Feishu application secret",
-    "appSecretMaskedHint": "Leave blank or keep **** to preserve the stored secret",
-    "appSecretRequired": "App Secret is required",
-    "appSecretCannotBeMasked": "A real secret is required when creating a new config."
+    "appId": "App ID"
   },
   "generic": {
-    "endpointUrl": "API URL",
-    "endpointUrlPlaceholder": "https://example.com/org-sync",
-    "endpointUrlRequired": "API URL is required",
-    "endpointUrlInvalid": "URL must start with http:// or https://",
     "apiKey": "API Key (optional)",
-    "apiKeyPlaceholder": "Authentication key (if required)",
-    "apiKeyMaskedHint": "Leave blank or keep **** to preserve the stored key"
+    "apiKeyPlaceholder": "Authentication key (if required)"
   },
   "validation": {
     "nameRequired": "Config name is required"
   },
-  "testConnection": {
-    "successTitle": "Connection OK",
-    "successDesc": "{{org}} — {{depts}} departments, {{members}} members"
-  },
+  "testConnection": {},
   "confirmExecute": {
     "title": "Run Sync Now?",
     "desc": "Syncing “{{name}}” will fetch the latest departments and members; related data may change during the run."
@@ -118,9 +84,6 @@
   "syncLog": {
     "title": "Sync Log · {{name}}",
     "status": "Status",
-    "triggerType": "Trigger",
-    "deptChanges": "Departments",
-    "memberChanges": "Members",
     "startTime": "Start",
     "endTime": "End",
     "empty": "No sync history yet"

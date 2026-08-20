@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 
 import { useContext, useEffect, useRef, useState } from "react";
@@ -180,8 +181,8 @@ const useUpload = (open, maxSize, fileKey, uploadFunc) => {
     useEffect(() => {
         const maxRequestCount = 3 // 最大并发数
         // 分类
-        let awaitTasks = [] // 排队上传的任务
-        let peddingTasks = [] // 上传中的任务
+        const awaitTasks = [] // 排队上传的任务
+        const peddingTasks = [] // 上传中的任务
         // 任务分组
         progressList.forEach(item => {
             if (item.await) {

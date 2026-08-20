@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Button } from "@/components/bs-ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog";
 import { Input } from "@/components/bs-ui/input";
@@ -347,7 +348,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
                 } else {
                     // 新变量名生成逻辑
                     let counter = 1;
-                    let baseName = names[formType];
+                    const baseName = names[formType];
                     let name = baseName;
                     while (existingOptions?.some(opt => opt.key === name)) {
                         counter += 1;
@@ -358,7 +359,7 @@ function Form({ nodeId, nodeData, initialData, onSubmit, onCancel, existingOptio
             } else {
                 // 新建模式生成唯一变量名
                 let counter = 1;
-                let baseName = names[formType];
+                const baseName = names[formType];
                 let name = baseName;
                 while (existingOptions?.some(opt => opt.key === name)) {
                     counter += 1;
@@ -855,8 +856,8 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
         // 按统一规则清理字段：路径恒留；图片看上传类型；解析结果看是否解析。
         let cleanedImageFile = image_file;
         let cleanedFileContent = file_content;
-        let cleanedFilePath = file_path;
-        let cleanedFileContentSize = file_content_size;
+        const cleanedFilePath = file_path;
+        const cleanedFileContentSize = file_content_size;
 
         if (type === FormType.File) {
             if (!isParse) {
@@ -970,7 +971,7 @@ export default function InputFormItem({ data, nodeId, onChange, onValidate, onVa
                 }
             }
 
-            let text = `${el.value}（${variableList}）`;
+            const text = `${el.value}（${variableList}）`;
 
             return {
                 key: el.key,

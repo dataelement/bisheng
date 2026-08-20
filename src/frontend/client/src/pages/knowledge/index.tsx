@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
@@ -20,19 +21,16 @@ import {
 import {
     KnowledgeSpace,
     SpaceRole,
-    VisibilityType,
     SpaceSortType,
+    VisibilityType,
     getSpaceInfoApi,
     getMineSpacesApi,
     getJoinedSpacesApi,
     getDepartmentSpacesApi,
-    createSpaceApi,
-    updateSpaceApi,
     deleteSpaceApi,
 } from "~/api/knowledge";
 import { NotificationSeverity } from "~/common";
 import { useConfirm, useToastContext } from "~/Providers";
-import { CreateKnowledgeSpaceDrawer, type CreateKnowledgeSpaceFormData } from "./CreateKnowledgeSpaceDrawer";
 import { KnowledgeSpaceSidebar } from "./sidebar/KnowledgeSpaceSidebar";
 import { KnowledgeSpaceContent } from "./SpaceDetail";
 import { KnowledgeAiBottomDock } from "./SpaceDetail/AiChat/KnowledgeAiBottomDock";
@@ -40,17 +38,19 @@ import { KnowledgeSpacePreviewDrawer } from "./KnowledgeSpacePreviewDrawer";
 import KnowledgeSquare from "./KnowledgeSquare";
 import { useFileManager } from "./hooks/useFileManager";
 import { useFileUpload } from "./hooks/useFileUpload";
-import { useLocalize, useMediaQuery, usePrefersMobileLayout } from "~/hooks";
+import { useLocalize, useMediaQuery, usePrefersMobileLayout, useWorkbenchMenuNames } from "~/hooks";
 import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useAuthContext } from "~/hooks/AuthContext";
 import { cn } from "~/utils";
-import { KnowledgeSpaceShareDialog } from "./SpaceDetail/KnowledgeSpaceShareDialog";
 import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { resolveUploadSizeLimits } from "./knowledgeUtils";
+import { knowledgeUploadCapabilities } from "./knowledgeUploadCapabilities";
 
 export default function Knowledge() {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const bishengConfig = useRecoilValue(bishengConfState);
     const uploadSizeLimits = useMemo(
         () => resolveUploadSizeLimits(bishengConfig),
@@ -63,11 +63,7 @@ export default function Knowledge() {
     const { isOverQuota } = useEffectiveQuota();
     const previewNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [activeSpace, setActiveSpace] = useState<KnowledgeSpace | null>(null);
-    const [showCreateDrawer, setShowCreateDrawer] = useState(false);
-    const [editingSpace, setEditingSpace] = useState<KnowledgeSpace | null>(null);
     const [showKnowledgeSquare, setShowKnowledgeSquare] = useState(false);
-    const [spacePermissionDialogOpen, setSpacePermissionDialogOpen] = useState(false);
-    const [spacePermissionDialogSpace, setSpacePermissionDialogSpace] = useState<KnowledgeSpace | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [dragError, setDragError] = useState<string | null>(null);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -109,11 +105,6 @@ export default function Knowledge() {
     const [squareStatusOverride, setSquareStatusOverride] = useState<
         Record<string, "join" | "joined" | "pending" | "rejected">
     >({});
-
-    const openSpacePermissionDialog = (space: KnowledgeSpace) => {
-        setSpacePermissionDialogSpace(space);
-        setSpacePermissionDialogOpen(true);
-    };
 
     /** Wait for user fetch before applying plugin gate; avoid share routes firing APIs then bouncing wrong. */
     const knowledgePluginGate = useMemo((): "loading" | "enabled" | "disabled" => {
@@ -503,10 +494,9 @@ export default function Knowledge() {
                     });
                     return;
                 }
-                setEditingSpace(null);
-                setShowCreateDrawer(true);
+                navigate("/knowledge/create");
             } catch {
-                // 如果校验接口失败，为避免阻塞用户操作，仍允许打开创建抽屉
+                // 如果校验接口失败，为避免阻塞用户操作，仍允许进入创建页面
                 // （可根据需要改成硬拦截）
                 // Fall back to cached count when possible; otherwise keep the original behavior.
                 const cachedUpdate = queryClient.getQueryData<KnowledgeSpace[]>(["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME]);
@@ -521,86 +511,13 @@ export default function Knowledge() {
                     return;
                 }
 
-                setEditingSpace(null);
-                setShowCreateDrawer(true);
+                navigate("/knowledge/create");
             }
         })();
     };
 
-    // Open space settings drawer — fetch detail first, then open
-    const handleSpaceSettings = async (space: KnowledgeSpace) => {
-        try {
-            const detail = await getSpaceInfoApi(space.id);
-            setEditingSpace({ ...space, ...detail, id: space.id });
-        } catch {
-            // Fallback to list-level data if detail fetch fails
-            setEditingSpace(space);
-        }
-        setShowCreateDrawer(true);
-    };
-
-    const handleConfirmCreateSpace = async (form: CreateKnowledgeSpaceFormData) => {
-        try {
-            // Map joinPolicy → auth_type
-            const auth_type =
-                form.joinPolicy === "public"
-                    ? VisibilityType.PUBLIC
-                    : form.joinPolicy === "review"
-                        ? VisibilityType.APPROVAL
-                        : VisibilityType.PRIVATE;
-            const is_released = form.publishToSquare === "yes";
-
-            if (editingSpace) {
-                // ── Edit mode ──
-                const updated = await updateSpaceApi(editingSpace.id, {
-                    name: form.name,
-                    description: form.description,
-                    auth_type,
-                    is_released,
-                });
-                if (activeSpace?.id === updated.id) setActiveSpace({ ...updated, role: activeSpace.role });
-                queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
-                showToast({ message: localize("com_knowledge.space_updated"), severity: NotificationSeverity.SUCCESS });
-            } else {
-                // ── Create mode ──
-                const newSpace = await createSpaceApi({
-                    name: form.name,
-                    description: form.description,
-                    auth_type,
-                    is_released,
-                });
-                setActiveSpace(newSpace);
-
-                // Optimistically update cached "mine created" lists so subsequent "create limit check"
-                // doesn't rely on backend propagation timing.
-                const createdKeys: Array<[string, string, SpaceSortType]> = [
-                    ["knowledgeSpaces", "mine", SpaceSortType.UPDATE_TIME],
-                    ["knowledgeSpaces", "mine", SpaceSortType.NAME],
-                ];
-                for (const key of createdKeys) {
-                    queryClient.setQueryData<KnowledgeSpace[]>(key, (prev) => {
-                        if (!prev) return [newSpace];
-                        if (prev.some((s) => s.id === newSpace.id)) return prev;
-                        return [newSpace, ...prev];
-                    });
-                }
-
-                queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces", "mine"] });
-                showToast({ message: localize("com_knowledge.space_create_success"), severity: NotificationSeverity.SUCCESS });
-            }
-            return true;
-        } catch (error) {
-            const message = error instanceof Error && error.message
-                ? error.message
-                : (editingSpace
-                    ? localize("com_knowledge.update_space_failed")
-                    : localize("com_knowledge.create_space_failed"));
-            showToast({
-                message,
-                severity: NotificationSeverity.ERROR
-            });
-            return false;
-        }
+    const handleSpaceSettings = (space: KnowledgeSpace) => {
+        navigate(`/knowledge/space/${space.id}/settings`);
     };
 
     // Delete the current space from the file-page top-bar menu, then return to the list.
@@ -706,7 +623,7 @@ export default function Knowledge() {
             {/* Drag and Drop Overlay */}
             {isDragging && (
                 <div
-                    className={`absolute inset-0.5 z-[100] rounded-[12px] backdrop-blur-[16px] flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
+                    className={`absolute inset-0.5 z-[100] rounded-[12px] flex flex-col items-center justify-center pointer-events-none transition-all duration-300 ${dragError ? "border border-dashed border-red-500 bg-[rgba(255,236,232,0.7)]" : "border border-dashed bg-[rgba(255,255,255,0.7)]"}`}
                 >
                     <div className={`flex flex-col items-center justify-center p-8 rounded-2xl ${dragError ? "bg-transparent" : "bg-white/50"}`}>
                         {dragError ? (
@@ -717,10 +634,17 @@ export default function Knowledge() {
                         <div className="text-center text-xs text-gray-400 leading-5">
                             <p>{localize("com_knowledge.supported_formats")}</p>
                             <p>{localize("com_knowledge.format_list")}</p>
-                            <p>{localize("com_knowledge.upload_size_limits_hint", {
-                                docMax: uploadSizeLimits.defaultMaxMB,
-                                mediaMax: uploadSizeLimits.mediaMaxMB,
-                            })}</p>
+                            <p>
+                                {localize(
+                                    knowledgeUploadCapabilities.media
+                                        ? "com_knowledge.upload_size_limits_hint"
+                                        : "com_knowledge.upload_size_limit_hint_without_media",
+                                    {
+                                        docMax: uploadSizeLimits.defaultMaxMB,
+                                        mediaMax: uploadSizeLimits.mediaMaxMB,
+                                    },
+                                )}
+                            </p>
                             <p>{localize("com_knowledge.max_upload_50_short")}</p>
                         </div>
                     </div>
@@ -737,9 +661,6 @@ export default function Knowledge() {
                         onSpaceSelect={handleSpaceSelect}
                         onCreateSpace={handleCreateSpace}
                         onSpaceSettings={handleSpaceSettings}
-                        onManageMembers={(space) => {
-                            openSpacePermissionDialog(space);
-                        }}
                         onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                         collapsed={sidebarCollapsed}
                         onCollapsedChange={setSidebarCollapsed}
@@ -762,7 +683,7 @@ export default function Knowledge() {
                         role="dialog"
                         aria-modal="true"
                         aria-hidden={!spaceListDrawerOpen}
-                        aria-label={localize("com_knowledge.knowledge_space")}
+                        aria-label={menuNames.knowledge}
                     >
                         <div className="min-h-0 flex-1 overflow-hidden">
                             <KnowledgeSpaceSidebar
@@ -783,10 +704,6 @@ export default function Knowledge() {
                                     handleSpaceSettings(space);
                                     setSpaceListDrawerOpen(false);
                                 }}
-                                onManageMembers={(space) => {
-                                    openSpacePermissionDialog(space);
-                                    setSpaceListDrawerOpen(false);
-                                }}
                                 onKnowledgeSquare={() => {
                                     setShowKnowledgeSquare(true);
                                     setSpaceListDrawerOpen(false);
@@ -801,7 +718,7 @@ export default function Knowledge() {
                                     setShowKnowledgeSquare(true);
                                     setSpaceListDrawerOpen(false);
                                 }}
-                                className="h-8 flex-1 gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                                className="h-8 flex-1 gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                             >
                                 <Outlined.BlocksAndArrows className="size-4" />
                                 {localize("com_knowledge.go_to_square")}
@@ -812,7 +729,7 @@ export default function Knowledge() {
                                     handleCreateSpace();
                                     setSpaceListDrawerOpen(false);
                                 }}
-                                className="h-8 flex-1 gap-1 rounded-[6px] bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
+                                className="h-8 flex-1 gap-1 rounded-md bg-blue-100 px-3 py-[5px] text-sm font-normal leading-[22px] text-blue-main hover:bg-blue-200"
                             >
                                 <Plus className="size-4" />
                                 {localize("com_knowledge.create_knowledge_space")}
@@ -913,7 +830,7 @@ export default function Knowledge() {
                                 <Outlined.SidebarMenu className="size-5" />
                             </button>
                             <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-[#212121]">
-                                {localize("com_knowledge.knowledge_space")}
+                                {menuNames.knowledge}
                             </span>
                             <span className="size-5 shrink-0" aria-hidden />
                         </div>
@@ -952,7 +869,6 @@ export default function Knowledge() {
                                     onSpaceSelect={handleSpaceSelect}
                                     onCreateSpace={handleCreateSpace}
                                     onSpaceSettings={handleSpaceSettings}
-                                    onManageMembers={(space) => openSpacePermissionDialog(space)}
                                     onKnowledgeSquare={() => setShowKnowledgeSquare(true)}
                                 />
                             </div>
@@ -961,7 +877,7 @@ export default function Knowledge() {
                                 <Button
                                     variant="secondary"
                                     onClick={() => setShowKnowledgeSquare(true)}
-                                    className="h-8 w-full gap-1 rounded-[6px] border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
+                                    className="h-8 w-full gap-1 rounded-md border border-[#e3e3e3] bg-white px-3 py-[5px] text-sm font-normal leading-[22px] text-[#666666] hover:bg-[#F4F4F4]"
                                 >
                                     <Outlined.BlocksAndArrows className="size-4" />
                                     {localize("com_knowledge.go_to_square")}
@@ -1001,27 +917,6 @@ export default function Knowledge() {
                     </div>
                 </div>
             )}
-
-            <CreateKnowledgeSpaceDrawer
-                open={showCreateDrawer}
-                onOpenChange={setShowCreateDrawer}
-                onConfirm={handleConfirmCreateSpace}
-                mode={editingSpace ? "edit" : "create"}
-                editingSpace={editingSpace}
-                onViewSpace={() => setShowCreateDrawer(false)}
-                onManageMembers={() => {
-                    setShowCreateDrawer(false);
-                    if (activeSpace) openSpacePermissionDialog(activeSpace);
-                }}
-            />
-
-            <KnowledgeSpaceShareDialog
-                open={spacePermissionDialogOpen}
-                onOpenChange={setSpacePermissionDialogOpen}
-                resourceId={spacePermissionDialogSpace?.id || ""}
-                resourceName={spacePermissionDialogSpace?.name || ""}
-                isDepartmentSpace={spacePermissionDialogSpace?.spaceKind === "department"}
-            />
 
             <KnowledgeSpacePreviewDrawer
                 spaceId={previewSpaceId}

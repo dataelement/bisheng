@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "../../../components/bs-ui/button";
 import {
@@ -33,6 +34,7 @@ import WebLinkImportDialog from "./WebLinkImportDialog";
 import FileTagList from "./tags/FileTagList";
 import KnowledgeTagSelect from "./tags/KnowledgeTagSelect";
 import { resolveKnowledgeParseFailure } from "../knowledgeParseFailureMessage";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
 interface StatusIndicatorProps {
     status: number;
@@ -92,7 +94,7 @@ export const StatusIndicator: React.FC<StatusIndicatorProps> = ({ status, remark
                 }
                 const mediaMessage = formatMediaParseFailureMessage(obj, t);
                 if (mediaMessage) return mediaMessage;
-                return t(`errors.${obj.status_code}`, obj.data)
+                return t(`api_errors:${obj.status_code}`, { ...(obj.data || {}), defaultValue: obj.status_message || t('api_errors:fallback') })
             } catch (error) {
                 return trimmedRemark
             }
@@ -329,10 +331,10 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                     downloadFile(url, `${libName}_${dateStr}_${timeStr}.zip`);
                 }
             } else {
-                toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+                toast({ variant: 'error', description: t('api_errors:10003') });
             }
         } catch (e) {
-            toast({ variant: 'error', description: t('errors.10003', { ns: 'bs' }) });
+            toast({ variant: 'error', description: t('api_errors:10003') });
         } finally {
             setIsDownloading(false);
         }
@@ -528,9 +530,18 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                     {canEditKb && (
                         <AddKnowledgeFileMenu
                             buttonClassName="px-4 md:px-8"
-                            supportedFormatsLabel={t("supportedFormatsTip", { defaultValue: "" })}
+                            supportedFormatsLabel={t(
+                                knowledgeUploadCapabilities.media
+                                    ? "supportedFormatsTip"
+                                    : "supportedFormatsTipWithoutMedia",
+                                { defaultValue: "" },
+                            )}
                             onUploadFile={() => navigate(`/filelib/upload/${id}`)}
-                            onWebLink={() => setWebLinkOpen(true)}
+                            onWebLink={() => {
+                                if (knowledgeUploadCapabilities.webLink) {
+                                    setWebLinkOpen(true);
+                                }
+                            }}
                         />
                     )}
                 </div>
@@ -798,12 +809,14 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
                 id={id}
                 initialMetadata={metadataFields}
             />
-            <WebLinkImportDialog
-                knowledgeId={id}
-                open={webLinkOpen}
-                onOpenChange={setWebLinkOpen}
-                onImported={reload}
-            />
+            {knowledgeUploadCapabilities.webLink && (
+                <WebLinkImportDialog
+                    knowledgeId={id}
+                    open={webLinkOpen}
+                    onOpenChange={setWebLinkOpen}
+                    onImported={reload}
+                />
+            )}
         </div>
 
     )

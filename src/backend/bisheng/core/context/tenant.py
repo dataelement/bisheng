@@ -32,7 +32,7 @@ Usage:
     to decide whether to honour the admin scope override.
 """
 
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from contextvars import ContextVar
 from typing import FrozenSet, Optional
 
@@ -107,6 +107,28 @@ def bypass_tenant_filter():
         yield
     finally:
         _bypass_tenant_filter.reset(token)
+
+
+def bypass_tenant_filter_if(condition: bool) -> AbstractContextManager:
+    """``bypass_tenant_filter()`` when ``condition`` else a no-op scope.
+
+    For reads authorized by a *capability* rather than by tenant membership —
+    currently share links: the secret token is the grant, and recipients are
+    routinely in a different tenant than the owner. Because the rows behind a
+    share (``message``, ``session``, ``linsight_session_version``,
+    ``linsight_execute_task``) are all tenant-aware, the automatic
+    ``tenant_id IN (leaf, root)`` filter hides them from a recipient in another
+    child tenant; the endpoint then sees an empty result, skips its
+    authorization branch and answers ``200 []`` — a blank page with no error.
+
+    Two properties make this safe, and both must hold at every call site:
+      1. It only widens the READ. The owner / capability check still runs
+         afterwards, so a token that does not match the requested resource
+         still yields UnAuthorized and nothing is returned.
+      2. It is opt-in per request — callers without a capability stay strictly
+         tenant-filtered, so this is not a blanket escape hatch.
+    """
+    return bypass_tenant_filter() if condition else nullcontext()
 
 
 def is_tenant_filter_bypassed() -> bool:

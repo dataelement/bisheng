@@ -60,7 +60,7 @@ const SPEC_PAGES: PageDef[] = [
 
 /** Progress registry — migration dashboards & ledgers, one per in-flight component. */
 const PROGRESS_PAGES: PageDef[] = [
-  { id: 'overview', label: '总览看板', group: '总则', Page: ProgressOverview },
+  { id: 'overview', label: '现状总览', group: '总则', Page: ProgressOverview },
   { id: 'typography', label: '字体 Typography', group: '基础 Foundation', status: 'wip', Page: TypographyProgress },
   { id: 'color', label: '色彩 Colors', group: '基础 Foundation', status: 'wip', Page: ColorProgress },
   { id: 'button', label: 'Button 按钮', group: '通用 General', status: 'wip', Page: ButtonProgress },
@@ -68,9 +68,11 @@ const PROGRESS_PAGES: PageDef[] = [
   { id: 'confirm', label: '二次确认弹窗', group: '反馈 Feedback', status: 'wip', Page: ConfirmProgress },
 ];
 
-const REGISTRY: Record<Mode, PageDef[]> = { spec: SPEC_PAGES, progress: PROGRESS_PAGES };
+/* Order matters — Object.keys drives the segment control, and 现状梳理 is the
+   gallery's primary job (the written spec now lives in the separate rspress site). */
+const REGISTRY: Record<Mode, PageDef[]> = { progress: PROGRESS_PAGES, spec: SPEC_PAGES };
 
-const MODE_LABEL: Record<Mode, string> = { spec: '设计规范', progress: '迁移进度' };
+const MODE_LABEL: Record<Mode, string> = { progress: '现状梳理', spec: '设计规范' };
 
 const STATUS_DOT: Record<Status, string> = {
   wip: 'bg-amber-500',
@@ -87,7 +89,7 @@ function groupsOf(pages: PageDef[]): string[] {
 }
 
 export default function GalleryApp() {
-  const [mode, setMode] = useState<Mode>('spec');
+  const [mode, setMode] = useState<Mode>('progress');
   /* Remember the active page per mode, so toggling back restores where you were. */
   const [activeIds, setActiveIds] = useState<Record<Mode, string>>({
     spec: 'overview',

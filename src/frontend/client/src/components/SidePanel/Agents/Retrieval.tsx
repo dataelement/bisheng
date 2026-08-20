@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useEffect, useMemo } from 'react';
 import { Capabilities } from '~/types/chat';
 import { useFormContext, Controller, useWatch } from 'react-hook-form';

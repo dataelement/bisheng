@@ -1,5 +1,14 @@
+// @ts-strict-ignore
 import request from "./request";
 import { resolveKnowledgeParseFailureMessage } from "./knowledgeParseFailureMessage";
+import { mapInitialPermissionResult } from "./permission";
+import type {
+    InitialPermissionResult,
+    InitialPermissionsPayload,
+    RawInitialPermissionResult,
+} from "./permission";
+
+export type { InitialPermissionResult } from "./permission";
 
 // Standard backend response wrapper
 interface ApiResponse<T> {
@@ -127,6 +136,7 @@ export interface KnowledgeSpace {
     departmentName?: string;
     approvalEnabled?: boolean;
     sensitiveCheckEnabled?: boolean;
+    initialPermissionResult?: InitialPermissionResult;
 }
 
 export type SpaceSubscribeStatus = "subscribed" | "pending";
@@ -195,6 +205,12 @@ export interface KnowledgeFile {
     user_name?: string;           // mapped from user_name — original uploader of this file
     // Transient UI-only fields
     isCreating?: boolean;
+    /**
+     * The unmapped server row, kept only for duplicate entries (status 3) so the
+     * retry API can echo it back verbatim. Set by the list mappers below; nothing
+     * reads its fields, so it travels as the raw shape it arrived in.
+     */
+    _raw?: RawSpaceChild;
 }
 
 // ─────────────────────────────────────────────
@@ -228,6 +244,7 @@ interface RawKnowledgeSpace {
     is_pending?: boolean;
     is_followed?: boolean;
     subscription_status?: string;
+    initial_permission_result?: RawInitialPermissionResult | null;
 }
 
 export interface KnowledgeSpaceTagLibraryListItem {
@@ -243,7 +260,7 @@ export interface KnowledgeSpaceTagLibraryPage {
     total: number;
 }
 
-interface RawSpaceChild {
+export interface RawSpaceChild {
     id: number;
     name: string;
     /** "folder" | "file" */
@@ -952,7 +969,7 @@ export async function getSquareSpacesApi(params?: {
 /**
  * Create a new knowledge space
  */
-export async function createSpaceApi(data: {
+export interface CreateSpacePayload {
     name: string;
     description?: string;
     icon?: string;
@@ -961,8 +978,16 @@ export async function createSpaceApi(data: {
     auto_tag_enabled?: boolean;
     auto_tag_library_id?: number | null;
     auto_tag_custom_tags?: string[] | null;
-}): Promise<KnowledgeSpace> {
-    const res: any = await request.post(`/api/v1/knowledge/space`, data);
+    initialPermissions?: InitialPermissionsPayload;
+}
+
+export async function createSpaceApi(data: CreateSpacePayload): Promise<KnowledgeSpace> {
+    const { initialPermissions, ...spaceData } = data;
+    const body = {
+        ...spaceData,
+        ...(initialPermissions ? { initial_permissions: initialPermissions } : {}),
+    };
+    const res = await request.post(`/api/v1/knowledge/space`, body);
     const statusCode = res?.status_code ?? res?.code ?? 200;
     if (statusCode !== 200) {
         throw new Error(res?.status_message || res?.message || "createSpaceApi failed");
@@ -971,7 +996,12 @@ export async function createSpaceApi(data: {
     if (!raw || raw?.id === undefined || raw?.id === null) {
         throw new Error("createSpaceApi: missing data");
     }
-    return mapSpace({ ...raw, user_role: SpaceRole.CREATOR });
+    const space = mapSpace({ ...raw, user_role: SpaceRole.CREATOR });
+    const initialPermissionResult = mapInitialPermissionResult(raw.initial_permission_result);
+    return {
+        ...space,
+        ...(initialPermissionResult ? { initialPermissionResult } : {}),
+    };
 }
 
 /**
@@ -1171,7 +1201,7 @@ export async function deleteSpaceApi(space_id: string): Promise<void> {
 export async function getFolderParentPathApi(
     spaceId: string,
     folderId: string
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
 ): Promise<Array<{ id: string; name: string }>> {
     const res = await request.get<ApiResponse<any>>(
         `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/parent`
@@ -1368,7 +1398,11 @@ export async function createFolderApi(
         }
     ) as ApiResponse<RawSpaceChild> & { message?: string; msg?: string };
     if (res?.status_code !== undefined && res.status_code !== 200) {
-        throw new Error(res.status_message || res.message || res.msg || "create folder failed");
+        // Keep the business code on the error so callers can branch on
+        // server-side rejections (e.g. 18011 folder-depth limit).
+        const err: any = new Error(res.status_message || res.message || res.msg || "create folder failed");
+        err.status_code = res.status_code;
+        throw err;
     }
     if (!res?.data) {
         throw new Error("create folder failed: missing data");
@@ -1463,7 +1497,7 @@ export async function addFilesApi(
         const file = mapChild(raw, space_id);
         // Preserve raw object for status 3 (duplicate) so retry API can use it
         if (raw?.status === 3) {
-            (file as any)._raw = raw;
+            file._raw = raw;
         }
         return file;
     });
@@ -1523,7 +1557,7 @@ export async function uploadFolderApi(
         const file = mapChild(raw, space_id);
         // Preserve raw object for status 3 (duplicate) so retry API can use it
         if (raw?.status === 3) {
-            (file as any)._raw = raw;
+            file._raw = raw;
         }
         return file;
     });

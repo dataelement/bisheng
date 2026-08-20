@@ -8,12 +8,12 @@ import { ComponentPage, ExampleGroup, CompareTable } from '../components/kit';
 export function ProgressOverview() {
   return (
     <ComponentPage
-      title="迁移进度"
-      eng="Progress"
+      title="现状总览"
+      eng="Inventory"
       description={
         <>
-          组件统一化的现状看板，给改造负责人看。左侧各组件页是对应的迁移账本（用量盘点 /
-          旧写法清单 / 待定项）。只想查规范怎么用？切回顶部的「设计规范」。
+          这个画廊的首要职能是<b>现状梳理</b>——把产品里实际存在的各种弹窗、按钮样式摆出来并排看，
+          才能看清重复与不一致。左侧各页是逐组件的现状账本。文字规范已移至独立的 rspress 文档站。
         </>
       }
       whenToUse={[
@@ -26,7 +26,7 @@ export function ProgressOverview() {
       ]}
       bodyTitle={null}
     >
-      <ExampleGroup title="进度看板">
+      <ExampleGroup title="现状看板" subtitle="2026-07-20 全仓扫描口径；数字为业务文件/出现次数实测值。">
       <CompareTable
         head={['组件', '状态', '现状', '基准（收敛目标）与剩余工作']}
         rows={[
@@ -57,19 +57,19 @@ export function ProgressOverview() {
           [
             'Button 按钮',
             '🟨 进行中',
-            '5 路并行（旧 API 已自动映射）',
-            'color×variant 双轴 v1 已落地；剩：设计师验收 → 逐批迁移 → 清退 btn 系全局类',
+            '原生 <button> 485 处 / Button 组件 264 处 / 全局 btn 类',
+            '双轴 v1 已落地，但新 color 属性业务仅 1 处使用；485 处野生 button 未收编',
           ],
           [
             'Modal 弹窗',
             '🟨 进行中',
-            '5 个并行体系 · 约 64 个业务文件',
+            '5 个并行壳体系 · 63 个业务文件',
             '标准待定 · C 套壳为基准候选（见 Modal 迁移页「待设计师定夺」）',
           ],
           [
             '二次确认弹窗',
             '🟨 进行中',
-            '2 套体系（真确认已全部迁 C 套）',
+            '2 套体系；业务仍有 13 处旧 selectClasses',
             'B 套壳与按钮已对齐 C 套；剩：死 UI 清理、表单弹窗归 Modal 期',
           ],
           ['点赞 / 点踩', '✅ 完成', '1（已统一）', 'MessageFeedbackButtons 全 6 类回答界面共用'],

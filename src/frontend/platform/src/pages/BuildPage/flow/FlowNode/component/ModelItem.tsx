@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Label } from "@/components/bs-ui/label";
 import Cascader from "@/components/bs-ui/select/cascader";
 import { getLlmDefaultModel } from "@/controllers/API/finetune";

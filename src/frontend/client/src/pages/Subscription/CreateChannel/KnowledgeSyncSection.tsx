@@ -1,7 +1,8 @@
+// @ts-strict-ignore
 /**
  * KnowledgeSyncSection — v2.5 Module D configuration UI.
  *
- * Pure controlled component. Owned by the parent CreateChannelDrawer, which
+ * Pure controlled component. Owned by the unified ChannelSettingsPage, which
  * hoists the draft in `value` and passes `onChange`. No API calls happen here
  * — the draft is persisted atomically when the creator clicks Save on the
  * drawer (backend accepts a `knowledge_sync` field on Channel create/update).

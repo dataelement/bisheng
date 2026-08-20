@@ -33,8 +33,6 @@ interface ArticleListProps {
     selectedArticleId?: string;
     /** PC：顶部标题下拉切换频道（替代左侧 ChannelSidebar） */
     onChannelSelect?: (channel: Channel | null) => void;
-    /** PC：下拉内频道项管理操作 */
-    onManageMembers?: (channel: Channel) => void;
     onChannelSettings?: (channel: Channel) => void;
     /** H5：打开「我的频道」侧栏（订阅页抽屉） */
     onOpenChannelNav?: () => void;
@@ -161,7 +159,6 @@ export function ArticleList({
     selectedArticleId,
     onArticleSelect,
     onChannelSelect,
-    onManageMembers,
     onChannelSettings,
     onOpenChannelNav,
     onGoChannelSquare,
@@ -492,7 +489,6 @@ export function ArticleList({
                                         variant="mobile"
                                         channel={channel}
                                         onChannelSelect={onChannelSelect}
-                                        onManageMembers={onManageMembers}
                                         onChannelSettings={onChannelSettings}
                                         onShare={canOpenChannelShare ? handleMobileShare : undefined}
                                         onOpenSourceFilter={
@@ -565,7 +561,7 @@ export function ArticleList({
                                 onClick={handleToggleUnread}
                                 disabled={mobileDropdownOpen}
                                 className={cn(
-                                    "shrink-0 rounded-[6px] border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
+                                    "shrink-0 rounded-md border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-transparent bg-primary/20 text-primary"
                                         : "border-[#E5E6EB] bg-white text-gray-800",
@@ -743,7 +739,7 @@ export function ArticleList({
                                 className="min-w-0"
                             />
                             <MultiSourceSelect
-                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-[6px]"
+                                className="h-8 min-w-[140px] max-w-full shrink-0 rounded-md"
                                 options={sourceOptions}
                                 value={selectedSources}
                                 onChange={handleSourcesChange}
@@ -752,7 +748,7 @@ export function ArticleList({
                                 type="button"
                                 onClick={handleToggleUnread}
                                 className={cn(
-                                    "shrink-0 rounded-[6px] border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
+                                    "shrink-0 rounded-md border px-4 py-[5px] text-sm transition-colors whitespace-nowrap",
                                     onlyUnread
                                         ? "border-transparent bg-primary/20 text-primary"
                                         : "border-[#ECECEC] bg-white text-gray-800 fine-pointer:hover:bg-gray-50",
@@ -778,7 +774,6 @@ export function ArticleList({
                                 <ChannelActionsMenu
                                     channel={channel}
                                     onChannelSelect={onChannelSelect}
-                                    onManageMembers={onManageMembers}
                                     onChannelSettings={onChannelSettings}
                                     triggerClassName="border-[#ECECEC]"
                                 />

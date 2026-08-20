@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { message } from '@/components/bs-ui/toast/use-toast';
 import { generateUUID } from '@/components/bs-ui/utils';
 import { getChatHistory } from '@/controllers/API';
@@ -147,7 +148,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     },
     // stream
     streamWsMsg(data) {
-        let messages = cloneDeep(get().messages);
+        const messages = cloneDeep(get().messages);
         const { unique_id, output_key, reasoning_content } = data.message;
         const currentMessageIndex = messages.findIndex(msg => msg.message_id === (unique_id + output_key))
         const currentMsg = messages[currentMessageIndex]
@@ -199,7 +200,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     insetNodeRun(data) {
         if (['output', 'condition'].includes(data.message?.node_id.split('_')[0])) return
         set((state) => {
-            let newChat = cloneDeep(state.messages);
+            const newChat = cloneDeep(state.messages);
             const { category, flow_id, chat_id, files, is_bot, liked, message, receiver, type, source, user_id } = data
             if (type === 'end') {
                 return { messages: newChat.filter(msg => msg.message_id !== message.unique_id) }

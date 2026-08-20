@@ -1,8 +1,8 @@
+// @ts-strict-ignore
 "use client"
 
 import { Outlined } from "bisheng-icons"
 import { LoaderCircle } from "lucide-react"
-import PropTypes from "prop-types"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRecoilState } from "recoil"
 import { getVoice2TextApi } from "~/api"
@@ -304,11 +304,6 @@ const SpeechToTextComponent = ({ disabled, onChange }: SpeechToTextComponentProp
             {isRecording && <div className="pulse-ring"></div>}
         </div>
     )
-}
-
-// PropTypes for runtime validation
-SpeechToTextComponent.propTypes = {
-    onChange: PropTypes.func.isRequired,
 }
 
 export default SpeechToTextComponent

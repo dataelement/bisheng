@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import cloneDeep from "lodash-es/cloneDeep";
 import uniqueId from "lodash-es/uniqueId";
 import { Suspense, useContext, useEffect, useMemo, useState } from "react";
@@ -17,9 +18,10 @@ import { userContext } from "./contexts/userContext";
 import { getAdminRouter, getPrivateRouter, publicRouter, resolveRoutePermissions } from "./routes";
 import { LoadingIcon } from "./components/bs-icons/loading";
 import { useToast } from "./components/bs-ui/toast/use-toast";
+import { consumeLoginReturnTo } from "./utils/loginReturnTo";
 
 export default function App() {
-  let { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
+  const { setCurrent, setShowSideBar, setIsStackedOpen } = useContext(locationContext);
   // let location = useLocation();
   useEffect(() => {
     setCurrent(location.pathname.replace(/\/$/g, "").split("/"));
@@ -61,7 +63,7 @@ export default function App() {
       }
       setErrorOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "error", data: cloneDeep(errorData), id: uniqueId() },
         ];
@@ -79,7 +81,7 @@ export default function App() {
       }
       setNoticeOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "notice", data: cloneDeep(noticeData), id: uniqueId() },
         ];
@@ -97,7 +99,7 @@ export default function App() {
       }
       setSuccessOpen(false);
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "success", data: cloneDeep(successData), id: uniqueId() },
         ];
@@ -123,7 +125,7 @@ export default function App() {
   useEffect(() => {
     window.errorAlerts = (errorList: string[]) => {
       setAlertsList((old) => {
-        let newAlertsList = [
+        const newAlertsList = [
           ...old,
           { type: "error", data: { title: '', list: errorList }, id: uniqueId() },
         ];
@@ -139,6 +141,23 @@ export default function App() {
   };
 
   const { user, setUser } = useContext(userContext);
+
+  // Post-login return hop for landings that never touch the local login form —
+  // chiefly the SSO/gateway callback, which sets the cookie and drops the user
+  // on the platform root. Without this, someone who opened a share link while
+  // signed out ends up on the home page instead of the shared page.
+  //
+  // One-shot: consumeLoginReturnTo() clears the keys, and it validates
+  // same-origin + freshness, so a stale target cannot yank an admin away later.
+  // The local login form consumes the same value before its own full-page
+  // navigation, so the two paths never both fire.
+  useEffect(() => {
+    if (!user?.user_id) return;
+    const returnTo = consumeLoginReturnTo();
+    if (returnTo && returnTo !== location.href) {
+      location.href = returnTo;
+    }
+  }, [user?.user_id]);
 
   // 退出
   useEffect(() => {
@@ -184,7 +203,7 @@ export default function App() {
   useEffect(() => {
     if (window.url_error) {
       toast({
-        description: t(`errors.${window.url_error}`, { defaultValue: String(window.url_error) }),
+        description: t(`api_errors:${window.url_error}`, { defaultValue: t('api_errors:fallback') }),
         variant: 'error',
       });
       delete window.url_error

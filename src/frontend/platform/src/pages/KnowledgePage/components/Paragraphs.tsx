@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { FileIcon } from "@/components/bs-icons/file";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { Button } from '@/components/bs-ui/button';
@@ -208,7 +209,7 @@ export default function Paragraphs({ fileId, onBack, canEditKb = false, canDelet
 
     const handleChunkChange = useCallback((chunkIndex, text) => {
         if (!canEditKb) return;
-        let chunkIndexPage = chunkIndex % pageSize;
+        const chunkIndexPage = chunkIndex % pageSize;
         console.log('Converted localIndex:', chunkIndexPage);
 
         const bbox = { chunk_bboxes: selectedBbox };

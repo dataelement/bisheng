@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 /**
  * Direct API calls for the AI chat system.
  */
@@ -14,6 +15,9 @@ const API = {
     sessionInfo: (conversationId: string) =>
         `/api/v1/chat/info?chat_id=${encodeURIComponent(conversationId)}`,
     sseChat: () => `/api/v1/workstation/chat/completions`,
+    // Links handed out at upload time expire; ask for a fresh one at render.
+    attachmentUrl: (conversationId: string, fileId: string) =>
+        `/api/v1/chat/${conversationId}/files/${fileId}/url`,
     abortChat: () => `/api/v1/workstation/chat/completions/abort`,
     deleteConversation: (id: string) => `/api/v1/chat/${id}`,
     bsConfig: () => `/api/v1/workstation/config`,
@@ -130,6 +134,12 @@ export interface ChatMessage {
         `text` so a stream that failed *after* emitting an answer keeps that answer
         renderable — overwriting `text` would destroy it. */
     errorText?: string;
+    /** stable failure classification from the backend (`data.error_type` on the SSE
+        error envelope) — picks the card's title/explanation/hint copy. */
+    errorType?: string;
+    /** raw upstream text (provider message, parser error, offending filename) kept
+        behind the card's "view details" disclosure. */
+    errorDetail?: string;
     unfinished?: boolean;
     isCreatedByUser?: boolean;
     createdAt?: string;
@@ -591,7 +601,7 @@ export async function getFolderSessions(
     spaceId: string | number,
     folderId?: string | number
 ): Promise<FolderSession[]> {
-    const params: Record<string, any> = {};
+    const params: Record<string, unknown> = {};
     if (folderId != null && folderId !== "") params.folder_id = folderId;
     const res = await http.get(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
@@ -608,7 +618,7 @@ export async function createFolderSession(
     spaceId: string | number,
     folderId?: number
 ): Promise<FolderSession> {
-    const body: Record<string, any> = {};
+    const body: Record<string, unknown> = {};
     if (folderId != null) body.folder_id = folderId;
     const res = await http.post(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
@@ -623,7 +633,7 @@ export async function deleteFolderSession(
     chatId: string,
     folderId?: number
 ): Promise<void> {
-    const body: Record<string, any> = { chat_id: chatId };
+    const body: Record<string, unknown> = { chat_id: chatId };
     if (folderId != null) body.folder_id = folderId;
     await http.deleteWithOptions(
         `/api/v1/knowledge/space/${spaceId}/chat/folder/session`,
@@ -651,7 +661,7 @@ export async function getFolderChatHistory(
         pageSize?: number;
     }
 ): Promise<ChatMessage[]> {
-    const queryParams: Record<string, any> = {};
+    const queryParams: Record<string, unknown> = {};
     if (params.folderId != null && params.folderId !== "")
         queryParams.folder_id = params.folderId;
     if (params.chatId) queryParams.chat_id = params.chatId;
@@ -664,4 +674,24 @@ export async function getFolderChatHistory(
     const items: StreamHistoryItem[] = Array.isArray(res?.data) ? res.data : [];
     // Backend returns newest-first; reverse for chronological order
     return items.reverse().map(parseStreamHistoryItem);
+}
+
+/**
+ * Fresh link for one attachment of one conversation.
+ *
+ * The link stored on the message was signed at upload time and expires; the
+ * backend re-signs from the object it recorded for that conversation. Returns
+ * null when the file is no longer retrievable (cleared storage, or an upload
+ * from before attachments were kept), which the caller renders as such.
+ */
+export async function getAttachmentUrl(
+    conversationId: string,
+    fileId: string,
+): Promise<string | null> {
+    try {
+        const res: any = await http.get(API.attachmentUrl(conversationId, fileId));
+        return (res?.data ?? res)?.url ?? null;
+    } catch {
+        return null;
+    }
 }

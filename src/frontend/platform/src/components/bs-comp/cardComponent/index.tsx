@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { cname } from "@/components/bs-ui/utils";
 import { AppNumType, AppType } from "@/types/app";
 import { Copy, FilePlus, Settings, Shield, Trash2 } from "lucide-react";

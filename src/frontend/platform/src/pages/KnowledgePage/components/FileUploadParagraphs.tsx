@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { delChunkInPreviewApi, previewFileSplitApi } from "@/controllers/API";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";

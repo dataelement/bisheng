@@ -49,7 +49,7 @@ export function CrawlFeedbackDialog({ open, onOpenChange }: CrawlFeedbackDialogP
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogAction className="h-8 rounded-[6px] px-4 inline-flex items-center justify-center leading-none bg-blue-500 hover:bg-blue-400">
+                    <AlertDialogAction className="h-8 rounded-md px-4 inline-flex items-center justify-center leading-none bg-blue-500 hover:bg-blue-400">
                         {localize("com_subscription.ok")}
                     </AlertDialogAction>
                 </AlertDialogFooter>

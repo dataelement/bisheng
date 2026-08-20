@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { EToolResources } from '~/types/chat';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {

@@ -8,8 +8,8 @@ import { ComponentPage, ExampleGroup, CompareTable } from '../components/kit';
 export function TypographyProgress() {
   return (
     <ComponentPage
-      title="字体 · 迁移"
-      eng="Typography Progress"
+      title="字体 · 现状"
+      eng="Typography Inventory"
       description={
         <>
           九档 semantic token + 系统字体栈已落地（2026-07-14）。旧 Tailwind

@@ -70,65 +70,72 @@ function ConfirmReferenceDemo() {
 export function ModalProgress() {
   return (
     <ComponentPage
-      title="Modal · 迁移"
-      eng="Modal Progress"
+      title="Modal 弹窗 · 现状"
+      eng="Modal Inventory"
       description={
         <>
-          2026-07-09 重新盘点：全站普通弹窗共 <b>5 个并行体系、约 64 个业务文件</b>
-          。二次确认期已把 B 套壳对齐 C 套视觉，但 A 套（原语直接拼 22 处 + 模板 3
-          处）与手拼 AlertDialog（7 处）仍是另外两种壳。逐个打开对比，定统一标准。
+          2026-07-20 全仓重扫：弹窗类业务文件<b>去重 63 个</b>，分属 <b>5 个并行壳体系</b>
+          。二次确认期已把 B 套壳对齐 C 套视觉，A 套（原语 23 + 模板 3）与手拼 AlertDialog（6）
+          仍是另外两种壳。逐个打开对比，定统一标准。
         </>
       }
       whenToUse={[
-        <>本页是<b>现状盘点</b>，统一标准尚未定稿（见文末"④ 待设计师定夺"）。</>,
+        <>
+          按血统分：LibreChat 血统 <b>24</b> · 毕昇自研 <code>pages/</code> <b>15</b> ·
+          SidePanel 子树 <b>10</b> · 其它 14。
+        </>,
         <>已定：二次确认（C 套）壳为基准候选——圆角 16 / p-5 / 灰底毛玻璃；B 套已对齐。</>,
-        <>待定：A 套（最大人群 22 处）的遮罩 / 圆角 / 标题字重是否并入基准。</>,
+        <>待定：A 套（最大人群 23 处）的遮罩 / 圆角 / 标题字重是否并入基准（见文末"④ 待定夺"）。</>,
       ]}
       bodyTitle="现状盘点"
     >
       {/* ① Population overview */}
-      <ExampleGroup title="① 用量盘子（当前精确扫描，排除 ui/ 与画廊）">
+      <ExampleGroup title="① 用量盘子" subtitle="2026-07-20 全仓扫描，排除 ui/ 定义、画廊与测试文件。">
         <CompareTable
-          head={['体系', '实现', '业务文件数', '用在哪 / 备注']}
+          head={['体系', '判定方式', '业务文件数', '用在哪 / 备注']}
           rows={[
             [
               'A 套 · 原语直接拼',
-              'Dialog + DialogContent 手拼',
-              <b key="a1">22（最大人群）</b>,
-              '新页面为主：知识库 8、订阅 2、审批/通知/账号/分享/appChat…（含 MainLayout 全局弹窗）',
+              <code key="a">&lt;DialogContent</code>,
+              <b key="a1">23（最大人群）</b>,
+              '知识库 8、订阅 3、审批/通知/账号/分享/appChat、MainLayout 全局弹窗…',
             ],
             [
               'A 套 · 模板',
-              'DialogTemplate',
+              <code key="b">&lt;DialogTemplate</code>,
               '3',
-              'EditPresetDialog、PresetItems、ContextButton（后者在 SidePanel 死树）',
+              'EditPresetDialog、PresetItems、ContextButton（后者 0 引用，确认死代码）',
             ],
             [
               'B 套 · 模板',
-              'OGDialogTemplate',
-              '16（原 25，确认迁移后）',
-              '书签/导出/SetKey/归档/Agent 面板…（其中 SidePanel 死树约 6 处）；壳已对齐 C 套',
+              <code key="c">&lt;OGDialogTemplate</code>,
+              '16',
+              '书签/导出/SetKey/归档/Agent 面板…；壳已对齐 C 套',
             ],
             [
               'B 套 · 原语直接拼',
-              'OGDialog + OGDialogContent 手拼',
+              <code key="d">&lt;OGDialogContent</code>,
               '16',
-              '设置（账号/数据）、Prompts、文件预览、ShareAgent…；壳同上（已对齐 C 套）',
+              '设置（账号/数据）、Prompts、文件预览、ShareAgent…；壳同上',
             ],
             [
               '手拼 AlertDialog',
-              'AlertDialogContent + 自拼头尾',
-              '7',
-              '频道成员 2、爬取系 4、灵思 TaskModeInput（部分带确认性质，本期一并处理）',
+              <code key="e">&lt;AlertDialogContent</code>,
+              '6',
+              '频道成员 2、爬取系 3、灵思 TaskModeInput（部分带确认性质）',
             ],
             [
               'C 套 · useConfirm（参照）',
-              'ConfirmContext（AlertDialog 底层）',
+              <code key="f">useConfirm()</code>,
               '26（已收敛 ✅）',
               '二次确认已定稿的视觉基准：圆角16 / p-5 / 灰底毛玻璃 —— Modal 壳的天然候选',
             ],
           ]}
         />
+        <p className="mt-3 text-body-sm text-muted-foreground">
+          注：<code>AlertDialogContent</code> 另有 1 处在 <code>Providers/ConfirmContext.tsx</code>
+          —— 那是 C 套自己的实现，不计入业务手拼。
+        </p>
       </ExampleGroup>
 
       {/* ② Shell anatomy */}
@@ -189,7 +196,7 @@ export function ModalProgress() {
       <ExampleGroup title="③ 同一内容装进各个壳（逐个打开对比）">
         <DemoGrid cols={3}>
           {/* A-set raw primitives — the largest population */}
-          <Demo label="A 套 · 原语直接拼（22 处）" note="ui/Dialog.tsx · 浅黑毛玻璃 · 圆角8 · p-5">
+          <Demo label="A 套 · 原语直接拼（23 处）" note="ui/Dialog.tsx · 浅黑毛玻璃 · 圆角8 · p-5">
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="outline">打开</Button>
@@ -267,7 +274,7 @@ export function ModalProgress() {
 
           {/* Hand-rolled AlertDialog population */}
           <Demo
-            label="手拼 AlertDialog（7 处）"
+            label="手拼 AlertDialog（6 处）"
             note="p-6 · 圆角8 · 无边框阴影 · z-110 · 移动端贴底滑入"
           >
             <AlertDialog>
@@ -324,7 +331,7 @@ export function ModalProgress() {
             <b>层级</b>：z-50 / z-[100] / z-[110] 三档并存，统一到几？（需盘 Drawer/Sheet/Popover 的层级关系）
           </li>
           <li>
-            <b>原语收敛</b>：A 套 22 处直拼是最大人群 —— 是把 A 套壳改成标准（业务零改动），还是逐批迁 B 套？
+            <b>原语收敛</b>：A 套 23 处直拼是最大人群 —— 是把 A 套壳改成标准（业务零改动），还是逐批迁 B 套？
           </li>
         </ol>
       </div>

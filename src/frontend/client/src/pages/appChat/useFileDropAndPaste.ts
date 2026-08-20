@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { generateUUID } from '~/utils';
 

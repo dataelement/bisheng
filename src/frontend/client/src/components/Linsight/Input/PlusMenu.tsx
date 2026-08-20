@@ -59,18 +59,16 @@ export function PlusMenu({
 
             <DropdownMenuContent
                 align="start"
-                className="flex w-[200px] flex-col gap-0 rounded-2xl border-slate-100 p-1.5 shadow-xl"
+                className="flex w-[200px] flex-col gap-1 rounded-2xl border-slate-100 p-3 shadow-xl"
             >
-                {/* Upload file (icon: shared daily-mode `link` asset) */}
+                {/* Upload file — same icon component as the daily-mode "+" menu:
+                    the old `link.svg` asset bakes its own colour in and can't
+                    follow the shared resting tint. */}
                 <DropdownMenuItem
                     onSelect={() => onUploadFile()}
-                    className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
+                    className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                 >
-                    <img
-                        src={`${__APP_ENV__.BASE_URL || ''}/assets/channel/link.svg`}
-                        className="size-4 shrink-0"
-                        alt=""
-                    />
+                    <Outlined.Attachment size={16} className="shrink-0 text-[#4E5969]" />
                     <span className="text-[14px] font-normal text-slate-700">
                         {localize('com_ui_upload_files')}
                     </span>
@@ -82,9 +80,9 @@ export function PlusMenu({
                 {/* Task mode toggle */}
                 <DropdownMenuItem
                     onSelect={() => onToggleTaskMode()}
-                    className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 outline-none"
+                    className="flex h-8 cursor-pointer items-center gap-3 rounded-lg px-2 outline-none"
                 >
-                    <Outlined.Binoculars size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-slate-600')} />
+                    <Outlined.ListSuccess size={16} className={cn(taskModeActive ? 'text-blue-500' : 'text-[#4E5969]')} />
                     <span
                         className={cn(
                             'flex-1 text-[14px] font-normal',
@@ -101,7 +99,7 @@ export function PlusMenu({
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger
                             className={cn(
-                                'mt-0.5 flex cursor-pointer items-center justify-between rounded-xl px-2 py-1.5 outline-none',
+                                'flex h-8 cursor-pointer items-center justify-between rounded-lg px-2 outline-none',
                                 '!bg-transparent hover:!bg-transparent focus:!bg-transparent',
                             )}
                         >
@@ -109,7 +107,7 @@ export function PlusMenu({
                                 <div className="relative">
                                     <Outlined.Newspaper
                                         size={16}
-                                        className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-slate-600')}
+                                        className={cn(selectedSkills.length > 0 ? 'text-blue-500' : 'text-[#4E5969]')}
                                     />
                                     {selectedSkills.length > 0 && (
                                         <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-white bg-blue-500" />
@@ -121,8 +119,13 @@ export function PlusMenu({
                             </div>
                             {/* ChevronRight is rendered by DropdownMenuSubTrigger itself */}
                         </DropdownMenuSubTrigger>
-                        {/* Layout mirrors the daily-mode knowledge panel shell (ChatKnowledge `variant === 'knowledge'`). */}
-                        <DropdownMenuSubContent className="ml-2 flex max-h-[256px] w-[240px] flex-col gap-0 overflow-hidden rounded-[8px] border-0 bg-white px-2 pb-0 pt-2 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]">
+                        {/* Layout mirrors the daily-mode knowledge panel shell (ChatKnowledge `variant === 'knowledge'`).
+                            `align="center"` centers the panel vertically on the trigger row. */}
+                        <DropdownMenuSubContent
+                            align="center"
+                            collisionPadding={8}
+                            className="ml-2 flex max-h-[440px] w-[280px] flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-white px-3 pb-0 pt-3 shadow-[0_2px_16px_-2px_rgba(0,23,66,0.10)]"
+                        >
                             <SkillSelector selected={selectedSkills} onChange={onSkillsChange} />
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>

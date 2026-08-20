@@ -59,7 +59,7 @@ export function WorkspacePanel({
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
             {/* File-type icon hidden for now; keep for an easy future re-enable. */}
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
+            { }
             {/* <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" /> */}
             {/* min-w-0 without flex-1 so the action stays next to the NAME, not
                 pushed to the panel edge; the name truncates only when it must. */}

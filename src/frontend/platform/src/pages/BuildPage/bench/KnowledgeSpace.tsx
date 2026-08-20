@@ -13,6 +13,8 @@ import { getKnowledgeConfigApi, setKnowledgeConfigApi } from "@/controllers/API"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { Input, NonNegativeInput, Textarea } from "@/components/bs-ui/input";
 import { canManageWorkbenchConfig, isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions";
+import { FormInput } from "./FormInput";
+import { clampMenuName } from "./menuDisplayName";
 import Preview from "./Preview";
 import { resolveConfigString } from "./configValue";
 import { useContext, useEffect, useRef, useState } from "react";
@@ -37,6 +39,8 @@ interface KnowledgeConfigForm {
     autoTagVisible: boolean;
     /** 知识空间侧 AI 助手自定义名称，对应接口 assistant_name；空表示用客户端默认文案 */
     assistantName: string;
+    /** 知识空间在 client 侧边栏的菜单显示名称，对应接口 menu_display_name；空表示用客户端默认文案 */
+    menuDisplayName: string;
 }
 
 export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: number }) {
@@ -93,6 +97,19 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                 <CardContent className="p-0 pt-4 relative">
                     <div className="w-full max-h-[calc(100vh-180px-var(--license-banner-h,0px))] overflow-y-scroll scrollbar-hide">
                         <ConfigInheritanceBanner meta={configMeta} />
+                        {/* 菜单显示名称：留空则客户端回退到本地化默认文案 */}
+                        <div className="px-5">
+                            <FormInput
+                                label={t('chatConfig.menuDisplayName')}
+                                value={formData.menuDisplayName}
+                                error={errors.menuDisplayName}
+                                placeholder={t('bench.knowledgeSpace')}
+                                onChange={(v) => {
+                                    setFormData(prev => ({ ...prev, menuDisplayName: clampMenuName(v) }));
+                                    setErrors(prev => ({ ...prev, menuDisplayName: '' }));
+                                }}
+                            />
+                        </div>
                         <div className="mb-6">
                             <div className="p-5 bg-gray-50 rounded-lg">
                                 <div className="flex items-center mb-2">
@@ -296,11 +313,14 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
         maxChunkSize: 15000,
         autoTagVisible: false,
         assistantName: '',
+        // 接口为空时展示默认菜单名，用户可直接改
+        menuDisplayName: t('bench.knowledgeSpace'),
     });
 
-    const [errors, setErrors] = useState<{ systemPrompt: string; userPrompt: string }>({
+    const [errors, setErrors] = useState<{ systemPrompt: string; userPrompt: string; menuDisplayName: string }>({
         systemPrompt: '',
         userPrompt: '',
+        menuDisplayName: '',
     });
     const [configMeta, setConfigMeta] = useState<any>(null);
 
@@ -316,6 +336,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             const maxChunkSizeFromRes = cfg?.max_chunk_size ?? cfg?.maxTokens;
             const autoTagVisibleFromRes = cfg?.auto_tag_visible ?? cfg?.autoTagVisible;
             const assistantNameFromRes = cfg?.assistant_name ?? cfg?.assistantName;
+            const menuDisplayNameFromRes = cfg?.menu_display_name ?? cfg?.menuDisplayName;
             // When backend returns no saved value, seed the textarea with the
             // localized default template so it is editable as a real value.
             const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
@@ -328,6 +349,8 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
                 autoTagVisible: Boolean(autoTagVisibleFromRes),
                 // Keep blank when unset — empty means "use client i18n default".
                 assistantName: resolveConfigString(assistantNameFromRes, ''),
+                // 空字符串同样视为「未配置」，回落到默认菜单名
+                menuDisplayName: resolveConfigString(menuDisplayNameFromRes, '').trim() || t('bench.knowledgeSpace'),
             }));
         });
     }, [scopeVersion, t]);
@@ -350,8 +373,13 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
 
         // Length cap is the only remaining check after auto-refill removes the blank case.
         let isValid = true;
-        const nextErrors = { systemPrompt: '', userPrompt: '' };
+        const nextErrors = { systemPrompt: '', userPrompt: '', menuDisplayName: '' };
 
+        // 菜单显示名称必填（长度在输入时已截断）
+        if (!(formData.menuDisplayName || '').trim()) {
+            nextErrors.menuDisplayName = t('chatConfig.errors.required');
+            isValid = false;
+        }
         if (finalSystemPrompt.length > 30000) {
             nextErrors.systemPrompt = t('chatConfig.errors.maxCharacters', { count: 30000 });
             isValid = false;
@@ -372,6 +400,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             max_chunk_size: formData.maxChunkSize,
             auto_tag_visible: formData.autoTagVisible,
             assistant_name: (formData.assistantName || '').trim(),
+            menu_display_name: (formData.menuDisplayName || '').trim(),
         };
 
         const res = await captureAndAlertRequestErrorHoc(setKnowledgeConfigApi(dataToSave));

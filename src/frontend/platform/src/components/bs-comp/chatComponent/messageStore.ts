@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { getChatHistory } from '@/controllers/API';
 import { ChatMessageType } from '@/types/chat';
 import { formatDate } from '@/util/utils';
@@ -181,7 +182,7 @@ export const useMessageStore = create<State & Actions>((set, get) => ({
     createWsMsg(data) {
         console.log('change createWsMsg');
         set((state) => {
-            let newChat = cloneDeep(state.messages);
+            const newChat = cloneDeep(state.messages);
             newChat.push({
                 isSend: false,
                 message: runLogsTypes.includes(data.category) ? JSON.parse(data.message) : '',

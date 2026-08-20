@@ -48,6 +48,20 @@ class LLMRateLimitError(BaseErrorCode):
     Msg: str = "LLM service is busy, please try again later"
 
 
+class ChatFileParseError(BaseErrorCode):
+    """An attachment on the outgoing message could not be parsed (OCR / ETL).
+
+    Umbrella code — the frontend picks its copy from the ``error_type`` carried
+    in ``data`` (``file_parse_busy`` vs ``file_parse_failed``), the same way the
+    task-mode failure card does, so a throttled OCR service reads as "busy, try
+    again" rather than a hard failure. Replaces the bare ``ServerError`` (500)
+    that used to swallow the parser's own message.
+    """
+
+    Code: int = 12047
+    Msg: str = "File parsing failed, please try again later"
+
+
 # --- F028: Conversation export / import to knowledge space (12060-12079) ---
 
 

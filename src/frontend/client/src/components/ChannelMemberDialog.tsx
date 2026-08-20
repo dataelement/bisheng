@@ -46,7 +46,7 @@ const ROLE_SELECT_WIDTH_CLASS = "h-8 w-24";
 /** 角色下拉触发器：白底 + 浅灰描边（仅用于成员列表里「订阅用户」等可点下拉） */
 const ROLE_SELECT_TRIGGER_CLASS = cn(
     ROLE_SELECT_WIDTH_CLASS,
-    "box-border shrink-0 appearance-none rounded-[6px] border-[#EBECF0] bg-white shadow-none",
+    "box-border shrink-0 appearance-none rounded-md border-[#EBECF0] bg-white shadow-none",
     "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-[#818181]",
     "hover:border-[#CED4E0] hover:text-blue-500",
 );
@@ -222,7 +222,7 @@ export function ChannelMemberDialog({
                 <span
                     className={cn(
                         ROLE_SELECT_WIDTH_CLASS,
-                        "inline-flex items-center justify-end rounded-[6px] px-2 text-[14px] text-[#818181]"
+                        "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-[#818181]"
                     )}
                 >
                     {getRoleLabel(m.role, localize)}
@@ -237,7 +237,7 @@ export function ChannelMemberDialog({
                     <span
                         className={cn(
                             ROLE_SELECT_WIDTH_CLASS,
-                            "inline-flex items-center justify-end rounded-[6px] px-2 text-[14px] text-[#818181]"
+                            "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-[#818181]"
                         )}
                     >
                         {getRoleLabel(m.role, localize)}
@@ -255,7 +255,7 @@ export function ChannelMemberDialog({
                             <ChevronDown className="size-3.5" />
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="z-[120] w-28 rounded-[8px] border-[#EBECF0] p-1">
+                    <DropdownMenuContent align="end" className="z-[120] w-28 rounded-lg border-[#EBECF0] p-1">
                         <DropdownMenuItem
                             className={cn(
                                 "cursor-default",
@@ -290,7 +290,7 @@ export function ChannelMemberDialog({
                         <ChevronDown className="size-3.5" />
                     </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="z-[120] w-28 rounded-[8px] border-[#EBECF0] p-1">
+                <DropdownMenuContent align="end" className="z-[120] w-28 rounded-lg border-[#EBECF0] p-1">
                     <DropdownMenuItem
                         className={cn(
                             m.role === "admin" &&
@@ -356,7 +356,7 @@ export function ChannelMemberDialog({
                                 value={keyword}
                                 onChange={(e) => setKeyword(e.target.value)}
                                 placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
-                                className="h-8 w-full rounded-[6px] border border-[#EBECF0] pl-9 pr-3 text-[14px] text-[#212121] placeholder:text-[#818181] focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
+                                className="h-8 w-full rounded-md border border-[#EBECF0] pl-9 pr-3 text-[14px] text-[#212121] placeholder:text-[#818181] focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
                             />
                         </div>
 
@@ -435,7 +435,7 @@ export function ChannelMemberDialog({
                                                 className={cn(
                                                     "flex h-6 min-w-6 items-center justify-center px-1.5 text-[14px] transition-colors",
                                                     p === page
-                                                        ? "rounded-[8px] border border-blue-500 text-blue-500"
+                                                        ? "rounded-lg border border-blue-500 text-blue-500"
                                                         : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-blue-500"
                                                 )}
                                                 onClick={() => fetchMembers(p)}

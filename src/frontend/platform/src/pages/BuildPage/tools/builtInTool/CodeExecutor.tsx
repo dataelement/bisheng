@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Button } from '@/components/bs-ui/button';
 import { DialogClose, DialogFooter } from "@/components/bs-ui/dialog";
 import { PassInput } from '@/components/bs-ui/input';

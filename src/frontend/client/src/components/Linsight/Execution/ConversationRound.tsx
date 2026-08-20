@@ -16,7 +16,7 @@ import { useLocalize } from '~/hooks';
 import { ExecutionLiveContext } from './executionLive';
 import { ExecutionTimeline } from './ExecutionTimeline';
 import { ResultPanel } from './ResultPanel';
-import { TaskErrorCard } from './TaskErrorCard';
+import { ChatErrorCard } from '~/components/ChatErrorCard';
 import { TaskStepRow, type ExecTask } from './TaskStepRow';
 import type { ExecStepEventData } from './stepUtils';
 import { isTaskStarted } from './stepUtils';
@@ -59,7 +59,7 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
             {/* terminal banners — mirror the active round (no retry: history is
                 read-only and the next round already moved on) */}
             {round.taskError && (
-                <TaskErrorCard
+                <ChatErrorCard
                     errorType={round.taskErrorInfo?.error_type}
                     detail={round.taskErrorInfo?.detail}
                     fallbackMessage={round.taskError}

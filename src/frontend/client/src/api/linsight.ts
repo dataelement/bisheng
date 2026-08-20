@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import {LinsightInfo} from "~/store/linsight";
 import request from "./request";
 

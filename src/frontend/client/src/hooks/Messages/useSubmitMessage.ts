@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useCallback } from 'react';
 import { useRecoilState, useRecoilValue, useSetRecoilState } from 'recoil';
 import { v4 } from 'uuid';

@@ -24,6 +24,12 @@ interface ConfirmOptions {
     variant?: "default" | "destructive"
     /** Override the title icon in the destructive variant (defaults to Trash2). */
     icon?: React.ReactNode
+    /**
+     * Acknowledge-only mode: hide the cancel button and keep just the confirm
+     * action. For dead-end notices (an error the user can only take note of),
+     * where a second "cancel" button would do exactly the same thing.
+     */
+    hideCancel?: boolean
 }
 
 interface ConfirmContextType {
@@ -123,15 +129,15 @@ export const ConfirmProvider = ({ children }: { children: React.ReactNode }) => 
                     </AlertDialogDescription>
 
                     <AlertDialogFooter className="w-full flex-row gap-2 sm:space-x-0">
-                        <AlertDialogCancel
+                        {!options.hideCancel && <AlertDialogCancel
                             onClick={handleCancel}
-                            className="mt-0 h-auto flex-1 rounded-[6px] border-[#ebecf0] bg-white/50 px-4 py-[5px] text-sm font-normal text-[#070038] backdrop-blur-[4px] hover:bg-[#f7f8fa] focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
+                            className="mt-0 h-8 flex-1 rounded-md border-[#ebecf0] bg-white/50 px-4 text-sm font-normal text-[#070038] hover:bg-[#f7f8fa] focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:mt-0 sm:flex-none"
                         >
                             {options.cancelText || defaultCancel}
-                        </AlertDialogCancel>
+                        </AlertDialogCancel>}
                         <AlertDialogAction
                             onClick={handleConfirm}
-                            className={`h-auto flex-1 rounded-[6px] px-4 py-[5px] text-sm font-normal text-white focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:flex-none ${confirmColor}`}
+                            className={`h-8 flex-1 rounded-md px-4 text-sm font-normal text-white focus:ring-0 focus:ring-offset-0 focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 sm:flex-none ${confirmColor}`}
                         >
                             {options.confirmText || defaultConfirm}
                         </AlertDialogAction>

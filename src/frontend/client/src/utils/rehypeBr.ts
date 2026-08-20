@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { visit, SKIP } from 'unist-util-visit';
 
 /**

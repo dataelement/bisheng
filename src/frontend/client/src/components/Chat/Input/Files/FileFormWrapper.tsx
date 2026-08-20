@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { memo, useEffect, useState } from "react";
 import { useRecoilValue } from "recoil";
 import { useChatContext } from "~/Providers";

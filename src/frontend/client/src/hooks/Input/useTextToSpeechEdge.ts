@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { useRecoilValue } from 'recoil';
 import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';

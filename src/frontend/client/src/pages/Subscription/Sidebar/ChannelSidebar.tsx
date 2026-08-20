@@ -1,4 +1,4 @@
-import { useLocalize } from "~/hooks";
+import { useLocalize, useWorkbenchMenuNames } from "~/hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -24,7 +24,6 @@ interface ChannelSidebarProps {
     onChannelSelect: (channel: Channel | null) => void;
     onCreateChannel: () => void;
     onChannelSquare: () => void;
-    onManageMembers: (channel: Channel) => void;
     onChannelSettings: (channel: Channel) => void;
     /** Report created channel count back to parent so it doesn't need a duplicate query */
     onCreatedCountChange?: (count: number) => void;
@@ -41,7 +40,6 @@ export function ChannelSidebar({
     onChannelSelect,
     onCreateChannel,
     onChannelSquare,
-    onManageMembers,
     onChannelSettings,
     onCreatedCountChange,
     suppressAutoSelect,
@@ -49,6 +47,8 @@ export function ChannelSidebar({
     onDrawerClose,
 }: ChannelSidebarProps) {
     const localize = useLocalize();
+    // 模块标题跟随后台配置的菜单显示名称
+    const menuNames = useWorkbenchMenuNames();
     const { data: bsConfig } = useGetBsConfig();
     const [collapsed, setCollapsed] = useState(false);
     const [createdCollapsed, setCreatedCollapsed] = useState(false);
@@ -184,8 +184,8 @@ export function ChannelSidebar({
                 {!mobileDrawerMode ? (
                 <div className={collapsed ? "px-0 py-5" : "px-3 py-5"}>
                     <div className={collapsed ? "flex items-center justify-center h-7" : "border-b border-[#e5e6eb] space-y-4 pb-4"}>
-                        {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-medium">
-                            <span>{localize("com_subscription.subscribe")}</span>
+                        {!collapsed && <div className="px-2 flex justify-between items-center text-[16px] font-semibold">
+                            <span>{menuNames.channel}</span>
                         </div>}
                         {!collapsed && (
                             <div className="flex items-center gap-3">
@@ -241,7 +241,6 @@ export function ChannelSidebar({
                                             onDelete={handleDeleteChannel}
                                             onUnsubscribe={handleUnsubscribeChannel}
                                             onPin={handlePinChannel}
-                                            onManageMembers={onManageMembers}
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}
@@ -272,7 +271,6 @@ export function ChannelSidebar({
                                             onDelete={handleDeleteChannel}
                                             onUnsubscribe={handleUnsubscribeChannel}
                                             onPin={handlePinChannel}
-                                            onManageMembers={onManageMembers}
                                             onChannelSettings={onChannelSettings}
                                         />
                                     ))}

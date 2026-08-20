@@ -11,7 +11,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { cn } from "~/utils";
 
-type SquareStatus = "join" | "joined" | "pending" | "private" | "rejected";
+type SquareStatus = "join" | "joined" | "pending" | "private";
 
 interface SquareChannel {
   id: string;
@@ -175,7 +175,7 @@ function ChannelSquare({
           });
         const root: any = res;
         const payload = root.data ?? root;
-        const list: any[] = (payload?.data || payload?.list || []) as any[];
+        const list = (payload?.data || payload?.list || []) as any[];
         const mapped: SquareChannel[] = list
           .map((item: any) => {
             const rawId = item.id ?? item.channel_id;
@@ -197,11 +197,11 @@ function ChannelSquare({
               visibility: item.visibility as "public" | "private" | "review" | undefined,
               status: (() => {
                 const subStatus = String(item.subscription_status ?? "");
-                // 后端约定：not_subscribed=订阅，subscribed=已订阅，pending=申请中，rejected=已驳回
+                // 后端约定：not_subscribed=订阅，subscribed=已订阅，pending=申请中。
+                // rejected 不是独立状态：驳回后可再次申请，按「订阅」处理。
                 if (subStatus === "subscribed") return "joined";
                 if (subStatus === "pending") return "pending";
-                if (subStatus === "rejected") return "rejected";
-                if (subStatus === "not_subscribed") return "join";
+                if (subStatus === "rejected" || subStatus === "not_subscribed") return "join";
                 return (item.status as SquareStatus) || "join";
               })(),
               isHighlighted: Boolean(item.isHighlighted ?? item.highlight)

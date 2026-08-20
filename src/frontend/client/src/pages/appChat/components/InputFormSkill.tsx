@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 
 import { forwardRef, useContext, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { getVariablesApi } from "~/api/apps";

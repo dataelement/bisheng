@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import React, { forwardRef } from "react";
 import copy from "./copy.svg?react";
 import like from "./like.svg?react";

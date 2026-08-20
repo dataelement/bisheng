@@ -4,10 +4,16 @@ import type {
   GrantDepartmentSearchResult,
   GrantItem,
   GrantUser,
+  InitialPermissionResult,
+  InitialPermissionsPayload,
   PermissionEntry,
+  RawInitialPermissionResult,
   RelationModel,
   RevokeItem,
 } from "./permission";
+import { mapInitialPermissionResult } from "./permission";
+
+export type { InitialPermissionResult } from "./permission";
 
 // 排序方式
 export enum SortType {
@@ -624,6 +630,13 @@ export interface CreateManagerChannelPayload {
     is_released?: boolean;                // 是否发布（可选）
     /** v2.5 Module D — saved atomically with the channel. */
     knowledge_sync?: KnowledgeSyncConfig;
+    initialPermissions?: InitialPermissionsPayload;
+}
+
+export interface CreateManagerChannelResult {
+    id: string;
+    initialPermissionResult?: InitialPermissionResult;
+    [key: string]: unknown;
 }
 
 /**
@@ -632,8 +645,33 @@ export interface CreateManagerChannelPayload {
  */
 export async function createManagerChannelApi(
     data: CreateManagerChannelPayload
-): Promise<any> {
-    return await request.post(`/api/v1/channel/manager/create`, data, { showError: true } as any);
+): Promise<CreateManagerChannelResult> {
+    const { initialPermissions, ...channelData } = data;
+    const body = {
+        ...channelData,
+        ...(initialPermissions ? { initial_permissions: initialPermissions } : {}),
+    };
+    const response = await request.post(
+        `/api/v1/channel/manager/create`,
+        body,
+        { showError: true } as any,
+    );
+    const raw = unwrapChannelPermissionPayload<
+        Record<string, unknown> & {
+            id?: string;
+            initial_permission_result?: RawInitialPermissionResult | null;
+        }
+    >(response);
+    if (!raw || raw.id === undefined || raw.id === null) {
+        throw new Error("createManagerChannelApi: missing data");
+    }
+    const { initial_permission_result: rawPermissionResult, ...channel } = raw;
+    const initialPermissionResult = mapInitialPermissionResult(rawPermissionResult);
+    return {
+        ...channel,
+        id: String(raw.id),
+        ...(initialPermissionResult ? { initialPermissionResult } : {}),
+    };
 }
 
 /**
@@ -707,8 +745,11 @@ export async function addWechatSourceApi(body: {
     [key: string]: any;
 }, options?: any): Promise<any> {
     // options supports AbortController signal, e.g. { signal }
+    // showError is off on purpose: failures are surfaced by the caller's own
+    // "link not recognized" dialog + inline guidance, so the generic red toast
+    // would only duplicate it.
     return await request.post(`/api/v1/channel/manager/add_wechat_source`, body, {
-        showError: true,
+        showError: false,
         ...options,
     });
 }

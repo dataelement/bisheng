@@ -45,7 +45,8 @@ import { bishengConfState } from "~/pages/appChat/store/atoms";
 import { CompoundSearchInput, SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
 import { FileCard } from "./FileCard";
-import { FileTable } from "./FileTable";
+import { FileListToolbar } from "./FileListToolbar";
+import { FileListView } from "./FileListView";
 import { KnowledgeSpaceHeader } from "./KnowledgeSpaceHeader";
 import { KnowledgeSpaceShareDialog } from "./KnowledgeSpaceShareDialog";
 import { MoveToDialog } from "./MoveToDialog";
@@ -70,6 +71,7 @@ import {
     sidebarListMoreMenuDangerLabelClassName,
 } from "~/components/SidebarListMoreMenu";
 import { cn, getFullWidthLength } from "~/utils";
+import { knowledgeUploadCapabilities } from "../knowledgeUploadCapabilities";
 
 interface KnowledgeSpaceContentProps {
     space: KnowledgeSpace;
@@ -111,7 +113,7 @@ interface KnowledgeSpaceContentProps {
     onOpenSystemMenu?: () => void;
     onToggleSpaceList?: () => void;
     spaceListOpen?: boolean;
-    /** Edit current space (opens the space settings drawer owned by the page); permission-gated by the menu. */
+    /** Open the unified space settings page; permission-gated by the menu. */
     onEditSpace?: () => void;
     /** Delete current space (navigates back to the list); permission-gated by the menu. */
     onDeleteSpace?: () => void;
@@ -172,7 +174,6 @@ export function KnowledgeSpaceContent({
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const displayFiles = [
         ...(creatingFolder ? [creatingFolder] : []),
         // In-progress folder upload: show its placeholder card (keyed to the space +
@@ -317,13 +318,13 @@ export function KnowledgeSpaceContent({
         "delete_space",
     );
     // Permission management — mirrors the desktop sidebar (KnowledgeSpaceItem) gating.
-    const canManageMembers = isAdmin || hasKnowledgeSpacePermission(
+    const canManageMembers = hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
         "manage_space_relation",
     );
     // Edit space — mirrors the desktop sidebar (KnowledgeSpaceItem) gating.
-    const canEditSpace = isAdmin || hasKnowledgeSpacePermission(
+    const canEditSpace = hasKnowledgeSpacePermission(
         spaceActionPermissions,
         space.id,
         "edit_space",
@@ -377,7 +378,7 @@ export function KnowledgeSpaceContent({
     const [permTarget, setPermTarget] = useState<{
         id: string;
         name: string;
-        type: "folder" | "knowledge_file" | "knowledge_space";
+        type: "folder" | "knowledge_file";
     } | null>(null);
     const [permissionEntryIds, setPermissionEntryIds] = useState<Set<string>>(new Set());
     const [renameEntryIds, setRenameEntryIds] = useState<Set<string>>(new Set());
@@ -553,7 +554,7 @@ export function KnowledgeSpaceContent({
     const [webLinkSubmitting, setWebLinkSubmitting] = useState(false);
 
     const triggerWebLink = () => {
-        if (!canUploadFile) return;
+        if (!knowledgeUploadCapabilities.webLink || !canUploadFile) return;
         setWebLinkDialogOpen(true);
     };
 
@@ -650,7 +651,7 @@ export function KnowledgeSpaceContent({
                 return;
             }
 
-            for (let f of filesList) {
+            for (const f of filesList) {
                 const fileMaxSizeMB = getMaxFileSizeMBForFile(f.name, uploadSizeLimits);
                 const fileMaxSizeBytes = getMaxFileSizeBytesForFile(f.name, uploadSizeLimits);
                 if (f.size > fileMaxSizeBytes) {
@@ -705,10 +706,9 @@ export function KnowledgeSpaceContent({
     };
 
     const handleStatusFilter = (status: FileStatus, checked: boolean) => {
-        const coupled = [status];
         const newFilter = checked
-            ? [...statusFilter, ...coupled.filter(s => !statusFilter.includes(s))]
-            : statusFilter.filter(s => !coupled.includes(s));
+            ? (statusFilter.includes(status) ? statusFilter : [...statusFilter, status])
+            : statusFilter.filter((s) => s !== status);
         setStatusFilter(newFilter);
         onFilterStatus(newFilter);
     };
@@ -993,6 +993,13 @@ export function KnowledgeSpaceContent({
         return null;
     };
 
+    // Toolbar select-all state — uploading folder placeholders (no backend
+    // identity) never count, mirroring handleSelectAll / handleSelectFile.
+    const selectableFiles = displayFiles.filter((f) => !isFolderUploadPlaceholder(f));
+    const isAllSelectedOnPage =
+        selectableFiles.length > 0 && selectableFiles.every((f) => selectedFiles.has(f.id));
+    const isSelectionIndeterminate =
+        !isAllSelectedOnPage && selectableFiles.some((f) => selectedFiles.has(f.id));
     const hasFailedFiles = displayFiles.some(f =>
         selectedFiles.has(f.id) && (
             f.status === FileStatus.FAILED ||
@@ -1072,7 +1079,7 @@ export function KnowledgeSpaceContent({
 
     return (
         <div
-            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg px-4 max-[767px]:overflow-hidden max-[767px]:px-0"
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-lg max-[767px]:overflow-hidden"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
@@ -1203,7 +1210,7 @@ export function KnowledgeSpaceContent({
                             </DropdownMenu>
                             {/* Hide the whole "..." trigger when every item is permission-gated
                                 away — an empty menu is confusing on mobile. */}
-                            {(canUploadFile || canCreateFolder || showShareInMenu || canManageMembers || canDeleteSpace) && (
+                            {(canUploadFile || canCreateFolder || showShareInMenu || canEditSpace || canManageMembers || canDeleteSpace) && (
                             <DropdownMenu onOpenChange={(open) => { if (open) ensureSpacePermissions(space.id); }}>
                                 <DropdownMenuTrigger asChild disabled={spaceListOpen}>
                                     <button
@@ -1221,7 +1228,7 @@ export function KnowledgeSpaceContent({
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.upload_file")}</span>
                                         </DropdownMenuItem>
                                     )}
-                                    {canUploadFile && (
+                                    {canUploadFile && knowledgeUploadCapabilities.webLink && (
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={triggerWebLink}>
                                             <Link2 className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.web_link")}</span>
@@ -1233,7 +1240,7 @@ export function KnowledgeSpaceContent({
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.new_folder")}</span>
                                         </DropdownMenuItem>
                                     )}
-                                    {canEditSpace && onEditSpace && (
+                                    {(canEditSpace || canManageMembers) && onEditSpace && (
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={() => onEditSpace()}>
                                             <Outlined.Edit className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.space_settings")}</span>
@@ -1243,15 +1250,6 @@ export function KnowledgeSpaceContent({
                                         <DropdownMenuItem className={sidebarListMoreMenuItemClassName} onClick={handleCopyShareLink}>
                                             <Outlined.Share className={sidebarListMoreMenuIconClassName} />
                                             <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.share")}</span>
-                                        </DropdownMenuItem>
-                                    )}
-                                    {canManageMembers && (
-                                        <DropdownMenuItem
-                                            className={sidebarListMoreMenuItemClassName}
-                                            onClick={() => setPermTarget({ id: space.id, name: space.name, type: "knowledge_space" })}
-                                        >
-                                            <Outlined.PeopleSafe className={sidebarListMoreMenuIconClassName} />
-                                            <span className={sidebarListMoreMenuLabelClassName}>{localize("com_knowledge.member_management")}</span>
                                         </DropdownMenuItem>
                                     )}
                                     {canDeleteSpace && (
@@ -1274,17 +1272,7 @@ export function KnowledgeSpaceContent({
                 space={space}
                 currentPath={currentPath}
                 onNavigateFolder={onNavigateFolder}
-                searchQuery={searchQuery}
                 isSearching={isSearching}
-                onSearch={handleSearch}
-                viewMode={viewMode}
-                setViewMode={setViewMode}
-                enableCardMode={!isH5}
-                statusFilter={statusFilter}
-                onFilterStatus={handleStatusFilter}
-                sortBy={sortBy}
-                sortDirection={sortDirection}
-                onSort={handleSort}
                 onCreateFolder={onCreateFolder}
                 onTriggerUpload={triggerUpload}
                 onTriggerUploadFolder={triggerUploadFolder}
@@ -1313,6 +1301,28 @@ export function KnowledgeSpaceContent({
             </div>
             )}
 
+            {/* Unified toolbar — shared by the list and card views (Figma 13198:75844).
+                Hidden in the full-page search view, which carries its own search box. */}
+            {!isH5 && !searchMode && (
+                <FileListToolbar
+                    spaceId={space.id}
+                    isRoot={currentPath.length === 0}
+                    onSearch={handleSearch}
+                    statusFilter={statusFilter}
+                    onFilterStatus={handleStatusFilter}
+                    showFilter={space.role !== SpaceRole.MEMBER}
+                    sortBy={sortBy}
+                    sortDirection={sortDirection}
+                    onSort={handleSort}
+                    viewMode={viewMode}
+                    setViewMode={setViewMode}
+                    isAllSelected={isAllSelectedOnPage}
+                    isIndeterminate={isSelectionIndeterminate}
+                    hasSelectableFiles={selectableFiles.length > 0}
+                    onSelectAll={() => handleSelectAll(isAllSelectedOnPage)}
+                />
+            )}
+
             {/* Content Container：中间区域滚动；手机端分页栏在下方 shrink-0，不随列表滚走 */}
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div
@@ -1336,7 +1346,7 @@ export function KnowledgeSpaceContent({
                                     {localize("com_knowledge.upload_file")}
                                 </DropdownMenuItem>
                             )}
-                            {canUploadFile && (
+                            {canUploadFile && knowledgeUploadCapabilities.webLink && (
                                 <DropdownMenuItem onClick={triggerWebLink} className="cursor-pointer">
                                     <Link2 className="mr-2 size-4" />
                                     {localize("com_knowledge.web_link")}
@@ -1388,10 +1398,12 @@ export function KnowledgeSpaceContent({
                                 className={cn(
                                     // pb-[112px] reserves room for the bottom AI dock (40px gap + 56px input + 16px safe-area)
                                     // so the last card row clears the dock with a 40px visual gap above the input top.
-                                    "w-full min-w-0 pt-4 pb-[112px]",
+                                    "w-full min-w-0 pb-[112px]",
                                     effectiveViewMode === "list"
-                                        ? "grid grid-cols-1 gap-0"
-                                        : "grid gap-4"
+                                        // H5 list stays full-bleed — its rows carry their own px-4 so a
+                                        // selected row's background spans the full width.
+                                        ? "grid grid-cols-1 gap-0 pt-4"
+                                        : "grid gap-2 px-2 pt-1"
                                 )}
                                 style={
                                     effectiveViewMode === "card"
@@ -1441,16 +1453,14 @@ export function KnowledgeSpaceContent({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="flex min-h-0 min-w-0 flex-1 flex-col border-t border-[#e5e6eb]">
-                                <FileTable files={displayFiles}
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                            <FileListView files={displayFiles}
                                     onEnsureFilePermissions={ensureFilePermissions}
                                     onScroll={handleListScroll}
                                     /* Reserve 112px under the last row so the bottom AI dock leaves
                                        a 40px visual gap above the input. */
                                     bottomSpacing={112}
                                     selectedFiles={selectedFiles}
-                                    handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
                                     isAdmin={isAdmin}
                                     currentUserRole={space.role}
@@ -1476,13 +1486,9 @@ export function KnowledgeSpaceContent({
                                     onOpenVersionManagement={(f) => setVersionMgmtFile(f)}
                                     onOpenVersionHistory={(f) => setVersionHistoryFile(f)}
                                     canManageMembers={canManageMembers}
-                                    sortBy={sortBy}
-                                    sortDirection={sortDirection}
-                                    onSort={handleSort}
                                     highlightedTagIds={searchTagIds}
                                     highlightKeyword={searchQuery}
-                                />
-                            </div>
+                            />
                         </div>
                     )}
                 </div>
@@ -1491,7 +1497,7 @@ export function KnowledgeSpaceContent({
             {/* Footer：仅在搜索且有选中时展示所选文件的路径面包屑（无分页器） */}
             {!isH5 && isSearching && selectedFiles.size > 0 && (
                 <div className="mt-auto w-full min-w-0 shrink-0">
-                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white py-3">
+                    <div className="flex w-full min-w-0 flex-shrink-0 items-center gap-y-1 border-t border-[#e5e6eb] bg-white px-4 py-3">
                         <SelectionPathBreadcrumb
                             spaceId={space.id}
                             spaceName={space.name}
@@ -1572,59 +1578,61 @@ export function KnowledgeSpaceContent({
                 }
             />
 
-            <Dialog
-                open={webLinkDialogOpen}
-                onOpenChange={(open) => {
-                    setWebLinkDialogOpen(open);
-                    if (!open) resetWebLinkDialog();
-                }}
-            >
-                <DialogContent className="max-w-[520px]">
-                    <DialogHeader>
-                        <DialogTitle>{localize("com_knowledge.web_link_import_title")}</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="knowledge-web-link-url">{localize("com_knowledge.web_link_url")}</Label>
-                            <Input
-                                id="knowledge-web-link-url"
-                                value={webLinkUrl}
-                                onChange={(e) => setWebLinkUrl(e.target.value)}
-                                placeholder="https://example.com/article"
-                                disabled={webLinkSubmitting}
-                            />
+            {knowledgeUploadCapabilities.webLink && (
+                <Dialog
+                    open={webLinkDialogOpen}
+                    onOpenChange={(open) => {
+                        setWebLinkDialogOpen(open);
+                        if (!open) resetWebLinkDialog();
+                    }}
+                >
+                    <DialogContent className="max-w-[520px]">
+                        <DialogHeader>
+                            <DialogTitle>{localize("com_knowledge.web_link_import_title")}</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="knowledge-web-link-url">{localize("com_knowledge.web_link_url")}</Label>
+                                <Input
+                                    id="knowledge-web-link-url"
+                                    value={webLinkUrl}
+                                    onChange={(e) => setWebLinkUrl(e.target.value)}
+                                    placeholder="https://example.com/article"
+                                    disabled={webLinkSubmitting}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="knowledge-web-link-title">{localize("com_knowledge.web_link_title")}</Label>
+                                <Input
+                                    id="knowledge-web-link-title"
+                                    value={webLinkTitle}
+                                    onChange={(e) => setWebLinkTitle(e.target.value)}
+                                    placeholder={localize("com_knowledge.web_link_title_placeholder")}
+                                    disabled={webLinkSubmitting}
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="knowledge-web-link-title">{localize("com_knowledge.web_link_title")}</Label>
-                            <Input
-                                id="knowledge-web-link-title"
-                                value={webLinkTitle}
-                                onChange={(e) => setWebLinkTitle(e.target.value)}
-                                placeholder={localize("com_knowledge.web_link_title_placeholder")}
+                        <DialogFooter>
+                            <button
+                                type="button"
+                                className="inline-flex h-9 items-center justify-center rounded-md border border-[#e5e6eb] bg-white px-4 text-sm text-[#4e5969] hover:bg-[#f7f8fa]"
+                                onClick={() => setWebLinkDialogOpen(false)}
                                 disabled={webLinkSubmitting}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <button
-                            type="button"
-                            className="inline-flex h-9 items-center justify-center rounded-md border border-[#e5e6eb] bg-white px-4 text-sm text-[#4e5969] hover:bg-[#f7f8fa]"
-                            onClick={() => setWebLinkDialogOpen(false)}
-                            disabled={webLinkSubmitting}
-                        >
-                            {localize("com_knowledge.cancel")}
-                        </button>
-                        <button
-                            type="button"
-                            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                            onClick={() => submitWebLink(false)}
-                            disabled={webLinkSubmitting}
-                        >
-                            {webLinkSubmitting ? localize("com_knowledge.importing") : localize("com_knowledge.import")}
-                        </button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                            >
+                                {localize("com_knowledge.cancel")}
+                            </button>
+                            <button
+                                type="button"
+                                className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={() => submitWebLink(false)}
+                                disabled={webLinkSubmitting}
+                            >
+                                {webLinkSubmitting ? localize("com_knowledge.importing") : localize("com_knowledge.import")}
+                            </button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
 
             {permTarget && (
                 <KnowledgeSpaceShareDialog
@@ -1637,7 +1645,6 @@ export function KnowledgeSpaceContent({
                     resourceType={permTarget.type}
                     resourceId={permTarget.id}
                     resourceName={permTarget.name}
-                    isDepartmentSpace={permTarget.type === "knowledge_space" && space?.spaceKind === "department"}
                 />
             )}
 

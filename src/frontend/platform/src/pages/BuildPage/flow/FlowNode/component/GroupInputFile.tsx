@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { Switch } from "@/components/bs-ui/switch"
 import { QuestionTooltip } from "@/components/bs-ui/tooltip"
 import { WorkflowNode } from "@/types/flow"

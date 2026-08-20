@@ -1,3 +1,4 @@
+// @ts-strict-ignore
 import { forwardRef } from 'react';
 import type { ChangeEvent, FC, Ref } from 'react';
 import { cn, defaultTextPropsLabel, removeFocusOutlines, defaultTextProps } from '~/utils/';
