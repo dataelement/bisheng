@@ -3,15 +3,15 @@
 ## 元信息 Metadata
 
 - Feature ID: `055-knowledge-space-content-stat-rebuild`
-- Status: `implementation-awaiting-destructive-confirmation`
+- Status: `scope-updated-awaiting-confirmation`
 - Inputs: `requirements.md`, `design.md`
 - Created: `2026-08-20`
 - Updated: `2026-08-20`
-- Execution gate: 代码实施确认已满足；T014 删除并重建索引仍需基于 dry-run 结果单独确认
+- Execution gate: `REQ-001` 至 `REQ-007` 的代码实施确认已满足；新增 `T015` 至 `T018` 需确认更新后的设计与任务后实施；T014 删除并重建索引仍需单独确认
 
 ## 执行原则
 
-- 严格限制在 `REQ-001` 至 `REQ-007`；发现新增口径先更新规格，不直接扩范围。
+- 严格限制在 `REQ-001` 至 `REQ-008`；发现新增口径先更新规格，不直接扩范围。
 - 先补回归测试或契约测试，再修改对应实现。
 - 保留工作区现有无关改动，不格式化无关文件。
 - 破坏性索引重建不属于普通代码实现步骤；完成代码验证后必须单独展示 preflight 并再次确认。
@@ -252,8 +252,8 @@ _Boundary: 只改脚本与测试；实现阶段不得实际执行 --apply。_
 ### [x] T012 执行定向模块回归和静态检查
 
 _Requirements: REQ-001, REQ-002, REQ-003, REQ-004, REQ-005, REQ-006, REQ-007_  
-_Acceptance: all acceptance criteria in requirements.md_  
-_Verification: all verification IDs in requirements.md_  
+_Acceptance: all acceptance criteria in REQ-001 through REQ-007_
+_Verification: all verification IDs for REQ-001 through REQ-007_
 _Depends: T001-T011_  
 _Boundary: 只验证已确认范围，不运行无关全量测试。_
 
@@ -282,7 +282,7 @@ uv run ruff check <changed-python-files>
 
 - 运行 `bash scripts/arch-guard.sh`，任何 VIOLATION 必须修复。
 - 记录实际命令、通过数、失败数和未覆盖的外部环境限制。
-- 覆盖：全部 `V-*` 的代码级证据。
+- 覆盖：`REQ-001` 至 `REQ-007` 的全部 `V-*` 代码级证据；本任务完成后新增的 `REQ-008` 由 `T018` 验证。
 - 依赖：`T001`～`T011`。
 
 ### [x] T013 执行 dry-run 并形成破坏性操作检查单
@@ -337,6 +337,100 @@ PYTHONPATH=./ python scripts/rebuild_knowledge_space_content_stat.py \
   - 看板可选择 8 个组织维度和收藏次数。
 - 依赖：`T013` + 用户对实际破坏性操作的单独确认。
 
+`T014` 与以下知识贡献占比任务不存在数据依赖。实现 `T015` 至 `T018` 不授权执行 `T014`；建议使用 `sdd-task T015-T018` 单独推进。
+
+## Phase 6：知识贡献占比虚拟指标（范围更新）
+
+### [ ] T015 实现通用 `share_of_parent` 查询策略
+
+_Requirements: REQ-008_
+_Acceptance: AC-REQ-008-02, AC-REQ-008-03, AC-REQ-008-04, AC-REQ-008-05, AC-REQ-008-06, AC-REQ-008-08_
+_Verification: V-CONTRIBUTION-QUERY-001, V-CONTRIBUTION-REGRESSION-001_
+_Depends: T010_
+_Boundary: 只扩展通用数据集配置与只读查询计算，不硬编码知识空间数据集，不修改 ES 文档、Mapping 或重建流程。_
+
+- 先新增 `test/telemetry_search/test_knowledge_contribution_ratio.py`，参数化覆盖：
+  - 上传人和文件所属两套层级；
+  - 单层组织分组；
+  - 公司＋部门、部门＋科室等父级分母；
+  - 时间或业务域等非组织分组保留；
+  - 最末级字段缺失排除；
+  - 零分母返回 0；
+  - 普通维度与 stack dimension 两种目标位置。
+- 在 `MetricConfig` 增加可选 `calculation`、`share_dimension_hierarchy`、`default_number_format`，旧配置解析结果保持不变。
+- 在查询 Schema 增加通用 `ExistsOp`。
+- 在 `DataQueryService` 增加 `query_share_of_parent_metric`：分子保留完整维度，分母只移除层级声明中最深的已选组织维度，并按保留上下文键合并。
+- 未选择声明组织维度时不报错，按当前上下文返回整体比例；不增加维度配对校验。
+- 保持 `query_formula_metric`、`query_sum_metric`、`query_index_metric` 和普通聚合分支不变。
+- 验证：
+
+```bash
+cd src/backend
+uv run pytest \
+  test/telemetry_search/test_knowledge_contribution_ratio.py \
+  test/test_realtime_dashboard.py \
+  -q
+```
+
+### [ ] T016 注册两套知识贡献占比数据集指标
+
+_Requirements: REQ-008_
+_Acceptance: AC-REQ-008-01, AC-REQ-008-02, AC-REQ-008-07, AC-REQ-008-09_
+_Verification: V-CONTRIBUTION-SCHEMA-001, V-CONTRIBUTION-FORMAT-001_
+_Depends: T015_
+_Boundary: 只更新系统数据集 seed 与契约测试，不创建组件、不修改自定义看板、不运行索引重建。_
+
+- 在“知识空间内容统计”注册：
+  - `uploader_knowledge_contribution_ratio` / “上传人知识贡献占比”；
+  - `belonging_knowledge_contribution_ratio` / “文件所属知识贡献占比”。
+- 两个指标均使用 `record_type=file`、`file_type=1`、有效 `space_level` 和 `value_count(file_id)`。
+- 分别声明上传人和文件所属的 `company → department → office → squad` 层级。
+- 声明默认格式 `{type: percent, decimalPlaces: 1, thousandSeparator: false}`。
+- 扩展 `test_knowledge_space_content_dataset.py`，断言指标名称、层级、过滤、聚合、计算策略和默认格式，并断言 Mapping/重建契约没有新增占比字段。
+- 验证：
+
+```bash
+cd src/backend
+uv run pytest \
+  test/telemetry_search/test_knowledge_space_content_dataset.py \
+  test/telemetry_search/test_knowledge_contribution_ratio.py \
+  -q
+```
+
+### [ ] T017 透传贡献占比默认百分比格式
+
+_Requirements: REQ-008_
+_Acceptance: AC-REQ-008-01, AC-REQ-008-07, AC-REQ-008-08_
+_Verification: V-CONTRIBUTION-FORMAT-001, V-CONTRIBUTION-REGRESSION-001_
+_Depends: T016_
+_Boundary: 只影响指标首次加入组件时的默认格式；不得覆盖已保存组件格式或改变其他 divide 指标默认值。_
+
+- 修正前端数据集 `MetricConfig` 类型，使其与后端真实 schema 字段一致，并增加 `default_number_format`。
+- `DatasetSelector` 将默认格式随点击和拖拽数据传递到图表状态。
+- `useChartState` 在新指标没有组件级 `numberFormat` 时采用数据集默认格式；已保存格式优先。
+- 新增 `knowledgeContributionMetricFormat.test.ts`，覆盖两个贡献指标 1 位百分比、已有 divide 默认行为以及已保存格式不被覆盖。
+- 验证：
+
+```bash
+cd src/frontend/platform
+npm test -- src/test/knowledgeContributionMetricFormat.test.ts src/test/pieChartTooltip.test.ts
+```
+
+### [ ] T018 执行贡献占比跨层定向验证并更新证据
+
+_Requirements: REQ-008_
+_Acceptance: AC-REQ-008-01, AC-REQ-008-02, AC-REQ-008-03, AC-REQ-008-04, AC-REQ-008-05, AC-REQ-008-06, AC-REQ-008-07, AC-REQ-008-08, AC-REQ-008-09_
+_Verification: V-CONTRIBUTION-SCHEMA-001, V-CONTRIBUTION-QUERY-001, V-CONTRIBUTION-FORMAT-001, V-CONTRIBUTION-REGRESSION-001_
+_Depends: T015, T016, T017_
+_Boundary: 只验证 `REQ-008` 及受影响的既有查询行为；不得执行 T014 或任何索引删除重建。_
+
+- 运行 T015～T017 的后端和前端定向测试各一次。
+- 对本批次修改的 Python 文件执行 `ruff check`、`ruff format --check` 和 `py_compile`。
+- 对本批次修改的前端文件执行目标 Vitest；如项目现有 typecheck/build 可在当前环境运行，再执行最小相关检查并记录结果。
+- 运行 `bash scripts/arch-guard.sh` 和 `git diff --check`。
+- 更新 `verification.md`，将 `REQ-008` 的实际命令、通过数、失败数、未验证项与手工验证建议单独记录。
+- 明确确认没有修改知识内容索引 Mapping、重建脚本和已有数据。
+
 ## 需求追踪矩阵
 
 | Requirement | Tasks |
@@ -348,6 +442,7 @@ PYTHONPATH=./ python scripts/rebuild_knowledge_space_content_stat.py \
 | `REQ-005` | `T003`, `T007`, `T008`, `T009`, `T012` |
 | `REQ-006` | `T004`, `T005`, `T009`, `T011`, `T012`, `T013`, `T014` |
 | `REQ-007` | `T001`, `T004`, `T006`, `T010`, `T011`, `T012`, `T014` |
+| `REQ-008` | `T015`, `T016`, `T017`, `T018` |
 
 ## 实际偏差记录
 
@@ -362,3 +457,6 @@ PYTHONPATH=./ python scripts/rebuild_knowledge_space_content_stat.py \
 - 如果 Redis 无法满足事件 payload/lease 持久化要求，暂停 `T004`，不得退化为只记录日志后丢事件。
 - 如果目标环境 dry-run 数量与门户/看板口径不一致，暂停 `T014`，先定位有效文件查询差异。
 - 如果实际索引存在未识别的其他 `record_type`，暂停重建并请用户确认，不默认删除未知业务数据。
+- 如果 `share_of_parent` 需要硬编码数据集或指标字段才能完成，暂停 T015，返回设计层修正通用配置契约。
+- 如果分母移除目标维度后无法稳定映射回完整分子维度键，暂停 T015，不得以逐行自身相除或前端二次汇总替代。
+- 如果默认格式透传会覆盖已保存组件 `numberFormat`，暂停 T017，优先保护现有组件兼容性。

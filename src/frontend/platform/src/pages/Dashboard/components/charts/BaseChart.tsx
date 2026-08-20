@@ -472,7 +472,7 @@ const getCartesianChartOption = (
     if (styleConfig.showDataLabel) {
       item.label = {
         show: true,
-        position: 'top',
+        position: chartType === ChartType.GroupedHorizontalBar ? 'right' : 'top',
         fontSize: 10,
         color: "#666",
         formatter: (params: any) => unitConversion(params.value, dataConfig).join('')

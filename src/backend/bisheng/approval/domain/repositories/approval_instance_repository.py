@@ -74,6 +74,25 @@ class ApprovalInstanceRepository:
             return list((await session.exec(statement)).all())
 
     @classmethod
+    async def list_by_scenario_codes(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_codes: list[str],
+        statuses: list[str] | None = None,
+    ) -> list[ApprovalInstance]:
+        if not scenario_codes:
+            return []
+        statement = select(ApprovalInstance).where(
+            ApprovalInstance.tenant_id == tenant_id,
+            ApprovalInstance.scenario_code.in_(scenario_codes),
+        )
+        if statuses:
+            statement = statement.where(ApprovalInstance.status.in_(statuses))
+        async with get_async_db_session() as session:
+            return list((await session.exec(statement)).all())
+
+    @classmethod
     async def update_instance(cls, row: ApprovalInstance) -> ApprovalInstance:
         async with get_async_db_session() as session:
             saved = await session.get(ApprovalInstance, row.id)

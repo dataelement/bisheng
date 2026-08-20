@@ -13,6 +13,7 @@ import "./index.css"
 import { cn } from "@/utils"
 import { useTranslation } from "react-i18next"
 import Tip from "@/components/bs-ui/tooltip/tip"
+import { CHART_TITLE_MAX_LENGTH, limitChartTitleLength } from "../../chartTitle"
 
 interface ComponentWrapperProps {
     component: DashboardComponent
@@ -77,10 +78,10 @@ export const ComponentWrapper = memo(({
             return
         }
 
-        if (trimmedTitle.length < 1 || trimmedTitle.length > 200) {
+        if (trimmedTitle.length < 1 || trimmedTitle.length > CHART_TITLE_MAX_LENGTH) {
             setTitle(component.title)
             toast({
-                description: t('charLimit200'),
+                description: t('chartTitleCharLimit30'),
                 variant: "error",
             })
             return
@@ -262,9 +263,10 @@ export const ComponentWrapper = memo(({
                             <Input
                                 ref={inputRef}
                                 value={title}
-                                onChange={(e) => setTitle(e.target.value)}
+                                onChange={(e) => setTitle(limitChartTitleLength(e.target.value))}
                                 onBlur={handleRenameBlur}
                                 onKeyDown={handleKeyDown}
+                                maxLength={CHART_TITLE_MAX_LENGTH}
                                 className="max-w-40 h-5 px-2 text-sm font-medium border-primary"
                                 onClick={(e) => e.stopPropagation()}
                             />
@@ -316,5 +318,4 @@ export const ComponentWrapper = memo(({
         </div>
     )
 });
-
 

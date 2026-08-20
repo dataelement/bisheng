@@ -19,6 +19,7 @@ import { NotificationSeverity } from "~/common/types";
 import useLocalize from "~/hooks/useLocalize";
 import { cn } from "~/utils";
 import { resolveDepartmentDisplayName } from "~/utils/departmentDisplayName";
+import { getSpaceInfoApi } from "~/api/knowledge";
 import { FutureApproverList } from "./FutureApproverList";
 import { Dialog, DialogContent } from "../ui/Dialog";
 
@@ -151,6 +152,83 @@ const KNOWLEDGE_SPACE_CREATE_SCENARIO = "knowledge_space_create_request";
 const FILE_PUBLISH_SCENARIO = "knowledge_space_file_publish_request";
 const FILE_SHARE_SCENARIO = "knowledge_space_file_share_request";
 const DEPARTMENT_FILE_VIEW_SCENARIO = "department_file_view_request";
+const SPACE_ID_NAME_KEYS = [
+  ["target_space_id", "target_space_name"],
+  ["source_space_id", "source_space_name"],
+  ["original_knowledge_id", "original_knowledge_name"],
+] as const;
+
+function collectSnapshotSpaceIds(snapshot: Record<string, any> | null | undefined): number[] {
+  if (!snapshot) return [];
+  const ids = SPACE_ID_NAME_KEYS.map(([idKey]) => Number(snapshot[idKey] || 0)).filter((id) => id > 0);
+  return Array.from(new Set(ids));
+}
+
+function applyLiveSpaceNames(
+  snapshot: Record<string, any> | null | undefined,
+  liveNames: Record<number, string>,
+): Record<string, any> {
+  const next = { ...(snapshot ?? {}) };
+  for (const [idKey, nameKey] of SPACE_ID_NAME_KEYS) {
+    const spaceId = Number(next[idKey] || 0);
+    if (spaceId && liveNames[spaceId]) {
+      next[nameKey] = liveNames[spaceId];
+    }
+  }
+  return next;
+}
+
+function liveFileSpaceBusinessName(
+  scenarioCode: string | undefined,
+  snapshot: Record<string, any>,
+  fallback: string | undefined | null,
+): string {
+  const fileName = String(snapshot.source_file_name || "").trim();
+  const targetName = String(snapshot.target_space_name || "").trim();
+  if (scenarioCode === FILE_PUBLISH_SCENARIO && fileName && targetName) {
+    return `发布文件：${fileName} → ${targetName}`;
+  }
+  if (scenarioCode === FILE_SHARE_SCENARIO && fileName && targetName) {
+    return `分享文件：${fileName} → ${targetName}`;
+  }
+  return fallback || "";
+}
+
+function useLiveSpaceNameMap(snapshot: Record<string, any> | null | undefined): Record<number, string> {
+  const [liveNames, setLiveNames] = useState<Record<number, string>>({});
+  const spaceIdsKey = collectSnapshotSpaceIds(snapshot).join(",");
+
+  useEffect(() => {
+    let cancelled = false;
+    const ids = spaceIdsKey ? spaceIdsKey.split(",").map(Number).filter((id) => id > 0) : [];
+    if (ids.length === 0) {
+      setLiveNames({});
+      return;
+    }
+    void Promise.all(
+      ids.map(async (id) => {
+        try {
+          const space = await getSpaceInfoApi(String(id));
+          return [id, space.name] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((rows) => {
+      if (cancelled) return;
+      const next: Record<number, string> = {};
+      for (const row of rows) {
+        if (row && row[1]) next[row[0]] = row[1];
+      }
+      setLiveNames(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [spaceIdsKey]);
+
+  return liveNames;
+}
 /** 定向问题转公开：业务禁止撤回，审批中心不展示撤回入口 */
 const QA_QUESTION_PUBLISH_SCENARIO = "qa_question_publish";
 
@@ -890,23 +968,27 @@ function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenario
 function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; localize: ReturnType<typeof useLocalize> }) {
   const instanceId = detail.instance_id;
   const serialNo = instanceId ? formatSerialNo(instanceId, detail.create_time) : "--";
+  const snapshot = detail.detail_snapshot ?? detail.payload_snapshot;
+  const liveNames = useLiveSpaceNameMap(snapshot);
+  const liveSnapshot = applyLiveSpaceNames(snapshot, liveNames);
+  const liveBusinessName = liveFileSpaceBusinessName(detail.scenario_code, liveSnapshot, detail.business_name);
 
   const basicRows: [string, string][] = [
     [localize("com_approval_field_serial_no"),      serialNo],
     [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
-    [localize("com_approval_field_business_target"),detail.business_name || "--"],
+    [localize("com_approval_field_business_target"),liveBusinessName || "--"],
     [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
     [localize("com_approval_field_department"),      approvalDepartmentName(detail) || "--"],
     [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.instance_status ?? detail.status}` as any, { defaultValue: detail.instance_status || detail.status || "--" }) as string],
   ];
 
-  const detailRows = buildBusinessContentRows(detail.scenario_code, detail.detail_snapshot ?? detail.payload_snapshot, localize);
+  const detailRows = buildBusinessContentRows(detail.scenario_code, liveSnapshot, localize);
   const showContent = detailRows.length > 0;
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
+      <DetailHeader title={formatTitle(detail.scenario_code, liveBusinessName, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
@@ -1065,12 +1147,16 @@ function TaskDetailPanel({ detail, localize }: { detail: ApprovalTaskDetail; loc
 function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDetail; localize: ReturnType<typeof useLocalize> }) {
   const id = detail.instance_id ?? detail.id;
   const serialNo = id ? formatSerialNo(Number(id), detail.create_time) : "--";
+  const snapshot = detail.detail_snapshot ?? detail.payload_snapshot;
+  const liveNames = useLiveSpaceNameMap(snapshot);
+  const liveSnapshot = applyLiveSpaceNames(snapshot, liveNames);
+  const liveBusinessName = liveFileSpaceBusinessName(detail.scenario_code, liveSnapshot, detail.business_name);
 
   const isTerminal = ["executed", "rejected", "withdrawn", "cancelled"].includes(detail.status ?? "");
   const basicRows: [string, string][] = [
     [localize("com_approval_field_serial_no"),      serialNo],
     [localize("com_approval_field_scenario_type"),  detail.scenario_name || detail.scenario_code || "--"],
-    [localize("com_approval_field_business_target"),detail.business_name || "--"],
+    [localize("com_approval_field_business_target"),liveBusinessName || "--"],
     [localize("com_approval_field_applicant"),       detail.applicant_user_name || "--"],
     [localize("com_approval_field_department"),      approvalDepartmentName(detail) || "--"],
     [localize("com_approval_field_apply_time"),      formatTime(detail.create_time)],
@@ -1078,11 +1164,11 @@ function RequestDetailPanel({ detail, localize }: { detail: ApprovalInstanceDeta
     [localize("com_approval_status_label").replace("：", ""), localize(`com_approval_status_${detail.status}` as any, { defaultValue: detail.status ?? "--" }) as string],
   ];
 
-  const detailRows = buildBusinessContentRows(detail.scenario_code, detail.detail_snapshot, localize);
+  const detailRows = buildBusinessContentRows(detail.scenario_code, liveSnapshot, localize);
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="instance" serialNo={serialNo}
+      <DetailHeader title={formatTitle(detail.scenario_code, liveBusinessName, localize)} status={detail.status} scope="instance" serialNo={serialNo}
         scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} />
 
       <div>
