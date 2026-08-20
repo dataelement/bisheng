@@ -42,7 +42,7 @@ interface SearchState extends NodePageState {
   keyword: string;
 }
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 const UNASSIGNED_KEY = "unassigned";
 type NodeKey = number | typeof UNASSIGNED_KEY;
 
@@ -168,7 +168,7 @@ export function SubjectSearchUserTree({
               ? rows
               : mergeUsers(current[stateKey]?.rows ?? [], rows),
             page,
-            hasMore: rows.length > 0,
+            hasMore: rows.length >= PAGE_SIZE,
             loading: false,
             error: false,
           },
@@ -225,7 +225,7 @@ export function SubjectSearchUserTree({
           keyword: searchKeyword,
           rows: page === 1 ? rows : mergeUsers(current.rows, rows),
           page,
-          hasMore: rows.length > 0,
+          hasMore: rows.length >= PAGE_SIZE,
           loading: false,
           error: false,
         }));
@@ -260,6 +260,93 @@ export function SubjectSearchUserTree({
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
+  const [bulkLoadingDept, setBulkLoadingDept] = useState<Set<NodeKey>>(new Set());
+
+  // 收集某部门(不含子部门)当前已加载的 users
+  const getLoadedUsersOfDept = useCallback(
+    (key: NodeKey): PermissionUserRow[] => {
+      const state = nodeStates[String(key)];
+      return state ? state.rows : [];
+    },
+    [nodeStates],
+  );
+
+  // 拉完某部门所有分页,返回全部 users
+  const fetchAllUsersOfDept = useCallback(
+    async (key: NodeKey): Promise<PermissionUserRow[]> => {
+      const collected: PermissionUserRow[] = [];
+      const seen = new Set<number>();
+      let page = 1;
+      while (true) {
+        const rows = await getGrantUsers(
+          resourceType,
+          resourceId,
+          key === UNASSIGNED_KEY
+            ? { keyword: "", page, page_size: PAGE_SIZE, unassigned: true }
+            : { keyword: "", page, page_size: PAGE_SIZE, department_id: key },
+        );
+        for (const u of rows) {
+          if (!seen.has(u.user_id)) {
+            seen.add(u.user_id);
+            collected.push(u);
+          }
+        }
+        if (rows.length < PAGE_SIZE) break;
+        page += 1;
+        if (page > 200) break; // 兜底,避免死循环
+      }
+      return collected;
+    },
+    [getGrantUsers, resourceId, resourceType],
+  );
+
+  const toggleDepartmentSelectAll = async (key: NodeKey) => {
+    if (bulkLoadingDept.has(key)) return;
+    setBulkLoadingDept((s) => new Set(s).add(key));
+    try {
+      const allUsers = await fetchAllUsersOfDept(key);
+      const selectable = allUsers.filter((u) => !disabledIdSet.has(u.user_id));
+      const selectableIds = new Set(selectable.map((u) => u.user_id));
+      const allSelected = selectable.length > 0 && selectable.every((u) => selectedIds.has(u.user_id));
+      if (allSelected) {
+        onChange(value.filter((subject) => !selectableIds.has(subject.id)));
+      } else {
+        const byId = new Map(value.map((subject) => [subject.id, subject]));
+        selectable.forEach((u) => byId.set(u.user_id, { type: "user", id: u.user_id, name: u.user_name }));
+        onChange(Array.from(byId.values()));
+      }
+      // 同步更新 nodeStates,让 UI 立刻反映
+      setNodeStates((current) => ({
+        ...current,
+        [String(key)]: {
+          rows: allUsers,
+          page: Math.max(1, Math.ceil(allUsers.length / PAGE_SIZE)),
+          hasMore: false,
+          loading: false,
+          error: false,
+        },
+      }));
+    } catch {
+      // ignore, 让用户重试
+    } finally {
+      setBulkLoadingDept((s) => {
+        const next = new Set(s);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
+
+  // 部门 checkbox 状态: 'none' | 'some' | 'all'
+  const getDepartmentCheckboxState = (key: NodeKey): 'none' | 'some' | 'all' => {
+    const loaded = getLoadedUsersOfDept(key).filter((u) => !disabledIdSet.has(u.user_id));
+    if (loaded.length === 0) return 'none';
+    const selectedCount = loaded.filter((u) => selectedIds.has(u.user_id)).length;
+    if (selectedCount === 0) return 'none';
+    if (selectedCount === loaded.length) return 'all';
+    return 'some';
+  };
+
   const toggleUser = (user: PermissionUserRow) => {
     if (disabledIdSet.has(user.user_id)) return;
     if (selectedIds.has(user.user_id)) {
@@ -274,6 +361,54 @@ export function SubjectSearchUserTree({
     });
     onChange(Array.from(byId.values()));
   };
+
+  // 关键字匹配部门名字(name / short_name / display_name)
+  const deptMatchesKeyword = useCallback((node: DepartmentNode, kw: string) => {
+    if (!kw) return false;
+    const k = kw.toLowerCase();
+    const fields = [
+      node.name,
+      node.short_name,
+      node.display_name,
+    ].filter(Boolean) as string[];
+    return fields.some((f) => f.toLowerCase().includes(k));
+  }, []);
+
+  // 收集所有名字匹配的 dept id (含祖先链,便于展开显示)
+  const nameMatchedDeptIds = useMemo(() => {
+    const kw = keyword.trim();
+    if (!kw) return new Set<number>();
+    const matched = new Set<number>();
+    const parentById = new Map<number, number | null>();
+    const walk = (nodes: DepartmentNode[]) => {
+      nodes.forEach((n) => {
+        parentById.set(n.id, n.parent_id);
+        if (deptMatchesKeyword(n, kw)) matched.add(n.id);
+        walk(n.children ?? []);
+      });
+    };
+    walk(tree);
+    // 补齐祖先链,让匹配部门在树中可见
+    Array.from(matched).forEach((id) => {
+      let p: number | null | undefined = parentById.get(id);
+      while (p != null && !matched.has(p)) {
+        matched.add(p);
+        p = parentById.get(p);
+      }
+    });
+    return matched;
+  }, [deptMatchesKeyword, keyword, tree]);
+
+  // 名字命中的 dept 自动加载其 users(page 1)
+  useEffect(() => {
+    if (!keyword.trim()) return;
+    nameMatchedDeptIds.forEach((id) => {
+      const st = nodeStates[String(id)];
+      if (!st || (st.page === 0 && !st.loading)) {
+        void loadNodePage(id, 1);
+      }
+    });
+  }, [keyword, loadNodePage, nameMatchedDeptIds, nodeStates]);
 
   const searchGroups = useMemo(() => {
     const byDepartment = new Map<number, PermissionUserRow[]>();
@@ -303,15 +438,17 @@ export function SubjectSearchUserTree({
       });
     };
     collectParents(tree);
-    searchGroups.byDepartment.forEach((_rows, departmentId) => {
-      let currentId: number | null | undefined = departmentId;
+    const addWithAncestors = (id: number) => {
+      let currentId: number | null | undefined = id;
       while (currentId != null && !visibleIds.has(currentId)) {
         visibleIds.add(currentId);
         currentId = parentById.get(currentId);
       }
-    });
+    };
+    searchGroups.byDepartment.forEach((_rows, departmentId) => addWithAncestors(departmentId));
+    nameMatchedDeptIds.forEach((id) => addWithAncestors(id));
     return visibleIds;
-  }, [searchGroups.byDepartment, tree]);
+  }, [nameMatchedDeptIds, searchGroups.byDepartment, tree]);
 
   const isSearching = Boolean(keyword.trim());
 
@@ -360,9 +497,6 @@ export function SubjectSearchUserTree({
           </button>
         </div>
       )}
-      {!state.loading && !state.error && state.rows.length === 0 && state.page > 0 && (
-        <div className="py-2 pl-11 text-xs text-gray-500">{localize("com_permission.empty_department_users")}</div>
-      )}
       {!state.loading && !state.error && state.hasMore && state.page > 0 && (
         <button
           type="button"
@@ -387,20 +521,42 @@ export function SubjectSearchUserTree({
     });
     return (
       <div key={node.id}>
-        <button
-          type="button"
+        <div
           data-testid={`permission-user-tree-department-${node.id}`}
           className="flex w-full items-center gap-2 py-2 pr-3 text-left text-sm text-[#212121] hover:bg-gray-50"
           style={{ paddingLeft: 12 + depth * 20 }}
-          onClick={() => !isSearching && toggleExpand(node.id)}
         >
-          {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-          <Building2 className="size-4 text-gray-400" />
-          <span className="truncate" title={displayName}>{displayName}</span>
-        </button>
+          <button
+            type="button"
+            className="flex items-center gap-1 flex-1 min-w-0 text-left"
+            onClick={() => !isSearching && toggleExpand(node.id)}
+          >
+            {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+            <Building2 className="size-4 text-gray-400" />
+            <span className="truncate" title={displayName}>{displayName}</span>
+          </button>
+          <Checkbox
+            checked={
+              getDepartmentCheckboxState(node.id) === 'all'
+                ? true
+                : getDepartmentCheckboxState(node.id) === 'some'
+                ? 'indeterminate'
+                : false
+            }
+            disabled={bulkLoadingDept.has(node.id)}
+            title="全选/取消全选此部门(会自动加载全部用户)"
+            onCheckedChange={() => {
+              void toggleDepartmentSelectAll(node.id);
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
         {isExpanded && (
           <div>
-            {(isSearching ? searchRows : state.rows).map((user) => renderUser(user, node.id, depth))}
+            {(isSearching
+              ? (nameMatchedDeptIds.has(node.id) ? state.rows : searchRows)
+              : state.rows
+            ).map((user) => renderUser(user, node.id, depth))}
             {!isSearching && renderNodeStatus(node.id, state)}
             {(node.children ?? []).map((child) => renderDepartment(child, depth + 1))}
           </div>

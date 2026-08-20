@@ -2025,7 +2025,7 @@
     "search_department": "部署を検索",
     "search_clinic": "科室を検索",
     "search_user": "ユーザーを検索",
-    "search_user_by_name_or_account": "名前またはアカウントを検索",
+    "search_user_by_name_or_account": "名前、アカウント、または部門を検索",
     "search_user_group": "ユーザーグループを検索",
     "selected_prefix": "選択済み",
     "subject_department": "部署",

@@ -2101,7 +2101,7 @@
     "search_department": "Search departments",
     "search_clinic": "Search clinics",
     "search_user": "Search users",
-    "search_user_by_name_or_account": "Search name or account",
+    "search_user_by_name_or_account": "Search name, account or department",
     "search_user_group": "Search user groups",
     "selected_prefix": "Selected ",
     "subject_department": "Department",
