@@ -69,6 +69,27 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
     );
 }
 
+/** File/folder eligible for single or batch re-parse from the space file list. */
+export function isKnowledgeFileReparseRetryable(
+    file: Pick<
+        KnowledgeFile,
+        "status" | "type" | "successFileNum" | "fileNum" | "folderStatsLoading" | "folderStatsError"
+    >,
+): boolean {
+    if (file.type === FileType.FOLDER) {
+        if (file.folderStatsLoading || file.folderStatsError) return false;
+        if (file.successFileNum !== undefined && file.fileNum !== undefined) {
+            return file.successFileNum < file.fileNum;
+        }
+        return false;
+    }
+    return (
+        file.status === FileStatus.FAILED
+        || file.status === FileStatus.VIOLATION
+        || file.status === FileStatus.TIMEOUT
+    );
+}
+
 // ─── File upload constants ──────────────────────────────────────────
 /**
  * Allowed file extensions for upload — fully populated set (assumes ETL4LM is enabled).

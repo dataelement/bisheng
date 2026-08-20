@@ -14,7 +14,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Badge } from "~/components/ui/Badge";
@@ -331,11 +331,7 @@ export function FileCard({
         onPreview?.(file.id);
     };
 
-    const defaultCanRetry = (
-        file.status === FileStatus.FAILED ||
-        file.status === FileStatus.VIOLATION ||
-        (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
-    );
+    const defaultCanRetry = isKnowledgeFileReparseRetryable(file);
     const hasRetryOption = Boolean(onRetry && (canRetryFile ? canRetryFile(file) : defaultCanRetry));
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
     const canEditTags = isAdmin && !isFolder && !isReadonlyDistributionEntry;

@@ -10445,10 +10445,75 @@ class TestTupleLifecycle:
                 "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
                 new_callable=AsyncMock,
             ) as mock_enqueue,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_pdf_artifact_service.request_pdf_artifact_generation",
+                new_callable=AsyncMock,
+            ),
         ):
             await service.batch_retry_failed_files(1, [126])
 
         mock_enqueue.assert_awaited_once_with([126])
+
+    @pytest.mark.asyncio
+    async def test_batch_retry_failed_files_includes_timeout_status(self, service):
+        space = _make_space(auth_type=AuthTypeEnum.PUBLIC)
+        file_record = _make_file(file_id=127, knowledge_id=1)
+        file_record.status = KnowledgeFileStatus.TIMEOUT.value
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+                new_callable=AsyncMock,
+                return_value=space,
+            ),
+            patch.object(
+                service,
+                "_require_read_permission",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aget_file_by_ids",
+                new_callable=AsyncMock,
+                return_value=[file_record],
+            ),
+            patch.object(
+                service,
+                "_require_resource_permission",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.aupdate_file_status",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_update_knowledge_update_time_by_id",
+                new_callable=AsyncMock,
+            ),
+            patch.object(
+                service,
+                "update_folder_update_time",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
+                new_callable=AsyncMock,
+            ) as mock_enqueue,
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_parse_dispatch_service.dispatch_knowledge_parse_task",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.knowledge_pdf_artifact_service.request_pdf_artifact_generation",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await service.batch_retry_failed_files(1, [127])
+
+        mock_enqueue.assert_awaited_once_with([127])
 
 
 class TestFineGrainedPermissionRuntime:

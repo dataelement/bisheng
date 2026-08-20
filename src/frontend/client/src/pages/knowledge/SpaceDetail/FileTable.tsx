@@ -41,7 +41,7 @@ import {
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -1245,11 +1245,7 @@ function FileRow({
         onCancelCreate,
     });
 
-    const defaultCanRetry = (
-        file.status === FileStatus.FAILED ||
-        file.status === FileStatus.VIOLATION ||
-        (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
-    );
+    const defaultCanRetry = isKnowledgeFileReparseRetryable(file);
     const hasRetryOption = canRetryFile ? canRetryFile(file) : defaultCanRetry;
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
     const canEditTags = canEditEncoding && !isFolder && !isReadonlyDistributionEntry;

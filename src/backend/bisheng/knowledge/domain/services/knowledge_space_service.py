@@ -17904,6 +17904,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         retryable_status = {
             KnowledgeFileStatus.FAILED.value,
             KnowledgeFileStatus.VIOLATION.value,
+            KnowledgeFileStatus.TIMEOUT.value,
         }
         for file in retry_files:
             if file.knowledge_id != space_id:

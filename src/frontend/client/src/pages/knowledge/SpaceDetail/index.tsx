@@ -31,6 +31,7 @@ import {
     getMaxFileSizeMBForFile,
     resolveUploadSizeLimits,
     triggerUrlDownload,
+    isKnowledgeFileReparseRetryable,
 } from "../knowledgeUtils";
 import { bishengConfState } from "~/pages/appChat/store/atoms";
 import {
@@ -1427,14 +1428,9 @@ export function KnowledgeSpaceContent({
     };
 
     const handleBatchRetry = async () => {
-        // Find selected files/folders that have FAILED status or partial failures
         const retryIds = displayFiles
-            .filter(f => selectedFiles.has(f.id) && (
-                f.status === FileStatus.FAILED ||
-                f.status === FileStatus.VIOLATION ||
-                (f.successFileNum !== undefined && f.fileNum !== undefined && f.successFileNum < f.fileNum)
-            ))
-            .map(f => Number(f.id));
+            .filter((file) => selectedFiles.has(file.id) && isKnowledgeFileReparseRetryable(file))
+            .map((file) => Number(file.id));
 
         if (retryIds.length === 0) return;
 
@@ -1479,12 +1475,8 @@ export function KnowledgeSpaceContent({
         return null;
     };
 
-    const hasFailedFiles = displayFiles.some(f =>
-        selectedFiles.has(f.id) && (
-            f.status === FileStatus.FAILED ||
-            f.status === FileStatus.VIOLATION ||
-            (f.type === FileType.FOLDER && f.successFileNum! < f.fileNum!)
-        )
+    const hasFailedFiles = displayFiles.some(
+        (file) => selectedFiles.has(file.id) && isKnowledgeFileReparseRetryable(file),
     );
     const hasFoldersSelected = displayFiles.some(f => selectedFiles.has(f.id) && f.type === FileType.FOLDER);
     const selectedList = displayFiles.filter(f => selectedFiles.has(f.id));
