@@ -18,8 +18,12 @@ to the shared store (per-space collections are NOT updated while
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
+
+from sqlmodel import col, select
 
 from bisheng.knowledge.domain.contracts.errors import (
     SharedStorageContractError,
@@ -55,6 +59,10 @@ class SharedStorageMigrationProgress:
     migrated_spaces: int = 0
     failed_spaces: int = 0
     errors: list[str] = field(default_factory=list)
+    collection_name: str | None = None
+    index_name: str | None = None
+    embedding_model_id: int | None = None
+    schema_fingerprint: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
@@ -71,6 +79,20 @@ class SharedStorageMigrationCoordinator:
     def __init__(self) -> None:
         self._reader: SharedSpaceStorageReader | None = None
 
+    @staticmethod
+    async def _list_tenant_spaces(tenant_id: int) -> list[Any]:
+        tenant_loader = getattr(KnowledgeDao, "aget_spaces_by_tenant", None)
+        if tenant_loader is not None:
+            return list(await tenant_loader(int(tenant_id)))
+        all_spaces = await KnowledgeDao.aget_all_knowledge(
+            knowledge_type=KnowledgeTypeEnum.SPACE,
+        )
+        return [
+            space
+            for space in all_spaces
+            if int(getattr(space, "tenant_id", None) or 1) == int(tenant_id)
+        ]
+
     async def migrate_tenant(
         self,
         tenant_id: int,
@@ -85,31 +107,37 @@ class SharedStorageMigrationCoordinator:
             started_at=datetime.now(timezone.utc),
         )
 
-        # Phase 1: freeze writes
-        progress.phase = MIGRATION_STATE_FROZEN
-        await self._phase_freeze(tenant_id, progress, dry_run=dry_run)
+        try:
+            progress.phase = MIGRATION_STATE_FROZEN
+            await self._phase_freeze(tenant_id, progress, dry_run=dry_run)
 
-        # Phase 2: copy vectors
-        progress.phase = MIGRATION_STATE_COPYING
-        await self._phase_copy(
-            tenant_id,
-            progress,
-            collection_name=collection_name,
-            index_name=index_name,
-            embedding_model_id=embedding_model_id,
-            dry_run=dry_run,
-        )
+            progress.phase = MIGRATION_STATE_COPYING
+            await self._phase_copy(
+                tenant_id,
+                progress,
+                collection_name=collection_name,
+                index_name=index_name,
+                embedding_model_id=embedding_model_id,
+                dry_run=dry_run,
+            )
 
-        # Phase 3: resume writes (activate routing)
-        progress.phase = MIGRATION_STATE_RESUMED
-        await self._phase_resume(
-            tenant_id,
-            progress,
-            collection_name=collection_name,
-            index_name=index_name,
-            embedding_model_id=embedding_model_id,
-            dry_run=dry_run,
-        )
+            progress.phase = MIGRATION_STATE_RESUMED
+            await self._phase_resume(
+                tenant_id,
+                progress,
+                collection_name=collection_name,
+                index_name=index_name,
+                embedding_model_id=embedding_model_id,
+                dry_run=dry_run,
+            )
+        except Exception:
+            progress.phase = MIGRATION_STATE_FAILED
+            progress.errors.append(_sanitize_error())
+            if not dry_run:
+                KnowledgeSpaceSharedStorageRoutingDao.set_migration_state(
+                    tenant_id, MIGRATION_STATE_FAILED
+                )
+            raise
 
         progress.completed_at = datetime.now(timezone.utc)
         return progress
@@ -172,7 +200,25 @@ class SharedStorageMigrationCoordinator:
 
         # Phase 2: copy from shared → per-space
         progress.phase = MIGRATION_STATE_REVERSE_COPYING
-        await self._phase_reverse_copy(tenant_id, progress, dry_run=dry_run)
+        try:
+            await self._phase_reverse_copy(tenant_id, progress, dry_run=dry_run)
+        except Exception:
+            progress.phase = MIGRATION_STATE_FAILED
+            if not dry_run:
+                KnowledgeSpaceSharedStorageRoutingDao.set_migration_state(
+                    tenant_id, MIGRATION_STATE_FAILED
+                )
+            raise
+
+        if progress.failed_spaces or progress.errors:
+            progress.phase = MIGRATION_STATE_FAILED
+            if not dry_run:
+                KnowledgeSpaceSharedStorageRoutingDao.set_migration_state(
+                    tenant_id, MIGRATION_STATE_FAILED
+                )
+            raise RuntimeError(
+                "reverse migration copy failed; shared routing remains active and frozen"
+            )
 
         # Phase 3: switch to legacy + unfreeze
         progress.phase = MIGRATION_STATE_FAILED  # transitional
@@ -209,20 +255,13 @@ class SharedStorageMigrationCoordinator:
         use the existing ``KnowledgeRag`` bootstrap paths.
         """
         from bisheng.knowledge.rag.shared_space_storage import (
-            get_shared_storage_conf,
             resolve_space_shared_routing,
             shared_collection_name,
             shared_index_name,
         )
 
         # Discover all SPACE-type knowledge bases in the tenant.
-        all_spaces = await KnowledgeDao.aget_all_knowledge(
-            knowledge_type=KnowledgeTypeEnum.SPACE,
-        )
-        spaces = [
-            s for s in all_spaces
-            if int(getattr(s, 'tenant_id', None) or 1) == int(tenant_id)
-        ]
+        spaces = await self._list_tenant_spaces(tenant_id)
         progress.total_spaces = len(spaces)
 
         if dry_run:
@@ -244,13 +283,12 @@ class SharedStorageMigrationCoordinator:
             getattr(first_space, 'type', None),
         )
         if snapshot is None:
-            logger.warning(
-                "shared_storage_reverse_migration_no_routing tenant=%s",
-                tenant_id,
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
+                "shared routing is unavailable for reverse migration",
+                tenant_id=tenant_id,
             )
-            return
 
-        conf = get_shared_storage_conf()
         collection_name = snapshot.collection_name or shared_collection_name(tenant_id)
         index_name = snapshot.index_name or shared_index_name(tenant_id)
 
@@ -261,11 +299,11 @@ class SharedStorageMigrationCoordinator:
             0, tenant_id=tenant_id,
         )
         if embeddings is None:
-            logger.error(
-                "shared_storage_reverse_migration_no_embedding tenant=%s",
-                tenant_id,
+            raise SharedStorageContractError(
+                SharedStorageErrorCode.EMBEDDING_MODEL_MISMATCH,
+                "shared embedding model is unavailable for reverse migration",
+                tenant_id=tenant_id,
             )
-            return
 
         shared_milvus = KnowledgeRag.init_milvus_vectorstore(
             collection_name=collection_name,
@@ -310,35 +348,39 @@ class SharedStorageMigrationCoordinator:
         """Copy chunks belonging to *space_id* from shared store to per-space
         collections.
 
-        Delta detection: only copies chunks whose ``content_generation`` is
-        **newer** than the per-space copy. The key is
-        ``(canonical_document_id, chunk_index)`` — chunks that already exist
-        in per-space with the same or higher generation are skipped.
-
         Strategy:
-        1. Query per-space for existing ``(canonical_document_id, chunk_index,
-           content_generation)`` triples to build a lookup map.
-        2. Query shared store for chunks where ``knowledge_ids`` contains
+        1. Resolve canonical documents to the active entry ids in this space.
+        2. Purge only those F059 entry rows from the legacy stores.
+        3. Query shared store for chunks where ``knowledge_ids`` contains
            *space_id*.
-        3. For each chunk, compare generations: only write if shared has a
-           newer generation.
-        4. Repeat for ES.
+        4. Restore the full authoritative chunk set into Milvus and ES.
         """
-        import asyncio
-
         from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 
         space_collection = getattr(space, 'collection_name', None)
         if not space_collection:
             return
 
-        # --- Preload per-space generation map ---
+        entry_by_document, distribution_entry_ids = await self._load_space_entry_maps(
+            tenant_id=tenant_id,
+            space_id=space_id,
+        )
+
+        # --- Initialize and clean only the F059 distribution entries ---
         per_space_milvus = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
             0, knowledge=space,
         )
-        existing_map = await self._build_per_space_generation_map(
-            per_space_milvus, space_id,
+        per_space_es = None
+        space_index = getattr(space, 'index_name', None)
+        if space_index:
+            per_space_es = KnowledgeRag.init_es_vectorstore_sync(index_name=space_index)
+        await self._purge_distribution_entries_from_legacy(
+            per_space_milvus=per_space_milvus,
+            per_space_es=per_space_es,
+            space_index=space_index,
+            entry_ids=distribution_entry_ids,
         )
+        existing_map: dict[tuple[int, int], int] = {}
         logger.info(
             "shared_storage_reverse_existing_map space=%s entries=%d",
             space_id,
@@ -355,9 +397,19 @@ class SharedStorageMigrationCoordinator:
                     "canonical_version_id",
                     "chunk_index",
                     "text",
+                    "vector",
                     "content_generation",
-                    "entry_generation",
+                    "membership_generation",
                     "knowledge_ids",
+                    "document_name",
+                    "abstract",
+                    "bbox",
+                    "page",
+                    "upload_time",
+                    "update_time",
+                    "uploader",
+                    "updater",
+                    "user_metadata",
                 ]
                 total = 0
                 skipped = 0
@@ -378,6 +430,7 @@ class SharedStorageMigrationCoordinator:
                             existing_map=existing_map,
                             per_space_milvus=per_space_milvus,
                             tenant_id=tenant_id,
+                            entry_by_document=entry_by_document,
                         )
                         total += written
                         skipped += skipped_batch
@@ -395,6 +448,7 @@ class SharedStorageMigrationCoordinator:
                             existing_map=existing_map,
                             per_space_milvus=per_space_milvus,
                             tenant_id=tenant_id,
+                            entry_by_document=entry_by_document,
                         )
                         total += written
                         skipped += skipped_batch
@@ -413,18 +467,15 @@ class SharedStorageMigrationCoordinator:
                 raise
 
         # --- ES: copy from shared ES → per-space ES ---
-        space_index = getattr(space, 'index_name', None)
         if space_index and shared_es is not None:
             try:
-                per_space_es = KnowledgeRag.init_es_vectorstore_sync(
-                    index_name=space_index,
-                )
                 await self._reverse_copy_es(
                     shared_es=shared_es,
                     shared_index_name=shared_index_name,
                     per_space_es=per_space_es,
                     space_id=space_id,
                     space_index=space_index,
+                    entry_by_document=entry_by_document,
                 )
             except Exception:
                 logger.exception(
@@ -434,69 +485,59 @@ class SharedStorageMigrationCoordinator:
                 raise
 
     @staticmethod
-    async def _build_per_space_generation_map(
-        per_space_milvus: Any,
-        space_id: int,
-    ) -> dict[tuple[int, int], int]:
-        """Query per-space collection and return a lookup map of
-        ``(canonical_document_id, chunk_index) → content_generation``.
+    async def _load_space_entry_maps(
+        *, tenant_id: int, space_id: int
+    ) -> tuple[dict[int, int], list[int]]:
+        """Resolve canonical documents back to their legacy entry file ids."""
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.models.knowledge_file import (
+            KnowledgeFile,
+            KnowledgeFileEntryStatus,
+        )
 
-        This is used for delta detection: only chunks with a higher generation
-        in the shared store need to be copied back.
-        """
+        async with get_async_db_session() as session:
+            result = await session.execute(
+                select(KnowledgeFile).where(
+                    KnowledgeFile.tenant_id == tenant_id,
+                    KnowledgeFile.knowledge_id == space_id,
+                    KnowledgeFile.reference_document_id.is_not(None),
+                )
+            )
+            entries = list(result.scalars().all())
+        distribution_ids = [int(entry.id) for entry in entries]
+        active_by_document: dict[int, int] = {}
+        for entry in entries:
+            if entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value:
+                active_by_document.setdefault(
+                    int(entry.reference_document_id), int(entry.id)
+                )
+        return active_by_document, distribution_ids
+
+    @staticmethod
+    async def _purge_distribution_entries_from_legacy(
+        *,
+        per_space_milvus: Any,
+        per_space_es: Any,
+        space_index: str | None,
+        entry_ids: list[int],
+    ) -> None:
+        """Remove only F059 distribution rows before an authoritative restore."""
         import asyncio
 
-        if per_space_milvus.col is None:
-            return {}
-
-        def _query() -> list[dict]:
-            try:
-                if hasattr(per_space_milvus.col, "query_iterator"):
-                    iterator = per_space_milvus.col.query_iterator(
-                        expr=f"knowledge_id == {space_id}",
-                        output_fields=[
-                            "canonical_document_id",
-                            "chunk_index",
-                            "content_generation",
-                        ],
-                        batch_size=5000,
-                    )
-                    results: list[dict] = []
-                    while True:
-                        batch = iterator.next()
-                        if not batch:
-                            break
-                        results.extend(batch)
-                    return results
-                else:
-                    return per_space_milvus.col.query(
-                        expr=f"knowledge_id == {space_id}",
-                        output_fields=[
-                            "canonical_document_id",
-                            "chunk_index",
-                            "content_generation",
-                        ],
-                        limit=16384,
-                    )
-            except Exception:
-                logger.exception(
-                    "shared_storage_reverse_generation_map_query_failed "
-                    "space=%s",
-                    space_id,
-                )
-                return []
-
-        results = await asyncio.to_thread(_query)
-        lookup: dict[tuple[int, int], int] = {}
-        for row in results:
-            doc_id = int(row.get("canonical_document_id", 0))
-            chunk_idx = int(row.get("chunk_index", 0))
-            gen = int(row.get("content_generation", 0))
-            key = (doc_id, chunk_idx)
-            # Keep the highest generation per key.
-            if key not in lookup or gen > lookup[key]:
-                lookup[key] = gen
-        return lookup
+        if not entry_ids:
+            return
+        id_list = ", ".join(str(entry_id) for entry_id in sorted(set(entry_ids)))
+        if per_space_milvus.col is not None:
+            await asyncio.to_thread(
+                per_space_milvus.col.delete,
+                expr=f"document_id in [{id_list}]",
+            )
+        if per_space_es is not None and space_index:
+            await asyncio.to_thread(
+                per_space_es.client.delete_by_query,
+                index=space_index,
+                query={"terms": {"metadata.document_id": entry_ids}},
+            )
 
     async def _write_per_space_milvus_delta(
         self,
@@ -506,8 +547,9 @@ class SharedStorageMigrationCoordinator:
         existing_map: dict[tuple[int, int], int],
         per_space_milvus: Any,
         tenant_id: int,
+        entry_by_document: dict[int, int],
     ) -> tuple[int, int]:
-        """Write **only delta** chunks to per-space Milvus.
+        """Write the authoritative shared chunks to per-space Milvus.
 
         Returns ``(written_count, skipped_count)``.
         """
@@ -516,7 +558,8 @@ class SharedStorageMigrationCoordinator:
         if per_space_milvus.col is None:
             return 0, len(chunks)
 
-        # Filter: only keep chunks that are new or have a higher generation.
+        # The destination entry rows were purged first; the map only prevents
+        # duplicates when a shared iterator repeats a chunk across batches.
         to_write: list[dict] = []
         skipped = 0
         for chunk in chunks:
@@ -525,18 +568,52 @@ class SharedStorageMigrationCoordinator:
             shared_gen = int(chunk.get("content_generation", 0))
             key = (doc_id, chunk_idx)
             existing_gen = existing_map.get(key, -1)
+            entry_id = entry_by_document.get(doc_id)
+            if entry_id is None:
+                skipped += 1
+                continue
             if shared_gen > existing_gen:
                 row = {
                     "knowledge_id": space_id,
-                    "canonical_document_id": doc_id,
-                    "canonical_version_id": int(chunk.get("canonical_version_id", 0)),
+                    "document_id": entry_id,
                     "chunk_index": chunk_idx,
                     "text": chunk.get("text", ""),
-                    "content_generation": shared_gen,
-                    "entry_generation": int(chunk.get("entry_generation", 0)),
                 }
-                if "vector" in chunk:
-                    row["vector"] = chunk["vector"]
+                if chunk.get("vector") is None:
+                    raise RuntimeError(
+                        f"shared chunk {doc_id}/{chunk_idx} has no vector"
+                    )
+                row["vector"] = chunk["vector"]
+                for field_name in (
+                    "document_name",
+                    "abstract",
+                    "bbox",
+                    "page",
+                    "upload_time",
+                    "update_time",
+                    "uploader",
+                    "updater",
+                ):
+                    if field_name in chunk:
+                        row[field_name] = chunk[field_name]
+                user_metadata = (
+                    dict(chunk.get("user_metadata"))
+                    if isinstance(chunk.get("user_metadata"), dict)
+                    else {}
+                )
+                user_metadata.update(
+                    {
+                        "canonical_document_id": doc_id,
+                        "canonical_version_id": int(
+                            chunk.get("canonical_version_id", 0)
+                        ),
+                        "content_generation": shared_gen,
+                        "entry_generation": int(
+                            chunk.get("membership_generation", 0)
+                        ),
+                    }
+                )
+                row["user_metadata"] = user_metadata
                 to_write.append(row)
                 # Update the map so subsequent batches for the same space
                 # don't rewrite the same chunk.
@@ -568,90 +645,66 @@ class SharedStorageMigrationCoordinator:
         per_space_es: Any,
         space_id: int,
         space_index: str,
+        entry_by_document: dict[int, int],
     ) -> None:
-        """Copy ES documents from shared index to per-space index, delta only.
-
-        Uses the ``terms`` query on ``metadata.knowledge_ids`` to find
-        documents belonging to *space_id*, then compares ``content_generation``
-        with the per-space copy before re-indexing.
-        """
+        """Copy every shared ES document for this space to the legacy index."""
         import asyncio
 
         try:
-            # First, build a lookup of existing per-space content_generations.
-            existing_query = {
-                "query": {
-                    "term": {"metadata.knowledge_id": space_id},
-                },
-                "size": 10000,
-                "_source": [
-                    "metadata.canonical_document_id",
-                    "metadata.chunk_index",
-                    "metadata.content_generation",
-                ],
-            }
-            existing_resp = await asyncio.to_thread(
-                per_space_es.client.search,
-                index=space_index,
-                body=existing_query,
-            )
-            existing_map: dict[str, int] = {}
-            for hit in existing_resp.get("hits", {}).get("hits", []):
-                src = hit.get("_source", {}).get("metadata", {})
-                doc_id = src.get("canonical_document_id", "")
-                chunk_idx = src.get("chunk_index", 0)
-                gen = int(src.get("content_generation", 0))
-                key = f"{doc_id}_{chunk_idx}"
-                if key not in existing_map or gen > existing_map[key]:
-                    existing_map[key] = gen
+            from elasticsearch.helpers import bulk, scan
 
-            # Query shared ES for documents containing this space_id.
-            shared_query = {
-                "query": {
-                    "terms": {"metadata.knowledge_ids": [space_id]},
-                },
-                "size": 10000,
-            }
-            response = await asyncio.to_thread(
-                shared_es.client.search,
-                index=shared_index_name,
-                body=shared_query,
-            )
-            hits = response.get("hits", {}).get("hits", [])
-            if not hits:
-                return
+            def _scan() -> list[dict]:
+                return list(
+                    scan(
+                        shared_es.client,
+                        index=shared_index_name,
+                        query={
+                            "query": {
+                                "terms": {
+                                    "metadata.knowledge_ids": [space_id]
+                                }
+                            }
+                        },
+                        preserve_order=False,
+                    )
+                )
 
-            # Filter: only write documents that are new or have higher generation.
-            from elasticsearch.helpers import bulk
-
+            hits = await asyncio.to_thread(_scan)
             actions = []
             skipped = 0
             for hit in hits:
-                doc = hit["_source"]
-                meta = doc.get("metadata", {})
-                doc_id = str(meta.get("canonical_document_id", ""))
-                chunk_idx = int(meta.get("chunk_index", 0))
-                shared_gen = int(meta.get("content_generation", 0))
-                key = f"{doc_id}_{chunk_idx}"
-                existing_gen = existing_map.get(key, -1)
-                if shared_gen <= existing_gen:
+                doc = dict(hit["_source"])
+                metadata = dict(doc.get("metadata", {}))
+                canonical_document_id = int(
+                    metadata.get("canonical_document_id", 0) or 0
+                )
+                entry_id = entry_by_document.get(canonical_document_id)
+                if entry_id is None:
                     skipped += 1
                     continue
-                # Rewrite: knowledge_ids → knowledge_id (scalar).
-                doc["metadata"]["knowledge_id"] = space_id
-                doc["metadata"].pop("knowledge_ids", None)
-                actions.append({
-                    "_index": space_index,
-                    "_id": f"{doc_id}_{chunk_idx}",
-                    "_source": doc,
-                })
-                existing_map[key] = shared_gen
+                chunk_idx = int(metadata.get("chunk_index", 0) or 0)
+                metadata["knowledge_id"] = space_id
+                metadata["document_id"] = entry_id
+                metadata["entry_generation"] = int(
+                    metadata.pop("membership_generation", 0) or 0
+                )
+                metadata.pop("knowledge_ids", None)
+                doc["metadata"] = metadata
+                actions.append(
+                    {
+                        "_index": space_index,
+                        "_id": f"{entry_id}_{chunk_idx}",
+                        "_source": doc,
+                    }
+                )
 
             if actions:
-                def _bulk() -> None:
-                    bulk(per_space_es.client, actions, refresh=True)
-
-                await asyncio.to_thread(_bulk)
+                await asyncio.to_thread(
+                    bulk,
+                    per_space_es.client,
+                    actions,
+                    refresh=True,
+                )
             logger.info(
                 "shared_storage_reverse_es_copied space=%s written=%d skipped=%d",
                 space_id,
@@ -679,6 +732,10 @@ class SharedStorageMigrationCoordinator:
         if dry_run:
             logger.info("shared_storage_migration dry_run freeze tenant=%s", tenant_id)
             return
+        KnowledgeSpaceSharedStorageRoutingDao.ensure_row(tenant_id)
+        KnowledgeSpaceSharedStorageRoutingDao.set_migration_state(
+            tenant_id, MIGRATION_STATE_FROZEN
+        )
         freeze_tenant_writes(tenant_id)
         logger.info("shared_storage_migration_frozen tenant=%s", tenant_id)
 
@@ -695,10 +752,7 @@ class SharedStorageMigrationCoordinator:
         # Discover all SPACE-type knowledge bases in the tenant.
         # KnowledgeDao does not expose a tenant-scoped query; we use the
         # type-filtered paginated list and filter by tenant_id in memory.
-        all_spaces = await KnowledgeDao.aget_all_knowledge(
-            knowledge_type=KnowledgeTypeEnum.SPACE,
-        )
-        spaces = [s for s in all_spaces if int(getattr(s, 'tenant_id', None) or 1) == int(tenant_id)]
+        spaces = await self._list_tenant_spaces(tenant_id)
         progress.total_spaces = len(spaces)
 
         if dry_run:
@@ -709,73 +763,234 @@ class SharedStorageMigrationCoordinator:
             )
             progress.migrated_spaces = len(spaces)
             return
+        if not spaces:
+            raise RuntimeError(f"tenant {tenant_id} has no SPACE knowledge bases")
 
-        for space in spaces:
-            try:
-                await self._copy_space_vectors(
-                    space_id=int(space.id),
-                    tenant_id=tenant_id,
-                    collection_name=collection_name,
-                    index_name=index_name,
-                    embedding_model_id=embedding_model_id,
-                )
-                progress.migrated_spaces += 1
-            except Exception:
-                logger.exception(
-                    "shared_storage_migration_copy_failed space=%s tenant=%s",
-                    space.id,
-                    tenant_id,
-                )
-                progress.failed_spaces += 1
-                progress.errors.append(
-                    f"space {space.id}: {_sanitize_error()}",
-                )
+        KnowledgeSpaceSharedStorageRoutingDao.set_migration_state(
+            tenant_id, MIGRATION_STATE_COPYING
+        )
+        await self._copy_tenant_documents(
+            tenant_id=tenant_id,
+            spaces=spaces,
+            progress=progress,
+            collection_name=collection_name,
+            index_name=index_name,
+            embedding_model_id=embedding_model_id,
+        )
+        progress.migrated_spaces = len(spaces)
 
-    async def _copy_space_vectors(
+    async def _copy_tenant_documents(
         self,
-        space_id: int,
-        tenant_id: int,
         *,
+        tenant_id: int,
+        spaces: list[Any],
+        progress: SharedStorageMigrationProgress,
         collection_name: str | None,
         index_name: str | None,
         embedding_model_id: int | None,
     ) -> None:
-        """Copy vectors from per-space collection to the shared store.
+        """Bootstrap the shared stores and copy every active canonical primary."""
+        from pymilvus import Collection
 
-        In the current implementation, the actual vector copy is handled by the
-        projection system: when ``switch_to_shared`` is called, new document
-        projections are written to the shared store. Existing documents are
-        re-projected via the document projection worker.
-
-        This placeholder validates that the shared store is available and
-        records the space in the routing table.
-        """
-        # The shared store bootstrap is idempotent; calling ensure_shared_index
-        # and bootstrap_shared_collection here is safe.
+        from bisheng.core.database import get_async_db_session
+        from bisheng.knowledge.domain.contracts.identifiers import (
+            CanonicalDocumentId,
+            CanonicalVersionId,
+            ContentFileId,
+            TenantId,
+        )
+        from bisheng.knowledge.domain.contracts.shared_space_storage import (
+            ContentProjectionIdentity,
+            ContentUpsertRequest,
+            MembershipUpdateRequest,
+        )
+        from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+        from bisheng.knowledge.domain.models.knowledge_document import (
+            KnowledgeDocument,
+            KnowledgeDocumentLifecycleStatus,
+        )
+        from bisheng.knowledge.domain.models.knowledge_document_version import (
+            KnowledgeDocumentVersion,
+        )
+        from bisheng.knowledge.domain.models.knowledge_file import (
+            KnowledgeFile,
+            KnowledgeFileProjectionStatus,
+        )
+        from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+            KnowledgeFileRepositoryImpl,
+        )
+        from bisheng.knowledge.domain.services.shared_space_projection_support import (
+            load_shared_content_chunks_from_legacy,
+        )
         from bisheng.knowledge.rag.shared_space_storage import (
+            MilvusEsSharedSpaceStorageWriter,
+            SharedStoreSchemaSpec,
+            TenantRoutingSnapshot,
+            _ensure_shared_milvus_connection,
             bootstrap_shared_collection,
             ensure_shared_es_index,
             get_shared_storage_conf,
+            shared_collection_name,
+            shared_index_name,
         )
 
         conf = get_shared_storage_conf()
-        actual_collection = collection_name or conf.collection_name
-        actual_index = index_name or conf.index_name
-        actual_model_id = embedding_model_id or conf.tenant_embedding_model_id
-
-        if actual_collection:
-            await bootstrap_shared_collection(
-                collection_name=actual_collection,
-                tenant_id=tenant_id,
-            )
-        if actual_index:
-            await ensure_shared_es_index(index_name=actual_index)
-
-        logger.info(
-            "shared_storage_migration_space_done space=%s tenant=%s",
-            space_id,
-            tenant_id,
+        model_ids = {int(space.model) for space in spaces}
+        target_model_id = int(
+            embedding_model_id
+            or conf.tenant_embedding_model_id
+            or next(iter(model_ids))
         )
+        if model_ids != {target_model_id}:
+            raise RuntimeError(
+                "shared migration requires every source SPACE to use the target embedding model"
+            )
+
+        source_store = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+            0, knowledge=spaces[0]
+        )
+        vector_field = next(
+            field for field in source_store.col.schema.fields if field.name == "vector"
+        )
+        dimension = int(vector_field.params["dim"])
+        spec = SharedStoreSchemaSpec(
+            embedding_model_id=target_model_id,
+            dimension=dimension,
+            knowledge_ids_max_capacity=int(conf.knowledge_ids_max_capacity),
+        )
+        actual_collection = collection_name or shared_collection_name(tenant_id, conf)
+        actual_index = index_name or shared_index_name(tenant_id, conf)
+        bootstrap = bootstrap_shared_collection(
+            spec,
+            tenant_id,
+            collection_name=actual_collection,
+        )
+        es_store = KnowledgeRag.init_es_vectorstore_sync(index_name=actual_index)
+        ensure_shared_es_index(
+            es_store.client,
+            tenant_id,
+            conf=conf,
+            index_name=actual_index,
+        )
+
+        routing_row = KnowledgeSpaceSharedStorageRoutingDao.get_by_tenant(tenant_id)
+        if routing_row is None:
+            raise RuntimeError("shared migration routing row disappeared")
+        snapshot = TenantRoutingSnapshot(
+            tenant_id=tenant_id,
+            shared_enabled=False,
+            routing_version=int(routing_row.routing_version),
+            write_frozen=True,
+            collection_name=actual_collection,
+            index_name=actual_index,
+            embedding_model_id=target_model_id,
+            schema_fingerprint=bootstrap.fingerprint,
+            migration_state=MIGRATION_STATE_COPYING,
+        )
+        collection = Collection(
+            actual_collection, using=_ensure_shared_milvus_connection()
+        )
+        writer = MilvusEsSharedSpaceStorageWriter(
+            tenant_id=tenant_id,
+            collection=collection,
+            es_client=es_store.client,
+            expected_routing_version=snapshot.routing_version,
+            schema_spec=spec,
+            conf=conf,
+            routing_provider=lambda _tenant_id: snapshot,
+            migration_mode=True,
+        )
+
+        space_ids = [int(space.id) for space in spaces]
+        async with get_async_db_session() as session:
+            result = await session.execute(
+                select(KnowledgeDocument).where(
+                    KnowledgeDocument.tenant_id == tenant_id,
+                    col(KnowledgeDocument.knowledge_id).in_(space_ids),
+                    KnowledgeDocument.lifecycle_status
+                    == KnowledgeDocumentLifecycleStatus.ACTIVE.value,
+                )
+            )
+            documents = list(result.scalars().all())
+            document_ids = [int(document.id) for document in documents]
+            file_repo = KnowledgeFileRepositoryImpl(session)
+            entries = await file_repo.find_active_entries_for_documents(
+                tenant_id=tenant_id,
+                document_ids=document_ids,
+                knowledge_ids=space_ids,
+            )
+            entries_by_document: dict[int, list[KnowledgeFile]] = defaultdict(list)
+            for entry in entries:
+                entries_by_document[int(entry.reference_document_id)].append(entry)
+
+            for document in documents:
+                if document.primary_version_id is None:
+                    raise RuntimeError(
+                        f"document {document.id} has no primary version"
+                    )
+                version = await session.get(
+                    KnowledgeDocumentVersion, int(document.primary_version_id)
+                )
+                if version is None or int(version.document_id) != int(document.id):
+                    raise RuntimeError(
+                        f"document {document.id} primary version is inconsistent"
+                    )
+                content_file = await session.get(
+                    KnowledgeFile, int(version.knowledge_file_id)
+                )
+                if content_file is None:
+                    raise RuntimeError(
+                        f"document {document.id} content file is missing"
+                    )
+                memberships = tuple(
+                    sorted(
+                        {
+                            int(entry.knowledge_id)
+                            for entry in entries_by_document.get(int(document.id), [])
+                        }
+                    )
+                )
+                if not memberships:
+                    continue
+                chunks = await load_shared_content_chunks_from_legacy(content_file)
+                await writer.upsert_content(
+                    ContentUpsertRequest(
+                        identity=ContentProjectionIdentity(
+                            tenant_id=TenantId(tenant_id),
+                            canonical_document_id=CanonicalDocumentId(int(document.id)),
+                            canonical_version_id=CanonicalVersionId(int(version.id)),
+                            content_file_id=ContentFileId(int(content_file.id)),
+                            content_generation=int(document.content_generation),
+                            embedding_model_id=str(target_model_id),
+                        ),
+                        knowledge_ids=memberships,
+                        chunks=chunks,
+                    )
+                )
+                await writer.update_membership(
+                    MembershipUpdateRequest(
+                        tenant_id=TenantId(tenant_id),
+                        canonical_document_id=CanonicalDocumentId(int(document.id)),
+                        knowledge_ids=memberships,
+                        membership_generation=max(
+                            int(entry.entry_generation)
+                            for entry in entries_by_document[int(document.id)]
+                        ),
+                        content_generation=int(document.content_generation),
+                    )
+                )
+                for entry in entries_by_document.get(int(document.id), []):
+                    entry.applied_content_generation = int(document.content_generation)
+                    entry.applied_entry_generation = int(entry.entry_generation)
+                    entry.projection_status = KnowledgeFileProjectionStatus.READY.value
+                    entry.projection_last_error = None
+                    session.add(entry)
+            await session.commit()
+
+        progress.collection_name = actual_collection
+        progress.index_name = actual_index
+        progress.embedding_model_id = target_model_id
+        progress.schema_fingerprint = bootstrap.fingerprint
 
     async def _phase_resume(
         self,
@@ -790,7 +1005,26 @@ class SharedStorageMigrationCoordinator:
         if dry_run:
             logger.info("shared_storage_migration dry_run resume tenant=%s", tenant_id)
             return
-
+        if (
+            progress.errors
+            or progress.failed_spaces
+            or progress.migrated_spaces != progress.total_spaces
+            or not progress.collection_name
+            or not progress.index_name
+            or progress.embedding_model_id is None
+            or not progress.schema_fingerprint
+        ):
+            raise RuntimeError("shared migration is incomplete; refusing routing switch")
+        switched = KnowledgeSpaceSharedStorageRoutingDao.switch_to_shared(
+            tenant_id,
+            collection_name=progress.collection_name,
+            index_name=progress.index_name,
+            embedding_model_id=progress.embedding_model_id,
+            schema_fingerprint=progress.schema_fingerprint,
+            migration_state=MIGRATION_STATE_RESUMED,
+        )
+        if not switched:
+            raise RuntimeError("shared migration routing switch updated no row")
         unfreeze_tenant_writes(tenant_id)
         logger.info("shared_storage_migration_resumed tenant=%s", tenant_id)
 

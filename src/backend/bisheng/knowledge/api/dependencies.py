@@ -387,6 +387,7 @@ async def get_knowledge_space_chat_service(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
+    file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
     version_repo: KnowledgeDocumentVersionRepository = Depends(get_knowledge_document_version_repository),
     doc_repo: KnowledgeDocumentRepository = Depends(
         get_knowledge_document_repository
@@ -399,6 +400,7 @@ async def get_knowledge_space_chat_service(
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService as _SvcClass
 
     service = _SvcClass(request=request, login_user=login_user)
+    service.file_repo = file_repo
     service.version_repo = version_repo
     service.doc_repo = doc_repo
     service.department_file_view_access_service = (

@@ -38,6 +38,51 @@ class TestSharedStorageMigrationCoordinator:
         progress = SharedStorageMigrationProgress(tenant_id=1)
         assert progress.scope == MigrationScope.SHARED_STORAGE
 
+    async def test_forward_copy_failure_never_switches_routing(self):
+        coordinator = SharedStorageMigrationCoordinator()
+        with (
+            patch.object(coordinator, "_phase_freeze", AsyncMock()),
+            patch.object(
+                coordinator,
+                "_phase_copy",
+                AsyncMock(side_effect=RuntimeError("copy failed")),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.KnowledgeSpaceSharedStorageRoutingDao"
+            ) as routing_dao,
+        ):
+            with pytest.raises(RuntimeError, match="copy failed"):
+                await coordinator.migrate_tenant(1)
+        routing_dao.switch_to_shared.assert_not_called()
+        routing_dao.set_migration_state.assert_called_with(
+            1, "TENANT_MIGRATION_FAILED"
+        )
+
+    async def test_reverse_copy_failure_keeps_shared_route_frozen(self):
+        coordinator = SharedStorageMigrationCoordinator()
+        with (
+            patch(
+                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.freeze_tenant_writes",
+                return_value=True,
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.unfreeze_tenant_writes",
+                return_value=True,
+            ) as unfreeze,
+            patch.object(
+                coordinator,
+                "_phase_reverse_copy",
+                AsyncMock(side_effect=RuntimeError("reverse copy failed")),
+            ),
+            patch(
+                "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.KnowledgeSpaceSharedStorageRoutingDao"
+            ) as routing_dao,
+        ):
+            with pytest.raises(RuntimeError, match="reverse copy failed"):
+                await coordinator.reverse_migrate_tenant(1)
+        routing_dao.switch_to_legacy.assert_not_called()
+        unfreeze.assert_not_called()
+
     async def test_rollback_clears_frozen_and_switches_to_legacy(self):
         coordinator = SharedStorageMigrationCoordinator()
         with (

@@ -87,6 +87,7 @@ async def _build_document_projection_service(
         KnowledgeDocumentProjectionService,
     )
     from bisheng.knowledge.domain.services.shared_space_projection_support import (
+        load_shared_content_chunks_from_legacy,
         resolve_shared_space_storage_enabled,
     )
 
@@ -103,6 +104,7 @@ async def _build_document_projection_service(
             kwargs = {
                 "shared_storage_writer": writer,
                 "shared_storage_enabled": True,
+                "shared_content_chunk_loader": load_shared_content_chunks_from_legacy,
             }
             logger.info(
                 "F059 projection using shared dual projection mode "
@@ -620,6 +622,10 @@ async def _reconcile_rollback_candidates(
 
 
 async def _scan_tenant_projection_async(tenant_id: int) -> int:
+    from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
+        KnowledgeDocumentProjectionService,
+    )
+
     async with get_async_db_session() as session:
         repository = KnowledgeFileRepositoryImpl(session)
         service = KnowledgeDocumentProjectionService(

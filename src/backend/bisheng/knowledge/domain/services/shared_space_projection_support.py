@@ -11,6 +11,7 @@ free of infrastructure imports:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 
@@ -56,7 +57,7 @@ def shared_space_block_enabled(block: object | None) -> bool:
     enabled = getattr(block, "enabled", None)
     if enabled is None and isinstance(block, dict):
         enabled = block.get("enabled")
-    return bool(enabled)
+    return enabled if isinstance(enabled, bool) else False
 
 
 async def resolve_shared_space_storage_enabled() -> bool:
@@ -68,13 +69,11 @@ async def resolve_shared_space_storage_enabled() -> bool:
     """
     try:
         from bisheng.common.services.config_service import settings as bisheng_settings
-
-        conf = await bisheng_settings.async_get_knowledge()
     except Exception:
         return False
     try:
         return shared_space_block_enabled(
-            getattr(conf, "knowledge_space_shared_storage", None)
+            getattr(bisheng_settings, "knowledge_space_shared_storage", None)
         )
     except Exception:
         logger.debug(
@@ -82,6 +81,72 @@ async def resolve_shared_space_storage_enabled() -> bool:
             exc_info=True,
         )
         return False
+
+
+async def load_shared_content_chunks_from_legacy(
+    content_file: KnowledgeFile,
+) -> Sequence[SharedContentChunk]:
+    """Load the physical file's existing chunks from its legacy collection.
+
+    Projection workers already have durable vectors in the per-space store;
+    shared projection must copy those vectors instead of silently producing an
+    empty content projection or embedding them again.
+    """
+    from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
+    knowledge = await KnowledgeDao.aquery_by_id(int(content_file.knowledge_id))
+    if knowledge is None:
+        raise RuntimeError(
+            f"knowledge {content_file.knowledge_id} not found for content file {content_file.id}"
+        )
+
+    def _load() -> list[SharedContentChunk]:
+        vector_store = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+            0, knowledge=knowledge
+        )
+        collection = vector_store.col
+        output_fields = [field.name for field in collection.schema.fields]
+        expr = f"document_id == {int(content_file.id)}"
+        rows: list[dict] = []
+        if hasattr(collection, "query_iterator"):
+            iterator = collection.query_iterator(
+                expr=expr,
+                output_fields=output_fields,
+                batch_size=1000,
+            )
+            try:
+                while batch := iterator.next():
+                    rows.extend(batch)
+            finally:
+                iterator.close()
+        else:
+            rows.extend(
+                collection.query(
+                    expr=expr,
+                    output_fields=output_fields,
+                    limit=16384,
+                )
+            )
+
+        chunks: list[SharedContentChunk] = []
+        for offset, row in enumerate(rows):
+            metadata = {
+                key: value
+                for key, value in row.items()
+                if key not in {"pk", "text", "vector"}
+            }
+            chunks.append(
+                SharedContentChunk(
+                    chunk_index=int(row.get("chunk_index", offset) or offset),
+                    text=str(row.get("text", "")),
+                    vector=row.get("vector"),
+                    metadata=metadata,
+                )
+            )
+        return sorted(chunks, key=lambda chunk: chunk.chunk_index)
+
+    return await asyncio.to_thread(_load)
 
 
 def aggregate_active_knowledge_ids(

@@ -63,12 +63,20 @@ def retrieve_knowledge_space_documents_sync(
     from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
         KnowledgeDocumentVersionRepositoryImpl,
     )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+        KnowledgeDocumentRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
     from bisheng.worker._asyncio_utils import run_async_task
 
     async def _retrieve() -> list[tuple[int, Document]]:
         async with get_async_db_session() as session:
             service = KnowledgeSpaceChatService(request, ensure_knowledge_space_login_user(login_user))
+            service.file_repo = KnowledgeFileRepositoryImpl(session)
+            service.doc_repo = KnowledgeDocumentRepositoryImpl(session)
             service.version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
             return await service.aretrieve_chunks(
                 query=query,

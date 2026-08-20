@@ -69,6 +69,7 @@ class KnowledgeSpaceChatService:
         self.request = request
         self.login_user = login_user
         self.department_file_view_access_service = None
+        self.file_repo = None
         self.doc_repo = None
         self.version_repo = None
 
@@ -757,12 +758,14 @@ class KnowledgeSpaceChatService:
         # B1: shared-storage fast path — when the tenant is routed to the shared
         # store, use the resolver + shared reader instead of per-space tooling.
         if await self._is_shared_storage_active(knowledge_base_ids):
-            return await self._aretrieve_chunks_shared(
+            shared_chunks = await self._aretrieve_chunks_shared(
                 query=query,
                 knowledge_base_ids=knowledge_base_ids,
                 top_k=top_k,
                 max_content=max_content,
             )
+            if shared_chunks is not None:
+                return shared_chunks
 
         kb_id_set = set(knowledge_base_ids)
         filters_by_kb: dict[int, dict[str, Any]] = {}
@@ -821,9 +824,14 @@ class KnowledgeSpaceChatService:
         back to the legacy path.
         """
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        from bisheng.knowledge.domain.services.shared_space_projection_support import (
+            resolve_shared_space_storage_enabled,
+        )
         from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
 
         if not knowledge_base_ids:
+            return False
+        if not await resolve_shared_space_storage_enabled():
             return False
         spaces = await KnowledgeDao.aget_list_by_ids(knowledge_base_ids)
         if not spaces or len(spaces) != len(knowledge_base_ids):
@@ -844,7 +852,7 @@ class KnowledgeSpaceChatService:
         knowledge_base_ids: list[int],
         top_k: int,
         max_content: int,
-    ) -> list[tuple[int, Document]]:
+    ) -> list[tuple[int, Document]] | None:
         """B1: Retrieve chunks via the shared store reader + scope resolver.
 
         Uses ``KnowledgeSpaceScopeResolver`` for permission validation and
@@ -854,8 +862,9 @@ class KnowledgeSpaceChatService:
         """
         from bisheng.knowledge.domain.contracts.identifiers import SpaceId, TenantId
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-        from bisheng.knowledge.domain.services.knowledge_scope_resolver import (
-            KnowledgeSpaceScopeResolver,
+        from bisheng.knowledge.domain.services.knowledge_retrieval_scope_resolver import (
+            RetrievalScopeResolverSettings,
+            SqlKnowledgeRetrievalScopeResolver,
         )
         from bisheng.knowledge.rag.shared_space_storage import (
             SharedSpaceStorageReader,
@@ -867,29 +876,56 @@ class KnowledgeSpaceChatService:
         # Determine tenant from the first space.
         first_space = await KnowledgeDao.aquery_by_id(knowledge_base_ids[0])
         if first_space is None:
-            return []
+            return None
         tenant_id = int(getattr(first_space, 'tenant_id', None) or 1)
         snapshot = resolve_space_shared_routing(
             tenant_id,
             getattr(first_space, 'type', None),
         )
         if snapshot is None:
-            return []
+            return None
 
         # P1: file_repository is required for map_and_authorize_hits; when
         # missing (e.g. Portal calls without a full DI context), fall back
         # to the legacy per-space path.
-        file_repo = getattr(self, 'doc_repo', None)
-        if file_repo is None:
+        file_repo = getattr(self, 'file_repo', None)
+        doc_repo = getattr(self, 'doc_repo', None)
+        version_repo = getattr(self, 'version_repo', None)
+        if file_repo is None or doc_repo is None or version_repo is None:
             logger.debug(
                 "shared_storage_fallback_no_file_repo tenant=%s user=%s",
                 tenant_id,
                 self.login_user.user_id,
             )
-            return []
+            return None
 
         # Resolve the retrieval scope (permission check).
-        resolver = KnowledgeSpaceScopeResolver(file_repository=file_repo)
+        permission_service = self._permission_service()
+
+        async def _space_read_checker(_tenant_id, user_id, space_id):
+            return await permission_service._user_can_read_space(
+                int(user_id), int(space_id)
+            )
+
+        async def _entry_view_checker(_tenant_id, _user_id, space_id, entry_id):
+            permissions = await permission_service._get_effective_permission_ids(
+                "knowledge_file",
+                int(entry_id),
+                space_id=int(space_id),
+            )
+            return "view_file" in permissions
+
+        resolver = SqlKnowledgeRetrievalScopeResolver(
+            file_repository=file_repo,
+            document_repository=doc_repo,
+            version_repository=version_repo,
+            space_read_checker=_space_read_checker,
+            entry_view_checker=_entry_view_checker,
+            settings_provider=lambda: RetrievalScopeResolverSettings(
+                enabled=True,
+                routing_version=int(snapshot.routing_version),
+            ),
+        )
         scope = await resolver.resolve_request(
             user_id=str(self.login_user.user_id),
             tenant_id=TenantId(tenant_id),
@@ -916,12 +952,19 @@ class KnowledgeSpaceChatService:
                 tenant_id,
                 self.login_user.user_id,
             )
-            return []
-        milvus_vector = KnowledgeRag.init_milvus_vectorstore(
-            collection_name=collection_name,
-            embeddings=embeddings,
-        )
-        es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=index_name)
+            return None
+        try:
+            milvus_vector = KnowledgeRag.init_milvus_vectorstore(
+                collection_name=collection_name,
+                embeddings=embeddings,
+            )
+            es_client = KnowledgeRag.init_es_vectorstore_sync(index_name=index_name)
+        except Exception:
+            logger.exception(
+                "shared_storage_reader_init_failed tenant=%s",
+                tenant_id,
+            )
+            return None
 
         reader = SharedSpaceStorageReader(
             tenant_id=tenant_id,
@@ -945,7 +988,7 @@ class KnowledgeSpaceChatService:
                 "shared_storage_milvus_search_failed tenant=%s",
                 tenant_id,
             )
-            return []
+            return None
 
         # BM25 search (ES) — optional, best-effort.
         es_hits: list = []

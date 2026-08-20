@@ -201,6 +201,53 @@ class TestSharedSpaceStorageReader:
         assert hits[0].canonical_version_id == 100
         assert hits[0].score == pytest.approx(1.5)
 
+    async def test_es_routing_only_used_for_canonical_document_queries(self):
+        calls = []
+        reader = self._reader()
+        reader.conf = _conf(es_routing_enabled=True)
+        reader.es_client.search = lambda **kwargs: (
+            calls.append(kwargs) or {"hits": {"hits": []}}
+        )
+
+        await reader.search_es(
+            BackendQueryFilter(
+                tenant_id=1,
+                requested_space_ids=(11,),
+                routing_version=3,
+            ),
+            query_text="hello",
+            limit=5,
+        )
+        await reader.search_es(
+            BackendQueryFilter(
+                tenant_id=1,
+                requested_space_ids=(11,),
+                routing_version=3,
+                canonical_document_ids=(10, 11),
+            ),
+            query_text="hello",
+            limit=5,
+        )
+
+        assert "routing" not in calls[0]
+        assert calls[1]["routing"] == "1-10,1-11"
+
+
+class TestESQueryRendering:
+    _reader = TestSharedSpaceStorageReader._reader
+
+    def test_older_generation_uses_range_query(self):
+        writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
+        query = writer._es_doc_query(
+            tenant_id=1,
+            canonical_document_id=10,
+            content_generation=3,
+            generation_lt=True,
+        )
+        assert {
+            "range": {"metadata.content_generation": {"lt": 3}}
+        } in query["bool"]["filter"]
+
     async def test_routing_version_mismatch_fails_closed(self):
         reader = self._reader(routing_version=2)
         filter_ = BackendQueryFilter(

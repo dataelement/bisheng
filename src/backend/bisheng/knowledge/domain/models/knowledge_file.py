@@ -78,6 +78,7 @@ class KnowledgeFileEntryStatus(str, Enum):
 class KnowledgeFileProjectionStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
+    PROJECTING = "processing"  # backwards-compatible alias
     READY = "ready"
     FAILED = "failed"
 

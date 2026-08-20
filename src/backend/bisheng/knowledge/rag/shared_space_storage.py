@@ -26,13 +26,12 @@ import json
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from pymilvus import Collection, CollectionSchema, DataType, FieldSchema, connections
 from pymilvus.orm import utility
 
 from bisheng.common.constants.vectorstore_metadata import RagMetadataFieldSchema
-from bisheng.common.schemas.rag_schema import RagMetadataFieldSchema as _RagSchema
 from bisheng.knowledge.domain.contracts.errors import (
     SharedStorageContractError,
     SharedStorageErrorCode,
@@ -203,10 +202,6 @@ def freeze_tenant_writes(tenant_id: int) -> bool:
     before calling (the guard in ``_require_not_write_frozen`` and the
     ``SharedSpaceStorageWriter`` both respect that config).
     """
-    from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
-        KnowledgeSpaceSharedStorageRoutingDao,
-    )
-
     return KnowledgeSpaceSharedStorageRoutingDao.set_write_frozen(int(tenant_id), True)
 
 
@@ -215,10 +210,6 @@ def unfreeze_tenant_writes(tenant_id: int) -> bool:
 
     Returns True when a row was updated. Idempotent.
     """
-    from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
-        KnowledgeSpaceSharedStorageRoutingDao,
-    )
-
     return KnowledgeSpaceSharedStorageRoutingDao.set_write_frozen(int(tenant_id), False)
 
 
@@ -406,6 +397,7 @@ def bootstrap_shared_collection(
     spec: SharedStoreSchemaSpec,
     tenant_id: int,
     *,
+    collection_name: str | None = None,
     connection_alias: str | None = None,
     collection_factory: Callable[[str, CollectionSchema, str, str], Collection] | None = None,
 ) -> SharedCollectionBootstrapResult:
@@ -419,7 +411,7 @@ def bootstrap_shared_collection(
     ``collection_factory(name, schema, description, alias)`` allows tests to
     substitute collection creation.
     """
-    name = shared_collection_name(tenant_id)
+    name = collection_name or shared_collection_name(tenant_id)
     fingerprint = spec.fingerprint()
     description = spec.description_payload()
 
@@ -479,6 +471,7 @@ def ensure_shared_es_index(
     es_client: Any,
     tenant_id: int,
     *,
+    index_name: str | None = None,
     conf=None,
     create_index: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> str:
@@ -489,14 +482,14 @@ def ensure_shared_es_index(
     so the PoC can flip it without reindexing.
     """
     conf = conf or get_shared_storage_conf()
-    index_name = shared_index_name(tenant_id, conf)
+    index_name = index_name or shared_index_name(tenant_id, conf)
     body = build_shared_es_index_body(conf)
     if create_index is not None:
         create_index(index_name, body)
     else:
         if not es_client.indices.exists(index=index_name):
             es_client.indices.create(index=index_name, body=body)
-        es_client.indices.put_alias(index=index_name, name=shared_index_alias(tenant_id, conf))
+        es_client.indices.put_alias(index=index_name, name=f"{index_name}_alias")
     return index_name
 
 
@@ -577,6 +570,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         conf=None,
         routing_provider: Callable[[int], TenantRoutingSnapshot | None] | None = None,
         embedding_model_validator: Callable[[int, TenantRoutingSnapshot], None] | None = None,
+        migration_mode: bool = False,
     ) -> None:
         self.tenant_id = int(tenant_id)
         self.collection = collection
@@ -586,6 +580,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         self.conf = conf
         self._routing_provider = routing_provider or load_tenant_routing_snapshot
         self._embedding_model_validator = embedding_model_validator
+        self._migration_mode = bool(migration_mode)
 
     # -- guards ---------------------------------------------------------------
 
@@ -613,7 +608,7 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         self, *, embedding_model_id: str | int | None = None
     ) -> TenantRoutingSnapshot:
         snapshot = self._routing_snapshot()
-        if not snapshot.shared_enabled:
+        if not snapshot.shared_enabled and not self._migration_mode:
             raise SharedStorageContractError(
                 SharedStorageErrorCode.SHARED_STORAGE_NOT_ENABLED,
                 "tenant is not routed to the shared store",
@@ -626,7 +621,11 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
                 f"to {snapshot.routing_version} while the projection held its lease",
                 tenant_id=self.tenant_id,
             )
-        if snapshot.write_frozen and self._conf().migration_write_block_enabled:
+        if (
+            snapshot.write_frozen
+            and self._conf().migration_write_block_enabled
+            and not self._migration_mode
+        ):
             raise SharedStorageContractError(
                 SharedStorageErrorCode.TENANT_WRITE_FROZEN,
                 "tenant SPACE writes are frozen for migration",
@@ -729,13 +728,24 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
                 {"term": {"metadata.canonical_version_id": int(canonical_version_id)}}
             )
         if content_generation is not None:
-            key = "lt" if generation_lt else "term"
-            value = (
-                {"metadata.content_generation": {"lt": int(content_generation)}}
-                if generation_lt
-                else {"metadata.content_generation": int(content_generation)}
-            )
-            filters.append({key: value} if False else value)
+            if generation_lt:
+                filters.append(
+                    {
+                        "range": {
+                            "metadata.content_generation": {
+                                "lt": int(content_generation)
+                            }
+                        }
+                    }
+                )
+            else:
+                filters.append(
+                    {
+                        "term": {
+                            "metadata.content_generation": int(content_generation)
+                        }
+                    }
+                )
         return {"bool": {"filter": filters}}
 
     # -- chunk rows ------------------------------------------------------------
@@ -842,22 +852,30 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         es_index = self._es_index(snapshot)
         es_routing_on = bool(self._conf().es_routing_enabled)
 
-        # 1) clean leftovers of a crashed retry of this same generation
-        await self._run_milvus("delete", expr=same_gen_expr)
-        await self._run_es(
-            "delete_by_query",
-            index=es_index,
-            query=self._es_doc_query(
-                tenant_id=identity.tenant_id,
-                canonical_document_id=identity.canonical_document_id,
-                canonical_version_id=identity.canonical_version_id,
-                content_generation=identity.content_generation,
-            ),
+        # A completed retry must not delete the only durable copy before
+        # rewriting it. Deterministic chunk indexes let us distinguish a
+        # complete generation from a partial write left by a crashed attempt.
+        existing = await self._run_milvus(
+            "query",
+            expr=same_gen_expr,
+            output_fields=["chunk_index"],
+            limit=_MILVUS_QUERY_BATCH,
         )
+        expected_indexes = {int(row["chunk_index"]) for row in rows}
+        existing_indexes = {
+            int(row["chunk_index"])
+            for row in existing
+            if row.get("chunk_index") is not None
+        }
+        generation_complete = (
+            len(existing) == len(rows) and existing_indexes == expected_indexes
+        )
+        if not generation_complete:
+            await self._run_milvus("delete", expr=same_gen_expr)
 
         # 2) write the new generation (new first - a crash here can only
         #    duplicate, never lose content)
-        if rows:
+        if rows and not generation_complete:
             await self._run_milvus("insert", rows)
         for row in rows:
             es_kwargs: dict[str, Any] = {
@@ -1272,8 +1290,14 @@ class SharedSpaceStorageReader:
             "_source": ["metadata.canonical_document_id", "metadata.canonical_version_id", "metadata.chunk_index", "text"],
         }
         kwargs: dict[str, Any] = {"index": snapshot.index_name or shared_index_name(self.tenant_id), "body": body}
-        if get_shared_storage_conf().es_routing_enabled:
-            kwargs["routing"] = str(self.tenant_id)
+        if (
+            (self.conf or get_shared_storage_conf()).es_routing_enabled
+            and filter_.canonical_document_ids
+        ):
+            kwargs["routing"] = ",".join(
+                es_routing_value(self.tenant_id, document_id)
+                for document_id in filter_.canonical_document_ids
+            )
         response = await asyncio.to_thread(self.es_client.search, **kwargs)
         hits: list[CanonicalChunkHit] = []
         for row in response.get("hits", {}).get("hits", []):

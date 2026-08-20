@@ -228,3 +228,16 @@ class KnowledgeSpaceSharedStorageRoutingDao:
             result = session.exec(statement)
             session.commit()
             return bool(result.rowcount)
+
+    @classmethod
+    def set_migration_state(cls, tenant_id: int, state: str) -> bool:
+        """Persist migration progress without changing the active route."""
+        with get_sync_db_session() as session:
+            statement = (
+                update(KnowledgeSpaceSharedStorageRouting)
+                .where(KnowledgeSpaceSharedStorageRouting.tenant_id == int(tenant_id))
+                .values(migration_state=state)
+            )
+            result = session.exec(statement)
+            session.commit()
+            return bool(result.rowcount)

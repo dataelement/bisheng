@@ -159,6 +159,7 @@ def build_knowledge_space_chat_service_for_openapi(
     request_user: UserPayload,
     version_repo: KnowledgeDocumentVersionRepository,
     doc_repo: KnowledgeDocumentRepository,
+    file_repo: KnowledgeFileRepository | None = None,
 ) -> "KnowledgeSpaceChatService":
     """Build the retrieval service inside the resolved Filelib user context."""
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
@@ -166,6 +167,7 @@ def build_knowledge_space_chat_service_for_openapi(
     service = KnowledgeSpaceChatService(request=request, login_user=request_user)
     service.version_repo = version_repo
     service.doc_repo = doc_repo
+    service.file_repo = file_repo
     return service
 
 

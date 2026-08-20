@@ -7,8 +7,9 @@ over the async SQLite fixtures.
 """
 from __future__ import annotations
 
+import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -447,6 +448,16 @@ class TestLegacyGating:
 
     async def test_config_resolution_defaults_to_disabled(self):
         assert await resolve_shared_space_storage_enabled() is False
+
+    async def test_config_resolution_reads_top_level_shared_storage_block(self):
+        settings = SimpleNamespace(
+            knowledge_space_shared_storage=SimpleNamespace(enabled=True)
+        )
+        config_module = sys.modules[
+            "bisheng.common.services.config_service"
+        ]
+        with patch.object(config_module, "settings", settings):
+            assert await resolve_shared_space_storage_enabled() is True
 
 
 # ---------------------------------------------------------------------------

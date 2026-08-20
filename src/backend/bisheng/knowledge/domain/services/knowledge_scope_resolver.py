@@ -18,7 +18,7 @@ F3.7 - error semantics: fail-closed on every error path, per spec 8.1
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 
 from bisheng.knowledge.domain.contracts.errors import (
     SharedStorageContractError,
@@ -49,6 +49,10 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository 
 )
 
 logger = logging.getLogger(__name__)
+
+# Kept patchable for legacy callers/tests; imported lazily to avoid coupling
+# this resolver module to the large knowledge-space service at import time.
+KnowledgeSpaceService = None
 
 # Entry-type priority for dedup selection (lower = higher priority).
 _ENTRY_TYPE_PRIORITY = {
@@ -241,7 +245,7 @@ class KnowledgeSpaceScopeResolver(KnowledgeRetrievalScopeResolver):
             )
             seen_documents.add(doc_id)
 
-        return mapped
+        return tuple(mapped)
 
     # ------------------------------------------------------------------
     #  internal helpers
@@ -320,10 +324,12 @@ class KnowledgeSpaceScopeResolver(KnowledgeRetrievalScopeResolver):
         ``KnowledgeSpaceService`` (OpenFGA ``can_read`` + RBAC menu).
         """
         try:
-            from bisheng.knowledge.domain.services.knowledge_space_service import (
-                KnowledgeSpaceService,
-            )
-            return await KnowledgeSpaceService._user_can_read_space(
+            service_class = KnowledgeSpaceService
+            if service_class is None:
+                from bisheng.knowledge.domain.services.knowledge_space_service import (
+                    KnowledgeSpaceService as service_class,
+                )
+            return await service_class._user_can_read_space(
                 user_id=user_id,
                 space_id=space_id,
             )

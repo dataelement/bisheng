@@ -154,6 +154,9 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
+from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
+    KnowledgeSpaceSharedStorageRoutingDao,
+)
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
@@ -263,6 +266,7 @@ from bisheng.knowledge.domain.services.knowledge_space_pin_service import Knowle
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
     KnowledgeSpaceTagLibraryService,
 )
+from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.services.portal_recommendation_behavior_service import (
     PortalRecommendationBehaviorService,
@@ -615,11 +619,6 @@ async def _require_not_write_frozen(tenant_id: int) -> None:
         SharedStorageContractError,
         SharedStorageErrorCode,
     )
-    from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
-        KnowledgeSpaceSharedStorageRoutingDao,
-    )
-    from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
-
     conf = get_shared_storage_conf()
     if not conf.migration_write_block_enabled:
         return
@@ -4185,6 +4184,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         may not have tags yet.
         """
 
+        await _require_not_write_frozen(int(self.login_user.tenant_id))
         perf_start = time.perf_counter()
         perf_last = perf_start
 
@@ -11215,6 +11215,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
+        await _require_not_write_frozen(
+            int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         if not force:
             if getattr(space, "is_favorite", False):
                 raise FavoriteSpaceProtectedError()
@@ -11572,6 +11575,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
+        await _require_not_write_frozen(
+            int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
 
@@ -14648,6 +14654,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         folder_name: str,
         parent_id: int | None = None,
     ) -> KnowledgeFile:
+        knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
+        if not knowledge:
+            raise SpaceNotFoundError()
+        await _require_not_write_frozen(
+            int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         if parent_id:
             await self._require_permission_id("folder", parent_id, "create_folder", space_id=knowledge_id)
         else:
@@ -14746,6 +14758,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not folder or folder.file_type != 0:
             raise SpaceFolderNotFoundError()
         folder = self._ensure_space_folder(folder, folder.knowledge_id)
+        await _require_not_write_frozen(
+            int(getattr(folder, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         await self._require_permission_id("folder", folder_id, "rename_folder", space_id=folder.knowledge_id)
         self._check_name_sensitive_words(new_name)
 
@@ -14779,6 +14794,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
+        await _require_not_write_frozen(
+            int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         self._ensure_space_async_task_tenant_consistency(space, "delete_folder")
         folder_name = str(getattr(folder, "file_name", None) or folder_id)
 
@@ -15211,6 +15229,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> KnowledgeSpaceFileResponse:
         file_record = await KnowledgeFileDao.query_by_id(file_id)
         file_record = self._ensure_space_file(file_record, space_id)
+        await _require_not_write_frozen(
+            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         resolved = await self._resolve_document_entry(
             file_record,
             required_capability="can_move",
@@ -15313,6 +15334,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """Move a folder (and all its descendants) to a new location within the same space."""
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         folder = self._ensure_space_folder(folder, space_id)
+        await _require_not_write_frozen(
+            int(getattr(folder, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         await self._require_permission_id("folder", folder_id, "rename_file", space_id=space_id)
 
         old_folder_path = folder.file_level_path or ""
@@ -16107,6 +16131,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         file_record = await self._get_file_for_action(file_id)
+        await _require_not_write_frozen(
+            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         resolved = await self._require_document_content_manager(file_record)
         if resolved is None:
             await self._require_permission_id(
@@ -16312,6 +16339,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         encoding segments so list APIs and reparses keep the edited selection.
         """
         file_record = await self._get_file_for_action(file_id)
+        await _require_not_write_frozen(
+            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         resolved = await self._require_file_metadata_edit_permission(file_record)
 
         cleaned = encoding.strip()
@@ -16591,6 +16621,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def delete_file(self, file_id: int):
         file_record = await self._get_file_for_action(file_id)
+        await _require_not_write_frozen(
+            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         await self._require_permission_id("knowledge_file", file_id, "delete_file", space_id=file_record.knowledge_id)
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
@@ -17177,6 +17210,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: list[int], review_tag_ids: list[int]):
         """2：支持对单文件的标签管理: Overwrite tags for a single file."""
         file_record = await self._get_file_for_action(file_id, space_id=space_id)
+        await _require_not_write_frozen(
+            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
         before_tags = [
             str(item.get("name") or "") for item in (await self._load_file_tags_batch([file_id])).get(file_id, [])
         ]
@@ -17487,6 +17523,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise SpaceNotFoundError()
+        await _require_not_write_frozen(
+            int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID)
+        )
 
         await self._require_read_permission(knowledge_id)
         self._ensure_space_async_task_tenant_consistency(knowledge, "batch_delete")
