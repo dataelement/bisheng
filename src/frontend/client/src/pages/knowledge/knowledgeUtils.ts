@@ -34,6 +34,25 @@ export {
     toWebLinkFileName,
 } from "~/api/knowledge";
 
+/** Whether the file was ingested via OpenAPI / filelib sync (vs local space upload). */
+export function isKnowledgeApiSyncFile(
+    file: Pick<KnowledgeFile, "userMetadata" | "type">,
+): boolean {
+    if (file.type === FileType.FOLDER) return false;
+    const meta = file.userMetadata ?? {};
+    return Boolean(meta.filelib_sync_endpoint || meta.external_file_id);
+}
+
+export function getKnowledgeIngestMethodLabel(
+    file: Pick<KnowledgeFile, "userMetadata" | "type">,
+    localize: (key: string) => string,
+): string {
+    if (file.type === FileType.FOLDER) return "";
+    return isKnowledgeApiSyncFile(file)
+        ? localize("com_knowledge.ingest_method_api_sync")
+        : localize("com_knowledge.ingest_method_local");
+}
+
 /** Label for transient upload rows (progress % / registering phase). */
 export function getUploadTransientStatusLabel(
     file: KnowledgeFile,
