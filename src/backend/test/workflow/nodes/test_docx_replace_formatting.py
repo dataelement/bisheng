@@ -143,3 +143,56 @@ def test_block_content_still_splits_the_paragraph():
     assert len(rendered.tables) == 1
     assert rendered.tables[0].rows[0].cells[0].text == "列1"
     assert any("见下表：" in paragraph.text for paragraph in rendered.paragraphs)
+
+
+def test_block_split_keeps_paragraph_style_and_run_formatting():
+    """Splitting around a heading must not flatten the surviving text."""
+
+    def build(doc):
+        paragraph = doc.add_paragraph(style="Quote")
+        paragraph.add_run("前缀 ").underline = True
+        paragraph.add_run(PLACEHOLDER).underline = True
+        paragraph.add_run(" 后缀____").underline = True
+
+    rendered = _render(
+        build,
+        {
+            KEY: [
+                {"type": "text", "content": "正文"},
+                {"type": "heading", "content": "小标题", "level": 3},
+                {"type": "text", "content": "结尾"},
+            ]
+        },
+    )
+    before, heading, after = rendered.paragraphs[:3]
+
+    assert before.style.name == "Quote"
+    assert after.style.name == "Quote"
+    assert heading.style.name == "Heading 3"
+    # Text on both sides of the heading keeps the underline it had, and so does
+    # the substituted value — it used to come out plain.
+    assert all(run.underline is True for run in before.runs if run.text)
+    assert all(run.underline is True for run in after.runs if run.text)
+    assert before.text == "前缀 正文"
+    assert after.text == "结尾 后缀____"
+
+
+def test_block_split_keeps_each_run_its_own_format():
+    """Mid-paragraph format changes used to be re-stamped with run[0]'s format."""
+
+    def build(doc):
+        paragraph = doc.add_paragraph()
+        paragraph.add_run("普通 ")
+        paragraph.add_run("加粗 ").bold = True
+        paragraph.add_run(PLACEHOLDER).underline = True
+
+    rendered = _render(
+        build,
+        {KEY: [{"type": "text", "content": "值"}, {"type": "heading", "content": "标题", "level": 2}]},
+    )
+    runs = [run for run in rendered.paragraphs[0].runs if run.text]
+
+    assert [run.text for run in runs] == ["普通 ", "加粗 ", "值"]
+    assert runs[0].bold is None
+    assert runs[1].bold is True
+    assert runs[2].underline is True
