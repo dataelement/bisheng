@@ -40,6 +40,15 @@ def year_bounds(now: datetime | None = None) -> tuple[datetime, datetime]:
     return start, end
 
 
+def _department_path_ids(path: str | None) -> list[int]:
+    """从 materialized path 抽出部门 id，例如 ``/1/54/`` → ``[1, 54]``。"""
+    parts: list[int] = []
+    for part in str(path or "").strip("/").split("/"):
+        if part.isdigit():
+            parts.append(int(part))
+    return parts
+
+
 def resolve_company_id(
     primary: Department | None,
     departments: dict[int, Department],
@@ -47,15 +56,39 @@ def resolve_company_id(
     """主部门沿 path 向上找最近 org_level=company；找不到返回 None。"""
     if primary is None or not primary.path:
         return None
-    parts: list[int] = []
-    for part in str(primary.path).strip("/").split("/"):
-        if part.isdigit():
-            parts.append(int(part))
-    for dept_id in reversed(parts):
+    for dept_id in reversed(_department_path_ids(primary.path)):
         node = departments.get(dept_id)
         if node is not None and getattr(node, "org_level", None) == ORG_LEVEL_COMPANY:
             return int(node.id)
     return None
+
+
+def resolve_first_company_id(departments: dict[int, Department]) -> int | None:
+    """组织架构树前序中第一个 ``org_level=company`` 节点。
+
+    同级顺序与部门树一致：``sort_order`` 升序，再按 id。无公司标签时返回 None。
+    用途：未登录访客与平台系统管理员看首页积分榜的默认公司。
+    """
+    companies = [
+        node
+        for node in departments.values()
+        if getattr(node, "org_level", None) == ORG_LEVEL_COMPANY and getattr(node, "id", None) is not None
+    ]
+    if not companies:
+        return None
+
+    def _tree_key(node) -> tuple:
+        key: list[tuple[int, int]] = []
+        for dept_id in _department_path_ids(getattr(node, "path", None)):
+            ancestor = departments.get(dept_id)
+            sort_order = int(getattr(ancestor, "sort_order", 0) or 0) if ancestor is not None else 0
+            key.append((sort_order, dept_id))
+        if not key:
+            key.append((int(getattr(node, "sort_order", 0) or 0), int(node.id)))
+        return tuple(key)
+
+    companies.sort(key=_tree_key)
+    return int(companies[0].id)
 
 
 def resolve_dept_bucket_id(

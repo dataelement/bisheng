@@ -99,6 +99,24 @@ class PointsQueryService:
         dept_by_id = {int(d.id): d for d in all_depts}
         return resolve_company_id(primary, dept_by_id)
 
+    @staticmethod
+    async def _resolve_first_company_id() -> int | None:
+        """组织架构第一个公司根 id；当前租户无公司标签时返回 None。"""
+        from bisheng.database.models.department import DepartmentDao
+        from bisheng.points.domain.services.points_rank_service import resolve_first_company_id
+
+        all_depts = await DepartmentDao.aget_all_active()
+        dept_by_id = {int(d.id): d for d in all_depts}
+        return resolve_first_company_id(dept_by_id)
+
+    async def _resolve_leaderboard_company_id(self, user) -> int | None:
+        """首页榜公司：访客/平台超管取组织树第一家；普通人取所属公司。"""
+        from bisheng.points.domain.services.points_auth import is_platform_super_admin
+
+        if user is None or is_platform_super_admin(user):
+            return await self._resolve_first_company_id()
+        return await self._resolve_user_company_id(int(user.user_id))
+
     async def my_summary(self, tenant_id: int, user_id: int) -> PointSummaryResponse:
         """余额、当月收支与本公司排名（无公司则排名为 —）。"""
         account = await self.repository.find_account(tenant_id, user_id)
@@ -169,8 +187,12 @@ class PointsQueryService:
         )
         return [self._log_response(r) for r in rows], total
 
-    async def leaderboard(self, tenant_id: int, period: str, user_id: int) -> PointLeaderboardResponse:
-        """读取当前用户所属公司的小时快照前十（算法甲含并列）；无公司则空榜（AC-15）。"""
+    async def leaderboard(self, tenant_id: int, period: str, user=None) -> PointLeaderboardResponse:
+        """读取首页积分榜小时快照前十（算法甲含并列）。
+
+        普通人看所属公司；未登录与平台系统管理员看组织架构第一个公司。
+        解析不到公司则空榜（AC-15）。
+        """
         now = datetime.now(SHANGHAI)
         if period == "year":
             period_key = now.strftime("%Y")
@@ -179,7 +201,12 @@ class PointsQueryService:
         else:
             period = "month"
             period_key = now.strftime("%Y-%m")
-        company_id = await self._resolve_user_company_id(user_id)
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id, set_current_tenant_id
+
+        # 访客无 JWT 时中间件可能未注入租户；公开榜按默认租户读部门/快照。
+        if get_current_tenant_id() is None:
+            set_current_tenant_id(int(tenant_id or DEFAULT_TENANT_ID))
+        company_id = await self._resolve_leaderboard_company_id(user)
         refreshed = await self.repository.latest_rank_refreshed_at(tenant_id, period, period_key)
         if company_id is None:
             return PointLeaderboardResponse(period=period, refreshed_at=refreshed, items=[])
