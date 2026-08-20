@@ -61,13 +61,14 @@ class _State:
         context,
         grant,
         source,
+        visibility,
         *,
         operation_id: int,
     ):
-        self.prepared.append((context, grant, source, operation_id))
+        self.prepared.append((context, grant, source, visibility, operation_id))
 
-    async def finalize(self, context, grant, outcome):
-        self.finalized.append((context, grant, outcome))
+    async def finalize(self, context, grant, visibility, outcome):
+        self.finalized.append((context, grant, visibility, outcome))
 
     async def mark_compensation_required(self, context, error):
         self.compensations.append((context, error))
@@ -170,6 +171,13 @@ async def test_creation_adds_one_protected_creator_without_replacing_owners() ->
     assert {source.projected_subject for source in result.grant.sources} == {"user:7", "user:8"}
     assert len(state.prepared) == len(state.finalized) == 1
     assert any(delta.relation == "protected_assignee" for delta in projection.plans[0].deltas)
+    assert {(delta.user, delta.relation) for delta in projection.plans[0].deltas} >= {
+        ("user:7", "visible"),
+        ("user:8", "visible"),
+    }
+    visibility = state.prepared[0][3]
+    assert visibility is not None
+    assert {source.projected_subject for source in visibility.active_sources} == {"user:7", "user:8"}
 
 
 @pytest.mark.asyncio
@@ -248,6 +256,8 @@ async def test_custom_copy_projects_ordinary_sources_and_new_creator_atomically(
     assert {(row.user, row.relation) for row in plan.deltas} >= {
         ("user:8", "ordinary_assignee"),
         ("user:7", "protected_assignee"),
+        ("user:8", "visible"),
+        ("user:7", "visible"),
     }
     assert result.grant is not None
     assert result.grant.sources[0].protected is True

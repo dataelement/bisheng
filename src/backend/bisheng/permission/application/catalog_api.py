@@ -24,6 +24,7 @@ from bisheng.common.errcode.permission import (
     PermissionProjectionFailedError,
     PermissionPublishNotReadyError,
     PermissionVersionConflictError,
+    SameLevelGrantRequiresManagePermissionError,
 )
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
@@ -59,10 +60,12 @@ from bisheng.permission.domain.services.catalog_policy import (
     derive_action_release,
 )
 from bisheng.permission.domain.services.catalog_service import (
+    CatalogActionChangeSummary,
     CatalogCommitUnknownError,
     CatalogDraftBuildInput,
     CatalogDraftSnapshot,
     CatalogImpactSummary,
+    CatalogModelChangeSummary,
     CatalogPublishContext,
     CatalogService,
     CatalogTupleChange,
@@ -72,6 +75,7 @@ from bisheng.permission.domain.services.model_policy import (
     ModelReferenceSummary,
     PermissionModelImpact,
     PermissionModelRelease,
+    SameLevelGrantRequiresManagePermission,
     derive_permission_models,
     effective_model_action_codes,
 )
@@ -1086,6 +1090,53 @@ class SqlCatalogImpact:
         revocation_count = sum(
             len(before - after) * len(sources_by_grant.get(int(row.id), ())) for row, before, after in affected
         )
+        affected_assignees_by_model: dict[str, int] = {}
+        for row, _, _ in affected:
+            affected_assignees_by_model[row.model_key] = affected_assignees_by_model.get(row.model_key, 0) + len(
+                sources_by_grant.get(int(row.id), ())
+            )
+        before_action_by_code = {action.code: action for action in before_actions.actions}
+        after_action_by_code = {action.code: action for action in after_actions.actions}
+        action_changes = tuple(
+            CatalogActionChangeSummary(
+                action_code=action_code,
+                action_name=(after_action_by_code.get(action_code) or before_action_by_code[action_code]).name,
+                before_level=(
+                    before_action_by_code[action_code].level if action_code in before_action_by_code else None
+                ),
+                after_level=(after_action_by_code[action_code].level if action_code in after_action_by_code else None),
+                before_active=(
+                    before_action_by_code[action_code].active if action_code in before_action_by_code else False
+                ),
+                after_active=(
+                    after_action_by_code[action_code].active if action_code in after_action_by_code else False
+                ),
+            )
+            for action_code in action_impact.changed_action_codes
+        )
+        model_changes = tuple(
+            CatalogModelChangeSummary(
+                model_key=model_key,
+                model_name=(after_by_key.get(model_key) or before_by_key[model_key]).name,
+                kind=(after_by_key.get(model_key) or before_by_key[model_key]).kind,
+                before_level=(before_by_key[model_key].derived_level if model_key in before_by_key else None),
+                after_level=(after_by_key[model_key].derived_level if model_key in after_by_key else None),
+                added_action_codes=tuple(
+                    sorted(
+                        set(after_by_key[model_key].action_codes if model_key in after_by_key else ())
+                        - set(before_by_key[model_key].action_codes if model_key in before_by_key else ())
+                    )
+                ),
+                removed_action_codes=tuple(
+                    sorted(
+                        set(before_by_key[model_key].action_codes if model_key in before_by_key else ())
+                        - set(after_by_key[model_key].action_codes if model_key in after_by_key else ())
+                    )
+                ),
+                affected_assignee_count=affected_assignees_by_model.get(model_key, 0),
+            )
+            for model_key in model_impact.changed_model_keys
+        )
         source_signatures = {
             int(row.id): tuple(
                 (
@@ -1120,6 +1171,8 @@ class SqlCatalogImpact:
             assignee_count=assignee_count,
             expansion_count=expansion_count,
             revocation_count=revocation_count,
+            action_changes=action_changes,
+            model_changes=model_changes,
             blockers=(),
         )
 
@@ -1516,6 +1569,11 @@ class F048CatalogApi:
             )
         except (InvalidCatalogActionError, ImmutableStandardModelError):
             raise
+        except SameLevelGrantRequiresManagePermission as exc:
+            raise SameLevelGrantRequiresManagePermissionError(
+                exception=exc,
+                msg=str(exc),
+            ) from exc
         except ValueError as exc:
             raise InvalidCatalogActionError(
                 exception=exc,
@@ -1570,6 +1628,30 @@ class F048CatalogApi:
                 "assignee_count": impact.assignee_count,
                 "expansion_count": impact.expansion_count,
                 "revocation_count": impact.revocation_count,
+                "action_changes": [
+                    {
+                        "action_code": change.action_code,
+                        "action_name": change.action_name,
+                        "before_level": change.before_level,
+                        "after_level": change.after_level,
+                        "before_active": change.before_active,
+                        "after_active": change.after_active,
+                    }
+                    for change in impact.action_changes
+                ],
+                "model_changes": [
+                    {
+                        "model_key": change.model_key,
+                        "model_name": change.model_name,
+                        "kind": change.kind,
+                        "before_level": change.before_level,
+                        "after_level": change.after_level,
+                        "added_action_codes": list(change.added_action_codes),
+                        "removed_action_codes": list(change.removed_action_codes),
+                        "affected_assignee_count": change.affected_assignee_count,
+                    }
+                    for change in impact.model_changes
+                ],
                 "blockers": sorted(set(draft.blockers) | set(impact.blockers)),
                 "expires_at": _as_utc(expires_at).isoformat(),
             },
@@ -1743,6 +1825,11 @@ class F048CatalogApi:
                 custom_models=custom_by_key.values(),
                 standard_allow_same_level=standard_policy,
             )
+        except SameLevelGrantRequiresManagePermission as exc:
+            raise SameLevelGrantRequiresManagePermissionError(
+                exception=exc,
+                msg=str(exc),
+            ) from exc
         except ValueError as exc:
             if touched_standard_keys:
                 raise ImmutableStandardModelError(

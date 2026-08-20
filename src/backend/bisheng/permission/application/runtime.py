@@ -155,6 +155,11 @@ class F048PermissionRuntime:
     async def current_catalog(self) -> RuntimeCatalogSnapshot:
         return await self._runtime_catalog()
 
+    async def effective_actions(self, resource_type: str) -> tuple[str, ...]:
+        """All action codes effective for a resource type in the CURRENT catalog."""
+
+        return await self._decision.effective_actions(resource_type)
+
     async def prospective_owner_grantable_models(
         self,
     ) -> tuple[RuntimeCatalogSnapshot, tuple[RuntimeModelSnapshot, ...]]:

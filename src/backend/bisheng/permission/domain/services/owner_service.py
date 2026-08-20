@@ -7,7 +7,7 @@ INV-2: every resource must have exactly one owner tuple in OpenFGA.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Protocol
 
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
@@ -24,9 +24,14 @@ from bisheng.permission.domain.services.grant_source_service import (
 from bisheng.permission.domain.services.projection_plan import (
     ProjectionOutcome,
     ProjectionTupleDelta,
+    merge_projection_deltas,
 )
 from bisheng.permission.domain.services.resource_lifecycle_policy import (
     build_create_plan,
+)
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompilation,
+    VisibilityProjectionCompiler,
 )
 
 logger = logging.getLogger(__name__)
@@ -78,6 +83,7 @@ class OwnerProjectionStatePort(Protocol):
         context: OwnerProjectionContext,
         grant: GrantSnapshot | None,
         source: GrantSourceRecord | None,
+        visibility: VisibilityProjectionCompilation | None,
         *,
         operation_id: int,
     ) -> None: ...
@@ -86,7 +92,8 @@ class OwnerProjectionStatePort(Protocol):
         self,
         context: OwnerProjectionContext,
         grant: GrantSnapshot | None,
-        outcome: object,
+        visibility: VisibilityProjectionCompilation | None,
+        outcome: ProjectionOutcome,
     ) -> None: ...
 
     async def mark_compensation_required(
@@ -105,18 +112,22 @@ class F048OwnerProjectionService:
         source_service: GrantSourceService,
         projection: OwnerProjectionPort,
         state: OwnerProjectionStatePort,
+        visibility_compiler: VisibilityProjectionCompiler | None = None,
     ) -> None:
         self._sources = source_service
         self._projection = projection
         self._state = state
+        self._visibility = visibility_compiler or VisibilityProjectionCompiler()
 
     async def project_created(
         self,
         context: OwnerProjectionContext,
     ) -> OwnerProjectionResult:
         self._validate_common(context)
+        self._validate_copy(context)
         grant: GrantSnapshot | None
         source: GrantSourceRecord | None
+        visibility: VisibilityProjectionCompilation | None
         protected_deltas: tuple[ProjectionTupleDelta, ...]
         if context.system_owned:
             self._validate_system_owned(context)
@@ -137,12 +148,18 @@ class F048OwnerProjectionService:
                 )
                 for index, relation in enumerate(dict.fromkeys(marker_relations))
             )
+            visibility = None
         else:
             grant, source, protected_deltas = self._protected_owner(context)
-
-        self._validate_copy(context)
-        all_deltas = tuple(
-            replace(delta, sequence=index) for index, delta in enumerate((*context.copy_deltas, *protected_deltas))
+            visibility = self._visibility.compile(
+                tenant_id=context.target.tenant_id,
+                grants=self._projection_grants(context, grant),
+                existing_sources=(),
+            )
+        all_deltas = merge_projection_deltas(
+            context.copy_deltas,
+            protected_deltas,
+            visibility.deltas if visibility is not None else (),
         )
         plan = build_create_plan(
             context.target,
@@ -161,6 +178,7 @@ class F048OwnerProjectionService:
                     context,
                     grant,
                     source,
+                    visibility,
                     operation_id=int(operation.id),
                 )
             except Exception as exc:
@@ -171,7 +189,7 @@ class F048OwnerProjectionService:
         except Exception as exc:
             await self._state.mark_compensation_required(context, exc)
             raise
-        await self._state.finalize(context, grant, outcome)
+        await self._state.finalize(context, grant, visibility, outcome)
         return OwnerProjectionResult(
             grant=grant,
             source=source,
@@ -207,6 +225,17 @@ class F048OwnerProjectionService:
         )
         mutation = self._sources.add_source(grant, source)
         return mutation.grant, source, mutation.deltas
+
+    @staticmethod
+    def _projection_grants(
+        context: OwnerProjectionContext,
+        owner_grant: GrantSnapshot,
+    ) -> tuple[GrantSnapshot, ...]:
+        if not context.copy_grants:
+            return (owner_grant,)
+        by_model = {grant.model.model_key: grant for grant in context.copy_grants}
+        by_model[owner_grant.model.model_key] = owner_grant
+        return tuple(by_model[key] for key in sorted(by_model) if by_model[key].active and by_model[key].sources)
 
     @staticmethod
     def _validate_common(context: OwnerProjectionContext) -> None:

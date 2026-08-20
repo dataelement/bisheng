@@ -61,15 +61,34 @@ class ChannelRepositoryImpl(BaseRepositoryImpl[Channel, str], ChannelRepository)
         result = await self.session.exec(query)
         return list(result.all())
 
-    async def find_permission_candidates(
+    async def find_channels_by_user_id(self, user_id: int) -> list[Channel]:
+        """Find all channels created by the given user (tenant auto-scoped)."""
+        query = select(Channel).where(Channel.user_id == user_id)
+        result = await self.session.exec(query)
+        return list(result.all())
+
+    async def find_followed_by_visible_ids(
         self,
+        channel_ids: list[str],
         *,
-        after_id: str | None,
-        limit: int,
+        tenant_id: int,
+        exclude_creator_id: int,
     ) -> list[Channel]:
-        query = select(Channel).order_by(Channel.id).limit(limit)
-        if after_id is not None:
-            query = query.where(Channel.id > after_id)
+        """Load one bounded visible-id chunk under the canonical followed filters.
+
+        Called by ``_get_followed_channels`` with a page of ids that OpenFGA has
+        already declared visible for the current user; the ``tenant_id`` and
+        ``user_id != exclude_creator_id`` predicates keep the row set to the
+        active tenant and drop the user's own created channels at the DB layer,
+        so the loop never materialises them just to filter them out again.
+        """
+        if not channel_ids:
+            return []
+        query = select(Channel).where(
+            col(Channel.id).in_(channel_ids),
+            Channel.tenant_id == tenant_id,
+            Channel.user_id != exclude_creator_id,
+        )
         result = await self.session.exec(query)
         return list(result.all())
 

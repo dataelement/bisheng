@@ -19,6 +19,13 @@ import { HubModuleNavTabs } from "~/components/Nav/HubModuleNavTabs";
 import { MobileSidebarHeaderTabs } from "~/components/Nav/MobileSidebarHeaderTabs";
 import { cn } from "~/utils";
 
+// NOTE (dead code, kept intentionally): ChannelSidebar is only rendered by the
+// H5 drawer in Subscription/index.tsx, gated on `channelListDrawerOpen`, which is
+// never set to `true` anywhere — so this component (and its per-row ChannelItem
+// menu) is currently unreachable in both PC and H5. The live channel list is the
+// header `ChannelSwitcher` dropdown (name + pin only); management actions live on
+// the `ChannelActionsMenu` settings button (lazy via channel detail). Left in place
+// per request rather than removed.
 interface ChannelSidebarProps {
     activeChannelId?: string;
     onChannelSelect: (channel: Channel | null) => void;

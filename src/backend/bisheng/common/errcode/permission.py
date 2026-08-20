@@ -117,3 +117,8 @@ class PermissionMutationTooLargeError(BaseErrorCode):
 class PermissionEnumerationIncompleteError(BaseErrorCode):
     Code: int = 25014
     Msg: str = "Permission object enumeration did not complete"
+
+
+class SameLevelGrantRequiresManagePermissionError(BaseErrorCode):
+    Code: int = 25015
+    Msg: str = "Same-level grants require the manage_permission action"

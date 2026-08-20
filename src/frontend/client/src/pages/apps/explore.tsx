@@ -34,9 +34,9 @@ export default function ExplorePlaza() {
     const [loadingMore, setLoadingMore] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
 
-    // --- 新增滚动加载相关状态 ---
-    const [page, setPage] = useState(1);
+    // --- 游标瀑布流加载状态 ---
     const [hasMore, setHasMore] = useState(true);
+    const cursorRef = useRef<string | null>(null);
     const loaderRef = useRef<HTMLDivElement>(null);
     const loadMoreLockRef = useRef(false);
     // Bumped by every first-page request. A response whose ticket no longer
@@ -69,8 +69,8 @@ export default function ExplorePlaza() {
         setSearchQuery('');
     }, []);
 
-    // Modify Fetch Function
-    const fetchAgents = useCallback(async (query: string, categoryId: number | string, currentPage: number, isAppend: boolean) => {
+    // Fetch one cursor page. `cursor === null` starts a fresh list (first page).
+    const fetchAgents = useCallback(async (query: string, categoryId: number | string, cursor: string | null, isAppend: boolean) => {
         // Infinite scroll stays serialized. A first-page request never is: it
         // carries a new tab or keyword, and the old shared lock silently dropped
         // it whenever one was still in flight — the grid then kept showing the
@@ -88,13 +88,13 @@ export default function ExplorePlaza() {
             // keyword is present the tab filter is therefore dropped, and the
             // active tab is un-highlighted so the widened scope is visible.
             const result = keyword
-                ? await getChatOnlineApi(currentPage, keyword, ALL_CATEGORIES, pageSize)
+                ? await getChatOnlineApi(cursor, keyword, ALL_CATEGORIES, pageSize)
                 : categoryId === UNCATEGORIZED
-                    ? await getUncategorized(currentPage, pageSize)
-                    : await getChatOnlineApi(currentPage, '', categoryId as number, pageSize);
+                    ? await getUncategorized(cursor, pageSize)
+                    : await getChatOnlineApi(cursor, '', categoryId as number, pageSize);
 
             if (seq !== listSeqRef.current) return;
-            const pageData = (result as any).data || [];
+            const pageData = result.list || [];
 
             const formattedResults = pageData.map((item: any) => ({
                 ...item,
@@ -104,7 +104,8 @@ export default function ExplorePlaza() {
             }));
 
             setAgents(prev => isAppend ? [...prev, ...formattedResults] : formattedResults);
-            setHasMore(pageData.length >= pageSize);
+            cursorRef.current = result.nextCursor;
+            setHasMore(!!result.hasMore);
         } catch (error) {
             console.error("Failed to fetch agents:", error);
             if (seq !== listSeqRef.current) return;
@@ -120,17 +121,11 @@ export default function ExplorePlaza() {
 
     useEffect(() => {
         if (activeTabId === null) return;
-        setPage(1);
+        cursorRef.current = null;
         setHasMore(true);
         loadMoreLockRef.current = false;
-        fetchAgents(searchQuery, activeTabId, 1, false);
+        fetchAgents(searchQuery, activeTabId, null, false);
     }, [searchQuery, activeTabId, refreshTrigger]);
-
-    useEffect(() => {
-        if (page > 1 && activeTabId !== null) {
-            fetchAgents(searchQuery, activeTabId, page, true);
-        }
-    }, [page]);
 
     useEffect(() => {
         if (!loadingMore) {
@@ -146,10 +141,11 @@ export default function ExplorePlaza() {
                 !loading &&
                 !loadingMore &&
                 hasMore &&
+                activeTabId !== null &&
                 !loadMoreLockRef.current
             ) {
                 loadMoreLockRef.current = true;
-                setPage(prev => prev + 1);
+                fetchAgents(searchQuery, activeTabId, cursorRef.current, true);
             }
         }, { threshold: 0, rootMargin: '400px 0px' });
 
@@ -158,7 +154,7 @@ export default function ExplorePlaza() {
         }
 
         return () => observer.disconnect();
-    }, [loading, loadingMore, hasMore]);
+    }, [loading, loadingMore, hasMore, searchQuery, activeTabId, fetchAgents]);
 
     // The spinner also covers the wait for the navigation's tags, which decide
     // the default tab. `loading` itself must stay false until a request is

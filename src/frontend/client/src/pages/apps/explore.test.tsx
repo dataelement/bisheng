@@ -4,6 +4,9 @@
  * tests pin the two properties that make such an app findable anyway:
  * a keyword search spans every category, and a first-page request is never
  * dropped because an earlier one is still in flight.
+ *
+ * Both list endpoints are F027 cursor waterfalls: the first page asks with a
+ * `null` cursor and the answer is `{ list, hasMore, nextCursor }`.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -75,7 +78,7 @@ const PAGE_SIZE = 20;
 /** The navigation reports the default tab once its tags land; stubbed as a click. */
 async function selectTaggedTab() {
   fireEvent.click(screen.getByTestId('tab-tagged'));
-  await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(1, '', 7, PAGE_SIZE));
+  await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, '', 7, PAGE_SIZE));
 }
 
 beforeAll(() => {
@@ -95,8 +98,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  mockGetChatOnlineApi.mockResolvedValue({ data: [] });
-  mockGetUncategorized.mockResolvedValue({ data: [] });
+  mockGetChatOnlineApi.mockResolvedValue({ list: [], hasMore: false, nextCursor: null });
+  mockGetUncategorized.mockResolvedValue({ list: [], hasMore: false, nextCursor: null });
 });
 
 describe('ExplorePlaza search scope', () => {
@@ -114,7 +117,7 @@ describe('ExplorePlaza search scope', () => {
     fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
 
     await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(1, 'expense', -1, PAGE_SIZE),
+      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE),
     );
     expect(mockGetUncategorized).not.toHaveBeenCalled();
     expect(screen.getByTestId('search-active')).toHaveTextContent('true');
@@ -124,12 +127,12 @@ describe('ExplorePlaza search scope', () => {
     render(<ExplorePlaza />);
 
     fireEvent.click(screen.getByTestId('tab-uncategorized'));
-    await waitFor(() => expect(mockGetUncategorized).toHaveBeenCalledWith(1, PAGE_SIZE));
+    await waitFor(() => expect(mockGetUncategorized).toHaveBeenCalledWith(null, PAGE_SIZE));
 
     fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
 
     await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(1, 'expense', -1, PAGE_SIZE),
+      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE),
     );
   });
 
@@ -139,12 +142,12 @@ describe('ExplorePlaza search scope', () => {
 
     fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
     await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(1, 'expense', -1, PAGE_SIZE),
+      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE),
     );
 
     fireEvent.click(screen.getByTestId('tab-uncategorized'));
 
-    await waitFor(() => expect(mockGetUncategorized).toHaveBeenCalledWith(1, PAGE_SIZE));
+    await waitFor(() => expect(mockGetUncategorized).toHaveBeenCalledWith(null, PAGE_SIZE));
     expect(screen.getByTestId('search-input')).toHaveValue('');
     expect(screen.getByTestId('search-active')).toHaveTextContent('false');
   });
@@ -152,24 +155,29 @@ describe('ExplorePlaza search scope', () => {
   it('keeps the search result when the previous request resolves late', async () => {
     render(<ExplorePlaza />);
 
-    let resolveFirstPage: (value: { data: unknown[] }) => void = () => undefined;
+    let resolveFirstPage: (value: { list: unknown[]; hasMore: boolean; nextCursor: string | null }) => void =
+      () => undefined;
     mockGetChatOnlineApi.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           resolveFirstPage = resolve;
         }),
     );
-    mockGetChatOnlineApi.mockResolvedValue({ data: [{ id: '2', name: 'searched app' }] });
+    mockGetChatOnlineApi.mockResolvedValue({
+      list: [{ id: '2', name: 'searched app' }],
+      hasMore: false,
+      nextCursor: null,
+    });
 
     fireEvent.click(screen.getByTestId('tab-tagged'));
-    await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(1, '', 7, PAGE_SIZE));
+    await waitFor(() => expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, '', 7, PAGE_SIZE));
 
     // Keyword typed while the tab's own page is still in flight.
     fireEvent.change(screen.getByTestId('search-input'), { target: { value: 'expense' } });
     await waitFor(() =>
-      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(1, 'expense', -1, PAGE_SIZE),
+      expect(mockGetChatOnlineApi).toHaveBeenCalledWith(null, 'expense', -1, PAGE_SIZE),
     );
-    resolveFirstPage({ data: [{ id: '1', name: 'stale tab app' }] });
+    resolveFirstPage({ list: [{ id: '1', name: 'stale tab app' }], hasMore: false, nextCursor: null });
 
     await waitFor(() => expect(screen.getAllByTestId('agent')).toHaveLength(1));
     expect(screen.getByTestId('agent')).toHaveTextContent('searched app');

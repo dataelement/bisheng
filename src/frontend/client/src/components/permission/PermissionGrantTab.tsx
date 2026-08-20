@@ -355,7 +355,7 @@ export function PermissionGrantTab({
               value={selectedModelKey}
               disabled={modelsLoading || models.length === 0}
               onChange={(event) => setSelectedModelKey(event.target.value)}
-              className="h-8 w-[132px] rounded-md border-0 bg-white px-1 text-sm leading-[22px] text-[#212121] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40 disabled:opacity-60"
+              className="h-8 w-[132px] truncate rounded-md border-0 bg-white px-1 text-sm leading-[22px] text-[#212121] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500/40 disabled:opacity-60"
             >
               {models.map((model) => (
                 <option key={model.key} value={model.key}>
@@ -442,7 +442,7 @@ export function PermissionGrantTab({
                       [assignee.assignee_id]: event.target.value,
                     }))
                   }
-                  className="h-10 rounded-md border border-[#D9D9D9] bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                  className="h-10 truncate rounded-md border border-[#D9D9D9] bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
                 >
                   {!currentIsGrantable && (
                     <option value={assignee.model.key}>
@@ -532,7 +532,7 @@ export function PermissionGrantTab({
                 value={selectedModelKey}
                 disabled={modelsLoading || models.length === 0}
                 onChange={(event) => setSelectedModelKey(event.target.value)}
-                className="h-10 w-full rounded-md border border-[#D9D9D9] bg-white px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                className="h-10 w-full truncate rounded-md border border-[#D9D9D9] bg-white px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
               >
                 {models.map((model) => (
                   <option key={model.key} value={model.key}>

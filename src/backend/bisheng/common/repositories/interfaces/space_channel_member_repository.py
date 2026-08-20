@@ -73,11 +73,6 @@ class SpaceChannelMemberRepository(BaseRepository[SpaceChannelMember, int], ABC)
         pass
 
     @abstractmethod
-    async def update_pin_status(self, member_id: int, is_pinned: bool) -> SpaceChannelMember | None:
-        """Update the pin status of a channel membership."""
-        pass
-
-    @abstractmethod
     async def find_channel_members_paginated(
         self, channel_id: str, user_ids: list[int] | None = None, page: int = 1, page_size: int = 20
     ) -> list[SpaceChannelMember]:

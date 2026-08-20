@@ -45,6 +45,32 @@ class CatalogCommitUnknownError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class CatalogActionChangeSummary:
+    """One operator-authored action change rendered in the impact review."""
+
+    action_code: str
+    action_name: str
+    before_level: int | None
+    after_level: int | None
+    before_active: bool
+    after_active: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CatalogModelChangeSummary:
+    """One derived model change and its existing authorization impact."""
+
+    model_key: str
+    model_name: str
+    kind: str
+    before_level: int | None
+    after_level: int | None
+    added_action_codes: tuple[str, ...]
+    removed_action_codes: tuple[str, ...]
+    affected_assignee_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class CatalogImpactSummary:
     """Cross-tenant impact aggregate bound to one complete draft."""
 
@@ -54,6 +80,8 @@ class CatalogImpactSummary:
     assignee_count: int
     expansion_count: int
     revocation_count: int
+    action_changes: tuple[CatalogActionChangeSummary, ...] = ()
+    model_changes: tuple[CatalogModelChangeSummary, ...] = ()
     blockers: tuple[str, ...] = ()
 
 
@@ -265,16 +293,11 @@ class CatalogService:
         )
         before_by_key = {model.model_key: model for model in build.before_models.models}
         after_keys = {model.model_key for model in model_release.models}
-        deleted_models = tuple(
-            before_by_key[model_key]
-            for model_key in sorted(set(before_by_key) - after_keys)
-        )
+        deleted_models = tuple(before_by_key[model_key] for model_key in sorted(set(before_by_key) - after_keys))
         for model in deleted_models:
             references = build.model_reference_summaries.get(model.model_key)
             if references is None:
-                raise PermissionModelStateConflictError(
-                    msg=f"Model reference audit is missing: {model.model_key}"
-                )
+                raise PermissionModelStateConflictError(msg=f"Model reference audit is missing: {model.model_key}")
             try:
                 ensure_model_deletable(model, references=references)
             except ValueError as exc:

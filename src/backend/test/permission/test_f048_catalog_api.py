@@ -12,6 +12,7 @@ from bisheng.common.errcode.permission import (
     ImmutableStandardModelError,
     InvalidCatalogActionError,
     PermissionVersionConflictError,
+    SameLevelGrantRequiresManagePermissionError,
 )
 from bisheng.permission.api.dependencies import get_catalog_api
 from bisheng.permission.api.endpoints.catalog import router
@@ -135,6 +136,7 @@ def test_catalog_semantic_errors_are_translated_to_unified_codes() -> None:
     cases = (
         (InvalidCatalogActionError(), 25001),
         (ImmutableStandardModelError(), 25003),
+        (SameLevelGrantRequiresManagePermissionError(), 25015),
     )
     for error, expected in cases:
         api = _CatalogApi()

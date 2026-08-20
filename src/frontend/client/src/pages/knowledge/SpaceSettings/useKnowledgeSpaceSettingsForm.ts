@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { generateUUID } from "~/utils";
 import {
   createSpaceApi,
   getKnowledgeSpaceAutoTagVisibilityApi,
@@ -17,6 +18,7 @@ import {
   getCreationPermissionContext,
   getAllResourcePermissionGrants,
   getGrantablePermissionModels,
+  getMyResourcePermissions,
   getResourcePermissionContext,
   mutateResourceGrants,
 } from "~/api/permission";
@@ -104,7 +106,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
   const [canManagePermissions, setCanManagePermissions] = useState(false);
   const [relationModels, setRelationModels] = useState<GrantablePermissionModel[]>([]);
   const [catalogReleaseId, setCatalogReleaseId] = useState<number | null>(null);
-  const creationRequestIdRef = useRef(crypto.randomUUID());
+  const creationRequestIdRef = useRef(generateUUID(32));
   const [createdSpace, setCreatedSpace] = useState<KnowledgeSpace | null>(null);
   const [permissionRetryStatus, setPermissionRetryStatus] = useState<
     "idle" | "retrying" | "success" | "failed"
@@ -201,10 +203,18 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       if (!spaceId) return;
       setLoading(true);
       try {
-        const space = await getSpaceInfoApi(spaceId);
+        // `getSpaceInfoApi` no longer carries the caller's effective actions,
+        // so authorization for this settings page is resolved via the F048
+        // my-permissions summary. Both reads are independent, so run them
+        // together to keep the page open fast.
+        const [space, myPermissions] = await Promise.all([
+          getSpaceInfoApi(spaceId),
+          getMyResourcePermissions("knowledge_space", spaceId),
+        ]);
         if (cancelled) return;
-        const canEditSpace = Boolean(space.actions?.includes("edit"));
-        const canManageSpace = Boolean(space.actions?.includes("manage_permission"));
+        const canEditSpace = myPermissions.actions.includes("edit");
+        const canManageSpace =
+          myPermissions.actions.includes("manage_permission");
         if (!canEditSpace && !canManageSpace) {
           throw new Error("Knowledge space settings access denied");
         }
@@ -325,7 +335,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
       ) {
         const latestContext = await getResourcePermissionContext("knowledge_space", spaceId);
         await mutateResourceGrants("knowledge_space", spaceId, {
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: generateUUID(32),
           expected_resource_version: latestContext.resource_version,
           expected_catalog_release_id: latestContext.catalog_release_id,
           changes: permissionDiff.changes,
@@ -362,7 +372,7 @@ export function useKnowledgeSpaceSettingsForm(spaceId?: string) {
     try {
       const context = await getResourcePermissionContext("knowledge_space", createdSpace.id);
       await mutateResourceGrants("knowledge_space", createdSpace.id, {
-        idempotency_key: crypto.randomUUID(),
+        idempotency_key: generateUUID(32),
         expected_resource_version: context.resource_version,
         expected_catalog_release_id: context.catalog_release_id,
         changes: permissionDraft.diff.changes,

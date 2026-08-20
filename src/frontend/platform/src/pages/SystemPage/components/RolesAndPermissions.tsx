@@ -359,6 +359,8 @@ export function RolesAndPermissions() {
       <ImpactDialog
         open={impactOpen}
         draft={impactDraft}
+        models={catalog?.models}
+        actions={catalog?.actions}
         onOpenChange={setImpactOpen}
         onPublish={handlePublish}
       />

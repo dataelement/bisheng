@@ -127,7 +127,7 @@ describe("F048 PermissionListTab", () => {
         {
           ...departmentAssignee,
           scope: "INHERITED",
-          inherited_from: "knowledge_space:space-1",
+          inherited_from: "folder:94661",
           editable: false,
         },
       ],
@@ -146,8 +146,38 @@ describe("F048 PermissionListTab", () => {
 
     const row = await screen.findByTestId("permission-assignee-102")
     expect(row).toHaveTextContent("scope.inherited")
-    expect(row).toHaveTextContent("knowledge_space:space-1")
+    expect(row).toHaveTextContent("roster.parentFolder")
+    expect(row).not.toHaveTextContent("folder:94661")
     expect(row).toHaveAttribute("data-editable", "false")
+  })
+
+  it("shows the resolved inherited resource name when available", async () => {
+    vi.mocked(getResourcePermissionGrantsApi).mockResolvedValue({
+      data: [
+        {
+          ...departmentAssignee,
+          scope: "INHERITED",
+          inherited_from: "folder:94661",
+          inherited_from_name: "Release Notes",
+          editable: false,
+        },
+      ],
+      page_size: 50,
+      has_more: false,
+      next_cursor: null,
+    })
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_file"
+        resourceId="file-1"
+        context={{ ...customContext, mode: "INHERIT" }}
+      />,
+    )
+
+    const row = await screen.findByTestId("permission-assignee-102")
+    expect(row).toHaveTextContent("Release Notes")
+    expect(row).not.toHaveTextContent("folder:94661")
   })
 
   it("requests only the current-user summary without roster permission", async () => {

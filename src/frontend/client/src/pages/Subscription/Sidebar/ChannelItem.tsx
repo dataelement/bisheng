@@ -24,6 +24,11 @@ import { ChannelPinIcon } from "~/components/icons/channels";
 import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 
+// NOTE (dead code, kept intentionally): ChannelItem is only used by ChannelSidebar,
+// which is currently unreachable (see ChannelSidebar.tsx). Its per-row ⋯ menu is the
+// only place that reads `channel.actions` for 频道设置/解散 — which is why the
+// my_channels list endpoint no longer returns those actions (resolved lazily via the
+// ChannelActionsMenu settings button instead). Left in place per request.
 interface ChannelItemProps {
     channel: Channel;
     isActive: boolean;

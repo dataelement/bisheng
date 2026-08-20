@@ -481,6 +481,9 @@ export default function Subscription() {
             ) : (
                 <>
                     {/* PC：频道列表已移至顶部标题下拉（ChannelSwitcher）；H5：改抽屉叠在主内容之上（见下方 fixed） */}
+                    {/* NOTE: `channelListDrawerOpen` is never set to true anywhere, so this
+                        ChannelSidebar drawer branch is currently dead code. Kept intentionally
+                        (not cleaned up) — the live H5 channel list is the ChannelSwitcher panel. */}
                     {isH5 && channelListDrawerOpen ? (
                         <div
                             className="fixed inset-0 z-[70] flex"

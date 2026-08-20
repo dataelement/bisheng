@@ -2078,7 +2078,10 @@
       "summary_only": "你只能查看自己的权限摘要",
       "protected": "受保护",
       "read_only": "只读",
-      "inherited_from": "继承自"
+      "inherited_from": "继承自",
+      "parent_folder": "上级文件夹",
+      "parent_knowledge_space": "上级知识空间",
+      "parent_resource": "上级资源"
     },
     "scope": {
       "local": "本级",

@@ -65,7 +65,7 @@ export function ActionLevelBoard({
   const [levels, setLevels] = useState<Record<string, ActionLevelValue>>({})
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({})
   const [submitting, setSubmitting] = useState(false)
-  const [draftFailed, setDraftFailed] = useState(false)
+  const [draftErrorMessage, setDraftErrorMessage] = useState<string | null>(null)
   const [showChangeList, setShowChangeList] = useState(false)
   const [draggingCode, setDraggingCode] = useState<string | null>(null)
 
@@ -80,7 +80,7 @@ export function ActionLevelBoard({
         normalizedActions.map((action) => [action.code, action.active]),
       ),
     )
-    setDraftFailed(false)
+    setDraftErrorMessage(null)
     setShowChangeList(false)
   }
 
@@ -150,24 +150,28 @@ export function ActionLevelBoard({
 
   const handleLevelChange = (actionCode: string, level: ActionLevelValue) => {
     if (disabled || submitting || levels[actionCode] === level) return
-    setDraftFailed(false)
+    setDraftErrorMessage(null)
     setLevels((current) => ({ ...current, [actionCode]: level }))
   }
 
   const handleActiveChange = (actionCode: string, active: boolean) => {
     if (disabled || submitting || activeStates[actionCode] === active) return
-    setDraftFailed(false)
+    setDraftErrorMessage(null)
     setActiveStates((current) => ({ ...current, [actionCode]: active }))
   }
 
   const handlePublishChanges = async () => {
     if (submitting || pendingChanges.length === 0) return
     setSubmitting(true)
-    setDraftFailed(false)
+    setDraftErrorMessage(null)
     try {
       onReviewImpact(await onCreateDraft(pendingChanges))
-    } catch {
-      setDraftFailed(true)
+    } catch (error) {
+      setDraftErrorMessage(
+        typeof error === "string" && error.trim()
+          ? error
+          : t("actionLevel.draftFailed"),
+      )
     } finally {
       setSubmitting(false)
     }
@@ -243,12 +247,12 @@ export function ActionLevelBoard({
         </div>
       )}
 
-      {draftFailed && (
+      {draftErrorMessage && (
         <p
           className="shrink-0 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
           role="alert"
         >
-          {t("actionLevel.draftFailed")}
+          {draftErrorMessage}
         </p>
       )}
 

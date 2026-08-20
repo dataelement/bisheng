@@ -90,11 +90,23 @@ def delete_frequently_used_chat(
 @router.get("/app/uncategorized")
 async def get_uncategorized_chat(
     login_user=LoginUserDep,
-    page: int | None = 1,
     limit: int | None = 8,
     keyword: str | None = None,
+    cursor: str | None = None,
 ):
-    data = await WorkFlowService.get_uncategorized_flows(login_user, page, limit, keyword)
+    """Untagged online apps (F027 cursor waterfall).
+
+    Response shape (PageInfiniteCursorData): ``{data, page_size, has_more, next_cursor}``.
+    Pass the previous response's ``next_cursor`` as ``cursor``; omit (or empty) for the
+    first page. ``limit`` is the page size. The legacy ``page`` / ``total`` are gone —
+    deep offset pages re-scanned and re-permission-checked every prior page.
+    """
+    data = await WorkFlowService.get_uncategorized_flows_envelope(
+        login_user,
+        cursor=cursor,
+        page_size=limit or 8,
+        keyword=keyword,
+    )
     return resp_200(data=data)
 
 

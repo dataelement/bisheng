@@ -2149,7 +2149,10 @@
       "summary_only": "You can only view your own permission summary.",
       "protected": "Protected",
       "read_only": "Read-only",
-      "inherited_from": "Inherited from"
+      "inherited_from": "Inherited from",
+      "parent_folder": "Parent folder",
+      "parent_knowledge_space": "Parent knowledge space",
+      "parent_resource": "Parent resource"
     },
     "scope": {
       "local": "Local",

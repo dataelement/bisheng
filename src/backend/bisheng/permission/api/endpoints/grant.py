@@ -72,7 +72,7 @@ async def list_resource_grants(
     resource_type: str,
     resource_id: str,
     cursor: str | None = Query(default=None),
-    page_size: int = Query(default=50, ge=1, le=100),
+    page_size: int = Query(default=50, ge=1, le=200),
     login_user: UserPayload = Depends(UserPayload.get_login_user),
     api: ResourcePermissionApiPort = Depends(get_resource_permission_api),
 ) -> UnifiedResponseModel:

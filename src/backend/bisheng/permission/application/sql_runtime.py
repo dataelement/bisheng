@@ -141,6 +141,37 @@ class SqlCatalogDecisionState:
             )
             return (await session.execute(statement)).scalar_one_or_none() is not None
 
+    async def effective_actions(self, resource_type: str) -> tuple[str, ...]:
+        """Every active, assigned action code effective for one resource type.
+
+        The bulk sibling of ``is_action_effective``: one query returns the whole
+        effective action set (in catalog display order) so a privileged actor,
+        who holds no grant rows, can be reported as able to do all of them.
+        """
+
+        async with get_async_db_session() as session:
+            statement = (
+                select(PermissionAction.code)
+                .join(
+                    PermissionCatalogRelease,
+                    PermissionCatalogRelease.id == PermissionAction.catalog_release_id,
+                )
+                .join(
+                    PermissionActionResourceScope,
+                    PermissionActionResourceScope.action_id == PermissionAction.id,
+                )
+                .where(
+                    PermissionCatalogRelease.status == "CURRENT",
+                    PermissionCatalogRelease.write_fenced == 0,
+                    PermissionAction.active == 1,
+                    PermissionAction.level.is_not(None),
+                    PermissionActionResourceScope.resource_type == resource_type,
+                )
+                .order_by(PermissionAction.sort_order, PermissionAction.code)
+            )
+            rows = (await session.execute(statement)).scalars().all()
+        return tuple(dict.fromkeys(rows))
+
 
 class SqlPermissionScopeFence:
     """Trust only a CURRENT permission-owned mirror of a verified target."""
@@ -163,7 +194,17 @@ class SqlPermissionScopeFence:
             or row.parent_type != target.parent_type
             or row.parent_id != target.parent_id
         ):
-            raise PermissionPublishNotReadyError(msg="Resource permission projection is not current")
+            raise PermissionPublishNotReadyError(
+                msg="Resource permission projection is not current",
+                stored_parent_type=row.parent_type if row else None,
+                stored_parent_id=row.parent_id if row else None,
+                stored_version=row.version if row else None,
+                stored_projection_state=row.projection_state if row else None,
+                expected_parent_type=target.parent_type,
+                expected_parent_id=target.parent_id,
+                expected_version=target.resource_version,
+                expected_projection_state="CURRENT",
+            )
 
 
 class RedisConsistencyMarker:

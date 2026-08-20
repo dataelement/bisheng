@@ -8,10 +8,14 @@ not cross package boundaries. Duplicating a 200-line harness to satisfy a path
 would be the worse trade.
 
 Both square entries are asserted separately on purpose. They are asymmetric:
-``get_online_flows_page`` runs ``add_extra_field`` afterwards and
-``get_uncategorized_flows`` does not, so anything attached in the wrong place
-works on the tagged tab and silently fails on the "uncategorised" tab — which
-is the one the acceptance script actually uses.
+``get_online_flows_cursor`` runs ``add_extra_field`` afterwards and
+``get_uncategorized_flows_envelope`` does not, so anything attached in the wrong
+place works on the tagged tab and silently fails on the "uncategorised" tab —
+which is the one the acceptance script actually uses.
+
+Both entries are F027 cursor envelopes; these probes unwrap ``.data`` because
+what they assert is the page's contents, not its pagination (that is
+``test/workstation/test_f040_app_square_cursor.py``).
 """
 
 from __future__ import annotations
@@ -33,24 +37,30 @@ def _payload(user_id: int = OWNER_USER_ID, tenant_id: int = ROOT_TENANT_ID):
     return UserPayload(user_id=user_id, user_name=f"user-{user_id}", user_role=[], tenant_id=tenant_id)
 
 
-async def _tagged_tab(env, *, user=None, page=1, page_size=20, name=None):
+async def _tagged_tab(env, *, user=None, cursor=None, page_size=20, name=None):
     from bisheng.api.services.workflow import WorkFlowService
 
-    return await WorkFlowService.get_online_flows_page(
+    envelope = await WorkFlowService.get_online_flows_cursor(
         user or _payload(),
         name,
         FlowStatus.ONLINE.value,
         None,
         None,
-        page,
-        page_size,
+        cursor=cursor,
+        page_size=page_size,
     )
+    return envelope.data
 
 
-async def _uncategorized_tab(env, *, user=None, page=1, page_size=20):
+async def _uncategorized_tab(env, *, user=None, cursor=None, page_size=20):
     from bisheng.api.services.workflow import WorkFlowService
 
-    return await WorkFlowService.get_uncategorized_flows(user or _payload(), page, page_size)
+    envelope = await WorkFlowService.get_uncategorized_flows_envelope(
+        user or _payload(),
+        cursor=cursor,
+        page_size=page_size,
+    )
+    return envelope.data
 
 
 @pytest.fixture()

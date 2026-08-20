@@ -777,6 +777,46 @@ async def build_list_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr("bisheng.api.services.workflow.batch_check_business_actions", _batch_check)
 
+    # F048 visible-ids-first (beta1) asks OpenFGA which ids the caller can see
+    # BEFORE the DB scan, and an empty answer short-circuits the whole list. The
+    # harness therefore has to stand in for that enumeration too, on the same
+    # terms as ``_batch_check`` above: default "everything is visible", narrowed
+    # by ``only_allow``. Without it this fixture would be testing whether the
+    # permission runtime is wired into the test process, not whether the list
+    # pipeline works.
+    seeded_ids: dict[int, list[str]] = {}
+
+    async def _collect_visible_app_ids(cls, actor, flow_type):
+        del actor
+        enabled = cls.enabled_app_types()
+        if flow_type is None:
+            types = sorted(enabled)
+        elif flow_type in enabled:
+            types = [flow_type]
+        else:
+            types = []
+        ids: list[str] = []
+        for value in types:
+            for resource_id in seeded_ids.get(value, ()):
+                if grant_all["value"] or granted.get(str(resource_id)):
+                    ids.append(str(resource_id))
+        return ids
+
+    monkeypatch.setattr(
+        WorkFlowService,
+        "_collect_visible_app_ids",
+        classmethod(_collect_visible_app_ids),
+    )
+
+    async def _actor(login_user):
+        from bisheng.permission.domain.services.permission_action_service import PermissionActor
+
+        # An ordinary member on purpose: the admin branch bypasses both stubs
+        # above, which would make every assertion about buckets vacuous.
+        return PermissionActor(user_id=login_user.user_id, current_tenant_id=int(login_user.tenant_id))
+
+    monkeypatch.setattr("bisheng.api.services.workflow.resolve_permission_actor", _actor)
+
     counter = {"n": 0}
 
     def _next_times():
@@ -816,6 +856,7 @@ async def build_list_env(tmp_path, monkeypatch):
             session.add(row)
             session.commit()
             session.refresh(row)
+        seeded_ids.setdefault(row.flow_type, []).append(str(row.id))
         return row
 
     def seed_assistant(*, name="assistant", user_id=OWNER_USER_ID, tenant_id=ROOT_TENANT_ID, status=2):
@@ -835,6 +876,7 @@ async def build_list_env(tmp_path, monkeypatch):
             session.add(row)
             session.commit()
             session.refresh(row)
+        seeded_ids.setdefault(5, []).append(str(row.id))
         return row
 
     def seed_app(*, name="hosted", state="online", owner_user_id=OWNER_USER_ID, tenant_id=ROOT_TENANT_ID, slug=None):
@@ -854,6 +896,7 @@ async def build_list_env(tmp_path, monkeypatch):
             session.add(row)
             session.commit()
             session.refresh(row)
+        seeded_ids.setdefault(35, []).append(str(row.id))
         return row
 
     def seed_tag_link(*, tag_name: str, resource_id: str, resource_type: int, tenant_id=ROOT_TENANT_ID) -> int:

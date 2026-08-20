@@ -221,26 +221,40 @@ class TenantPermissionSubjectDirectory:
         """Label the resources a grant can be inherited from.
 
         The permission layer knows a resource's identity, never its name, so the
-        roster reported inheritance as "knowledge_space:3377". Only the container
-        types can be a permission parent, and both live in the knowledge table.
-        Anything else resolves to nothing and the caller keeps showing the id.
+        business side resolves labels for both spaces and folders. Unknown or
+        missing resources stay unlabeled so callers can use a friendly generic
+        fallback without exposing the internal resource key.
         """
 
         from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
 
         knowledge_ids = [
             int(resource_id)
             for resource_type, resource_id in resources
             if resource_type in {"knowledge_space", "knowledge_library"} and resource_id.isdigit()
         ]
-        if not knowledge_ids:
-            return {}
-        rows = await KnowledgeDao.aget_list_by_ids(knowledge_ids)
-        by_id = {int(row.id): row.name for row in rows or () if row.id is not None}
-        return {
-            (resource_type, resource_id): by_id[int(resource_id)]
+        folder_ids = [
+            int(resource_id)
+            for resource_type, resource_id in resources
+            if resource_type == "folder" and resource_id.isdigit()
+        ]
+        knowledge_rows = await KnowledgeDao.aget_list_by_ids(knowledge_ids) if knowledge_ids else []
+        folder_rows = await KnowledgeFileDao.aget_file_by_ids(folder_ids) if folder_ids else []
+        knowledge_by_id = {int(row.id): row.name for row in knowledge_rows or () if row.id is not None}
+        folder_by_id = {int(row.id): row.file_name for row in folder_rows or () if row.id is not None}
+        labels = {
+            (resource_type, resource_id): knowledge_by_id[int(resource_id)]
             for resource_type, resource_id in resources
             if resource_type in {"knowledge_space", "knowledge_library"}
             and resource_id.isdigit()
-            and int(resource_id) in by_id
+            and int(resource_id) in knowledge_by_id
         }
+        labels.update(
+            {
+                (resource_type, resource_id): folder_by_id[int(resource_id)]
+                for resource_type, resource_id in resources
+                if resource_type == "folder" and resource_id.isdigit() and int(resource_id) in folder_by_id
+            }
+        )
+        return labels

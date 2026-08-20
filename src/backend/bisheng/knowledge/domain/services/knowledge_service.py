@@ -83,13 +83,18 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import (
     KnowledgeFilePermissionRecord,
     KnowledgePermissionService,
 )
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.llm.domain.const import LLMModelType
-from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.access import (
+    get_f048_resource_adapter,
+    get_f048_runtime,
+)
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     require_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_knowledge_index_name, generate_uuid
 from bisheng.utils.async_utils import run_async_safe
@@ -102,6 +107,14 @@ _KNOWLEDGE_LIST_ACTIONS = [
     "manage_permission",
 ]
 _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE = 100
+
+# Upper bound on the number of visible knowledge-library ids OpenFGA may return
+# for a regular user. Mirrors ``_JOINED_VISIBLE_MAX_RESULTS`` in
+# ``knowledge_space_service`` so the visible-first flows share the same
+# capacity envelope; the permission runtime emits ``capacity_80_percent``
+# telemetry as the population approaches this ceiling so a tenant nearing it
+# is flagged before the enumeration hits the schema-level 5 000 hard cap.
+_LIBRARY_VISIBLE_MAX_RESULTS = 5000
 
 
 class KnowledgeService(KnowledgeUtils):
@@ -431,15 +444,26 @@ class KnowledgeService(KnowledgeUtils):
         action: str = "use",
         preferred_ids: list[int] | None = None,
     ) -> PageInfiniteCursorData[KnowledgeRead]:
-        """List knowledge bases with cursor-based pagination (F027).
+        """List knowledge libraries with cursor-based pagination (F027).
 
-        - ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset cursor;
-          cursor key = ``[sort_value, id]``.
-        - ``sort_by`` = ``name`` → pseudo-cursor (offset internally, AD-15);
-          cursor key = ``[page_num]``.
-        - ``has_more`` is detected by fetching ``page_size + 1`` rows; the
-          ``total`` field is no longer computed (the ReBAC scan it triggered
-          previously is gone).
+        Strategy — F048 visible-first:
+          * Super admins and tenant admins skip the permission system entirely
+            and scan the business DB directly; every returned row receives the
+            full ``_KNOWLEDGE_LIST_ACTIONS`` set. The premise is that these
+            identities are effectively unrestricted, and enumerating "all
+            libraries in a tenant" through OpenFGA is both wasteful and prone
+            to trip the 5 000-object visible enumeration cap.
+          * Regular users first ask OpenFGA for the small set of libraries
+            they can see (``list_visible_objects``), then run the historical
+            keyset scan under an ``id IN (:visible_ids)`` filter. ``visible``
+            is the superset of every concrete action, so the pre-filter is
+            valid for ``action="use"``; the per-page BatchCheck below still
+            narrows the result to rows the user can actually ``use``.
+          * ``sort_by`` ∈ {``update_time``, ``create_time``} → true keyset
+            cursor with key ``[sort_value, id]``; ``sort_by="name"`` still
+            uses a pseudo-cursor (offset internally, AD-15) with key
+            ``[page_num]``. ``has_more`` is detected by fetching
+            ``page_size + 1`` rows; the ``total`` field is no longer computed.
         """
         total_start = perf_counter()
 
@@ -468,11 +492,66 @@ class KnowledgeService(KnowledgeUtils):
         page_size = max(int(page_size or 1), 1)
         fetch_limit = page_size + 1
 
-        # ---- 2. Bounded business candidates + exact F048 BatchCheck ----
+        # ---- 2. Decide strategy: admin bypass vs visible-first ----
+        actor = await resolve_permission_actor(login_user)
+        is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
+
+        visible_ids: list[int] | None
+        fga_elapsed_ms = 0.0
+        if is_admin:
+            # Admin bypass: no F048 enumeration, DB filter left unbounded.
+            visible_ids = None
+        else:
+            fga_started = perf_counter()
+            try:
+                visible = await (await get_f048_runtime()).list_visible_objects(
+                    actor,
+                    resource_type="knowledge_library",
+                    max_results=_LIBRARY_VISIBLE_MAX_RESULTS,
+                )
+            except PermissionEnumerationIncompleteError:
+                fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+                emit_metric(
+                    "permission_visible_list",
+                    tenant=actor.current_tenant_id,
+                    resource_type="knowledge_library",
+                    strategy="visible_ids_first_knowledge_list",
+                    candidate_count=0,
+                    visible_count=0,
+                    scanned_count=0,
+                    scan_amplification=0,
+                    stream_completed=False,
+                    capacity=_LIBRARY_VISIBLE_MAX_RESULTS,
+                    db_elapsed_ms=0,
+                    fga_elapsed_ms=fga_elapsed_ms,
+                    total_elapsed_ms=(perf_counter() - total_start) * 1000,
+                    alert="stream_incomplete",
+                )
+                raise
+            fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+            try:
+                visible_ids = [int(resource_id) for resource_id in visible.object_ids]
+            except (TypeError, ValueError) as exc:
+                raise PermissionEnumerationIncompleteError(
+                    msg="Knowledge-library visible enumeration returned an invalid resource ID",
+                    exception=exc,
+                ) from exc
+
+        # ---- 3. Bounded business scan (id_in for regular users, unfiltered for admins) ----
         action_map: dict[int, set[str]] = {}
         res: list[Knowledge] = []
         filter_start = perf_counter()
-        if is_name_sort:
+        # ``action`` values other than "visible" still require a per-page
+        # BatchCheck: visible ⊇ use ⊇ …, so the pre-filter is a superset. Admin
+        # bypass skips this because every action is granted.
+        needs_action_check = (not is_admin) and action != "visible"
+
+        empty_visible_set = (visible_ids is not None and not visible_ids)
+        if empty_visible_set:
+            # No visible resources → short-circuit to empty page without hitting
+            # the DB. Keyset cursor is also meaningless in this branch.
+            pass
+        elif is_name_sort:
             page_start = (page_num - 1) * page_size
             target_authorized = page_start + fetch_limit
             candidate_page = 1
@@ -485,15 +564,21 @@ class KnowledgeService(KnowledgeUtils):
                     page=candidate_page,
                     limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
                     preferred_ids=preferred_ids,
+                    id_in=visible_ids,
                 )
                 if not batch:
                     break
-                batch_action_map = await cls.permission_service.get_knowledge_action_map_async(
-                    login_user,
-                    [int(one.id) for one in batch],
-                    [action],
-                )
-                authorized.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
+                if needs_action_check:
+                    batch_action_map = await cls.permission_service.get_knowledge_action_map_async(
+                        login_user,
+                        [int(one.id) for one in batch],
+                        [action],
+                    )
+                    authorized.extend(
+                        one for one in batch if action in batch_action_map.get(int(one.id), set())
+                    )
+                else:
+                    authorized.extend(batch)
                 if len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
                     break
                 candidate_page += 1
@@ -508,15 +593,19 @@ class KnowledgeService(KnowledgeUtils):
                     limit=_KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE,
                     preferred_ids=preferred_ids,
                     cursor=candidate_cursor,
+                    id_in=visible_ids,
                 )
                 if not batch:
                     break
-                batch_action_map = await cls.permission_service.get_knowledge_action_map_async(
-                    login_user,
-                    [int(one.id) for one in batch],
-                    [action],
-                )
-                res.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
+                if needs_action_check:
+                    batch_action_map = await cls.permission_service.get_knowledge_action_map_async(
+                        login_user,
+                        [int(one.id) for one in batch],
+                        [action],
+                    )
+                    res.extend(one for one in batch if action in batch_action_map.get(int(one.id), set()))
+                else:
+                    res.extend(batch)
                 if len(res) >= fetch_limit or len(batch) < _KNOWLEDGE_PERMISSION_SCAN_BATCH_SIZE:
                     break
                 last_db = batch[-1]
@@ -524,6 +613,7 @@ class KnowledgeService(KnowledgeUtils):
                     (last_db.create_time if sort_by == "create_time" else last_db.update_time),
                     last_db.id,
                 ]
+        db_elapsed_ms = (perf_counter() - filter_start) * 1000
         logger.info(
             "[perf][knowledge.list.filter] user_id={} action={} type={} sort_by={} page_size={} rows={} took_ms={:.2f}",
             login_user.user_id,
@@ -532,26 +622,33 @@ class KnowledgeService(KnowledgeUtils):
             sort_by,
             page_size,
             len(res),
-            (perf_counter() - filter_start) * 1000,
+            db_elapsed_ms,
         )
 
-        # ---- 3. has_more probe + truncate ----
+        # ---- 4. has_more probe + truncate ----
         has_more = len(res) > page_size
         if has_more:
             res = res[:page_size]
 
-        # The other list actions only decorate the rows that survived, so they
-        # are resolved once the page is known. Asking for all of them per
-        # candidate multiplied the scan by the number of actions, and that cost
-        # grew with every extra scan round instead of with the page.
-        if res:
+        # ---- 5. Build the action map for enrichment ----
+        # Admins get every action on every row without a check. Regular users
+        # go through F048 BatchCheck on just the surviving page — asking for
+        # all of them per candidate multiplied the scan by the number of
+        # actions, and that cost grew with every extra scan round instead of
+        # with the page.
+        if not res:
+            action_map = {}
+        elif is_admin:
+            all_actions = set(_KNOWLEDGE_LIST_ACTIONS)
+            action_map = {int(one.id): set(all_actions) for one in res}
+        else:
             action_map = await cls.permission_service.get_knowledge_action_map_async(
                 login_user,
                 [int(one.id) for one in res],
                 _KNOWLEDGE_LIST_ACTIONS,
             )
 
-        # ---- 4. Enrich + build response ----
+        # ---- 6. Enrich + build response ----
         enrich_start = perf_counter()
         result_data = await cls.aconvert_knowledge_read(
             login_user,
@@ -567,7 +664,7 @@ class KnowledgeService(KnowledgeUtils):
             (perf_counter() - enrich_start) * 1000,
         )
 
-        # ---- 5. Compute next_cursor (None if has_more is False) ----
+        # ---- 7. Compute next_cursor (None if has_more is False) ----
         next_cursor: str | None = None
         if has_more and result_data:
             last = result_data[-1]
@@ -578,9 +675,34 @@ class KnowledgeService(KnowledgeUtils):
             else:  # update_time
                 next_cursor = encode_cursor((last.update_time, last.id), context=context)
 
+        # ---- 8. Telemetry: visible-first amplification ----
+        if not is_admin:
+            visible_count = len(visible_ids) if visible_ids is not None else 0
+            emit_metric(
+                "permission_visible_list",
+                tenant=actor.current_tenant_id,
+                resource_type="knowledge_library",
+                strategy="visible_ids_first_knowledge_list",
+                candidate_count=visible_count,
+                visible_count=visible_count,
+                scanned_count=len(result_data),
+                scan_amplification=(visible_count / max(len(result_data), 1)) if visible_count else 0,
+                stream_completed=True,
+                capacity=_LIBRARY_VISIBLE_MAX_RESULTS,
+                db_elapsed_ms=db_elapsed_ms,
+                fga_elapsed_ms=fga_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - total_start) * 1000,
+                returned_count=len(result_data),
+                alert=(
+                    "capacity_80_percent"
+                    if visible_count >= _LIBRARY_VISIBLE_MAX_RESULTS * 0.8
+                    else None
+                ),
+            )
+
         logger.info(
             "[perf][knowledge.list.total] user_id={} action={} type={} sort_by={} page_size={} rows={} "
-            "has_more={} took_ms={:.2f}",
+            "has_more={} took_ms={:.2f} strategy={}",
             login_user.user_id,
             action,
             knowledge_type.value,
@@ -589,6 +711,7 @@ class KnowledgeService(KnowledgeUtils):
             len(result_data),
             has_more,
             (perf_counter() - total_start) * 1000,
+            "admin_bypass" if is_admin else "visible_ids_first",
         )
         return PageInfiniteCursorData(
             data=result_data,

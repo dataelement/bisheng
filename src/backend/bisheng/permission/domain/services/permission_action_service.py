@@ -47,6 +47,11 @@ class PermissionCatalogDecisionPort(Protocol):
         action: str,
     ) -> bool: ...
 
+    async def effective_actions(
+        self,
+        resource_type: str,
+    ) -> tuple[str, ...]: ...
+
 
 class PermissionScopeFencePort(Protocol):
     async def ensure_readable(
@@ -251,7 +256,12 @@ class F048PermissionService:
             if shortcut is not None:
                 results[index] = shortcut[0]
                 continue
-            await self._prepare_action_target(target, action)
+            try:
+                await self._prepare_action_target(target, action)
+            except PermissionPublishNotReadyError as exc:
+                results[index] = False
+                self._handle_stale_projection(target, exc)
+                continue
             target_consistency = await self._consistency(target)
             if target_consistency == HIGHER_CONSISTENCY:
                 consistency = HIGHER_CONSISTENCY
@@ -294,7 +304,12 @@ class F048PermissionService:
                 results[index] = False
                 continue
             await self._catalog.ensure_runtime_ready()
-            await self._scope_fence.ensure_readable(target)
+            try:
+                await self._scope_fence.ensure_readable(target)
+            except PermissionPublishNotReadyError as exc:
+                results[index] = False
+                self._handle_stale_projection(target, exc)
+                continue
             target_consistency = await self._consistency(target)
             if target_consistency == HIGHER_CONSISTENCY:
                 consistency = HIGHER_CONSISTENCY
@@ -475,6 +490,40 @@ class F048PermissionService:
         if any(not value.startswith(prefix) for value in objects):
             raise PermissionProjectionFailedError(msg="OpenFGA ListObjects returned an unexpected object type")
         return tuple(dict.fromkeys(value[len(prefix) :] for value in objects))
+
+    async def effective_actions(self, resource_type: str) -> tuple[str, ...]:
+        """All action codes effective for a resource type in the CURRENT catalog.
+
+        Used to report the full capability of a privileged actor, who is
+        authorized on identity and therefore holds no grant rows to explain.
+        """
+
+        await self._catalog.ensure_runtime_ready()
+        return await self._catalog.effective_actions(resource_type)
+
+    @staticmethod
+    def _handle_stale_projection(
+        target: VerifiedPermissionTarget,
+        exc: PermissionPublishNotReadyError,
+    ) -> None:
+        """Log and metric a stale projection; caller sets results[index] = False."""
+        logger.warning(
+            "stale_projection: resource={}:{} stored_parent={}:{} expected_parent={}:{}",
+            target.resource_type,
+            target.resource_id,
+            exc.kwargs.get("stored_parent_type", "?"),
+            exc.kwargs.get("stored_parent_id", "?"),
+            target.parent_type,
+            target.parent_id,
+        )
+        emit_metric(
+            "permission",
+            event="stale_projection",
+            resource_type=target.resource_type,
+            resource_id=target.resource_id,
+            tenant_id=str(target.tenant_id),
+            mismatch_kind="stale_parent_or_version",
+        )
 
     @staticmethod
     def _normalize_action(action: str) -> str:

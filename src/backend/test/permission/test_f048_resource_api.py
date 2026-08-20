@@ -124,6 +124,9 @@ class _Subjects:
     async def display_names(self, subjects):
         return {("user", "8"): "Member 8"}
 
+    async def actor_projected_subjects(self, actor):
+        return frozenset({f"user:{actor.user_id}"})
+
 
 @pytest.mark.asyncio
 async def test_super_admin_subject_validation_uses_target_tenant() -> None:
@@ -172,6 +175,184 @@ async def test_super_admin_subject_validation_uses_target_tenant() -> None:
     assert subjects.tenant_ids == [9]
     assert runtime.changes[0].source.projected_subject == "user:8"
     assert runtime.page_calls == []
+
+
+class _ContextRuntime(_Runtime):
+    """A runtime whose FGA visible check always denies.
+
+    check_visible never waves admins through, so an admin's context request must
+    not depend on it — the API's own identity shortcut is what must let them in.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.visible_checks = 0
+
+    async def check_action(self, actor, target, action):
+        if action == "visible":
+            self.visible_checks += 1
+            return False
+        return True
+
+    async def current_mode(self, target):
+        del target
+        return SimpleNamespace(mode="CUSTOM", projection_state="READY")
+
+    async def effective_actions(self, resource_type):
+        del resource_type
+        # 'visible' is a base relation, not a registered action, so it never
+        # appears in the effective action set.
+        return ("use", "edit", "delete", "manage_permission")
+
+
+class _OrdinaryContextRuntime(_ContextRuntime):
+    """Denies BOTH ``visible`` and ``manage_permission``.
+
+    ``_ContextRuntime`` allows every non-visible action, which makes its actor a
+    manager — and ``get_context`` lets a manager (owner, granted manager, or an
+    admin via check_action's identity shortcut) in without a visible tuple, so
+    that fake cannot model an ordinary user. This one can: no management right,
+    no visibility, therefore no entry.
+    """
+
+    async def check_action(self, actor, target, action):
+        if action in {"visible", "manage_permission"}:
+            if action == "visible":
+                self.visible_checks += 1
+            return False
+        return True
+
+
+class _ExplainRuntime(_ContextRuntime):
+    """Visible via FGA, but the grant-derived explanation is empty.
+
+    Models an ordinary user who can see the resource yet holds no grant rows —
+    the path that must stay grant-derived (and NOT be handed the full set).
+    """
+
+    async def check_action(self, actor, target, action):
+        if action == "visible":
+            self.visible_checks += 1
+            return True
+        return True
+
+    async def explain_permissions(self, **kwargs):
+        del kwargs
+        return SimpleNamespace(mode="CUSTOM", action_codes=(), sources=())
+
+
+@pytest.mark.asyncio
+async def test_super_admin_reads_context_without_a_visible_tuple() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=5, super_admin=True)
+
+    result = await api.get_context(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    # The visibility gate must be skipped for the super admin, never consulted.
+    assert runtime.visible_checks == 0
+    assert result["mode"] == "CUSTOM"
+    assert result["can_manage_permission"] is True
+
+
+@pytest.mark.asyncio
+async def test_tenant_admin_reads_context_for_own_tenant_without_visible_tuple() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    # _Resources resolves the target into tenant 9.
+    actor = PermissionActor(
+        user_id=7,
+        current_tenant_id=9,
+        tenant_admin_tenant_ids=frozenset({9}),
+    )
+
+    result = await api.get_context(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    assert runtime.visible_checks == 0
+    assert result["can_manage_permission"] is True
+
+
+@pytest.mark.asyncio
+async def test_ordinary_user_context_still_requires_a_visible_tuple() -> None:
+    from bisheng.common.errcode.permission import PermissionDeniedError
+
+    runtime = _OrdinaryContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=9)
+
+    with pytest.raises(PermissionDeniedError):
+        await api.get_context(
+            resource_type="workflow",
+            resource_id="wf-1",
+            actor=actor,
+        )
+    assert runtime.visible_checks == 1
+
+
+@pytest.mark.asyncio
+async def test_super_admin_my_permissions_returns_full_effective_actions() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=5, super_admin=True)
+
+    result = await api.get_my_permissions(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    # No grant rows exist for a super admin, so the grant-derived explanation
+    # would be empty; the full effective action set is reported instead.
+    assert result["actions"] == ["use", "edit", "delete", "manage_permission"]
+    assert result["sources"] == []
+    assert runtime.visible_checks == 0
+
+
+@pytest.mark.asyncio
+async def test_ordinary_user_my_permissions_stays_grant_derived() -> None:
+    runtime = _ExplainRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    # Same tenant as the resolved target (9) but no admin rights.
+    actor = PermissionActor(user_id=7, current_tenant_id=9)
+
+    result = await api.get_my_permissions(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    # Ordinary user: went through the real visibility check and stayed on the
+    # grant-derived path (empty here), never handed the full effective set.
+    assert runtime.visible_checks == 1
+    assert result["actions"] == []
 
 
 @pytest.mark.asyncio

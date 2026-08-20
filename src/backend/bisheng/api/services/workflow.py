@@ -21,9 +21,11 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkFlowInitError
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
 from bisheng.common.services.config_service import settings
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.database import get_async_db_session
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
@@ -31,10 +33,12 @@ from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
 from bisheng.database.models.user_link import UserLinkDao
+from bisheng.permission.application.access import get_f048_runtime
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     require_business_action,
 )
+from bisheng.permission.application.identity import resolve_permission_actor
 from bisheng.permission.domain.services.catalog_policy import ACTION_RESOURCE_SCOPES
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid
@@ -78,6 +82,13 @@ CHAT_ENTRY_EXCLUDED_FLOW_TYPES: frozenset[int] = frozenset({FlowType.HOSTED_APP.
 #: that is deliberately absent from ``REGISTERED_ACTION_CODES`` and therefore
 #: from ``ACTION_RESOURCE_SCOPES``.
 _ACTION_SCOPE_EXEMPT = frozenset({"visible"})
+# F048 visible-first: upper bound on the number of visible app ids OpenFGA may
+# return per resource type (workflow + assistant queried separately). Matches
+# the ceiling used for knowledge_library / knowledge_space / channel so all
+# visible-first flows share the same capacity envelope; the permission
+# runtime emits ``capacity_80_percent`` telemetry before this hits the
+# schema-level 5 000 hard cap.
+_APP_VISIBLE_MAX_RESULTS = 5000
 
 
 class WorkflowResourceAuthorizationPort:
@@ -424,6 +435,7 @@ class WorkFlowService(BaseService):
         search_description: bool,
         required_action: str,
         app_state: str | None = None,
+        admin_bypass: bool = False,
     ) -> tuple[list[dict], bool, set[str]]:
         """F027 cursor-paginated scan for /workflow/list: keep fetching DB
         batches via keyset, apply ReBAC fine-grained filtering, accumulate
@@ -433,6 +445,14 @@ class WorkFlowService(BaseService):
         Returns ``(visible_items[:page_size], has_more, writeable_ids)`` —
         ``writeable_ids`` aggregates across all scanned batches so the
         ``can_write`` flag in the response stays accurate.
+
+        ``admin_bypass=True`` skips the per-batch F048 BatchCheck and marks
+        every row as writeable; the envelope selects this branch when the
+        actor is a super admin or a tenant admin of the current tenant. The
+        envelope also handles ``flow_ids`` prefiltering (visible-id union for
+        regular users, tag prefilter for admins), so the scan loop only sees
+        the pre-filtered candidate universe and does not need to distinguish
+        between the two callers itself.
         """
         visible: list[dict] = []
         writeable_ids: set[str] = set()
@@ -468,25 +488,33 @@ class WorkFlowService(BaseService):
             if not batch:
                 return visible[:page_size], False, writeable_ids
 
-            permission_map_start = perf_counter()
-            permission_map = await cls._application_action_map(
-                user,
-                batch,
-                tuple(dict.fromkeys((required_action, "edit"))),
-            )
-            kept = [one for one in batch if required_action in permission_map.get(str(one.get("id")), frozenset())]
-            writeable_ids |= {str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes}
-            logger.info(
-                "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} "
-                "action={} took_ms={:.2f}",
-                user.user_id,
-                flow_type,
-                len(batch),
-                len(kept),
-                len(writeable_ids),
-                required_action,
-                (perf_counter() - permission_map_start) * 1000,
-            )
+            if admin_bypass:
+                # Admin sees everything and edits everything — no BatchCheck,
+                # every row is kept and every id counts toward writeable_ids.
+                kept = batch
+                writeable_ids |= {str(one.get("id")) for one in batch}
+            else:
+                permission_map_start = perf_counter()
+                permission_map = await cls._application_action_map(
+                    user,
+                    batch,
+                    tuple(dict.fromkeys((required_action, "edit"))),
+                )
+                kept = [one for one in batch if required_action in permission_map.get(str(one.get("id")), frozenset())]
+                writeable_ids |= {
+                    str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes
+                }
+                logger.info(
+                    "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} "
+                    "writeable={} action={} took_ms={:.2f}",
+                    user.user_id,
+                    flow_type,
+                    len(batch),
+                    len(kept),
+                    len(writeable_ids),
+                    required_action,
+                    (perf_counter() - permission_map_start) * 1000,
+                )
 
             for item in kept:
                 visible.append(item)
@@ -539,14 +567,13 @@ class WorkFlowService(BaseService):
                 item["app_state"] = state
 
     @classmethod
-    async def _scan_visible_apps_page(
+    async def _scan_visible_apps_cursor(
         cls,
         *,
         user: UserPayload,
-        page: int,
         page_size: int,
-        name: str | None,
-        status: int | None,
+        name: str | None = None,
+        status: int | None = None,
         id_list: list[str] | None = None,
         id_list_not_in: list[str] | None = None,
         flow_type: int | None = None,
@@ -555,24 +582,33 @@ class WorkFlowService(BaseService):
         ranking_user_id: int | None = None,
         status_exempt_flow_types: set[int] | None = None,
         app_state_in: set[str] | None = None,
-    ) -> tuple[list[dict], dict[str, frozenset[str]]]:
-        """Fill a legacy offset page using bounded keyset scans.
+        cursor: Sequence | None = None,
+    ) -> tuple[list[dict], bool, dict[str, frozenset[str]]]:
+        """Fill ONE cursor page by scanning keyset batches until enough visible.
+
+        Unlike the retired offset scan (which re-scanned and re-permission-checked
+        pages 1..N to serve page N), this resumes strictly after ``cursor`` so the
+        per-page permission-check cost is bounded by ``page_size`` no matter how
+        deep the caller has scrolled.
 
         ``status_exempt_flow_types`` / ``app_state_in`` are forwarded verbatim to
         the DAO; both square entries pin them, everyone else leaves them unset
         and gets the previous SQL (F056 design D9).
+
+        Returns ``(page_items, has_more, page_actions)``. ``page_items`` still
+        carry the ranking helper columns (``_used_rank``/``_sort_time``) when
+        ``ranking_user_id`` is set so the caller can derive ``next_cursor``; the
+        caller MUST strip them before serving the response.
         """
-        normalized_page = max(int(page or 1), 1)
         normalized_page_size = max(int(page_size or 1), 1)
-        page_start = (normalized_page - 1) * normalized_page_size
-        target_visible = normalized_page * normalized_page_size
+        requested_actions = tuple(dict.fromkeys((action, "edit", "share")))
 
         visible: list[dict] = []
         visible_actions: dict[str, frozenset[str]] = {}
-        batch_cursor: list | None = None
-        requested_actions = tuple(dict.fromkeys((action, "edit", "share")))
+        batch_cursor: list | None = list(cursor) if cursor else None
 
-        while len(visible) < target_visible:
+        # Accumulate one extra visible row (page_size + 1) to probe has_more.
+        while len(visible) <= normalized_page_size:
             batch, db_has_more = await FlowDao.aget_all_apps(
                 name=name,
                 status=status,
@@ -592,41 +628,36 @@ class WorkFlowService(BaseService):
 
             last_db = batch[-1]
             batch = cls.filter_supported_apps(batch)
-            action_map = await cls._application_action_map(
-                user,
-                batch,
-                requested_actions,
-                actions_by_type=_SQUARE_ACTIONS_BY_TYPE,
-            )
-            # Per row, not one action for the whole page: the hosted-application
-            # entry decides with ``use`` (F054), and asking the square with
-            # ``visible`` would produce the one state AC-06 forbids — a card the
-            # user can see and cannot open. ``visible`` and ``can_use`` are
-            # separate FGA relations, so "授了 editor 没授 use" makes them differ.
-            kept = [
-                item
-                for item in batch
-                if cls._square_visibility_action(item, action) in action_map.get(str(item.get("id")), frozenset())
-            ]
-            for item in kept:
-                item_id = str(item.get("id"))
-                visible_actions[item_id] = action_map.get(
-                    item_id,
-                    frozenset(),
+            if batch:
+                action_map = await cls._application_action_map(
+                    user,
+                    batch,
+                    requested_actions,
+                    actions_by_type=_SQUARE_ACTIONS_BY_TYPE,
                 )
+                # Per row, not one action for the whole page: the hosted-application
+                # entry decides with ``use`` (F054), and asking the square with
+                # ``visible`` would produce the one state AC-06 forbids — a card the
+                # user can see and cannot open. ``visible`` and ``can_use`` are
+                # separate FGA relations, so "授了 editor 没授 use" makes them differ.
+                for item in batch:
+                    item_id = str(item.get("id"))
+                    if cls._square_visibility_action(item, action) in action_map.get(item_id, frozenset()):
+                        visible.append(item)
+                        visible_actions[item_id] = action_map.get(
+                            item_id,
+                            frozenset(),
+                        )
 
-            visible.extend(kept)
-            if len(visible) >= target_visible or not db_has_more:
+            if not db_has_more:
                 break
             if ranking_user_id is not None:
                 batch_cursor = [last_db["_used_rank"], last_db["_sort_time"], last_db["id"]]
             else:
                 batch_cursor = [last_db["update_time"], last_db["id"]]
 
-        page_items = visible[page_start:target_visible]
-        for item in page_items:
-            item.pop("_used_rank", None)
-            item.pop("_sort_time", None)
+        has_more = len(visible) > normalized_page_size
+        page_items = visible[:normalized_page_size]
         await cls._attach_hosted_app_entry_fields(page_items)
         page_actions = {
             str(item.get("id")): visible_actions.get(
@@ -635,7 +666,7 @@ class WorkFlowService(BaseService):
             )
             for item in page_items
         }
-        return page_items, page_actions
+        return page_items, has_more, page_actions
 
     @classmethod
     def _apply_page_can_share(
@@ -653,22 +684,38 @@ class WorkFlowService(BaseService):
         return data
 
     @classmethod
-    async def get_online_flows_page(
+    async def get_online_flows_cursor(
         cls,
         user: UserPayload,
         name: str | None,
         status: int,
         tag_id: int | None,
         flow_type: int | None,
-        page: int,
-        page_size: int,
+        cursor: str | None = None,
+        page_size: int = 10,
         *,
         search_description: bool = False,
         action: str = "use",
-    ) -> list[dict]:
-        """Return the legacy online-app page without materializing all apps."""
+    ) -> "PageInfiniteCursorData":
+        """Ranked online-app page as an F027 cursor envelope.
+
+        Apps the user has conversations with rank first (by last-used), then the
+        rest by update_time. The ranked keyset is ``(_used_rank, _sort_time, id)``.
+        Per-page permission-check cost is bounded by ``page_size`` regardless of
+        scroll depth (no offset re-scan of earlier pages).
+        """
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+        from bisheng.common.errcode.flow import AppInvalidCursorError
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        context = f"online|action={action}|search_description={int(bool(search_description))}"
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=3, expected_context=context)
+        except CursorDecodeError as exc:
+            raise AppInvalidCursorError(exception=exc)
+
         if flow_type is not None and flow_type not in cls.enabled_app_types():
-            return []
+            return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
 
         tagged_ids: list[str] | None = None
         if tag_id:
@@ -686,11 +733,10 @@ class WorkFlowService(BaseService):
             )
             tagged_ids = [row.resource_id for rows in tagged_rows for row in rows]
             if not tagged_ids:
-                return []
+                return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
 
-        data, action_map = await cls._scan_visible_apps_page(
+        page_items, has_more, action_map = await cls._scan_visible_apps_cursor(
             user=user,
-            page=page,
             page_size=page_size,
             name=name,
             status=status,
@@ -705,10 +751,31 @@ class WorkFlowService(BaseService):
             # caller.
             status_exempt_flow_types={FlowType.HOSTED_APP.value},
             app_state_in=set(SQUARE_APP_STATES),
+            cursor=decoded,
         )
+
+        # Derive the cursor from the last PAGE item's ranked keyset BEFORE the
+        # helper columns are stripped for serialization.
+        next_cursor: str | None = None
+        if has_more and page_items:
+            last = page_items[-1]
+            next_cursor = encode_cursor(
+                (last["_used_rank"], last["_sort_time"], last["id"]),
+                context=context,
+            )
+        for item in page_items:
+            item.pop("_used_rank", None)
+            item.pop("_sort_time", None)
+
         writeable_ids = {app_id for app_id, action_codes in action_map.items() if "edit" in action_codes}
-        data = cls.add_extra_field(user, data, writeable_ids=writeable_ids)
-        return cls._apply_page_can_share(user, data, action_map)
+        data = cls.add_extra_field(user, page_items, writeable_ids=writeable_ids)
+        data = cls._apply_page_can_share(user, data, action_map)
+        return PageInfiniteCursorData(
+            data=data,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     @classmethod
     async def get_all_flows_envelope(
@@ -760,11 +827,71 @@ class WorkFlowService(BaseService):
                 return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
             flow_ids = [one.resource_id for one in ret]
 
+        # F048 visible-first strategy:
+        #   * Super admins and tenant admins skip the permission system
+        #     entirely and scan the business DB directly; every returned row
+        #     gets ``write=True`` because they are effectively unrestricted.
+        #     Enumerating "all apps in a tenant" through OpenFGA is wasteful
+        #     for these identities and prone to trip the 5 000-object visible
+        #     enumeration cap.
+        #   * Regular users first ask OpenFGA for the small set of workflow
+        #     and assistant ids they can see (``list_visible_objects`` per
+        #     resource_type), pass their union into ``_scan_visible_flows_cursor``
+        #     as an ``id_list`` prefilter, and keep the per-batch BatchCheck
+        #     because visible ⊇ edit ⊇ use — the pre-filter is a valid
+        #     superset for the concrete action, but the action itself still
+        #     needs to be verified per page.
+        actor = await resolve_permission_actor(user)
+        is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
+
+        fga_elapsed_ms = 0.0
+        effective_flow_ids: list[str]
+        visible_id_count: int | None = None
+        if is_admin:
+            # Admin bypass — no permission enumeration; tag prefilter only.
+            effective_flow_ids = flow_ids
+        else:
+            fga_started = perf_counter()
+            try:
+                visible_id_list = await cls._collect_visible_app_ids(actor, flow_type)
+            except PermissionEnumerationIncompleteError:
+                fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+                emit_metric(
+                    "permission_visible_list",
+                    tenant=actor.current_tenant_id,
+                    resource_type="application",
+                    strategy="visible_ids_first_flow_list",
+                    candidate_count=0,
+                    visible_count=0,
+                    scanned_count=0,
+                    scan_amplification=0,
+                    stream_completed=False,
+                    capacity=_APP_VISIBLE_MAX_RESULTS,
+                    db_elapsed_ms=0,
+                    fga_elapsed_ms=fga_elapsed_ms,
+                    total_elapsed_ms=(perf_counter() - total_start) * 1000,
+                    alert="stream_incomplete",
+                )
+                raise
+            fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+            visible_id_count = len(visible_id_list)
+            if flow_ids:
+                tag_set = {str(fid) for fid in flow_ids}
+                visible_id_list = [i for i in visible_id_list if i in tag_set]
+            if not visible_id_list:
+                return PageInfiniteCursorData(
+                    data=[],
+                    page_size=page_size,
+                    has_more=False,
+                    next_cursor=None,
+                )
+            effective_flow_ids = visible_id_list
+
         data, has_more, writeable_ids = await cls._scan_visible_flows_cursor(
             user=user,
             name=name,
             status=status,
-            flow_ids=flow_ids,
+            flow_ids=effective_flow_ids,
             flow_type=flow_type,
             cursor=decoded,
             page_size=page_size,
@@ -772,6 +899,7 @@ class WorkFlowService(BaseService):
             search_description=search_description,
             required_action=required_action,
             app_state=app_state,
+            admin_bypass=is_admin,
         )
 
         enrich_start = perf_counter()
@@ -790,7 +918,7 @@ class WorkFlowService(BaseService):
         )
         logger.info(
             "[perf][workflow.list.total] user_id={} flow_type={} page_size={} managed={} action={} "
-            "rows={} has_more={} took_ms={:.2f}",
+            "rows={} has_more={} took_ms={:.2f} strategy={}",
             user.user_id,
             flow_type,
             page_size,
@@ -799,7 +927,27 @@ class WorkFlowService(BaseService):
             len(data),
             has_more,
             (perf_counter() - total_start) * 1000,
+            "admin_bypass" if is_admin else "visible_ids_first",
         )
+
+        if not is_admin and visible_id_count is not None:
+            emit_metric(
+                "permission_visible_list",
+                tenant=actor.current_tenant_id,
+                resource_type="application",
+                strategy="visible_ids_first_flow_list",
+                candidate_count=visible_id_count,
+                visible_count=visible_id_count,
+                scanned_count=len(data),
+                scan_amplification=(visible_id_count / max(len(data), 1)) if visible_id_count else 0,
+                stream_completed=True,
+                capacity=_APP_VISIBLE_MAX_RESULTS,
+                db_elapsed_ms=(perf_counter() - enrich_start) * 1000,
+                fga_elapsed_ms=fga_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - total_start) * 1000,
+                returned_count=len(data),
+                alert=("capacity_80_percent" if visible_id_count >= _APP_VISIBLE_MAX_RESULTS * 0.8 else None),
+            )
 
         next_cursor: str | None = None
         if has_more and data:
@@ -819,6 +967,59 @@ class WorkFlowService(BaseService):
             has_more=has_more,
             next_cursor=next_cursor,
         )
+
+    @classmethod
+    async def _collect_visible_app_ids(
+        cls,
+        actor,
+        flow_type: int | None,
+    ) -> list[str]:
+        """Union OpenFGA visible-id enumerations across every listed app type.
+
+        ``flow_type`` narrows which resource_types are queried: ``None`` fans
+        out to all of them, otherwise only the matching one is asked. Returns
+        the list of raw resource ids as strings (workflow ids are integer-typed
+        but stored as strings in ``FlowDao.aget_all_apps`` id filters, while
+        assistant and hosted-application ids are UUID hex strings — all are
+        compared against ``sub_query.c.id`` in the UNION ALL query without
+        adapter shims).
+
+        The type set is derived from ``enabled_app_types`` rather than spelled
+        out, for the same reason ``_tag_resource_types`` is: this is a
+        pre-filter, so a type missing here does not raise — it silently drops
+        every row of that type from the list. F054 hosted applications
+        disappearing for every non-admin is exactly that failure.
+        """
+        enabled = cls.enabled_app_types()
+        if flow_type is None:
+            candidate_types = sorted(enabled)
+        elif flow_type in enabled:
+            candidate_types = [flow_type]
+        else:
+            return []
+        resource_types = [
+            resource_type
+            for resource_type in (cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(value) for value in candidate_types)
+            if resource_type is not None
+        ]
+        if not resource_types:
+            return []
+
+        runtime = await get_f048_runtime()
+        results = await asyncio.gather(
+            *(
+                runtime.list_visible_objects(
+                    actor,
+                    resource_type=resource_type,
+                    max_results=_APP_VISIBLE_MAX_RESULTS,
+                )
+                for resource_type in resource_types
+            )
+        )
+        ids: list[str] = []
+        for result in results:
+            ids.extend(str(object_id) for object_id in result.object_ids)
+        return ids
 
     @classmethod
     async def filter_apps_by_action(
@@ -1139,16 +1340,30 @@ class WorkFlowService(BaseService):
         return is_new
 
     @classmethod
-    async def get_uncategorized_flows(
+    async def get_uncategorized_flows_envelope(
         cls,
         user: UserPayload,
-        page: int = 1,
+        cursor: str | None = None,
         page_size: int = 8,
         keyword: str | None = None,
-    ) -> list[dict]:
+    ) -> "PageInfiniteCursorData":
+        """Unsorted (untagged) online apps as an F027 cursor envelope.
+
+        Candidate = online apps NOT bound to any APPLICATION tag. Scans forward
+        from the cursor and permission-filters by ``visible``; per-page cost is
+        bounded by ``page_size`` regardless of scroll depth (the offset version
+        re-scanned pages 1..N and degraded on deep pages).
         """
-        Get a list of unsorted skills
-        """
+        from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
+        from bisheng.common.errcode.flow import AppInvalidCursorError
+        from bisheng.common.schemas.api import PageInfiniteCursorData
+
+        context = "uncategorized|action=visible"
+        try:
+            decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
+        except CursorDecodeError as exc:
+            raise AppInvalidCursorError(exception=exc)
+
         all_tags = await TagDao.asearch_tags(
             None,
             0,
@@ -1167,9 +1382,8 @@ class WorkFlowService(BaseService):
             )
             flow_ids_not_in = list({row.resource_id for rows in tagged_rows for row in rows})
 
-        data, permission_map = await cls._scan_visible_apps_page(
+        page_items, has_more, permission_map = await cls._scan_visible_apps_cursor(
             user=user,
-            page=page,
             page_size=page_size,
             name=keyword,
             status=FlowStatus.ONLINE.value,
@@ -1179,12 +1393,24 @@ class WorkFlowService(BaseService):
             # applications appear under a tag but not in "uncategorised".
             status_exempt_flow_types={FlowType.HOSTED_APP.value},
             app_state_in=set(SQUARE_APP_STATES),
+            cursor=decoded,
         )
 
-        for one in data:
-            one["logo"] = cls.get_logo_share_link(one["logo"])
+        next_cursor: str | None = None
+        if has_more and page_items:
+            last = page_items[-1]
+            next_cursor = encode_cursor((last["update_time"], last["id"]), context=context)
 
-        return cls._apply_page_can_share(user, data, permission_map)
+        for one in page_items:
+            one["logo"] = cls.get_logo_share_link(one["logo"])
+        cls._apply_page_can_share(user, page_items, permission_map)
+
+        return PageInfiniteCursorData(
+            data=page_items,
+            page_size=page_size,
+            has_more=has_more,
+            next_cursor=next_cursor,
+        )
 
     @classmethod
     async def get_one_workflow_simple_info(cls, workflow_id: str) -> Flow | None:

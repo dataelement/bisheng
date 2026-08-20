@@ -20,6 +20,10 @@ STANDARD_MODEL_DEFINITIONS: tuple[tuple[str, str, int, bool], ...] = (
 STANDARD_MODEL_KEYS = frozenset(row[0] for row in STANDARD_MODEL_DEFINITIONS)
 
 
+class SameLevelGrantRequiresManagePermission(ValueError):
+    """A model cannot delegate its tier without permission management."""
+
+
 @dataclass(frozen=True, slots=True)
 class CustomModelSelection:
     """Administrator-owned explicit action selection."""
@@ -326,7 +330,9 @@ def with_allow_same_level(
     if not isinstance(allow_same_level, bool):
         raise ValueError("same-level policy must be boolean")
     if allow_same_level and "manage_permission" not in model.action_codes:
-        raise ValueError(f"model {model.model_key} requires manage_permission to allow same level")
+        raise SameLevelGrantRequiresManagePermission(
+            f"model {model.model_key} requires manage_permission to allow same level"
+        )
     return replace(model, allow_same_level=allow_same_level)
 
 

@@ -3,6 +3,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from hashlib import sha256
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from bisheng.approval.domain.schemas.approval_center_schema import ApprovalGateDecision, ApprovalGateRequest
@@ -16,6 +17,7 @@ from bisheng.channel.domain.models.channel_knowledge_sync import (
     ChannelKnowledgeSync,
     ChannelKnowledgeSyncDao,
 )
+from bisheng.channel.domain.models.channel_user_pin import ChannelUserPinDao
 from bisheng.channel.domain.repositories.implementations.channel_repository_impl import ChannelRepositoryImpl
 from bisheng.channel.domain.repositories.interfaces.article_read_repository import ArticleReadRepository
 from bisheng.channel.domain.repositories.interfaces.channel_info_source_repository import ChannelInfoSourceRepository
@@ -81,14 +83,16 @@ from bisheng.common.models.space_channel_member import (
     resolve_channel_relation,
 )
 from bisheng.common.repositories.interfaces.space_channel_member_repository import SpaceChannelMemberRepository
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.external.bisheng_information_client.bisheng_information_manager import get_bisheng_information_client
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.knowledge.domain.models.knowledge_file import FileSource
 from bisheng.message.domain.services.message_service import MessageService
 from bisheng.message.domain.services.notification_content import build_notify_content
-from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
+    batch_check_business_visible,
     require_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
@@ -133,6 +137,19 @@ CHANNEL_MEMBERSHIP_MODEL = {
 # (default 65536). Beyond that, the batched unread query falls back to the
 # per-channel total-minus-read path to avoid a query error.
 _MAX_UNREAD_EXCLUDE_TERMS = 65536
+
+# Upper bound on the number of channel ids OpenFGA may return for the "我加入的"
+# list. Mirrors ``_JOINED_VISIBLE_MAX_RESULTS`` in ``knowledge_space_service`` so
+# the two "visible-ids-first" flows share the same capacity envelope; the
+# permission runtime emits ``capacity_80_percent`` telemetry as the population
+# approaches this ceiling so a real-world tenant approaching it is flagged
+# before the enumeration silently truncates.
+_FOLLOWED_VISIBLE_MAX_RESULTS = 5000
+
+# Chunk size for the ``IN (:ids)`` DB read. Bounds the SQL parse cost and driver
+# parameter buffer without changing behaviour — the visible-id list is dominated
+# by tens/hundreds per user, so a single chunk covers the common case.
+_FOLLOWED_DB_ID_BATCH_SIZE = 500
 
 
 class ChannelResourceAuthorizationPort:
@@ -236,18 +253,6 @@ class ChannelService:
             actions=CHANNEL_EFFECTIVE_ACTIONS,
         )
         return set(action_map.get(str(channel_id), frozenset()))
-
-    @staticmethod
-    async def _batch_channel_actions(
-        channel_ids: list[str],
-        login_user: UserPayload,
-    ) -> dict[str, frozenset[str]]:
-        return await batch_check_business_actions(
-            login_user,
-            resource_type="channel",
-            resource_ids=channel_ids,
-            actions=CHANNEL_EFFECTIVE_ACTIONS,
-        )
 
     @staticmethod
     def _resolve_subscription_status(
@@ -814,190 +819,178 @@ class ChannelService:
         self, query_data: MyChannelQueryRequest, login_user: UserPayload
     ) -> list[ChannelItemResponse]:
         """
-        Get the list of channels associated with the logged-in user based on the query type (created or followed) and sorting preference.
+        Get the list of channels associated with the logged-in user.
+
+        - CREATED: read straight from the ``channel`` table by ``user_id``. The
+          creator is always the channel owner, so no F048 check is needed to decide
+          inclusion, and the full owner action set is returned directly. This also
+          avoids the orphan creator-membership rows the old membership-based path
+          could over-count.
+        - FOLLOWED: resolve the user's *visible* channel ids (single F048 ``visible``
+          check over the tenant candidate set), drop the user's own created
+          channels, then resolve the concrete edit/manage/delete actions only over
+          that (smaller) visible subset.
+
+        Pin state comes from the decoupled ``channel_user_pin`` table (F051), not the
+        membership row. Unread counts are intentionally NOT computed here — the list
+        is unread-free; the dedicated ``/{channel_id}/unread-counts`` endpoint serves
+        them lazily.
         """
+        pinned_ids = await ChannelUserPinDao.list_pinned_channel_ids(login_user.user_id)
 
         if query_data.query_type == QueryTypeEnum.CREATED:
-            roles = [UserRoleEnum.CREATOR]
+            result = await self._get_created_channels(login_user, pinned_ids)
         else:
-            # My Followed Channels include both ADMIN and MEMBER roles
-            roles = [UserRoleEnum.ADMIN, UserRoleEnum.MEMBER]
-
-        # Get the user's channel memberships based on the query type and active status
-        memberships = await self.space_channel_member_repository.find_channel_memberships(
-            user_id=login_user.user_id, roles=roles, statuses=[MembershipStatusEnum.ACTIVE]
-        )
-
-        permission_candidate_ids: list[str] = []
-        if query_data.query_type == QueryTypeEnum.FOLLOWED:
-            after_id: str | None = None
-            while True:
-                candidate_page = await self.channel_repository.find_permission_candidates(
-                    after_id=after_id,
-                    limit=100,
-                )
-                if not candidate_page:
-                    break
-                permission_candidate_ids.extend(str(channel.id) for channel in candidate_page)
-                after_id = str(candidate_page[-1].id)
-                if len(candidate_page) < 100:
-                    break
-
-        # Ordinary F048 Grants need no synthetic membership row, so the
-        # followed view checks tenant-scoped business candidates in bounded
-        # cursor pages.
-        channel_ids = list(
-            dict.fromkeys(
-                [
-                    *(m.business_id for m in memberships),
-                    *permission_candidate_ids,
-                ]
-            )
-        )
-        if not channel_ids:
-            return []
-        channels = await self.channel_repository.find_channels_by_ids(channel_ids)
-        channel_map = {ch.id: ch for ch in channels}
-
-        # Get all read article IDs for the current user
-        all_read_ids = []
-        if self.article_read_repository:
-            all_read_ids = await self.article_read_repository.get_all_read_article_ids(login_user.user_id)
-
-        # Build a map of business_id to membership for quick lookup
-        membership_map = {m.business_id: m for m in memberships}
-        action_map = await self._batch_channel_actions(
-            [str(channel.id) for channel in channels],
-            login_user,
-        )
-
-        # Construct the result list, filtering out non-authorized private channels for "followed" query type
-        result: list[ChannelItemResponse] = []
-        channels_to_process = []
-        for channel_id in channel_ids:
-            channel = channel_map.get(channel_id)
-            if not channel:
-                continue
-            membership = membership_map.get(channel_id)
-            actions = action_map.get(str(channel_id), frozenset())
-
-            if query_data.query_type == QueryTypeEnum.FOLLOWED:
-                if getattr(channel, "user_id", None) == login_user.user_id:
-                    continue
-                if "visible" not in actions:
-                    continue
-
-            channels_to_process.append((channel, membership, actions))
-
-        # F037-B: unread counts for the whole page in a single ES msearch round-trip
-        # (was N channels x (1 total + read-id chunks) sequential count queries).
-        unread_counts = await self._calculate_unread_counts_batch(
-            [channel for channel, _, _ in channels_to_process], all_read_ids
-        )
-
-        for (channel, membership, actions), unread_count in zip(
-            channels_to_process,
-            unread_counts,
-            strict=True,
-        ):
-            relation = _effective_relation_value(membership)
-            item = ChannelItemResponse(
-                id=channel.id,
-                name=channel.name,
-                source_list=channel.source_list,
-                visibility=channel.visibility,
-                is_released=channel.is_released,
-                latest_article_update_time=channel.latest_article_update_time,
-                create_time=channel.create_time,
-                user_role=_legacy_role_value_for_relation(relation, membership),
-                relation=relation,
-                actions=sorted(actions),
-                is_pinned=bool(membership and membership.is_pinned),
-                subscribed_at=membership.create_time if membership else None,
-                unread_count=unread_count,
-            )
-            result.append(item)
+            result = await self._get_followed_channels(login_user, pinned_ids)
 
         # Apply mixed sorting: pinned channels first, then sort by the selected criteria within each group
-        result = self._sort_channels(result, query_data.sort_by)
+        return self._sort_channels(result, query_data.sort_by)
 
-        return result
-
-    async def _calculate_unread_counts_batch(self, channels: list[Channel], all_read_ids: list[str]) -> list[int]:
-        """F037-B: unread counts for many channels in one ES msearch round-trip.
-
-        unread = articles matching the channel's main filter AND not in the user's
-        read set, expressed as a single count per channel (must_not terms on _id)
-        and batched via ``count_articles_batch``. Equivalent to the per-channel
-        ``_calculate_unread_count`` oracle (total-minus-read is the same set as
-        filter AND NOT read), but collapses N x (1 + read-chunk) sequential ES
-        queries into a single round-trip. Order matches the input ``channels``.
-        """
+    async def _get_created_channels(
+        self, login_user: UserPayload, pinned_ids: set[str]
+    ) -> list[ChannelItemResponse]:
+        """Channels created by the current user, straight from the channel table."""
+        channels = await self.channel_repository.find_channels_by_user_id(login_user.user_id)
         if not channels:
             return []
-        # Defensive fallback: a read set larger than a single terms clause can hold
-        # would error; preserve correctness via the original per-channel path.
-        if all_read_ids and len(all_read_ids) > _MAX_UNREAD_EXCLUDE_TERMS:
-            return await asyncio.gather(*[self._calculate_unread_count(channel, all_read_ids) for channel in channels])
-
-        exclude = all_read_ids or None
-        requests = []
+        result: list[ChannelItemResponse] = []
         for channel in channels:
-            main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
-            requests.append(
-                {
-                    "source_ids": channel.source_list,
-                    "filter_rules": main_rule_groups if main_rule_groups else None,
-                    "exclude_article_ids": exclude,
-                }
+            result.append(
+                ChannelItemResponse(
+                    id=channel.id,
+                    name=channel.name,
+                    source_list=channel.source_list,
+                    visibility=channel.visibility,
+                    is_released=channel.is_released,
+                    latest_article_update_time=channel.latest_article_update_time,
+                    create_time=channel.create_time,
+                    user_role=UserRoleEnum.CREATOR.value,
+                    relation=ChannelRelationEnum.OWNER.value,
+                    # The list never carries the F048 action set — the header
+                    # ChannelSwitcher only needs name + pin, and the settings button
+                    # (ChannelActionsMenu -> channel detail) resolves edit/manage/
+                    # delete lazily when a channel is opened.
+                    actions=[],
+                    is_pinned=channel.id in pinned_ids,
+                    # For a created channel the "added" time is its creation time.
+                    subscribed_at=channel.create_time,
+                )
             )
-        return await self.article_es_service.count_articles_batch(requests)
+        return result
 
-    async def _calculate_unread_count(self, channel: Channel, all_read_ids: list[str]) -> int:
-        """Calculate the exact number of unread articles for a given channel."""
-        main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
+    async def _get_followed_channels(
+        self, login_user: UserPayload, pinned_ids: set[str]
+    ) -> list[ChannelItemResponse]:
+        """Channels the user can see but did not create.
 
-        # 2. Get total number of articles for this channel
-        total_count = await self.article_es_service.count_articles(
-            source_ids=channel.source_list,
-            filter_rules=main_rule_groups if main_rule_groups else None,
+        Uses the "visible-ids-first" pattern (F048 ``list_visible_objects``): one
+        OpenFGA ``StreamListObjects`` call returns the complete set of channel ids
+        the caller can see (creator-of + org-granted + membership); a single
+        indexed ``IN`` read then materialises exactly those rows from the
+        ``channel`` table, with the caller's own created channels excluded at the
+        DB layer (they belong to the "created" list). Mirrors
+        ``KnowledgeSpaceService.get_my_followed_spaces`` so the "我加入的" flow is
+        uniform across resources.
+
+        Replaces the earlier "enumerate tenant candidates + per-id
+        ``batch_check_business_visible``" loop, whose per-target
+        ``ensure_runtime_ready`` / ``ensure_readable`` / resolve fan-out issued
+        several SQL reads per candidate channel — 176 channels became ~700 SQL
+        statements and ~2s wall-time for a single-row response body.
+        """
+        started = perf_counter()
+        runtime = await get_f048_runtime()
+        actor = await resolve_permission_actor(login_user)
+
+        fga_started = perf_counter()
+        visible = await runtime.list_visible_objects(
+            actor,
+            resource_type="channel",
+            max_results=_FOLLOWED_VISIBLE_MAX_RESULTS,
         )
+        fga_elapsed_ms = (perf_counter() - fga_started) * 1000
+        visible_ids = list(visible.object_ids)
 
-        if total_count == 0:
-            return 0
+        channels: list[Channel] = []
+        db_started = perf_counter()
+        for offset in range(0, len(visible_ids), _FOLLOWED_DB_ID_BATCH_SIZE):
+            channels.extend(
+                await self.channel_repository.find_followed_by_visible_ids(
+                    visible_ids[offset : offset + _FOLLOWED_DB_ID_BATCH_SIZE],
+                    tenant_id=actor.current_tenant_id,
+                    exclude_creator_id=login_user.user_id,
+                )
+            )
+        db_elapsed_ms = (perf_counter() - db_started) * 1000
 
-        # If user hasn't read any articles, everything is unread
-        if not all_read_ids:
-            return total_count
+        # Membership rows carry the subscribe time + relation for the followed
+        # rows (a channel visible only via org grant has no membership row). Skip
+        # the query entirely when the visibility set + DB-side creator filter
+        # already yielded no rows — there is nothing to enrich.
+        if channels:
+            memberships = await self.space_channel_member_repository.find_channel_memberships(
+                user_id=login_user.user_id,
+                roles=[UserRoleEnum.ADMIN, UserRoleEnum.MEMBER],
+                statuses=[MembershipStatusEnum.ACTIVE],
+            )
+            membership_map = {m.business_id: m for m in memberships}
+        else:
+            membership_map = {}
 
-        # 3. Calculate how many read articles belong to this channel
-        # Chunk requests to avoid Elasticsearch TooManyClauses exception (default limit is 1024)
-        chunk_size = 1000
-        matching_read_count = 0
-
-        tasks = []
-        for i in range(0, len(all_read_ids), chunk_size):
-            chunked_ids = all_read_ids[i : i + chunk_size]
-            tasks.append(
-                self.article_es_service.count_articles(
-                    source_ids=channel.source_list,
-                    filter_rules=main_rule_groups if main_rule_groups else None,
-                    include_article_ids=chunked_ids,
+        # The channel list UI (the header ChannelSwitcher dropdown) only needs the
+        # name + pin state; edit/manage/delete are resolved lazily by the settings
+        # button (ChannelActionsMenu -> channel detail) when a channel is opened,
+        # so the list carries no F048 action set at all (visibility is what
+        # decides membership of this list, it is not echoed back per row).
+        result: list[ChannelItemResponse] = []
+        for channel in channels:
+            membership = membership_map.get(channel.id)
+            relation = _effective_relation_value(membership)
+            result.append(
+                ChannelItemResponse(
+                    id=channel.id,
+                    name=channel.name,
+                    source_list=channel.source_list,
+                    visibility=channel.visibility,
+                    is_released=channel.is_released,
+                    latest_article_update_time=channel.latest_article_update_time,
+                    create_time=channel.create_time,
+                    user_role=_legacy_role_value_for_relation(relation, membership),
+                    relation=relation,
+                    actions=[],
+                    is_pinned=channel.id in pinned_ids,
+                    subscribed_at=membership.create_time if membership else None,
                 )
             )
 
-        if tasks:
-            counts = await asyncio.gather(*tasks)
-            matching_read_count = sum(counts)
-
-        # Ensure no negative count just in case
-        return max(0, total_count - matching_read_count)
+        emit_metric(
+            "permission_visible_list",
+            tenant=actor.current_tenant_id,
+            resource_type="channel",
+            strategy="visible_ids_first_followed",
+            candidate_count=len(visible_ids),
+            visible_count=len(visible_ids),
+            scanned_count=len(visible_ids),
+            scan_amplification=1 if visible_ids else 0,
+            stream_completed=True,
+            capacity=_FOLLOWED_VISIBLE_MAX_RESULTS,
+            db_elapsed_ms=db_elapsed_ms,
+            fga_elapsed_ms=fga_elapsed_ms,
+            total_elapsed_ms=(perf_counter() - started) * 1000,
+            returned_count=len(result),
+            alert=(
+                "capacity_80_percent"
+                if len(visible_ids) >= _FOLLOWED_VISIBLE_MAX_RESULTS * 0.8
+                else None
+            ),
+        )
+        return result
 
     async def _calculate_sub_channel_unread_counts(self, channel: Channel, all_read_ids: list[str]) -> dict[str, int]:
         """Unread count per sub-channel: total - read for (main rules AND that sub's rules).
 
-        Mirrors _calculate_unread_count but combines the main filter rules with each
-        sub-channel's rules (same AND semantics the article search uses)."""
+        Combines the main filter rules with each sub-channel's rules (same AND
+        semantics the article search uses)."""
         main_rule_groups = self._extract_filter_rule_groups(channel, channel_type="main")
 
         # Distinct sub-channel names defined on this channel.
@@ -1118,20 +1111,27 @@ class ChannelService:
     async def set_channel_pin(self, pin_data: SetPinRequest, login_user: UserPayload) -> bool:
         """
         Set the pin status of a channel for the logged-in user.
-        - Validate that the user is a member of the channel
-        - Update the is_pinned status in the membership record
+
+        Pin state lives in the decoupled ``channel_user_pin`` table, not on the
+        membership row — mirroring the knowledge-space pin (F044/F051). A user may
+        pin a channel reachable only via ReBAC / department authorization (no
+        membership row). We gate on the concrete ``visible`` action first so a pin
+        can only be written for a channel the user can actually see.
         """
-
-        membership = await self.space_channel_member_repository.find_membership(
-            business_id=pin_data.channel_id, business_type=BusinessTypeEnum.CHANNEL, user_id=login_user.user_id
+        if not await self.channel_repository.find_channels_by_ids([pin_data.channel_id]):
+            raise ChannelNotFoundError()
+        require_visible = await batch_check_business_visible(
+            login_user,
+            resource_type="channel",
+            resource_ids=[pin_data.channel_id],
         )
-
-        if not membership or membership.status != MembershipStatusEnum.ACTIVE:
+        if not require_visible.get(str(pin_data.channel_id), False):
             raise ChannelNotFoundError()
 
-        await self.space_channel_member_repository.update_pin_status(
-            member_id=membership.id, is_pinned=pin_data.is_pinned
-        )
+        if pin_data.is_pinned:
+            await ChannelUserPinDao.pin(user_id=login_user.user_id, channel_id=pin_data.channel_id)
+        else:
+            await ChannelUserPinDao.unpin(user_id=login_user.user_id, channel_id=pin_data.channel_id)
 
         return True
 
@@ -1530,7 +1530,7 @@ class ChannelService:
         total = await self.channel_repository.count_square_channels(keyword=keyword)
 
         # 3. Map rows to response items (ES article counts + top source infos)
-        result_list = await self._build_square_items(rows)
+        result_list = await self._build_square_items(rows, login_user)
 
         return ChannelSquarePageResponse(data=result_list, total=total)
 
@@ -1548,7 +1548,7 @@ class ChannelService:
         """
         rows = await self.channel_repository.find_public_recommend_channels(user_id=login_user.user_id)
 
-        items = await self._build_square_items(rows)
+        items = await self._build_square_items(rows, login_user)
 
         # Sort by content count desc; tie-break on subscriber count then name for stability.
         items.sort(key=lambda x: (x.article_count, x.subscriber_count, x.name), reverse=True)
@@ -1556,7 +1556,7 @@ class ChannelService:
         total = len(items)
         return ChannelSquarePageResponse(data=items[:limit], total=total)
 
-    async def _build_square_items(self, rows) -> list[ChannelSquareItemResponse]:
+    async def _build_square_items(self, rows, login_user: UserPayload) -> list[ChannelSquareItemResponse]:
         """
         Map channel-square repository rows
         ``(Channel, user_subscription_status, user_subscription_update_time, subscriber_count)``
@@ -1573,6 +1573,16 @@ class ChannelService:
         # ``article_counts`` stays a list parallel to ``rows``. Shared by the square and
         # the home-page recommendations, so both benefit from the cache.
         channels = [row[0] for row in rows]
+        # The square's "subscribed" flag mirrors the "我加入的" (followed) rule: a
+        # channel the user can see (F048 ``visible``) is shown as SUBSCRIBED, so a
+        # channel reachable via any grant is never mislabeled "not subscribed".
+        # PENDING/REJECTED still come from the membership row — those states grant no
+        # visibility (e.g. a REVIEW channel awaiting approval), so they fall through.
+        visible_map = await batch_check_business_visible(
+            login_user,
+            resource_type="channel",
+            resource_ids=[c.id for c in channels],
+        )
         cached_counts = await ArticleCountCache.get_main_counts([c.id for c in channels])
 
         miss_indices = [i for i, c in enumerate(channels) if c.id not in cached_counts]
@@ -1612,9 +1622,13 @@ class ChannelService:
             subscriber_count = row[3]
             article_count = article_counts[i] if i < len(article_counts) else 0
 
-            status = self._resolve_subscription_status(
-                membership_status=user_subscription_status,
-                update_time=user_subscription_update_time,
+            status = (
+                SubscriptionStatusEnum.SUBSCRIBED
+                if visible_map.get(str(channel.id), False)
+                else self._resolve_subscription_status(
+                    membership_status=user_subscription_status,
+                    update_time=user_subscription_update_time,
+                )
             )
 
             # Prepare source infos
