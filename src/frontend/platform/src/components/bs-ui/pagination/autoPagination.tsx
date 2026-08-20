@@ -125,7 +125,10 @@ const AutoPagination = ({
                             value={String(pageSize)}
                             onValueChange={(value) => onPageSizeChange?.(Number(value))}
                         >
-                            <SelectTrigger className="h-7 w-[92px] mr-2 text-sm">
+                            {/* Width follows the label instead of a fixed size: the trigger clamps
+                                its text, and "20 条/页" already overflowed 92px — the longest
+                                option in ja is longer still. */}
+                            <SelectTrigger className="h-7 w-auto gap-1 whitespace-nowrap px-2 mr-2 text-sm">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
