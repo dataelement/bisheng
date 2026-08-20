@@ -470,6 +470,14 @@
   "com_linsight_exporting": "エクスポート中です。しばらくお待ちください…",
   "com_linsight_export_success": "ファイルをダウンロードしました",
   "com_linsight_export_failed": "エクスポートに失敗しました。後でもう一度お試しください",
+  "com_linsight": {
+    "downloadToLocal": "ローカルにダウンロード",
+    "saveToKnowledge": "ナレッジスペースに保存",
+    "saveToKnowledgeSaving": "ナレッジスペースに保存中…",
+    "saveToKnowledgeSuccess": "ナレッジスペースに保存しました：{{name}}",
+    "saveToKnowledgePending": "承認申請を送信しました。承認後にナレッジスペースへ保存されます",
+    "saveToKnowledgeFailed": "ナレッジスペースへの保存に失敗しました。後でもう一度お試しください"
+  },
   "com_message_content_copied": "内容をコピーしました",
   "com_notifications_approved": "承認済み",
   "com_notifications_rejected": "却下済み",

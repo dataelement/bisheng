@@ -485,6 +485,14 @@
   "com_linsight_exporting": "Exporting, please wait…",
   "com_linsight_export_success": "File downloaded",
   "com_linsight_export_failed": "Export failed, please try again later",
+  "com_linsight": {
+    "downloadToLocal": "Download to local",
+    "saveToKnowledge": "Save to knowledge space",
+    "saveToKnowledgeSaving": "Saving to knowledge space…",
+    "saveToKnowledgeSuccess": "Saved to knowledge space: {{name}}",
+    "saveToKnowledgePending": "Submitted for approval; it will be saved to the knowledge space once approved",
+    "saveToKnowledgeFailed": "Failed to save to knowledge space, please try again later"
+  },
   "com_message_content_copied": "Content copied",
   "com_notifications_approved": "Approved",
   "com_notifications_rejected": "Rejected",

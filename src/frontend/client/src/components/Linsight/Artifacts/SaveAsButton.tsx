@@ -1,8 +1,17 @@
 /**
- * F035 Track H (P4): the artifact hand-off action. Markdown files expand into a
- * small menu (original md / pdf / docx via the backend convert endpoint); every
- * other type downloads the original file directly — so the label is honest per
- * type: "另存为" when there is a format choice, "下载" when there isn't.
+ * F035 Track H (P4): the artifact hand-off action. Every type opens a menu now —
+ * Markdown offers three local formats (original md / pdf / docx via the backend
+ * convert endpoint), other types a single "download to local" — followed, after a
+ * separator, by "save into knowledge space".
+ *
+ * The separator is load-bearing: the items above it end at the user's disk, the
+ * one below writes into a shared knowledge space, which is a different kind of
+ * commitment and must not sit flush against a download.
+ *
+ * A share-link viewer never gets the knowledge-space item: they are neither the
+ * task owner nor necessarily logged in, so the uploadable-space lookup behind it
+ * doesn't apply to them. With nothing left to choose, a non-Markdown artifact
+ * falls back to the plain one-click download button rather than a one-item menu.
  *
  * Three placements share the logic (`variant`):
  *   - 'row'     sits directly after the file name in a list, revealed on row
@@ -28,23 +37,28 @@
 import { Outlined } from 'bisheng-icons';
 import { useState } from 'react';
 import { getMdDownload } from '~/api/linsight';
+import { listUploadableSpacesApi } from '~/api/messageExport';
 import { NotificationSeverity } from '~/common';
 import FileIcon from '~/components/ui/icon/File';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '~/components/ui';
 import { useLocalize } from '~/hooks';
+import { AddToKnowledgeModal } from '~/pages/Subscription/Article/AddToKnowledgeModal';
 import { useToastContext } from '~/Providers';
 import { cn } from '~/utils';
+import { getShareTokenFromPath } from '~/utils/shareToken';
 import {
     type ArtifactFile,
     downloadArtifactFile,
     getFileExtension,
     saveConvertedBlob,
 } from './artifactUtils';
+import { useSaveArtifactToKnowledge } from './useSaveArtifactToKnowledge';
 
 type SaveAsVariant = 'row' | 'inline' | 'toolbar';
 
@@ -96,10 +110,14 @@ export function SaveAsButton({ file, versionId, variant = 'row', className }: Sa
     const localize = useLocalize();
     const { showToast } = useToastContext();
     const [busy, setBusy] = useState(false);
+    const { pickerOpen, setPickerOpen, openPicker, saveTo, saving } =
+        useSaveArtifactToKnowledge(file, versionId);
 
-    // Markdown is the only type with a format choice (md / pdf / docx).
+    // Markdown is the only type with a local format choice (md / pdf / docx).
     const isMarkdown = getFileExtension(file.file_name) === 'md';
-    const label = isMarkdown ? localize('com_linsight_save_as') : localize('com_ui_download');
+    const canSaveToKnowledge = !getShareTokenFromPath();
+    const hasMenu = isMarkdown || canSaveToKnowledge;
+    const label = hasMenu ? localize('com_linsight_save_as') : localize('com_ui_download');
 
     const handleDownloadOriginal = async () => {
         if (busy) return;
@@ -140,7 +158,7 @@ export function SaveAsButton({ file, versionId, variant = 'row', className }: Sa
     const trigger = (
         <button
             type="button"
-            disabled={busy}
+            disabled={busy || saving}
             title={label}
             aria-label={label}
             className={cn(TRIGGER_BASE, TRIGGER_VARIANT[variant], className)}
@@ -149,13 +167,13 @@ export function SaveAsButton({ file, versionId, variant = 'row', className }: Sa
             // would also open it.
             onClick={(e) => {
                 e.stopPropagation();
-                if (!isMarkdown) {
+                if (!hasMenu) {
                     handleDownloadOriginal();
                 }
             }}
             onKeyDown={(e) => e.stopPropagation()}
         >
-            {busy ? (
+            {busy || saving ? (
                 <Outlined.Loading className="size-4 animate-spin" />
             ) : (
                 <Outlined.Download className="size-4" />
@@ -163,24 +181,55 @@ export function SaveAsButton({ file, versionId, variant = 'row', className }: Sa
         </button>
     );
 
-    if (!isMarkdown) {
+    if (!hasMenu) {
         return trigger;
     }
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[140px]">
-                <DropdownMenuItem className="gap-2" onClick={handleDownloadOriginal}>
-                    <FileIcon type="md" className="size-4" /> Markdown
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2" onClick={() => handleExport('pdf')}>
-                    <FileIcon type="pdf" className="size-4" /> PDF
-                </DropdownMenuItem>
-                <DropdownMenuItem className="gap-2" onClick={() => handleExport('docx')}>
-                    <FileIcon type="docx" className="size-4" /> Docx
-                </DropdownMenuItem>
-            </DropdownMenuContent>
-        </DropdownMenu>
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-[140px]">
+                    {isMarkdown ? (
+                        <>
+                            <DropdownMenuItem className="gap-2" onClick={handleDownloadOriginal}>
+                                <FileIcon type="md" className="size-4" /> Markdown
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2" onClick={() => handleExport('pdf')}>
+                                <FileIcon type="pdf" className="size-4" /> PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2" onClick={() => handleExport('docx')}>
+                                <FileIcon type="docx" className="size-4" /> Docx
+                            </DropdownMenuItem>
+                        </>
+                    ) : (
+                        <DropdownMenuItem className="gap-2" onClick={handleDownloadOriginal}>
+                            <Outlined.Download className="size-4" />
+                            {localize('com_linsight.downloadToLocal')}
+                        </DropdownMenuItem>
+                    )}
+                    {canSaveToKnowledge && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="gap-2" disabled={saving} onClick={openPicker}>
+                                <Outlined.AddToKnowledgeBase className="size-4" />
+                                {localize('com_linsight.saveToKnowledge')}
+                            </DropdownMenuItem>
+                        </>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Sibling of the menu, not a child: inside DropdownMenuContent it
+                would unmount the moment the menu closes on item select. */}
+            {canSaveToKnowledge && (
+                <AddToKnowledgeModal
+                    open={pickerOpen}
+                    onOpenChange={setPickerOpen}
+                    mode="channel_sync"
+                    dataSourceApi={listUploadableSpacesApi}
+                    onSyncSelect={saveTo}
+                />
+            )}
+        </>
     );
 }

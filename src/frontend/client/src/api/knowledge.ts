@@ -343,6 +343,15 @@ export interface UploadFileResponse {
     state: "uploaded" | "attached" | "consumed" | "cleanup_pending" | "cleaned";
     expire_at?: string;
     create_time?: string | null;
+    /**
+     * Set when the space already holds a file with this name. The check is
+     * space-wide and name-only in practice: the backend compares
+     * `md5 OR file_name`, but `KnowledgeFile.md5` stores the upload's uuid
+     * object name, never a content hash, so the md5 branch can't match.
+     */
+    repeat?: boolean;
+    repeat_file_name?: string | null;
+    repeat_update_time?: string | null;
 }
 
 export type FileChangeDecision = "direct" | "pending" | "invalid";
