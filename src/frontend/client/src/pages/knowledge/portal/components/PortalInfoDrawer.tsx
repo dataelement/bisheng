@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Copy, X } from "lucide-react";
 import type { KnowledgeFile, KnowledgeSpace } from "~/api/knowledge";
-import { FileStatus, SpaceLevel, SpaceRole, VisibilityType, getFileStatsApi } from "~/api/knowledge";
+import { FileStatus, FileType, SpaceLevel, SpaceRole, VisibilityType, getFileStatsApi } from "~/api/knowledge";
+import { useLocalize } from "~/hooks";
+import { getKnowledgeIngestMethodLabel } from "../../knowledgeUtils";
 import type { PanelKey, PortalFileCategoryGroupOption } from "../types";
 import {
     type BusinessDomainOptionItem,
@@ -123,6 +125,7 @@ export function PortalInfoDrawer({
     onUpdateEncoding,
     onPanelChange,
 }: PortalInfoDrawerProps) {
+    const localize = useLocalize();
     const [encodingDraft, setEncodingDraft] = useState<EncodingDraft>({});
     const [savingEncoding, setSavingEncoding] = useState(false);
     const [fileStats, setFileStats] = useState<{ views: number; downloads: number } | null>(null);
@@ -393,6 +396,12 @@ export function PortalInfoDrawer({
                         {renderDetailItem("部门", sourceDepartmentName)}
                         {renderDetailItem("知识库", sourceSpaceName)}
                         {renderDetailItem("路径", sourcePath)}
+                        {selectedFile && selectedFile.type !== FileType.FOLDER
+                            ? renderDetailItem(
+                                localize("com_knowledge.ingest_method"),
+                                getKnowledgeIngestMethodLabel(selectedFile, localize),
+                            )
+                            : null}
                     </div>
                 ) : null}
 
