@@ -671,19 +671,51 @@ class SqlProjectionFinalizer:
                         raise PermissionPublishNotReadyError(
                             msg="Visible source recovery owner identity is invalid",
                         ) from exc
-                    assignee_state = (
+                    canonical_owner = (
                         await session.execute(
-                            select(PermissionGrantAssignee.state).where(
+                            select(PermissionGrantAssignee, PermissionGrant)
+                            .join(
+                                PermissionGrant,
+                                PermissionGrant.id == PermissionGrantAssignee.grant_id,
+                            )
+                            .where(
                                 PermissionGrantAssignee.tenant_id == plan.tenant_id,
                                 PermissionGrantAssignee.id == assignee_id,
                             )
                         )
-                    ).scalar_one_or_none()
-                    if assignee_state not in {"ACTIVE", "INACTIVE"}:
+                    ).first()
+                    if canonical_owner is None:
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery canonical owner is missing",
+                        )
+                    assignee, grant = canonical_owner
+                    if assignee.state not in {"ACTIVE", "INACTIVE"} or grant.state not in {
+                        "ACTIVE",
+                        "INACTIVE",
+                    }:
                         raise PermissionPublishNotReadyError(
                             msg="Visible source recovery owner state is incomplete",
                         )
-                    source.state = "ACTIVE" if assignee_state == "ACTIVE" else "RETIRED"
+                    if grant.resource_type != source.resource_type or grant.resource_id != source.resource_id:
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery owner resource is inconsistent",
+                        )
+                    if assignee.state == "ACTIVE" and grant.state != "ACTIVE":
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery active assignee has no active Grant",
+                        )
+                    visibility_class = "protected" if assignee.protected else "ordinary"
+                    is_current = (
+                        assignee.state == "ACTIVE"
+                        and grant.state == "ACTIVE"
+                        and grant.model_key == source.model_key
+                        and assignee.version == source.source_version
+                        and assignee.source_locator == source.source_locator
+                        and assignee.source_fingerprint == source.source_fingerprint
+                        and assignee.projected_subject == source.projected_subject
+                        and visibility_class == source.visibility_class
+                    )
+                    source.state = "ACTIVE" if is_current else "RETIRED"
                     session.add(source)
 
                 target_mode = self._target_mode(plan)

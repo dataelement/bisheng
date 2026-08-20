@@ -46,9 +46,17 @@ PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
 ```
 
 The JSON report includes canonical Grant/assignee source counts, persisted
-source differences, and the deduplicated expected tuple count/checksum. The
-script never scans or deletes existing visible tuples because system/public/
-shared visibility is not owned by the Grant source projection.
+source differences, and the deduplicated expected tuple count/checksum. Add an
+explicit Store scan to report missing and orphan direct `visible` tuple keys:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --audit-orphan-tuples
+```
+
+The audit treats the union of canonical Grant sources and every ACTIVE SQL
+visible-source contribution as supported, so non-Grant system/resource sources
+are not classified as orphans. It prints exact tuple keys and stable checksums.
 
 For apply, stop ingress traffic and all API/Worker/Linsight processes, wait for
 their F048 heartbeat TTL to expire, and copy the dry-run `store_id` into the
@@ -73,9 +81,31 @@ with OpenFGA duplicate-ignore semantics, verifies them with higher consistency,
 then activates the rebuilt Grant source rows and publishes a no-op Catalog
 release bound to the new Authorization Model release. It does not create or modify a formal
 `permission_migration_run`. Re-running after an interruption is forward-only
-and idempotent. Restart all permission-using processes after success; they
-discover the latest model through the stable Store name and validate the new
-SQL CURRENT Catalog pin.
+and idempotent.
+
+To delete reviewed orphan tuple keys, keep the maintenance window in place and
+copy both `store_id` and `orphan_tuple_checksum` from the immediately preceding
+dry-run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --apply \
+  --audit-orphan-tuples \
+  --cleanup-orphan-tuples \
+  --confirm-orphan-checksum <orphan-tuple-checksum> \
+  --confirm-store-id <store-id> \
+  --operator-id <operator-user-id>
+```
+
+Cleanup is refused if the reviewed orphan set changes. Each resource is fenced
+by its current permission version, each exact delete is recorded as a
+`VISIBLE_ORPHAN_CLEANUP` projection operation, and higher-consistency reads must
+confirm that no orphan direct tuple remains. Effective `visible` checks can
+still be true through an inherited parent; the audit verifies exact direct
+tuple presence instead.
+Restart all permission-using processes after success; they discover the latest
+model through the stable Store name and validate the new SQL CURRENT Catalog
+pin.
 
 ### `reconcile_f048_projection_operations.py`
 

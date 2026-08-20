@@ -1002,6 +1002,7 @@ class F048PermissionRuntime:
             target=target,
             models=models,
         )
+        visible_sources = await self._state.load_visible_sources(target=target)
         return ModeContext(
             target=target,
             mode=mode.mode,
@@ -1011,6 +1012,7 @@ class F048PermissionRuntime:
             operator_id=actor.user_id,
             local_grants=local,
             inherited_grants=inherited,
+            existing_visible_sources=visible_sources,
         )
 
     async def _grant_capabilities(

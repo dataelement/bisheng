@@ -824,6 +824,7 @@ class SqlPermissionControlState:
         context: ModeContext,
         draft: PermissionModeDraft,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation,
         *,
         idempotency_key: str,
         operation_id: int,
@@ -843,7 +844,7 @@ class SqlPermissionControlState:
         await self.prepare_grants(
             grant_context,
             grants,
-            None,
+            visibility,
             idempotency_key=idempotency_key,
             operation_id=operation_id,
         )
@@ -853,6 +854,7 @@ class SqlPermissionControlState:
         context: ModeContext,
         draft: PermissionModeDraft,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation,
         outcome: ProjectionOutcome,
     ) -> None:
         grant_context = GrantMutationContext(
@@ -867,7 +869,7 @@ class SqlPermissionControlState:
             models=tuple(grant.model for grant in grants),
             grants=grants,
         )
-        await self.finalize_grants(grant_context, grants, None, outcome)
+        await self.finalize_grants(grant_context, grants, visibility, outcome)
         async with get_async_db_session() as session:
             async with session.begin():
                 await session.execute(
@@ -1432,6 +1434,7 @@ class SqlModeState:
         context,
         draft,
         grants,
+        visibility,
         *,
         idempotency_key,
         operation_id,
@@ -1440,15 +1443,17 @@ class SqlModeState:
             context,
             draft,
             grants,
+            visibility,
             idempotency_key=idempotency_key,
             operation_id=operation_id,
         )
 
-    async def finalize(self, context, draft, grants, outcome) -> None:
+    async def finalize(self, context, draft, grants, visibility, outcome) -> None:
         await self._state.finalize_mode(
             context,
             draft,
             grants,
+            visibility,
             outcome,
         )
 
