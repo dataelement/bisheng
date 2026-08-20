@@ -1690,6 +1690,8 @@
       "history_confirm_set_primary_description": "V{{version}} が主バージョンになり、RAG 検索とチャットに即時反映されます。",
       "history_confirm_delete_title": "履歴バージョンを削除",
       "history_confirm_delete_description": "V{{version}} は完全に削除されます。元に戻せません。",
+      "confirm_delete_with_history_title": "削除の確認",
+      "confirm_delete_with_history_description": "このファイルには旧バージョンがあります。削除すると履歴ドキュメントも同時に削除され、元に戻せません。削除しますか？",
       "history_cannot_delete_primary": "主バージョンは削除できません。先に別バージョンを主に切り替えてください。",
       "toast_link_success": "関連付けに成功しました",
       "toast_link_failure": "関連付けに失敗しました",
