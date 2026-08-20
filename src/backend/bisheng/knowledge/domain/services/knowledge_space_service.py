@@ -600,6 +600,38 @@ class PortalDiscoveryResult:
     snapshot: str
 
 
+async def _require_not_write_frozen(tenant_id: int) -> None:
+    """F4: Block SPACE writes when the tenant is frozen for shared-storage migration.
+
+    Raises ``SharedStorageContractError(TENANT_WRITE_FROZEN)`` when the tenant's
+    routing table has ``write_frozen=True`` AND the config setting
+    ``migration_write_block_enabled`` is True (spec 7.4 / risk R17).
+
+    This guard is deliberately at the application layer rather than only in the
+    vector writer, so that file upload and space creation are blocked before
+    any I/O or DB writes occur.
+    """
+    from bisheng.knowledge.domain.contracts.errors import (
+        SharedStorageContractError,
+        SharedStorageErrorCode,
+    )
+    from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
+        KnowledgeSpaceSharedStorageRoutingDao,
+    )
+    from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
+
+    conf = get_shared_storage_conf()
+    if not conf.migration_write_block_enabled:
+        return
+    row = await KnowledgeSpaceSharedStorageRoutingDao.aget_by_tenant(int(tenant_id))
+    if row is not None and bool(row.write_frozen):
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.TENANT_WRITE_FROZEN,
+            f"tenant {tenant_id} SPACE writes are frozen for migration",
+            tenant_id=int(tenant_id),
+        )
+
+
 class KnowledgeSpaceService(KnowledgeUtils):
     """Service for Knowledge Space operations.
     Instance-based; each method receives login_user as an argument.
@@ -3801,6 +3833,56 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if "view_space" not in effective_permissions:
             raise SpacePermissionDeniedError()
         return space
+
+    async def _require_no_active_shared_managers(self, space: Knowledge) -> None:
+        """B5.2: Block deletion of a shared-storage space with active MANAGER entries.
+
+        When the tenant is routed to shared SPACE storage, the MANAGER entry
+        is the canonical content owner for the document's primary version.
+        Deleting the manager would orphan the shared-store content projection
+        (risk R7: the shared store lifecycle is not per-space). The user must
+        first reassign the manager role to another entry in another space, or
+        delete the document entirely.
+
+        This check is scoped to the shared-storage path only; legacy per-space
+        storage is unaffected.
+        """
+        from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+
+        if resolve_space_shared_routing(
+            int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID),
+            space.type,
+        ) is None:
+            return  # Legacy per-space storage: no shared-store manager protection
+
+        # Query active MANAGER entries in this space.
+        from bisheng.knowledge.domain.models.knowledge_file import (
+            KnowledgeFileEntryStatus,
+            KnowledgeFileEntryType,
+        )
+
+        async with get_async_db_session() as session:
+            statement = (
+                select(KnowledgeFile)
+                .where(
+                    KnowledgeFile.knowledge_id == int(space.id),
+                    KnowledgeFile.entry_type == KnowledgeFileEntryType.MANAGER.value,
+                    KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+                    KnowledgeFile.reference_document_id.is_not(None),
+                    col(KnowledgeFile.deleted_at).is_(None),
+                )
+                .limit(1)
+            )
+            result = await session.exec(statement)
+            manager_entry = result.first()
+            if manager_entry is not None:
+                raise KnowledgeDocumentManagerRequiredError(
+                    msg=(
+                        f"空间 {space.name}（ID={space.id}）中存在活跃的文档管理入口，"
+                        "共享存储下文档内容由管理入口持有。请先将管理角色转移至其他空间的入口，"
+                        "或删除对应文档后再删除空间。"
+                    )
+                )
 
     async def require_parse_queue_read(self, space_id: int) -> Knowledge:
         """Public authorization boundary for parse queue position queries."""
@@ -11174,6 +11256,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         original_member_ids = [member.user_id for member in original_members]
 
         if not force:
+            # B5.2: tenant-routed shared-storage SPACE must not be deleted
+            # while it holds active MANAGER entries that are the canonical
+            # content owner for documents distributed to other spaces.
+            # Deleting the manager would orphan the shared-store content
+            # projection (risk R7: shared store lifecycle is not per-space).
+            await self._require_no_active_shared_managers(space)
+
             if self.knowledge_space_retirement_service is None:
                 raise KnowledgeDocumentStateConflictError(msg="知识库退役服务不可用")
             result = await self.knowledge_space_retirement_service.retire(
@@ -15746,6 +15835,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not db_knowledge:
             raise SpaceFolderNotFoundError()
         self._ensure_space_async_task_tenant_consistency(db_knowledge, "upload_file")
+
+        # F4: shared-storage write-freeze guard — prevent new uploads during
+        # tenant migration into the shared store (spec 7.4 / risk R17).
+        await _require_not_write_frozen(int(getattr(db_knowledge, 'tenant_id', None) or DEFAULT_TENANT_ID))
 
         level = 0
         file_level_path = ""

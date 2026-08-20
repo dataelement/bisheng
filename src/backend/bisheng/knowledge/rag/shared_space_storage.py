@@ -195,6 +195,33 @@ def resolve_space_shared_routing(
     return snapshot
 
 
+def freeze_tenant_writes(tenant_id: int) -> bool:
+    """F4: Set ``write_frozen=True`` on the tenant's routing row.
+
+    Returns True when a row was updated. Idempotent — safe to call when
+    already frozen. Callers must gate on ``migration_write_block_enabled``
+    before calling (the guard in ``_require_not_write_frozen`` and the
+    ``SharedSpaceStorageWriter`` both respect that config).
+    """
+    from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
+        KnowledgeSpaceSharedStorageRoutingDao,
+    )
+
+    return KnowledgeSpaceSharedStorageRoutingDao.set_write_frozen(int(tenant_id), True)
+
+
+def unfreeze_tenant_writes(tenant_id: int) -> bool:
+    """F4: Clear ``write_frozen`` on the tenant's routing row.
+
+    Returns True when a row was updated. Idempotent.
+    """
+    from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
+        KnowledgeSpaceSharedStorageRoutingDao,
+    )
+
+    return KnowledgeSpaceSharedStorageRoutingDao.set_write_frozen(int(tenant_id), False)
+
+
 def tenant_target_embedding_model_id(snapshot: TenantRoutingSnapshot) -> int:
     """The tenant-wide target embedding model (routing row wins, config is
     the fallback). Raises when neither is configured."""
@@ -992,6 +1019,86 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
         )
 
 
+def build_shared_space_components_for_tenant(
+    tenant_id: int,
+    *,
+    embedding_dimension: int | None = None,
+    conf=None,
+    routing_provider: Callable[[int], TenantRoutingSnapshot | None] | None = None,
+) -> tuple[MilvusEsSharedSpaceStorageWriter, SharedSpaceStorageReader] | None:
+    """Build the per-tenant writer+reader pair when the tenant is routed.
+
+    Returns None when the tenant is not routed to the shared store (switch
+    off / no row) so callers keep legacy behaviour. The shared collection
+    must already exist - this factory never bootstraps (admin path only).
+
+    ``embedding_dimension`` must be provided by the caller (the dimension of
+    the tenant target embedding model); the spec derived from it must match
+    the fingerprint stored in the routing row, otherwise the first write
+    fails closed with ``SCHEMA_FINGERPRINT_MISMATCH``.
+    """
+    conf = conf or get_shared_storage_conf()
+    if not conf.enabled:
+        return None
+    provider = routing_provider or load_tenant_routing_snapshot
+    snapshot = provider(int(tenant_id))
+    if snapshot is None or not snapshot.shared_enabled:
+        return None
+    if embedding_dimension is None and not snapshot.schema_fingerprint:
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.ROUTING_NOT_CONFIGURED,
+            "embedding_dimension of the tenant target model is required when "
+            "the routing row carries no bootstrap fingerprint",
+            tenant_id=int(tenant_id),
+        )
+    spec = SharedStoreSchemaSpec(
+        embedding_model_id=snapshot.embedding_model_id or 0,
+        # dimension is only used to recompute the fallback fingerprint; the
+        # authoritative check is against the routing row's bootstrap
+        # fingerprint, which the migration writes at switch time.
+        dimension=int(embedding_dimension or 0),
+        knowledge_ids_max_capacity=conf.knowledge_ids_max_capacity,
+    )
+    alias = _ensure_shared_milvus_connection()
+    name = shared_collection_name(tenant_id, conf)
+    if not utility.has_collection(name, using=alias):
+        raise SharedStorageContractError(
+            SharedStorageErrorCode.SCHEMA_FINGERPRINT_MISMATCH,
+            f"shared collection {name} does not exist; run the admin "
+            "bootstrap before routing the tenant",
+            tenant_id=int(tenant_id),
+        )
+    collection = Collection(name, using=alias)
+    expected_fingerprint = snapshot.schema_fingerprint or spec.fingerprint()
+    verify_shared_collection_schema(collection, expected_fingerprint, tenant_id=int(tenant_id))
+
+    from elasticsearch import Elasticsearch
+
+    from bisheng.common.services.config_service import settings as bisheng_settings
+
+    es_conf = bisheng_settings.get_vectors_conf().elasticsearch
+    es_client = Elasticsearch(hosts=es_conf.elasticsearch_url, **es_conf.ssl_verify)
+
+    writer = MilvusEsSharedSpaceStorageWriter(
+        tenant_id=int(tenant_id),
+        collection=collection,
+        es_client=es_client,
+        expected_routing_version=snapshot.routing_version,
+        schema_spec=spec,
+        conf=conf,
+        routing_provider=provider,
+    )
+    reader = SharedSpaceStorageReader(
+        tenant_id=int(tenant_id),
+        collection=collection,
+        es_client=es_client,
+        expected_routing_version=snapshot.routing_version,
+        conf=conf,
+        routing_provider=provider,
+    )
+    return writer, reader
+
+
 # ---------------------------------------------------------------------------
 # the shared-store read client (F1, proposed reader contract pending review)
 # ---------------------------------------------------------------------------
@@ -1204,6 +1311,7 @@ __all__ = [
     "build_shared_es_filter",
     "build_shared_es_index_body",
     "build_shared_field_schemas",
+    "build_shared_space_components_for_tenant",
     "ensure_shared_es_index",
     "es_routing_value",
     "get_shared_storage_conf",

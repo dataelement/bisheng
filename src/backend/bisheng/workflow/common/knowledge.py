@@ -86,6 +86,47 @@ def retrieve_knowledge_space_documents_sync(
     raise RuntimeError("knowledge space retrieval does not support running inside an active event loop")
 
 
+def is_shared_storage_active_for_knowledge_ids(
+    knowledge_base_ids: list[int],
+) -> bool:
+    """B2: Check whether the given knowledge bases are routed to shared storage.
+
+    Returns True when ALL requested bases are SPACE-type and the tenant has
+    ``shared_enabled=True``. This is a sync helper for workflow nodes that
+    need to decide between legacy per-space retrieval and shared-store paths.
+
+    If the check cannot be performed (e.g. no event loop), returns False.
+    """
+    if not knowledge_base_ids:
+        return False
+    import asyncio
+
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+    from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+
+    async def _check() -> bool:
+        async with get_async_db_session() as session:
+            for kb_id in knowledge_base_ids:
+                space = await KnowledgeDao.aquery_by_id(kb_id)
+                if space is None:
+                    return False
+                snapshot = resolve_space_shared_routing(
+                    int(getattr(space, 'tenant_id', None) or 1),
+                    getattr(space, 'type', None),
+                )
+                if snapshot is None or not snapshot.shared_enabled:
+                    return False
+            return True
+
+    try:
+        asyncio.get_running_loop()
+        return False
+    except RuntimeError:
+        from bisheng.worker._asyncio_utils import run_async_task
+        return run_async_task(_check)
+
+
 class ConditionOne(BaseModel):
     id: str = Field(..., description="Unique id for condition")
     knowledge_id: int = Field(..., description="metadata filed belong for knowledge`s id")

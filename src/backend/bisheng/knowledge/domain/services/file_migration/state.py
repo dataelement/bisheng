@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from enum import Enum
 
 from bisheng.knowledge.domain.models.knowledge_migration import (
     KnowledgeMigrationBatchStatus,
     KnowledgeMigrationUnitStatus,
 )
+
+
+class MigrationScope(str, Enum):
+    """F4: distinguishes migration types so the executor can branch."""
+    CROSS_SPACE = "cross_space"          # existing: move files between spaces
+    SHARED_STORAGE = "shared_storage"    # F4: tenant → shared Milvus/ES
 
 _BATCH_TRANSITIONS = {
     KnowledgeMigrationBatchStatus.PREFLIGHT_QUEUED.value: {
