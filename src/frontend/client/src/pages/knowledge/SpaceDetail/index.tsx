@@ -1,4 +1,5 @@
 import { Fragment, useState, useRef, useEffect, useLayoutEffect, useCallback, type MouseEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useRecoilValue, useRecoilState } from "recoil";
 import { knowledgeSelectedFilesState } from "../selectionStore";
 import { EmptyStateIllustration } from "~/components/illustrations";
@@ -59,6 +60,7 @@ import { VersionHistorySheet } from "./VersionHistorySheet";
 import { SimilarDocumentDialog } from "./SimilarDocumentDialog";
 import { SelectionPathBreadcrumb } from "./SelectionPathBreadcrumb";
 import { FileChangeApprovalDetail } from "./FileChangeApprovalDetail";
+import { FilePreviewDrawer } from "../FilePreview/FilePreviewDrawer";
 import { canOpenPermissionDialog, checkPermission } from "~/api/permission";
 import {
     hasKnowledgeSpacePermission,
@@ -155,6 +157,11 @@ function normalizeWebLinkTitle(title: string): string | undefined {
     if (!trimmed) return undefined;
     return /\.html$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
 }
+
+/** Query params holding what the preview drawer is showing: a regular file id, or
+ *  the approval request id of an upload still awaiting a decision. */
+const PREVIEW_QUERY_PARAM = "preview";
+const PREVIEW_CHANGE_QUERY_PARAM = "previewChange";
 
 export function KnowledgeSpaceContent({
     space,
@@ -404,6 +411,11 @@ export function KnowledgeSpaceContent({
     const [versionMgmtFile, setVersionMgmtFile] = useState<KnowledgeFile | null>(null);
     const [versionHistoryFile, setVersionHistoryFile] = useState<KnowledgeFile | null>(null);
     const [similarDialogOpen, setSimilarDialogOpen] = useState(false);
+    // Desktop file preview lives in a side drawer; H5 keeps the full-page route.
+    // The open file id lives in the URL (?preview=<fileId>) — see the block near
+    // handlePreviewFile. This only carries the display name of files that aren't in
+    // the list (e.g. previewing an older version from the version history).
+    const [previewNameHint, setPreviewNameHint] = useState<{ key: string; name: string } | null>(null);
     // File ids (KnowledgeFile.id) the similar-document dialog is scoped to — snapshotted
     // from the current selection when the batch "处理相似文档" entry is triggered.
     const [similarRestrictIds, setSimilarRestrictIds] = useState<string[]>([]);
@@ -896,6 +908,11 @@ export function KnowledgeSpaceContent({
             showToast({ message: localize("com_knowledge.file_change_preview_failed"), status: "error" });
             return;
         }
+        // Desktop previews in the side drawer; H5 keeps the full-page route.
+        if (!isH5) {
+            openPreviewDrawer("change", String(requestId), pendingFile.fileName);
+            return;
+        }
         const url = `${__APP_ENV__.BASE_URL}/knowledge/file-change/${requestId}?name=${encodeURIComponent(pendingFile.fileName)}&spaceId=${encodeURIComponent(space.id)}`;
         window.open(url, "_blank", "noopener,noreferrer");
     };
@@ -1121,14 +1138,75 @@ export function KnowledgeSpaceContent({
         }
     };
 
-    const handlePreviewFile = (fileId: string, explicitFileName?: string) => {
-        const file = displayFiles.find(f => f.id === fileId);
-        // Version files aren't in displayFiles, so accept an explicit name for them.
-        const fileName = explicitFileName || file?.name || localize("com_knowledge.unknown_file");
+    // ─── File preview drawer (desktop) ───────────────────────────────────
+    // The open file is kept in the URL so a refresh restores the preview and the
+    // browser Back button closes it. Opening pushes one history entry; closing pops
+    // it again (or just drops the param when the drawer came from a deep link).
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const previewFileId = isH5 ? null : searchParams.get(PREVIEW_QUERY_PARAM);
+    const previewChangeId = isH5 ? null : searchParams.get(PREVIEW_CHANGE_QUERY_PARAM);
+    const previewKey = previewChangeId
+        ? `change:${previewChangeId}`
+        : previewFileId ? `file:${previewFileId}` : null;
+    const previewPushedRef = useRef(false);
+
+    // The click that opened the drawer knows the name; a refresh or a shared link
+    // does not, so fall back to looking the id up in what's currently loaded.
+    const resolvePreviewName = () => {
+        if (!previewKey) return "";
+        if (previewNameHint?.key === previewKey) return previewNameHint.name;
+        const fromList = previewChangeId
+            ? fileChangeApproval.pendingItems.find(item => String(item.requestId) === previewChangeId)?.fileName
+            : displayFiles.find(f => f.id === previewFileId)?.name;
+        return fromList ?? localize("com_knowledge.unknown_file");
+    };
+    const previewFileName = resolvePreviewName();
+
+    // The params can also vanish without going through closePreviewDrawer (Back button).
+    useEffect(() => {
+        if (!previewKey) previewPushedRef.current = false;
+    }, [previewKey]);
+
+    const openPreviewDrawer = (kind: "file" | "change", id: string, name: string) => {
+        setPreviewNameHint({ key: `${kind}:${id}`, name });
+        const next = new URLSearchParams(searchParams);
+        next.delete(PREVIEW_QUERY_PARAM);
+        next.delete(PREVIEW_CHANGE_QUERY_PARAM);
+        next.set(kind === "change" ? PREVIEW_CHANGE_QUERY_PARAM : PREVIEW_QUERY_PARAM, id);
+        previewPushedRef.current = true;
+        setSearchParams(next);
+    };
+
+    const closePreviewDrawer = () => {
+        if (previewPushedRef.current) {
+            previewPushedRef.current = false;
+            navigate(-1);
+            return;
+        }
+        const next = new URLSearchParams(searchParams);
+        next.delete(PREVIEW_QUERY_PARAM);
+        next.delete(PREVIEW_CHANGE_QUERY_PARAM);
+        setSearchParams(next, { replace: true });
+    };
+
+    const openPreviewInNewTab = (fileId: string, fileName: string) => {
         // Use extension from filename for preview viewer dispatch instead of API type field
         const ext = fileName.split('.').pop()?.toLowerCase() || "";
         const url = `${__APP_ENV__.BASE_URL}/knowledge/file/${fileId}?name=${encodeURIComponent(fileName)}&type=${encodeURIComponent(ext)}&spaceId=${encodeURIComponent(space.id)}`;
         window.open(url, '_blank');
+    };
+
+    const handlePreviewFile = (fileId: string, explicitFileName?: string) => {
+        const file = displayFiles.find(f => f.id === fileId);
+        // Version files aren't in displayFiles, so accept an explicit name for them.
+        const fileName = explicitFileName || file?.name || localize("com_knowledge.unknown_file");
+        // H5 has no room for a drawer — keep the full-page preview route there.
+        if (isH5) {
+            openPreviewInNewTab(fileId, fileName);
+            return;
+        }
+        openPreviewDrawer("file", fileId, fileName);
     };
 
     const handleOpenEditTags = (fileId: string) => {
@@ -1992,6 +2070,15 @@ export function KnowledgeSpaceContent({
                 currentSpaceId={space.id}
                 currentSpaceName={space.name}
                 onConfirm={handleMoveConfirm}
+            />
+
+            <FilePreviewDrawer
+                open={previewKey !== null}
+                onOpenChange={(o) => { if (!o) closePreviewDrawer(); }}
+                spaceId={String(space.id)}
+                fileId={previewFileId}
+                changeRequestId={previewChangeId}
+                fileName={previewFileName}
             />
 
             <FileChangeApprovalDetail

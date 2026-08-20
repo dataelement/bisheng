@@ -46,6 +46,8 @@ interface TopBarProps {
     onDownload?: () => void;
     /** Slot: extra actions rendered at the right side (before download button) */
     actions?: React.ReactNode;
+    /** Slot: actions pinned to the far right, after the download button (e.g. drawer close) */
+    trailingActions?: React.ReactNode;
 }
 
 export function TopBar({
@@ -63,6 +65,7 @@ export function TopBar({
     onPageChange,
     onDownload,
     actions,
+    trailingActions,
 }: TopBarProps) {
     const [pageInput, setPageInput] = useState(String(currentPage));
     const inputRef = useRef<HTMLInputElement>(null);
@@ -195,7 +198,7 @@ export function TopBar({
                     )}
                 </div>
 
-                {/* ===== Right: actions slot + Download ===== */}
+                {/* ===== Right: actions slot + Download + trailing slot ===== */}
                 <div className="content-stretch flex gap-[12px] items-center justify-end relative shrink-0 flex-1">
                     {actions}
                     {onDownload && (
@@ -204,6 +207,7 @@ export function TopBar({
                             <DownloadIcon />
                         </Button>
                     )}
+                    {trailingActions}
                 </div>
             </div>
         </div>

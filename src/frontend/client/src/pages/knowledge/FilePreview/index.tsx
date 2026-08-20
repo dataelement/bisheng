@@ -28,6 +28,8 @@ export interface FilePreviewProps {
     fileUrl: string;
     /** Extra actions rendered in TopBar right area (before download button) */
     actions?: React.ReactNode;
+    /** Actions pinned to the far right of the TopBar, after the download button. */
+    trailingActions?: React.ReactNode;
     /** True when pptx-to-pdf conversion failed on the backend */
     conversionFailed?: boolean;
     /** Optional PDF highlight boxes in original PDF coordinates. */
@@ -58,6 +60,7 @@ export default function FilePreview({
     fileType,
     fileUrl,
     actions,
+    trailingActions,
     conversionFailed = false,
     highlightBboxes = [],
     targetBBox = null,
@@ -161,7 +164,7 @@ export default function FilePreview({
     if (viewerType === "unsupported") {
         return (
             <div className="w-full h-full flex flex-col">
-                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
+                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} trailingActions={trailingActions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-4 text-[#86909c]">
                         <div className="text-5xl">📄</div>
@@ -192,6 +195,7 @@ export default function FilePreview({
                         onZoomOut={handleZoomOut}
                         onDownload={fileUrl ? topBarDownload : undefined}
                         actions={actions}
+                        trailingActions={trailingActions}
                     />
                 )}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
@@ -208,7 +212,7 @@ export default function FilePreview({
     if (error) {
         return (
             <div className="w-full h-full flex flex-col">
-                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
+                {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} trailingActions={trailingActions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
                     <div className="flex flex-col items-center gap-3 text-[#86909c]">
                         <div className="text-4xl">📄</div>
@@ -268,6 +272,7 @@ export default function FilePreview({
                     onPageChange={handlePageChange}
                     onDownload={topBarDownload}
                     actions={actions}
+                        trailingActions={trailingActions}
                 />
             )}
             <div className="flex flex-1 min-h-0">

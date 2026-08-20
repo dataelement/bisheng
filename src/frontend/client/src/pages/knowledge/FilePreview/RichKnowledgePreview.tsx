@@ -16,6 +16,8 @@ interface RichKnowledgePreviewProps {
     fileName: string;
     preview: KnowledgeFilePreview;
     actions?: ReactNode;
+    /** Actions pinned to the far right of the TopBar, after the download button. */
+    trailingActions?: ReactNode;
     allowDownload?: boolean;
     onDownloadFile?: () => void;
     compactMode?: boolean;
@@ -302,6 +304,7 @@ export function RichKnowledgePreview({
     fileName,
     preview,
     actions,
+    trailingActions,
     allowDownload = true,
     onDownloadFile,
     compactMode = false,
@@ -324,6 +327,7 @@ export function RichKnowledgePreview({
                         showZoom={false}
                         onDownload={allowDownload ? onDownloadFile : undefined}
                         actions={actions}
+                        trailingActions={trailingActions}
                     />
                 )}
                 {/* Side-by-side on md+: player left, transcript right, split by a single
@@ -358,6 +362,7 @@ export function RichKnowledgePreview({
                     showZoom={false}
                     onDownload={allowDownload ? onDownloadFile : undefined}
                     actions={actions}
+                    trailingActions={trailingActions}
                 />
             )}
             <div className="flex min-h-0 flex-1 overflow-hidden">

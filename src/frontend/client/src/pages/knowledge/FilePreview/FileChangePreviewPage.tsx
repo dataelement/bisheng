@@ -14,16 +14,42 @@ function getFileType(fileName: string): string {
         : "";
 }
 
-export function FileChangePreviewPage() {
+export interface FileChangePreviewPageProps {
+    /** Embedded mode: approval request id from props instead of the route param. */
+    requestId?: string;
+    /** Embedded mode: display name instead of the `name` query param. */
+    fileName?: string;
+    /** Embedded mode: space id instead of the `spaceId` query param. */
+    spaceId?: string;
+    /** Fill the parent instead of the viewport (side-drawer preview). */
+    embedded?: boolean;
+    /** Extra buttons rendered in the TopBar action slot (e.g. the drawer's close). */
+    extraActions?: React.ReactNode;
+}
+
+/**
+ * Preview of an upload still going through approval. Route-level page, and also
+ * the body of `FilePreviewDrawer` when `embedded` is set.
+ */
+export function FileChangePreviewPage({
+    requestId: requestIdProp,
+    fileName: fileNameProp,
+    spaceId: spaceIdProp,
+    embedded = false,
+    extraActions,
+}: FileChangePreviewPageProps) {
     const localize = useLocalize();
-    const { requestId } = useParams<{ requestId: string }>();
+    const { requestId: routeRequestId } = useParams<{ requestId: string }>();
     const [searchParams] = useSearchParams();
-    const fileName = searchParams.get("name") || localize("com_knowledge.unknown_file");
-    const spaceId = searchParams.get("spaceId") || "";
+    const requestId = requestIdProp || routeRequestId;
+    const fileName = fileNameProp || searchParams.get("name") || localize("com_knowledge.unknown_file");
+    const spaceId = spaceIdProp || searchParams.get("spaceId") || "";
     const fileType = useMemo(() => getFileType(fileName), [fileName]);
     const [fileUrl, setFileUrl] = useState("");
     const [loading, setLoading] = useState(true);
     const [failed, setFailed] = useState(false);
+    // Embedded in a drawer, the preview fills its container; standalone it owns the viewport.
+    const rootHeightClass = embedded ? "h-full" : "h-[var(--bs-vh,100vh)]";
 
     useEffect(() => {
         const normalizedRequestId = Number(requestId);
@@ -58,7 +84,7 @@ export function FileChangePreviewPage() {
 
     if (loading) {
         return (
-            <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center bg-background text-text-3">
+            <div className={`flex ${rootHeightClass} items-center justify-center bg-background text-text-3`}>
                 {localize("com_knowledge.loading")}
             </div>
         );
@@ -66,18 +92,19 @@ export function FileChangePreviewPage() {
 
     if (failed || !fileUrl) {
         return (
-            <div className="flex h-[var(--bs-vh,100vh)] items-center justify-center bg-background text-text-3">
+            <div className={`flex ${rootHeightClass} items-center justify-center bg-background text-text-3`}>
                 {localize("com_knowledge.file_change_preview_failed")}
             </div>
         );
     }
 
     return (
-        <div className="h-[var(--bs-vh,100vh)] overflow-hidden bg-background">
+        <div className={`${rootHeightClass} overflow-hidden bg-background`}>
             <FilePreview
                 fileName={fileName}
                 fileType={fileType}
                 fileUrl={fileUrl}
+                trailingActions={extraActions}
             />
         </div>
     );
