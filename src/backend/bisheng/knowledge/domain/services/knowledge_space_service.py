@@ -12079,6 +12079,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     clinic_binding.department_id = int(department_id)
                     await DepartmentKnowledgeSpaceDao.aupdate(clinic_binding)
                 await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
+                if name_changed:
+                    await self._sync_approval_space_names_after_rename(space)
                 return space
 
             if prepared_portal_rebind_plan is None:
@@ -12096,6 +12098,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     raise
         if name_changed or department_id is not None:
             await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
+        if name_changed:
+            await self._sync_approval_space_names_after_rename(space)
         new_auth_type = space.auth_type
 
         # When switching to PRIVATE, remove all non-creator members
@@ -12138,6 +12142,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await SpaceChannelMemberDao.async_delete_rejected_members(space_id)
 
         return space
+
+    async def _sync_approval_space_names_after_rename(self, space: Knowledge) -> None:
+        try:
+            from bisheng.approval.domain.services.approval_center_service import ApprovalCenterService
+
+            await ApprovalCenterService.sync_space_name_to_approvals(
+                space_id=int(space.id),
+                space_name=str(space.name or ""),
+                tenant_id=int(space.tenant_id or self.login_user.tenant_id),
+            )
+        except Exception:
+            _logger.exception(
+                "failed to sync approval space names after rename space_id=%s",
+                getattr(space, "id", None),
+            )
 
     async def _write_portal_discovery_audit(
         self,
