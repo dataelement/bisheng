@@ -51,7 +51,7 @@ def _success_result() -> InspectionStandardSyncResponseData:
                 knowledge_id=118,
                 knowledge_name="智能制造室(制造)",
                 folder_path="点检标准/DEPT-A/2026",
-                generated_file_name="2026-08-01至2026-08-14.xlsx",
+                generated_file_name="DEPT-A_2026-08-01至2026-08-14.xlsx",
                 status=5,
                 check_standard_count=1,
                 check_standard_item_count=1,
