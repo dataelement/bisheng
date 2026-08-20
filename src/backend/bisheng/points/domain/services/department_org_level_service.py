@@ -1,4 +1,4 @@
-"""组织四级标签：多公司作用域级联 dept/office/squad（公司之间互不干扰）。"""
+"""组织四级标签：租户内唯一公司根，子树级联 dept/office/squad。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,11 @@ from sqlalchemy import update
 from sqlmodel import select
 
 from bisheng.common.errcode.department import DepartmentNotFoundError
-from bisheng.common.errcode.points import PointsCompanyRootConflictError, PointsNotCompanyRootError
+from bisheng.common.errcode.points import (
+    PointsCompanyAlreadyExistsError,
+    PointsCompanyRootConflictError,
+    PointsNotCompanyRootError,
+)
 from bisheng.core.database import get_async_db_session
 from bisheng.database.models.department import Department, DepartmentDao
 from bisheng.points.domain.constants.org_levels import (
@@ -60,6 +64,15 @@ class DepartmentOrgLevelService:
             if other_path.startswith(company_path):
                 raise PointsCompanyRootConflictError()
 
+    @staticmethod
+    def _assert_unique_company_root(company: Department, existing_companies: list) -> None:
+        """租户内最多一个公司根：存在其他 company 时拒绝（不自动替换）。"""
+        company_id = int(company.id)
+        for row in existing_companies:
+            if int(row.id) == company_id:
+                continue
+            raise PointsCompanyAlreadyExistsError()
+
     async def list_org_levels(self, user) -> list[DepartmentOrgLevelItem]:
         """列出当前租户活跃部门的 org_level（只读）。"""
         _ = user  # 登录即可读；租户过滤由 ORM 事件注入。
@@ -77,7 +90,7 @@ class DepartmentOrgLevelService:
         ]
 
     async def set_company_root(self, user, dept_key: str) -> SetCompanyRootResponse:
-        """指定公司根并仅在该子树内级联打标；允许多公司并列，禁止嵌套。
+        """指定公司根并仅在该子树内级联打标；租户内唯一公司，禁止嵌套。
 
         同一公司根可重复调用以重算子树。只清空目标 path 子树标签后再写入。
         """
@@ -95,9 +108,12 @@ class DepartmentOrgLevelService:
                     )
                 )
             ).all()
-            self._assert_no_company_nesting(company, list(existing))
+            existing_list = list(existing)
+            # 先嵌套（更具体），再唯一性（并列第二家公司）。
+            self._assert_no_company_nesting(company, existing_list)
+            self._assert_unique_company_root(company, existing_list)
 
-            # 仅清空本公司子树标签，不影响其他公司。
+            # 仅清空本公司子树标签后重算。
             await session.exec(
                 update(Department)
                 .where(
@@ -115,7 +131,7 @@ class DepartmentOrgLevelService:
                     )
                 )
             ).all()
-            levels = {level: 0 for level in ORG_LEVELS}
+            levels = dict.fromkeys(ORG_LEVELS, 0)
             labeled = 0
             for node in subtree:
                 rel = relative_depth(company.path, node.path)
