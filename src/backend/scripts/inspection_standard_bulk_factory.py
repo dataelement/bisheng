@@ -17,7 +17,7 @@ def build_standard_dict(*, create_dept_id: str, check_standard_id: str, record_i
         "DEVICE_STATUS": "1-运转",
         "ENFORCE_CODE": "1-点检",
         "SAFETY_BOARD": "N-否",
-        "CHECK_PERIOD": 1,
+        "CHECK_PERIOD": "1",
         "PERIOD_UNIT": "W-周",
         "INTERFACE_SYSTEM": "1-智能点检系统",
         "NEXT_SCHE_DATE": "2026-08-10",

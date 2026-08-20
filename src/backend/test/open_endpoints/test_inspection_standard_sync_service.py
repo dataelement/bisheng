@@ -51,7 +51,7 @@ def _sample_standard(**overrides) -> InspectionStandardRecord:
         "DEVICE_STATUS": "1-运转",
         "ENFORCE_CODE": "1-点检",
         "SAFETY_BOARD": "N-否",
-        "CHECK_PERIOD": 1,
+        "CHECK_PERIOD": "1",
         "PERIOD_UNIT": "W-周",
         "INTERFACE_SYSTEM": "1-智能点检系统",
         "NEXT_SCHE_DATE": "2026-05-06",
@@ -114,6 +114,15 @@ def _build_service(*, rule: DeveloperTokenFileSyncRule | None = None) -> Inspect
                 status=5,
             )
         ),
+        repository=SimpleNamespace(
+            find_knowledge_by_id=AsyncMock(
+                return_value=SimpleNamespace(name="智能制造室(制造)"),
+            ),
+        ),
+        request=None,
+        login_user=SimpleNamespace(user_id=1, user_name="admin", tenant_id=1),
+        token_id=42,
+        token_name="TEST-TOKEN",
     )
     return InspectionStandardSyncService(filelib_sync_service=filelib_sync_service)
 
@@ -217,3 +226,9 @@ def test_build_generated_file_name_uses_date_only():
     assert InspectionStandardSyncService._build_generated_file_name(start_dt, end_dt) == (
         "2026-08-01至2026-08-14.xlsx"
     )
+
+
+def test_sample_standard_coerces_numeric_check_period():
+    record = _sample_standard(CHECK_PERIOD=2)
+    assert record.CHECK_PERIOD == "2"
+    assert isinstance(record.CHECK_PERIOD, str)

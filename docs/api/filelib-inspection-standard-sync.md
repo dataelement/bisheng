@@ -179,10 +179,10 @@ JSON 字段 key 定义如下（生成 Excel 时不写入英文列名行，列顺
 | `DEVICE_STATUS` | 设备状态 | string | 16 | 是 | 小代码：`0-不限定`、`1-运转`、`2-停止`。 |
 | `ENFORCE_CODE` | 实施方 | string | 16 | 是 | 小代码，如 `1-点检`。 |
 | `SAFETY_BOARD` | 安全挂牌 | string | 8 | 是 | `N-否` / `Y-是`。 |
-| `CHECK_PERIOD` | 实施周期 | integer | — | 是 | 正整数；非周期填 `0`。 |
+| `CHECK_PERIOD` | 实施周期 | string | 32 | 是 | 文本数字；非周期填 `"0"`。JSON 传 number 时服务端自动转为 string。 |
 | `PERIOD_UNIT` | 周期单位 | string | 8 | 是 | 小代码：`H/S/D/W/M/Y/N/F` 等。 |
 | `INTERFACE_SYSTEM` | 系统接口 | string | 16 | 是 | 小代码，如 `1-智能点检系统`。 |
-| `NEXT_SCHE_DATE` | 下次排程日期 | string | 10 | 是 | 文本格式 `YYYY-MM-DD`；为空时服务端可用导入日期填充。 |
+| `NEXT_SCHE_DATE` | 下次排程日期 | string | 100 | 是 | 建议 `YYYY-MM-DD`；服务端不做格式校验。 |
 | `MAINTAIN_REASON` | 维护原因 | string | 50 | 是 | 如 `初始建立`。 |
 | `DEVICE_MAINTAIN_JOB_ID` | 点检员岗号 | string | 10 | 是 | |
 | `REC_CREATOR` | 点检员工号 | string | 10 | 是 | |
@@ -193,18 +193,18 @@ JSON 字段 key 定义如下（生成 Excel 时不写入英文列名行，列顺
 | JSON 字段 | 中文名 | 类型 | 长度 | 必填 | 说明 |
 |---|---|---|---:|---:|---|
 | `CHECK_STANDARD_ID` | 点检标准编号 | string | 12 | 是 | 必须存在于 `check_standards` 中，通过该字段归入对应 `CREATE_DEPT_ID` 分组。 |
-| `CHECK_STANDARD_SEQ_NO` | 点检标准项次 | string | 3 | 是 | 三位序号，如 `001`；同一标准下唯一。 |
+| `CHECK_STANDARD_SEQ_NO` | 点检标准项次 | string | 100 | 是 | 同一标准下唯一；服务端不做格式校验。 |
 | `CONTENT` | 内容 | string | 50 | 是 | 项次描述。 |
 | `CHECK_WAY` | 点检方法 | string | 16 | 是 | 小代码，如 `1-五感`。 |
 | `LUBRIC_WAY` | 润滑方式 | string | 16 | 是 | 小代码，如 `0-无`。 |
-| `LUBRIC_POINT` | 润滑点数 | integer | — | 否 | 润滑标准时必填，1～100。 |
+| `LUBRIC_POINT` | 润滑点数 | string | 32 | 否 | 润滑标准时必填，如 `"1"`～`"100"`。JSON 传 number 时服务端自动转为 string。 |
 | `MANAGE_CONTROL_MODE` | 管理控别 | string | 16 | 是 | 小代码，如 `0-无`。 |
 | `MANAGE_TYPE` | 管理类别 | string | 16 | 否 | 小代码。 |
 | `DATA_TYPE` | 数据类别 | string | 16 | 是 | `10-定性` / `20-定量` / `30-定量做倾向分析`。 |
 | `CRITERI` | 标准 | string | 100 | 是 | 模板列名为 `CRITERI`（非 CRITERIA）。 |
 | `UOM` | 计量单位 | string | 8 | 条件 | 定量时必填。 |
-| `QLTY_TOP` | 上限 | number | 5,2 | 条件 | 定量时可填；不带单位。 |
-| `QLTY_BOTTOM` | 下限 | number | 5,2 | 条件 | 定量时可填；不带单位。 |
+| `QLTY_TOP` | 上限 | string | 32 | 条件 | 定量时可填；不带单位。JSON 传 number 时服务端自动转为 string。 |
+| `QLTY_BOTTOM` | 下限 | string | 32 | 条件 | 定量时可填；不带单位。JSON 传 number 时服务端自动转为 string。 |
 | `ALARM_SETTINGS` | 报警设置 | string | 100 | 否 | |
 | `STATUTORY_REQ` | 法定要求 | string | 16 | 是 | 小代码，如 `0-无`。 |
 | `EQUIPMENT_NAME` | 装置名称 | string | 100 | 否 | |
@@ -238,9 +238,8 @@ JSON 字段 key 定义如下（生成 Excel 时不写入英文列名行，列顺
 | 项次关联 | 每条 `check_standard_items.CHECK_STANDARD_ID` 须出现在 `check_standards` 中。 |
 | 项次分组一致 | 项次仅通过 `CHECK_STANDARD_ID` 归入对应标准所在 `CREATE_DEPT_ID` 分组；不允许孤儿项次。 |
 | 项次序号唯一 | 同一 `CHECK_STANDARD_ID` 下 `CHECK_STANDARD_SEQ_NO` 不可重复。 |
-| 项次序号格式 | `CHECK_STANDARD_SEQ_NO` 须为 3 位字符串（如 `001`，可左补零）。 |
-| 排程日期 | `NEXT_SCHE_DATE` 须匹配 `YYYY-MM-DD`。 |
-| 定量字段 | `DATA_TYPE` 为 `20-定量` 或 `30-定量做倾向分析` 时，建议校验 `UOM` 及上下限至少一项有值。 |
+| 字段类型 | `check_standards`、`check_standard_items` 中所有业务字段均为 **string**；为兼容历史对接，JSON 中的 integer/number 会在入库前自动转为 string（如 `CHECK_PERIOD: 1` → `"1"`）。 |
+| 定量字段 | `DATA_TYPE` 为 `20-定量` 或 `30-定量做倾向分析` 时，建议校验 `UOM` 及上下限（`QLTY_TOP` / `QLTY_BOTTOM` 字符串）至少一项有值。 |
 | 数组非空 | `check_standards`、`check_standard_items` 均至少 1 条；每个 `CREATE_DEPT_ID` 分组内两项均非空。 |
 | 目录名合法 | `CREATE_DEPT_ID` 不得包含 `/`、`\` 等路径分隔符。 |
 
@@ -268,7 +267,7 @@ curl -X POST 'https://{bisheng-host}/api/v2/filelib/inspection-standard/sync' \
           "DEVICE_STATUS": "1-运转",
           "ENFORCE_CODE": "1-点检",
           "SAFETY_BOARD": "N-否",
-          "CHECK_PERIOD": 1,
+          "CHECK_PERIOD": "1",
           "PERIOD_UNIT": "W-周",
           "INTERFACE_SYSTEM": "1-智能点检系统",
           "NEXT_SCHE_DATE": "2026-05-06",
@@ -286,7 +285,7 @@ curl -X POST 'https://{bisheng-host}/api/v2/filelib/inspection-standard/sync' \
           "DEVICE_STATUS": "1-运转",
           "ENFORCE_CODE": "1-点检",
           "SAFETY_BOARD": "N-否",
-          "CHECK_PERIOD": 1,
+          "CHECK_PERIOD": "1",
           "PERIOD_UNIT": "D-天",
           "INTERFACE_SYSTEM": "1-智能点检系统",
           "NEXT_SCHE_DATE": "2026-05-06",
@@ -320,8 +319,8 @@ curl -X POST 'https://{bisheng-host}/api/v2/filelib/inspection-standard/sync' \
           "DATA_TYPE": "20-定量",
           "CRITERI": "18-27℃（通用要求）",
           "UOM": "℃",
-          "QLTY_TOP": 27,
-          "QLTY_BOTTOM": 18,
+          "QLTY_TOP": "27",
+          "QLTY_BOTTOM": "18",
           "STATUTORY_REQ": "0-无"
         }
       ]
@@ -427,7 +426,7 @@ Developer Token 通用认证错误（`19801`～`19806`、`19812`）同 [filelib-
 2. 每个 Sheet 第 1 行填中文列名（见 §4 中文名列）；第 2 行起写入该分组数据；不写入模版标题行与英文列名行。
 3. Sheet1 仅含该组 `check_standards`；Sheet2 仅含该组 `check_standard_items`（通过 `CHECK_STANDARD_ID` 关联）。
 4. `NEXT_SCHE_DATE` 列按**文本**写入，避免 Excel 自动日期序列化。
-5. `CHECK_STANDARD_SEQ_NO` 按 3 位文本写入（如 `001`）。
+5. `CHECK_STANDARD_SEQ_NO` 按原值**文本**写入（服务端不再补零或校验位数）。
 6. 不写入模板中的「说明_*」「智能点检标准小代码编制要求」等 Sheet。
 7. 生成完成后走内部 Filelib 同步，目标目录为 `{Token固定目录}/{CREATE_DEPT_ID}/{start_time年份}`。
 
