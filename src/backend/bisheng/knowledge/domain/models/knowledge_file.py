@@ -972,13 +972,21 @@ class KnowledgeFileDao(KnowledgeFileBase):
             await session.commit()
 
     @classmethod
-    def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+    def get_file_by_condition(
+        cls,
+        knowledge_id: int,
+        md5_: str = None,
+        file_name: str = None,
+        file_level_path: str | None = None,
+    ):
         with get_sync_db_session() as session:
             sql = cls._apply_duplicate_filters(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
             if md5_:
                 sql = sql.where(KnowledgeFile.md5 == md5_)
             if file_name:
                 sql = sql.where(KnowledgeFile.file_name == file_name)
+            if file_level_path is not None:
+                sql = sql.where(KnowledgeFile.file_level_path == file_level_path)
             return session.exec(sql).all()
 
     @classmethod

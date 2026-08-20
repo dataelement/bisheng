@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from fastapi import UploadFile
@@ -125,27 +125,64 @@ async def test_sync_same_name_upload_replaces_existing_without_version_link():
 
 
 @pytest.mark.asyncio
-async def test_resolve_same_name_version_overwrite_replaces_success_existing():
+async def test_resolve_same_name_version_overwrite_links_success_existing():
     knowledge_space_service = SimpleNamespace(delete_file=AsyncMock())
     service = _service(knowledge_space_service=knowledge_space_service)
     existing = [
         KnowledgeFile(id=55, knowledge_id=8, file_name="report.pdf", status=KnowledgeFileStatus.SUCCESS.value),
+    ]
+    with (
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.asyncio.to_thread",
+            new=AsyncMock(
+                side_effect=[
+                    SimpleNamespace(file_level_path="", knowledge_id=8),
+                    existing,
+                ]
+            ),
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.resolve_version_link_target_document_id",
+            new=AsyncMock(return_value=7001),
+        ) as mock_resolve,
+    ):
+        replaced_file_id, target_document_id = await service._resolve_same_name_version_overwrite(
+            knowledge_id=8,
+            folder_id=9001,
+            file_name="report.pdf",
+        )
+
+    assert replaced_file_id == 55
+    assert target_document_id == 7001
+    mock_resolve.assert_awaited_once()
+    knowledge_space_service.delete_file.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_resolve_same_name_version_overwrite_deletes_non_success_existing():
+    knowledge_space_service = SimpleNamespace(delete_file=AsyncMock())
+    service = _service(knowledge_space_service=knowledge_space_service)
+    existing = [
         KnowledgeFile(id=56, knowledge_id=8, file_name="report.pdf", status=KnowledgeFileStatus.WAITING.value),
     ]
     with patch(
         "bisheng.open_endpoints.domain.services.filelib_sync_service.asyncio.to_thread",
-        new=AsyncMock(return_value=existing),
+        new=AsyncMock(
+            side_effect=[
+                SimpleNamespace(file_level_path="", knowledge_id=8),
+                existing,
+            ]
+        ),
     ):
         replaced_file_id, target_document_id = await service._resolve_same_name_version_overwrite(
             knowledge_id=8,
+            folder_id=9001,
             file_name="report.pdf",
         )
 
     assert replaced_file_id is None
     assert target_document_id is None
-    assert knowledge_space_service.delete_file.await_count == 2
-    knowledge_space_service.delete_file.assert_any_await(55)
-    knowledge_space_service.delete_file.assert_any_await(56)
+    knowledge_space_service.delete_file.assert_awaited_once_with(56)
 
 
 @pytest.mark.asyncio
@@ -170,6 +207,7 @@ async def test_complete_pending_filelib_sync_version_link_calls_link_service():
         message_service=None,
     )
 
+    mock_session = SimpleNamespace(sync_session=MagicMock())
     with (
         patch(
             "bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.query_by_id_sync",
@@ -190,7 +228,7 @@ async def test_complete_pending_filelib_sync_version_link_calls_link_service():
             return_value=link_service,
         ),
     ):
-        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=object())
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=False)
         linked = await complete_pending_filelib_sync_version_link(99)
 

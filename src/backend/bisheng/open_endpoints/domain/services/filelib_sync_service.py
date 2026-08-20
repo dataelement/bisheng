@@ -48,6 +48,7 @@ from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import Fil
 from bisheng.open_endpoints.domain.services.filelib_sync_version_link_service import (
     FILELIB_SYNC_PENDING_VERSION_LINK_KEY,
     build_filelib_sync_pending_version_link_metadata,
+    resolve_version_link_target_document_id,
 )
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     PortalDocumentTypeChildConfig,
@@ -200,6 +201,7 @@ class FilelibSyncService:
 
             replaced_file_id, target_document_id = await self._resolve_same_name_version_overwrite(
                 knowledge_id=int(target.space.id),
+                folder_id=target.folder_id,
                 file_name=params.file_name,
             )
 
@@ -978,20 +980,60 @@ class FilelibSyncService:
         self,
         *,
         knowledge_id: int,
+        folder_id: int | None,
         file_name: str,
     ) -> tuple[int | None, int | None]:
-        """Remove same-name files so the incoming upload replaces rather than duplicates."""
+        """Replace same-name files in the target folder via version link or delete."""
+        file_level_path = await self._resolve_upload_file_level_path(
+            knowledge_id=knowledge_id,
+            folder_id=folder_id,
+        )
         existing_files = await asyncio.to_thread(
             KnowledgeFileDao.get_file_by_condition,
             knowledge_id=knowledge_id,
             file_name=file_name,
+            file_level_path=file_level_path,
         )
         if not existing_files:
             return None, None
 
         for existing_file in existing_files:
+            if int(existing_file.status) != KnowledgeFileStatus.SUCCESS.value:
+                continue
+            try:
+                target_document_id = await resolve_version_link_target_document_id(
+                    request=self.request,
+                    login_user=self.login_user,
+                    existing_file=existing_file,
+                )
+            except ValueError as exc:
+                logger.warning(
+                    "filelib sync version-link overwrite skipped file_id={} error={}",
+                    existing_file.id,
+                    exc,
+                )
+                continue
+            return int(existing_file.id), int(target_document_id)
+
+        for existing_file in existing_files:
+            if int(existing_file.status) == KnowledgeFileStatus.SUCCESS.value:
+                continue
             await self._remove_same_name_file_for_sync_replace(int(existing_file.id))
         return None, None
+
+    @staticmethod
+    async def _resolve_upload_file_level_path(
+        *,
+        knowledge_id: int,
+        folder_id: int | None,
+    ) -> str:
+        if folder_id is None:
+            return ""
+        folder = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, int(folder_id))
+        if folder is None or int(folder.knowledge_id) != int(knowledge_id):
+            raise FilelibSyncNotFoundError(msg="target folder does not exist")
+        parent_path = folder.file_level_path or ""
+        return f"{parent_path}/{int(folder_id)}" if parent_path else str(int(folder_id))
 
     async def _remove_same_name_file_for_sync_replace(self, file_id: int) -> None:
         try:
