@@ -272,7 +272,7 @@ export function FileCard({
                         : "分享文件"}
             </span>
         );
-        const similarIndicator = versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && !file.is_multi_version && (
+        const similarIndicator = versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && (
             <button
                 type="button"
                 onClick={(e) => {

@@ -389,7 +389,7 @@ export function KnowledgeSpaceContent({
     // deleting a folder whose children carry similar marks) where the visible
     // displayFiles slice doesn't see the cascaded removals.
     const similarFileIdsKey = displayFiles
-        .filter((f) => f.has_similar && !f.is_multi_version)
+        .filter((f) => f.has_similar)
         .map((f) => f.id)
         .sort()
         .join(",");

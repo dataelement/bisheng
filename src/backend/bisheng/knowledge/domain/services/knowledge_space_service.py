@@ -13405,16 +13405,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         actionable_similar_file_ids: set[int] | None = None
         similar_candidate_repo = getattr(self, "similar_candidate_repo", None)
         if similar_candidate_repo is not None:
-            single_version_source_file_ids: list[int] = []
-            for item in file_items:
-                if item.similar_status != 1:
-                    continue
-                ver = ver_by_file.get(item.id)
-                if ver is not None and doc_version_counts.get(ver.document_id, 1) > 1:
-                    continue
-                single_version_source_file_ids.append(int(item.id))
+            # A file already in a multi-version chain used to be excluded here, so
+            # its badge never appeared even when it had live candidates. Being
+            # versioned and having a near-duplicate elsewhere are separate facts;
+            # the link path accepts both, so the badge has to show for both.
+            similar_source_file_ids = [int(item.id) for item in file_items if item.similar_status == 1]
             actionable_similar_file_ids = await similar_candidate_repo.find_actionable_source_file_ids(
-                single_version_source_file_ids
+                similar_source_file_ids
             )
 
         for item in file_items:

@@ -1558,7 +1558,7 @@ function FileRow({
                                         {`V${file.version_no}`}
                                     </span>
                                 )}
-                                {versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && !file.is_multi_version && (
+                                {versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && (
                                     <button
                                         type="button"
                                         onClick={(e) => {
