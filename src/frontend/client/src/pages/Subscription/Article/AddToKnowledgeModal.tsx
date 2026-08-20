@@ -206,7 +206,7 @@ function TreeNode({
     const { showToast } = useToastContext();
 
     return (
-        <div className="w-full min-w-0 max-w-full">
+        <div className="w-full min-w-0 max-w-full space-y-1">
             <div
                 className={`group relative flex w-full min-w-0 max-w-full box-border items-center gap-1.5 py-1 px-2 rounded-md cursor-pointer text-sm select-none overflow-hidden
                     ${isSelected ? "bg-blue-50 text-primary" : "fine-pointer:hover:bg-gray-50 coarse-pointer:hover:bg-transparent"}`}
@@ -272,7 +272,7 @@ function TreeNode({
 
             {/* Children */}
             {isExpanded && node.children && node.children.length > 0 && (
-                <div className="w-full min-w-0 max-w-full">
+                <div className="w-full min-w-0 max-w-full space-y-1">
                     {node.children.map(child => (
                         <TreeNode
                             key={child.id}
@@ -801,16 +801,16 @@ export function AddToKnowledgeModal({
                             ? "mb-4 flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
                             : isArticleMobileFullScreen
                                 ? "flex min-h-0 flex-1 flex-col px-4 pt-4 pb-[84px]"
-                            : "flex min-h-0 flex-1 flex-col px-6 pt-4 touch-mobile:px-4"
+                            : "flex min-h-0 flex-1 flex-col px-5 pt-4 touch-mobile:px-4"
                 }
             >
                 <div
                     ref={treeScrollRevealRef}
                     className={
                         useFlexTree
-                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll"
+                            ? "scrollbar-gutter-stable flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-1 scrollbar-on-scroll"
                             : cn(
-                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-3 scrollbar-on-scroll",
+                                "scrollbar-gutter-stable h-[340px] max-h-full w-full overflow-y-auto overflow-x-hidden rounded-md border border-[#ECECEC] p-1 scrollbar-on-scroll",
                                 mode === "article" && isH5 && "touch-mobile:h-[calc(var(--bs-dvh,100dvh)-260px)]",
                             )
                     }
@@ -830,7 +830,7 @@ export function AddToKnowledgeModal({
                             <p className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.no_matching_knowledge_space")}</p>
                         </div>
                     ) : (
-                        <div className="w-full min-w-0 max-w-full py-1">
+                        <div className="w-full min-w-0 max-w-full space-y-1 pb-1">
                             {displayTree.map(node => (
                                 <TreeNode
                                     key={node.id}
