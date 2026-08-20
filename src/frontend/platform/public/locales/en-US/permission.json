@@ -191,7 +191,10 @@
     "summaryOnly": "You can only view your own permission summary.",
     "protected": "Protected",
     "readOnly": "Read-only",
-    "inheritedFrom": "Inherited from"
+    "inheritedFrom": "Inherited from",
+    "parentFolder": "Parent folder",
+    "parentKnowledgeSpace": "Parent knowledge space",
+    "parentResource": "Parent resource"
   },
   "scope": {
     "local": "Local",

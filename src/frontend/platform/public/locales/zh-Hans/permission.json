@@ -191,7 +191,10 @@
     "summaryOnly": "你只能查看自己的权限摘要",
     "protected": "受保护",
     "readOnly": "只读",
-    "inheritedFrom": "继承自"
+    "inheritedFrom": "继承自",
+    "parentFolder": "上级文件夹",
+    "parentKnowledgeSpace": "上级知识空间",
+    "parentResource": "上级资源"
   },
   "scope": {
     "local": "本级",

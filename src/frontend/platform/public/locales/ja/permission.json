@@ -191,7 +191,10 @@
     "summaryOnly": "自分の権限概要のみ表示できます。",
     "protected": "保護対象",
     "readOnly": "読み取り専用",
-    "inheritedFrom": "継承元"
+    "inheritedFrom": "継承元",
+    "parentFolder": "上位フォルダー",
+    "parentKnowledgeSpace": "上位ナレッジスペース",
+    "parentResource": "上位リソース"
   },
   "scope": {
     "local": "ローカル",

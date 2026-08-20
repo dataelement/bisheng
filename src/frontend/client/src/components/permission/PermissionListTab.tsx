@@ -76,6 +76,26 @@ function getAvatarLabel(assignee: PermissionGrantAssignee): string {
   return (name.charAt(0) || "U").toUpperCase();
 }
 
+function getInheritedSourceLabel(
+  assignee: PermissionGrantAssignee,
+  localize: (key: string) => string,
+): string {
+  const resolvedName = assignee.inherited_from_name?.trim();
+  if (resolvedName) return resolvedName;
+
+  const resourceType = assignee.inherited_from?.split(":", 1)[0];
+  if (resourceType === "folder") {
+    return localize("f048_permission.roster.parent_folder");
+  }
+  if (
+    resourceType === "knowledge_space" ||
+    resourceType === "knowledge_library"
+  ) {
+    return localize("f048_permission.roster.parent_knowledge_space");
+  }
+  return localize("f048_permission.roster.parent_resource");
+}
+
 interface RosterRowProps {
   assignee: PermissionGrantAssignee;
   context: ResourcePermissionContext;
@@ -135,7 +155,7 @@ function RosterRow({
             {assignee.inherited_from && (
               <span className="truncate">
                 · {localize("f048_permission.roster.inherited_from")}: {" "}
-                {assignee.inherited_from_name || assignee.inherited_from}
+                {getInheritedSourceLabel(assignee, localize)}
               </span>
             )}
           </div>

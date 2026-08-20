@@ -174,6 +174,10 @@ describe("F048 Client PermissionListTab", () => {
 
     const protectedRow = await screen.findByTestId("permission-assignee-3");
     expect(protectedRow).toHaveAttribute("data-editable", "false");
+    expect(protectedRow).toHaveTextContent(
+      "f048_permission.roster.parent_folder",
+    );
+    expect(protectedRow).not.toHaveTextContent("folder:parent-1");
     expect(
       screen.getByLabelText("f048_permission.roster.protected"),
     ).toBeInTheDocument();
