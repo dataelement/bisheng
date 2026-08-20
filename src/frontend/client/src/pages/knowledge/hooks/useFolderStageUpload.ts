@@ -22,8 +22,11 @@ import {
     extractDuplicateFileEntries,
     partitionUploadMutationResults,
     registerFolderStagesWithRetry,
+    sumFileSizes,
     uploadFilesSequential,
     type DuplicateFileEntry,
+    type RefreshQuota,
+    type StorageQuotaGuard,
 } from "./fileUploadUtils";
 import { handleUploadMutationFeedback } from "./stageUploadFeedback";
 
@@ -37,10 +40,15 @@ interface UseFolderStageUploadOptions {
     localize: Localize;
     showToast: ShowToast;
     setDuplicateFiles: React.Dispatch<React.SetStateAction<DuplicateFileEntry[]>>;
+    isStorageBlocked: StorageQuotaGuard;
+    refreshQuota: RefreshQuota;
 }
 
 export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
-    const { activeSpace, currentFolderId, loadFiles, localize, showToast, setDuplicateFiles } = options;
+    const {
+        activeSpace, currentFolderId, loadFiles, localize, showToast,
+        setDuplicateFiles, isStorageBlocked, refreshQuota,
+    } = options;
     const [uploadingFolder, setUploadingFolder] = useState<KnowledgeFile | null>(null);
     const folderUploadInFlightRef = useRef(false);
 
@@ -49,6 +57,7 @@ export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
         uploadOptions: { allowedExtensions: readonly string[]; maxSizeMB: number; limits?: UploadSizeLimits },
     ) => {
         if (!activeSpace || !fileList || fileList.length === 0 || folderUploadInFlightRef.current) return;
+        if (isStorageBlocked()) return;
         folderUploadInFlightRef.current = true;
         let placeholderShown = false;
         try {
@@ -109,6 +118,9 @@ export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
                 });
                 return;
             }
+            // Capacity pre-check on what will actually be stored, so filtered-out
+            // files do not count against the remaining space.
+            if (isStorageBlocked(sumFileSizes(valid))) return;
 
             const uploadedItems: FolderUploadItemPayload[] = [];
             const { failures, earlyStop } = await uploadFilesSequential(
@@ -123,13 +135,19 @@ export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
             );
             const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
             if (failureMessage) showToast({ message: failureMessage, severity: NotificationSeverity.ERROR });
-            if (uploadedItems.length === 0) return;
+            if (uploadedItems.length === 0) {
+                // A quota rejection means the cached numbers are already stale.
+                refreshQuota();
+                return;
+            }
 
             const mutationResults = partitionUploadMutationResults(await registerFolderStagesWithRetry({
                 spaceId: activeSpace.id,
                 parentId: currentFolderId ? Number(currentFolderId) : null,
                 items: uploadedItems,
             }));
+            // Usage counts registered files only, so this is where it moved.
+            refreshQuota();
             const duplicates = extractDuplicateFileEntries(mutationResults.directFiles);
             if (duplicates.length > 0) setDuplicateFiles(duplicates);
             handleUploadMutationFeedback(activeSpace.id, mutationResults, localize, showToast);
@@ -142,7 +160,7 @@ export function useFolderStageUpload(options: UseFolderStageUploadOptions) {
             folderUploadInFlightRef.current = false;
             if (placeholderShown) setUploadingFolder(null);
         }
-    }, [activeSpace, currentFolderId, loadFiles, localize, setDuplicateFiles, showToast]);
+    }, [activeSpace, currentFolderId, isStorageBlocked, loadFiles, localize, refreshQuota, setDuplicateFiles, showToast]);
 
     return { uploadingFolder, handleUploadFolder };
 }

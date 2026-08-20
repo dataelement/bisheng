@@ -9,8 +9,11 @@ import {
     mergeVisibleRegisteredFiles,
     partitionUploadMutationResults,
     registerUploadedStagesWithRetry,
+    sumFileSizes,
     uploadFilesSequential,
     type DuplicateFileEntry,
+    type RefreshQuota,
+    type StorageQuotaGuard,
 } from "./fileUploadUtils";
 import { getFileTypeFromName } from "../knowledgeUtils";
 import { handleUploadMutationFeedback, REGISTERED_PROCESSING_STATUSES } from "./stageUploadFeedback";
@@ -28,12 +31,14 @@ interface UseFileStageUploadOptions {
     localize: Localize;
     showToast: ShowToast;
     setDuplicateFiles: React.Dispatch<React.SetStateAction<DuplicateFileEntry[]>>;
+    isStorageBlocked: StorageQuotaGuard;
+    refreshQuota: RefreshQuota;
 }
 
 export function useFileStageUpload(options: UseFileStageUploadOptions) {
     const {
         activeSpace, currentFolderId, files, setFiles, setTotal, loadFiles,
-        localize, showToast, setDuplicateFiles,
+        localize, showToast, setDuplicateFiles, isStorageBlocked, refreshQuota,
     } = options;
     const [uploadingFiles, setUploadingFiles] = useState<KnowledgeFile[]>([]);
 
@@ -43,6 +48,9 @@ export function useFileStageUpload(options: UseFileStageUploadOptions) {
             return;
         }
         const fileArray = Array.from(fileList);
+        // Upfront capacity check on the whole batch; the server rejection stays
+        // authoritative, this only avoids a pointless upload round-trip.
+        if (isStorageBlocked(sumFileSizes(fileArray))) return;
         const placeholders: KnowledgeFile[] = fileArray.map((file) => ({
             id: `upload_${Date.now()}_${Math.random().toString(36).substring(7)}`,
             name: file.name,
@@ -70,6 +78,9 @@ export function useFileStageUpload(options: UseFileStageUploadOptions) {
         const failureMessage = buildUploadFailureMessage(failures, earlyStop, localize);
         if (failureMessage) showToast({ message: failureMessage, severity: NotificationSeverity.ERROR });
         if (uploadIds.length === 0) {
+            // Nothing was stored, but a quota rejection means the cached numbers
+            // no longer match the server — re-read them.
+            refreshQuota();
             setUploadingFiles((previous) => previous.filter(
                 (file) => !placeholders.some((placeholder) => placeholder.id === file.id),
             ));
@@ -101,11 +112,13 @@ export function useFileStageUpload(options: UseFileStageUploadOptions) {
             console.error("[useFileUpload] file registration failed:", error);
             showToast({ message: localize("com_knowledge.file_register_failed"), severity: NotificationSeverity.ERROR });
         } finally {
+            // Usage counts registered files only, so this is where it moved.
+            refreshQuota();
             setUploadingFiles((previous) => previous.filter(
                 (file) => !placeholders.some((placeholder) => placeholder.id === file.id),
             ));
         }
-    }, [activeSpace, currentFolderId, files, loadFiles, localize, setDuplicateFiles, setFiles, setTotal, showToast]);
+    }, [activeSpace, currentFolderId, files, isStorageBlocked, loadFiles, localize, refreshQuota, setDuplicateFiles, setFiles, setTotal, showToast]);
 
     return { uploadingFiles, handleUploadFile };
 }

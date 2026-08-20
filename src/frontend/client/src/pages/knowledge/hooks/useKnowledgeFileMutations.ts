@@ -15,6 +15,7 @@ import {
 import { NotificationSeverity } from "~/common";
 
 import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
+import { type RefreshQuota } from "./fileUploadUtils";
 import {
     applyBatchDeleteDecision,
     applyBatchRenameDecision,
@@ -34,6 +35,7 @@ interface UseKnowledgeFileMutationsOptions {
     loadFiles: (page?: number) => Promise<void>;
     localize: Localize;
     showToast: ShowToast;
+    refreshQuota: RefreshQuota;
 }
 
 function showInvalidItems(
@@ -58,6 +60,7 @@ export function useKnowledgeFileMutations({
     loadFiles,
     localize,
     showToast,
+    refreshQuota,
 }: UseKnowledgeFileMutationsOptions) {
     const handleRenameExisting = useCallback(async (fileId: string, newName: string) => {
         if (!activeSpace) return;
@@ -118,6 +121,7 @@ export function useKnowledgeFileMutations({
             setFiles((previous) => applyDeleteDecision(previous, fileId, result));
             setTotal((previous) => Math.max(0, previous - 1));
             if (target.type === FileType.FOLDER) dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            refreshQuota();
             showToast({
                 message: localize("com_knowledge.deleted"),
                 severity: NotificationSeverity.SUCCESS,
@@ -128,7 +132,7 @@ export function useKnowledgeFileMutations({
                 severity: NotificationSeverity.ERROR,
             });
         }
-    }, [activeSpace, files, loadFiles, localize, setFiles, setTotal, showToast]);
+    }, [activeSpace, files, loadFiles, localize, refreshQuota, setFiles, setTotal, showToast]);
 
     const handleBatchDelete = useCallback(async (ids: Array<string | number>): Promise<boolean> => {
         if (!activeSpace || ids.length === 0) return false;
@@ -142,6 +146,7 @@ export function useKnowledgeFileMutations({
             setFiles((previous) => applyBatchDeleteDecision(previous, result));
             if (result.completed.length > 0) {
                 setTotal((previous) => Math.max(0, previous - result.completed.length));
+                refreshQuota();
             }
             if (result.completed.some((item) => item.type === "folder")) {
                 dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
@@ -152,7 +157,7 @@ export function useKnowledgeFileMutations({
         } catch {
             return false;
         }
-    }, [activeSpace, files, localize, setFiles, setTotal, showToast]);
+    }, [activeSpace, files, localize, refreshQuota, setFiles, setTotal, showToast]);
 
     const handleBatchRename = useCallback(async (
         items: Array<{ id: string; name: string }>,

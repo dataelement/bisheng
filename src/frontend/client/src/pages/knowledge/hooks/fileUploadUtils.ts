@@ -42,6 +42,19 @@ type FolderStageRegister = (
 
 const COLLAPSIBLE_CODES = new Set([18024, 19402, 19403]);
 
+/**
+ * Returns true when the action must not proceed, having already told the user
+ * why. The byte total is optional: without it only the exhausted state is
+ * checked. Server-side quota enforcement stays authoritative.
+ */
+export type StorageQuotaGuard = (uploadBytes?: number) => boolean;
+/** Invalidates the shared effective-quota cache after usage may have moved. */
+export type RefreshQuota = () => void;
+
+/** Total byte size of an upload batch, for the personal-storage pre-check. */
+export const sumFileSizes = (files: File[]): number =>
+    files.reduce((total, file) => total + file.size, 0);
+
 function resolveUploadErrorReason(error: unknown): string {
     const err = error as UploadErrorShape;
     const statusCode = err.statusCode ?? err.response?.data?.status_code;
