@@ -136,6 +136,12 @@ class SwitchPrimaryManagerResult:
     idempotent: bool = False
 
 
+@dataclass(frozen=True)
+class UpdateManagerMetadataResult:
+    manager_file: KnowledgeFile
+    active_entry_ids: tuple[int, ...]
+
+
 async def _default_permission_snapshot_loader(
     file_id: int,
 ) -> Sequence[TupleOperation]:
@@ -868,6 +874,77 @@ class KnowledgeDocumentDistributionService:
         )
         await self._commit()
         return int(document.content_generation)
+
+    async def update_manager_metadata(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        manager_file_id: int,
+        split_rule: str | None,
+        file_encoding: str | None,
+        file_subcategory_code: str | None,
+        file_subcategory_source: str | None,
+        updater_id: int,
+        updater_name: str | None,
+    ) -> UpdateManagerMetadataResult:
+        """Sync portal classification metadata to active canonical entries."""
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        manager = await self.file_repository.find_by_id_for_update(manager_file_id)
+        primary_version = (
+            await self.version_repository.find_by_id(int(document.primary_version_id))
+            if document is not None and document.primary_version_id is not None
+            else None
+        )
+        self._validate_switch_manager_state(
+            tenant_id=tenant_id,
+            document=document,
+            current_manager=manager,
+            target_version=primary_version,
+            target_file=manager,
+        )
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            statuses={KnowledgeFileEntryStatus.ACTIVE.value},
+            for_update=True,
+        )
+        active_entry_types = {
+            KnowledgeFileEntryType.MANAGER.value,
+            KnowledgeFileEntryType.PUBLISH.value,
+            KnowledgeFileEntryType.SHARE.value,
+        }
+        if not any(int(entry.id) == manager_file_id for entry in entries):
+            raise KnowledgeDocumentDistributionError(
+                "active canonical manager is missing from distribution entries"
+            )
+
+        document.content_generation += 1
+        for entry in entries:
+            if entry.entry_type not in active_entry_types:
+                continue
+            entry.split_rule = split_rule
+            entry.file_encoding = file_encoding
+            entry.file_subcategory_code = file_subcategory_code
+            entry.file_subcategory_source = file_subcategory_source
+            entry.updater_id = updater_id
+            entry.updater_name = updater_name
+            entry.desired_content_generation = int(document.content_generation)
+            entry.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+            entry.projection_next_retry_at = None
+            self.session.add(entry)
+        self.session.add(document)
+        await self.session.flush()
+        await self._commit()
+        return UpdateManagerMetadataResult(
+            manager_file=manager,
+            active_entry_ids=tuple(
+                sorted(
+                    int(entry.id)
+                    for entry in entries
+                    if entry.entry_type in active_entry_types
+                )
+            ),
+        )
 
     @staticmethod
     def _create_publish_entry(

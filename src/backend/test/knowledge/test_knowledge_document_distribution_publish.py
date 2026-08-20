@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -139,6 +140,146 @@ async def _seed_manager(session: AsyncSession) -> None:
         ]
     )
     await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_manager_metadata_update_syncs_only_active_distribution_entries(
+    async_db_session: AsyncSession,
+):
+    """Manager classification metadata is copied only to active entries."""
+    await _seed_manager(async_db_session)
+    old_split_rule = json.dumps(
+        {"file_category_code": "STD", "business_domain_code": "EM"},
+        ensure_ascii=False,
+    )
+    manager = await KnowledgeFileRepositoryImpl(async_db_session).find_by_id(100)
+    manager.split_rule = old_split_rule
+    manager.file_encoding = "SGGF-STD-EM-20260800000001"
+    manager.file_subcategory_code = "STD"
+    manager.file_subcategory_source = "ai"
+    async_db_session.add_all(
+        [
+            manager,
+            KnowledgeFile(
+                id=101,
+                tenant_id=7,
+                knowledge_id=30,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                split_rule=old_split_rule,
+                file_encoding="SGGF-STD-EM-20260800000001",
+                file_subcategory_code="STD",
+                file_subcategory_source="ai",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.PUBLISH.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                file_level_path="/301",
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+            KnowledgeFile(
+                id=102,
+                tenant_id=7,
+                knowledge_id=40,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                split_rule=old_split_rule,
+                file_encoding="SGGF-STD-EM-20260800000001",
+                file_subcategory_code="STD",
+                file_subcategory_source="ai",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.SHARE.value,
+                entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+                file_level_path="/401",
+                allow_download=True,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+            KnowledgeFile(
+                id=103,
+                tenant_id=7,
+                knowledge_id=50,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                split_rule=old_split_rule,
+                file_encoding="SGGF-STD-EM-20260800000001",
+                file_subcategory_code="STD",
+                file_subcategory_source="ai",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.SHARE.value,
+                entry_status=KnowledgeFileEntryStatus.INVALID.value,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+            KnowledgeFile(
+                id=104,
+                tenant_id=7,
+                knowledge_id=60,
+                file_name="canonical.pdf",
+                status=KnowledgeFileStatus.SUCCESS.value,
+                split_rule=old_split_rule,
+                file_encoding="SGGF-STD-EM-20260800000001",
+                file_subcategory_code="STD",
+                file_subcategory_source="ai",
+                reference_document_id=91,
+                entry_type=KnowledgeFileEntryType.PUBLISH.value,
+                entry_status=KnowledgeFileEntryStatus.DELETING.value,
+                projection_status=KnowledgeFileProjectionStatus.READY.value,
+                desired_content_generation=3,
+                applied_content_generation=3,
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    new_split_rule = json.dumps(
+        {"file_category_code": "RPT", "business_domain_code": "PP"},
+        ensure_ascii=False,
+    )
+    updated = await _service(async_db_session).update_manager_metadata(
+        tenant_id=7,
+        document_id=91,
+        manager_file_id=100,
+        split_rule=new_split_rule,
+        file_encoding="SGGF-RPT-PP-20260800000001",
+        file_subcategory_code="RPT",
+        file_subcategory_source="manual",
+        updater_id=700,
+        updater_name="元数据管理员",
+    )
+
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    entries = {
+        int(item.id): item
+        for item in await repository.find_distribution_entries_by_document_id(91)
+    }
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+
+    assert updated.manager_file.id == 100
+    assert updated.active_entry_ids == (100, 101, 102)
+    assert document.content_generation == 4
+    for entry_id in (100, 101, 102):
+        entry = entries[entry_id]
+        assert entry.split_rule == new_split_rule
+        assert entry.file_encoding == "SGGF-RPT-PP-20260800000001"
+        assert entry.file_subcategory_code == "RPT"
+        assert entry.file_subcategory_source == "manual"
+        assert entry.desired_content_generation == 4
+        assert entry.projection_status == KnowledgeFileProjectionStatus.PENDING.value
+        assert entry.projection_next_retry_at is None
+
+    assert entries[101].file_level_path == "/301"
+    assert entries[102].file_level_path == "/401"
+    assert entries[102].allow_download is True
+    for entry_id in (103, 104):
+        entry = entries[entry_id]
+        assert entry.split_rule == old_split_rule
+        assert entry.file_encoding == "SGGF-STD-EM-20260800000001"
+        assert entry.file_subcategory_code == "STD"
+        assert entry.file_subcategory_source == "ai"
 
 
 async def _seed_ordinary_file(

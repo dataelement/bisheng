@@ -35,7 +35,13 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeState,
     KnowledgeTypeEnum,
 )
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileStatus
+from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
+    KnowledgeFile,
+    KnowledgeFileEntryStatus,
+    KnowledgeFileEntryType,
+    KnowledgeFileStatus,
+)
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum, KnowledgeSpaceOwnerTypeEnum
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalFileBrowseReq,
@@ -1889,6 +1895,120 @@ async def test_update_file_encoding_syncs_split_rule_category_and_business_domai
     split_rule = json.loads(updated.split_rule)
     assert split_rule["file_category_code"] == "RPT"
     assert split_rule["business_domain_code"] == "PP"
+
+
+@pytest.mark.asyncio
+async def test_update_file_encoding_routes_manager_metadata_through_distribution_transaction(service):
+    """Distributed manager edits use the canonical metadata transaction."""
+    service.normalize_file_category_code = lambda value: str(value).strip().upper() if value else None
+    file_record = _make_file(
+        file_id=501,
+        knowledge_id=10,
+        file_name="编码文档.pdf",
+    )
+    file_record.tenant_id = 1
+    file_record.reference_document_id = 91
+    file_record.entry_type = KnowledgeFileEntryType.MANAGER.value
+    file_record.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
+    file_record.file_encoding = "SGGF-STD-EM-20260600000001"
+    file_record.split_rule = json.dumps(
+        {"file_category_code": "STD", "business_domain_code": "EM"},
+        ensure_ascii=False,
+    )
+    file_record.file_subcategory_code = "STD"
+    file_record.file_subcategory_source = "ai"
+    distribution_service = SimpleNamespace(
+        update_manager_metadata=AsyncMock(
+            return_value=SimpleNamespace(
+                manager_file=file_record,
+                active_entry_ids=(501, 502, 503),
+            )
+        ),
+    )
+    service.document_distribution_service = distribution_service
+
+    with (
+        patch.object(
+            service,
+            "_get_file_for_action",
+            new_callable=AsyncMock,
+            return_value=file_record,
+        ),
+        patch.object(
+            service,
+            "_require_file_metadata_edit_permission",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(entry_type=KnowledgeFileEntryType.MANAGER.value),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aquery_by_id",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(business_domain_codes=["PP", "EM"]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.acount_by_file_encoding",
+            new_callable=AsyncMock,
+            return_value=0,
+            create=True,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.async_update",
+            new_callable=AsyncMock,
+        ) as legacy_update,
+        patch.object(
+            service,
+            "_notify_favorite_source_changed",
+            new_callable=AsyncMock,
+        ),
+        patch.object(
+            service,
+            "_mark_document_content_changed",
+            new_callable=AsyncMock,
+        ) as legacy_touch,
+        patch.object(
+            service,
+            "_enqueue_recommendation_file_refresh",
+        ) as enqueue_single_recommendation,
+        patch.object(
+            service,
+            "_enqueue_recommendation_files_refresh",
+        ) as enqueue_recommendations,
+        patch.object(
+            service,
+            "_enqueue_document_distribution_projection",
+            new_callable=AsyncMock,
+        ) as enqueue_distribution_projection,
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceContentStat.enqueue_file_stat_async",
+            new_callable=AsyncMock,
+        ) as enqueue_stats,
+    ):
+        await service.update_file_encoding(
+            501,
+            "SGGF-RPT-PP-20260600000001",
+            file_subcategory_code="RPT",
+        )
+
+    distribution_service.update_manager_metadata.assert_awaited_once_with(
+        tenant_id=1,
+        document_id=91,
+        manager_file_id=501,
+        split_rule=file_record.split_rule,
+        file_encoding="SGGF-RPT-PP-20260600000001",
+        file_subcategory_code="RPT",
+        file_subcategory_source="manual",
+        updater_id=service.login_user.user_id,
+        updater_name=service.login_user.user_name,
+    )
+    legacy_update.assert_not_awaited()
+    legacy_touch.assert_not_awaited()
+    enqueue_stats.assert_awaited_once_with([501, 502, 503])
+    enqueue_recommendations.assert_called_once_with([501, 502, 503])
+    enqueue_single_recommendation.assert_not_called()
+    enqueue_distribution_projection.assert_awaited_once_with(
+        tenant_id=1,
+        entry_ids=[501, 502, 503],
+    )
 
 
 @pytest.mark.asyncio
