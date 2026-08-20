@@ -163,6 +163,52 @@ async def _seed_assistant(session, aid: str, user_id: int, tenant_id: int):
     )
 
 
+async def _seed_user(session, user_id: int, user_name: str):
+    await session.execute(
+        __import__('sqlalchemy').text(
+            'INSERT INTO user (user_id, user_name, password) '
+            'VALUES (:uid, :name, :pwd)'
+        ),
+        {'uid': user_id, 'name': user_name, 'pwd': 'hashed'},
+    )
+
+
+async def _seed_knowledge_file(
+    session,
+    file_id: int,
+    user_id: int,
+    tenant_id: int,
+    *,
+    user_name: str,
+    updater_id: int,
+    updater_name: str,
+    original_uploader_id: int,
+    knowledge_id: int = 10,
+):
+    await session.execute(
+        __import__('sqlalchemy').text(
+            'INSERT INTO knowledgefile ('
+            'id, tenant_id, user_id, user_name, knowledge_id, file_name, file_type, '
+            'updater_id, updater_name, original_uploader_id'
+            ') VALUES ('
+            ':id, :tid, :uid, :user_name, :kid, :file_name, 1, '
+            ':updater_id, :updater_name, :original_uploader_id'
+            ')'
+        ),
+        {
+            'id': file_id,
+            'tid': tenant_id,
+            'uid': user_id,
+            'user_name': user_name,
+            'kid': knowledge_id,
+            'file_name': f'file-{file_id}.txt',
+            'updater_id': updater_id,
+            'updater_name': updater_name,
+            'original_uploader_id': original_uploader_id,
+        },
+    )
+
+
 # =========================================================================
 # AC-03 / AC-08 / AC-08b / AC-08c / AC-08d / AD-03: validations
 # =========================================================================
@@ -446,6 +492,107 @@ class TestPendingTransfer:
             )
 
         assert items == []
+
+
+# =========================================================================
+# knowledgefile denormalized uploader fields
+# =========================================================================
+
+@pytest.mark.asyncio
+class TestKnowledgeFileDenormalizedFields:
+
+    async def test_transfer_syncs_uploader_updater_original_uploader(
+        self,
+        tenant_admin,
+        patch_leaf_resolver,
+        sqlite_session,
+        patch_fga,
+        patch_audit,
+    ):
+        await _seed_user(sqlite_session, 100, 'DeletedUser')
+        await _seed_user(sqlite_session, 200, 'DeptAdmin')
+        await _seed_knowledge_file(
+            sqlite_session,
+            file_id=501,
+            user_id=100,
+            tenant_id=2,
+            user_name='DeletedUser',
+            updater_id=100,
+            updater_name='DeletedUser',
+            original_uploader_id=100,
+        )
+        await sqlite_session.commit()
+
+        with patch_leaf_resolver({200: 2}):
+            result = await ResourceOwnershipService.transfer_owner(
+                tenant_id=2,
+                from_user_id=100,
+                to_user_id=200,
+                resource_types=['knowledge_file'],
+                operator=tenant_admin,
+            )
+
+        assert result['transferred_count'] == 1
+        row = (
+            await sqlite_session.execute(
+                __import__('sqlalchemy').text(
+                    'SELECT user_id, user_name, updater_id, updater_name, original_uploader_id '
+                    'FROM knowledgefile WHERE id = 501'
+                )
+            )
+        ).one()
+        assert row.user_id == 200
+        assert row.user_name == 'DeptAdmin'
+        assert row.updater_id == 200
+        assert row.updater_name == 'DeptAdmin'
+        assert row.original_uploader_id == 200
+
+    async def test_transfer_syncs_updater_even_when_updater_id_differs(
+        self,
+        tenant_admin,
+        patch_leaf_resolver,
+        sqlite_session,
+        patch_fga,
+        patch_audit,
+    ):
+        """Stale updater_name must not survive when updater_id does not match from_user."""
+        await _seed_user(sqlite_session, 100, 'DeletedUser')
+        await _seed_user(sqlite_session, 200, 'DeptAdmin')
+        await _seed_knowledge_file(
+            sqlite_session,
+            file_id=502,
+            user_id=100,
+            tenant_id=2,
+            user_name='DeletedUser',
+            updater_id=999,
+            updater_name='DeletedUser',
+            original_uploader_id=100,
+        )
+        await sqlite_session.commit()
+
+        with patch_leaf_resolver({200: 2}):
+            result = await ResourceOwnershipService.transfer_owner(
+                tenant_id=2,
+                from_user_id=100,
+                to_user_id=200,
+                resource_types=['knowledge_file'],
+                operator=tenant_admin,
+            )
+
+        assert result['transferred_count'] == 1
+        row = (
+            await sqlite_session.execute(
+                __import__('sqlalchemy').text(
+                    'SELECT user_id, user_name, updater_id, updater_name, original_uploader_id '
+                    'FROM knowledgefile WHERE id = 502'
+                )
+            )
+        ).one()
+        assert row.user_id == 200
+        assert row.user_name == 'DeptAdmin'
+        assert row.updater_id == 200
+        assert row.updater_name == 'DeptAdmin'
+        assert row.original_uploader_id == 200
 
 
 # =========================================================================

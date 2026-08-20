@@ -247,13 +247,48 @@ export async function applyDepartmentMemberEditApi(
   )
 }
 
+export interface LocalMemberDeleteReceiverPreview {
+  user_id: number
+  user_name: string
+  source: "department_admin" | "platform_admin"
+  department_id?: number | null
+  department_name?: string | null
+}
+
+export interface LocalMemberDeletePreview {
+  has_assets: boolean
+  counts: Record<string, number>
+  transfer_count: number
+  linsight_delete_count: number
+  proposed_receiver: LocalMemberDeleteReceiverPreview | null
+}
+
+export interface LocalMemberDeleteExecuteResult {
+  deleted_user_id: number
+  transfer: {
+    performed: boolean
+    receiver: LocalMemberDeleteReceiverPreview | null
+    transferred_count: number
+    counts_by_type: Record<string, number>
+    transfer_log_ids: string[]
+  }
+  linsight_deleted: {
+    performed: boolean
+    deleted_count: number
+    counts: Record<string, number>
+  }
+  personal_recycled: {
+    performed: boolean
+    recycled_count: number
+    folder_name: string
+    recycle_batch_id: string | null
+  }
+}
+
 export async function checkDepartmentMemberDeleteApi(
   deptId: string,
   userId: number
-): Promise<{
-  has_assets: boolean
-  counts: { knowledge_spaces: number; flows: number; assistants: number }
-}> {
+): Promise<LocalMemberDeletePreview> {
   return await axios.get(
     `/api/v1/departments/${depSeg(deptId)}/members/${userId}/delete-check`
   )
@@ -262,8 +297,8 @@ export async function checkDepartmentMemberDeleteApi(
 export async function deleteDepartmentLocalMemberApi(
   deptId: string,
   userId: number
-): Promise<void> {
-  await axios.delete(
+): Promise<LocalMemberDeleteExecuteResult> {
+  return await axios.delete(
     `/api/v1/departments/${depSeg(deptId)}/members/${userId}/local-account`
   )
 }

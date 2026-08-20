@@ -113,3 +113,8 @@ class DepartmentPersonIdDeletedAccountError(BaseErrorCode):
 class DepartmentDefaultRootMoveForbiddenError(BaseErrorCode):
     Code: int = 21021
     Msg: str = "The default root organization cannot be moved or reparented"
+
+
+class DepartmentMemberDeleteTransferReceiverNotFoundError(BaseErrorCode):
+    Code: int = 21022
+    Msg: str = "No eligible administrator found to receive transferred assets"
