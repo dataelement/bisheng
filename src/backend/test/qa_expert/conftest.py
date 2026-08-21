@@ -223,7 +223,7 @@ async def flow_env(monkeypatch):
         AsyncMock(),
     )
 
-    async def _related_access(_user, _space_id, _file_id):
+    async def _related_access(_user, _space_id, _file_id, *, space_cache=None):
         return False
 
     monkeypatch.setattr(
