@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime
 from types import SimpleNamespace
@@ -40,6 +41,14 @@ from bisheng.user.domain.services.auth import LoginUser
 
 # 定向问题转公开审批：业务规则禁止发起人撤回（与 qa_expert.publish_approval_bridge 场景码一致）
 _QA_QUESTION_PUBLISH_SCENARIO = "qa_question_publish"
+_FILE_PUBLISH_SCENARIO = "knowledge_space_file_publish_request"
+_FILE_SHARE_SCENARIO = "knowledge_space_file_share_request"
+_FILE_SPACE_NAME_SCENARIOS = frozenset({_FILE_PUBLISH_SCENARIO, _FILE_SHARE_SCENARIO})
+_SPACE_ID_NAME_KEYS = (
+    ("target_space_id", "target_space_name"),
+    ("source_space_id", "source_space_name"),
+    ("original_knowledge_id", "original_knowledge_name"),
+)
 
 # Comment recorded on a task auto-approved because its approver is the applicant.
 SELF_APPROVAL_COMMENT = "发起人与审批人为同一人，自动通过"
@@ -74,6 +83,175 @@ class ApprovalCenterService:
             for department in departments
             if getattr(department, "id", None) is not None
         }
+
+    @staticmethod
+    def _as_int_id(value: object) -> int:
+        try:
+            if value is None or value is False or value == "":
+                return 0
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _as_snapshot_dict(snapshot: object) -> dict:
+        if snapshot is None:
+            return {}
+        if isinstance(snapshot, str):
+            try:
+                snapshot = json.loads(snapshot)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return {}
+        return dict(snapshot) if isinstance(snapshot, dict) else {}
+
+    @classmethod
+    def _space_ids_from_snapshot(cls, snapshot: object) -> list[int]:
+        data = cls._as_snapshot_dict(snapshot)
+        ids: list[int] = []
+        for id_key, _ in _SPACE_ID_NAME_KEYS:
+            space_id = cls._as_int_id(data.get(id_key))
+            if space_id:
+                ids.append(space_id)
+        return ids
+
+    @classmethod
+    def _space_ids_from_instance(cls, instance) -> list[int]:
+        ids: list[int] = []
+        ids.extend(cls._space_ids_from_snapshot(getattr(instance, "payload_snapshot", None)))
+        ids.extend(cls._space_ids_from_snapshot(getattr(instance, "detail_snapshot", None)))
+        return ids
+
+    @classmethod
+    def _apply_live_space_names(cls, snapshot: object, name_map: dict[int, str]) -> dict:
+        result = cls._as_snapshot_dict(snapshot)
+        for id_key, name_key in _SPACE_ID_NAME_KEYS:
+            space_id = cls._as_int_id(result.get(id_key))
+            live_name = name_map.get(space_id)
+            if live_name:
+                result[name_key] = live_name
+        return result
+
+    @classmethod
+    def _live_file_space_business_name(
+        cls,
+        scenario_code: str | None,
+        snapshot: object,
+        fallback_name: str | None,
+        name_map: dict[int, str],
+    ) -> str:
+        data = cls._as_snapshot_dict(snapshot)
+        file_name = str(data.get("source_file_name") or "").strip()
+        target_id = cls._as_int_id(data.get("target_space_id"))
+        target_name = str(name_map.get(target_id) or data.get("target_space_name") or "").strip()
+        if scenario_code == _FILE_PUBLISH_SCENARIO and file_name and target_name:
+            return f"发布文件：{file_name} → {target_name}"
+        if scenario_code == _FILE_SHARE_SCENARIO and file_name and target_name:
+            return f"分享文件：{file_name} → {target_name}"
+        return fallback_name or ""
+
+    @classmethod
+    async def _load_live_space_name_map(cls, space_ids: list[int]) -> dict[int, str]:
+        if not space_ids:
+            return {}
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+
+        name_map: dict[int, str] = {}
+        try:
+            spaces = await KnowledgeDao.aget_list_by_ids(space_ids)
+        except Exception:
+            logger.exception("approval live space name batch lookup failed: space_ids=%s", space_ids)
+            spaces = []
+        for space in spaces or []:
+            if getattr(space, "id", None) and getattr(space, "name", None):
+                name_map[int(space.id)] = str(space.name)
+        for space_id in space_ids:
+            if space_id in name_map:
+                continue
+            try:
+                space = await KnowledgeDao.aquery_by_id(space_id)
+            except Exception:
+                logger.exception("approval live space name lookup failed: space_id=%s", space_id)
+                continue
+            if space is not None and getattr(space, "name", None):
+                name_map[int(space.id)] = str(space.name)
+        return name_map
+
+    @classmethod
+    async def _overlay_live_space_names(cls, *, instances: list, payloads: list[dict]) -> None:
+        """发布/分享审批按当前知识库名称展示，避免改名后仍显示提交时快照。"""
+        try:
+            file_instances = [
+                inst
+                for inst in instances
+                if inst is not None and getattr(inst, "scenario_code", None) in _FILE_SPACE_NAME_SCENARIOS
+            ]
+            if not file_instances:
+                return
+            space_ids = sorted({space_id for inst in file_instances for space_id in cls._space_ids_from_instance(inst)})
+            name_map = await cls._load_live_space_name_map(space_ids)
+            instance_by_id = {int(inst.id): inst for inst in file_instances}
+            for payload in payloads:
+                instance = instance_by_id.get(int(payload.get("instance_id") or 0))
+                if instance is None:
+                    continue
+                if "payload_snapshot" in payload:
+                    payload["payload_snapshot"] = cls._apply_live_space_names(payload.get("payload_snapshot"), name_map)
+                if "detail_snapshot" in payload:
+                    payload["detail_snapshot"] = cls._apply_live_space_names(payload.get("detail_snapshot"), name_map)
+                snapshot = payload.get("payload_snapshot") or payload.get("detail_snapshot") or instance.payload_snapshot
+                payload["business_name"] = cls._live_file_space_business_name(
+                    instance.scenario_code,
+                    snapshot,
+                    payload.get("business_name") or instance.business_name,
+                    name_map,
+                )
+        except Exception:
+            logger.exception("approval live space name overlay failed")
+
+    @classmethod
+    async def sync_space_name_to_approvals(
+        cls,
+        *,
+        space_id: int,
+        space_name: str,
+        tenant_id: int,
+    ) -> None:
+        """知识库改名后，把进行中的发布/分享审批快照和标题同步成新名字。"""
+        space_id = int(space_id)
+        space_name = str(space_name or "").strip()
+        if space_id <= 0 or not space_name:
+            return
+        from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
+
+        instances = await ApprovalInstanceRepository.list_by_scenario_codes(
+            tenant_id=int(tenant_id),
+            scenario_codes=list(_FILE_SPACE_NAME_SCENARIOS),
+            statuses=[
+                ApprovalInstanceStatus.PENDING,
+                ApprovalInstanceStatus.EXECUTE_FAILED,
+                ApprovalInstanceStatus.EXCEPTION,
+            ],
+        )
+        name_map = {space_id: space_name}
+        for instance in instances:
+            payload = cls._apply_live_space_names(instance.payload_snapshot, name_map)
+            detail = cls._apply_live_space_names(instance.detail_snapshot, name_map)
+            title = cls._live_file_space_business_name(
+                instance.scenario_code,
+                payload,
+                instance.business_name,
+                name_map,
+            )
+            if (
+                payload == cls._as_snapshot_dict(instance.payload_snapshot)
+                and detail == cls._as_snapshot_dict(instance.detail_snapshot)
+                and title == (instance.business_name or "")
+            ):
+                continue
+            instance.payload_snapshot = payload
+            instance.detail_snapshot = detail
+            instance.business_name = title
+            await ApprovalInstanceRepository.update_instance(instance)
 
     @staticmethod
     def _with_department_display_name(
@@ -254,6 +432,7 @@ class ApprovalCenterService:
                 int(inst.applicant_user_id): str(inst.applicant_user_name or "") for inst in instance_map.values()
             },
         )
+        await cls._overlay_live_space_names(instances=list(instance_map.values()), payloads=data)
         return {"data": data, "total": len(data)}
 
     @classmethod
@@ -479,6 +658,7 @@ class ApprovalCenterService:
                 int(instance.applicant_user_id): str(instance.applicant_user_name or ""),
             },
         )
+        await cls._overlay_live_space_names(instances=[instance], payloads=[payload])
         return payload
 
     @classmethod
@@ -604,6 +784,7 @@ class ApprovalCenterService:
             pending_approver_ids_by_instance=extra_user_ids,
             fallback_names=fallback_names,
         )
+        await cls._overlay_live_space_names(instances=list(rows), payloads=data)
         return {"data": data, "total": len(data)}
 
     @classmethod
@@ -730,6 +911,7 @@ class ApprovalCenterService:
                 int(instance.applicant_user_id): str(instance.applicant_user_name or ""),
             },
         )
+        await cls._overlay_live_space_names(instances=[instance], payloads=[payload])
         return payload
 
     @classmethod

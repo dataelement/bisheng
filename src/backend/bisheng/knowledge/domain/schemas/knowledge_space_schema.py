@@ -621,6 +621,28 @@ class ShougangPortalAdvancedFileSearchReq(ShougangPortalFileBrowseReq):
         return self
 
 
+class ShougangPortalFileCountReq(ShougangPortalAdvancedFileSearchReq):
+    """Independent exact-count request for portal file-list variants."""
+
+    query_type: Literal["browse", "keyword", "advanced", "recommendation"] = "browse"
+    q: str | None = Field(default=None, max_length=500)
+    filter_tag: str | None = Field(default=None, description="Optional second tag intersection filter")
+
+    @model_validator(mode="after")
+    def validate_count_mode(self):
+        self.cursor = None
+        if self.query_type == "keyword" and not (self.q or "").strip():
+            raise ValueError("keyword count requires q")
+        if self.query_type == "recommendation" and not (self.recommendation or "").strip():
+            raise ValueError("recommendation count requires recommendation")
+        return self
+
+
+class ShougangPortalFileCountResp(BaseModel):
+    total: int = Field(default=0, ge=0)
+    discovery_snapshot: str = ""
+
+
 class ShougangPortalAdvancedUploaderSearchReq(BaseModel):
     discovery_scope: Literal[
         "legacy",
@@ -730,6 +752,7 @@ class ShougangPortalFileItemResp(BaseModel):
             "id",
             "space_id",
             "title",
+            "summary",
             "source",
             "updated_at",
             "tag_infos",
@@ -1086,6 +1109,22 @@ class BatchMoveReq(BaseModel):
     file_ids: list[int] = Field(default_factory=list, description="List of file IDs to move")
     folder_ids: list[int] = Field(default_factory=list, description="List of folder IDs to move")
     target_folder_id: int | None = Field(default=None, description="Target folder ID; null means space root")
+
+
+class BatchAliasFailure(BaseModel):
+    file_id: int = Field(..., description="File ID that failed")
+    reason_code: str = Field(..., description="Machine-readable failure reason")
+    message: str = Field(..., description="Human-readable failure message")
+
+
+class BatchAliasActionReq(BaseModel):
+    file_ids: list[int] = Field(..., min_length=1, description="File IDs to accept or reject alias")
+
+
+class BatchAliasActionResult(BaseModel):
+    succeeded_ids: list[int] = Field(default_factory=list, description="File IDs processed successfully")
+    skipped_ids: list[int] = Field(default_factory=list, description="File IDs skipped (no alias, folder, etc.)")
+    failed: list[BatchAliasFailure] = Field(default_factory=list, description="Per-file failures")
 
 
 class ChatReq(BaseModel):

@@ -483,6 +483,12 @@ class KnowledgeSpaceConfig(BaseModel):
         default=True,
         description='Whether the knowledge-space pending review-tag UI is visible to users in this tenant',
     )
+    review_tag_similarity_threshold: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description='Tenant override for review-tag fuzzy match threshold; null uses system knowledges.tag_library default',
+    )
 
 
 class ExcelRule(BaseModel):

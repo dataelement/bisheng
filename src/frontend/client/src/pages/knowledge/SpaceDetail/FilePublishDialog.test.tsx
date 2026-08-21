@@ -230,6 +230,48 @@ describe("FilePublishDialog", () => {
         });
     });
 
+    test("按名称搜索候选知识库并在隐藏当前选择时清理关联状态", async () => {
+        mockGetTargetSpaces.mockResolvedValue({
+            data: [
+                { id: 20, name: "Public Library", space_level: "public", can_browse_files: true },
+                { id: 21, name: "Department Library", space_level: "department", can_browse_files: true },
+            ],
+        });
+        mockGetSimilarCandidates.mockResolvedValue({
+            data: [{ target_document_id: 301, title: "已选版本" }],
+        });
+
+        render(
+            <FilePublishDialog
+                open
+                activeSpace={activeSpace}
+                file={file}
+                onOpenChange={jest.fn()}
+                versionManagementEnabled
+            />,
+        );
+
+        await screen.findByRole("button", { name: "选择Public Library根目录" });
+        fireEvent.change(await screen.findByLabelText("版本管理"), {
+            target: { value: "document:301" },
+        });
+        expect((screen.getByLabelText("版本管理") as HTMLSelectElement).value).toBe("document:301");
+
+        const targetSearch = screen.getByPlaceholderText("搜索候选知识库");
+        fireEvent.change(targetSearch, { target: { value: "  DEPARTMENT  " } });
+
+        await waitFor(() => {
+            expect(screen.queryByRole("button", { name: "选择Public Library根目录" })).not.toBeInTheDocument();
+        });
+        expect(screen.getByRole("button", { name: "选择Department Library根目录" })).toBeInTheDocument();
+        expect((screen.getByLabelText("版本管理") as HTMLSelectElement).value).toBe("");
+        expect(screen.getByRole("button", { name: "提交申请" })).toBeDisabled();
+
+        fireEvent.change(targetSearch, { target: { value: "" } });
+        expect(await screen.findByRole("button", { name: "选择Public Library根目录" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "选择Department Library根目录" })).toBeInTheDocument();
+    });
+
     test("知识空间节点不使用文件夹图标", async () => {
         mockGetTargetSpaces.mockResolvedValue({
             data: [{ id: 20, name: "公共空间", space_level: "public", can_browse_files: true }],
@@ -258,7 +300,7 @@ describe("FilePublishDialog", () => {
         expect(folderButton.querySelector(".lucide-folder, .lucide-folder-open")).not.toBeNull();
     });
 
-    test("无目标读取权限时只允许选择目录且不查询目标文件", async () => {
+    test("后端返回无目标查看权限候选时前端不展示且不查询目标内容", async () => {
         mockGetTargetSpaces.mockResolvedValue({
             data: [{
                 id: 20,
@@ -267,11 +309,6 @@ describe("FilePublishDialog", () => {
                 can_browse_files: false,
             }],
         });
-        mockGetTargetFolders.mockResolvedValue({
-            data: [{ id: 301, name: "制度目录", level: 1 }],
-            total: 1,
-        });
-
         render(
             <FilePublishDialog
                 open
@@ -282,15 +319,16 @@ describe("FilePublishDialog", () => {
             />,
         );
 
-        expect(await screen.findByText("无目标库读取权限，仅可选择发布目录")).toBeInTheDocument();
+        await waitFor(() => expect(mockGetTargetSpaces).toHaveBeenCalledWith(10, 100));
+        expect(screen.queryByRole("button", { name: "选择部门空间根目录" })).not.toBeInTheDocument();
+        expect(screen.getByText("暂无可发布目标")).toBeInTheDocument();
+        expect(screen.queryByText("无目标库读取权限，仅可选择发布目录")).not.toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "提交申请" })).toBeDisabled();
         expect(screen.getByLabelText("版本管理")).toBeDisabled();
         expect(screen.getByPlaceholderText("搜索目标空间文档...")).toBeDisabled();
         expect(mockGetSimilarCandidates).not.toHaveBeenCalled();
         expect(mockSearchDocuments).not.toHaveBeenCalled();
-
-        fireEvent.click(screen.getByRole("button", { name: "展开部门空间目录" }));
-        fireEvent.click(await screen.findByRole("button", { name: "选择目录制度目录" }));
-        expect(mockGetTargetFolders).toHaveBeenCalledWith(10, 100, 20, null);
+        expect(mockGetTargetFolders).not.toHaveBeenCalled();
     });
 
     test("发布弹窗限制在视口内并让内容区滚动", async () => {

@@ -76,7 +76,8 @@ class AuditLogService:
 
     @classmethod
     async def get_audit_log(cls, login_user: UserPayload, group_ids, operator_ids, start_time, end_time,
-                            system_id, event_type, page, limit) -> Any:
+                            system_id, event_type, page, limit,
+                            responsible_user_ids=None) -> Any:
         groups = group_ids
         if not login_user.is_admin():
             if await cls._user_has_log_web_menu(login_user):
@@ -93,12 +94,31 @@ class AuditLogService:
                         return UnAuthorizedError.return_resp()
 
         tenant_scope = cls._get_audit_tenant_scope(login_user)
-        data, total = await AuditLogDao.get_audit_logs(groups, operator_ids, start_time, end_time,
-                                                       system_id,
-                                                       event_type,
-                                                       page, limit,
-                                                       tenant_scope=tenant_scope)
+        data, total = await AuditLogDao.get_audit_logs(
+            groups,
+            operator_ids,
+            start_time,
+            end_time,
+            system_id,
+            event_type,
+            responsible_user_ids,
+            page,
+            limit,
+            tenant_scope=tenant_scope,
+        )
         return resp_200(data={'data': data, 'total': total})
+
+    @classmethod
+    async def get_all_responsible_persons(cls, login_user: UserPayload) -> List[Dict]:
+        groups: List[int] = []
+        if not login_user.is_admin():
+            if not await cls._user_has_log_web_menu(login_user):
+                groups = [one.group_id for one in await UserGroupDao.aget_user_admin_group(login_user.user_id)]
+                if not groups:
+                    raise UnAuthorizedError()
+
+        tenant_scope = cls._get_audit_tenant_scope(login_user)
+        return AuditLogDao.get_all_responsible_persons(groups, tenant_scope=tenant_scope)
 
     @classmethod
     async def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:

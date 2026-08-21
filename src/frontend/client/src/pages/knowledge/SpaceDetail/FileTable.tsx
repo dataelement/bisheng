@@ -41,7 +41,7 @@ import {
 import { SortType, SortDirection, FileStatus, FileType, KnowledgeFile, SpaceRole, updateFileEncoding } from "~/api/knowledge";
 import { formatBytes } from "~/utils";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTime, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable } from "../knowledgeUtils";
+import { formatTime, getKnowledgeApprovalStatusLabel, getKnowledgeIngestMethodLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
 import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarListMoreMenu";
 import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { useGetBsConfig } from "~/hooks/queries/endpoints/queries";
@@ -101,6 +101,12 @@ function getPersonDisplay(name?: string | null) {
     return isNonEmptyText(name) ? name : EMPTY_FIELD_PLACEHOLDER;
 }
 
+function getOriginalUploaderDisplay(
+    file: Pick<KnowledgeFile, "originalUploaderName" | "user_name">,
+) {
+    return getPersonDisplay(file.originalUploaderName ?? file.user_name);
+}
+
 // ============================================================
 // 列定义：key、最小宽度、初始宽度
 // ============================================================
@@ -112,7 +118,9 @@ const COLUMN_CONFIG = {
     tags: { minWidth: 140, initialWidth: 200 },
     businessDomain: { minWidth: 140, initialWidth: 170 },
     fileEncoding: { minWidth: 160, initialWidth: 204 },
+    ingestMethod: { minWidth: 100, initialWidth: 120 },
     uploader: { minWidth: 100, initialWidth: 140 },
+    originalUploader: { minWidth: 100, initialWidth: 140 },
     updater: { minWidth: 100, initialWidth: 140 },
     updateTime: { minWidth: 140, initialWidth: 180 },
     status: { minWidth: 120, initialWidth: 160 },
@@ -607,6 +615,21 @@ function FileTableHeader({
                     </TableHead>
                 )}
 
+                {/* 入库方式 */}
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    style={{
+                        width: columnWidths.ingestMethod,
+                        minWidth: columnWidths.ingestMethod,
+                        maxWidth: columnWidths.ingestMethod,
+                    }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        {localize("com_knowledge.ingest_method")}
+                    </div>
+                    <ResizeHandle columnKey="ingestMethod" onResizeStart={onResizeStart} />
+                </TableHead>
+
                 {/* 上传人 */}
                 <TableHead
                     className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
@@ -616,6 +639,21 @@ function FileTableHeader({
                         上传人
                     </div>
                     <ResizeHandle columnKey="uploader" onResizeStart={onResizeStart} />
+                </TableHead>
+
+                {/* 原始上传人 */}
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    style={{
+                        width: columnWidths.originalUploader,
+                        minWidth: columnWidths.originalUploader,
+                        maxWidth: columnWidths.originalUploader,
+                    }}
+                >
+                    <div className="flex items-center gap-1.5 border-l pl-3">
+                        {localize("com_knowledge.original_uploader")}
+                    </div>
+                    <ResizeHandle columnKey="originalUploader" onResizeStart={onResizeStart} />
                 </TableHead>
 
                 {/* 更新人 */}
@@ -1223,17 +1261,19 @@ function FileRow({
         onCancelCreate,
     });
 
-    const defaultCanRetry = (
-        file.status === FileStatus.FAILED ||
-        file.status === FileStatus.VIOLATION ||
-        (isFolder && file.successFileNum !== undefined && file.fileNum !== undefined && file.successFileNum < file.fileNum)
-    );
+    const defaultCanRetry = isKnowledgeFileReparseRetryable(file);
     const hasRetryOption = canRetryFile ? canRetryFile(file) : defaultCanRetry;
     const retryText = retryActionLabel ?? localize("com_knowledge.retry");
     const canEditTags = canEditEncoding && !isFolder && !isReadonlyDistributionEntry;
     const canRenameContent = canRename && !isReadonlyDistributionEntry;
     const canRetry = isAdmin && hasRetryOption && file.entryStatus !== "invalid";
-    const showPublish = canPublish && Boolean(onPublishFile) && !isFolder && !isReadonlyDistributionEntry;
+    const showPublish = (
+        file.status === FileStatus.SUCCESS
+        && canPublish
+        && Boolean(onPublishFile)
+        && !isFolder
+        && !isReadonlyDistributionEntry
+    );
     const showShare = canShare && Boolean(onShareFile) && !isFolder && file.entryType !== "share";
     const showMoreMenu = showPublish || showShare || canEditTags || canRenameContent || canRetry || canDelete || canMove || Boolean(onManagePermission);
     const namePreviewable = isKnowledgeItemPreviewable(file);
@@ -1503,7 +1543,9 @@ function FileRow({
                                 {!isFolder && file.entryType && file.entryType !== "normal" && (
                                     <span className="flex h-5 shrink-0 items-center rounded bg-[#f2f3f5] px-1.5 text-xs text-[#4e5969]">
                                         {file.entryStatus === "invalid"
-                                            ? "已失效：原管理知识库已删除"
+                                            ? file.distributionInvalidReason === "manager_file_deleted"
+                                                ? "已失效：原文件已删除"
+                                                : "已失效：原管理知识库已删除"
                                             : file.entryType === "manager"
                                             ? "管理文件"
                                             : file.entryType === "publish"
@@ -1511,17 +1553,12 @@ function FileRow({
                                                 : "分享文件"}
                                     </span>
                                 )}
-                                {!isFolder && file.projectionReady === false && (
-                                    <span className="flex h-5 shrink-0 items-center rounded bg-[#fff7e8] px-1.5 text-xs text-[#f77234]">
-                                        同步中
-                                    </span>
-                                )}
                                 {versionManagementEnabled && file.is_multi_version && file.version_no != null && file.version_no >= 1 && (
                                     <span className="flex h-5 shrink-0 items-center justify-center rounded bg-[#E8F3FF] px-1.5 text-xs font-medium text-[#165DFF]">
                                         {`V${file.version_no}`}
                                     </span>
                                 )}
-                                {versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && !file.is_multi_version && (
+                                {versionManagementEnabled && !isReadonlyDistributionEntry && canManageMembers && file.has_similar && (
                                     <button
                                         type="button"
                                         onClick={(e) => {
@@ -1799,6 +1836,20 @@ function FileRow({
                 </TableCell>
             )}
 
+            {/* 入库方式 */}
+            <TableCell
+                className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
+                style={{
+                    width: columnWidths.ingestMethod,
+                    minWidth: columnWidths.ingestMethod,
+                    maxWidth: columnWidths.ingestMethod,
+                }}
+            >
+                <span className="block truncate whitespace-nowrap">
+                    {isFolder ? EMPTY_FIELD_PLACEHOLDER : getKnowledgeIngestMethodLabel(file, localize)}
+                </span>
+            </TableCell>
+
             {/* 上传人 */}
             <TableCell
                 className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
@@ -1806,6 +1857,20 @@ function FileRow({
             >
                 <span className="block truncate whitespace-nowrap">
                     {isFolder ? EMPTY_FIELD_PLACEHOLDER : getPersonDisplay(file.user_name)}
+                </span>
+            </TableCell>
+
+            {/* 原始上传人 */}
+            <TableCell
+                className={cn("relative overflow-visible py-3 text-sm text-[#86909c]", rowBg)}
+                style={{
+                    width: columnWidths.originalUploader,
+                    minWidth: columnWidths.originalUploader,
+                    maxWidth: columnWidths.originalUploader,
+                }}
+            >
+                <span className="block truncate whitespace-nowrap">
+                    {isFolder ? EMPTY_FIELD_PLACEHOLDER : getOriginalUploaderDisplay(file)}
                 </span>
             </TableCell>
 

@@ -15,7 +15,9 @@ import {
     Trash2,
     FolderInput,
     FileSearch,
-    Link2
+    Link2,
+    FilePenLine,
+    FileX2,
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -76,6 +78,10 @@ interface KnowledgeSpaceHeaderProps {
     canBatchDelete?: boolean;
     onBatchMove?: () => void;
     canBatchMove?: boolean;
+    onBatchAcceptAlias?: () => void;
+    canBatchAcceptAlias?: boolean;
+    onBatchRejectAlias?: () => void;
+    canBatchRejectAlias?: boolean;
     onGoKnowledgeSquare?: () => void;
     onToggleAiAssistant?: () => void;
     isAiAssistantOpen?: boolean;
@@ -127,6 +133,10 @@ export function KnowledgeSpaceHeader({
     canBatchDelete = false,
     onBatchMove,
     canBatchMove = false,
+    onBatchAcceptAlias,
+    canBatchAcceptAlias = false,
+    onBatchRejectAlias,
+    canBatchRejectAlias = false,
     onGoKnowledgeSquare,
     onToggleAiAssistant,
     isAiAssistantOpen,
@@ -169,6 +179,8 @@ export function KnowledgeSpaceHeader({
     const hasBatchActions = (
         canBatchDownload ||
         canBatchMove ||
+        canBatchAcceptAlias ||
+        canBatchRejectAlias ||
         (isAdmin && !hasFoldersSelected) ||
         (isAdmin && hasFailedFiles) ||
         canBatchDelete
@@ -337,6 +349,18 @@ export function KnowledgeSpaceHeader({
                             <DropdownMenuItem onClick={onBatchMove} className="cursor-pointer">
                                 <FolderInput className="mr-2 size-4" />
                                 {localize("com_knowledge.batch_move")}
+                            </DropdownMenuItem>
+                        )}
+                        {canBatchAcceptAlias && onBatchAcceptAlias && (
+                            <DropdownMenuItem onClick={onBatchAcceptAlias} className="cursor-pointer">
+                                <FilePenLine className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_accept_alias")}
+                            </DropdownMenuItem>
+                        )}
+                        {canBatchRejectAlias && onBatchRejectAlias && (
+                            <DropdownMenuItem onClick={onBatchRejectAlias} className="cursor-pointer">
+                                <FileX2 className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_reject_alias")}
                             </DropdownMenuItem>
                         )}
                         {isAdmin && !hasFoldersSelected && (

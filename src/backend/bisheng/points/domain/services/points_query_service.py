@@ -99,6 +99,24 @@ class PointsQueryService:
         dept_by_id = {int(d.id): d for d in all_depts}
         return resolve_company_id(primary, dept_by_id)
 
+    @staticmethod
+    async def _resolve_first_company_id() -> int | None:
+        """组织架构第一个公司根 id；当前租户无公司标签时返回 None。"""
+        from bisheng.database.models.department import DepartmentDao
+        from bisheng.points.domain.services.points_rank_service import resolve_first_company_id
+
+        all_depts = await DepartmentDao.aget_all_active()
+        dept_by_id = {int(d.id): d for d in all_depts}
+        return resolve_first_company_id(dept_by_id)
+
+    async def _resolve_leaderboard_company_id(self, user) -> int | None:
+        """首页榜公司：访客/平台超管取组织树第一家；普通人取所属公司。"""
+        from bisheng.points.domain.services.points_auth import is_platform_super_admin
+
+        if user is None or is_platform_super_admin(user):
+            return await self._resolve_first_company_id()
+        return await self._resolve_user_company_id(int(user.user_id))
+
     async def my_summary(self, tenant_id: int, user_id: int) -> PointSummaryResponse:
         """余额、当月收支与本公司排名（无公司则排名为 —）。"""
         account = await self.repository.find_account(tenant_id, user_id)
@@ -169,8 +187,12 @@ class PointsQueryService:
         )
         return [self._log_response(r) for r in rows], total
 
-    async def leaderboard(self, tenant_id: int, period: str, user_id: int) -> PointLeaderboardResponse:
-        """读取当前用户所属公司的小时快照前十（算法甲含并列）；无公司则空榜（AC-15）。"""
+    async def leaderboard(self, tenant_id: int, period: str, user=None) -> PointLeaderboardResponse:
+        """读取首页积分榜小时快照前十（算法甲含并列）。
+
+        普通人看所属公司；未登录与平台系统管理员看组织架构第一个公司。
+        解析不到公司则空榜（AC-15）。
+        """
         now = datetime.now(SHANGHAI)
         if period == "year":
             period_key = now.strftime("%Y")
@@ -179,7 +201,12 @@ class PointsQueryService:
         else:
             period = "month"
             period_key = now.strftime("%Y-%m")
-        company_id = await self._resolve_user_company_id(user_id)
+        from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id, set_current_tenant_id
+
+        # 访客无 JWT 时中间件可能未注入租户；公开榜按默认租户读部门/快照。
+        if get_current_tenant_id() is None:
+            set_current_tenant_id(int(tenant_id or DEFAULT_TENANT_ID))
+        company_id = await self._resolve_leaderboard_company_id(user)
         refreshed = await self.repository.latest_rank_refreshed_at(tenant_id, period, period_key)
         if company_id is None:
             return PointLeaderboardResponse(period=period, refreshed_at=refreshed, items=[])
@@ -221,11 +248,12 @@ class PointsQueryService:
         """批量解析用户名与积分部门名称。
 
         部门名取主部门沿 path 向上最近的 ``org_level=dept`` 节点，与部门榜桶一致；
-        找不到该标签时不回退叶子部门，调用方按 ``—`` 展示。
+        展示名优先 ``short_name``。找不到该标签时不回退叶子/主部门，调用方按 ``—`` 展示（AC-22）。
         """
         if not user_ids:
             return {}, {}
         from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+        from bisheng.department.domain.services.department_display_service import get_department_display_name
         from bisheng.points.domain.services.points_rank_service import resolve_dept_bucket_id
         from bisheng.user.domain.models.user import UserDao
 
@@ -248,9 +276,14 @@ class PointsQueryService:
         for uid, primary in primary_map.items():
             bucket_id = resolve_dept_bucket_id(primary, dept_by_id)
             node = dept_by_id.get(bucket_id) if bucket_id is not None else None
-            name = getattr(node, "name", None) if node is not None else None
-            if name:
-                dept_by_user[int(uid)] = str(name)
+            if node is None:
+                continue
+            display = get_department_display_name(
+                str(getattr(node, "name", "") or ""),
+                getattr(node, "short_name", None),
+            ).strip()
+            if display:
+                dept_by_user[int(uid)] = display
         return name_by_user, dept_by_user
 
     async def overview(self, tenant_id: int, user: UserPayload) -> PointOverviewResponse:
@@ -264,10 +297,12 @@ class PointsQueryService:
         cached = await self._overview_cache_get(cache_key)
         if cached is not None:
             return PointOverviewResponse(**cached)
+        month_start, month_end = self._month_bounds()
         payload = {
             "total_issued": await self.repository.sum_total_issued(tenant_id),
             "total_balance": await self.repository.sum_total_balance(tenant_id),
             "total_violation_deducted": await self.repository.sum_violation_deducted(tenant_id),
+            "total_issued_mom": await self.repository.sum_tenant_earn(tenant_id, month_start, month_end),
         }
         await self._overview_cache_set(cache_key, payload)
         return PointOverviewResponse(**payload)
@@ -439,7 +474,11 @@ class PointsQueryService:
         month_deducted = abs(
             await self.repository.sum_user_delta(tenant_id, uid, direction="deduct", start=month_start, end=month_end)
         )
-        role_label = await self._resolve_user_role_label(uid)
+        from bisheng.points.domain.constants.admin_user_type import resolve_user_types_for_admin_list
+
+        # 与列表「角色」列同源：积分用户类型（空间管理角色），不用 RBAC 角色名。
+        user_type_by_user = await resolve_user_types_for_admin_list([uid])
+        role_label = user_type_by_user.get(uid, "普通用户")
 
         logs, logs_total = await self.my_logs(
             tenant_id,
@@ -463,7 +502,10 @@ class PointsQueryService:
 
     @staticmethod
     async def _resolve_user_role_label(user_id: int) -> str:
-        """解析用户角色展示名；无角色时默认「普通用户」。"""
+        """解析用户角色展示名；无角色时默认「普通用户」。
+
+        管理端详情已改用 ``resolve_user_types_for_admin_list``；本方法保留给其他调用方。
+        """
         try:
             from bisheng.database.models.role import RoleDao
             from bisheng.user.domain.models.user_role import UserRoleDao

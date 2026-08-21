@@ -36,12 +36,12 @@ from bisheng.open_endpoints.domain.schemas.inspection_standard_sync import (
     InspectionStandardSyncResponseData,
 )
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
+from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import FilelibSyncAuditWriter
 from bisheng.open_endpoints.domain.services.inspection_standard_excel_builder import (
     build_inspection_standard_xlsx_bytes,
 )
 
 _PATH_SEPARATOR_PATTERN = re.compile(r"[\\/]")
-_TIME_FILENAME_SANITIZE_PATTERN = re.compile(r"[:/\\ ]+")
 
 
 @dataclass(frozen=True)
@@ -58,20 +58,22 @@ class InspectionStandardSyncService:
     async def sync(self, request: InspectionStandardSyncRequest) -> InspectionStandardSyncResponseData:
         self._validate_token_rule(self.filelib_sync_service.file_sync_rule)
         start_dt, end_dt = self._parse_time_window(request.start_time, request.end_time)
-        _ = (start_dt, end_dt)
+        year_dir = str(start_dt.year)
         groups = self._build_groups(request)
-        generated_file_name = self._build_generated_file_name(request.start_time, request.end_time)
         base_folder_path = self._resolve_base_folder_path(self.filelib_sync_service.file_sync_rule)
         knowledge_id = int(self.filelib_sync_service.file_sync_rule.target_space.knowledge_id)
+        knowledge = await self.filelib_sync_service.repository.find_knowledge_by_id(knowledge_id)
+        knowledge_name = str(knowledge.name) if knowledge is not None else None
 
         staged_paths: list[str] = []
+        file_results: list[InspectionStandardSyncFileResult] = []
         try:
-            file_results: list[InspectionStandardSyncFileResult] = []
             for group in groups:
                 target_folder_id, folder_path = await self._resolve_group_target_folder(
                     knowledge_id=knowledge_id,
                     create_dept_id=group.create_dept_id,
                     base_folder_path=base_folder_path,
+                    year=year_dir,
                 )
                 xlsx_bytes = build_inspection_standard_xlsx_bytes(
                     check_standards=group.check_standards,
@@ -79,6 +81,11 @@ class InspectionStandardSyncService:
                 )
                 staged_path = self._write_temp_xlsx(xlsx_bytes)
                 staged_paths.append(staged_path)
+                generated_file_name = self._build_generated_file_name(
+                    create_dept_id=group.create_dept_id,
+                    start_dt=start_dt,
+                    end_dt=end_dt,
+                )
                 params = FilelibSyncParams(
                     external_file_id=self._build_external_file_id(
                         create_dept_id=group.create_dept_id,
@@ -113,13 +120,39 @@ class InspectionStandardSyncService:
                         sync_result=sync_result,
                     )
                 )
-            return InspectionStandardSyncResponseData(
+            response = InspectionStandardSyncResponseData(
                 data_start_time=request.start_time,
                 data_end_time=request.end_time,
                 group_count=len(file_results),
                 files=file_results,
             )
-        except FilelibSyncError:
+            await FilelibSyncAuditWriter.write_inspection_batch_success(
+                request=self.filelib_sync_service.request,
+                login_user=self.filelib_sync_service.login_user,
+                token_id=self.filelib_sync_service.token_id,
+                token_name=self.filelib_sync_service.token_name,
+                knowledge_id=knowledge_id,
+                knowledge_name=knowledge_name,
+                data_start_time=request.start_time,
+                data_end_time=request.end_time,
+                group_count=len(file_results),
+                file_count=len(file_results),
+            )
+            return response
+        except Exception as exc:
+            await FilelibSyncAuditWriter.write_inspection_batch_failed(
+                request=self.filelib_sync_service.request,
+                login_user=self.filelib_sync_service.login_user,
+                token_id=self.filelib_sync_service.token_id,
+                token_name=self.filelib_sync_service.token_name,
+                knowledge_id=knowledge_id,
+                knowledge_name=knowledge_name,
+                data_start_time=request.start_time,
+                data_end_time=request.end_time,
+                group_count=len(groups),
+                success_count=len(file_results),
+                error=exc,
+            )
             raise
         finally:
             for path in staged_paths:
@@ -252,27 +285,37 @@ class InspectionStandardSyncService:
         knowledge_id: int,
         create_dept_id: str,
         base_folder_path: str | None,
+        year: str,
     ) -> tuple[int, str]:
         rule = self.filelib_sync_service.file_sync_rule.target_space
         knowledge_space_service = self.filelib_sync_service.knowledge_space_service
         child = normalize_file_sync_folder_path(create_dept_id)
         if child is None:
             raise InspectionStandardSyncCreateDeptIdError(msg="CREATE_DEPT_ID is invalid")
+        year_segment = normalize_file_sync_folder_path(year)
+        if year_segment is None:
+            raise InspectionStandardSyncInvalidTimeError(msg="start_time year is invalid")
+        relative_path = f"{child}/{year_segment}"
 
         try:
             if base_folder_path:
-                folder_path = f"{base_folder_path}/{child}"
+                folder_path = f"{base_folder_path}/{relative_path}"
                 folder = await knowledge_space_service.find_or_create_folder_path_for_file_sync(
                     knowledge_id,
                     folder_path,
                 )
             elif rule.folder_id is not None:
-                folder = await knowledge_space_service.find_or_create_folder_for_file_sync(
+                dept_folder = await knowledge_space_service.find_or_create_folder_for_file_sync(
                     knowledge_id,
                     child,
                     int(rule.folder_id),
                 )
-                folder_path = child
+                folder = await knowledge_space_service.find_or_create_folder_for_file_sync(
+                    knowledge_id,
+                    year_segment,
+                    int(dept_folder.id),
+                )
+                folder_path = relative_path
             else:
                 raise InspectionStandardSyncTokenRuleError(
                     msg="token file_sync_rule requires fixed folder_path or folder_id",
@@ -287,10 +330,11 @@ class InspectionStandardSyncService:
         return int(folder.id), folder_path
 
     @staticmethod
-    def _build_generated_file_name(start_time: str, end_time: str) -> str:
-        safe_start = _TIME_FILENAME_SANITIZE_PATTERN.sub("-", start_time.strip())
-        safe_end = _TIME_FILENAME_SANITIZE_PATTERN.sub("-", end_time.strip())
-        return f"{safe_start}-{safe_end}.xlsx"
+    def _build_generated_file_name(*, create_dept_id: str, start_dt: datetime, end_dt: datetime) -> str:
+        start_date = start_dt.date().isoformat()
+        end_date = end_dt.date().isoformat()
+        safe_dept = re.sub(r"[^A-Za-z0-9._-]+", "-", str(create_dept_id or "").strip()).strip("-") or "DEPT"
+        return f"{safe_dept}_{start_date}至{end_date}.xlsx"
 
     @staticmethod
     def _build_external_file_id(

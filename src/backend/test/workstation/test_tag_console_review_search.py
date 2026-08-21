@@ -25,6 +25,7 @@ from bisheng.workstation.domain.repositories.tag_console_repository import (
     SOURCE_TAG,
     TagConsoleRepositoryImpl,
 )
+from bisheng.workstation.domain.schemas.review_tags_schema import ReviewTagScope
 from bisheng.workstation.domain.schemas.tag_console_schema import (
     TagConsoleReviewSearchReq,
     TagConsoleReviewStatus,
@@ -185,10 +186,10 @@ async def _seed(session):
     return {"scale": scale, "rejected": rejected, "orphan": orphan}
 
 
-async def _search(session, *, space_ids=None, **overrides):
+async def _search(session, *, scope=None, **overrides):
     repository = TagConsoleRepositoryImpl(session=session)
     req = TagConsoleReviewSearchReq(**overrides)
-    return await repository.search_review_tags(req, tenant_id=TENANT_ID, space_ids=space_ids)
+    return await repository.search_review_tags(req, tenant_id=TENANT_ID, scope=scope)
 
 
 @pytest.mark.asyncio
@@ -263,7 +264,7 @@ async def test_counts_ignore_status_filter(async_db_session):
     repository = TagConsoleRepositoryImpl(session=async_db_session)
 
     narrowed = TagConsoleReviewSearchReq(status=TagConsoleReviewStatus.PENDING)
-    pending, rejected, approved = await repository.count_review_by_status(narrowed, tenant_id=TENANT_ID, space_ids=None)
+    pending, rejected, approved = await repository.count_review_by_status(narrowed, tenant_id=TENANT_ID, scope=None)
 
     assert pending == 3
     assert rejected == 1, "rejected total must stay real while viewing pending"
@@ -311,17 +312,21 @@ async def test_department_scope_narrows_rows(async_db_session):
     """Review rows do have per-space provenance, unlike library-mode tags."""
     await _seed(async_db_session)
 
-    _, in_scope = await _search(async_db_session, space_ids={201}, status=TagConsoleReviewStatus.PENDING)
+    _, in_scope = await _search(
+        async_db_session,
+        scope=ReviewTagScope(role_managed_space_ids=frozenset({201})),
+        status=TagConsoleReviewStatus.PENDING,
+    )
     assert in_scope == 2  # 结垢 (has a row in 201) / 边裂
 
-    _, empty_scope = await _search(async_db_session, space_ids=set())
+    _, empty_scope = await _search(async_db_session, scope=ReviewTagScope())
     assert empty_scope == 0
 
 
-async def _search_reviewed(session, *, space_ids=None, **overrides):
+async def _search_reviewed(session, *, scope=None, **overrides):
     repository = TagConsoleRepositoryImpl(session=session)
     req = TagConsoleReviewSearchReq(**overrides)
-    return await repository.search_reviewed_tags(req, tenant_id=TENANT_ID, space_ids=space_ids)
+    return await repository.search_reviewed_tags(req, tenant_id=TENANT_ID, scope=scope)
 
 
 @pytest.mark.asyncio
@@ -389,7 +394,7 @@ async def test_load_group_and_source_files(async_db_session):
     seeded = await _seed(async_db_session)
     repository = TagConsoleRepositoryImpl(session=async_db_session)
 
-    grouped = await repository.load_review_group([("结垢", AI)], tenant_id=TENANT_ID, space_ids=None)
+    grouped = await repository.load_review_group([("结垢", AI)], tenant_id=TENANT_ID, scope=None)
     assert len(grouped[("结垢", AI)]) == 3
 
     files = await repository.list_review_source_files(

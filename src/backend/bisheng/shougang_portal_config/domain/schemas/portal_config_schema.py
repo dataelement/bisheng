@@ -475,6 +475,16 @@ def resolve_portal_watermark_horizontal_text(
     return configured or DEFAULT_PORTAL_WATERMARK_HORIZONTAL_TEXT
 
 
+class PortalAutoPublishRuleConfig(BaseModel):
+    """Auto-publish rule config — stored in portal admin JSON, consumed by auto_publish_worker."""
+
+    id: str = ""
+    enabled: bool = True
+    document_type_code: str = ""
+    target_space_id: int | None = None
+    source_space_ids: list[int] = Field(default_factory=list)
+
+
 class PortalConfig(BaseModel):
     domains: list[PortalDomainConfig] = Field(default_factory=list)
     category_cards: list[PortalCategoryCardConfig] = Field(default_factory=list)
@@ -489,6 +499,7 @@ class PortalConfig(BaseModel):
     integrations: PortalIntegrationsConfig = Field(default_factory=PortalIntegrationsConfig)
     site: PortalSiteConfig = Field(default_factory=PortalSiteConfig)
     watermark: PortalWatermarkConfig = Field(default_factory=PortalWatermarkConfig)
+    auto_publish_rules: list[PortalAutoPublishRuleConfig] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod

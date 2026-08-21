@@ -1115,6 +1115,75 @@ class TestSessionListGroupAndTenantIntersection:
         assert 'c-grp200' not in chat_ids  # group filter blocked it
 
 
+# ===========================================================================
+# Filelib sync responsible-person filter + dropdown
+# ===========================================================================
+
+def _insert_filelib_audit(
+    session,
+    *,
+    responsible_user_id: int,
+    external_id: str = 'liuy005x',
+    user_name: str = 'liu-y',
+):
+    entry = AuditLog(
+        operator_id=1,
+        operator_name='admin',
+        tenant_id=1,
+        operator_tenant_id=1,
+        action='filelib_sync.upload.success',
+        target_type='knowledge_file',
+        target_id='1001',
+        audit_metadata={
+            'responsible_user_id': responsible_user_id,
+            'responsible_person_external_id': external_id,
+            'responsible_user_name': user_name,
+        },
+    )
+    session.add(entry)
+    session.commit()
+    session.refresh(entry)
+    return entry
+
+
+class TestFilelibResponsiblePersonAuditFilter:
+
+    async def test_get_audit_logs_filters_by_responsible_user_id(
+        self,
+        patch_dao_session,
+        session,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(
+            'bisheng.database.models.audit_log._db_dialect',
+            lambda: 'sqlite',
+        )
+        _insert_filelib_audit(session, responsible_user_id=501, external_id='liuy005x')
+        _insert_filelib_audit(session, responsible_user_id=502, external_id='wang001')
+
+        rows, total = await AuditLogDao.get_audit_logs(
+            [],
+            responsible_user_ids=[501],
+        )
+        assert total == 1
+        assert rows[0].audit_metadata['responsible_person_external_id'] == 'liuy005x'
+
+    def test_get_all_responsible_persons_deduplicates_labels(
+        self,
+        patch_dao_session,
+        session,
+    ):
+        _insert_filelib_audit(session, responsible_user_id=501, external_id='liuy005x', user_name='liu-y')
+        _insert_filelib_audit(session, responsible_user_id=501, external_id='liuy005x', user_name='liu-y')
+        _insert_filelib_audit(session, responsible_user_id=502, external_id='wang001', user_name='wang')
+
+        persons = AuditLogDao.get_all_responsible_persons([])
+        assert len(persons) == 2
+        labels = {item['label'] for item in persons}
+        assert 'liuy005x (liu-y)' in labels
+        assert 'wang001 (wang)' in labels
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

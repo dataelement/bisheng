@@ -400,6 +400,151 @@ class TestPermissionServiceAuthorize:
 
 class TestPermissionServiceCreatorFallback:
 
+    @pytest.mark.parametrize('fga_enabled', [True, False])
+    @pytest.mark.parametrize(
+        ('user_id', 'expected'),
+        [
+            (12, False),
+            (34, True),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_knowledge_file_fallback_uses_current_knowledge_creator(
+        self,
+        fga_enabled,
+        user_id,
+        expected,
+        mock_fga,
+        mock_login_user_normal,
+    ):
+        """File uploader attribution must not bypass the current space owner."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        file_record = MagicMock(id=77, user_id=12, knowledge_id=55)
+        knowledge = MagicMock(id=55, user_id=34)
+        fga = mock_fga if fga_enabled else None
+
+        with patch.object(PermissionService, '_get_fga', return_value=fga), patch(
+            'bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.aget_file_by_ids',
+            new_callable=AsyncMock,
+            return_value=[file_record],
+        ), patch(
+            'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=knowledge,
+        ), patch(
+            'bisheng.permission.domain.services.permission_cache.PermissionCache.get_check',
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            'bisheng.permission.domain.services.permission_cache.PermissionCache.set_check',
+            new_callable=AsyncMock,
+        ):
+            result = await PermissionService.check(
+                user_id=user_id,
+                relation='can_delete',
+                object_type='knowledge_file',
+                object_id='77',
+                login_user=mock_login_user_normal,
+            )
+
+        assert result is expected
+
+    @pytest.mark.asyncio
+    async def test_knowledge_file_fallback_fails_closed_when_knowledge_missing(self):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        file_record = MagicMock(id=77, user_id=12, knowledge_id=55)
+        with patch(
+            'bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.aget_file_by_ids',
+            new_callable=AsyncMock,
+            return_value=[file_record],
+        ), patch(
+            'bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aquery_by_id',
+            new_callable=AsyncMock,
+            return_value=None,
+        ) as knowledge_lookup:
+            result = await PermissionService._get_resource_creator('knowledge_file', '77')
+
+        assert result is None
+        knowledge_lookup.assert_awaited_once_with(55)
+
+    @pytest.mark.asyncio
+    async def test_knowledge_file_fallback_fails_closed_when_lookup_errors(self):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch(
+            'bisheng.knowledge.domain.models.knowledge_file.KnowledgeFileDao.aget_file_by_ids',
+            new_callable=AsyncMock,
+            side_effect=RuntimeError('database unavailable'),
+        ):
+            result = await PermissionService._get_resource_creator('knowledge_file', '77')
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_knowledge_file_creator_owned_ids_follow_knowledge_creators(self):
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        async def knowledge_ids_for_creator(user_id, knowledge_type):
+            if user_id == 34 and knowledge_type == KnowledgeTypeEnum.SPACE:
+                return [55]
+            return []
+
+        async def files_for_spaces(knowledge_ids):
+            return [MagicMock(id=77)] if knowledge_ids == [55] else []
+
+        with patch.object(
+            KnowledgeDao,
+            'aget_knowledge_ids_created_by',
+            new_callable=AsyncMock,
+            side_effect=knowledge_ids_for_creator,
+        ), patch.object(
+            KnowledgeFileDao,
+            'aget_file_by_space_filters',
+            new_callable=AsyncMock,
+            side_effect=files_for_spaces,
+        ) as file_lookup, patch(
+            'bisheng.core.database.get_async_db_session',
+            side_effect=AssertionError('must not use KnowledgeFile.user_id for creator lookup'),
+        ):
+            creator_result = await PermissionService._resource_ids_by_creator_user_ids(
+                'knowledge_file', {34},
+            )
+            uploader_result = await PermissionService._resource_ids_by_creator_user_ids(
+                'knowledge_file', {12},
+            )
+
+        assert creator_result == ['77']
+        assert uploader_result == []
+        assert [item.args[0] for item in file_lookup.await_args_list] == [[55], []]
+
+    @pytest.mark.asyncio
+    async def test_knowledge_file_permission_list_includes_fallback_owner(
+        self,
+    ):
+        from bisheng.permission.api.endpoints.resource_permission import _add_creator_owner_entry
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(
+            PermissionService,
+            '_get_resource_creator',
+            new_callable=AsyncMock,
+            return_value=34,
+        ):
+            result = await _add_creator_owner_entry(
+                resource_type='knowledge_file',
+                resource_id='77',
+                permissions=[],
+                model_map={},
+            )
+
+        assert len(result) == 1
+        assert result[0].subject_id == 34
+        assert result[0].relation == 'owner'
+
     @pytest.mark.asyncio
     async def test_get_resource_creator_assistant_uses_assistant_dao(self):
         from bisheng.permission.domain.services.permission_service import PermissionService

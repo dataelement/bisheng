@@ -623,6 +623,17 @@ class PaddleOcrConf(BaseModel):
     request_kwargs: dict = Field(default_factory=dict, description="PaddleOcrService Request Arguments")
 
 
+class TagLibraryConf(BaseModel):
+    """Tag library / review-tag matching configure."""
+
+    review_tag_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="SequenceMatcher ratio threshold for review-tag and Link B fuzzy name matching. Range [0, 1].",
+    )
+
+
 class VersionManagementConf(BaseModel):
     """Version Management Configure"""
 
@@ -699,6 +710,10 @@ class KnowledgeConf(BaseModel):
     version_management: VersionManagementConf = Field(
         default_factory=VersionManagementConf,
         description="Version Management Configure",
+    )
+    tag_library: TagLibraryConf = Field(
+        default_factory=TagLibraryConf,
+        description="Tag library matching configure",
     )
     pdf_artifact: KnowledgePdfArtifactConf = Field(
         default_factory=KnowledgePdfArtifactConf,

@@ -186,3 +186,30 @@ async def test_hydrate_fills_title_from_knowledge_file(monkeypatch):
     views = await svc.hydrate_related_docs("8-15")
     assert views[0]["id"] == "8-15"
     assert views[0]["title"] == "炼钢规程.pdf"
+
+
+async def test_hydrate_rewrites_favorite_reference_to_source(monkeypatch):
+    """「我的收藏」指针在详情里改写成源空间/源文件，前端才能打开可预览文档。"""
+    from bisheng.qa_expert.domain import related_docs_access
+
+    monkeypatch.setattr(related_docs_access, "resolve_related_doc_target", AsyncMock(return_value=(90, 12)))
+    monkeypatch.setattr(related_docs_access, "check_related_doc_access", AsyncMock(return_value=True))
+    monkeypatch.setattr(related_docs_access, "load_related_doc_title", AsyncMock(return_value="规程.pdf"))
+    svc = _service()
+    views = await svc.hydrate_related_docs("5-77", user=SimpleNamespace(user_id=1))
+    assert views[0]["id"] == "90-12"
+    assert views[0]["space_id"] == 90
+    assert views[0]["file_id"] == 12
+    assert views[0]["accessible"] is True
+    assert views[0]["title"] == "规程.pdf"
+
+
+async def test_hydrate_dangling_favorite_is_not_found(monkeypatch):
+    """收藏指针还在、源文件已删：详情标 not_found，不能链到空预览。"""
+    from bisheng.qa_expert.domain import related_docs_access
+
+    monkeypatch.setattr(related_docs_access, "resolve_related_doc_target", AsyncMock(return_value=None))
+    svc = _service()
+    views = await svc.hydrate_related_docs("5-77", user=SimpleNamespace(user_id=1))
+    assert views[0]["accessible"] is False
+    assert views[0]["unavailable_reason"] == "not_found"

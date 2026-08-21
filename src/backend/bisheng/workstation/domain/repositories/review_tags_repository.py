@@ -10,16 +10,81 @@ from bisheng.common.errcode.tag import (
     TargetTagInUsedError,
 )
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
+from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.review_tags import ApproveOrRejectEnum, ReviewTag, ReviewTagLink
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScope
+from bisheng.points.domain.constants.org_levels import ORG_LEVEL_OFFICE
 from bisheng.workstation.domain.repositories.tags_repository import TagRepositoryImpl
 from bisheng.workstation.domain.schemas.review_tags_schema import (
     ORG_UPLOADER_REVIEW_LEVELS,
     ReviewTagScope,
     ReviewTagSubmitterTarget,
 )
+
+
+def build_clinic_uploader_match_clause(tenant_id: int, department_ids: set[int]):
+    """团队/个人库：文件上传人主部门是已打 office 标、且落在给定科室 ID 集合。
+
+    必须用 ``knowledge_file.user_id``，不能用 review_tag / review_tag_link.user_id。
+    """
+    dept_id_list = sorted(int(dept_id) for dept_id in department_ids)
+    org_levels = sorted(ORG_UPLOADER_REVIEW_LEVELS)
+    org_link_match = exists(
+        select(1)
+        .select_from(ReviewTagLink)
+        .join(
+            KnowledgeFile,
+            KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer),
+        )
+        .join(
+            KnowledgeSpaceScope,
+            KnowledgeSpaceScope.space_id == KnowledgeFile.knowledge_id,
+        )
+        .join(
+            UserDepartment,
+            (UserDepartment.user_id == KnowledgeFile.user_id) & (UserDepartment.is_primary == 1),
+        )
+        .join(Department, Department.id == UserDepartment.department_id)
+        .where(
+            ReviewTagLink.tag_id == ReviewTag.id,
+            ReviewTagLink.tenant_id == tenant_id,
+            ReviewTagLink.is_deleted == False,  # noqa: E712
+            KnowledgeFile.tenant_id == tenant_id,
+            KnowledgeSpaceScope.level.in_(org_levels),
+            Department.org_level == ORG_LEVEL_OFFICE,
+            Department.id.in_(dept_id_list),
+        )
+    )
+    org_business_match = and_(
+        ReviewTag.business_type.in_(
+            [
+                TagBusinessTypeEnum.KNOWLEDGE_SPACE.value,
+                TagBusinessTypeEnum.KNOWLEDGE.value,
+            ]
+        ),
+        exists(
+            select(1)
+            .select_from(KnowledgeSpaceScope)
+            .where(
+                KnowledgeSpaceScope.space_id == cast(ReviewTag.business_id, Integer),
+                KnowledgeSpaceScope.level.in_(org_levels),
+            )
+        ),
+        exists(
+            select(1)
+            .select_from(UserDepartment)
+            .join(Department, Department.id == UserDepartment.department_id)
+            .where(
+                UserDepartment.user_id == ReviewTag.user_id,
+                UserDepartment.is_primary == 1,
+                Department.org_level == ORG_LEVEL_OFFICE,
+                Department.id.in_(dept_id_list),
+            )
+        ),
+    )
+    return or_(org_business_match, org_link_match)
 
 
 class ReviewTagsRepositoryImpl:
@@ -74,53 +139,9 @@ class ReviewTagsRepositoryImpl:
         )
         return or_(business_match, link_match)
 
-    def _org_uploader_match_clause(self, tenant_id: int, uploader_ids: set[int]):
-        """组织管理员范围：团队/个人库，且**文件上传人**在组织内。
-
-        必须用 ``knowledge_file.user_id``，不能用 review_tag / review_tag_link.user_id：
-        后者是打标人。他人（如超管）给组织成员文件打标时，待审应仍归上传人组织管理员。
-        """
-        uploader_id_list = sorted(int(uid) for uid in uploader_ids)
-        org_levels = sorted(ORG_UPLOADER_REVIEW_LEVELS)
-        org_link_match = exists(
-            select(1)
-            .select_from(ReviewTagLink)
-            .join(
-                KnowledgeFile,
-                KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer),
-            )
-            .join(
-                KnowledgeSpaceScope,
-                KnowledgeSpaceScope.space_id == KnowledgeFile.knowledge_id,
-            )
-            .where(
-                ReviewTagLink.tag_id == ReviewTag.id,
-                ReviewTagLink.tenant_id == tenant_id,
-                ReviewTagLink.is_deleted == False,  # noqa: E712
-                KnowledgeFile.tenant_id == tenant_id,
-                KnowledgeSpaceScope.level.in_(org_levels),
-                KnowledgeFile.user_id.in_(uploader_id_list),
-            )
-        )
-        # 无文件挂接的遗留空间级待审：没有 knowledge_file，只能回退 tag.user_id。
-        org_business_match = and_(
-            ReviewTag.business_type.in_(
-                [
-                    TagBusinessTypeEnum.KNOWLEDGE_SPACE.value,
-                    TagBusinessTypeEnum.KNOWLEDGE.value,
-                ]
-            ),
-            ReviewTag.user_id.in_(uploader_id_list),
-            exists(
-                select(1)
-                .select_from(KnowledgeSpaceScope)
-                .where(
-                    KnowledgeSpaceScope.space_id == cast(ReviewTag.business_id, Integer),
-                    KnowledgeSpaceScope.level.in_(org_levels),
-                )
-            ),
-        )
-        return or_(org_business_match, org_link_match)
+    def _clinic_uploader_match_clause(self, tenant_id: int, department_ids: set[int]):
+        """科室库管理员范围：团队/个人库，上传人主部门落在所管科室。"""
+        return build_clinic_uploader_match_clause(tenant_id, department_ids)
 
     def _pending_review_scope_clause(self, tenant_id: int, scope: ReviewTagScope | None):
         """按 ReviewTagScope 限制待审标签；None 表示全租户。"""
@@ -129,8 +150,8 @@ class ReviewTagsRepositoryImpl:
         parts = []
         if scope.role_managed_space_ids:
             parts.append(self._role_space_match_clause(tenant_id, set(scope.role_managed_space_ids)))
-        if scope.org_uploader_ids:
-            parts.append(self._org_uploader_match_clause(tenant_id, set(scope.org_uploader_ids)))
+        if scope.clinic_admin_department_ids:
+            parts.append(self._clinic_uploader_match_clause(tenant_id, set(scope.clinic_admin_department_ids)))
         if not parts:
             return ReviewTag.id == -1
         return or_(*parts)
@@ -586,8 +607,8 @@ class ReviewTagsRepositoryImpl:
             kid = int(tag.business_id)
             if effective is not None:
                 level = await self._level_for_space(kid)
-                if not effective.allows_space_for_uploader(
-                    space_id=kid, level=level, uploader_id=int(tag.user_id or 0)
+                if not await self._allows_in_scope(
+                    effective, space_id=kid, level=level, uploader_id=int(tag.user_id or 0)
                 ):
                     continue
             if kid not in knowledge_ids:
@@ -707,7 +728,9 @@ class ReviewTagsRepositoryImpl:
         space_id = self._space_id_from_review_tag(tag)
         if space_id is not None:
             level = await self._level_for_space(int(space_id))
-            if scope.allows_space_for_uploader(space_id=int(space_id), level=level, uploader_id=int(tag.user_id or 0)):
+            if await self._allows_in_scope(
+                scope, space_id=int(space_id), level=level, uploader_id=int(tag.user_id or 0)
+            ):
                 return True
         if tag.id is None:
             return False
@@ -724,6 +747,38 @@ class ReviewTagsRepositoryImpl:
             return None
         return str(getattr(row, "level", "") or "") or None
 
+    async def _uploader_office_department_id(self, user_id: int | None) -> int | None:
+        """上传人主部门仅在已打 office 标时返回 department_id；否则 None（不上溯）。"""
+        if user_id is None or int(user_id) <= 0:
+            return None
+        from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
+
+        primary = await UserDepartmentDao.aget_user_primary_department(int(user_id))
+        if primary is None or getattr(primary, "department_id", None) is None:
+            return None
+        dept = await DepartmentDao.aget_by_id(int(primary.department_id))
+        if dept is None:
+            return None
+        if str(getattr(dept, "org_level", "") or "") != ORG_LEVEL_OFFICE:
+            return None
+        return int(dept.id)
+
+    async def _allows_in_scope(
+        self,
+        scope: ReviewTagScope,
+        *,
+        space_id: int | None,
+        level: str | None,
+        uploader_id: int | None,
+    ) -> bool:
+        office_dept_id = await self._uploader_office_department_id(uploader_id)
+        return scope.allows_space_for_uploader(
+            space_id=space_id,
+            level=level,
+            uploader_id=uploader_id,
+            uploader_office_department_id=office_dept_id,
+        )
+
     async def link_in_review_scope(
         self,
         link: ReviewTagLink,
@@ -738,7 +793,7 @@ class ReviewTagsRepositoryImpl:
         # 有文件时按上传人；无文件才回退打标人（遗留无挂接行）。
         uploader_id = int(file_uploader_id or 0) or int(link.user_id or 0) or int(tag.user_id or 0)
         level = await self._level_for_space(space_id)
-        return scope.allows_space_for_uploader(space_id=space_id, level=level, uploader_id=uploader_id)
+        return await self._allows_in_scope(scope, space_id=space_id, level=level, uploader_id=uploader_id)
 
     async def _in_scope_link_ids_for_tag(
         self,
@@ -884,7 +939,9 @@ class ReviewTagsRepositoryImpl:
             if effective is not None:
                 level = await self._level_for_space(space_id)
                 scope_uploader = file_uploader_id or user_id
-                if not effective.allows_space_for_uploader(space_id=space_id, level=level, uploader_id=scope_uploader):
+                if not await self._allows_in_scope(
+                    effective, space_id=space_id, level=level, uploader_id=scope_uploader
+                ):
                     continue
             existing = user_targets.get(user_id)
             if existing is None or (existing.knowledge_space_id is None and space_id is not None):

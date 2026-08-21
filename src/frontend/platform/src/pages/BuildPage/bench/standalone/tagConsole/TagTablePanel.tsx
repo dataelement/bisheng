@@ -29,7 +29,8 @@ import {
     type TagConsoleFilterState,
 } from "./tagConsoleTypes"
 
-const PAGE_SIZE = 20
+const DEFAULT_PAGE_SIZE = 20
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
 
 interface TagTablePanelProps {
     selectedLibraryIds: number[]
@@ -45,6 +46,7 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
     const [rows, setRows] = useState<TagConsoleItem[]>([])
     const [total, setTotal] = useState(0)
     const [page, setPage] = useState(1)
+    const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
     const [loading, setLoading] = useState(false)
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [addOpen, setAddOpen] = useState(false)
@@ -57,7 +59,7 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
             setLoading(true)
             const res = await captureAndAlertRequestErrorHoc(
                 searchTagConsoleApi({
-                    ...buildSearchParams(appliedFilters, targetPage, PAGE_SIZE),
+                    ...buildSearchParams(appliedFilters, targetPage, pageSize),
                     library_ids: selectedLibraryIds,
                 }),
             )
@@ -66,7 +68,11 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
             setSelectedIds([])
             setLoading(false)
         },
-        [appliedFilters, selectedLibraryIds],
+        // pageSize is a dependency on purpose: changing it rebuilds `load`,
+        // which the effect below turns into a reset to page 1 plus a reload.
+        // That is what keeps a size change from leaving the view on a page
+        // that no longer exists.
+        [appliedFilters, selectedLibraryIds, pageSize],
     )
 
     useEffect(() => {
@@ -209,7 +215,7 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                                         />
                                     </td>
                                     <td className="px-3 py-3 text-muted-foreground">
-                                        {(page - 1) * PAGE_SIZE + index + 1}
+                                        {(page - 1) * pageSize + index + 1}
                                     </td>
                                     <td className="px-3 py-3">{row.library_name || "-"}</td>
                                     <td className="px-3 py-3 font-medium">
@@ -243,8 +249,13 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
             <div className="flex justify-end border-t border-[#E5E6EB] bg-background px-4 py-2">
                 <AutoPagination
                     page={page}
-                    pageSize={PAGE_SIZE}
+                    pageSize={pageSize}
                     total={total}
+                    showJumpInput
+                    jumpToText={t("pagination.jumpTo", "跳至")}
+                    pageText={t("pagination.pageUnit", "页")}
+                    pageSizeOptions={PAGE_SIZE_OPTIONS}
+                    onPageSizeChange={setPageSize}
                     onChange={(value) => {
                         setPage(value)
                         void load(value)

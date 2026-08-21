@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import random
 from datetime import datetime, timedelta
 from uuid import uuid4
 
+from elasticsearch import AsyncElasticsearch
 from loguru import logger
+from pymysql.err import OperationalError as PyMySQLOperationalError
+from sqlalchemy.exc import OperationalError
 
 from bisheng.common.services.config_service import settings
 from bisheng.core.config.celery_queues import DEFAULT_CELERY_QUEUE, KNOWLEDGE_PARSE_QUEUE
@@ -13,7 +18,11 @@ from bisheng.core.context.tenant import current_tenant_id
 from bisheng.core.database import get_async_db_session
 from bisheng.core.search.elasticsearch.manager import get_es_connection, get_statistics_es_connection
 from bisheng.knowledge.domain import knowledge_fulltext_constants as constants
-from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import KnowledgeFulltextOutbox
+from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import (
+    KnowledgeFulltextAggregateType,
+    KnowledgeFulltextDesiredAction,
+    KnowledgeFulltextOutbox,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
     KnowledgeDocumentRepositoryImpl,
 )
@@ -279,51 +288,31 @@ async def _consume(*, outbox_id: int, revision: int) -> bool:
             if row_snapshot is None:
                 return False
 
-            es_client = await get_es_connection()
-            statistics_es_client = await get_statistics_es_connection()
-            index_repository = KnowledgeFulltextIndexRepositoryImpl(es_client)
-            await index_repository.ensure_index()
-            sync_service = KnowledgeFulltextSyncService(
-                outbox_repository=outbox_repository,
-                source_repository=KnowledgeFulltextSourceRepositoryImpl(session),
-                chunk_repository=KnowledgeFulltextChunkRepositoryImpl(
-                    es_client,
-                    page_size=constants.KNOWLEDGE_FULLTEXT_CHUNK_PAGE_SIZE,
-                ),
-                index_repository=index_repository,
-                rebuild_service=KnowledgeFulltextRebuildService(
-                    max_overlap_chars=constants.KNOWLEDGE_FULLTEXT_MAX_OVERLAP_CHARS
-                ),
-                document_service=KnowledgeFulltextDocumentService(
-                    index_schema_version=constants.KNOWLEDGE_FULLTEXT_INDEX_SCHEMA_VERSION
-                ),
-                fanout_batch_size=constants.KNOWLEDGE_FULLTEXT_FANOUT_BATCH_SIZE,
-                max_retries=constants.KNOWLEDGE_FULLTEXT_MAX_RETRIES,
-                engagement_repository=KnowledgeFulltextEngagementRepositoryImpl(
-                    daily_client=es_client,
-                    raw_client=statistics_es_client,
-                ),
-            )
-            started_at = datetime.now()
-            result = await sync_service.sync_claimed(
-                row_snapshot,
-                lease_owner=lease_owner,
-                now=datetime.now(),
-            )
-            await session.commit()
-            duration_ms = int((datetime.now() - started_at).total_seconds() * 1000)
-            logger.bind(
-                outbox_id=outbox_id,
-                aggregate_type=row_snapshot.aggregate_type,
-                aggregate_id=row_snapshot.aggregate_id,
-                file_id=(row_snapshot.aggregate_id if row_snapshot.aggregate_type == "file" else None),
-                knowledge_id=row_snapshot.knowledge_id,
-                revision=revision,
-                trigger=row_snapshot.trigger_type,
-                status=result,
-                duration_ms=duration_ms,
-            ).info("knowledge fulltext sync completed")
-            return True
+        es_client = await get_es_connection()
+        statistics_es_client = await get_statistics_es_connection()
+        index_repository = KnowledgeFulltextIndexRepositoryImpl(es_client)
+        await index_repository.ensure_index()
+        started_at = datetime.now()
+        result = await _sync_claimed_with_db_retry(
+            row_snapshot=row_snapshot,
+            lease_owner=lease_owner,
+            es_client=es_client,
+            statistics_es_client=statistics_es_client,
+            index_repository=index_repository,
+        )
+        duration_ms = int((datetime.now() - started_at).total_seconds() * 1000)
+        logger.bind(
+            outbox_id=outbox_id,
+            aggregate_type=row_snapshot.aggregate_type,
+            aggregate_id=row_snapshot.aggregate_id,
+            file_id=(row_snapshot.aggregate_id if row_snapshot.aggregate_type == "file" else None),
+            knowledge_id=row_snapshot.knowledge_id,
+            revision=revision,
+            trigger=row_snapshot.trigger_type,
+            status=result,
+            duration_ms=duration_ms,
+        ).info("knowledge fulltext sync completed")
+        return True
     except Exception as exc:
         repair_dispatch = None
         async with get_async_db_session() as failure_session:
@@ -387,6 +376,108 @@ async def _consume(*, outbox_id: int, revision: int) -> bool:
             error_type=type(exc).__name__,
         ).exception("knowledge fulltext sync failed")
         return False
+
+
+async def _sync_claimed_with_db_retry(
+    *,
+    row_snapshot: KnowledgeFulltextOutbox,
+    lease_owner: str,
+    es_client: AsyncElasticsearch,
+    statistics_es_client: AsyncElasticsearch,
+    index_repository: KnowledgeFulltextIndexRepositoryImpl,
+) -> str:
+    max_attempts = constants.KNOWLEDGE_FULLTEXT_DB_RETRY_MAX_ATTEMPTS
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await _sync_claimed_once(
+                row_snapshot=row_snapshot,
+                lease_owner=lease_owner,
+                es_client=es_client,
+                statistics_es_client=statistics_es_client,
+                index_repository=index_repository,
+            )
+        except OperationalError as exc:
+            error_code = _mysql_operational_error_code(exc)
+            if not _should_retry_fanout_transaction(row_snapshot, error_code) or attempt >= max_attempts:
+                raise
+            delay_seconds = _db_retry_delay_seconds(attempt)
+            logger.bind(
+                outbox_id=row_snapshot.id,
+                knowledge_id=row_snapshot.knowledge_id,
+                revision=row_snapshot.desired_revision,
+                attempt=attempt,
+                max_attempts=max_attempts,
+                mysql_error_code=error_code,
+                retry_delay_seconds=round(delay_seconds, 3),
+            ).warning("knowledge fulltext fanout transaction lock conflict; retrying")
+            await asyncio.sleep(delay_seconds)
+    raise RuntimeError("unreachable knowledge fulltext database retry state")
+
+
+async def _sync_claimed_once(
+    *,
+    row_snapshot: KnowledgeFulltextOutbox,
+    lease_owner: str,
+    es_client: AsyncElasticsearch,
+    statistics_es_client: AsyncElasticsearch,
+    index_repository: KnowledgeFulltextIndexRepositoryImpl,
+) -> str:
+    async with get_async_db_session() as session:
+        sync_service = KnowledgeFulltextSyncService(
+            outbox_repository=KnowledgeFulltextOutboxRepositoryImpl(session),
+            source_repository=KnowledgeFulltextSourceRepositoryImpl(session),
+            chunk_repository=KnowledgeFulltextChunkRepositoryImpl(
+                es_client,
+                page_size=constants.KNOWLEDGE_FULLTEXT_CHUNK_PAGE_SIZE,
+            ),
+            index_repository=index_repository,
+            rebuild_service=KnowledgeFulltextRebuildService(
+                max_overlap_chars=constants.KNOWLEDGE_FULLTEXT_MAX_OVERLAP_CHARS
+            ),
+            document_service=KnowledgeFulltextDocumentService(
+                index_schema_version=constants.KNOWLEDGE_FULLTEXT_INDEX_SCHEMA_VERSION
+            ),
+            fanout_batch_size=constants.KNOWLEDGE_FULLTEXT_FANOUT_BATCH_SIZE,
+            max_retries=constants.KNOWLEDGE_FULLTEXT_MAX_RETRIES,
+            engagement_repository=KnowledgeFulltextEngagementRepositoryImpl(
+                daily_client=es_client,
+                raw_client=statistics_es_client,
+            ),
+        )
+        result = await sync_service.sync_claimed(
+            row_snapshot,
+            lease_owner=lease_owner,
+            now=datetime.now(),
+        )
+        await session.commit()
+        return result
+
+
+def _mysql_operational_error_code(exc: OperationalError) -> int | None:
+    if not isinstance(exc.orig, PyMySQLOperationalError):
+        return None
+    args = getattr(exc.orig, "args", ())
+    if not args:
+        return None
+    try:
+        return int(args[0])
+    except (TypeError, ValueError):
+        return None
+
+
+def _should_retry_fanout_transaction(row: KnowledgeFulltextOutbox, error_code: int | None) -> bool:
+    return (
+        error_code in {1205, 1213}
+        and row.aggregate_type == KnowledgeFulltextAggregateType.KNOWLEDGE.value
+        and row.desired_action == KnowledgeFulltextDesiredAction.FANOUT_CURRENT.value
+    )
+
+
+def _db_retry_delay_seconds(attempt: int) -> float:
+    base_delay = constants.KNOWLEDGE_FULLTEXT_DB_RETRY_BASE_SECONDS * (2 ** max(0, attempt - 1))
+    lower_bound = min(constants.KNOWLEDGE_FULLTEXT_DB_RETRY_MAX_SECONDS, base_delay)
+    upper_bound = min(constants.KNOWLEDGE_FULLTEXT_DB_RETRY_MAX_SECONDS, base_delay * 3)
+    return random.uniform(lower_bound, upper_bound)
 
 
 async def _claim_auto_repair(*, outbox_id: int, fingerprint: str, lease_owner: str):

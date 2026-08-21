@@ -1280,12 +1280,29 @@ class PermissionService:
     ) -> List[str]:
         if not creator_uids:
             return []
+
         from bisheng.core.context.tenant import bypass_tenant_filter
         uids = list(creator_uids)
-        from bisheng.core.database import get_async_db_session
-        from sqlmodel import col, select
-
         with bypass_tenant_filter():
+            if object_type == 'knowledge_file':
+                from bisheng.knowledge.domain.models.knowledge import KnowledgeDao, KnowledgeTypeEnum
+                from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+
+                knowledge_id_lists = await asyncio.gather(*[
+                    KnowledgeDao.aget_knowledge_ids_created_by(user_id, knowledge_type)
+                    for user_id in sorted(creator_uids)
+                    for knowledge_type in KnowledgeTypeEnum
+                ])
+                knowledge_ids = sorted({
+                    int(knowledge_id)
+                    for knowledge_ids in knowledge_id_lists
+                    for knowledge_id in knowledge_ids
+                })
+                files = await KnowledgeFileDao.aget_file_by_space_filters(knowledge_ids)
+                return [str(file.id) for file in files if file.id is not None]
+
+            from bisheng.core.database import get_async_db_session
+            from sqlmodel import col, select
             async with get_async_db_session() as session:
                 if object_type == 'knowledge_space':
                     from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
@@ -1322,13 +1339,6 @@ class PermissionService:
                     from bisheng.database.models.assistant import Assistant
 
                     stmt = select(Assistant.id).where(col(Assistant.user_id).in_(uids))
-                    result = await session.exec(stmt)
-                    rows = result.all()
-                    return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
-                if object_type == 'knowledge_file':
-                    from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-
-                    stmt = select(KnowledgeFile.id).where(col(KnowledgeFile.user_id).in_(uids))
                     result = await session.exec(stmt)
                     rows = result.all()
                     return [str(row[0] if isinstance(row, tuple) else row) for row in rows]
@@ -1707,9 +1717,14 @@ class PermissionService:
                     return None
 
                 if object_type == 'knowledge_file':
+                    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
                     from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao
+
                     files = await KnowledgeFileDao.aget_file_by_ids([int(object_id)])
-                    return files[0].user_id if files else None
+                    if not files or files[0].knowledge_id is None:
+                        return None
+                    knowledge = await KnowledgeDao.aquery_by_id(int(files[0].knowledge_id))
+                    return knowledge.user_id if knowledge else None
 
                 if object_type == 'tool':
                     from bisheng.tool.domain.models.gpts_tools import GptsToolsDao

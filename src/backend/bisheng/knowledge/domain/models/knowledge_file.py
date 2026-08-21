@@ -972,13 +972,21 @@ class KnowledgeFileDao(KnowledgeFileBase):
             await session.commit()
 
     @classmethod
-    def get_file_by_condition(cls, knowledge_id: int, md5_: str = None, file_name: str = None):
+    def get_file_by_condition(
+        cls,
+        knowledge_id: int,
+        md5_: str = None,
+        file_name: str = None,
+        file_level_path: str | None = None,
+    ):
         with get_sync_db_session() as session:
             sql = cls._apply_duplicate_filters(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == knowledge_id))
             if md5_:
                 sql = sql.where(KnowledgeFile.md5 == md5_)
             if file_name:
                 sql = sql.where(KnowledgeFile.file_name == file_name)
+            if file_level_path is not None:
+                sql = sql.where(KnowledgeFile.file_level_path == file_level_path)
             return session.exec(sql).all()
 
     @classmethod
@@ -1367,6 +1375,92 @@ class KnowledgeFileDao(KnowledgeFileBase):
         statement = statement.limit(safe_limit)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).all()
+
+    @classmethod
+    async def acount_portal_files(
+        cls,
+        *,
+        knowledge_ids: list[int],
+        status: list[int] | None = None,
+        file_ids: list[int] | None = None,
+        file_ext: str | None = None,
+        document_type: str | None = None,
+        file_subcategory_code: str | None = None,
+        business_domain_code: str | None = None,
+        full_space_ids: list[int] | None = None,
+        explicit_file_ids: list[int] | None = None,
+    ) -> int:
+        """Count canonical active portal documents with the browse-list predicates."""
+        normalized_knowledge_ids = sorted(
+            {int(knowledge_id) for knowledge_id in knowledge_ids if int(knowledge_id) > 0}
+        )
+        if not normalized_knowledge_ids:
+            return 0
+
+        statement = select(
+            func.count(
+                func.distinct(
+                    func.coalesce(
+                        KnowledgeFile.reference_document_id,
+                        KnowledgeFile.id,
+                    )
+                )
+            )
+        ).where(
+            KnowledgeFile.knowledge_id.in_(normalized_knowledge_ids),
+            KnowledgeFile.file_type == FileType.FILE.value,
+            cls.active_inventory_predicate(),
+        )
+
+        if full_space_ids is not None or explicit_file_ids is not None:
+            normalized_full_space_ids = {
+                int(space_id) for space_id in (full_space_ids or []) if int(space_id) > 0
+            }
+            normalized_explicit_file_ids = {
+                int(file_id) for file_id in (explicit_file_ids or []) if int(file_id) > 0
+            }
+            visibility_conditions = []
+            if normalized_full_space_ids:
+                visibility_conditions.append(
+                    KnowledgeFile.knowledge_id.in_(normalized_full_space_ids)
+                )
+            if normalized_explicit_file_ids:
+                visibility_conditions.append(
+                    KnowledgeFile.id.in_(normalized_explicit_file_ids)
+                )
+            if not visibility_conditions:
+                return 0
+            statement = statement.where(or_(*visibility_conditions))
+
+        statement = cls._build_file_filters_statement(
+            statement,
+            file_name=None,
+            status=status,
+            file_ids=file_ids,
+        )
+        normalized_ext = (file_ext or "").strip().lower().lstrip(".")
+        if normalized_ext:
+            statement = statement.where(
+                func.lower(KnowledgeFile.file_name).like(f"%.{normalized_ext}")
+            )
+        normalized_subcategory = (file_subcategory_code or "").strip().upper()
+        if normalized_subcategory:
+            statement = statement.where(
+                KnowledgeFile.file_subcategory_code == normalized_subcategory
+            )
+        normalized_document_type = (document_type or "").strip().upper()
+        if normalized_document_type:
+            statement = statement.where(
+                KnowledgeFile.file_encoding.like(f"%-{normalized_document_type}-%")
+            )
+        normalized_business_domain = (business_domain_code or "").strip().upper()
+        if normalized_business_domain:
+            statement = statement.where(
+                KnowledgeFile.file_encoding.like(f"%-{normalized_business_domain}-%")
+            )
+
+        async with get_async_db_session() as session:
+            return int(await session.scalar(statement) or 0)
 
     @classmethod
     async def asearch_portal_advanced_cursor(

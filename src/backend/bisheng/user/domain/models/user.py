@@ -141,7 +141,7 @@ class UserRead(UserBase):
     # PRD 3.2.2 用户组管理入口：超管 / 部门管理员
     can_manage_user_groups: bool | None = None
     is_department_admin: bool | None = None
-    # 标签审核入口：库 admin/creator 或部门管理员（团队/个人）或超管/租户管理员
+    # 标签审核入口：独立管理员（含部门/用户组继承，不含仅所有者）或上传人科室下科室库管理员，或超管/租户管理员
     can_review_tags: bool | None = None
     # Multi-tenant fields (F010)
     requires_tenant_selection: bool | None = None

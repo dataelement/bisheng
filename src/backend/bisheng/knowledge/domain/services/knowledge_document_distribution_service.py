@@ -136,6 +136,12 @@ class SwitchPrimaryManagerResult:
     idempotent: bool = False
 
 
+@dataclass(frozen=True)
+class UpdateManagerMetadataResult:
+    manager_file: KnowledgeFile
+    active_entry_ids: tuple[int, ...]
+
+
 async def _default_permission_snapshot_loader(
     file_id: int,
 ) -> Sequence[TupleOperation]:
@@ -868,6 +874,77 @@ class KnowledgeDocumentDistributionService:
         )
         await self._commit()
         return int(document.content_generation)
+
+    async def update_manager_metadata(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        manager_file_id: int,
+        split_rule: str | None,
+        file_encoding: str | None,
+        file_subcategory_code: str | None,
+        file_subcategory_source: str | None,
+        updater_id: int,
+        updater_name: str | None,
+    ) -> UpdateManagerMetadataResult:
+        """Sync portal classification metadata to active canonical entries."""
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        manager = await self.file_repository.find_by_id_for_update(manager_file_id)
+        primary_version = (
+            await self.version_repository.find_by_id(int(document.primary_version_id))
+            if document is not None and document.primary_version_id is not None
+            else None
+        )
+        self._validate_switch_manager_state(
+            tenant_id=tenant_id,
+            document=document,
+            current_manager=manager,
+            target_version=primary_version,
+            target_file=manager,
+        )
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            statuses={KnowledgeFileEntryStatus.ACTIVE.value},
+            for_update=True,
+        )
+        active_entry_types = {
+            KnowledgeFileEntryType.MANAGER.value,
+            KnowledgeFileEntryType.PUBLISH.value,
+            KnowledgeFileEntryType.SHARE.value,
+        }
+        if not any(int(entry.id) == manager_file_id for entry in entries):
+            raise KnowledgeDocumentDistributionError(
+                "active canonical manager is missing from distribution entries"
+            )
+
+        document.content_generation += 1
+        for entry in entries:
+            if entry.entry_type not in active_entry_types:
+                continue
+            entry.split_rule = split_rule
+            entry.file_encoding = file_encoding
+            entry.file_subcategory_code = file_subcategory_code
+            entry.file_subcategory_source = file_subcategory_source
+            entry.updater_id = updater_id
+            entry.updater_name = updater_name
+            entry.desired_content_generation = int(document.content_generation)
+            entry.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+            entry.projection_next_retry_at = None
+            self.session.add(entry)
+        self.session.add(document)
+        await self.session.flush()
+        await self._commit()
+        return UpdateManagerMetadataResult(
+            manager_file=manager,
+            active_entry_ids=tuple(
+                sorted(
+                    int(entry.id)
+                    for entry in entries
+                    if entry.entry_type in active_entry_types
+                )
+            ),
+        )
 
     @staticmethod
     def _create_publish_entry(
@@ -1858,23 +1935,19 @@ class KnowledgeDocumentDistributionService:
             return "remove_share"
         if entry.entry_type != KnowledgeFileEntryType.MANAGER.value:
             raise KnowledgeDocumentDistributionError("entry type does not support explicit delete")
-        if document.predecessor_logic_file_id is not None:
-            return "rollback"
-
-        entries = await self.file_repository.find_distribution_entries_by_document_id(
-            document_id,
-        )
-        if any(
-            candidate.entry_type == KnowledgeFileEntryType.SHARE.value
-            and candidate.entry_status
-            in {
-                KnowledgeFileEntryStatus.PREPARING.value,
-                KnowledgeFileEntryStatus.ACTIVE.value,
-            }
-            for candidate in entries
-        ):
-            raise KnowledgeDocumentDistributionError("active shares must be revoked before final manager deletion")
         return "final_delete"
+
+    @staticmethod
+    def _mark_entry_for_manager_delete(
+        entry: KnowledgeFile,
+        status: KnowledgeFileEntryStatus,
+    ) -> None:
+        entry.entry_status = status.value
+        entry.desired_entry_generation = int(entry.desired_entry_generation or 0) + 1
+        entry.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        entry.projection_next_retry_at = None
+        entry.projection_lease_owner = None
+        entry.projection_lease_until = None
 
     async def delete_manager(
         self,
@@ -1883,6 +1956,20 @@ class KnowledgeDocumentDistributionService:
         document_id: int,
         manager_file_id: int,
     ) -> DeleteManagerResult:
+        manager_snapshot = await self.file_repository.find_by_id(manager_file_id)
+        if manager_snapshot is None:
+            raise KnowledgeDocumentDistributionError("manager delete state no longer exists")
+        manager_space_id = int(manager_snapshot.knowledge_id)
+        await self.session.execute(
+            select(Knowledge)
+            .where(
+                Knowledge.id == manager_space_id,
+                Knowledge.tenant_id == tenant_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
         document = await self.document_repository.find_by_id_for_update(document_id)
         manager = await self.file_repository.find_by_id_for_update(manager_file_id)
         if document is None or manager is None:
@@ -1892,6 +1979,8 @@ class KnowledgeDocumentDistributionService:
             or int(manager.tenant_id or 0) != tenant_id
             or int(manager.reference_document_id or 0) != document_id
             or manager.entry_type != KnowledgeFileEntryType.MANAGER.value
+            or int(manager.knowledge_id) != manager_space_id
+            or int(document.knowledge_id) != manager_space_id
         ):
             raise KnowledgeDocumentDistributionError("delete target is not the canonical manager")
         if (
@@ -1905,46 +1994,46 @@ class KnowledgeDocumentDistributionService:
                 idempotent=True,
             )
 
-        predecessor_id = document.predecessor_logic_file_id
-        if manager.entry_status == KnowledgeFileEntryStatus.PREPARING.value and predecessor_id is not None:
-            return await self._rollback_manager(
-                tenant_id=tenant_id,
-                document=document,
-                manager=manager,
-                predecessor_id=int(predecessor_id),
-            )
-        if manager.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
+        if manager.entry_status not in {
+            KnowledgeFileEntryStatus.ACTIVE.value,
+            KnowledgeFileEntryStatus.PREPARING.value,
+            KnowledgeFileEntryStatus.DELETING.value,
+        }:
             raise KnowledgeDocumentDistributionError("manager state changed concurrently")
-        if predecessor_id is not None:
-            return await self._rollback_manager(
-                tenant_id=tenant_id,
-                document=document,
-                manager=manager,
-                predecessor_id=int(predecessor_id),
-            )
 
         entries = await self.file_repository.find_distribution_entries_by_document_id(
             document_id,
             for_update=True,
         )
-        if any(
-            entry.entry_type == KnowledgeFileEntryType.SHARE.value
-            and entry.entry_status
-            in {
-                KnowledgeFileEntryStatus.PREPARING.value,
-                KnowledgeFileEntryStatus.ACTIVE.value,
-            }
-            for entry in entries
-        ):
-            raise KnowledgeDocumentDistributionError("active shares must be revoked before final manager deletion")
-
         document.lifecycle_status = KnowledgeDocumentLifecycleStatus.DELETING.value
-        manager.entry_status = KnowledgeFileEntryStatus.DELETING.value
-        manager.desired_entry_generation += 1
-        manager.projection_status = KnowledgeFileProjectionStatus.PENDING.value
-        manager.projection_next_retry_at = None
+        for entry in entries:
+            if int(entry.id) == manager_file_id:
+                self._mark_entry_for_manager_delete(
+                    entry,
+                    KnowledgeFileEntryStatus.DELETING,
+                )
+            elif (
+                entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+                and entry.entry_type
+                in {
+                    KnowledgeFileEntryType.PUBLISH.value,
+                    KnowledgeFileEntryType.SHARE.value,
+                }
+            ):
+                self._mark_entry_for_manager_delete(
+                    entry,
+                    KnowledgeFileEntryStatus.INVALID,
+                )
+            elif entry.entry_status in {
+                KnowledgeFileEntryStatus.PREPARING.value,
+                KnowledgeFileEntryStatus.DELETING.value,
+            }:
+                self._mark_entry_for_manager_delete(
+                    entry,
+                    KnowledgeFileEntryStatus.DELETING,
+                )
         self.session.add(document)
-        self.session.add(manager)
+        self.session.add_all(entries)
         await self.session.flush()
         await self._commit()
         return DeleteManagerResult(

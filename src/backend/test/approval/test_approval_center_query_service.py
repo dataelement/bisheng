@@ -134,6 +134,71 @@ def test_department_snapshot_display_uses_live_short_name_without_mutating_histo
     assert snapshot == {"department_id": 18, "department_name": "技术研发中心"}
 
 
+def test_live_space_names_replace_snapshot_without_mutating_history() -> None:
+    snapshot = {
+        "target_space_id": 20,
+        "target_space_name": "测试01",
+        "source_space_id": 5,
+        "source_space_name": "个人库",
+    }
+
+    enriched = ApprovalCenterService._apply_live_space_names(snapshot, {20: "测试02"})
+
+    assert enriched["target_space_name"] == "测试02"
+    assert enriched["source_space_name"] == "个人库"
+    assert snapshot["target_space_name"] == "测试01"
+
+
+def test_live_file_publish_title_uses_current_target_name() -> None:
+    title = ApprovalCenterService._live_file_space_business_name(
+        "knowledge_space_file_publish_request",
+        {
+            "source_file_name": "知识库平台-测试.md",
+            "target_space_id": 20,
+            "target_space_name": "测试01",
+        },
+        "发布文件：知识库平台-测试.md → 测试01",
+        {20: "测试02"},
+    )
+    assert title == "发布文件：知识库平台-测试.md → 测试02"
+
+
+@pytest.mark.asyncio
+async def test_overlay_live_space_names_updates_approval_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    instance = SimpleNamespace(
+        id=8,
+        scenario_code="knowledge_space_file_publish_request",
+        business_name="发布文件：知识库平台-测试.md → 测试01",
+        payload_snapshot={
+            "source_file_name": "知识库平台-测试.md",
+            "target_space_id": 20,
+            "target_space_name": "测试01",
+        },
+        detail_snapshot={
+            "source_file_name": "知识库平台-测试.md",
+            "target_space_id": 20,
+            "target_space_name": "测试01",
+        },
+    )
+    payload = {
+        "instance_id": 8,
+        "business_name": instance.business_name,
+        "payload_snapshot": dict(instance.payload_snapshot),
+        "detail_snapshot": dict(instance.detail_snapshot),
+    }
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.models.knowledge.KnowledgeDao.aget_list_by_ids",
+        AsyncMock(return_value=[SimpleNamespace(id=20, name="测试02")]),
+    )
+
+    await ApprovalCenterService._overlay_live_space_names(instances=[instance], payloads=[payload])
+
+    assert payload["business_name"] == "发布文件：知识库平台-测试.md → 测试02"
+    assert payload["detail_snapshot"]["target_space_name"] == "测试02"
+    assert payload["payload_snapshot"]["target_space_name"] == "测试02"
+    assert instance.payload_snapshot["target_space_name"] == "测试01"
+
+
 @pytest.mark.asyncio
 async def test_list_my_tasks_aggregates_instance_summary(monkeypatch: pytest.MonkeyPatch):
     task = _build_task(11, node_order=1, approver_user_id=9)

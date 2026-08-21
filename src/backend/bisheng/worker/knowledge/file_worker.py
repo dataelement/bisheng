@@ -20,6 +20,7 @@ from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeDao, KnowledgeState, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
+    FileType,
     KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileEntryStatus,
@@ -557,6 +558,76 @@ def _prepare_knowledge_file_for_processing(file_id: int) -> bool:
     return False
 
 
+
+def _try_enqueue_auto_publish(file_record: KnowledgeFile) -> None:
+    """Best-effort enqueue of auto-publish task after parse success.
+
+    Checks preconditions (department space, has subcategory) and enqueues
+    the auto_publish_file Celery task. Never raises — any failure is logged
+    and swallowed to avoid disrupting the main parse delivery flow.
+    """
+    try:
+        # Skip if file has no second-level category
+        if not getattr(file_record, "file_subcategory_code", None):
+            return
+
+        # Skip if file is already an F059 distribution entry
+        if getattr(file_record, "entry_type", None) is not None:
+            return
+
+        # Skip non-files (directories)
+        if int(getattr(file_record, "file_type", 1)) != FileType.FILE.value:
+            return
+
+        # Check space level: only DEPARTMENT triggers auto-publish
+        from bisheng.knowledge.domain.models.knowledge_space_scope import (
+            KnowledgeSpaceLevelEnum,
+            KnowledgeSpaceScopeDao,
+        )
+        from bisheng.worker._asyncio_utils import run_async_task
+
+        space_id = int(file_record.knowledge_id)
+        scope = run_async_task(
+            lambda: KnowledgeSpaceScopeDao.aget_by_space_id(space_id)
+        )
+        if scope is None or scope.level != KnowledgeSpaceLevelEnum.DEPARTMENT:
+            return
+
+        # Extract file_category_code from split_rule
+        from bisheng.knowledge.domain.constants import (
+            get_file_category_code_from_split_rule,
+        )
+
+        split_rule = getattr(file_record, "split_rule", None)
+        file_category_code = get_file_category_code_from_split_rule(split_rule)
+        if not file_category_code:
+            return
+
+        # Enqueue auto-publish task to default celery queue
+        from bisheng.worker.knowledge.auto_publish_worker import (
+            auto_publish_file_celery,
+        )
+
+        tenant_id = int(file_record.tenant_id or 1)
+        auto_publish_file_celery.apply_async(
+            args=(int(file_record.id), tenant_id),
+            queue="celery",
+        )
+        logger.info(
+            "auto_publish: enqueued file_id=%s space_id=%s category_code=%s",
+            file_record.id,
+            space_id,
+            file_category_code,
+        )
+    except Exception:
+        # Best-effort: never disrupt the main parse delivery flow
+        logger.warning(
+            "auto_publish: enqueue failed for file_id=%s; main flow unaffected",
+            getattr(file_record, "id", "?"),
+            exc_info=True,
+        )
+
+
 def _run_formal_parse_delivery(
     file_id: int,
     preview_cache_key: str | None = None,
@@ -580,6 +651,7 @@ def _run_formal_parse_delivery(
                 _mark_manager_projection_after_parse(db_file[0])
                 if complete_filelib_sync:
                     _complete_filelib_sync_version_link_if_needed(file_id)
+                _try_enqueue_auto_publish(db_file[0])
             _enqueue_recommendation_projection_refresh(file_id)
             _enqueue_current_pdf_artifact_sync(
                 tenant_id=int(db_file[0].tenant_id),

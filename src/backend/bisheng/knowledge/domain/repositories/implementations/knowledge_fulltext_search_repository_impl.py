@@ -169,6 +169,7 @@ class KnowledgeFulltextSearchRepositoryImpl(KnowledgeFulltextSearchRepository):
                 "business_domain_code": "business_domain_code",
                 "file_ext": "file_ext",
                 "original_uploader_id": "original_uploader_id",
+                "original_uploader_name": "original_uploader_name",
                 "original_knowledge_id": "original_knowledge_id",
             }
             return {"term": {field_map[condition.field]: condition.value}}

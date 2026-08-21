@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from bisheng.common.errcode.filelib_sync import FilelibSyncNotFoundError
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.open_endpoints.domain.models.filelib_department_mapping import FilelibDepartmentMapping
@@ -100,12 +99,12 @@ async def test_department_id_resolves_through_mapping_and_org_code() -> None:
 
 
 @pytest.mark.asyncio
-async def test_missing_mapping_is_rejected() -> None:
-    caller_department = _department(10, "调用人部门")
+async def test_missing_mapping_falls_back_to_uploader_primary_department() -> None:
+    uploader_department = _department(10, "上传人部门")
     repository = SimpleNamespace(
         find_user_by_id=AsyncMock(return_value=_token_user()),
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
-        find_department_by_id=AsyncMock(return_value=caller_department),
+        find_department_by_id=AsyncMock(return_value=uploader_department),
         find_department_mapping_by_external_department_id=AsyncMock(return_value=None),
         find_department_by_external_id=AsyncMock(),
     )
@@ -119,13 +118,15 @@ async def test_missing_mapping_is_rejected() -> None:
         )
     )
 
-    with pytest.raises(FilelibSyncNotFoundError, match="external department mapping does not exist"):
-        await _service(repository)._resolve_identity(params)
+    identity = await _service(repository)._resolve_identity(params)
+
+    assert identity.main_department.id == 10
+    repository.find_department_by_external_id.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_missing_department_for_org_code_is_rejected() -> None:
-    caller_department = _department(10, "调用人部门")
+async def test_missing_department_for_org_code_falls_back_to_uploader_primary_department() -> None:
+    uploader_department = _department(10, "上传人部门")
     mapping = FilelibDepartmentMapping(
         id=1,
         external_department_id="20",
@@ -135,7 +136,7 @@ async def test_missing_department_for_org_code_is_rejected() -> None:
     repository = SimpleNamespace(
         find_user_by_id=AsyncMock(return_value=_token_user()),
         find_primary_departments=AsyncMock(return_value=[UserDepartment(user_id=1, department_id=10, is_primary=1)]),
-        find_department_by_id=AsyncMock(return_value=caller_department),
+        find_department_by_id=AsyncMock(return_value=uploader_department),
         find_department_mapping_by_external_department_id=AsyncMock(return_value=mapping),
         find_department_by_external_id=AsyncMock(return_value=None),
     )
@@ -149,5 +150,7 @@ async def test_missing_department_for_org_code_is_rejected() -> None:
         )
     )
 
-    with pytest.raises(FilelibSyncNotFoundError, match="department does not exist"):
-        await _service(repository)._resolve_identity(params)
+    identity = await _service(repository)._resolve_identity(params)
+
+    assert identity.main_department.id == 10
+    repository.find_department_by_external_id.assert_awaited_once_with("ORG-200", tenant_id=5)

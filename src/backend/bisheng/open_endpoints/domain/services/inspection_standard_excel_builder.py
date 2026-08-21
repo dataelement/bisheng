@@ -133,15 +133,10 @@ def _normalize_cell(value: Any) -> Any:
 def _write_sheet_header(
     sheet: Worksheet,
     *,
-    title: str,
     zh_headers: list[str],
-    en_headers: list[str],
 ) -> None:
-    sheet.cell(row=1, column=1, value=title).number_format = TEXT_NUMBER_FORMAT
     for col, header in enumerate(zh_headers, start=1):
-        sheet.cell(row=2, column=col, value=header).number_format = TEXT_NUMBER_FORMAT
-    for col, header in enumerate(en_headers, start=1):
-        sheet.cell(row=3, column=col, value=header).number_format = TEXT_NUMBER_FORMAT
+        sheet.cell(row=1, column=col, value=header).number_format = TEXT_NUMBER_FORMAT
 
 
 def _write_rows(
@@ -150,7 +145,7 @@ def _write_rows(
     columns: list[str],
     rows: Iterable[dict[str, Any]],
     text_columns: set[str] | None = None,
-    start_row: int = 4,
+    start_row: int = 2,
 ) -> None:
     text_columns = text_columns or set()
     for row_index, row in enumerate(rows, start=start_row):
@@ -177,15 +172,11 @@ def build_inspection_standard_xlsx_bytes(
 
         _write_sheet_header(
             standard_sheet,
-            title="点检标准",
             zh_headers=CHECK_STANDARD_ZH_HEADERS,
-            en_headers=CHECK_STANDARD_EN_COLUMNS,
         )
         _write_sheet_header(
             item_sheet,
-            title="点检标准项次",
             zh_headers=CHECK_STANDARD_ITEM_ZH_HEADERS,
-            en_headers=CHECK_STANDARD_ITEM_EN_COLUMNS,
         )
 
         standard_rows = [record.model_dump() for record in check_standards]

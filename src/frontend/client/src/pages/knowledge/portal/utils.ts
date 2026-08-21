@@ -17,6 +17,7 @@ import type {
     PortalUploadFolderNode,
 } from "./types";
 import { cleanEncodingText, normalizeEncodingCode } from "./uploadMetadata";
+import { isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
 
 export function isFolder(file: KnowledgeFile) {
     return file.type === FileType.FOLDER;
@@ -315,12 +316,7 @@ export function folderCountText(file: KnowledgeFile) {
 }
 
 export function isRetryable(file: KnowledgeFile) {
-    if (file.status === FileStatus.FAILED || file.status === FileStatus.VIOLATION) return true;
-    if (isFolder(file) && (file.folderStatsLoading || file.folderStatsError)) return false;
-    if (isFolder(file) && file.successFileNum !== undefined && file.fileNum !== undefined) {
-        return file.successFileNum < file.fileNum;
-    }
-    return false;
+    return isKnowledgeFileReparseRetryable(file);
 }
 
 export function toNumericIds(files: KnowledgeFile[]) {

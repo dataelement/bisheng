@@ -16,6 +16,7 @@ from bisheng.knowledge.api.endpoints.knowledge_space import update_space
 from bisheng.knowledge.domain.models.department_knowledge_space import DepartmentKnowledgeSpace
 from bisheng.knowledge.domain.models.department_file_view_grant import DepartmentFileViewGrant
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileStatus
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
@@ -29,6 +30,8 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     KnowledgeSpaceUpdateReq,
     ShougangPortalCategoryFileCountItem,
     ShougangPortalDomainFileCountItem,
+    ShougangPortalFileCountReq,
+    ShougangPortalFileCountResp,
     ShougangPortalFileSearchResp,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
@@ -968,6 +971,232 @@ async def test_portal_counts_keep_explicit_empty_card_scope_empty() -> None:
     count_categories.assert_awaited_once_with({"STD": set()}, {"STD": set()})
 
 
+@pytest.mark.asyncio
+async def test_portal_file_count_uses_full_space_and_grant_only_scope_without_n_plus_one() -> None:
+    login_user = Mock(user_id=7, user_name="访问者", tenant_id=1)
+    service = KnowledgeSpaceService(request=Mock(headers={}), login_user=login_user)
+    service._portal_discovery_result = PortalDiscoveryResult(
+        discoverable_space_ids=[10],
+        explicitly_visible_space_ids=[20],
+        explicitly_visible_file_ids=[3101],
+        explicit_file_space_by_id={3101: 30},
+        grant_parent_space_ids=[30],
+        query_space_ids=[10, 20, 30],
+        space_kind_by_id={10: "public", 20: "department", 30: "clinic"},
+        snapshot="snapshot-count",
+    )
+    spaces = [
+        Knowledge(id=10, name="公开库", type=KnowledgeTypeEnum.SPACE.value),
+        Knowledge(id=20, name="部门库", type=KnowledgeTypeEnum.SPACE.value),
+        Knowledge(id=30, name="授权文件父库", type=KnowledgeTypeEnum.SPACE.value),
+    ]
+
+    with (
+        patch.object(
+            service,
+            "_get_shougang_portal_request_spaces",
+            new_callable=AsyncMock,
+            return_value=spaces,
+        ),
+        patch.object(
+            service,
+            "_get_shougang_portal_tag_file_ids",
+            new_callable=AsyncMock,
+            side_effect=([1001, 2001, 3101], [2001, 3101]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeFileDao.acount_portal_files",
+            new_callable=AsyncMock,
+            return_value=7,
+        ) as count_files,
+    ):
+        result = await service.count_shougang_portal_files(
+            ShougangPortalFileCountReq(
+                discovery_scope="portal_configured",
+                query_type="browse",
+                space_ids=[10, 20, 30],
+                tag="行业情报",
+                filter_tag="API接口调用",
+                file_ext="PDF",
+                document_type="STD",
+                file_subcategory_code="STD-01",
+                business_domain_code="PM",
+            )
+        )
+
+    assert result == {"total": 7, "discovery_snapshot": "snapshot-count"}
+    count_files.assert_awaited_once_with(
+        knowledge_ids=[10, 20, 30],
+        status=[KnowledgeFileStatus.SUCCESS.value],
+        file_ids=[2001, 3101],
+        file_ext="PDF",
+        document_type="STD",
+        file_subcategory_code="STD-01",
+        business_domain_code="PM",
+        full_space_ids=[10, 20],
+        explicit_file_ids=[3101],
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_only_file_count_keeps_portal_discovery_enabled_scope() -> None:
+    service = KnowledgeSpaceService(
+        request=Mock(headers={}),
+        login_user=Mock(user_id=7, user_name="访问者", tenant_id=1),
+    )
+    resolve_spaces = AsyncMock(return_value=[])
+    service._get_shougang_portal_request_spaces = resolve_spaces
+
+    result = await service.count_shougang_portal_files(
+        ShougangPortalFileCountReq(
+            discovery_scope="portal_public",
+            public_only=True,
+            query_type="browse",
+        )
+    )
+
+    assert result == {"total": 0, "discovery_snapshot": ""}
+    resolve_spaces.assert_awaited_once_with(
+        requested_space_ids=[],
+        space_level=None,
+        discovery_scope="portal_public",
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_only_list_modes_keep_portal_discovery_enabled_scope() -> None:
+    service = KnowledgeSpaceService(
+        request=Mock(headers={}),
+        login_user=Mock(user_id=7, user_name="访问者", tenant_id=1),
+    )
+    resolve_spaces = AsyncMock(return_value=[])
+    service._get_shougang_portal_request_spaces = resolve_spaces
+    request = ShougangPortalFileCountReq(
+        discovery_scope="portal_public",
+        public_only=True,
+        query_type="browse",
+    )
+
+    await service._browse_shougang_portal_files_impl(request)
+    request.query_type = "keyword"
+    request.q = "检修"
+    await service._search_shougang_portal_files_impl(request)
+    await service._resolve_shougang_portal_advanced_search_spaces(request)
+
+    assert [call.kwargs["discovery_scope"] for call in resolve_spaces.await_args_list] == [
+        "portal_public",
+        "portal_public",
+        "portal_public",
+    ]
+
+
+def test_portal_file_count_response_preserves_total_and_snapshot() -> None:
+    response = ShougangPortalFileCountResp(total=7, discovery_snapshot="snapshot-count")
+
+    assert response.model_dump(mode="json") == {
+        "total": 7,
+        "discovery_snapshot": "snapshot-count",
+    }
+
+
+@pytest.mark.asyncio
+async def test_advanced_portal_file_count_consumes_all_cursor_pages() -> None:
+    service = KnowledgeSpaceService(
+        request=Mock(headers={}),
+        login_user=Mock(user_id=7, user_name="访问者", tenant_id=1),
+    )
+    service._portal_discovery_result = PortalDiscoveryResult(
+        discoverable_space_ids=[10],
+        explicitly_visible_space_ids=[],
+        explicitly_visible_file_ids=[],
+        explicit_file_space_by_id={},
+        grant_parent_space_ids=[],
+        query_space_ids=[10],
+        space_kind_by_id={10: "public"},
+        snapshot="snapshot-advanced",
+    )
+    advanced_search = AsyncMock(
+        side_effect=[
+            {
+                "data": [{"id": 1}, {"id": 2}],
+                "has_more": True,
+                "next_cursor": "cursor-2",
+            },
+            {"data": [{"id": 3}], "has_more": False, "next_cursor": None},
+        ]
+    )
+    service.advanced_search_shougang_portal_files = advanced_search
+    request = ShougangPortalFileCountReq.model_validate(
+        {
+            "query_type": "advanced",
+            "conditions": [
+                {
+                    "field": "file_name",
+                    "match_mode": "fuzzy",
+                    "value": "检修",
+                }
+            ],
+            "sort": "relevance",
+        }
+    )
+
+    result = await service.count_shougang_portal_files(request)
+
+    assert result == {"total": 3, "discovery_snapshot": "snapshot-advanced"}
+    assert advanced_search.await_count == 2
+    second_request = advanced_search.await_args_list[1].args[0]
+    assert second_request.cursor == "cursor-2"
+
+
+@pytest.mark.asyncio
+async def test_recommendation_portal_file_count_deduplicates_all_cursor_pages() -> None:
+    service = KnowledgeSpaceService(
+        request=Mock(headers={}),
+        login_user=Mock(user_id=7, user_name="访问者", tenant_id=1),
+    )
+    service._portal_discovery_result = PortalDiscoveryResult(
+        discoverable_space_ids=[10],
+        explicitly_visible_space_ids=[],
+        explicitly_visible_file_ids=[],
+        explicit_file_space_by_id={},
+        grant_parent_space_ids=[],
+        query_space_ids=[10],
+        space_kind_by_id={10: "public"},
+        snapshot="snapshot-recommendation",
+    )
+    browse = AsyncMock(
+        side_effect=[
+            {
+                "data": [
+                    {"id": 1, "canonical_document_id": 100},
+                    {"id": 2, "canonical_document_id": 200},
+                ],
+                "has_more": True,
+                "next_cursor": "cursor-2",
+            },
+            {
+                "data": [
+                    {"id": 3, "canonical_document_id": 200},
+                    {"id": 4, "canonical_document_id": 300},
+                ],
+                "has_more": False,
+                "next_cursor": None,
+            },
+        ]
+    )
+    service.browse_shougang_portal_files = browse
+
+    result = await service.count_shougang_portal_files(
+        ShougangPortalFileCountReq(
+            query_type="recommendation",
+            recommendation="latest_selected",
+        )
+    )
+
+    assert result == {"total": 3, "discovery_snapshot": "snapshot-recommendation"}
+    assert browse.await_count == 2
+
+
 def test_portal_file_response_preserves_discovery_snapshot() -> None:
     response = ShougangPortalFileSearchResp(
         data=[],
@@ -1016,7 +1245,7 @@ def test_safe_projection_only_redacts_discoverable_space_without_explicit_permis
     )
     authorized = service._map_shougang_portal_file_item(20, item)
 
-    assert redacted.summary == ""
+    assert redacted.summary == "完整摘要"
     assert redacted.file_size == ""
     assert redacted.file_encoding == ""
     assert redacted.source_path == ""
@@ -1024,3 +1253,9 @@ def test_safe_projection_only_redacts_discoverable_space_without_explicit_permis
     assert authorized.file_size == "1024"
     assert authorized.file_encoding == "GF-STD-PM-001"
     assert authorized.source_path == "设备部/检修方案.pdf"
+
+    redacted_payload = redacted.model_dump(mode="json")
+    assert redacted_payload["summary"] == "完整摘要"
+    assert "file_size" not in redacted_payload
+    assert "file_encoding" not in redacted_payload
+    assert "source_path" not in redacted_payload

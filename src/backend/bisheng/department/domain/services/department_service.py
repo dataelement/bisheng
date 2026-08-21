@@ -20,7 +20,6 @@ from bisheng.common.errcode.department import (
     DepartmentHasMembersError,
     DepartmentInvalidPasswordError,
     DepartmentInvalidRolesError,
-    DepartmentMemberDeleteBlockedError,
     DepartmentMemberDeleteForbiddenError,
     DepartmentMemberExistsError,
     DepartmentMemberNotFoundError,
@@ -529,6 +528,7 @@ class DepartmentService:
 
             if dept.status == "archived":
                 raise DepartmentArchivedReadonlyError()
+            name_changed = data.name is not None and data.name != dept.name
 
             # Source-readonly check
             if dept.source != "local" and data.name is not None:
@@ -584,6 +584,13 @@ class DepartmentService:
                 role_ids_for_grant,
                 login_user,
             )
+
+        if name_changed:
+            from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+                KnowledgeSpaceContentStat,
+            )
+
+            await KnowledgeSpaceContentStat.enqueue_department_stat_async([int(dept.id)])
 
         return dept
 
@@ -744,6 +751,13 @@ class DepartmentService:
         # Fire change handler
         ops = DepartmentChangeHandler.on_moved(dept.id, old_parent_id, data.new_parent_id)
         await DepartmentChangeHandler.execute_async(ops)
+
+        if old_parent_id != data.new_parent_id:
+            from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+                KnowledgeSpaceContentStat,
+            )
+
+            await KnowledgeSpaceContentStat.enqueue_department_stat_async([int(dept.id)])
 
         # Re-derive user_tenant for primary users under the moved subtree —
         # crossing into a different parent's subtree may change the resolved
@@ -1819,42 +1833,13 @@ class DepartmentService:
         )
 
     @classmethod
-    async def _count_user_owned_data_assets(cls, user_id: int) -> dict:
-        """删除人员前：统计用户作为创建者挂载的常见数据资产。"""
-        from bisheng.database.models.assistant import Assistant
-        from bisheng.database.models.flow import Flow
-        from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-
-        async with get_async_db_session() as session:
-            k = await session.scalar(
-                select(func.count(Knowledge.id)).where(
-                    Knowledge.user_id == user_id,
-                    Knowledge.type == KnowledgeTypeEnum.SPACE.value,
-                ),
-            )
-            f = await session.scalar(
-                select(func.count(Flow.id)).where(Flow.user_id == user_id),
-            )
-            a = await session.scalar(
-                select(func.count(Assistant.id)).where(
-                    Assistant.user_id == user_id,
-                    Assistant.is_delete == 0,
-                ),
-            )
-        return {
-            "knowledge_spaces": int(k or 0),
-            "flows": int(f or 0),
-            "assistants": int(a or 0),
-        }
-
-    @classmethod
-    async def acheck_local_member_delete(
+    async def _validate_local_member_deletable(
         cls,
         dept_id: str,
         user_id: int,
         login_user,
-    ) -> dict:
-        """删除人员前预检：是否挂载数据资产。"""
+    ) -> None:
+        """Shared permission and eligibility checks for local member delete."""
         from bisheng.database.constants import AdminRole
         from bisheng.user.domain.models.user import UserDao
         from bisheng.user.domain.models.user_role import UserRoleDao
@@ -1884,9 +1869,34 @@ class DepartmentService:
         if any(int(r.role_id) == AdminRole for r in old_roles):
             raise DepartmentPermissionDeniedError()
 
-        counts = await cls._count_user_owned_data_assets(user_id)
-        total = sum(counts.values())
-        return {"has_assets": total > 0, "counts": counts}
+    @classmethod
+    async def acheck_local_member_delete(
+        cls,
+        dept_id: str,
+        user_id: int,
+        login_user,
+    ) -> dict:
+        from bisheng.department.domain.services.local_member_delete_service import (
+            LocalMemberDeleteService,
+        )
+
+        await cls._validate_local_member_deletable(dept_id, user_id, login_user)
+        preview = await LocalMemberDeleteService.preview(
+            dept_id=dept_id,
+            user_id=user_id,
+            login_user=login_user,
+            validate_member=cls._validate_local_member_deletable,
+        )
+        legacy_counts = {
+            "knowledge_spaces": preview.counts.get("knowledge_space", 0),
+            "flows": preview.counts.get("workflow", 0),
+            "assistants": preview.counts.get("assistant", 0),
+        }
+        merged_counts = {**preview.counts, **legacy_counts}
+        return {
+            **preview.model_dump(),
+            "counts": merged_counts,
+        }
 
     @classmethod
     async def adelete_local_organization_member(
@@ -1894,47 +1904,17 @@ class DepartmentService:
         dept_id: str,
         user_id: int,
         login_user,
-    ) -> None:
-        """删除本地人员账号：清部门关系、角色（保留超管）、用户组，软删用户。"""
-        from bisheng.database.constants import AdminRole
-        from bisheng.database.models.user_group import UserGroup
-        from bisheng.user.domain.models.user import User
-        from bisheng.user.domain.models.user_role import UserRole
+    ):
+        from bisheng.department.domain.services.local_member_delete_service import (
+            LocalMemberDeleteService,
+        )
 
-        await cls.acheck_local_member_delete(dept_id, user_id, login_user)
-        counts = await cls._count_user_owned_data_assets(user_id)
-        if sum(counts.values()) > 0:
-            raise DepartmentMemberDeleteBlockedError(
-                msg="User has data assets",
-                counts=counts,
-            )
-
-        uds = await UserDepartmentDao.aget_user_departments(user_id)
-        dept_ids = [int(u.department_id) for u in uds]
-
-        async with get_async_db_session() as session:
-            await session.exec(delete(UserDepartment).where(UserDepartment.user_id == user_id))
-            await session.exec(
-                delete(UserRole).where(
-                    UserRole.user_id == user_id,
-                    UserRole.role_id != AdminRole,
-                ),
-            )
-            await session.exec(delete(UserGroup).where(UserGroup.user_id == user_id))
-            db_user = (await session.exec(select(User).where(User.user_id == user_id))).first()
-            if db_user:
-                db_user.delete = 1
-                session.add(db_user)
-            await session.commit()
-
-        if db_user:
-            from bisheng.user.domain.services.user import UserService
-
-            await UserService.ainvalidate_jwt_after_account_disabled(user_id)
-
-        for did in dept_ids:
-            ops = DepartmentChangeHandler.on_member_removed(did, user_id)
-            await DepartmentChangeHandler.execute_async(ops)
+        return await LocalMemberDeleteService.execute(
+            dept_id=dept_id,
+            user_id=user_id,
+            login_user=login_user,
+            validate_member=cls._validate_local_member_deletable,
+        )
 
     @classmethod
     async def aget_member_edit_form(

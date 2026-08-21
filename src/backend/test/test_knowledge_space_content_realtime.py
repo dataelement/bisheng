@@ -53,6 +53,14 @@ class _FakeRedisConnection:
             return rows
         return [member for member, _ in rows]
 
+    def hset(self, key, field, value):
+        self.hashes[key][str(field)] = str(value)
+        return 1
+
+    def hget(self, key, field):
+        value = self.hashes[key].get(str(field))
+        return value.encode() if value is not None else None
+
     def eval(self, script, numkeys, *args):
         keys = args[:numkeys]
         values = args[numkeys:]
@@ -106,6 +114,19 @@ class _FakeRedisConnection:
                 self.zsets[processing_key].pop(member, None)
                 self.hashes[meta_key].pop(member, None)
             return removed
+        if script == stat_cls.ACK_EVENT_SCRIPT:
+            processing_key, meta_key, payload_key, lock_key = keys
+            owner_token, *members = values
+            if self.values.get(lock_key) != str(owner_token):
+                return 0
+            removed = 0
+            for member in members:
+                member = self._text(member)
+                removed += int(member in self.zsets[processing_key])
+                self.zsets[processing_key].pop(member, None)
+                self.hashes[meta_key].pop(member, None)
+                self.hashes[payload_key].pop(member, None)
+            return removed
         if script == stat_cls.RECLAIM_SCRIPT:
             pending_key, processing_key, meta_key = keys
             now_ms = float(values[0])
@@ -141,6 +162,11 @@ def _install_fake(monkeypatch):
     monkeypatch.setattr(
         module.KnowledgeSpaceContentStat,
         "_schedule_pending_sync",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        module.KnowledgeSpaceContentStat,
+        "schedule_event_pending_sync_now",
         lambda *_args, **_kwargs: None,
     )
     return module.KnowledgeSpaceContentStat, fake
@@ -199,3 +225,55 @@ def test_projection_redis_keys_share_cluster_hash_tag():
     }
     assert all("{knowledge_space_content}" in key for key in keys)
     assert not hasattr(KnowledgeSpaceContentStat, "PREVIEW_PENDING_KEY")
+
+
+def test_event_queue_claim_ack_and_reclaim_preserve_payload(monkeypatch):
+    from bisheng.telemetry.domain.mid_table.knowledge_space_content import (
+        ContentStatEventEnvelope,
+    )
+
+    stat_cls, fake = _install_fake(monkeypatch)
+    monkeypatch.setattr(stat_cls, "_now_ms", lambda: 1_000)
+    envelope = ContentStatEventEnvelope(
+        event_id="event-1",
+        event_type="portal_document_read",
+        record_type="preview_daily",
+        user_id=7,
+        occurred_at=1_776_000_000,
+        local_date="2026-08-20",
+        daily_id="preview_daily:11:2026-08-20:digest",
+        source_app="shougang_portal",
+        scene="document_preview",
+        entry_point="direct",
+        dimensions={"file_id": 11},
+    )
+    fake.connection.hset(
+        stat_cls.EVENT_PAYLOAD_KEY,
+        envelope.event_id,
+        envelope.model_dump_json(),
+    )
+    fake.connection.zadd(
+        stat_cls.EVENT_PENDING_KEY,
+        {envelope.event_id: 1_000},
+    )
+    owner = stat_cls.acquire_lock_sync("owner-a")
+
+    assert stat_cls.claim_event_pending_sync(owner) == ["event-1"]
+    assert stat_cls.get_event_payload_sync("event-1") == envelope
+    assert stat_cls.renew_event_claims_sync(
+        owner,
+        ["event-1"],
+        now_ms=2_000,
+    )
+    assert stat_cls.event_queue_status_sync() == {
+        "event_pending_count": 0,
+        "event_processing_count": 1,
+        "event_oldest_pending_age_ms": 0,
+    }
+    assert stat_cls.reclaim_expired_events_sync(now_ms=240_999) == 0
+    assert stat_cls.reclaim_expired_events_sync(now_ms=241_999) == 0
+    assert stat_cls.reclaim_expired_events_sync(now_ms=242_000) == 1
+
+    assert stat_cls.claim_event_pending_sync(owner) == ["event-1"]
+    assert stat_cls.ack_event_claimed_sync(owner, ["event-1"])
+    assert stat_cls.get_event_payload_sync("event-1") is None

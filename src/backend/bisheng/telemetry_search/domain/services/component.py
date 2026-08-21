@@ -451,16 +451,26 @@ class DataQueryService(BaseModel):
             dimension_config = dimension_map.get(dimension.field_id)
             if not dimension_config:
                 raise QueryDimensionNotFoundError()
-            if dimension.time_granularity:
-                agg = AggregationExpression(name=dimension_config.field,
-                                            field=dimension_config.field,
-                                            type=AggsTypeEnum.DATE_HISTOGRAM,
-                                            time_interval=dimension.time_granularity)
+            time_granularity = dimension.time_granularity
+            if not time_granularity and dimension_config.field == TIMESTAMP_FIELD:
+                # Older dashboard edits could drop the selected granularity from
+                # stack dimensions. Timestamp dimensions exposed by the editor
+                # are never raw values, so keep those saved charts grouped by day.
+                time_granularity = "day"
+            if time_granularity:
+                agg = AggregationExpression(
+                    name=dimension_config.field,
+                    field=dimension_config.field,
+                    type=AggsTypeEnum.DATE_HISTOGRAM,
+                    time_interval=time_granularity,
+                )
 
             else:
-                agg = AggregationExpression(name=dimension_config.field,
-                                            field=dimension_config.field,
-                                            type=AggsTypeEnum.TERMS)
+                agg = AggregationExpression(
+                    name=dimension_config.field,
+                    field=dimension_config.field,
+                    type=AggsTypeEnum.TERMS,
+                )
             res.append(agg)
         return res
 

@@ -34,6 +34,25 @@ export {
     toWebLinkFileName,
 } from "~/api/knowledge";
 
+/** Whether the file was ingested via OpenAPI / filelib sync (vs local space upload). */
+export function isKnowledgeApiSyncFile(
+    file: Pick<KnowledgeFile, "userMetadata" | "type">,
+): boolean {
+    if (file.type === FileType.FOLDER) return false;
+    const meta = file.userMetadata ?? {};
+    return Boolean(meta.filelib_sync_endpoint || meta.external_file_id);
+}
+
+export function getKnowledgeIngestMethodLabel(
+    file: Pick<KnowledgeFile, "userMetadata" | "type">,
+    localize: (key: string) => string,
+): string {
+    if (file.type === FileType.FOLDER) return "";
+    return isKnowledgeApiSyncFile(file)
+        ? localize("com_knowledge.ingest_method_api_sync")
+        : localize("com_knowledge.ingest_method_local");
+}
+
 /** Label for transient upload rows (progress % / registering phase). */
 export function getUploadTransientStatusLabel(
     file: KnowledgeFile,
@@ -66,6 +85,27 @@ export function isKnowledgeItemPending(file: KnowledgeFile): boolean {
             FileStatus.REBUILDING,
             FileStatus.UPLOADING,
         ].includes(file.status)
+    );
+}
+
+/** File/folder eligible for single or batch re-parse from the space file list. */
+export function isKnowledgeFileReparseRetryable(
+    file: Pick<
+        KnowledgeFile,
+        "status" | "type" | "successFileNum" | "fileNum" | "folderStatsLoading" | "folderStatsError"
+    >,
+): boolean {
+    if (file.type === FileType.FOLDER) {
+        if (file.folderStatsLoading || file.folderStatsError) return false;
+        if (file.successFileNum !== undefined && file.fileNum !== undefined) {
+            return file.successFileNum < file.fileNum;
+        }
+        return false;
+    }
+    return (
+        file.status === FileStatus.FAILED
+        || file.status === FileStatus.VIOLATION
+        || file.status === FileStatus.TIMEOUT
     );
 }
 

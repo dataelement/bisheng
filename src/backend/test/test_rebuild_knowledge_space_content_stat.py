@@ -31,7 +31,17 @@ class _FakeElasticsearch:
     def __init__(self):
         self.exists = True
         self.refresh_interval = "30s"
-        self.counts = defaultdict(int, {"all": 9, "file": 6, "preview_daily": 3})
+        self.counts = defaultdict(
+            int,
+            {
+                "all": 20,
+                "file": 6,
+                "preview_daily": 3,
+                "download_daily": 2,
+                "favorite_daily": 1,
+                "portal_engagement_daily": 3,
+            },
+        )
         self.events = []
         self.indices = _FakeIndices(self)
 
@@ -41,6 +51,30 @@ class _FakeElasticsearch:
             return {"count": self.counts["all"]}
         record_type = body["query"]["term"]["record_type"]
         return {"count": self.counts[record_type]}
+
+    def search(self, *, index, body):
+        assert index == TARGET_INDEX
+        assert body["query"]["bool"]["must_not"] == [
+            {
+                "terms": {
+                    "record_type": [
+                        "file",
+                        "preview_daily",
+                        "download_daily",
+                        "favorite_daily",
+                        "portal_engagement_daily",
+                    ]
+                }
+            }
+        ]
+        return {
+            "aggregations": {
+                "record_types": {
+                    "buckets": ([{"key": "legacy_unknown", "doc_count": 2}] if self.counts["all"] == 20 else [])
+                },
+                "missing_record_type": {"doc_count": 3 if self.counts["all"] == 20 else 0},
+            }
+        }
 
 
 class _FakeRedisConnection:
@@ -98,11 +132,15 @@ def _build_runtime(es, redis, events):
         renew_lock=lambda owner: owner == "owner-1",
         release_lock=lambda owner: events.append(f"release:{owner}") or True,
         reclaim_all=lambda: events.append("reclaim") or 2,
+        reclaim_all_events=lambda: events.append("reclaim_events") or 1,
         reset_index_bootstrap=lambda: events.append("reset_bootstrap"),
         ensure_index=ensure_index,
         rebuild=rebuild,
         has_pending=lambda: True,
         schedule_pending=lambda: events.append("schedule_pending"),
+        has_event_pending=lambda: True,
+        schedule_event_pending=lambda: events.append("schedule_event_pending"),
+        set_replay_floor=lambda _timestamp: events.append("set_replay_floor"),
     )
 
 
@@ -123,9 +161,15 @@ def test_default_dry_run_is_read_only_and_reports_current_state():
     assert report["preflight"]["index"] == {
         "exists": True,
         "refresh_interval": "30s",
-        "document_count": 9,
+        "document_count": 20,
         "file_snapshot_count": 6,
         "preview_daily_count": 3,
+        "download_daily_count": 2,
+        "favorite_daily_count": 1,
+        "portal_engagement_daily_count": 3,
+        "other_record_count": 5,
+        "other_record_type_counts": {"legacy_unknown": 2},
+        "missing_record_type_count": 3,
     }
     assert events == []
     assert redis.deleted == []
@@ -161,19 +205,24 @@ def test_apply_uses_owner_lock_rebuilds_exact_index_and_reschedules_pending():
     assert events == [
         "acquire_lock",
         "reclaim",
+        "reclaim_events",
+        "set_replay_floor",
         "delete_index",
         "reset_bootstrap",
         "ensure_index",
         "rebuild",
         "release:owner-1",
         "schedule_pending",
+        "schedule_event_pending",
     ]
     assert report["result"]["index"]["refresh_interval"] == "1s"
     assert report["result"]["index"]["file_snapshot_count"] == 4
     assert report["result"]["index"]["preview_daily_count"] == 0
     assert report["result"]["reclaimed_processing_count"] == 2
+    assert report["result"]["reclaimed_event_processing_count"] == 1
     assert report["owner_lock_released"] is True
     assert report["pending_rescheduled"] is True
+    assert report["event_pending_rescheduled"] is True
     assert len(redis.deleted) == 6
 
 

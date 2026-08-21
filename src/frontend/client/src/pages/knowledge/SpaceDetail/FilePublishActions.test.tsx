@@ -19,6 +19,7 @@ jest.mock("~/hooks", () => ({
             "com_knowledge.tag": "标签",
             "com_knowledge.file_encoding": "文件编码",
             "com_knowledge.update_time": "更新时间",
+            "com_knowledge.original_uploader": "原始上传人",
             "com_knowledge.status": "状态",
             "com_knowledge.success": "成功",
             "com_knowledge.parsing_status": "解析中",
@@ -133,6 +134,7 @@ const baseFile: KnowledgeFile = {
     fileEncoding: "",
     spaceId: "space-1",
     user_name: "张三",
+    originalUploaderName: "原始张三",
     updater_name: "李四",
 } as any;
 
@@ -184,6 +186,41 @@ describe("普通知识空间文件发布入口", () => {
         expect(mockOnPublishFile).toHaveBeenCalledWith(baseFile);
     });
 
+    test("失败文件即使具有发布 capability 也不展示表格发布入口", () => {
+        const failedFile = {
+            ...baseFile,
+            status: FileStatus.FAILED,
+            capabilities: { canPublish: true },
+        } as KnowledgeFile;
+
+        render(
+            <FileTable
+                files={[failedFile]}
+                selectedFiles={new Set()}
+                handleSelectAll={jest.fn()}
+                handleSelectFile={jest.fn()}
+                isAdmin
+                currentUserRole={SpaceRole.ADMIN}
+                onDownload={jest.fn()}
+                onEditTags={jest.fn()}
+                onRename={jest.fn()}
+                onDelete={jest.fn()}
+                onRetry={jest.fn()}
+                onNavigateFolder={jest.fn()}
+                onPreview={jest.fn()}
+                onValidateName={() => null}
+                sortBy={SortType.UPDATE_TIME}
+                sortDirection={SortDirection.DESC}
+                onSort={jest.fn()}
+                publishEntryIds={new Set([failedFile.id])}
+                onPublishFile={mockOnPublishFile}
+            />
+        );
+
+        fireEvent.mouseEnter(screen.getByText(failedFile.name).closest("tr")!);
+        expect(screen.queryByRole("button", { name: "发布" })).not.toBeInTheDocument();
+    });
+
     test("表格展示上传人和更新人", () => {
         const folder = {
             ...baseFile,
@@ -198,6 +235,7 @@ describe("普通知识空间文件发布入口", () => {
             id: "file-2",
             name: "更新人兜底.pdf",
             user_name: "王五",
+            originalUploaderName: undefined,
             updater_name: undefined,
         } as KnowledgeFile;
 
@@ -224,6 +262,7 @@ describe("普通知识空间文件发布入口", () => {
         );
 
         expect(screen.getByText("上传人")).toBeInTheDocument();
+        expect(screen.getByText("原始上传人")).toBeInTheDocument();
         expect(screen.getByText("更新人")).toBeInTheDocument();
 
         const folderRow = screen.getByText("制度文件夹").closest("tr")!;
@@ -232,10 +271,11 @@ describe("普通知识空间文件发布入口", () => {
 
         const fileRow = screen.getByText(baseFile.name).closest("tr")!;
         expect(within(fileRow).getByText("张三")).toBeInTheDocument();
+        expect(within(fileRow).getByText("原始张三")).toBeInTheDocument();
         expect(within(fileRow).getByText("李四")).toBeInTheDocument();
 
         const fallbackRow = screen.getByText("更新人兜底.pdf").closest("tr")!;
-        expect(within(fallbackRow).getAllByText("王五")).toHaveLength(2);
+        expect(within(fallbackRow).getAllByText("王五")).toHaveLength(3);
     });
 
     test("卡片更多菜单展示发布并触发发布回调", () => {
@@ -282,6 +322,54 @@ describe("普通知识空间文件发布入口", () => {
         expect(screen.getByText("解析中")).toBeInTheDocument();
     });
 
+    test("投影未完成时表格和卡片不展示内部同步状态", () => {
+        const syncingFile = {
+            ...baseFile,
+            entryType: "share",
+            projectionReady: false,
+        } as KnowledgeFile;
+
+        render(
+            <>
+                <FileTable
+                    files={[syncingFile]}
+                    selectedFiles={new Set()}
+                    handleSelectAll={jest.fn()}
+                    handleSelectFile={jest.fn()}
+                    isAdmin={false}
+                    currentUserRole={SpaceRole.MEMBER}
+                    onDownload={jest.fn()}
+                    onEditTags={jest.fn()}
+                    onRename={jest.fn()}
+                    onDelete={jest.fn()}
+                    onRetry={jest.fn()}
+                    onNavigateFolder={jest.fn()}
+                    onPreview={jest.fn()}
+                    onValidateName={() => null}
+                    sortBy={SortType.UPDATE_TIME}
+                    sortDirection={SortDirection.DESC}
+                    onSort={jest.fn()}
+                />
+                <FileCard
+                    file={syncingFile}
+                    userRole={SpaceRole.MEMBER}
+                    isSelected={false}
+                    onSelect={jest.fn()}
+                    onDownload={jest.fn()}
+                    onRename={jest.fn()}
+                    onDelete={jest.fn()}
+                    onEditTags={jest.fn()}
+                    onRetry={jest.fn()}
+                    onNavigateFolder={jest.fn()}
+                    onPreview={jest.fn()}
+                />
+            </>
+        );
+
+        expect(screen.getAllByText("分享文件")).toHaveLength(2);
+        expect(screen.queryByText("同步中")).not.toBeInTheDocument();
+    });
+
     test("移动端卡片菜单展示发布并触发发布回调", () => {
         render(
             <FileCard
@@ -307,10 +395,10 @@ describe("普通知识空间文件发布入口", () => {
         expect(mockOnPublishFile).toHaveBeenCalledWith(baseFile);
     });
 
-    test("不可发布文件不展示发布入口", () => {
+    test("失败文件即使 canPublish 为真也不展示卡片发布入口", () => {
         render(
             <FileCard
-                file={{ ...baseFile, status: FileStatus.PROCESSING }}
+                file={{ ...baseFile, status: FileStatus.FAILED }}
                 userRole={SpaceRole.MEMBER}
                 isSelected={false}
                 onSelect={jest.fn()}
@@ -321,7 +409,7 @@ describe("普通知识空间文件发布入口", () => {
                 onRetry={jest.fn()}
                 onNavigateFolder={jest.fn()}
                 onPreview={jest.fn()}
-                canPublish={false}
+                canPublish
                 onPublishFile={mockOnPublishFile}
             />
         );

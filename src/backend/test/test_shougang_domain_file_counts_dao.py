@@ -282,6 +282,76 @@ async def test_count_files_by_category_scopes_matches_active_canonical_inventory
 
 
 @pytest.mark.asyncio
+async def test_portal_file_count_matches_cursor_canonical_scope(async_db_session):
+    common = {
+        "knowledge_id": 10,
+        "file_encoding": "GF-STD-PM-001",
+        "reference_document_id": 900,
+        "entry_status": KnowledgeFileEntryStatus.ACTIVE.value,
+    }
+    await _insert(
+        async_db_session,
+        file_name="manager.pdf",
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        **common,
+    )
+    await _insert(
+        async_db_session,
+        file_name="publish.pdf",
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        **common,
+    )
+    granted = await _insert(
+        async_db_session,
+        knowledge_id=30,
+        file_name="granted.pdf",
+        file_encoding="GF-STD-PM-002",
+        reference_document_id=901,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+    )
+    await _insert(
+        async_db_session,
+        knowledge_id=30,
+        file_name="not-granted.pdf",
+        file_encoding="GF-STD-PM-003",
+        reference_document_id=902,
+        entry_type=KnowledgeFileEntryType.MANAGER.value,
+        entry_status=KnowledgeFileEntryStatus.ACTIVE.value,
+    )
+    await _insert(
+        async_db_session,
+        knowledge_id=10,
+        file_name="inactive.pdf",
+        file_encoding="GF-STD-PM-004",
+        reference_document_id=903,
+        entry_type=KnowledgeFileEntryType.PUBLISH.value,
+        entry_status=KnowledgeFileEntryStatus.INVALID.value,
+    )
+
+    filters = {
+        "knowledge_ids": [10, 30],
+        "status": [KnowledgeFileStatus.SUCCESS.value],
+        "file_ext": "pdf",
+        "document_type": "STD",
+        "business_domain_code": "PM",
+        "full_space_ids": [10],
+        "explicit_file_ids": [int(granted.id)],
+    }
+    with _patch_session_factory(async_db_session):
+        total = await KnowledgeFileDao.acount_portal_files(**filters)
+        rows = await KnowledgeFileDao.aget_file_by_space_filters_cursor(
+            **filters,
+            order_sort="desc",
+            cursor=None,
+            limit=100,
+        )
+
+    assert total == 2
+    assert {int(file.reference_document_id or file.id) for file in rows} == {900, 901}
+
+
+@pytest.mark.asyncio
 async def test_portal_cursor_paginates_canonical_documents_without_cross_page_duplicates(async_db_session):
     first = await _insert(
         async_db_session,

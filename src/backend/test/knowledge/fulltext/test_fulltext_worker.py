@@ -57,6 +57,175 @@ async def test_dispatcher_rejects_multi_tenant_without_reading_outbox():
     sender.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    (
+        "aggregate_type",
+        "desired_action",
+        "error_codes",
+        "expected_result",
+        "expected_sync_calls",
+        "expected_session_count",
+    ),
+    [
+        pytest.param("knowledge", "fanout_current", [1213], True, 2, 3, id="deadlock-then-success"),
+        pytest.param(
+            "knowledge",
+            "fanout_current",
+            [2006],
+            False,
+            1,
+            3,
+            id="non-retryable-operational-error",
+        ),
+        pytest.param(
+            "file",
+            "sync_current",
+            [1213],
+            False,
+            1,
+            3,
+            id="file-sync-does-not-replay-elasticsearch-side-effects",
+        ),
+        pytest.param(
+            "knowledge",
+            "fanout_current",
+            [1213, 1213, 1213],
+            False,
+            3,
+            5,
+            id="deadlock-retries-exhausted",
+        ),
+    ],
+)
+async def test_consumer_retries_only_retryable_fanout_transaction_failures(
+    monkeypatch,
+    aggregate_type,
+    desired_action,
+    error_codes,
+    expected_result,
+    expected_sync_calls,
+    expected_session_count,
+):
+    from pymysql.err import OperationalError as PyMySQLOperationalError
+    from sqlalchemy.exc import OperationalError
+
+    celery_stub = MagicMock()
+    celery_stub.task = lambda *args, **kwargs: lambda function: function
+    worker_main_stub = ModuleType("bisheng.worker.main")
+    worker_main_stub.bisheng_celery = celery_stub
+    asyncio_utils_stub = ModuleType("bisheng.worker._asyncio_utils")
+    asyncio_utils_stub.run_async_task = MagicMock()
+    file_worker_stub = ModuleType("bisheng.worker.knowledge.file_worker")
+    file_worker_stub.run_retry_knowledge_parse_lifecycle = MagicMock()
+    monkeypatch.setitem(sys.modules, "bisheng.worker.main", worker_main_stub)
+    monkeypatch.setitem(sys.modules, "bisheng.worker._asyncio_utils", asyncio_utils_stub)
+    monkeypatch.setitem(
+        sys.modules,
+        "bisheng.worker.knowledge.file_worker",
+        file_worker_stub,
+    )
+    worker_path = Path(__file__).resolve().parents[3] / "bisheng/worker/knowledge/fulltext_index.py"
+    spec = importlib.util.spec_from_file_location(
+        "test_fulltext_index_deadlock_under_test",
+        worker_path,
+    )
+    fulltext_index = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(fulltext_index)
+
+    row = fulltext_index.KnowledgeFulltextOutbox(
+        id=31,
+        tenant_id=1,
+        aggregate_type=aggregate_type,
+        aggregate_id=121,
+        knowledge_id=121,
+        desired_action=desired_action,
+        desired_revision=4,
+        applied_revision=3,
+        trigger_type="knowledge_business_domains_updated",
+        status="pending",
+    )
+    sessions = []
+    repositories = []
+
+    class SessionContext:
+        def __init__(self, session):
+            self.session = session
+
+        async def __aenter__(self):
+            return self.session
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    def get_session():
+        session = MagicMock(session_index=len(sessions))
+        session.commit = AsyncMock()
+        sessions.append(session)
+        return SessionContext(session)
+
+    def repository_factory(session):
+        repository = AsyncMock()
+        repositories.append(repository)
+        if session.session_index == 0:
+            repository.claim.return_value = row
+        return repository
+
+    errors = [
+        OperationalError(
+            "INSERT INTO knowledge_fulltext_outbox ...",
+            {},
+            PyMySQLOperationalError(error_code, "database transaction failed"),
+        )
+        for error_code in error_codes
+    ]
+    sync_service = MagicMock()
+    side_effects = [*errors, "fanout_complete"] if expected_result else errors
+    sync_service.sync_claimed = AsyncMock(side_effect=side_effects)
+    index_repository = MagicMock()
+    index_repository.ensure_index = AsyncMock()
+
+    monkeypatch.setattr(fulltext_index, "get_async_db_session", get_session)
+    monkeypatch.setattr(
+        fulltext_index,
+        "KnowledgeFulltextOutboxRepositoryImpl",
+        MagicMock(side_effect=repository_factory),
+    )
+    monkeypatch.setattr(
+        fulltext_index,
+        "KnowledgeFulltextSyncService",
+        MagicMock(return_value=sync_service),
+    )
+    monkeypatch.setattr(
+        fulltext_index,
+        "KnowledgeFulltextIndexRepositoryImpl",
+        MagicMock(return_value=index_repository),
+    )
+    monkeypatch.setattr(fulltext_index, "get_es_connection", AsyncMock(return_value=MagicMock()))
+    monkeypatch.setattr(
+        fulltext_index,
+        "get_statistics_es_connection",
+        AsyncMock(return_value=MagicMock()),
+    )
+
+    result = await fulltext_index._consume(outbox_id=31, revision=4)
+
+    assert result is expected_result
+    assert sync_service.sync_claimed.await_count == expected_sync_calls
+    assert len(sessions) == expected_session_count
+    attempt_sessions = sessions[1 : 1 + expected_sync_calls]
+    if expected_result:
+        for failed_session in attempt_sessions[:-1]:
+            failed_session.commit.assert_not_awaited()
+        attempt_sessions[-1].commit.assert_awaited_once()
+        assert all(repository.mark_failure.await_count == 0 for repository in repositories)
+    else:
+        for failed_session in attempt_sessions:
+            failed_session.commit.assert_not_awaited()
+        sessions[-1].commit.assert_awaited_once()
+        repositories[-1].mark_failure.assert_awaited_once()
+
+
 def test_auto_repair_worker_keeps_minimal_message_cas_and_retry_lifecycle_contract():
     source = (Path(__file__).resolve().parents[3] / "bisheng/worker/knowledge/fulltext_index.py").read_text(
         encoding="utf-8"

@@ -51,7 +51,7 @@ import { buildAutoTagLibraryPayload } from "../createKnowledgeSpaceApproval";
 import { extractKnowledgeActionErrorMessage } from "../errorUtils";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
 import { useFileUpload } from "../hooks/useFileUpload";
-import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeItemPending, resolveUploadSizeLimits, type UploadSizeEnvConfig } from "../knowledgeUtils";
+import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeFileReparseRetryable, isKnowledgeItemPending, resolveUploadSizeLimits, type UploadSizeEnvConfig } from "../knowledgeUtils";
 import { submitKnowledgeSpaceCreate } from "../createKnowledgeSpaceApproval";
 import { TREE_PAGE_SIZE } from "./constants";
 import type {
@@ -2643,11 +2643,7 @@ export default function PortalKnowledgeWorkbench() {
     }, [activeSpace, publishEntryIds]);
 
     const canRetryPortalFailedFile = useCallback((file: KnowledgeFile) => (
-        Boolean(
-            isActiveSpaceAdmin
-            && file.type !== FileType.FOLDER
-            && file.status === FileStatus.FAILED,
-        )
+        Boolean(isActiveSpaceAdmin && file.type !== FileType.FOLDER && isKnowledgeFileReparseRetryable(file))
     ), [isActiveSpaceAdmin]);
 
     const handleConfirmCreateSpace = useCallback(async (form: CreateKnowledgeSpaceFormData) => {
@@ -2820,6 +2816,8 @@ export default function PortalKnowledgeWorkbench() {
                                                     onRetryFile={() => void reloadFiles()}
                                                     onAcceptAlias={(fileId) => void fileUpload.handleAcceptAlias(fileId)}
                                                     onRejectAlias={(fileId) => void fileUpload.handleRejectAlias(fileId)}
+                                                    onBatchAcceptAlias={(fileIds) => void fileUpload.handleBatchAcceptAlias(fileIds)}
+                                                    onBatchRejectAlias={(fileIds) => void fileUpload.handleBatchRejectAlias(fileIds)}
                                                     canRetryFile={canRetryPortalFailedFile}
                                                     retryActionLabel="重新解析"
                                                     currentPath={currentPath}

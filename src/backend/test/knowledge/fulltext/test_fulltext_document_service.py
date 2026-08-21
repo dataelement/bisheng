@@ -49,7 +49,7 @@ def snapshot(**updates):
                 projection_status="pending",
                 is_primary_version=True,
             ),
-            KnowledgeFulltextProjectionAction.RETRY,
+            KnowledgeFulltextProjectionAction.KEEP,
         ),
         (
             snapshot(

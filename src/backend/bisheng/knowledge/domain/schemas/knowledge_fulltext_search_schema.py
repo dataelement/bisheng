@@ -64,6 +64,7 @@ class KnowledgeFulltextSelectCondition(StrictSchema):
         "business_domain_code",
         "file_ext",
         "original_uploader_id",
+        "original_uploader_name",
         "original_knowledge_id",
     ]
     match_mode: Literal[KnowledgeFulltextConditionMatchMode.EXACT] = (
@@ -82,6 +83,8 @@ class KnowledgeFulltextSelectCondition(StrictSchema):
         normalized = self.value.strip()
         if not normalized:
             raise ValueError(f"{self.field} condition value must not be empty")
+        if self.field == "original_uploader_name" and len(normalized) > 200:
+            raise ValueError("original_uploader_name condition value must not exceed 200 characters")
         if self.field in {"business_domain_code"}:
             normalized = normalized.upper()
         if self.field == "file_ext":

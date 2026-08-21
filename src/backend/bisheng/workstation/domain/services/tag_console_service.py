@@ -30,7 +30,7 @@ from bisheng.workstation.domain.repositories.tag_console_repository import (
     SOURCE_TAG,
     TagConsoleRepositoryImpl,
 )
-from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejectRequest
+from bisheng.workstation.domain.schemas.review_tags_schema import ApproveOrRejectRequest, ReviewTagScope
 from bisheng.workstation.domain.schemas.tag_console_schema import (
     MAX_BATCH_SIZE,
     MAX_PAGE_SIZE,
@@ -104,6 +104,13 @@ class TagConsoleService:
             return
         raise ReviewTagPermissionDeniedError()
 
+    async def _review_scope_or_full(self) -> ReviewTagScope | None:
+        """解析审核范围：全租户返回 None（仓库不过滤），否则返回受限 scope。"""
+        scope = await self.tags_service.resolve_review_tag_scope()
+        if scope.full_tenant:
+            return None
+        return scope
+
     async def search(self, req: TagConsoleSearchReq, tenant_id: int) -> TagConsoleSearchResp:
         self._validate_page(req)
         await self._ensure_can_manage_tags()
@@ -176,20 +183,20 @@ class TagConsoleService:
 
     async def review_search(self, req: TagConsoleReviewSearchReq, tenant_id: int) -> TagConsoleReviewSearchResp:
         self._validate_page(req)
-        space_ids = await self.tags_service.resolve_reviewable_space_ids()
+        scope = await self._review_scope_or_full()
 
         if req.status in (TagConsoleReviewStatus.APPROVED, TagConsoleReviewStatus.REVIEWED):
             # The "已审核" tab spans two tables, so rows arrive tagged with the
             # one they came from.
-            refs, total = await self.repository.search_reviewed_tags(req, tenant_id=tenant_id, space_ids=space_ids)
+            refs, total = await self.repository.search_reviewed_tags(req, tenant_id=tenant_id, scope=scope)
         else:
-            pairs, total = await self.repository.search_review_tags(req, tenant_id=tenant_id, space_ids=space_ids)
+            pairs, total = await self.repository.search_review_tags(req, tenant_id=tenant_id, scope=scope)
             refs = [(SOURCE_REVIEW, name, resource_type) for name, resource_type in pairs]
 
         pending_count, rejected_count, approved_count = await self.repository.count_review_by_status(
-            req, tenant_id=tenant_id, space_ids=space_ids
+            req, tenant_id=tenant_id, scope=scope
         )
-        data = await self._assemble_review_page(refs, tenant_id=tenant_id, space_ids=space_ids)
+        data = await self._assemble_review_page(refs, tenant_id=tenant_id, scope=scope)
         return TagConsoleReviewSearchResp(
             data=data,
             total=total,
@@ -202,7 +209,7 @@ class TagConsoleService:
         self,
         refs: list[tuple[int, str, str]],
         tenant_id: int,
-        space_ids: set[int] | None,
+        scope: ReviewTagScope | None,
     ) -> list[TagConsoleReviewItem]:
         """Decorate each half with its own query, then restore the page order.
 
@@ -217,7 +224,7 @@ class TagConsoleService:
 
         review_items = {
             (item.name, item.resource_type): item
-            for item in await self._decorate_review(review_pairs, tenant_id=tenant_id, space_ids=space_ids)
+            for item in await self._decorate_review(review_pairs, tenant_id=tenant_id, scope=scope)
         }
         approved_items = await self._decorate_approved(approved_pairs, tenant_id=tenant_id)
 
@@ -269,9 +276,9 @@ class TagConsoleService:
 
         Shares the query used by review mode so the two numbers cannot drift.
         """
-        space_ids = await self.tags_service.resolve_reviewable_space_ids()
+        scope = await self._review_scope_or_full()
         pending, _, _ = await self.repository.count_review_by_status(
-            TagConsoleReviewSearchReq(), tenant_id=tenant_id, space_ids=space_ids
+            TagConsoleReviewSearchReq(), tenant_id=tenant_id, scope=scope
         )
         return pending
 
@@ -292,8 +299,8 @@ class TagConsoleService:
         )
 
     async def review_detail(self, ref: TagConsoleReviewRef, tenant_id: int) -> TagConsoleReviewItem:
-        space_ids = await self.tags_service.resolve_reviewable_space_ids()
-        items = await self._decorate_review([(ref.name, ref.resource_type)], tenant_id=tenant_id, space_ids=space_ids)
+        scope = await self._review_scope_or_full()
+        items = await self._decorate_review([(ref.name, ref.resource_type)], tenant_id=tenant_id, scope=scope)
         if not items:
             raise ReviewTagNotFoundError()
         return items[0]
@@ -302,11 +309,11 @@ class TagConsoleService:
         self,
         pairs: list[tuple[str, str]],
         tenant_id: int,
-        space_ids: set[int] | None,
+        scope: ReviewTagScope | None,
     ) -> list[TagConsoleReviewItem]:
         if not pairs:
             return []
-        grouped = await self.repository.load_review_group(pairs, tenant_id=tenant_id, space_ids=space_ids)
+        grouped = await self.repository.load_review_group(pairs, tenant_id=tenant_id, scope=scope)
 
         all_ids = [int(row.id) for rows in grouped.values() for row in rows if row.id is not None]
         files_by_tag = await self.repository.list_review_source_files(all_ids, tenant_id=tenant_id)
@@ -456,8 +463,16 @@ class TagConsoleService:
         items: list[TagConsoleReviewRef],
         target_library_id: int,
         tenant_id: int,
+        *,
+        ack_similar: bool = False,
     ) -> TagConsoleBatchResult:
-        return await self._batch_review(items, tenant_id, approve=True, target_library_id=target_library_id)
+        return await self._batch_review(
+            items,
+            tenant_id,
+            approve=True,
+            target_library_id=target_library_id,
+            ack_similar=ack_similar,
+        )
 
     async def batch_reject(
         self,
@@ -477,14 +492,22 @@ class TagConsoleService:
         approve: bool,
         target_library_id: int | None = None,
         reject_reason: str | None = None,
+        ack_similar: bool = False,
     ) -> TagConsoleBatchResult:
-        space_ids = await self.tags_service.resolve_reviewable_space_ids()
+        scope = await self._review_scope_or_full()
         self._validate_batch(items)
         if approve and not await self.repository.library_exists(target_library_id, tenant_id):
             raise KnowledgeSpaceTagLibraryNotExistError()
+        if approve:
+            await self.tags_service.ensure_review_tags_similar_acknowledged(
+                tag_names=[item.name for item in items],
+                tag_library_id=int(target_library_id),
+                tenant_id=tenant_id,
+                ack_similar=ack_similar,
+            )
 
         pairs = [(item.name, item.resource_type) for item in items]
-        grouped = await self.repository.load_review_group(pairs, tenant_id=tenant_id, space_ids=space_ids)
+        grouped = await self.repository.load_review_group(pairs, tenant_id=tenant_id, scope=scope)
         # One batched lookup for the whole request rather than per item.
         spaces_by_review_tag = await self._map_review_tags_to_spaces(grouped, tenant_id=tenant_id) if approve else {}
 
@@ -498,7 +521,7 @@ class TagConsoleService:
                 # The underlying flow only looks at pending rows and would report
                 # a bare "tag not found"; say what is actually wrong instead.
                 raise TagConsoleActionNotApplicableError()
-            knowledge_id = self._resolve_knowledge_id(rows, space_ids, spaces_by_review_tag)
+            knowledge_id = self._resolve_knowledge_id(rows, scope, spaces_by_review_tag)
             if approve and knowledge_id is None:
                 # Logged, not silent: this rejects the whole item while still
                 # returning HTTP 200, which is invisible in the access log.
@@ -506,7 +529,12 @@ class TagConsoleService:
                     "tag console approve skipped, no in-scope source space for %s (review_tag ids=%s, scope=%s)",
                     item.name,
                     [row.id for row in rows],
-                    "all" if space_ids is None else sorted(space_ids),
+                    "all"
+                    if scope is None
+                    else (
+                        f"role={sorted(scope.role_managed_space_ids)} "
+                        f"clinic={sorted(scope.clinic_admin_department_ids)}"
+                    ),
                 )
                 result.failed.append(TagConsoleBatchFailure(name=item.name, reason="缺少来源知识"))
                 continue
@@ -519,6 +547,7 @@ class TagConsoleService:
                 "resource_type": item.resource_type,
                 "tag_library_id": target_library_id,
                 "knowledge_id": knowledge_id,
+                "ack_similar": ack_similar if approve else False,
             }
             if reject_reason is not None:
                 payload["reject_reason"] = reject_reason
@@ -571,21 +600,25 @@ class TagConsoleService:
     @staticmethod
     def _resolve_knowledge_id(
         rows,
-        space_ids: set[int] | None,
+        scope: ReviewTagScope | None,
         spaces_by_review_tag: dict[int, list[int]],
     ) -> int | None:
-        """First in-scope knowledge space carrying the tag.
+        """解析通过时写入的目标知识空间。
 
-        A tag produced in several spaces still approves into one library; the
-        review panel lists every source file so the reviewer sees the blast radius.
-
-        Source files come first because that is where the provenance actually
-        lives; ``business_id`` is only trusted when the row explicitly says it
-        holds a knowledge space.
+        优先来源文件所在、且落在 role 管理空间内的库；科室路径下再用文件来源
+        团队/个人库（2A）。``business_id`` 仅在行明确声明 knowledge_space 时兜底。
         """
+        full = scope is None or scope.full_tenant
+        role_ids = frozenset() if full else scope.role_managed_space_ids
+        clinic = False if full else bool(scope.clinic_admin_department_ids)
+
         for row in rows:
             for space_id in spaces_by_review_tag.get(int(row.id), []):
-                if space_ids is None or space_id in space_ids:
+                if full or space_id in role_ids:
+                    return space_id
+        if clinic:
+            for row in rows:
+                for space_id in spaces_by_review_tag.get(int(row.id), []):
                     return space_id
         for row in rows:
             if row.business_type != TagBusinessTypeEnum.KNOWLEDGE_SPACE.value:
@@ -593,7 +626,7 @@ class TagConsoleService:
             if not str(row.business_id or "").isdigit():
                 continue
             space_id = int(row.business_id)
-            if space_ids is None or space_id in space_ids:
+            if full or space_id in role_ids or clinic:
                 return space_id
         return None
 

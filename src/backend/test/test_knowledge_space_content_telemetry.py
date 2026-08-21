@@ -207,18 +207,18 @@ def _stub_file_dimension_lookups(worker_module, monkeypatch):
         "get_label_lookup_for_tenant",
         lambda _tenant_id: ({}, {}),
     )
+    monkeypatch.setattr(
+        worker_module,
+        "_get_dimension_department_map",
+        lambda _departments: {},
+    )
 
 
 @pytest.mark.asyncio
-async def test_knowledge_space_content_log_preview_success_upserts_daily_counter(monkeypatch):
+async def test_knowledge_space_content_log_preview_success_queues_fresh_event(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
-
-    fake_client = _FakeAsyncIndexClient()
-
-    async def fake_get_es_connection():
-        return fake_client
-
-    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection", fake_get_es_connection)
+    enqueue = AsyncMock(return_value=True)
+    monkeypatch.setattr(module.KnowledgeSpaceContentStat, "enqueue_success_event_async", enqueue)
 
     file_record = SimpleNamespace(
         id=11,
@@ -237,38 +237,23 @@ async def test_knowledge_space_content_log_preview_success_upserts_daily_counter
         occurred_at=datetime(2026, 8, 3, 15, 30, tzinfo=timezone.utc),
     )
 
-    assert fake_client.get_calls == [{"index": "mid_knowledge_space_content_stat", "id": "11"}]
-    call = fake_client.update_calls[0]
-    assert call["index"] == "mid_knowledge_space_content_stat"
-    assert call["id"] == "preview_11_2026-08-03"
-    assert call["retry_on_conflict"] == 5
-    assert call["script"]["source"] == "ctx._source.preview_count += params.increment"
-    assert call["upsert"]["record_type"] == "preview_daily"
-    assert call["upsert"]["local_date"] == "2026-08-03"
-    assert call["upsert"]["preview_count"] == 1
-    assert call["upsert"]["file_name"] == "方案.pdf"
-    assert "refresh" not in call
-    assert not {
-        "tenant_id",
-        "event_id",
-        "viewer_user_id",
-        "viewer_user_name",
-        "action_result",
-        "user_id",
-        "user_name",
-    }.intersection(call["upsert"])
+    enqueue.assert_awaited_once_with(
+        file_id=11,
+        user_id=9,
+        event_type="portal_document_read",
+        record_type="preview_daily",
+        source_app="bisheng_my_knowledge",
+        scene="document_preview",
+        entry_point="my_knowledge_preview",
+        occurred_at=datetime(2026, 8, 3, 15, 30, tzinfo=timezone.utc),
+    )
 
 
 @pytest.mark.asyncio
 async def test_favorite_space_preview_is_not_projected(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
-
-    fake_client = _FakeAsyncIndexClient()
-
-    async def fake_get_es_connection():
-        return fake_client
-
-    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection", fake_get_es_connection)
+    enqueue = AsyncMock(return_value=True)
+    monkeypatch.setattr(module.KnowledgeSpaceContentStat, "enqueue_success_event_async", enqueue)
 
     await module.KnowledgeSpaceContentStat.log_preview_success(
         file_record=SimpleNamespace(id=11),
@@ -277,22 +262,17 @@ async def test_favorite_space_preview_is_not_projected(monkeypatch):
         viewer_user_name="查看人",
     )
 
-    assert fake_client.get_calls == []
-    assert fake_client.update_calls == []
+    enqueue.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_knowledge_space_content_log_preview_success_does_not_retry_es_failure(monkeypatch):
+async def test_knowledge_space_content_log_preview_success_does_not_raise_on_enqueue_failure(monkeypatch):
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
-
-    class _FailingAsyncIndexClient(_FakeAsyncIndexClient):
-        async def update(self, **kwargs):
-            raise RuntimeError("es unavailable")
-
-    async def fake_get_es_connection():
-        return _FailingAsyncIndexClient()
-
-    monkeypatch.setattr("bisheng.telemetry.domain.mid_table.base.get_es_connection", fake_get_es_connection)
+    monkeypatch.setattr(
+        module.KnowledgeSpaceContentStat,
+        "enqueue_success_event_async",
+        AsyncMock(return_value=False),
+    )
 
     file_record = SimpleNamespace(
         id=11,
@@ -310,12 +290,14 @@ async def test_knowledge_space_content_log_preview_success_does_not_retry_es_fai
         viewer_user_name="查看人",
     )
 
-    assert not hasattr(module.KnowledgeSpaceContentStat, "enqueue_preview_record_async")
-    assert not hasattr(module.KnowledgeSpaceContentStat, "PREVIEW_PENDING_KEY")
+    assert module.KnowledgeSpaceContentStat.enqueue_success_event_async.await_count == 1
 
 
 def test_knowledge_space_content_build_file_record_contains_realtime_dimensions():
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+    from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import (
+        OrganizationNameSnapshot,
+    )
 
     file_record = SimpleNamespace(
         id=11,
@@ -331,16 +313,13 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
     )
     space = SimpleNamespace(id=3, tenant_id=7, name="质量制度库")
     uploader = SimpleNamespace(user_name="上传人", departments=[], groups=[], roles=[])
-    space_department = SimpleNamespace(id=31, name="质量管理处")
-    primary_department = SimpleNamespace(id=21, name="质量部")
-
     record = module.KnowledgeSpaceContentStat.build_file_record(
         file_record=file_record,
         space=space,
         uploader=uploader,
         space_level="department",
-        space_department=space_department,
-        primary_department=primary_department,
+        uploader_organization=OrganizationNameSnapshot(company_name="首钢", department_name="质量部"),
+        belonging_organization=OrganizationNameSnapshot(company_name="首钢", department_name="质量管理处"),
         file_category_labels={"POL": "政策制度"},
         file_subcategory_labels={"POL-01": "管理制度"},
     )
@@ -362,10 +341,10 @@ def test_knowledge_space_content_build_file_record_contains_realtime_dimensions(
     assert record.file_subcategory_code == "POL-01"
     assert record.file_subcategory_name == "管理制度"
     assert record.business_domain_code == "QM"
-    assert record.space_department_id == 31
-    assert record.space_department_name == "质量管理处"
-    assert record.primary_department_id == 21
-    assert record.primary_department_name == "质量部"
+    assert record.uploader_company_name == "首钢"
+    assert record.uploader_department_name == "质量部"
+    assert record.belonging_company_name == "首钢"
+    assert record.belonging_department_name == "质量管理处"
     assert record.projection_updated_at
 
 
@@ -387,6 +366,7 @@ def test_content_sync_keeps_team_and_clinic_levels_separate(
         "get_user_from_ids_with_cache",
         lambda _ids, user_map: user_map,
     )
+    monkeypatch.setattr(worker_module, "_get_dimension_department_map", lambda _departments: {})
     file_record = SimpleNamespace(
         id=11,
         tenant_id=1,
@@ -434,6 +414,14 @@ def test_knowledge_space_content_mapping_excludes_tenant_and_common_user_context
         "format": "strict_date_optional_time||epoch_second",
     }
     assert stat._mappings["download_count"] == {"type": "long"}
+    assert stat._mappings["favorite_count"] == {"type": "long"}
+    assert not {
+        "space_department_id",
+        "space_department_name",
+        "primary_department_id",
+        "primary_department_name",
+        "uploader_department_infos",
+    }.intersection(stat._mappings)
 
 
 @pytest.mark.parametrize(
@@ -450,6 +438,56 @@ def test_only_department_and_clinic_spaces_are_department_bound(level, expected)
     worker_module = _import_worker_mid_table()
 
     assert worker_module._is_department_bound_space_scope(SimpleNamespace(level=level)) is expected
+
+
+@pytest.mark.parametrize(
+    ("level", "scope_fields", "expected_source"),
+    [
+        ("public", {}, "company"),
+        ("department", {}, "binding"),
+        ("team_ks", {}, "binding"),
+        ("team", {"created_by": 8}, "creator"),
+        ("personal", {"owner_id": 9}, "owner"),
+    ],
+)
+def test_content_ownership_source_follows_space_level(
+    level,
+    scope_fields,
+    expected_source,
+):
+    worker_module = _import_worker_mid_table()
+    departments = {
+        "company": SimpleNamespace(id=1),
+        "binding": SimpleNamespace(id=2),
+        "creator": SimpleNamespace(id=3),
+        "owner": SimpleNamespace(id=4),
+    }
+    primary_departments = {
+        8: departments["creator"],
+        9: departments["owner"],
+    }
+
+    result = worker_module._resolve_belonging_start_department(
+        scope=SimpleNamespace(level=level, **scope_fields),
+        space_department=departments["binding"],
+        primary_department_map=primary_departments,
+        company_departments=[departments["company"]],
+    )
+
+    assert result is departments[expected_source]
+
+
+def test_public_content_ownership_requires_unique_company():
+    worker_module = _import_worker_mid_table()
+
+    result = worker_module._resolve_belonging_start_department(
+        scope=SimpleNamespace(level="public"),
+        space_department=None,
+        primary_department_map={},
+        company_departments=[SimpleNamespace(id=1), SimpleNamespace(id=2)],
+    )
+
+    assert result is None
 
 
 @pytest.mark.parametrize(
@@ -494,11 +532,11 @@ def test_unbound_space_content_has_no_owning_department():
             roles=[],
         ),
         space_level="public",
-        space_department=None,
     )
 
-    assert record.space_department_id is None
-    assert record.space_department_name is None
+    assert record.belonging_company_name is None
+    assert record.belonging_department_name is None
+    assert "belonging_company_name" not in record.model_dump()
 
 
 def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monkeypatch):
@@ -522,6 +560,9 @@ def test_knowledge_space_content_delete_stale_file_records_uses_sync_run_id(monk
 
 def test_knowledge_space_content_builds_idempotent_download_daily_record():
     from bisheng.telemetry.domain.mid_table import knowledge_space_content as module
+    from bisheng.telemetry.domain.mid_table.knowledge_space_content_dimensions import (
+        OrganizationNameSnapshot,
+    )
 
     file_record = module.KnowledgeSpaceContentStat.build_file_record(
         file_record=SimpleNamespace(
@@ -538,7 +579,10 @@ def test_knowledge_space_content_builds_idempotent_download_daily_record():
         ),
         space=SimpleNamespace(id=3, tenant_id=7, name="制度库"),
         space_level="department",
-        space_department=SimpleNamespace(id=31, name="质量管理处"),
+        belonging_organization=OrganizationNameSnapshot(
+            company_name="首钢",
+            department_name="质量管理处",
+        ),
     )
 
     first = module.KnowledgeSpaceContentStat.build_download_daily_record(
@@ -554,11 +598,12 @@ def test_knowledge_space_content_builds_idempotent_download_daily_record():
         sync_run_id="run-2",
     )
 
-    assert first.es_id == second.es_id == "download_11_2026-08-03"
+    assert first.es_id == second.es_id
+    assert first.es_id.startswith("download_daily:11:2026-08-03:")
     assert first.record_type == "download_daily"
     assert first.download_count == 2
     assert first.timestamp == 1785686400
-    assert first.space_department_name == "质量管理处"
+    assert first.belonging_department_name == "质量管理处"
     assert second.download_count == 5
 
 
@@ -602,7 +647,6 @@ def test_portal_download_aggregation_query_filters_source_and_uses_after_key(mon
             }
 
     monkeypatch.setattr(worker_module, "get_statistics_es_connection_sync", lambda: _FakeStatisticsEs())
-    worker_module.telemetry_service.index_name = "base_telemetry_events"
 
     buckets, after_key = worker_module._get_portal_download_aggregation_page(
         after_key={"local_date": "2026-08-02", "file_id": 9},
@@ -709,7 +753,8 @@ def test_rebuild_download_projection_skips_missing_files_and_cleans_after_write(
         sync_run_id="run-1",
     )
 
-    assert [record.es_id for record in inserted] == ["download_11_2026-08-03"]
+    assert len(inserted) == 1
+    assert inserted[0].es_id.startswith("download_daily:11:2026-08-03:")
     assert inserted[0].download_count == 2
     assert cleaned == ["run-1"]
     assert result == {"synced_download_daily": 1, "deleted_stale_download_daily": 4}
@@ -769,6 +814,60 @@ def test_rebuild_download_projection_does_not_cleanup_after_failed_write(monkeyp
         )
 
     assert cleaned == []
+
+
+def test_full_file_projection_does_not_rebuild_or_clean_daily_records(monkeypatch):
+    worker_module = _import_worker_mid_table()
+    stat_cls = worker_module.KnowledgeSpaceContentStat
+    monkeypatch.setattr(
+        "bisheng.telemetry.domain.mid_table.base.get_es_connection_sync",
+        lambda: _FakeSyncIndexClient(),
+    )
+    monkeypatch.setattr(stat_cls, "renew_lock_sync", lambda _owner: True)
+    monkeypatch.setattr(
+        stat_cls,
+        "delete_stale_file_records_sync",
+        lambda self, _sync_run_id: 2,
+    )
+    monkeypatch.setattr(
+        stat_cls,
+        "delete_space_records_sync",
+        lambda self, _space_ids: 1,
+    )
+    monkeypatch.setattr(
+        stat_cls,
+        "queue_status_sync",
+        lambda: {
+            "pending_count": 0,
+            "processing_count": 0,
+            "oldest_pending_age_ms": 0,
+        },
+    )
+    monkeypatch.setattr(
+        worker_module,
+        "_get_success_space_file_rows",
+        lambda _page, _page_size: [],
+    )
+    monkeypatch.setattr(worker_module, "_get_favorite_space_ids", lambda: [])
+    monkeypatch.setattr(
+        worker_module,
+        "rebuild_knowledge_space_content_download_projection",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("daily history must not be rebuilt")
+        ),
+    )
+
+    result = worker_module.rebuild_knowledge_space_content_file_projection("owner-a")
+
+    assert result["synced"] == 0
+    assert result["deleted_stale"] == 2
+    assert result["deleted_favorite"] == 1
+    assert not {
+        "synced_download_daily",
+        "deleted_stale_download_daily",
+        "preview_daily",
+        "favorite_daily",
+    }.intersection(result)
 
 
 def test_delete_space_records_removes_file_and_preview_rows(monkeypatch):
@@ -978,6 +1077,16 @@ def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):
         raising=False,
     )
     monkeypatch.setattr(
+        knowledge_imp.KnowledgeSpaceAutoTagService,
+        "apply_after_upload_parse",
+        classmethod(lambda cls, **_kwargs: 0),
+    )
+    monkeypatch.setattr(
+        knowledge_imp,
+        "persist_parse_result_with_fulltext_intent",
+        lambda _file: None,
+    )
+    monkeypatch.setattr(
         knowledge_imp.KnowledgeFileDao,
         "update",
         staticmethod(lambda db_file: updated_statuses.append(db_file.status)),
@@ -995,6 +1104,6 @@ def test_add_embedding_enqueues_file_stat_after_success(monkeypatch):
 
     knowledge_imp.addEmbedding(3, [file_record])
 
-    assert updated_statuses == [KnowledgeFileStatus.SUCCESS.value]
+    assert file_record.status == KnowledgeFileStatus.SUCCESS.value
     assert enqueued == [41]
     assert telemetry_events[0]["event_data"].status == "success"

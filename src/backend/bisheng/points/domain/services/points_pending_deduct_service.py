@@ -12,10 +12,14 @@ from datetime import datetime, timedelta
 
 from bisheng.common.errcode.points import PointsInvalidAdjustError, PointsRuleNotFoundError
 from bisheng.core.database import get_async_db_session
+from bisheng.points.domain.constants.notify_templates import format_deduct_notify_reason
 from bisheng.points.domain.models import PointPendingDeduct
 from bisheng.points.domain.repositories.points_repository import PointsRepository
 from bisheng.points.domain.services.points_ledger_service import PointsLedgerService
-from bisheng.points.domain.services.points_notify_service import PointsNotifyService
+from bisheng.points.domain.services.points_notify_service import (
+    PointsNotifyService,
+    build_points_notify_service,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +47,46 @@ class PointsPendingDeductService:
     def __init__(self, notify: PointsNotifyService | None = None):
         self.notify = notify or PointsNotifyService()
 
+    def _has_usable_notify(self) -> bool:
+        """已注入 MessageService 或单测 mock 时可直接发；裸服务必须走工厂。"""
+        if self.notify is None:
+            return False
+        if not isinstance(self.notify, PointsNotifyService):
+            return True
+        return self.notify.message_service is not None
+
+    async def _notify_admin_deduct(
+        self,
+        *,
+        user_id: int,
+        delta: int,
+        rule_name: str | None,
+        remark: str | None,
+        log_key: str,
+    ) -> None:
+        """账本提交后发扣分站内信；失败只记日志，不回滚积分。"""
+        reason = format_deduct_notify_reason(rule_name=rule_name, remark=remark)
+        try:
+            if self._has_usable_notify():
+                await self.notify.notify(
+                    user_id=user_id,
+                    template_code="deduct_admin",
+                    delta=delta,
+                    reason=reason,
+                )
+                return
+            async with get_async_db_session() as session:
+                notify = await build_points_notify_service(session)
+                await notify.notify(
+                    user_id=user_id,
+                    template_code="deduct_admin",
+                    delta=delta,
+                    reason=reason,
+                )
+                await session.commit()
+        except Exception:
+            logger.exception("points.pending_deduct.notify_failed user_id=%s key=%s", user_id, log_key)
+
     async def deduct_or_enqueue(
         self,
         *,
@@ -67,6 +111,7 @@ class PointsPendingDeductService:
                 score = abs(int((rule.score_expr or {}).get("score", 0)))
                 if score == 0:
                     raise PointsInvalidAdjustError(msg="扣减规则分值为 0")
+                rule_name = rule.name
                 result = await ledger.deduct(
                     tenant_id=tenant_id,
                     user_id=user_id,
@@ -95,15 +140,13 @@ class PointsPendingDeductService:
                     last_error="ledger_returned_no_log",
                 )
                 return DeductAttemptResult(applied=False, pending=True, reason="ledger_empty")
-            try:
-                await self.notify.notify(
-                    user_id=user_id,
-                    template_code="deduct_admin",
-                    delta=score,
-                    reason=format_deduct_notify_reason(rule_name=rule.name, remark=remark),
-                )
-            except Exception:
-                logger.exception("points.pending_deduct.notify_failed user_id=%s key=%s", user_id, key)
+            await self._notify_admin_deduct(
+                user_id=user_id,
+                delta=score,
+                rule_name=rule_name,
+                remark=remark,
+                log_key=key,
+            )
             return DeductAttemptResult(applied=True, pending=False)
         except Exception as exc:
             logger.exception(
@@ -220,18 +263,13 @@ class PointsPendingDeductService:
             row.next_retry_at = None
             await repo.save_pending_deduct(row)
             if not result.replayed and result.log_id is not None:
-                try:
-                    await self.notify.notify(
-                        user_id=int(row.user_id),
-                        template_code="deduct_admin",
-                        delta=score,
-                        reason=format_deduct_notify_reason(rule_name=rule.name, remark=row.remark),
-                    )
-                except Exception:
-                    logger.exception(
-                        "points.pending_deduct.drain_notify_failed id=%s",
-                        row.id,
-                    )
+                await self._notify_admin_deduct(
+                    user_id=int(row.user_id),
+                    delta=score,
+                    rule_name=rule.name,
+                    remark=row.remark,
+                    log_key=row.idempotency_key,
+                )
             return "done"
         except Exception as exc:
             row.retry_count = int(row.retry_count or 0) + 1

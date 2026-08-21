@@ -13,6 +13,7 @@ import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ReviewTablePanel } from "./tagConsole/ReviewTablePanel"
+import { TagFeatureToggles } from "./tagConsole/TagFeatureToggles"
 import { TagLibraryPanel } from "./tagConsole/TagLibraryPanel"
 import { TagTablePanel } from "./tagConsole/TagTablePanel"
 import {
@@ -60,7 +61,7 @@ export default function KnowledgeTagLibraryPage() {
 
     return (
         <div className="flex h-full flex-col bg-[#F5F6F8] p-3">
-            <div className="mb-3 flex items-baseline gap-3 px-1">
+            <div className="mb-3 flex items-center gap-3 px-1">
                 <h1 className="shrink-0 text-base font-semibold">
                     {t("build.tagLibraryManagementTitle", "标签管理")}
                 </h1>
@@ -70,6 +71,12 @@ export default function KnowledgeTagLibraryPage() {
                         "维护平台标签库；知识空间可绑定一个或多个标签库，AI 打标从库中选取候选标签。",
                     )}
                 </p>
+                {/* Pushed right and never shrunk: the description truncates first,
+                    because a switch whose state cannot be read is worse than a
+                    sentence that is cut short. */}
+                <div className="ml-auto">
+                    <TagFeatureToggles />
+                </div>
             </div>
 
             <div className="flex min-h-0 flex-1 overflow-hidden rounded-lg border border-[#E5E6EB] bg-background shadow-sm">

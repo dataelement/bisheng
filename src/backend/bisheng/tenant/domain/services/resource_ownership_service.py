@@ -127,7 +127,7 @@ class ResourceOwnershipService:
         # 5. Transactional flip: MySQL → OpenFGA (crash_safe) → audit
         transfer_log_id = cls._make_transfer_log_id()
         try:
-            await cls._bulk_update_user_ids(resources, to_user_id)
+            await cls._bulk_update_user_ids(resources, to_user_id, from_user_id)
             await cls._flip_fga_owner_tuples(resources, from_user_id, to_user_id)
         except Exception as exc:  # noqa: BLE001
             logger.error(
@@ -325,7 +325,10 @@ class ResourceOwnershipService:
 
     @classmethod
     async def _bulk_update_user_ids(
-        cls, resources: List[ResourceRow], to_user_id: int,
+        cls,
+        resources: List[ResourceRow],
+        to_user_id: int,
+        from_user_id: int,
     ) -> None:
         """Per-table ``UPDATE SET user_id = :uid WHERE id IN (...)``.
 
@@ -335,6 +338,9 @@ class ResourceOwnershipService:
         redundant (the ids already disambiguate) but keeps the update
         SQL symmetric with the select SQL and makes audits line up with
         per-type resource counts.
+
+        For ``knowledgefile``, also sync denormalized uploader/updater
+        columns so UI lists show the new owner after transfer.
         """
         by_type: Dict[str, List[Union[int, str]]] = {}
         for r in resources:
@@ -343,13 +349,46 @@ class ResourceOwnershipService:
         with bypass_tenant_filter():
             async with get_async_db_session() as session:
                 try:
+                    to_user_name = str(to_user_id)
+                    name_row = (
+                        await session.execute(
+                            text('SELECT user_name FROM user WHERE user_id = :uid'),
+                            {'uid': to_user_id},
+                        )
+                    ).first()
+                    if name_row and name_row[0]:
+                        to_user_name = str(name_row[0])
+
                     for rt, ids in by_type.items():
                         meta = get_meta(rt)
-                        stmt = text(
-                            f'UPDATE {meta.table} SET user_id = :uid '
-                            f'WHERE id IN :ids'
-                        ).bindparams(bindparam('ids', expanding=True))
-                        await session.execute(stmt, {'uid': to_user_id, 'ids': ids})
+                        if meta.table == 'knowledgefile':
+                            stmt = text(
+                                f'UPDATE {meta.table} SET '
+                                f'user_id = :to_uid, '
+                                f'user_name = :to_user_name, '
+                                f'updater_id = :to_uid, '
+                                f'updater_name = :to_user_name, '
+                                f'original_uploader_id = CASE '
+                                f'WHEN original_uploader_id = :from_uid '
+                                f'OR original_uploader_id IS NULL THEN :to_uid '
+                                f'ELSE original_uploader_id END '
+                                f'WHERE id IN :ids'
+                            ).bindparams(bindparam('ids', expanding=True))
+                            await session.execute(
+                                stmt,
+                                {
+                                    'to_uid': to_user_id,
+                                    'to_user_name': to_user_name,
+                                    'from_uid': from_user_id,
+                                    'ids': ids,
+                                },
+                            )
+                        else:
+                            stmt = text(
+                                f'UPDATE {meta.table} SET user_id = :uid '
+                                f'WHERE id IN :ids'
+                            ).bindparams(bindparam('ids', expanding=True))
+                            await session.execute(stmt, {'uid': to_user_id, 'ids': ids})
                     await session.commit()
                 except Exception:
                     await session.rollback()

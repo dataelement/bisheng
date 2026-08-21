@@ -176,6 +176,143 @@ class TagLibraryTagService:
         return None, "new", None
 
     @classmethod
+    def list_library_tag_catalog_entries_sync(cls, library_id: int) -> list[tuple[str, str]]:
+        statement = select(Tag).where(
+            Tag.business_type == TagBusinessTypeEnum.TAG_LIBRARY.value,
+            Tag.business_id == cls._business_id(library_id),
+        )
+        with get_sync_db_session() as session:
+            tags = session.exec(statement).all()
+        tags = cls._repair_legacy_library_resource_types_sync(list(tags))
+        deduped = cls.dedupe_library_tags_by_name(tags)
+        return [
+            ((tag.name or "").strip(), cls.normalize_tag_name_key(tag.name))
+            for tag in deduped
+            if (tag.name or "").strip()
+        ]
+
+    @classmethod
+    def find_all_similar_tags_in_catalog(
+        cls,
+        candidate: str,
+        catalog_entries: Sequence[tuple[str, str]],
+        *,
+        similarity_threshold: float = PENDING_REVIEW_TAG_SIMILARITY_THRESHOLD,
+        allow_substring: bool = True,
+        limit: int = 5,
+    ) -> tuple[list[tuple[str, TagMatchKind, float | None]], list[tuple[str, TagMatchKind, float | None]]]:
+        """Return (exact_matches, similar_matches) within a tag-library catalog."""
+        candidate_key = cls.normalize_tag_name_key(candidate)
+        if not candidate_key:
+            return [], []
+
+        exact_matches: list[tuple[str, TagMatchKind, float | None]] = []
+        similar_matches: list[tuple[str, TagMatchKind, float | None]] = []
+        seen_similar: set[str] = set()
+
+        for canonical_name, catalog_key in catalog_entries:
+            if not catalog_key:
+                continue
+            if catalog_key == candidate_key:
+                exact_matches.append((canonical_name, "exact", 1.0))
+                continue
+
+        if allow_substring:
+            for canonical_name, catalog_key in catalog_entries:
+                if not catalog_key or catalog_key == candidate_key or canonical_name in seen_similar:
+                    continue
+                shorter, longer = (
+                    (candidate_key, catalog_key)
+                    if len(candidate_key) <= len(catalog_key)
+                    else (catalog_key, candidate_key)
+                )
+                if len(shorter) < TAG_SUBSTRING_MIN_LENGTH or shorter == longer:
+                    continue
+                if shorter in longer:
+                    similar_matches.append((canonical_name, "substring", None))
+                    seen_similar.add(canonical_name)
+
+        if len(candidate_key) >= TAG_SIMILARITY_MIN_LENGTH:
+            for canonical_name, catalog_key in catalog_entries:
+                if not catalog_key or catalog_key == candidate_key or canonical_name in seen_similar:
+                    continue
+                if len(catalog_key) < TAG_SIMILARITY_MIN_LENGTH:
+                    continue
+                if abs(len(candidate_key) - len(catalog_key)) > 4:
+                    continue
+                if candidate_key[0] != catalog_key[0]:
+                    continue
+                score = SequenceMatcher(None, candidate_key, catalog_key).ratio()
+                if score >= similarity_threshold:
+                    similar_matches.append((canonical_name, "similarity", score))
+                    seen_similar.add(canonical_name)
+
+        def _sort_similar(item: tuple[str, TagMatchKind, float | None]) -> tuple[int, float]:
+            kind, score = item[1], item[2]
+            if kind == "substring":
+                return (0, -float(len(item[0])))
+            return (1, -(score or 0.0))
+
+        similar_matches.sort(key=_sort_similar)
+        return exact_matches, similar_matches[:limit]
+
+    @classmethod
+    def check_review_tag_similar_in_library_batch_sync(
+        cls,
+        *,
+        tag_names: Iterable[str],
+        library_id: int,
+        limit: int = 5,
+        similarity_threshold: float = PENDING_REVIEW_TAG_SIMILARITY_THRESHOLD,
+    ) -> list[tuple[str, list[tuple[str, TagMatchKind, float | None]], list[tuple[str, TagMatchKind, float | None]]]]:
+        catalog_entries = cls.list_library_tag_catalog_entries_sync(library_id)
+        if not catalog_entries:
+            return []
+
+        results: list[
+            tuple[str, list[tuple[str, TagMatchKind, float | None]], list[tuple[str, TagMatchKind, float | None]]]
+        ] = []
+        seen_names: set[str] = set()
+        for raw_name in tag_names:
+            normalized_name = (raw_name or "").strip()
+            if not normalized_name:
+                continue
+            dedupe_key = cls.normalize_tag_name_key(normalized_name)
+            if not dedupe_key or dedupe_key in seen_names:
+                continue
+            seen_names.add(dedupe_key)
+            exact_rows, similar_rows = cls.find_all_similar_tags_in_catalog(
+                normalized_name,
+                catalog_entries,
+                limit=limit,
+                similarity_threshold=similarity_threshold,
+            )
+            results.append((normalized_name, exact_rows, similar_rows))
+        return results
+
+    @classmethod
+    def check_review_tag_similar_in_library_sync(
+        cls,
+        *,
+        tag_name: str,
+        library_id: int,
+        limit: int = 5,
+        similarity_threshold: float = PENDING_REVIEW_TAG_SIMILARITY_THRESHOLD,
+    ) -> tuple[list[tuple[str, TagMatchKind, float | None]], list[tuple[str, TagMatchKind, float | None]]]:
+        normalized_name = (tag_name or "").strip()
+        if not normalized_name:
+            return [], []
+        catalog_entries = cls.list_library_tag_catalog_entries_sync(library_id)
+        if not catalog_entries:
+            return [], []
+        return cls.find_all_similar_tags_in_catalog(
+            normalized_name,
+            catalog_entries,
+            limit=limit,
+            similarity_threshold=similarity_threshold,
+        )
+
+    @classmethod
     def dedupe_pending_review_tags_by_name(cls, tags: list[ReviewTag]) -> list[ReviewTag]:
         best_by_name: dict[str, ReviewTag] = {}
         for tag in tags:
@@ -340,6 +477,12 @@ class TagLibraryTagService:
         if tenant_id is None:
             return TagResolutionBatch()
 
+        from bisheng.knowledge.domain.services.tag_library_tag_config_service import (
+            resolve_review_tag_similarity_threshold_sync,
+        )
+
+        similarity_threshold = resolve_review_tag_similarity_threshold_sync(tenant_id)
+
         library_index = (
             library_by_key if library_by_key is not None else cls.build_tenant_library_by_key_sync(tenant_id)
         )
@@ -389,6 +532,7 @@ class TagLibraryTagService:
                 tag_name=candidate,
                 resource_type=resource_type,
                 catalog=pending_rows,
+                similarity_threshold=similarity_threshold,
             )
             if pending_match:
                 canonical = pending_match.canonical_name

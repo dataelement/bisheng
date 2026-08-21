@@ -171,7 +171,7 @@ async def test_department_files_remain_discoverable_with_batch_access_state() ->
     service.department_file_view_access_service.evaluate_files.assert_awaited_once()
 
 
-def test_unauthorized_department_file_uses_strict_safe_projection() -> None:
+def test_unauthorized_department_file_keeps_summary_in_safe_projection() -> None:
     service = _service()
     service._portal_file_access_decision_map[101] = DepartmentFileAccessDecision(
         file_id=101,
@@ -199,8 +199,14 @@ def test_unauthorized_department_file_uses_strict_safe_projection() -> None:
 
     assert item.content_access == "approval_required"
     assert item.can_download is False
-    assert item.summary == ""
+    assert item.summary == "敏感摘要"
     assert item.file_size == ""
     assert item.file_encoding == ""
     assert item.source_path == ""
     assert item.folder_path == "制度/安全"
+
+    payload = item.model_dump(mode="json")
+    assert payload["summary"] == "敏感摘要"
+    assert "file_size" not in payload
+    assert "file_encoding" not in payload
+    assert "source_path" not in payload

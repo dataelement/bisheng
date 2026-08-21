@@ -2936,6 +2936,80 @@ export async function rejectFileAliasApi(
     );
 }
 
+export interface BatchAliasFailure {
+    file_id: number;
+    reason_code: string;
+    message: string;
+}
+
+export interface BatchAliasActionResult {
+    succeeded_ids: number[];
+    skipped_ids: number[];
+    failed: BatchAliasFailure[];
+}
+
+/**
+ * Accept AI-generated aliases for multiple files.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-accept-alias
+ */
+export async function batchAcceptFileAliasApi(
+    space_id: string,
+    file_ids: number[],
+): Promise<BatchAliasActionResult> {
+    return withKnowledgeMutationLog(
+        "batch-accept-file-alias",
+        { method: "POST", space_id, file_ids },
+        async () => {
+            const res = await request.post(
+                `/api/v1/knowledge/space/${space_id}/files/batch-accept-alias`,
+                { file_ids },
+            ) as ApiResponse<BatchAliasActionResult> & { message?: string; msg?: string };
+            if (res?.status_code !== undefined && res.status_code !== 200) {
+                throw new Error(
+                    res.status_message || res.message || res.msg || "batch accept alias failed",
+                );
+            }
+            const data = (res?.data ?? res) as BatchAliasActionResult;
+            return {
+                succeeded_ids: data?.succeeded_ids ?? [],
+                skipped_ids: data?.skipped_ids ?? [],
+                failed: data?.failed ?? [],
+            };
+        },
+    );
+}
+
+/**
+ * Reject AI-generated aliases for multiple files.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-reject-alias
+ */
+export async function batchRejectFileAliasApi(
+    space_id: string,
+    file_ids: number[],
+): Promise<BatchAliasActionResult> {
+    return withKnowledgeMutationLog(
+        "batch-reject-file-alias",
+        { method: "POST", space_id, file_ids },
+        async () => {
+            const res = await request.post(
+                `/api/v1/knowledge/space/${space_id}/files/batch-reject-alias`,
+                { file_ids },
+            ) as ApiResponse<BatchAliasActionResult> & { message?: string; msg?: string };
+            if (res?.status_code !== undefined && res.status_code !== 200) {
+                throw new Error(
+                    res.status_message || res.message || res.msg || "batch reject alias failed",
+                );
+            }
+            const data = (res?.data ?? res) as BatchAliasActionResult;
+            return {
+                succeeded_ids: data?.succeeded_ids ?? [],
+                skipped_ids: data?.skipped_ids ?? [],
+                failed: data?.failed ?? [],
+            };
+        },
+    );
+}
+
 /**
  * Delete a single file
  * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/delete

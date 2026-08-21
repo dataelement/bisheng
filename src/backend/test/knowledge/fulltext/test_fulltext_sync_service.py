@@ -134,16 +134,37 @@ async def test_file_sync_converges_delete_and_keep_without_partial_build(current
     chunk_repo.list_all.assert_not_awaited()
 
 
-async def test_file_sync_retries_when_projection_is_not_ready():
-    sync, _outbox_repo, source_repo, *_ = service()
+async def test_file_sync_keeps_current_index_when_projection_is_not_ready():
+    sync, outbox_repo, source_repo, chunk_repo, index_repo = service()
     source_repo.get_current_snapshot.return_value = snapshot(
         logical_document_id=10,
         entry_type="publish",
         entry_status="active",
         projection_status="pending",
     )
+    outbox_repo.is_current_lease.return_value = True
 
-    with pytest.raises(KnowledgeFulltextProjectionNotReadyError):
+    result = await sync.sync_claimed(outbox(), lease_owner="worker-a", now=datetime(2026, 1, 3))
+
+    assert result == "keep"
+    source_repo.get_knowledge_index_name.assert_not_awaited()
+    chunk_repo.list_all.assert_not_awaited()
+    index_repo.upsert.assert_not_awaited()
+    index_repo.delete.assert_not_awaited()
+    outbox_repo.mark_success.assert_awaited_once()
+
+
+async def test_file_sync_retries_when_knowledge_rag_index_is_not_ready():
+    sync, _outbox_repo, source_repo, *_ = service()
+    source_repo.get_current_snapshot.return_value = snapshot(
+        logical_document_id=10,
+        entry_type="publish",
+        entry_status="active",
+        projection_status="ready",
+    )
+    source_repo.get_knowledge_index_name.return_value = None
+
+    with pytest.raises(KnowledgeFulltextProjectionNotReadyError, match="knowledge RAG index is not ready"):
         await sync.sync_claimed(outbox(), lease_owner="worker-a", now=datetime(2026, 1, 3))
 
 

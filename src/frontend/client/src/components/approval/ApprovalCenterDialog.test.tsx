@@ -10,6 +10,7 @@ import {
   listMyApprovalTasksApi,
   revokeDepartmentFileViewGrantApi,
 } from "~/api/approval";
+import { getSpaceInfoApi } from "~/api/knowledge";
 
 jest.mock("~/hooks/useLocalize", () => ({
   __esModule: true,
@@ -51,6 +52,10 @@ jest.mock("~/hooks/useLocalize", () => ({
   },
 }));
 
+jest.mock("~/api/knowledge", () => ({
+  getSpaceInfoApi: jest.fn(),
+}));
+
 const mockShowToast = jest.fn();
 
 jest.mock("~/Providers", () => ({
@@ -78,6 +83,7 @@ jest.mock("~/components/ui/Dialog", () => ({
 describe("ApprovalCenterDialog", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(getSpaceInfoApi).mockRejectedValue(new Error("skip live space lookup"));
   });
 
   it("does not render withdraw for pending qa_question_publish requests", async () => {
@@ -329,6 +335,56 @@ describe("ApprovalCenterDialog", () => {
     expect(screen.queryByText("source_file_id")).not.toBeInTheDocument();
     expect(screen.queryByText("target_space_id")).not.toBeInTheDocument();
     expect(screen.queryByText("target_document_id")).not.toBeInTheDocument();
+  });
+
+  it("replaces frozen target space name with the current space name", async () => {
+    jest.mocked(getSpaceInfoApi).mockImplementation(async (spaceId: string) => {
+      const names: Record<string, string> = {
+        "10": "团队知识库",
+        "6": "最初团队库",
+        "30": "测试02",
+      };
+      return { name: names[spaceId] ?? `space-${spaceId}` } as any;
+    });
+    jest.mocked(listMyApprovalRequestsApi).mockResolvedValue({
+      data: [
+        {
+          instance_id: 41,
+          business_name: "发布文件：操作手册.pdf → 测试01",
+          status: "pending",
+          scenario_code: "knowledge_space_file_publish_request",
+        },
+      ],
+      total: 1,
+    });
+    jest.mocked(getApprovalInstanceDetailApi).mockResolvedValue({
+      instance_id: 41,
+      business_name: "发布文件：操作手册.pdf → 测试01",
+      status: "pending",
+      scenario_code: "knowledge_space_file_publish_request",
+      detail_snapshot: {
+        type: "knowledge_space_file_publish",
+        source_space_id: 10,
+        source_space_name: "团队知识库",
+        source_file_name: "操作手册.pdf",
+        original_knowledge_id: 6,
+        original_knowledge_name: "最初团队库",
+        target_space_id: 30,
+        target_space_name: "测试01",
+      },
+    } as any);
+
+    render(
+      <ApprovalCenterDialog
+        open
+        onOpenChange={jest.fn()}
+        target={{ tab: "my_requests", instanceId: 41 }}
+      />,
+    );
+
+    expect(await screen.findByText("测试02")).toBeInTheDocument();
+    expect(screen.getAllByText("发布文件：操作手册.pdf → 测试02").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("目标知识库")).toBeInTheDocument();
   });
 
   it("renders qa question publish business content with localized labels and datetime", async () => {

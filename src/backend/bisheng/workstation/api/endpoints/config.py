@@ -129,7 +129,7 @@ async def update_subscription_config(
 async def get_knowledge_space_config(request: Request, login_user=LoginUserDep):
     ret, inherited, source_tenant_id, has_override = await WorkStationService.get_knowledge_space_config_with_meta()
     return resp_200(data={
-        'data': ret.model_dump(exclude_unset=True) if ret else None,
+        'data': ret.model_dump(mode='json') if ret else None,
         'inherited_from_root': inherited,
         'source_tenant_id': source_tenant_id,
         'has_override': has_override,

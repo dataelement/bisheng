@@ -265,6 +265,133 @@ async def test_df04b_related_docs_follow_space_read_not_asker(flow_env, monkeypa
     assert all(item.get("accessible") is False for item in asker_views_again)
 
 
+async def test_df04c_favorite_reference_rewrites_to_source_file(flow_env, monkeypatch):
+    """从「我的收藏」选文档后，qa_question.related_docs 与详情链接必须指向源文件。"""
+    from bisheng.knowledge.domain.models.knowledge_file import (
+        FileType,
+        KnowledgeFile,
+        KnowledgeFileStatus,
+    )
+    from bisheng.qa_expert.domain import related_docs_access as related_docs_access_mod
+
+    env = flow_env
+    src_space_id = 88_100_000 + (env.asker.user_id % 9000)
+    fav_space_id = src_space_id + 1
+    src_file_id = 0
+    fav_file_id = 0
+    async with AsyncSession(env.engine, expire_on_commit=False) as session:
+        src_file = KnowledgeFile(
+            tenant_id=1,
+            knowledge_id=src_space_id,
+            user_id=env.asker.user_id,
+            file_name=f"{env.prefix}src-规程.pdf",
+            file_type=FileType.FILE.value,
+            file_source="upload",
+            status=KnowledgeFileStatus.SUCCESS.value,
+            object_name=f"{env.prefix}src-object",
+        )
+        session.add(src_file)
+        await session.flush()
+        fav_file = KnowledgeFile(
+            tenant_id=1,
+            knowledge_id=fav_space_id,
+            user_id=env.asker.user_id,
+            file_name=f"{env.prefix}fav-规程.pdf",
+            file_type=FileType.FILE.value,
+            file_source="favorite_reference",
+            status=KnowledgeFileStatus.SUCCESS.value,
+            user_metadata={
+                "favorite_reference": {
+                    "source_space_id": src_space_id,
+                    "source_file_id": int(src_file.id),
+                }
+            },
+        )
+        session.add(fav_file)
+        await session.commit()
+        await session.refresh(src_file)
+        await session.refresh(fav_file)
+        src_file_id = int(src_file.id)
+        fav_file_id = int(fav_file.id)
+    fav_token = f"{fav_space_id}-{fav_file_id}"
+    src_token = f"{src_space_id}-{src_file_id}"
+
+    async def fake_check(*, user_id, relation, object_type, object_id, login_user=None):
+        assert relation == "can_read"
+        assert object_type == "knowledge_space"
+        return int(object_id) == int(src_space_id) and int(user_id) == int(env.asker.user_id)
+
+    monkeypatch.setattr(
+        "bisheng.permission.domain.services.permission_service.PermissionService.check",
+        fake_check,
+    )
+
+    async def live_check(user, space_id, file_id, *, space_cache=None):
+        if not await related_docs_access_mod._file_belongs_to_space(int(space_id), int(file_id)):
+            return None
+        cache_key = int(space_id)
+        if space_cache is not None and cache_key in space_cache:
+            return space_cache[cache_key]
+        allowed = await related_docs_access_mod._space_can_read(user, cache_key)
+        if space_cache is not None:
+            space_cache[cache_key] = allowed
+        return allowed
+
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.related_docs_access.check_related_doc_access",
+        live_check,
+    )
+
+    try:
+        env.as_user(env.asker)
+        qid = await _create_question(
+            env,
+            {
+                "title": "df04c收藏关联",
+                "description": "收藏文档正文",
+                "business_domain": "steel",
+                "question_type": "public",
+                "related_doc_ids": [fav_token],
+            },
+        )
+        stored = await env.reload_row(Question, id=qid)
+        assert stored.related_docs == src_token
+        assert fav_token not in (stored.related_docs or "")
+
+        asker_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+        assert asker_detail["status_code"] == 200
+        asker_views = (asker_detail.get("data") or {}).get("related_doc_views") or []
+        assert len(asker_views) == 1
+        assert asker_views[0].get("accessible") is True
+        assert asker_views[0].get("space_id") == src_space_id
+        assert asker_views[0].get("file_id") == src_file_id
+        assert asker_views[0].get("id") == src_token
+        assert "收藏文档正文" in str(asker_detail.get("data") or {})
+
+        env.as_user(env.stranger)
+        stranger_detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+        stranger_views = (stranger_detail.get("data") or {}).get("related_doc_views") or []
+        assert len(stranger_views) == 1
+        assert stranger_views[0].get("accessible") is False
+        assert stranger_views[0].get("unavailable_reason") == "forbidden"
+
+        again = await env.reload_row(Question, id=qid)
+        assert again.related_docs == src_token
+
+        env.as_user(env.asker)
+        asker_again = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+        asker_views_again = (asker_again.get("data") or {}).get("related_doc_views") or []
+        assert asker_views_again[0].get("accessible") is True
+        assert asker_views_again[0].get("space_id") == src_space_id
+    finally:
+        async with AsyncSession(env.engine, expire_on_commit=False) as session:
+            await session.execute(
+                text("DELETE FROM knowledgefile WHERE file_name LIKE :p"),
+                {"p": f"{env.prefix}%"},
+            )
+            await session.commit()
+
+
 async def test_df05_first_answer_locks_content(flow_env):
     env = flow_env
     expert = await env.seed_expert(user_id=201, name="专家甲")

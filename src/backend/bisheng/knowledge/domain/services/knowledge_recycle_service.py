@@ -225,6 +225,143 @@ class KnowledgeRecycleService:
         await KnowledgeSpaceContentStat.enqueue_file_stat_async(file_ids)
         return batch_id
 
+    async def soft_delete_member_personal_batch(
+        self,
+        *,
+        recycle_root_id: int,
+        file_ids: Sequence[int],
+        folder_ids: Sequence[int],
+        list_entry_ids: Sequence[int],
+    ) -> str:
+        """Soft-delete personal-library items that may span multiple knowledge spaces.
+
+        Unlike ``soft_delete_file_ids``, each snapshot row uses the file's actual
+        ``knowledge_id`` so restore/original-path logic stays correct when a deleted
+        member owned several personal spaces (e.g. default library + favorites).
+        """
+        now = datetime.now()
+        retention_days = await self.get_retention_days()
+        expire_at = now + timedelta(days=retention_days)
+        batch_id = uuid.uuid4().hex
+        folder_ids = list(folder_ids or [])
+        all_ids = list(dict.fromkeys([*file_ids, *folder_ids]))
+        if not all_ids:
+            return batch_id
+
+        list_entry_set = set(list_entry_ids or [recycle_root_id])
+        records = await KnowledgeFileDao.aget_file_by_ids(all_ids)
+        by_id = {int(record.id): record for record in records if record}
+        records_by_space: dict[int, list[KnowledgeFile]] = {}
+        for record in records:
+            kid = int(record.knowledge_id)
+            records_by_space.setdefault(kid, []).append(record)
+
+        space_cache: dict[int, tuple[Any, str, str]] = {}
+        folder_map_cache: dict[int, dict[int, str]] = {}
+
+        async def _space_bundle(knowledge_id: int) -> tuple[Any, str, str, dict[int, str]]:
+            if knowledge_id not in space_cache:
+                space = await KnowledgeDao.aquery_by_id(knowledge_id)
+                space_level, space_level_label = await self._resolve_space_level(knowledge_id)
+                space_cache[knowledge_id] = (space, space_level, space_level_label)
+            space, space_level, space_level_label = space_cache[knowledge_id]
+            if knowledge_id not in folder_map_cache:
+                folder_map_cache[knowledge_id] = await self._build_folder_name_map(
+                    knowledge_id,
+                    records_by_space.get(knowledge_id, []),
+                )
+            return space, space_level, space_level_label, folder_map_cache[knowledge_id]
+
+        tags_by_file = await self._snapshot_tags_by_file_ids(all_ids)
+        items: list[KnowledgeRecycleItem] = []
+        for fid in all_ids:
+            rec = by_id.get(int(fid))
+            if not rec:
+                continue
+            knowledge_id = int(rec.knowledge_id)
+            space, space_level, space_level_label, folder_name_map = await _space_bundle(knowledge_id)
+            parent_id = self._parent_id_from_path(rec.file_level_path)
+            original_path = self._build_display_path(space.name if space else "", rec, folder_name_map)
+            fingerprint = self._path_fingerprint(rec.file_level_path)
+            biz = self._extract_business_domain(rec)
+            category = None
+            if rec.split_rule:
+                try:
+                    import json
+
+                    rule = json.loads(rec.split_rule) if isinstance(rec.split_rule, str) else rec.split_rule
+                    if isinstance(rule, dict):
+                        category = rule.get("file_category_code")
+                        biz = biz or rule.get("business_domain_code")
+                except Exception:
+                    pass
+
+            items.append(
+                KnowledgeRecycleItem(
+                    tenant_id=getattr(space, "tenant_id", None) or self.login_user.tenant_id,
+                    file_id=int(rec.id),
+                    knowledge_id=knowledge_id,
+                    file_type=self._coerce_file_type(rec.file_type),
+                    is_list_entry=int(rec.id) in list_entry_set,
+                    display_name=rec.file_name or "",
+                    file_category_code=category,
+                    file_subcategory_code=rec.file_subcategory_code,
+                    business_domain_code=biz,
+                    tags_snapshot=tags_by_file.get(int(rec.id), []),
+                    file_encoding=rec.file_encoding,
+                    file_size=rec.file_size,
+                    md5=rec.md5,
+                    space_level=space_level,
+                    space_level_label=space_level_label,
+                    original_knowledge_id=knowledge_id,
+                    original_parent_id=parent_id,
+                    original_path=original_path,
+                    original_file_level_path=rec.file_level_path or "",
+                    original_path_fingerprint=fingerprint,
+                    deleted_by=self.login_user.user_id,
+                    deleted_by_name=self.login_user.user_name,
+                    deleted_at=now,
+                    expire_at=expire_at,
+                    recycle_batch_id=batch_id,
+                    recycle_root_id=recycle_root_id,
+                    document_id=None,
+                    version_file_ids=None,
+                )
+            )
+
+        async with get_async_db_session() as session:
+            await session.execute(
+                update(KnowledgeFile).where(col(KnowledgeFile.id).in_(all_ids)).values(deleted_at=now)
+            )
+            for item in items:
+                session.add(item)
+            await request_file_delete_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(record.id),
+                        knowledge_id=int(record.knowledge_id),
+                        tenant_id=int(record.tenant_id or self.login_user.tenant_id),
+                    )
+                    for record in records
+                    if record.file_type == FileType.FILE.value
+                ],
+                trigger_type="recycle_soft_delete",
+            )
+            await session.commit()
+
+        logger.info(
+            "recycle soft-delete member-personal batch=%s root=%s count=%s by=%s",
+            batch_id,
+            recycle_root_id,
+            len(all_ids),
+            self.login_user.user_id,
+        )
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async(
+            [record.id for record in records if record.file_type == FileType.FILE.value]
+        )
+        return batch_id
+
     async def list_items(
         self,
         *,

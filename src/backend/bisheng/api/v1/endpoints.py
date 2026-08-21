@@ -72,13 +72,19 @@ def get_env():
 
     # Expose knowledge-space version management flag so the client can toggle UI affordances.
     vm = getattr(bisheng_settings.get_knowledge(), 'version_management', None)
+    tag_library = getattr(bisheng_settings.get_knowledge(), 'tag_library', None)
     env['knowledges'] = {
         'version_management': {
             'enabled': bool(vm.enabled) if vm else False,
             'simhash_similarity_threshold': (
                 vm.simhash_similarity_threshold if vm else 0.85
             ),
-        }
+        },
+        'tag_library': {
+            'review_tag_similarity_threshold': (
+                tag_library.review_tag_similarity_threshold if tag_library else 0.85
+            ),
+        },
     }
 
     return resp_200(env)
