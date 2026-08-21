@@ -8,7 +8,6 @@ import pytest
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.knowledge_space import (
     KnowledgeDocumentDownloadDeniedError,
-    KnowledgeDocumentEntryTypeInvalidError,
     KnowledgeDocumentManagerRequiredError,
     KnowledgeDocumentStateConflictError,
 )
@@ -29,6 +28,7 @@ from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema imp
 from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
     DeleteManagerResult,
     KnowledgeDocumentDistributionError,
+    RemovePublishEntryResult,
     RemoveShareEntryResult,
 )
 from bisheng.knowledge.domain.services.knowledge_space_service import (
@@ -46,6 +46,7 @@ def _service() -> KnowledgeSpaceService:
         ),
     )
     service.document_distribution_service = SimpleNamespace(
+        remove_publish_entry=AsyncMock(),
         remove_share_entry=AsyncMock(),
         delete_manager=AsyncMock(),
         file_repository=SimpleNamespace(
@@ -100,16 +101,32 @@ async def test_share_direct_delete_routes_to_distribution_lifecycle() -> None:
     )
 
 
-async def test_publish_direct_delete_is_always_rejected() -> None:
+async def test_publish_direct_delete_routes_to_distribution_lifecycle() -> None:
     service = _service()
-
-    with pytest.raises(KnowledgeDocumentEntryTypeInvalidError):
-        await service._handle_distribution_file_delete(
-            _entry(KnowledgeFileEntryType.PUBLISH)
+    service.document_distribution_service.remove_publish_entry.return_value = (
+        RemovePublishEntryResult(
+            document_id=91,
+            publish_entry_id=101,
+            idempotent=False,
         )
+    )
 
+    handled = await service._handle_distribution_file_delete(
+        _entry(KnowledgeFileEntryType.PUBLISH)
+    )
+
+    assert handled is True
+    service.document_distribution_service.remove_publish_entry.assert_awaited_once_with(
+        tenant_id=7,
+        document_id=91,
+        publish_entry_id=101,
+    )
     service.document_distribution_service.remove_share_entry.assert_not_awaited()
     service.document_distribution_service.delete_manager.assert_not_awaited()
+    service._enqueue_document_distribution_projection.assert_awaited_once_with(
+        tenant_id=7,
+        entry_ids=[101],
+    )
 
 
 async def test_manager_delete_does_not_preserve_legacy_active_share_error() -> None:
@@ -147,6 +164,65 @@ async def test_manager_delete_enqueues_all_due_document_entries() -> None:
         tenant_id=7,
         entry_ids=None,
     )
+
+
+@pytest.mark.parametrize("requested_ids", [[100, 101], [101, 100]])
+async def test_batch_delete_preflights_all_entries_and_handles_publish_before_manager(
+    requested_ids: list[int],
+) -> None:
+    service = _service()
+    manager = _entry(KnowledgeFileEntryType.MANAGER, file_id=100)
+    publish = _entry(KnowledgeFileEntryType.PUBLISH, file_id=101)
+    records = {100: manager, 101: publish}
+    events: list[tuple[str, int]] = []
+    service._require_read_permission = AsyncMock()
+    service._get_file_for_action = AsyncMock(
+        side_effect=lambda file_id, **_kwargs: records[file_id]
+    )
+    service._require_permission_id = AsyncMock()
+    service._preflight_distribution_file_delete = AsyncMock(
+        side_effect=lambda file: events.append(("preflight", int(file.id))) or True
+    )
+    service._handle_distribution_file_delete = AsyncMock(
+        side_effect=lambda file: events.append(("handle", int(file.id))) or True
+    )
+    service._plan_cascade_version_links_on_delete = AsyncMock(
+        return_value=SimpleNamespace(expanded_file_ids=[])
+    )
+    service._apply_cascade_version_delete_plan = AsyncMock()
+    service._prepare_favorite_delete_events = AsyncMock(return_value=[])
+    space = Knowledge(
+        id=20,
+        tenant_id=7,
+        name="发布目标库",
+        type=KnowledgeTypeEnum.SPACE.value,
+        state=KnowledgeState.PUBLISHED.value,
+    )
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=space),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeDao.async_update_knowledge_update_time_by_id",
+            new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_recycle_service."
+            "KnowledgeRecycleService",
+            return_value=SimpleNamespace(),
+        ),
+    ):
+        await service.batch_delete(20, requested_ids, [])
+
+    assert events[:2] == [
+        ("preflight", requested_ids[0]),
+        ("preflight", requested_ids[1]),
+    ]
+    assert events[2:] == [("handle", 101), ("handle", 100)]
 
 
 def test_container_delete_rejects_any_distribution_state() -> None:

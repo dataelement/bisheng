@@ -742,12 +742,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return True
         if file_record.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
             raise KnowledgeDocumentStateConflictError()
-        if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
-            raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除")
         if self.document_distribution_service is None:
             raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
 
         try:
+            if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
+                await self.document_distribution_service.remove_publish_entry(
+                    tenant_id=int(file_record.tenant_id),
+                    document_id=int(file_record.reference_document_id),
+                    publish_entry_id=int(file_record.id),
+                )
+                await self._enqueue_document_distribution_projection(
+                    tenant_id=int(file_record.tenant_id),
+                    entry_ids=[int(file_record.id)],
+                )
+                return True
             if file_record.entry_type == KnowledgeFileEntryType.SHARE.value:
                 await self.document_distribution_service.remove_share_entry(
                     tenant_id=int(file_record.tenant_id),
@@ -799,8 +808,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if self.document_distribution_service is None:
                 raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
             return True
-        if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
-            raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除")
         if self.document_distribution_service is None:
             raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
 
@@ -815,8 +822,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 entry_id=int(file_record.id),
             )
         except KnowledgeDocumentDistributionError as exc:
-            if "publish entries cannot be deleted" in str(exc):
-                raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除") from exc
             raise KnowledgeDocumentStateConflictError() from exc
         return True
 
@@ -18038,6 +18043,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         await self._apply_cascade_version_delete_plan(delete_plan)
+        distribution_files.sort(
+            key=lambda item: item.entry_type == KnowledgeFileEntryType.MANAGER.value
+        )
         for file_record in distribution_files:
             await self._handle_distribution_file_delete(file_record)
 
