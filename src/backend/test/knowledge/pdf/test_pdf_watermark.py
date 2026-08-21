@@ -108,6 +108,51 @@ def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path)
         assert all(trace["opacity"] == pytest.approx(0.31) for trace in watermark_traces)
 
 
+def _create_image_source(path: Path, *, color: tuple[int, int, int] = (40, 80, 40)) -> None:
+    """用 Pillow 整页图生成源 PDF，模拟门户图片下载转 PDF 产物。"""
+    from PIL import Image
+
+    image_path = path.with_suffix(".png")
+    Image.new("RGB", (1000, 750), color=color).save(image_path)
+    with Image.open(image_path) as image:
+        image.save(path, "PDF", resolution=150.0)
+
+
+def test_watermark_is_visually_contrastive_on_image_pdf(tmp_path: Path) -> None:
+    """图片主导页须使用描边增强，渲染后相对原图应有足够色差（避免「能下无水印」）。"""
+    source = tmp_path / "image-source.pdf"
+    output = tmp_path / "image-watermarked.pdf"
+    _create_image_source(source, color=(40, 80, 40))
+
+    with fitz.open(source) as original:
+        before = original.load_page(0).get_pixmap()
+    apply_pdf_watermark(source, output, _spec())
+
+    with fitz.open(output) as watermarked:
+        page = watermarked.load_page(0)
+        after = page.get_pixmap()
+        text = page.get_text()
+        assert "设备管理部-张三-SG001-2026/07/21" in text
+        assert "首钢股份内部资料，严禁外传，违者必究" in text  # noqa: RUF001
+        # 图片页双描：白底 + 深色字，同一文案至少出现两层
+        assert text.count("设备管理部-张三-SG001-2026/07/21") >= 4
+
+    assert before.width == after.width and before.height == after.height
+    max_delta = 0
+    changed = 0
+    for y in range(after.height):
+        for x in range(after.width):
+            before_pixel = before.pixel(x, y)
+            after_pixel = after.pixel(x, y)
+            delta = max(abs(after_pixel[i] - before_pixel[i]) for i in range(3))
+            if delta:
+                changed += 1
+            if delta > max_delta:
+                max_delta = delta
+    assert changed > 0
+    assert max_delta >= 40
+
+
 def test_watermark_spec_uses_two_lines_and_pdf_visual_baseline() -> None:
     spec = _spec()
 
