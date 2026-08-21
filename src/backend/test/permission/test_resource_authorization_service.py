@@ -221,3 +221,39 @@ async def test_default_service_reads_relation_models_and_bindings_from_domain_st
 
     read_models.assert_awaited_once()
     read_bindings.assert_awaited_once()
+
+
+# IKABS3: a tool manager must not be able to revoke an owner-tier grant. The
+# earlier level-based default gave managers manage_tool_owner (same relation
+# level as manage_tool_manager) so the authorization service approved the
+# revoke; the fix moves tool defaults to an explicit per-tier table that omits
+# manage_tool_owner for managers.
+async def test_manager_cannot_revoke_tool_owner_grant():
+    from bisheng.permission.domain.services.resource_authorization_service import (
+        _can_grant_model,
+    )
+    from bisheng.permission.domain.tool_permission_template import (
+        default_permission_ids_for_relation,
+    )
+
+    manager_permissions = default_permission_ids_for_relation("manager")
+    # Regression check: a manager on a tool never inherits manage_tool_owner.
+    assert "manage_tool_owner" not in manager_permissions
+
+    owner_model = {
+        "id": "owner",
+        "name": "所有者",
+        "relation": "owner",
+        "grant_tier": "owner",
+        "permissions": [],
+        "permissions_explicit": False,
+        "is_system": True,
+    }
+    # The revoke check: even if a UI bug forwards the call, the backend must
+    # refuse to grant/revoke an owner-tier relation when the caller only has
+    # the manager-tier permission.
+    assert _can_grant_model("tool", "owner", owner_model, manager_permissions) is False
+
+    # Sanity: an owner still passes the check.
+    owner_permissions = default_permission_ids_for_relation("owner")
+    assert _can_grant_model("tool", "owner", owner_model, owner_permissions) is True
