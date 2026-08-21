@@ -451,7 +451,7 @@ export function ArticleAiDock({ articleDocId }: ArticleAiDockProps) {
                                     type="button"
                                     onClick={() => setOpen(true)}
                                     aria-label={localize("com_ui_expand")}
-                                    className="absolute bottom-full right-0 z-10 mb-2.5 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
+                                    className="absolute bottom-full right-0 z-10 mb-2 mr-3 flex size-8 items-center justify-center rounded-[20px] border border-[#EBEBEB] bg-white text-[#86909c] drop-shadow-[0_0_8px_rgba(3,7,117,0.05)] transition-colors hover:text-[#4e5969]"
                                 >
                                     <Outlined.DoubleDown className="size-4 rotate-180" />
                                 </button>

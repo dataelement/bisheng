@@ -13,6 +13,7 @@ import { Outlined } from "bisheng-icons";
 import { Button } from "~/components/ui/Button";
 import { Sheet, SheetContent, SheetTitle } from "~/components/ui/Sheet";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
 import { FileChangePreviewPage } from "./FileChangePreviewPage";
 import FilePreviewPage from "./FilePreviewPage";
 
@@ -65,7 +66,18 @@ export function FilePreviewDrawer({
             <SheetContent
                 side="right"
                 hideClose
-                className="flex h-full min-h-0 w-[1000px] max-w-[92vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-[92vw]"
+                className={cn(
+                    "flex h-full min-h-0 flex-col gap-0 overflow-hidden p-0",
+                    // Width follows the drawer spec (packages/ui/docs/组件-Drawer抽屉.md §3-4):
+                    // reading content is the "xl" tier — 960px — stepping down one tier per
+                    // breakpoint on narrower windows (800 below xl:, 600 below lg:, never 400),
+                    // and never wider than the viewport minus the 96px strip that keeps the page
+                    // behind visible. max-w-none clears SheetContent's own sm:max-w-sm cap.
+                    "w-[min(600px,calc(var(--bs-vw,100vw)-96px))]",
+                    "lg:w-[min(800px,calc(var(--bs-vw,100vw)-96px))]",
+                    "xl:w-[min(960px,calc(var(--bs-vw,100vw)-96px))]",
+                    "max-w-none sm:max-w-none",
+                )}
             >
                 <SheetTitle className="sr-only">{fileName}</SheetTitle>
 
