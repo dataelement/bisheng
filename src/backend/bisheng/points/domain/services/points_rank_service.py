@@ -109,6 +109,50 @@ def resolve_dept_bucket_id(
     return None
 
 
+def dept_path_segment_from_bucket_to_leaf(path: str | None, bucket_id: int) -> list[int]:
+    """返回 dept 桶到主部门叶子之间的 path 段（含两端）。"""
+    ids = _department_path_ids(path)
+    if not ids:
+        return []
+    if bucket_id not in ids:
+        return list(ids)
+    bucket_index = ids.index(bucket_id)
+    return ids[bucket_index:]
+
+
+def resolve_points_user_dept_display_name(
+    primary: Department | None,
+    departments: dict[int, Department],
+) -> str | None:
+    """解析积分模块用户部门展示名。
+
+    沿主部门链（dept 桶 → 用户所在节点）由近及远优先 ``short_name``；
+    链路上均无简称时回退 dept 桶 ``name``。path 上无 ``org_level=dept`` 时不回退叶子名（AC-22）。
+    """
+    from bisheng.department.domain.services.department_display_service import (
+        normalize_department_short_name,
+    )
+
+    if primary is None or not primary.path:
+        return None
+    bucket_id = resolve_dept_bucket_id(primary, departments)
+    if bucket_id is None:
+        return None
+    segment = dept_path_segment_from_bucket_to_leaf(primary.path, bucket_id)
+    for dept_id in reversed(segment):
+        node = departments.get(dept_id)
+        if node is None:
+            continue
+        short_name = normalize_department_short_name(getattr(node, "short_name", None))
+        if short_name:
+            return short_name
+    bucket = departments.get(bucket_id)
+    if bucket is None:
+        return None
+    full_name = str(getattr(bucket, "name", "") or "").strip()
+    return full_name or None
+
+
 def build_ranked_rows(
     *,
     tenant_id: int,

@@ -130,7 +130,7 @@ async def test_display_maps_omits_dept_when_no_org_level_dept():
 
 @pytest.mark.asyncio
 async def test_display_maps_prefers_short_name_for_dept_bucket():
-    """有 dept 桶时展示名优先 short_name。"""
+    """dept 桶有简称时展示简称。"""
     leaf = SimpleNamespace(id=94, path="/1/54/55/94/", name="叶子", org_level="squad", short_name=None)
     dept = SimpleNamespace(id=55, path="/1/54/55/", name="二级积分部门1", org_level="dept", short_name="质量部")
     company = SimpleNamespace(id=54, path="/1/54/", name="公司", org_level="company", short_name=None)
@@ -153,6 +153,37 @@ async def test_display_maps_prefers_short_name_for_dept_bucket():
         _, depts = await PointsQueryService._leaderboard_display_maps([423])
 
     assert depts[423] == "质量部"
+
+
+@pytest.mark.asyncio
+async def test_display_maps_prefers_nearest_short_name_on_user_chain():
+    """用户所在节点有简称时，优先于上级 dept 桶全称。"""
+    leaf = SimpleNamespace(
+        id=94, path="/1/54/55/58/67/94/", name="五级积分部门1-1", org_level="squad", short_name="1-1班"
+    )
+    dept = SimpleNamespace(id=55, path="/1/54/55/", name="二级积分部门1", org_level="dept", short_name=None)
+    company = SimpleNamespace(id=54, path="/1/54/", name="测试积分部门", org_level="company", short_name=None)
+    office = SimpleNamespace(id=58, path="/1/54/55/58/", name="三级积分部门1", org_level="office", short_name=None)
+    squad = SimpleNamespace(id=67, path="/1/54/55/58/67/", name="四级积分部门1", org_level="squad", short_name=None)
+
+    with (
+        patch.object(
+            UserDao,
+            "aget_user_by_ids",
+            AsyncMock(return_value=[SimpleNamespace(user_id=423, user_name="gzx01204")]),
+        ),
+        patch(
+            "bisheng.database.models.department.UserDepartmentDao.get_primary_department_map_by_user_ids",
+            return_value={423: leaf},
+        ),
+        patch(
+            "bisheng.database.models.department.DepartmentDao.aget_by_ids",
+            AsyncMock(return_value=[company, dept, office, squad]),
+        ),
+    ):
+        _, depts = await PointsQueryService._leaderboard_display_maps([423])
+
+    assert depts[423] == "1-1班"
 
 
 @pytest.mark.asyncio

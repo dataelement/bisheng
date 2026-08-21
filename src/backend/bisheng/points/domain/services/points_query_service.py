@@ -247,14 +247,13 @@ class PointsQueryService:
     ) -> tuple[dict[int, str], dict[int, str]]:
         """批量解析用户名与积分部门名称。
 
-        部门名取主部门沿 path 向上最近的 ``org_level=dept`` 节点，与部门榜桶一致；
-        展示名优先 ``short_name``。找不到该标签时不回退叶子/主部门，调用方按 ``—`` 展示（AC-22）。
+        部门桶与部门榜一致（``org_level=dept``）；展示名沿主部门链优先简称，无简称时回退桶全称。
+        path 上无 dept 标签时不回退叶子名，调用方按 ``—`` 展示（AC-22）。
         """
         if not user_ids:
             return {}, {}
         from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-        from bisheng.department.domain.services.department_display_service import get_department_display_name
-        from bisheng.points.domain.services.points_rank_service import resolve_dept_bucket_id
+        from bisheng.points.domain.services.points_rank_service import resolve_points_user_dept_display_name
         from bisheng.user.domain.models.user import UserDao
 
         users = await UserDao.aget_user_by_ids(user_ids) or []
@@ -274,14 +273,7 @@ class PointsQueryService:
                     dept_by_id[int(row.id)] = row
         dept_by_user: dict[int, str] = {}
         for uid, primary in primary_map.items():
-            bucket_id = resolve_dept_bucket_id(primary, dept_by_id)
-            node = dept_by_id.get(bucket_id) if bucket_id is not None else None
-            if node is None:
-                continue
-            display = get_department_display_name(
-                str(getattr(node, "name", "") or ""),
-                getattr(node, "short_name", None),
-            ).strip()
+            display = resolve_points_user_dept_display_name(primary, dept_by_id)
             if display:
                 dept_by_user[int(uid)] = display
         return name_by_user, dept_by_user
