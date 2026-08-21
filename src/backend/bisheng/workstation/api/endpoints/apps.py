@@ -27,7 +27,7 @@ async def get_recommended_apps(login_user=LoginUserDep):
       even if an app later went offline.
     - Regular users (chat landing): filter to online apps the user can access.
     """
-    config = await WorkStationService.aget_config()
+    config = await WorkStationService.aget_config(login_user=login_user)
     if not config or not config.recommendedApps:
         return resp_200(data=[])
 

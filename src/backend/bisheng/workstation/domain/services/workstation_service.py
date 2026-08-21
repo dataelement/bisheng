@@ -39,6 +39,7 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import Knowl
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services import LLMService
+from bisheng.permission.domain.services.tool_permission_service import ToolPermissionService
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
@@ -405,10 +406,51 @@ class WorkStationService(BaseService):
         return hydrated
 
     @classmethod
+    async def _afilter_tools_by_view_permission(
+        cls,
+        grouped: list[dict],
+        login_user: UserPayload | None,
+    ) -> list[dict]:
+        """Drop tool groups the requester cannot see.
+
+        End users without ``view_tool`` on a configured tool must not see it in
+        the chat toolbar / agent tool selector. We filter at the parent
+        (tool_type) id — every child of that group shares the same access
+        because permissions are bound to the parent type in OpenFGA.
+
+        Admins (super / tenant / child) bypass the filter so the config
+        page echoes every configured tool. Callers without an injected
+        user (legacy code paths, tests that stub the method) keep the
+        pre-fix behaviour — no filter — so we do not regress the
+        pre-permission-visible config surface.
+        """
+        if not grouped or login_user is None or login_user.is_admin():
+            return grouped
+
+        candidate_ids = [int(group["id"]) for group in grouped if group.get("id") is not None]
+        if not candidate_ids:
+            return grouped
+        try:
+            allowed = await ToolPermissionService.filter_tool_ids_by_permission_async(
+                login_user,
+                candidate_ids,
+                "view_tool",
+            )
+        except Exception:
+            # Fail closed: if the permission probe errors, hide every tool
+            # rather than leak. Logged once; the chat toolbar then renders
+            # empty (existing UX for an empty config).
+            logger.exception("workstation: tool permission filter failed; hiding all configured tools")
+            return []
+        allowed_set = {str(a) for a in allowed}
+        return [group for group in grouped if group.get("id") is not None and str(int(group["id"])) in allowed_set]
+
+    @classmethod
     async def _aproject_tools_for_current_tenant(
         cls,
         tools: list | None,
         source_tenant_id: int = DEFAULT_TENANT_ID,
+        login_user: UserPayload | None = None,
     ) -> list[dict]:
         if not tools:
             return []
@@ -479,7 +521,11 @@ class WorkStationService(BaseService):
         for group in grouped:
             if group["id"] in default_checked_types:
                 group["default_checked"] = True
-        return grouped
+        # Apply the per-user view_tool filter last so a user who lacks
+        # permission on a configured tool does not see it in the chat
+        # toolbar (IKABQ0: "user without API/MCP tool permission still sees
+        # the tool in the workspace").
+        return await cls._afilter_tools_by_view_permission(grouped, login_user)
 
     @classmethod
     async def _afilter_org_kbs_for_current_tenant(cls, org_kbs: list | None) -> list[dict]:
@@ -516,11 +562,14 @@ class WorkStationService(BaseService):
         cls,
         config: WorkstationConfig | None,
         source_tenant_id: int = DEFAULT_TENANT_ID,
+        login_user: UserPayload | None = None,
     ) -> WorkstationConfig | None:
         if config is None:
             return None
         updates = {
-            "tools": await cls._aproject_tools_for_current_tenant(config.tools, source_tenant_id),
+            "tools": await cls._aproject_tools_for_current_tenant(
+                config.tools, source_tenant_id, login_user=login_user
+            ),
             "orgKbs": await cls._afilter_org_kbs_for_current_tenant(config.orgKbs),
             "recommendedApps": await cls._afilter_recommended_apps_for_current_tenant(config.recommendedApps),
         }
@@ -531,10 +580,11 @@ class WorkStationService(BaseService):
         cls,
         config: LinsightConfig | None,
         source_tenant_id: int = DEFAULT_TENANT_ID,
+        login_user: UserPayload | None = None,
     ) -> LinsightConfig | None:
         if config is None:
             return None
-        tools = await cls._aproject_tools_for_current_tenant(config.tools, source_tenant_id)
+        tools = await cls._aproject_tools_for_current_tenant(config.tools, source_tenant_id, login_user=login_user)
         return config.model_copy(update={"tools": tools})
 
     @classmethod
@@ -653,7 +703,10 @@ class WorkStationService(BaseService):
         return cls._apply_workbench_models(ret, LLMService.get_workbench_llm_sync())
 
     @classmethod
-    async def aget_config(cls) -> WorkstationConfig | None:
+    async def aget_config(
+        cls,
+        login_user: UserPayload | None = None,
+    ) -> WorkstationConfig | None:
         """Get the default workstation configuration asynchronously."""
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
@@ -663,11 +716,20 @@ class WorkStationService(BaseService):
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
-            ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
+            ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID, login_user=login_user)
+        elif login_user is not None:
+            # When the config is not inherited, the synced tool list still
+            # has to be filtered by the caller's permissions — otherwise
+            # the chat toolbar shows every tool the admin configured for
+            # this tenant, even ones the requester cannot see (IKABQ0).
+            ret.tools = await cls._afilter_tools_by_view_permission(ret.tools, login_user)
         return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
 
     @classmethod
-    async def get_daily_chat_config(cls) -> WorkstationConfig | None:
+    async def get_daily_chat_config(
+        cls,
+        login_user: UserPayload | None = None,
+    ) -> WorkstationConfig | None:
         """Get the default workstation configuration for daily chat."""
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
@@ -677,7 +739,9 @@ class WorkStationService(BaseService):
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
-            ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
+            ret = await cls._aproject_daily_config_for_current_tenant(ret, DEFAULT_TENANT_ID, login_user=login_user)
+        elif login_user is not None:
+            ret.tools = await cls._afilter_tools_by_view_permission(ret.tools, login_user)
         return cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
 
     @classmethod
@@ -691,7 +755,10 @@ class WorkStationService(BaseService):
         return await cls.get_daily_chat_config()
 
     @classmethod
-    async def get_daily_chat_config_with_meta(cls) -> tuple[WorkstationConfig | None, bool, int, bool]:
+    async def get_daily_chat_config_with_meta(
+        cls,
+        login_user: UserPayload | None = None,
+    ) -> tuple[WorkstationConfig | None, bool, int, bool]:
         value, inherited, source_tenant_id, has_override = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION)
         config = type("TenantConfigValue", (), {"value": value}) if value else None
         ret = cls.parse_config(config)
@@ -700,21 +767,28 @@ class WorkStationService(BaseService):
         if ret and not inherited:
             ret.tools = cls.sync_tool_info(ret.tools)
         if inherited:
-            ret = await cls._aproject_daily_config_for_current_tenant(ret, source_tenant_id)
+            ret = await cls._aproject_daily_config_for_current_tenant(ret, source_tenant_id, login_user=login_user)
+        elif login_user is not None:
+            ret.tools = await cls._afilter_tools_by_view_permission(ret.tools, login_user)
         ret = cls._apply_workbench_models(ret, await LLMService.get_workbench_llm())
         return ret, inherited, source_tenant_id, has_override
 
     @classmethod
-    async def get_linsight_config(cls) -> LinsightConfig | None:
+    async def get_linsight_config(
+        cls,
+        login_user: UserPayload | None = None,
+    ) -> LinsightConfig | None:
         """Get Linsight configuration."""
         value, inherited, _, _ = await cls._aresolve_tenant_config(ConfigKeyEnum.WORKSTATION_LINSIGHT)
         if not value:
             return None
         ret = LinsightConfig(**json.loads(value))
         if inherited:
-            ret = await cls._aproject_linsight_config_for_current_tenant(ret, DEFAULT_TENANT_ID)
+            ret = await cls._aproject_linsight_config_for_current_tenant(ret, DEFAULT_TENANT_ID, login_user=login_user)
         else:
             ret.tools = cls.sync_tool_info(ret.tools)
+            if login_user is not None:
+                ret.tools = await cls._afilter_tools_by_view_permission(ret.tools, login_user)
         return ret
 
     @classmethod
@@ -727,7 +801,10 @@ class WorkStationService(BaseService):
         return data
 
     @classmethod
-    async def get_linsight_config_with_meta(cls) -> tuple[LinsightConfig | None, bool, int, bool]:
+    async def get_linsight_config_with_meta(
+        cls,
+        login_user: UserPayload | None = None,
+    ) -> tuple[LinsightConfig | None, bool, int, bool]:
         value, inherited, source_tenant_id, has_override = await cls._aresolve_tenant_config(
             ConfigKeyEnum.WORKSTATION_LINSIGHT
         )
@@ -735,9 +812,11 @@ class WorkStationService(BaseService):
             return None, inherited, source_tenant_id, has_override
         ret = LinsightConfig(**json.loads(value))
         if inherited:
-            ret = await cls._aproject_linsight_config_for_current_tenant(ret, source_tenant_id)
+            ret = await cls._aproject_linsight_config_for_current_tenant(ret, source_tenant_id, login_user=login_user)
         else:
             ret.tools = cls.sync_tool_info(ret.tools)
+            if login_user is not None:
+                ret.tools = await cls._afilter_tools_by_view_permission(ret.tools, login_user)
         return ret, inherited, source_tenant_id, has_override
 
     @classmethod
