@@ -244,5 +244,21 @@
     "user_id": null,
     "is_delete": 0,
     "openapi_schema": null
+  },
+  {
+    "id": 17,
+    "name": "DataForB2B",
+    "logo": "https://api.dataforb2b.ai/DataForB2B_logo.png",
+    "description": "Find and enrich LinkedIn people and companies: search B2B leads and accounts by filters or natural language, and enrich profiles/companies with work email, personal email, phone and firmographics.",
+    "server_host": "https://api.dataforb2b.ai",
+    "auth_method": 0,
+    "api_key": "",
+    "auth_type": "basic",
+    "is_preset": 1,
+    "user_id": null,
+    "is_delete": 0,
+    "create_time": "2026-06-19 00:00:00",
+    "update_time": "2026-06-19 00:00:00",
+    "openapi_schema": null
   }
 ]

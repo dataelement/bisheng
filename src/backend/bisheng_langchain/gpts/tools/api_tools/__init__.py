@@ -11,6 +11,7 @@ from bisheng_langchain.gpts.tools.message.wechat import WechatMessageTool
 from langchain_core.tools import BaseTool
 from mypy_extensions import KwArg
 
+from .dataforb2b import DataForB2B
 from .flow import FlowTools
 from .macro_data import MacroData
 from .sina import StockInfo
@@ -112,6 +113,15 @@ _WECHAT_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
     'wechat_send_message': (WechatMessageTool.get_api_tool, [])
 }
 
+_DATAFORB2B_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[str]]] = {
+    'dataforb2b_search_people': (DataForB2B.get_api_tool, ['api_key']),
+    'dataforb2b_search_company': (DataForB2B.get_api_tool, ['api_key']),
+    'dataforb2b_reasoning_search': (DataForB2B.get_api_tool, ['api_key']),
+    'dataforb2b_enrich_profile': (DataForB2B.get_api_tool, ['api_key']),
+    'dataforb2b_enrich_company': (DataForB2B.get_api_tool, ['api_key']),
+    'dataforb2b_typeahead': (DataForB2B.get_api_tool, ['api_key']),
+}
+
 ALL_API_TOOLS = {}
 ALL_API_TOOLS.update(_TIAN_YAN_CHA_TOOLS)
 ALL_API_TOOLS.update(_SINA_TOOLS)
@@ -124,3 +134,4 @@ ALL_API_TOOLS.update(_DING_TOOLS)
 ALL_API_TOOLS.update(_EMAIL_TOOLS)
 ALL_API_TOOLS.update(_FEISHU_TOOLS)
 ALL_API_TOOLS.update(_WECHAT_TOOLS)
+ALL_API_TOOLS.update(_DATAFORB2B_TOOLS)

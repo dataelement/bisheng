@@ -1114,5 +1114,284 @@
     "is_delete": 0,
     "user_id": 1,
     "id": 38
+  },
+  {
+    "name": "Search People",
+    "logo": null,
+    "desc": "Search LinkedIn people / B2B leads by structured filters (job title, company, location, industry, seniority, skills). Find decision-makers and build a prospect list.",
+    "tool_key": "dataforb2b_search_people",
+    "type": 17,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": null,
+    "create_time": "2026-06-19 00:00:00",
+    "update_time": "2026-06-19 00:00:00",
+    "id": 39,
+    "api_params": [
+      {
+        "name": "filters",
+        "description": "JSON filter object {op, conditions:[{column,type,value,value2?}]} or a bare list of conditions",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "count",
+        "description": "Number of results (1-100)",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      {
+        "name": "offset",
+        "description": "Pagination offset: 0, then 25, 50, …",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      }
+    ]
+  },
+  {
+    "name": "Search Company",
+    "logo": null,
+    "desc": "Search LinkedIn companies / accounts by structured filters (industry, headcount, location, funding, keywords). Build target-account lists for B2B sales.",
+    "tool_key": "dataforb2b_search_company",
+    "type": 17,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": null,
+    "create_time": "2026-06-19 00:00:00",
+    "update_time": "2026-06-19 00:00:00",
+    "id": 40,
+    "api_params": [
+      {
+        "name": "filters",
+        "description": "JSON filter object {op, conditions:[{column,type,value,value2?}]} or a bare list of conditions",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "count",
+        "description": "Number of results (1-100)",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      {
+        "name": "offset",
+        "description": "Pagination offset: 0, then 25, 50, …",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      }
+    ]
+  },
+  {
+    "name": "Reasoning Search",
+    "logo": null,
+    "desc": "Natural-language people/company search — describe the audience in plain text and DataForB2B builds the filters. May ask clarifying questions (free).",
+    "tool_key": "dataforb2b_reasoning_search",
+    "type": 17,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": null,
+    "create_time": "2026-06-19 00:00:00",
+    "update_time": "2026-06-19 00:00:00",
+    "id": 41,
+    "api_params": [
+      {
+        "name": "query",
+        "description": "Natural-language search, e.g. 'CTOs at Series A fintech startups in France'",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "category",
+        "description": "'people' or 'companies'",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "max_results",
+        "description": "Number of results (1-100)",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      {
+        "name": "session_id",
+        "description": "session_id from a previous needs_input/refine turn",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "answers",
+        "description": "JSON object {question_id: answer} answering a needs_input turn",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
+  },
+  {
+    "name": "Enrich Profile",
+    "logo": null,
+    "desc": "Enrich a professional profile from a LinkedIn URL — full profile (role, experience, skills) plus work email, personal email, phone and GitHub. Email finder for outreach.",
+    "tool_key": "dataforb2b_enrich_profile",
+    "type": 17,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": null,
+    "create_time": "2026-06-19 00:00:00",
+    "update_time": "2026-06-19 00:00:00",
+    "id": 42,
+    "api_params": [
+      {
+        "name": "profile_identifier",
+        "description": "LinkedIn profile URL, public id (john-doe), or encoded prof_… id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "enrich_profile",
+        "description": "Return the full profile (role, experience, skills)",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      {
+        "name": "enrich_work_email",
+        "description": "Find the work email",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      {
+        "name": "enrich_personal_email",
+        "description": "Find the personal email",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      {
+        "name": "enrich_phone",
+        "description": "Find the phone number",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      {
+        "name": "enrich_github",
+        "description": "Find the GitHub profile",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "boolean"
+        }
+      }
+    ]
+  },
+  {
+    "name": "Enrich Company",
+    "logo": null,
+    "desc": "Enrich a company from its domain, name or LinkedIn company URL — firmographics, headcount/size, industry, domain and social profiles.",
+    "tool_key": "dataforb2b_enrich_company",
+    "type": 17,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": null,
+    "create_time": "2026-06-19 00:00:00",
+    "update_time": "2026-06-19 00:00:00",
+    "id": 43,
+    "api_params": [
+      {
+        "name": "company_identifier",
+        "description": "Company domain, name/slug, LinkedIn company URL, or org_… id",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    ]
+  },
+  {
+    "name": "Typeahead",
+    "logo": null,
+    "desc": "Resolve the exact stored value for a free-text filter before searching (company, industry, category, location, city, region, school, title, skill, investor).",
+    "tool_key": "dataforb2b_typeahead",
+    "type": 17,
+    "is_preset": 1,
+    "is_delete": 0,
+    "user_id": null,
+    "create_time": "2026-06-19 00:00:00",
+    "update_time": "2026-06-19 00:00:00",
+    "id": 44,
+    "api_params": [
+      {
+        "name": "type",
+        "description": "company, people_industry, company_industry, category, location, city, region, school, title, skill, investor",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "q",
+        "description": "Prefix/text to autocomplete (1-100 chars)",
+        "in": "query",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      {
+        "name": "limit",
+        "description": "Max suggestions (1-20)",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      }
+    ]
   }
 ]
