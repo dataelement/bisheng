@@ -1,4 +1,12 @@
-from bisheng.qa_expert.domain.watermarked_download import parse_qa_asset_location
+from io import BytesIO
+
+from PIL import Image
+
+from bisheng.qa_expert.domain.watermarked_download import (
+    _bytes_to_pdf,
+    parse_qa_asset_location,
+    resolve_conversion_filename,
+)
 
 
 def test_parse_permanent_qa_object_and_tmp_uuid():
@@ -7,11 +15,19 @@ def test_parse_permanent_qa_object_and_tmp_uuid():
         default_bucket="bisheng",
         tmp_bucket="tmp-dir",
     ) == ("bisheng", "qa-expert/1/question/attachment/a/a.pdf")
+    assert (
+        parse_qa_asset_location(
+            "/tmp-dir/abcd1234-ef.png?X-Amz-Expires=1",
+            default_bucket="bisheng",
+            tmp_bucket="tmp-dir",
+        )[0]
+        == "tmp-dir"
+    )
     assert parse_qa_asset_location(
-        "/tmp-dir/abcd1234-ef.png?X-Amz-Expires=1",
+        "/workspace/bisheng/qa-expert/1/question/image/u/abc.png?X-Amz-Signature=1",
         default_bucket="bisheng",
         tmp_bucket="tmp-dir",
-    )[0] == "tmp-dir"
+    ) == ("bisheng", "qa-expert/1/question/image/u/abc.png")
 
 
 def test_parse_rejects_unrelated_paths():
@@ -20,3 +36,32 @@ def test_parse_rejects_unrelated_paths():
         raise AssertionError("expected error")
     except ValueError:
         pass
+
+
+def test_resolve_conversion_filename_falls_back_to_object_suffix():
+    assert resolve_conversion_filename("问题图片 1", "qa-expert/1/question/image/u/deadbeef.webp") == (
+        "问题图片 1.webp"
+    )
+    assert resolve_conversion_filename("photo.png", "qa-expert/1/question/image/u/deadbeef.webp") == "photo.png"
+    assert resolve_conversion_filename("", "qa-expert/1/question/image/u/deadbeef.jpg") == "deadbeef.jpg"
+
+
+def _image_bytes(fmt: str) -> bytes:
+    buf = BytesIO()
+    Image.new("RGB", (24, 24), (12, 34, 56)).save(buf, format=fmt)
+    return buf.getvalue()
+
+
+def test_bytes_to_pdf_accepts_display_title_without_extension():
+    png = _image_bytes("PNG")
+    pdf = _bytes_to_pdf(png, "问题图片 1")
+    assert pdf[:5] == b"%PDF-"
+
+
+def test_bytes_to_pdf_converts_webp_via_pillow_fallback():
+    webp = _image_bytes("WEBP")
+    pdf = _bytes_to_pdf(webp, "问题图片 1.webp")
+    assert pdf[:5] == b"%PDF-"
+    # 详情页标题无后缀时，靠 sniff + Pillow
+    pdf2 = _bytes_to_pdf(webp, "问题图片 1")
+    assert pdf2[:5] == b"%PDF-"
