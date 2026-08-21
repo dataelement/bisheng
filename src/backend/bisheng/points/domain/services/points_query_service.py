@@ -610,7 +610,7 @@ class PointsQueryService:
             user_id=body.user_id,
             delta=-score,
             rule_code=rule.rule_code,
-            title=rule.name,
+            title=resolve_point_rule_display_name(rule),
             idempotency_key=(f"deduct:{rule.rule_code}:{user.user_id}:{body.user_id}:{uuid.uuid4().hex}"),
             operator_id=int(user.user_id),
             remark=body.remark,
@@ -626,6 +626,9 @@ class PointsQueryService:
             user_id=body.user_id,
             template_code="deduct_admin",
             delta=abs(int(log.delta)),
-            reason=format_deduct_notify_reason(rule_name=rule.name, remark=body.remark),
+            reason=format_deduct_notify_reason(
+                rule_name=resolve_point_rule_display_name(rule),
+                remark=body.remark,
+            ),
         )
         return self._log_response(log)

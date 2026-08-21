@@ -29,6 +29,7 @@ class PointRuleRequest(BaseModel):
     rule_code: str | None = None
     rule_type: str | None = None
     name: str | None = None
+    display_name: str | None = None
     score_expr: dict | None = None
     daily_cap: int | None = None
     beneficiary: str | None = None
@@ -156,6 +157,7 @@ class PointRuleResponse(BaseModel):
     rule_code: str
     rule_type: str
     name: str
+    display_name: str
     score_expr: dict
     daily_cap: int | None
     beneficiary: str | None

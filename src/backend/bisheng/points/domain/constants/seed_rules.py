@@ -205,9 +205,21 @@ SEED_RULES = [
 ]
 
 # 系统默认启用的编码（便于迁移/脚本对齐）。
-DEFAULT_ENABLED_RULE_CODES = frozenset(
-    {"G1", "G2", "G3", "G4", "R1", "R2", "R3", "M1", "M4", "M6"}
-)
+DEFAULT_ENABLED_RULE_CODES = frozenset({"G1", "G2", "G3", "G4", "R1", "R2", "R3", "M1", "M4", "M6"})
+
+# 种子入库时展示名与默认名一致；运营后续只改 display_name。
+for _seed in SEED_RULES:
+    _seed["display_name"] = _seed["name"]
+
+
+def seed_default_name(rule_code: str) -> str | None:
+    """按规则编码取种子默认名；未知编码返回 None。"""
+    code = (rule_code or "").strip().upper()
+    for row in SEED_RULES:
+        if row["rule_code"] == code:
+            return str(row["name"])
+    return None
+
 
 # Single rich-text guide for the public rules modal (Portal admin edits `guide` only).
 SEED_COPIES = [

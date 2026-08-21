@@ -111,13 +111,13 @@ class PointsPendingDeductService:
                 score = abs(int((rule.score_expr or {}).get("score", 0)))
                 if score == 0:
                     raise PointsInvalidAdjustError(msg="扣减规则分值为 0")
-                rule_name = rule.name
+                rule_name = resolve_point_rule_display_name(rule)
                 result = await ledger.deduct(
                     tenant_id=tenant_id,
                     user_id=user_id,
                     delta=-score,
                     rule_code=rule.rule_code,
-                    title=rule.name or rule.rule_code,
+                    title=rule_name,
                     idempotency_key=key,
                     operator_id=operator_id,
                     remark=remark,
@@ -251,7 +251,7 @@ class PointsPendingDeductService:
                 user_id=int(row.user_id),
                 delta=-score,
                 rule_code=rule.rule_code,
-                title=rule.name or rule.rule_code,
+                title=resolve_point_rule_display_name(rule),
                 idempotency_key=row.idempotency_key,
                 operator_id=int(row.operator_id or 0),
                 remark=row.remark,
@@ -266,7 +266,7 @@ class PointsPendingDeductService:
                 await self._notify_admin_deduct(
                     user_id=int(row.user_id),
                     delta=score,
-                    rule_name=rule.name,
+                    rule_name=resolve_point_rule_display_name(rule),
                     remark=row.remark,
                     log_key=row.idempotency_key,
                 )

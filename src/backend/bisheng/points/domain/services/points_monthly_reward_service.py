@@ -213,7 +213,7 @@ class PointsMonthlyRewardService:
                 tenant_id=tenant_id,
                 user_id=user_id,
                 rule_code=rule_code,
-                rule_name=rule.name or rule_code,
+                rule_name=resolve_point_rule_display_name(rule),
                 score=score,
                 period_key=month_key,
             )
