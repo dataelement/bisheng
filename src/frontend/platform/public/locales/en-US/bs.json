@@ -1492,7 +1492,8 @@
       "publicSpaces": "Public knowledge bases",
       "departmentSpaces": "Department knowledge bases",
       "teamSpaces": "Team / unit knowledge bases",
-      "personalSpaces": "Personal knowledge bases"
+      "personalSpaces": "Personal knowledge bases",
+      "moveTag": "Move to another library"
     }
   },
   "bench": {

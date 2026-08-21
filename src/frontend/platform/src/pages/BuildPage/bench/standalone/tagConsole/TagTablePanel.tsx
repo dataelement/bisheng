@@ -13,7 +13,7 @@ import {
     type TagConsoleItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { Trash2 } from "lucide-react"
+import { FolderInput, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AddTagDialog } from "./AddTagDialog"
@@ -50,7 +50,9 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
     const [loading, setLoading] = useState(false)
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [addOpen, setAddOpen] = useState(false)
-    const [moveOpen, setMoveOpen] = useState(false)
+    // Holds the rows a move applies to: the whole selection from the toolbar, or
+    // a single row from its own button. null keeps the picker closed.
+    const [moveIds, setMoveIds] = useState<number[] | null>(null)
     const [saving, setSaving] = useState(false)
     const [batchResult, setBatchResult] = useState<TagConsoleBatchResult | null>(null)
 
@@ -118,9 +120,11 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
     }
 
     const handleMove = async (targetLibraryId: number) => {
+        const ids = moveIds || []
+        if (!ids.length) return
         setSaving(true)
-        setMoveOpen(false)
-        finishBatch(await captureAndAlertRequestErrorHoc(batchMoveTagConsoleApi(selectedIds, targetLibraryId)))
+        setMoveIds(null)
+        finishBatch(await captureAndAlertRequestErrorHoc(batchMoveTagConsoleApi(ids, targetLibraryId)))
     }
 
     const allChecked = rows.length > 0 && selectedIds.length === rows.length
@@ -157,7 +161,12 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                 >
                     {t("build.tagConsole.batchDelete", "批量删除")}
                 </Button>
-                <Button size="sm" variant="outline" disabled={!selectedIds.length} onClick={() => setMoveOpen(true)}>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!selectedIds.length}
+                    onClick={() => setMoveIds(selectedIds)}
+                >
                     {t("build.tagConsole.batchMove", "批量移动")}
                 </Button>
             </div>
@@ -233,9 +242,22 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                                     <td className="px-3 py-3 text-muted-foreground">{formatDateTime(row.create_time)}</td>
                                     <td className="px-3 py-3 text-muted-foreground">{formatDateTime(row.review_time)}</td>
                                     <td className="px-3 py-3">
-                                        <button type="button" onClick={() => handleDelete([row.id])}>
-                                            <Trash2 className="size-4 text-muted-foreground hover:text-red-500" />
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                title={t("build.tagConsole.moveTag", "移动到其他标签库")}
+                                                onClick={() => setMoveIds([row.id])}
+                                            >
+                                                <FolderInput className="size-4 text-muted-foreground hover:text-primary" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title={t("build.deleteTagTitle", "删除标签")}
+                                                onClick={() => handleDelete([row.id])}
+                                            >
+                                                <Trash2 className="size-4 text-muted-foreground hover:text-red-500" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -270,11 +292,15 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                 onConfirm={handleAdd}
             />
             <LibraryPickerDialog
-                open={moveOpen}
-                title={t("build.tagConsole.batchMove", "批量移动")}
+                open={moveIds !== null}
+                title={
+                    (moveIds?.length ?? 0) > 1
+                        ? t("build.tagConsole.batchMove", "批量移动")
+                        : t("build.tagConsole.moveTag", "移动到其他标签库")
+                }
                 libraries={libraries}
                 saving={saving}
-                onOpenChange={setMoveOpen}
+                onOpenChange={(next) => setMoveIds(next ? moveIds : null)}
                 onConfirm={handleMove}
             />
             <BatchResultDialog result={batchResult} onOpenChange={() => setBatchResult(null)} />

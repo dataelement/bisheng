@@ -1475,7 +1475,8 @@
       "publicSpaces": "公開ナレッジベース",
       "departmentSpaces": "部門ナレッジベース",
       "teamSpaces": "チーム/部署ナレッジベース",
-      "personalSpaces": "個人ナレッジベース"
+      "personalSpaces": "個人ナレッジベース",
+      "moveTag": "他のタグライブラリへ移動"
     }
   },
   "bench": {

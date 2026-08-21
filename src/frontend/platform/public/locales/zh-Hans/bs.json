@@ -1481,7 +1481,8 @@
       "publicSpaces": "公共知识库",
       "departmentSpaces": "部门知识库",
       "teamSpaces": "团队/科室知识库",
-      "personalSpaces": "个人知识库"
+      "personalSpaces": "个人知识库",
+      "moveTag": "移动到其他标签库"
     }
   },
   "bench": {
