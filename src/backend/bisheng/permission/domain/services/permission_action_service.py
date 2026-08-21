@@ -57,7 +57,7 @@ class PermissionScopeFencePort(Protocol):
     async def ensure_readable(
         self,
         target: VerifiedPermissionTarget,
-    ) -> None: ...
+    ) -> bool: ...
 
 
 class PermissionConsistencyMarkerPort(Protocol):
@@ -165,8 +165,11 @@ class F048PermissionService:
             )
             return allowed
 
-        await self._prepare_action_target(target, action)
-        consistency = await self._consistency(target)
+        force_higher_consistency = await self._prepare_action_target(target, action)
+        consistency = await self._consistency(
+            target,
+            force_higher_consistency=force_higher_consistency,
+        )
         try:
             allowed = await self._fga.check(
                 user=f"user:{actor.user_id}",
@@ -206,8 +209,11 @@ class F048PermissionService:
             )
             return False
         await self._catalog.ensure_runtime_ready()
-        await self._scope_fence.ensure_readable(target)
-        consistency = await self._consistency(target)
+        force_higher_consistency = bool(await self._scope_fence.ensure_readable(target))
+        consistency = await self._consistency(
+            target,
+            force_higher_consistency=force_higher_consistency,
+        )
         try:
             allowed = await self._fga.check(
                 user=f"user:{actor.user_id}",
@@ -257,12 +263,15 @@ class F048PermissionService:
                 results[index] = shortcut[0]
                 continue
             try:
-                await self._prepare_action_target(target, action)
+                force_higher_consistency = await self._prepare_action_target(target, action)
             except PermissionPublishNotReadyError as exc:
                 results[index] = False
                 self._handle_stale_projection(target, exc)
                 continue
-            target_consistency = await self._consistency(target)
+            target_consistency = await self._consistency(
+                target,
+                force_higher_consistency=force_higher_consistency,
+            )
             if target_consistency == HIGHER_CONSISTENCY:
                 consistency = HIGHER_CONSISTENCY
             unresolved.append((index, target))
@@ -305,12 +314,15 @@ class F048PermissionService:
                 continue
             await self._catalog.ensure_runtime_ready()
             try:
-                await self._scope_fence.ensure_readable(target)
+                force_higher_consistency = bool(await self._scope_fence.ensure_readable(target))
             except PermissionPublishNotReadyError as exc:
                 results[index] = False
                 self._handle_stale_projection(target, exc)
                 continue
-            target_consistency = await self._consistency(target)
+            target_consistency = await self._consistency(
+                target,
+                force_higher_consistency=force_higher_consistency,
+            )
             if target_consistency == HIGHER_CONSISTENCY:
                 consistency = HIGHER_CONSISTENCY
             unresolved.append((index, target))
@@ -551,19 +563,31 @@ class F048PermissionService:
         self,
         target: VerifiedPermissionTarget,
         action: str,
-    ) -> None:
+    ) -> bool:
         await self._catalog.ensure_runtime_ready()
-        await self._scope_fence.ensure_readable(target)
+        force_higher_consistency = bool(await self._scope_fence.ensure_readable(target))
         if not await self._catalog.is_action_effective(
             target.resource_type,
             action,
         ):
             raise InvalidCatalogActionError(msg=f"Action {action} is unavailable for {target.resource_type}")
+        return force_higher_consistency
 
     async def _consistency(
         self,
         target: VerifiedPermissionTarget,
+        *,
+        force_higher_consistency: bool = False,
     ) -> str | None:
+        if force_higher_consistency:
+            emit_metric(
+                "permission",
+                event="degraded_projection_decision",
+                resource_type=target.resource_type,
+                resource_id=target.resource_id,
+                tenant_id=str(target.tenant_id),
+            )
+            return HIGHER_CONSISTENCY
         return await self._scope_consistency(
             target.tenant_id,
             target.resource_type,

@@ -322,6 +322,18 @@
 - **AC-68** — WHEN 两个管理员基于同一旧版本并发修改模型、Grant 或权限模式, THE SYSTEM SHALL 只接受符合当前版本的更新，并明确拒绝过期覆盖。
 - **AC-69** — WHEN 授权或撤销成功返回, THE SYSTEM SHALL 让随后用于安全决策的读取观察到该新状态，不得因旧缓存继续产生与已确认变更相反的 ALLOW。
 - **AC-70** — IF 业务数据变更已发生但权限状态未能完成一致更新, THEN THE SYSTEM SHALL 不把该权限变化报告为已生效，并产生可恢复、可审计的异常；业务资源结果继续遵守其 Owner Feature 与 Constitution C4 的失败补偿契约。
+- **AC-178** — WHILE 一个已存在资源的权限投影处于 `PROJECTING`、`COMMIT_UNKNOWN`、
+  `COMMITTED` 或 `FAILED_CLOSED`, THE SYSTEM SHALL 继续通过唯一 OpenFGA 执行面对该资源执行
+  具体 action、`visible` 与批量鉴权；投影控制面状态本身不得暂停未参与本次变更的既有授权。
+- **AC-179** — WHEN 非 `CURRENT` 投影状态或权限版本在同一请求内发生切换, THE SYSTEM SHALL
+  对具体资源鉴权强制使用 higher consistency；OpenFGA、CURRENT Catalog/model 或已验证资源
+  identity/parent 不可用时仍须 fail closed，不得使用 SQL Grant 或待处理记录补充 ALLOW。
+- **AC-180** — WHILE 资源权限投影不是 `CURRENT`, THE SYSTEM SHALL 拒绝新的 Grant mutation、
+  mode switch 及其他权限配置写入，只允许原 operation 的幂等继续或受控恢复；普通资源业务
+  读写不得复用该权限写锁。
+- **AC-181** — WHEN `my-permissions` 在非 `CURRENT` 投影状态下读取当前用户有效权限,
+  THE SYSTEM SHALL 从 OpenFGA 逐动作计算结果并返回投影降级状态，不得把 SQL 中的
+  `PENDING`、`PENDING_DELETE` 或 `PROJECTING` 来源明细包装成最终授权来源。
 
 ### 3.9 PRD 显式交互与新建规则
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from datetime import UTC, datetime, timedelta
@@ -64,12 +65,12 @@ class PermissionSubjectDirectoryPort(Protocol):
     ) -> dict[tuple[str, str], str]: ...
 
 
-
 def _split_resource_key(resource_key: str) -> tuple[str, str]:
     """Split "knowledge_space:3377" into its type and id."""
 
     resource_type, _, resource_id = resource_key.partition(":")
     return resource_type, resource_id
+
 
 def _encode_cursor(payload: dict[str, object]) -> str:
     raw = json.dumps(
@@ -196,9 +197,7 @@ class F048ResourcePermissionApi:
         # roster used to render "knowledge_space:3377" at users. Resolved through
         # the business side, the same way subject names already are.
         parents = tuple(
-            dict.fromkeys(
-                _split_resource_key(row.inherited_from) for row in selected if row.inherited_from
-            )
+            dict.fromkeys(_split_resource_key(row.inherited_from) for row in selected if row.inherited_from)
         )
         parent_names = await self._subjects.resource_display_names(parents) if parents else {}
         model_names = {item.snapshot.model_key: item.name for item in catalog.models}
@@ -267,19 +266,37 @@ class F048ResourcePermissionApi:
             "visible",
         )
         await self._require_visible(actor, target)
+        mode = await self._runtime.mode_for_target(target)
+        projection_degraded = mode.projection_state != "CURRENT" or mode.version != target.resource_version
         if self._privileged(actor, target):
             # A super admin / tenant admin is authorized on identity and holds
             # no grant rows, so the grant-derived explanation would report an
             # empty action set — "visible but powerless", which is exactly what
             # made the client show them as having no permissions. Report the
             # full effective action set for the resource type instead.
-            mode = await self._runtime.current_mode(target)
             actions = await self._runtime.effective_actions(resource_type)
             return {
                 "mode": mode.mode,
                 "actions": list(actions),
                 "sources": [],
                 "roster_complete": False,
+                "projection_state": mode.projection_state,
+                "projection_degraded": projection_degraded,
+            }
+        if projection_degraded:
+            effective_actions = await self._runtime.effective_actions(resource_type)
+            allowed = await asyncio.gather(
+                *(self._runtime.check_action(actor, target, action) for action in effective_actions)
+            )
+            return {
+                "mode": mode.mode,
+                "actions": [
+                    action for action, is_allowed in zip(effective_actions, allowed, strict=True) if is_allowed
+                ],
+                "sources": [],
+                "roster_complete": False,
+                "projection_state": mode.projection_state,
+                "projection_degraded": True,
             }
         explanation = await self._explanation(
             actor,
@@ -297,6 +314,8 @@ class F048ResourcePermissionApi:
                 for row in explanation.sources
             ],
             "roster_complete": False,
+            "projection_state": mode.projection_state,
+            "projection_degraded": False,
         }
 
     async def mutate_grants(
@@ -484,10 +503,7 @@ class F048ResourcePermissionApi:
         """
         if actor.super_admin:
             return True
-        return (
-            target.tenant_id == actor.current_tenant_id
-            and target.tenant_id in actor.tenant_admin_tenant_ids
-        )
+        return target.tenant_id == actor.current_tenant_id and target.tenant_id in actor.tenant_admin_tenant_ids
 
     async def _require_visible(self, actor, target) -> None:
         if self._privileged(actor, target):

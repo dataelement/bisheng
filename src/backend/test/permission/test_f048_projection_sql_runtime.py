@@ -511,6 +511,115 @@ async def test_assignee_move_preserves_identity_and_advances_version(
 
 
 @pytest.mark.asyncio
+async def test_assignee_move_replaces_inactive_target_identity(
+    session_factory,
+) -> None:
+    source = GrantSourceService().canonicalize_source(
+        source_id=101,
+        subject_type="user",
+        subject_id="11",
+        source_type="DIRECT",
+    )
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            async with session.begin():
+                old_grant = PermissionGrant(
+                    tenant_id=7,
+                    resource_type="folder",
+                    resource_id="42",
+                    model_key="viewer",
+                    state="ACTIVE",
+                    projection_state="CURRENT",
+                )
+                target_grant = PermissionGrant(
+                    tenant_id=7,
+                    resource_type="folder",
+                    resource_id="42",
+                    model_key="editor",
+                    state="ACTIVE",
+                    projection_state="CURRENT",
+                )
+                session.add_all((old_grant, target_grant))
+                await session.flush()
+                session.add_all(
+                    (
+                        PermissionGrantAssignee(
+                            id=source.source_id,
+                            tenant_id=7,
+                            grant_id=int(old_grant.id),
+                            subject_type=source.subject_type,
+                            subject_id=source.subject_id,
+                            userset_relation=source.userset_relation,
+                            include_children=source.include_children,
+                            source_type=source.source_type,
+                            source_ref=source.source_ref,
+                            source_locator=source.source_locator,
+                            source_fingerprint=source.source_fingerprint,
+                            projected_subject=source.projected_subject,
+                            protected=source.protected,
+                            state="ACTIVE",
+                            version=1,
+                        ),
+                        PermissionGrantAssignee(
+                            id=202,
+                            tenant_id=7,
+                            grant_id=int(target_grant.id),
+                            subject_type=source.subject_type,
+                            subject_id=source.subject_id,
+                            userset_relation=source.userset_relation,
+                            include_children=source.include_children,
+                            source_type=source.source_type,
+                            source_ref=source.source_ref,
+                            source_locator=source.source_locator,
+                            source_fingerprint=source.source_fingerprint,
+                            projected_subject=source.projected_subject,
+                            protected=source.protected,
+                            state="INACTIVE",
+                            version=4,
+                        ),
+                        PermissionVisibleSourceProjection(
+                            tenant_id=7,
+                            resource_type="folder",
+                            resource_id="42",
+                            visibility_class="ordinary",
+                            projected_subject=source.projected_subject,
+                            source_kind="GRANT_ASSIGNEE",
+                            source_owner_key="grant_assignee:202",
+                            source_locator=source.source_locator,
+                            source_fingerprint=source.source_fingerprint,
+                            contribution_fingerprint="8" * 64,
+                            model_key="editor",
+                            source_version=4,
+                            tuple_fingerprint="9" * 64,
+                            state="RETIRED",
+                        ),
+                    )
+                )
+                await session.flush()
+
+                moved = await SqlPermissionControlState._upsert_assignee(
+                    session,
+                    grant_row=target_grant,
+                    source=replace(source, version=2),
+                    state="PENDING",
+                )
+
+                assert moved.id == 101
+                assert moved.grant_id == target_grant.id
+                assert moved.version == 2
+
+            rows = list(
+                (await session.execute(select(PermissionGrantAssignee).order_by(PermissionGrantAssignee.id)))
+                .scalars()
+                .all()
+            )
+
+    assert [(row.id, row.grant_id, row.state, row.version) for row in rows] == [
+        (101, target_grant.id, "PENDING", 2),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_visible_source_after_state_is_frozen_then_finalized(
     session_factory,
 ) -> None:

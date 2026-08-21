@@ -20,6 +20,7 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.database import get_async_db_session
 from bisheng.core.openfga.client import FGAClient
 from bisheng.permission.domain.models import (
+    DECIDABLE_PROJECTION_STATES,
     AuthorizationModelRelease,
     AuthorizationModelReleaseStatus,
     PermissionAction,
@@ -174,12 +175,12 @@ class SqlCatalogDecisionState:
 
 
 class SqlPermissionScopeFence:
-    """Trust only a CURRENT permission-owned mirror of a verified target."""
+    """Validate decision identity while permission writes remain serialized."""
 
     async def ensure_readable(
         self,
         target: VerifiedPermissionTarget,
-    ) -> None:
+    ) -> bool:
         async with get_async_db_session() as session:
             statement = select(ResourcePermissionMode).where(
                 ResourcePermissionMode.tenant_id == target.tenant_id,
@@ -189,8 +190,7 @@ class SqlPermissionScopeFence:
             row = (await session.execute(statement)).scalars().first()
         if (
             row is None
-            or row.version != target.resource_version
-            or row.projection_state != "CURRENT"
+            or row.projection_state not in DECIDABLE_PROJECTION_STATES
             or row.parent_type != target.parent_type
             or row.parent_id != target.parent_id
         ):
@@ -203,8 +203,9 @@ class SqlPermissionScopeFence:
                 expected_parent_type=target.parent_type,
                 expected_parent_id=target.parent_id,
                 expected_version=target.resource_version,
-                expected_projection_state="CURRENT",
+                expected_projection_state="CURRENT|PROJECTING|FAILED_CLOSED",
             )
+        return row.projection_state != "CURRENT" or row.version != target.resource_version
 
 
 class RedisConsistencyMarker:

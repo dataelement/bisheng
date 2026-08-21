@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from bisheng.common.errcode.permission import PermissionPublishNotReadyError
+from bisheng.common.errcode.permission import (
+    PermissionPublishNotReadyError,
+    PermissionVersionConflictError,
+)
+from bisheng.permission.application import control_state as control_state_module
+from bisheng.permission.application.control_state import SqlPermissionControlState
 from bisheng.permission.application.sql_runtime import SqlPermissionScopeFence
 from bisheng.permission.domain.schemas.f048 import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import (
@@ -188,7 +194,152 @@ async def test_ensure_readable_error_carries_diagnostic_fields():
     assert exc.kwargs.get("expected_parent_type") == "knowledge_space"
     assert exc.kwargs.get("expected_parent_id") == "3377"
     assert exc.kwargs.get("expected_version") == 1
-    assert exc.kwargs.get("expected_projection_state") == "CURRENT"
+    assert exc.kwargs.get("expected_projection_state") == "CURRENT|PROJECTING|FAILED_CLOSED"
+
+
+@pytest.mark.parametrize(
+    ("projection_state", "stored_version", "requires_higher_consistency"),
+    (
+        ("CURRENT", 1, False),
+        ("CURRENT", 2, True),
+        ("PROJECTING", 1, True),
+        ("FAILED_CLOSED", 1, True),
+    ),
+)
+async def test_decision_fence_keeps_non_current_projection_readable(
+    projection_state: str,
+    stored_version: int,
+    requires_higher_consistency: bool,
+):
+    from unittest.mock import patch
+
+    target = _make_target(resource_version=1)
+    row = SimpleNamespace(
+        version=stored_version,
+        projection_state=projection_state,
+        parent_type=target.parent_type,
+        parent_id=target.parent_id,
+    )
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = row
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "bisheng.permission.application.sql_runtime.get_async_db_session",
+        return_value=mock_ctx,
+    ):
+        assert await SqlPermissionScopeFence().ensure_readable(target) is requires_higher_consistency
+
+
+async def test_decision_fence_still_rejects_pending_projection():
+    from unittest.mock import patch
+
+    target = _make_target(resource_version=1)
+    row = SimpleNamespace(
+        version=1,
+        projection_state="PENDING",
+        parent_type=target.parent_type,
+        parent_id=target.parent_id,
+    )
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = row
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    with (
+        patch(
+            "bisheng.permission.application.sql_runtime.get_async_db_session",
+            return_value=mock_ctx,
+        ),
+        pytest.raises(PermissionPublishNotReadyError),
+    ):
+        await SqlPermissionScopeFence().ensure_readable(target)
+
+
+@pytest.mark.parametrize("projection_state", ("CURRENT", "PROJECTING", "FAILED_CLOSED"))
+async def test_permission_version_exposes_decidable_projection_state(projection_state: str):
+    from unittest.mock import patch
+
+    row = SimpleNamespace(
+        version=7,
+        mode="CUSTOM",
+        parent_type=None,
+        parent_id=None,
+        projection_state=projection_state,
+    )
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.first.return_value = row
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch.object(
+        control_state_module,
+        "get_async_db_session",
+        return_value=mock_ctx,
+    ):
+        version, context = await SqlPermissionControlState().permission_version(
+            tenant_id=1,
+            resource_type="knowledge_space",
+            resource_id="4166",
+        )
+
+    assert version == 7
+    assert context.endswith(projection_state)
+
+
+async def test_non_current_decision_forces_higher_consistency():
+    scope_fence = AsyncMock()
+    scope_fence.ensure_readable = AsyncMock(return_value=True)
+    fga = AsyncMock()
+    fga.check = AsyncMock(return_value=True)
+    service = _make_service(scope_fence=scope_fence, fga=fga)
+
+    assert await service.check_action(_make_actor(), _make_target(), "download")
+    assert fga.check.await_args.kwargs["consistency"] == "HIGHER_CONSISTENCY"
+
+
+async def test_non_current_visible_and_batch_decisions_force_higher_consistency():
+    scope_fence = AsyncMock()
+    scope_fence.ensure_readable = AsyncMock(return_value=True)
+    fga = AsyncMock()
+    fga.check = AsyncMock(return_value=True)
+    fga.batch_check = AsyncMock(return_value=[True, True])
+    service = _make_service(scope_fence=scope_fence, fga=fga)
+    actor = _make_actor()
+    targets = (_make_target(resource_id="1"), _make_target(resource_id="2"))
+
+    assert await service.check_visible(actor, targets[0])
+    assert fga.check.await_args.kwargs["consistency"] == "HIGHER_CONSISTENCY"
+    assert await service.batch_check_actions(actor, targets, "download") == (True, True)
+    assert fga.batch_check.await_args.kwargs["consistency"] == "HIGHER_CONSISTENCY"
+    assert await service.batch_check_visible(actor, targets) == (True, True)
+    assert fga.batch_check.await_args.kwargs["consistency"] == "HIGHER_CONSISTENCY"
+
+
+async def test_failed_closed_resource_still_rejects_new_permission_operation():
+    row = SimpleNamespace(
+        version=3,
+        projection_state="FAILED_CLOSED",
+        operation_id=405,
+    )
+
+    with pytest.raises(PermissionVersionConflictError):
+        SqlPermissionControlState._claim_projection_operation(
+            row,
+            expected_version=3,
+            operation_id=406,
+            allowed_initial_states=("CURRENT",),
+        )
 
 
 # ── P1: reconciler repairs root-parent mismatch ────────────────────────────
