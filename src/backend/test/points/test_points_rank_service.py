@@ -119,13 +119,12 @@ def test_select_top_n_with_score_ties_includes_boundary_ties():
 
 @pytest.mark.asyncio
 async def test_refresh_scopes_by_company_and_trims_inactive():
-    """月/年不补 0 分账户；总榜按积分总和（余额非 0）；按公司写 global/dept 桶。"""
+    """月/年不补 0 分账户；总榜按 lifetime_earned>0；按公司写 global/dept 桶。"""
     accounts = [
         SimpleNamespace(user_id=1, balance=100, lifetime_earned=120),
         SimpleNamespace(user_id=2, balance=0, lifetime_earned=40),
         SimpleNamespace(user_id=3, balance=50, lifetime_earned=0),
         SimpleNamespace(user_id=4, balance=80, lifetime_earned=90),
-        SimpleNamespace(user_id=5, balance=-36, lifetime_earned=0),
     ]
     # user1/2 公司 A；user4 公司 B；user3 无公司且无本月流水
     month_scores = {1: 30, 2: 0, 4: 20}
@@ -148,8 +147,8 @@ async def test_refresh_scopes_by_company_and_trims_inactive():
             "_load_company_and_dept_buckets",
             AsyncMock(
                 return_value=(
-                    {1: 100, 2: 100, 3: None, 4: 200, 5: 100},
-                    {1: 10, 2: 10, 3: None, 4: 20, 5: 10},
+                    {1: 100, 2: 100, 3: None, 4: 200},
+                    {1: 10, 2: 10, 3: None, 4: 20},
                 )
             ),
         ),
@@ -171,8 +170,8 @@ async def test_refresh_scopes_by_company_and_trims_inactive():
     all_rows = inserted[2]
     all_global_a = {r.user_id: r.period_score for r in all_rows if r.scope == "global" and r.scope_id == 100}
     all_global_b = {r.user_id: r.period_score for r in all_rows if r.scope == "global" and r.scope_id == 200}
-    assert all_global_a == {1: 100, 5: -36}
-    assert all_global_b == {4: 80}
+    assert all_global_a == {1: 120, 2: 40}
+    assert all_global_b == {4: 90}
 
 
 @pytest.mark.asyncio

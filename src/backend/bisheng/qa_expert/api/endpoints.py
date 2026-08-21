@@ -6,7 +6,6 @@ Expert QA API Endpoints - HTTP 路由处理层
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile, status
-from fastapi.responses import Response
 from loguru import logger
 
 from bisheng.api.v1.schemas import UploadFileResponse
@@ -738,46 +737,6 @@ async def mark_notification_read(
 
 
 # ==================== 公共方法 ====================
-
-
-@router.get("/assets/watermarked-download")
-async def download_watermarked_asset(
-    source: str = Query(..., description="问答图片或附件地址"),
-    title: str = Query("", description="原始文件名"),
-    user: UserPayload = Depends(UserPayload.get_login_user),
-):
-    """将专家问答上传的图片/附件转为带水印 PDF 后下载。"""
-    from bisheng.core.context.tenant import get_current_tenant_id
-    from bisheng.qa_expert.domain.watermarked_download import (
-        QaWatermarkDownloadError,
-        build_watermarked_qa_pdf,
-    )
-
-    storage = await get_minio_storage()
-    user_name = str(getattr(user, "user_name", "") or user.user_id)
-    try:
-        payload, filename = await build_watermarked_qa_pdf(
-            source=source,
-            title=title,
-            user_name=user_name,
-            account=user_name,
-            department_name="",
-            tenant_id=get_current_tenant_id(),
-            storage=storage,
-        )
-    except QaWatermarkDownloadError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.exception("QA watermarked download failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="水印下载失败") from exc
-
-    return Response(
-        content=payload,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-        },
-    )
 
 
 @router.post("/upload")
