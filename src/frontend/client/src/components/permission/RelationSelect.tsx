@@ -43,7 +43,7 @@ export function RelationSelect({
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger
         className={cn(
-          "h-8 rounded-md border-0 bg-white px-1 text-[14px] leading-[22px] text-[#212121] shadow-none hover:bg-white focus:ring-0 data-[placeholder]:text-[#999999] [&>span]:text-[#212121]",
+          "h-8 rounded-md border-0 bg-white px-1 text-[14px] leading-[22px] text-text-1 shadow-none hover:bg-white focus:ring-0 data-[placeholder]:text-text-3 [&>span]:text-text-1",
           className
         )}
       >
@@ -59,7 +59,7 @@ export function RelationSelect({
             key={model.id}
             value={model.id}
             showIndicator={false}
-            className="mb-1 min-h-[32px] rounded-lg px-2 py-[5px] pr-2 text-[14px] leading-[22px] text-[#212121] focus:bg-blue-500/[0.07] focus:text-blue-500 data-[state=checked]:bg-blue-500/[0.07] data-[state=checked]:font-normal data-[state=checked]:text-blue-500 last:mb-0"
+            className="mb-1 min-h-[32px] rounded-lg px-2 py-[5px] pr-2 text-[14px] leading-[22px] text-text-1 focus:bg-blue-500/[0.07] focus:text-blue-500 data-[state=checked]:bg-blue-500/[0.07] data-[state=checked]:font-normal data-[state=checked]:text-blue-500 last:mb-0"
           >
             {model.name}
           </SelectItem>

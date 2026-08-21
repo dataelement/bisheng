@@ -34,7 +34,7 @@ interface WorkspacePanelProps {
 }
 
 const iconBtn =
-    'flex h-7 w-7 items-center justify-center rounded-lg text-[#8C8C8C] transition-colors hover:bg-gray-100';
+    'flex h-7 w-7 items-center justify-center rounded-lg text-text-3 transition-colors hover:bg-gray-100';
 
 export function WorkspacePanel({
     files,
@@ -64,7 +64,7 @@ export function WorkspacePanel({
             { }
             {/* <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" /> */}
             <span className="flex min-w-0 items-center gap-1.5">
-                <span className="min-w-0 truncate text-sm text-[#212121] group-hover/row:text-blue-500 group-has-[[data-state=open]]/row:text-blue-500">
+                <span className="min-w-0 truncate text-sm text-text-1 group-hover/row:text-blue-500 group-has-[[data-state=open]]/row:text-blue-500">
                     {file.file_name}
                 </span>
                 <NewTabHint file={file} />
@@ -81,7 +81,7 @@ export function WorkspacePanel({
                 'flex h-full min-h-0 w-full flex-col overflow-hidden bg-[#FBFBFB]',
                 // Fullscreen overlays the whole route viewport flush to the edges;
                 // the card chrome (radius/border) only applies to the docked panel.
-                !fullscreen && 'rounded-lg border border-[#ECECEC]',
+                !fullscreen && 'rounded-lg border border-border-base',
             )}
         >
             {previewFile ? (
@@ -92,7 +92,7 @@ export function WorkspacePanel({
                             <Outlined.ArrowLeft className="size-4" />
                         </button>
                         <span
-                            className="min-w-0 flex-1 truncate text-sm text-[#212121]"
+                            className="min-w-0 flex-1 truncate text-sm text-text-1"
                             title={previewFile.file_name}
                         >
                             {previewFile.file_name || localize('com_linsight_preview_file')}
@@ -133,7 +133,7 @@ export function WorkspacePanel({
                 <>
                     {/* list header */}
                     <div className="flex h-12 shrink-0 items-center justify-between px-4">
-                        <span className="text-sm font-medium text-[#212121]">{localize('com_linsight_workspace')}</span>
+                        <span className="text-sm font-medium text-text-1">{localize('com_linsight_workspace')}</span>
                         <button type="button" aria-label={localize('com_ui_close')} className={iconBtn} onClick={onClose}>
                             <Outlined.Close className="size-4" />
                         </button>
@@ -145,7 +145,7 @@ export function WorkspacePanel({
                         ) : (
                             <div className="flex h-full flex-col items-center justify-center text-center">
                                 <EmptyStateIllustration className="mb-4 size-[120px]" />
-                                <p className="text-[14px] font-normal text-[#999999]">{localize('com_linsight_workspace_empty')}</p>
+                                <p className="text-[14px] font-normal text-text-3">{localize('com_linsight_workspace_empty')}</p>
                             </div>
                         )}
                     </div>

@@ -163,7 +163,7 @@ export default function FilePreview({
             <div className="w-full h-full flex flex-col">
                 {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
-                    <div className="flex flex-col items-center gap-4 text-[#86909c]">
+                    <div className="flex flex-col items-center gap-4 text-text-3">
                         <div className="text-5xl">📄</div>
                         <p className="text-lg">{localize("com_knowledge.unsupported_format_prefix")}{fileType}{localize("com_knowledge.unsupported_format_suffix")}</p>
                         {allowDownload && (
@@ -195,7 +195,7 @@ export default function FilePreview({
                     />
                 )}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
-                    <div className="flex flex-col items-center gap-3 text-[#86909c]">
+                    <div className="flex flex-col items-center gap-3 text-text-3">
                         <div className="text-5xl">📄</div>
                         <p className="text-base">{localize("com_knowledge.load_doc_failed")}</p>
                     </div>
@@ -210,7 +210,7 @@ export default function FilePreview({
             <div className="w-full h-full flex flex-col">
                 {showHeader && <TopBar fileName={fileName} onDownload={topBarDownload} actions={actions} showZoom={false} />}
                 <div className="flex-1 flex items-center justify-center bg-[#fbfbfb]">
-                    <div className="flex flex-col items-center gap-3 text-[#86909c]">
+                    <div className="flex flex-col items-center gap-3 text-text-3">
                         <div className="text-4xl">📄</div>
                         <p>{error}</p>
                     </div>

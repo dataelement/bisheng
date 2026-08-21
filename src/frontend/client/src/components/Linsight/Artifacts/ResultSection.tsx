@@ -113,11 +113,11 @@ export function ResultSection({ answer, files, versionId, onPreview }: ResultSec
                 >
                     {/* header: icon + title + count badge */}
                     <div className="flex items-center gap-2">
-                        <Outlined.Clap className="size-4 text-[#212121]" />
-                        <span className="text-[14px] leading-[22px] text-[#999]">
+                        <Outlined.Clap className="size-4 text-text-1" />
+                        <span className="text-[14px] leading-[22px] text-text-3">
                             {localize('com_linsight_output_files', { 0: '' }).trim()}
                         </span>
-                        <span className="flex h-4 min-w-4 items-center justify-center rounded-md bg-[#212121]/5 px-1 text-[10px] font-semibold text-[#212121]">
+                        <span className="flex h-4 min-w-4 items-center justify-center rounded-md bg-[#212121]/5 px-1 text-caption-sm font-semibold text-text-1">
                             {files.length}
                         </span>
                     </div>

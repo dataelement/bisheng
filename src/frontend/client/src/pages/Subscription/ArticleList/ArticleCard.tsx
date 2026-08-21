@@ -114,7 +114,7 @@ function CoverThumbnail({ src, alt, fallbackIcon, fallbackUrl, containerClassNam
                     />
                 </>
             ) : (
-                <Outlined.Earth className="size-8 text-[#C9CDD4]" />
+                <Outlined.Earth className="size-8 text-text-4" />
             )}
         </div>
     );
@@ -131,7 +131,7 @@ function SourceAvatar({ src, fallbackUrl }: { src?: string; fallbackUrl?: string
     useEffect(() => { setFailed(false); }, [iconSrc]);
 
     if (!iconSrc || failed) {
-        return <Outlined.Earth className="h-full w-full text-[#C9CDD4]" />;
+        return <Outlined.Earth className="h-full w-full text-text-4" />;
     }
     return (
         <img
@@ -199,11 +199,11 @@ export function ArticleCard({
 
     // Shared meta row (source favicon + name + separator + time)
     const metaRow = (
-        <div className="flex items-center gap-2 text-xs text-[#999]">
+        <div className="flex items-center gap-2 text-xs text-text-3">
             <div className="size-4 shrink-0 overflow-hidden rounded-sm">
                 <SourceAvatar src={article.sourceAvatar} fallbackUrl={article.url} />
             </div>
-            <span className="max-w-40 truncate max-[767px]:text-[#212121]">{article.sourceName}</span>
+            <span className="max-w-40 truncate max-[767px]:text-text-1">{article.sourceName}</span>
             <span className="mx-0.5 h-2.5 w-px shrink-0 bg-[#E0E0E0]" aria-hidden />
             <span className="shrink-0">{formatTime(article.publishedAt)}</span>
         </div>
@@ -224,7 +224,7 @@ export function ArticleCard({
                                 className={cn(
                                     "min-w-0 flex-1 line-clamp-2 text-[16px] leading-[22px] font-medium max-[767px]:text-[14px] [&_em]:not-italic [&_em]:bg-[#FFBF00]/20 [&_em]:font-medium",
                                     isSelected ? "text-primary" : "fine-pointer:group-hover:text-primary",
-                                    article.isRead ? "text-[#989898]" : "text-[#212121]",
+                                    article.isRead ? "text-[#989898]" : "text-text-1",
                                 )}
                             >
                                 {highlightTitle
@@ -245,7 +245,7 @@ export function ArticleCard({
                                     {hasKnowledge && (
                                         <button
                                             onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
-                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#999] transition-colors group-hover:text-[#212121] hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-text-3 transition-colors group-hover:text-text-1 hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-text-3 max-[767px]:hover:bg-transparent"
                                             title={localize("com_subscription.add_to_knowledge_space")}
                                         >
                                             <Outlined.AddToKnowledgeBase className="size-3.5" />
@@ -260,7 +260,7 @@ export function ArticleCard({
                                                 .then(() => showToast({ message: localize("com_subscription.share_link_copied"), severity: NotificationSeverity.SUCCESS }))
                                                 .catch(() => showToast({ message: localize("com_subscription.copy_failed_retry"), severity: NotificationSeverity.ERROR }));
                                         }}
-                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#999] transition-colors group-hover:text-[#212121] hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-[#818181] max-[767px]:hover:bg-transparent"
+                                        className="flex size-8 cursor-pointer items-center justify-center rounded-full text-text-3 transition-colors group-hover:text-text-1 hover:bg-[#f7f7f7] max-[767px]:size-5 max-[767px]:rounded-none max-[767px]:text-text-3 max-[767px]:hover:bg-transparent"
                                         title={localize("com_subscription.share")}
                                     >
                                         <Outlined.Share className="size-3.5" />

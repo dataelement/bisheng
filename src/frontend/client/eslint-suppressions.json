@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 16
+      "count": 15
     }
   },
   "src/api/index.ts": {
@@ -2387,14 +2387,6 @@
       "count": 1
     }
   },
-  "src/hooks/useToast.ts": {
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
-    }
-  },
   "src/hooks/useVersionManagementEnabled.ts": {
     "no-restricted-imports": {
       "count": 1
@@ -2710,7 +2702,7 @@
   },
   "src/pages/_gallery/progress/ColorProgress.tsx": {
     "no-restricted-syntax": {
-      "count": 35
+      "count": 25
     }
   },
   "src/pages/_gallery/progress/ConfirmProgress.tsx": {
@@ -2725,7 +2717,7 @@
   },
   "src/pages/_gallery/progress/ProgressOverview.tsx": {
     "no-restricted-syntax": {
-      "count": 100
+      "count": 99
     }
   },
   "src/pages/_gallery/progress/TypographyProgress.tsx": {
@@ -3619,11 +3611,6 @@
     }
   },
   "src/store/text.ts": {
-    "no-restricted-imports": {
-      "count": 1
-    }
-  },
-  "src/store/toast.ts": {
     "no-restricted-imports": {
       "count": 1
     }

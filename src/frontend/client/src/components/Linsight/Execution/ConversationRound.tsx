@@ -42,7 +42,7 @@ export function ConversationRound({ round, versionId, onPreview }: ConversationR
             {/* user question bubble */}
             {round.question && (
                 <div className="mb-4 flex justify-end">
-                    <div className="max-w-[80%] whitespace-pre-wrap rounded-[12px] bg-[#F4F4F4] px-4 py-3 text-[14px] leading-relaxed text-[#212121]">
+                    <div className="max-w-[80%] whitespace-pre-wrap rounded-[12px] bg-[#F4F4F4] px-4 py-3 text-[14px] leading-relaxed text-text-1">
                         {round.question}
                     </div>
                 </div>

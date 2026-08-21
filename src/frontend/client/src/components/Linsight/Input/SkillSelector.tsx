@@ -11,7 +11,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { useQuery } from '@tanstack/react-query';
 import { getSelectableSkills } from '~/api/linsight';
 import { DropdownMenuItem, Input } from '~/components/ui';
-import { EmptyStateIllustration } from '~/components/illustrations';
+import { StateView } from '@bisheng/ui';
 import { Tooltip, TooltipContent, TooltipTrigger } from '~/components/ui/Tooltip2';
 import { useLocalize } from '~/hooks';
 import type { TaskModeSkill } from '~/store/linsight';
@@ -76,7 +76,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                     }}
                     className={cn(
                         'flex cursor-pointer items-start gap-2 rounded-lg px-2 py-[5px] outline-none transition-colors',
-                        'data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]',
+                        'data-[highlighted]:bg-fill-2 focus:bg-fill-2',
                         // Selected rows carry the state themselves (brand tint + a
                         // trailing check) now that the leading checkbox is gone.
                         isChecked && 'bg-blue-500/[0.07] data-[highlighted]:bg-blue-500/[0.07] focus:bg-blue-500/[0.07]',
@@ -91,7 +91,7 @@ function SkillRow({ skill, isChecked, onToggle }: SkillRowProps) {
                             {skill.display_name}
                         </p>
                         {skill.description && (
-                            <p ref={descRef} className="truncate text-[12px] leading-4 text-[#999]">
+                            <p ref={descRef} className="truncate text-[12px] leading-4 text-text-3">
                                 {skill.description}
                             </p>
                         )}
@@ -189,7 +189,7 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                     own box, so a mathematically centred icon reads high next to the text. */}
                 <Outlined.Search size={14} className="absolute left-3 top-[calc(50%+1px)] -translate-y-1/2 text-slate-400" />
                 <Input
-                    className="h-[28px] rounded-lg border border-[#ECECEC] bg-white py-0 pl-8 text-[12px] placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
+                    className="h-[28px] rounded-lg border border-border-base bg-white py-0 pl-8 text-[12px] placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
                     placeholder={localize('com_linsight_skill_search')}
                     value={keyword}
                     onChange={(e) => setKeyword(e.target.value)}
@@ -209,14 +209,13 @@ export function SkillSelector({ selected, onChange }: SkillSelectorProps) {
                     <Loader2 size={16} className="animate-spin text-slate-300" />
                 </div>
             ) : filtered.length === 0 ? (
-                // Centred in whatever height the list area is holding (see
+                // Inline tier (组件-State状态页.md §3): a selector with no
+                // options gets one centered line and no artwork. Centred in
+                // whatever height the list area is holding (see
                 // unfilteredHeight), so searching to zero results doesn't leave
                 // the copy stranded at the top of an otherwise empty panel.
-                <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-4">
-                    <EmptyStateIllustration grey className="size-[100px] shrink-0" />
-                    <p className="text-center text-xs text-slate-400">
-                        {localize('com_linsight_skill_empty')}
-                    </p>
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                    <StateView size="inline" title={localize('com_linsight_skill_empty')} />
                 </div>
             ) : (
                 <div className="relative flex min-h-0 flex-1 flex-col">

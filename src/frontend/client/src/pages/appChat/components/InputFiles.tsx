@@ -264,9 +264,9 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                         className="group inline-flex h-6 min-w-0 max-w-[220px] shrink-0 items-center rounded-[4px] bg-white px-2 text-xs text-slate-700 transition-colors duration-200 hover:bg-slate-50"
                     >
                         {file.isUploading || isLinsightParsing(file) ? (
-                            <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-[#999]" />
+                            <Loader2 className="mr-1 size-4 shrink-0 animate-spin text-text-3" />
                         ) : (
-                            <LegacyFileIcon className="mr-1 size-4 shrink-0 text-[#999]" type={getFileTypebyFileName(file.name)} />
+                            <LegacyFileIcon className="mr-1 size-4 shrink-0 text-text-3" type={getFileTypebyFileName(file.name)} />
                         )}
                         <span className="min-w-0 flex-1 truncate text-left" title={file.name}>
                             {file.name}

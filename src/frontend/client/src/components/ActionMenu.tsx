@@ -29,7 +29,7 @@ const itemBaseClassName =
 
 const itemRegularClassName = cn(
     itemBaseClassName,
-    "text-[#212121] data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5]",
+    "text-text-1 data-[highlighted]:bg-fill-2 focus:bg-fill-2",
 );
 
 const itemDangerClassName = cn(
@@ -38,7 +38,7 @@ const itemDangerClassName = cn(
 );
 
 const iconBaseClassName = "size-4 shrink-0";
-const iconRegularClassName = cn(iconBaseClassName, "text-[#4E5969]");
+const iconRegularClassName = cn(iconBaseClassName, "text-text-2");
 const iconDangerClassName = cn(iconBaseClassName, "text-[#F53F3F]");
 
 const labelClassName = "min-w-0 truncate text-sm leading-[22px]";

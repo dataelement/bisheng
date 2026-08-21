@@ -689,8 +689,12 @@ export async function getAttachmentUrl(
     fileId: string,
 ): Promise<string | null> {
     try {
-        const res: any = await http.get(API.attachmentUrl(conversationId, fileId));
-        return (res?.data ?? res)?.url ?? null;
+        // The wrapper unwraps `data` for some callers and not others, so accept both.
+        const res = await http.get<{ url?: string } | { data?: { url?: string } }>(
+            API.attachmentUrl(conversationId, fileId),
+        );
+        const payload = (res as { data?: { url?: string } })?.data ?? (res as { url?: string });
+        return payload?.url ?? null;
     } catch {
         return null;
     }

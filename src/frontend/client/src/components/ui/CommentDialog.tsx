@@ -60,7 +60,7 @@ export function CommentDialog({
         close={false}
       >
         <DialogHeader className="px-5 py-4 text-center sm:text-left">
-          <DialogTitle className="text-base leading-6 text-[#212121]">{title}</DialogTitle>
+          <DialogTitle className="text-base leading-6 text-text-1">{title}</DialogTitle>
         </DialogHeader>
         <div className="px-5">
           {/* Focus chrome mirrors the app-center search box (ExpandableSearchField). */}
@@ -68,7 +68,7 @@ export function CommentDialog({
             ref={commentRef}
             maxLength={9999}
             placeholder={placeholder}
-            className="bg-white border-[#E5E6EB] shadow-none transition-[border-color,box-shadow] duration-200 focus:border-[#DDDDDD] focus:shadow-[0_0_0_2px_#F1F5F9] placeholder:text-sm placeholder:text-[#999]"
+            className="bg-white border-border-base shadow-none transition-[border-color,box-shadow] duration-200 focus:border-[#DDDDDD] focus:shadow-[0_0_0_2px_#F1F5F9] placeholder:text-sm placeholder:text-text-3"
           />
         </div>
         <DialogFooter className="flex-row justify-end gap-3 space-x-0 sm:space-x-0 px-5 py-4">

@@ -106,7 +106,7 @@ function UploadedFileList({ files, conversationId }: { files: any[]; conversatio
                         const fileName = file.name || file.file_name || "File";
                         const FileTypeIcon = getFileTypeIcon(fileName);
                         return (
-                            <div key={i} className="flex shrink-0 items-center gap-1 text-[#999999]">
+                            <div key={i} className="flex shrink-0 items-center gap-1 text-text-3">
                                 <FileTypeIcon size={12} className="shrink-0 text-[#CCCCCC]" />
                                 <div className="min-w-0 flex-1 overflow-hidden">
                                     <div className="truncate text-xs" title={fileName}>
@@ -163,11 +163,11 @@ function CopyButton({ text }: { text: string }) {
         <button
             type="button"
             onClick={handleCopy}
-            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+            className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1"
             title={localize('com_ui_copy')}
             aria-label={localize('com_ui_copy')}
         >
-            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-[#818181]" />}
+            {copied ? <Outlined.Copied size={14} className="text-blue-500" /> : <Outlined.Copy size={14} className="text-text-3" />}
         </button>
     );
 }
@@ -445,14 +445,14 @@ function UserBubble({
                                 // box shrinks and the URL wraps inside max-w-full.
                                 "w-fit max-w-full px-3 py-2 whitespace-pre-wrap [overflow-wrap:anywhere] rounded-lg",
                                 knowledgeChatLayout
-                                    ? "bg-[#F2F3F5] text-[#4E5969] text-[14px] leading-[22px]"
-                                    : "rounded-[10px] bg-blue-500/[0.07] text-[#1d2129] text-sm"
+                                    ? "bg-fill-2 text-text-2 text-[14px] leading-[22px]"
+                                    : "rounded-[10px] bg-blue-500/[0.07] text-text-1 text-sm"
                             )}
                         >
                             {tag && (
                                 <span
                                     className={cn(
-                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-[#212121] select-none",
+                                        "mr-1 inline-flex max-w-[min(240px,90%)] shrink-0 items-center rounded-[2px] px-1 align-middle text-text-1 select-none",
                                         knowledgeChatLayout
                                             ? "text-[14px] font-normal leading-[22px]"
                                             : "h-5 text-xs font-medium leading-none align-middle"
@@ -707,7 +707,7 @@ function AssistantBubble({
                             "bs-mkdown message-content overflow-hidden break-words [word-break:break-all]",
                             knowledgeChatLayout
                                 ? "rounded-[2px] border-0 bg-transparent px-0 py-1 text-[14px] leading-[22px] [--markdown-font-size:14px]"
-                                : "rounded-[10px] bg-white border border-[#E5E6EB] px-3 py-2 text-sm"
+                                : "rounded-[10px] bg-white border border-border-base px-3 py-2 text-sm"
                         )}
                     >
 
@@ -732,8 +732,9 @@ function AssistantBubble({
                 {/* Error state — replaces the body when nothing streamed in, and sits
                     below it when a partial answer did. Same card as task mode:
                     localized title + explanation + hint, with the upstream text
-                    behind "view details"; transient hiccups render as the calm
-                    notice + Retry, terminal ones as the red card. */}
+                    (which file, which service, what it actually said) behind
+                    "view details"; transient hiccups render as the calm notice +
+                    Retry, terminal ones as the red card. */}
                 {!showWaiting && message.error && (
                     <div className={cn(hasAnswerBody && "mt-2")}>
                         <ChatErrorCard
@@ -782,7 +783,7 @@ function AssistantBubble({
                                         />
                                     )}
                                     <TextToSpeechButton
-                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-[#F7F7F7]"
+                                        className="flex size-6 items-center justify-center rounded-md transition-colors hover:bg-fill-1"
                                         messageId={message.messageId || ""}
                                         text={regularContent}
                                     />

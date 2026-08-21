@@ -59,9 +59,9 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
                 ref={(el) => {
                     containerRef.current = el;
                 }}
-                className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg p-3 z-50"
+                className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-border-base rounded-lg shadow-lg p-3 z-50"
             >
-                <p className="text-sm text-[#86909c] text-center">{localize("com_knowledge.no_matched_tags")}</p>
+                <p className="text-sm text-text-3 text-center">{localize("com_knowledge.no_matched_tags")}</p>
             </div>
         );
     }
@@ -72,7 +72,7 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
                 containerRef.current = el;
                 listScrollRevealRef(el);
             }}
-            className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-[#e5e6eb] rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto scrollbar-on-scroll"
+            className="absolute bottom-full left-0 right-0 mb-1 bg-white border border-border-base rounded-lg shadow-lg z-50 max-h-[200px] overflow-y-auto scrollbar-on-scroll"
         >
             <div className="p-1.5">
                 {filtered.map((tag, i) => (
@@ -81,8 +81,8 @@ export function TagPicker({ tags, searchText, onSelect, onClose }: TagPickerProp
                         className={cn(
                             "w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors",
                             i === activeIndex
-                                ? "bg-[#f2f3f5] text-[#1d2129]"
-                                : "text-[#4e5969] hover:bg-[#f7f8fa]"
+                                ? "bg-fill-2 text-text-1"
+                                : "text-text-2 hover:bg-fill-1"
                         )}
                         onMouseEnter={() => setActiveIndex(i)}
                         onClick={() => onSelect(tag)}

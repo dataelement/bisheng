@@ -11,7 +11,7 @@
  *                     sections/*  (antd-docs-style pages, no migration noise)
  *   进度 (progress) — migration dashboards & ledgers for the effort's owner.
  *                     progress/*  (status dots live here only)
- * Default export (required by React.lazy in the route). See docs-ui-refactor/00-总纲.md.
+ * Default export (required by React.lazy in the route). See packages/ui/docs/00-总纲.md.
  */
 import { ComponentType, useState } from 'react';
 import { cn } from '~/utils';
@@ -173,7 +173,7 @@ export default function GalleryApp() {
           ))}
         </nav>
         <div className="border-t border-border-light px-5 py-3 text-caption text-muted-foreground">
-          文档：docs-ui-refactor/
+          文档：packages/ui/docs/
         </div>
       </aside>
 

@@ -103,7 +103,7 @@ export function AgentNavigation({ onCategoryChange, onRefresh }: AgentNavigation
                     "flex shrink-0 items-center whitespace-nowrap border-b-2 px-2 py-[5px] font-['PingFang_SC'] text-[14px] leading-[22px] transition-colors",
                     isActive
                         ? "border-blue-500 text-blue-500"
-                        : "border-transparent text-[#212121] fine-pointer:hover:text-blue-500",
+                        : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
                 )}
             >
                 {label}

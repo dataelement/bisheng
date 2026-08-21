@@ -109,16 +109,16 @@ export function SubjectSearchUserGroup({
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#999999]" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
         <input
           type="text"
           placeholder={localize("com_permission.search_user_group")}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          className="h-8 w-full rounded-md border border-[#EBECF0] bg-white pl-9 pr-3 text-[14px] text-[#212121] outline-none transition-colors placeholder:text-[#999999] focus:border-[#C9CDD4]"
+          className="h-8 w-full rounded-md border border-border-base bg-white pl-9 pr-3 text-[14px] text-text-1 outline-none transition-colors placeholder:text-text-3 focus:border-border-deep"
         />
       </div>
-      <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-[#EBECF0]">
+      <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto rounded-md border border-border-base">
         {loading && (
           <div className="py-4 text-center text-sm text-gray-500">
             {localize("com_ui_loading")}

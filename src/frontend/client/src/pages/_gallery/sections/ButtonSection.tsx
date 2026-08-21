@@ -1,7 +1,7 @@
 /**
  * Button gallery — DEV-ONLY.
  * Standard-usage documentation for the refactored dual-axis Button
- * (docs-ui-refactor/组件-Button按钮.md v1): color × variant × size matrix,
+ * (packages/ui/docs/组件-Button按钮.md v1): color × variant × size matrix,
  * states and content forms. Legacy-API mapping ledger: progress/ButtonProgress.tsx.
  */
 import { Outlined } from 'bisheng-icons';

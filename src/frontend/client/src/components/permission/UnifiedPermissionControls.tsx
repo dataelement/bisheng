@@ -87,7 +87,7 @@ export function AccessModeSelector({
           <span className="shrink-0 whitespace-nowrap font-medium">{option.label}</span>
           <TruncatedTooltip
             content={option.description}
-            className="min-w-0 truncate text-[#999999]"
+            className="min-w-0 truncate text-text-3"
           >
             {option.description}
           </TruncatedTooltip>
@@ -124,7 +124,7 @@ export function SettingsSwitchRow({
           {label}
         </span>
         {description && (
-          <span className="truncate text-[#999999]">{description}</span>
+          <span className="truncate text-text-3">{description}</span>
         )}
         {children}
       </div>

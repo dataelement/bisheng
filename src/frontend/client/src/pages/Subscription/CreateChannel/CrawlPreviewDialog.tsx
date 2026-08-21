@@ -59,14 +59,14 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
                     value={url}
                     readOnly
                     disabled
-                    className="h-8 text-[14px] bg-[#F7F8FA] text-[#86909C] border-[#E5E6EB]"
+                    className="h-8 text-[14px] bg-fill-1 text-text-3 border-border-base"
                 />
             </div>
 
             {status === "loading" && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
                     <CrawlingIllustration className="w-[120px] h-[120px]" />
-                    <p className="text-[14px] font-normal text-[#999999]">
+                    <p className="text-[14px] font-normal text-text-3">
                         {localize("com_subscription.crawling_waiting") || localize("com_subscription.crawling_please_wait")}
                     </p>
                 </div>
@@ -81,12 +81,12 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
                 >
                     <div
                         className={cn(
-                            "flex min-w-0 flex-col overflow-hidden rounded-lg border border-[#E5E6EB] p-3",
+                            "flex min-w-0 flex-col overflow-hidden rounded-lg border border-border-base p-3",
                             previewData.articles?.length ? "min-h-0 flex-1" : "shrink-0"
                         )}
                     >
                         <div className="flex shrink-0 items-center gap-3">
-                            <Avatar className="h-10 w-10 border border-[#E5E6EB]">
+                            <Avatar className="h-10 w-10 border border-border-base">
                                 {previewData.icon ? (
                                     <AvatarImage src={previewData.icon} alt={previewData.name} />
                                 ) : (
@@ -94,7 +94,7 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
                                 )}
                             </Avatar>
                             <div className="min-w-0">
-                                <p className="text-[14px] font-medium text-[#1D2129]">
+                                <p className="text-[14px] font-medium text-text-1">
                                     {previewData.name}
                                 </p>
                                 <a
@@ -109,7 +109,7 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
                         </div>
                         {previewData.articles && previewData.articles.length > 0 && (
                             <>
-                                <p className="mb-2 mt-4 shrink-0 text-[14px] font-medium text-[#212121]">
+                                <p className="mb-2 mt-4 shrink-0 text-[14px] font-medium text-text-1">
                                     {localize("com_subscription.parsed_articles")}
                                 </p>
                                 <div
@@ -131,7 +131,7 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
                                             <span
                                                 className={cn(
                                                     "mr-2 h-[6px] w-[6px] flex-shrink-0 rounded-full",
-                                                    noHoverDevice ? "bg-blue-500" : "bg-[#C9CDD4] group-hover/item:bg-blue-500"
+                                                    noHoverDevice ? "bg-blue-500" : "bg-fill-4 group-hover/item:bg-blue-500"
                                                 )}
                                                 aria-hidden
                                             />
@@ -159,10 +159,10 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
             )}
 
             {status === "error" && (
-                <div className="flex min-h-[270px] flex-1 flex-col justify-between rounded border border-[#E5E6EB] px-6 py-8">
+                <div className="flex min-h-[270px] flex-1 flex-col justify-between rounded border border-border-base px-6 py-8">
                     <div className="flex flex-1 flex-col items-center justify-center text-center">
                         <EmptyStateIllustration className="mb-4 size-[80px]" />
-                        <p className="text-[14px] leading-6 text-[#4E5969]">
+                        <p className="text-[14px] leading-6 text-text-2">
                             {localize(crawlErrorMessageKey(errorCode))}
                         </p>
                     </div>
@@ -269,7 +269,7 @@ function FeedbackTrigger({ onOpen }: { onOpen: () => void }) {
             className="inline-flex flex-wrap items-baseline gap-x-1 text-left text-[14px] leading-relaxed"
             onClick={onOpen}
         >
-            <span className="text-[#4E5969]">
+            <span className="text-text-2">
                 {localize("com_subscription.unsatisfied_with_crawl_prompt")}
             </span>
             <span className="font-normal text-blue-500">
@@ -368,16 +368,16 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
     return (
         <>
             <div className="flex h-full min-h-0 flex-1 flex-col bg-white text-[14px]">
-                <div className="flex shrink-0 flex-row items-center gap-2 border-b border-[#ECECEC] px-4 pb-4 pt-4 sm:px-6">
+                <div className="flex shrink-0 flex-row items-center gap-2 border-b border-border-base px-4 pb-4 pt-4 sm:px-6">
                     <button
                         type="button"
                         onClick={handleCancel}
-                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-[#E5E6EB] text-[#4E5969] hover:bg-[#F7F8FA]"
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border-base text-text-2 hover:bg-fill-1"
                         aria-label={localize("com_ui_go_back")}
                     >
                         <ChevronLeft className="size-5" />
                     </button>
-                    <h2 className="min-w-0 flex-1 text-left text-[20px] font-medium leading-7 text-[#212121]">
+                    <h2 className="min-w-0 flex-1 text-left text-[20px] font-medium leading-7 text-text-1">
                         {localize("com_subscription.confirm_crawled_content")}
                     </h2>
                 </div>
@@ -390,7 +390,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                     noHoverDevice={noHoverDevice}
                 />
 
-                <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-[#E5E6EB] px-4 py-4 sm:px-6">
+                <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border-base px-4 py-4 sm:px-6">
                     {(status === "success" || status === "error") ? (
                         <FeedbackTrigger onOpen={() => setFeedbackDialogOpen(true)} />
                     ) : (
@@ -400,7 +400,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                         <Button
                             variant="secondary"
                             onClick={handleCancel}
-                            className="h-8 rounded-md px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-[#E5E6EB] bg-white text-[#4E5969] hover:bg-[#F7F8FA] touch-mobile:flex-1"
+                            className="h-8 rounded-md px-4 inline-flex items-center justify-center leading-none text-[14px] !font-normal border border-border-base bg-white text-text-2 hover:bg-fill-1 touch-mobile:flex-1"
                         >
                             {localize("cancel")}
                         </Button>
@@ -422,7 +422,7 @@ export function CrawlPreviewPanel({ url, onBack, onAddSource }: CrawlPreviewPane
                 <AlertDialogContent className="sm:max-w-[480px]">
                     <AlertDialogHeader>
                         <AlertDialogTitle>{localize("com_subscription.submit_manual_crawl_request")}</AlertDialogTitle>
-                        <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-[#4E5969]">
+                        <AlertDialogDescription className="whitespace-pre-line text-[14px] leading-6 text-text-2">
                             {feedbackTips}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
@@ -475,7 +475,7 @@ export function CrawlPreviewDialog({ open, onOpenChange, url, initialPreview }: 
                     noHoverDevice={noHoverDevice}
                 />
 
-                <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-[#E5E6EB] px-4 py-4 sm:px-6">
+                <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border-base px-4 py-4 sm:px-6">
                     <FeedbackTrigger onOpen={() => setFeedbackDialogOpen(true)} />
                     <div className="flex justify-end">
                         <Button

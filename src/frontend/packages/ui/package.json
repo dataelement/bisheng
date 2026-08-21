@@ -21,6 +21,7 @@
     "react-dom": "^18.2.0"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "catalog:",
     "@radix-ui/react-slot": "catalog:",
     "bisheng-icons": "catalog:",
     "class-variance-authority": "catalog:",

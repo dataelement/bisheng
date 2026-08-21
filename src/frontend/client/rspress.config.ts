@@ -80,10 +80,25 @@ export default defineConfig({
           ],
         },
         {
+          text: '数据录入 Data Entry',
+          items: [
+            { text: '输入框 Input', link: '/components/input' },
+          ],
+        },
+        {
+          text: '数据展示 Data Display',
+          items: [
+            { text: '文字提示 Tooltip', link: '/components/tooltip' },
+            { text: '气泡卡片 Popover', link: '/components/popover' },
+          ],
+        },
+        {
           text: '反馈 Feedback',
           items: [
             { text: '弹窗 Modal', link: '/components/modal' },
             { text: '二次确认 Confirm', link: '/components/confirm' },
+            { text: '轻提示 Toast', link: '/components/toast' },
+            { text: '状态页 State', link: '/components/state' },
             { text: '点赞点踩 Feedback', link: '/components/feedback' },
           ],
         },
@@ -106,14 +121,22 @@ export default defineConfig({
             { text: '色彩 Color', link: '/基础-色彩规范' },
             { text: '图标 Icon', link: '/基础-图标规范' },
             { text: '插画 Illustration', link: '/基础-插画规范' },
-            { text: '阴影与圆角 Elevation', link: '/基础-阴影与圆角规范' },
+            { text: '圆角与阴影 Radius & Shadow', link: '/基础-圆角与阴影规范' },
           ],
         },
         {
           text: '组件规范',
           items: [
             { text: '按钮 Button', link: '/组件-Button按钮' },
+            { text: '输入框 Input', link: '/组件-Input输入框' },
+            { text: '文字提示 Tooltip', link: '/组件-Tooltip文字提示' },
+            { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
+            { text: '面包屑 Breadcrumb', link: '/组件-Breadcrumb面包屑' },
             { text: '弹窗 Modal', link: '/组件-Modal弹窗' },
+            { text: '二次确认 Confirm', link: '/组件-Confirm二次确认' },
+            { text: '抽屉 Drawer', link: '/组件-Drawer抽屉' },
+            { text: '轻提示 Toast', link: '/组件-Toast轻提示' },
+            { text: '状态页 State', link: '/组件-State状态页' },
           ],
         },
       ],

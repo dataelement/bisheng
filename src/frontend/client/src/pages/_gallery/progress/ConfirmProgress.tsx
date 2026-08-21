@@ -1,5 +1,5 @@
 /**
- * Confirm dialog migration ledger — DEV-ONLY. See docs-ui-refactor/组件-Modal弹窗.md.
+ * Confirm dialog migration ledger — DEV-ONLY. See packages/ui/docs/组件-Modal弹窗.md.
  *
  * Tracks the OGDialogTemplate-selection → useConfirm() convergence: population
  * table, the 9 historical selectClasses variants, and old-API demos that should

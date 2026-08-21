@@ -1,5 +1,5 @@
 /**
- * Modal migration ledger — DEV-ONLY. See docs-ui-refactor/组件-Modal弹窗.md.
+ * Modal migration ledger — DEV-ONLY. See packages/ui/docs/组件-Modal弹窗.md.
  *
  * Fresh survey (2026-07-09): FIVE coexisting modal populations. The same demo
  * content (title + description + input + cancel/confirm footer) is mounted into

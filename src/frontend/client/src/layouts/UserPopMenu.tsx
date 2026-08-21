@@ -291,20 +291,20 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
                     aria-expanded={menuOpen}
                     className={cn(
                         "relative z-10 flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left outline-none",
-                        "hover:bg-[#f7f8fa] transition-colors active:scale-[0.99]",
+                        "hover:bg-fill-1 transition-colors active:scale-[0.99]",
                         // 打开时透明但保留命中区域，避免 pointer-events-none 导致点击穿透到下层
                         menuOpen && "opacity-0",
                     )}
                     onClick={() => setMenuOpen((open) => !open)}
                 >
                     <div className="relative shrink-0">
-                        <Avatar className="size-9 border border-[#f2f3f5]">{avatarInner}</Avatar>
+                        <Avatar className="size-9 border border-fill-2">{avatarInner}</Avatar>
                         {unreadDot}
                     </div>
                     <div className="min-w-0 flex-1">
-                        <p className="text-[14px] font-medium text-[#1d2129] truncate">{displayName}</p>
+                        <p className="text-[14px] font-medium text-text-1 truncate">{displayName}</p>
                     </div>
-                    <ChevronRight className="size-4 shrink-0 text-[#86909c]" aria-hidden />
+                    <ChevronRight className="size-4 shrink-0 text-text-3" aria-hidden />
                 </button>
 
                 {menuOpen ? (

@@ -199,7 +199,7 @@ export default function ExplorePlaza() {
                     <Button
                         variant="ghost"
                         onClick={() => navigate('/apps')}
-                        className="h-8 w-8 rounded-md border border-[#E5E6EB] bg-white p-0 text-[#4E5969] fine-pointer:hover:bg-[#F7F8FA] fine-pointer:hover:text-blue-500"
+                        className="h-8 w-8 rounded-md border border-border-base bg-white p-0 text-text-2 fine-pointer:hover:bg-fill-1 fine-pointer:hover:text-blue-500"
                     >
                         <ArrowLeft className="size-3.5" />
                     </Button>
@@ -208,7 +208,7 @@ export default function ExplorePlaza() {
                     <h1 className="mb-1 font-['PingFang_SC'] text-[26px] font-semibold text-blue-500">
                         {bannerTitle}
                     </h1>
-                    <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-[#86909C]">
+                    <p className="mb-3 max-w-[640px] font-['PingFang_SC'] text-[13px] leading-[22px] text-text-3">
                         {bannerDescription}
                     </p>
                 </div>
@@ -255,12 +255,12 @@ export default function ExplorePlaza() {
                     {showLoading ? (
                         <div className="flex flex-col items-center gap-3 text-blue-500">
                             <LoadingIcon className="size-20 text-primary" />
-                            <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
+                            <span className="text-sm font-['PingFang_SC'] text-text-3">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     ) : loadingMore ? (
                         <div className="flex items-center gap-2 text-blue-500">
                             <LoadingIcon className="size-6 text-primary" />
-                            <span className="text-sm font-['PingFang_SC'] text-[#999999]">{localize('com_app_explore_loading_more')}</span>
+                            <span className="text-sm font-['PingFang_SC'] text-text-3">{localize('com_app_explore_loading_more')}</span>
                         </div>
                     ) : null}
                     {!hasMore && agents.length > 0 && (

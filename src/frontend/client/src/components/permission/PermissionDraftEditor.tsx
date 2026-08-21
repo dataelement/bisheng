@@ -69,7 +69,7 @@ export function PermissionDraftEditor({
               <span className="min-w-0 truncate text-body text-text-1">{row.subjectName}</span>
             </div>
             {row.immutableCreator ? (
-              <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-[#999999]">
+              <span className="inline-flex h-8 w-[96px] shrink-0 items-center justify-end whitespace-nowrap px-2 text-[14px] leading-[22px] text-text-3">
                 {localize("creator")}
               </span>
             ) : (
