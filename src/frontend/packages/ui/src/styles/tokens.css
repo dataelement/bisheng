@@ -8,7 +8,10 @@
 
 :root {
   /* ---------- Typography (基础-字体规范.md) ---------- */
-  /* Primitive — desktop scale (line height = size + 8px) */
+  /* Primitive — desktop scale (line height = size + 8px).
+   * font-size-0 sits below the original 1–9 ladder (exception tier: pure
+   * display only, never clickable text) so existing numbers stay stable. */
+  --font-size-0: 0.625rem;   --line-height-0: 1.125rem;  /* 10 / 18 */
   --font-size-1: 0.75rem;    --line-height-1: 1.25rem;   /* 12 / 20 */
   --font-size-2: 0.8125rem;  --line-height-2: 1.3125rem; /* 13 / 21 */
   --font-size-3: 0.875rem;   --line-height-3: 1.375rem;  /* 14 / 22 */
@@ -20,6 +23,7 @@
   --font-size-9: 2.25rem;    --line-height-9: 2.75rem;   /* 36 / 44 */
 
   /* Semantic — consumed via tailwind preset fontSize (text-caption / text-body / text-h1 …) */
+  --text-caption-sm: var(--font-size-0); --leading-caption-sm: var(--line-height-0);
   --text-caption: var(--font-size-1);  --leading-caption: var(--line-height-1);
   --text-body-sm: var(--font-size-2);  --leading-body-sm: var(--line-height-2);
   --text-body: var(--font-size-3);     --leading-body: var(--line-height-3);
@@ -32,15 +36,15 @@
 
   /* ---------- Neutral colors (基础-色彩规范.md, Arco ramp) ---------- */
   /* Primitive — Arco gray 1-10 (RGB channel triplets for `/<alpha>` support) */
-  --arco-gray-1: 247 248 250;   /* #F7F8FA */
-  --arco-gray-2: 242 243 245;   /* #F2F3F5 */
-  --arco-gray-3: 229 230 235;   /* #E5E6EB */
-  --arco-gray-4: 201 205 212;   /* #C9CDD4 */
+  --arco-gray-1: 248 248 248;   /* #F8F8F8 — neutral, not Arco's blue-tinted #F7F8FA */
+  --arco-gray-2: 243 243 244;   /* #F3F3F4 */
+  --arco-gray-3: 229 230 233;   /* #E5E6E9 */
+  --arco-gray-4: 202 205 212;   /* #CACDD4 */
   --arco-gray-5: 169 174 184;   /* #A9AEB8 */
-  --arco-gray-6: 134 144 156;   /* #86909C */
-  --arco-gray-7: 107 119 133;   /* #6B7785 */
-  --arco-gray-8: 78 89 105;     /* #4E5969 */
-  --arco-gray-9: 39 46 59;      /* #272E3B */
+  --arco-gray-6: 137 143 156;   /* #898F9C */
+  --arco-gray-7: 111 118 131;   /* #6F7683 */
+  --arco-gray-8: 82 88 101;     /* #525865 */
+  --arco-gray-9: 41 46 55;      /* #292E37 */
   --arco-gray-10: 29 33 41;     /* #1D2129 */
 
   /* Semantic — neutral text / fill / border (components use ONLY these) */
@@ -84,14 +88,23 @@
   --brand-main: 22 93 255;   /* #165DFF */
   --brand-muted: 87 115 180; /* #5773B4 — muted/low-sat brand accent */
 
+  /* ---------- Illustration palette (基础-色彩规范 §5) ----------
+   * Illustrations use --illus-* rather than --brand-* so the green theme can
+   * render their own vivid green ramp instead of the darker UI brand green.
+   * Blue mode mirrors the brand blue. Consumed via inline `style` on the SVG —
+   * presentation attributes ignore var(), so there are no Tailwind classes. */
+  --illus-100: 190 218 255;  /* #BEDAFF */
+  --illus-300: 106 161 255;  /* #6AA1FF */
+  --illus-500: 22 93 255;    /* #165DFF */
+
   /* ---------- Button semantic tokens (组件-Button按钮.md §5.1) ---------- */
-  --btn-gray-text: 78 89 105;      /* #4E5969 — default-color button text */
-  --btn-gray-solid-bg: 78 89 105;  /* #4E5969 — default SOLID fill (+white text) */
-  --btn-gray-border: 229 230 235;  /* #E5E6EB — default-color button border */
-  --btn-fill-1: 247 248 250;       /* #F7F8FA — neutral fill ramp: hover bg */
-  --btn-fill-2: 242 243 245;       /* #F2F3F5 — active bg / filled base */
-  --btn-fill-3: 229 230 235;       /* #E5E6EB — filled hover */
-  --btn-fill-4: 201 205 212;       /* #C9CDD4 — filled active */
+  --btn-gray-text: 82 88 101;      /* #525865 — default-color button text */
+  --btn-gray-solid-bg: 82 88 101;  /* #525865 — default SOLID fill (+white text) */
+  --btn-gray-border: 229 230 233;  /* #E5E6E9 — default-color button border */
+  --btn-fill-1: 248 248 248;       /* #F8F8F8 — neutral fill ramp: hover bg (= fill-1) */
+  --btn-fill-2: 243 243 244;       /* #F3F3F4 — active bg / filled base */
+  --btn-fill-3: 229 230 233;       /* #E5E6E9 — filled hover */
+  --btn-fill-4: 202 205 212;       /* #CACDD4 — filled active */
   --btn-danger: 245 63 63;         /* #F53F3F */
   --btn-danger-hover: 214 55 58;   /* #D6373A */
   --btn-danger-active: 208 47 51;  /* #D02F33 */
@@ -101,6 +114,36 @@
 
   /* ---------- Radius scale (shadcn-compatible: lg=8 / md=6 / sm=4) ---------- */
   --radius: 0.5rem;
+
+  /* ---------- Shadow scale (基础-圆角与阴影规范.mdx §2.1) — only two tiers ----------
+   * popup: temporary overlays that open on click and leave on click-away
+   *        (dropdown, select panel, popover, toast).
+   * modal: interrupting overlays the user must dismiss (dialog, drawer).
+   * Carried as vars so dark mode can retune them without touching components. */
+  --shadow-popup: 0 2px 16px -2px rgba(0, 23, 66, 0.10);
+  --shadow-modal: 0 0 16px 0 rgba(3, 7, 117, 0.05);
+
+  /* ---------- Focus ring (组件-Input输入框.md §5.1) ----------
+   * NOT a third elevation tier: it is a focus INDICATOR, it does not express
+   * height, and every value in it comes from existing tokens (圆角与阴影规范
+   * §4 exception clause).
+   *
+   * Only the COLOR is a variable — the ring geometry lives in the Tailwind
+   * `shadow-focus` utility. A pre-composed `--shadow-focus: 0 0 0 2px
+   * rgb(var(--shadow-focus-ring))` declared here would NOT work: var() inside a
+   * custom property is substituted where that property is DECLARED, so the ring
+   * color would freeze to this :root value and a field in error / warning could
+   * never swap it. */
+  --shadow-focus-ring: var(--fill-2);
+
+  /* ---------- Overlay stacking (组件-Modal弹窗.md §5) — four tiers, nothing else ----------
+   * Each tier must be able to cover the one below it: a dropdown opens inside a
+   * dialog, a toast shows over both, a tooltip beats everything. Carried as vars
+   * so a host app that must sit under a legacy layer can retune them centrally. */
+  --z-modal: 1000;
+  --z-popover: 1100;
+  --z-toast: 1200;
+  --z-tooltip: 1300;
 }
 
 /* Dark mode — neutral + semantic layers auto-flip (custom props resolve lazily
@@ -165,6 +208,28 @@
   --brand-900: 6 50 22;      /* #063216 */
   --brand-main: 22 156 71;   /* #169C47 */
   --brand-muted: 92 138 119; /* #5C8A77 */
+
+  /* Illustration palette — green mode keeps the source SVGs' vivid greens so the
+     illustrations match their original artwork (not the darker UI brand green). */
+  --illus-100: 221 240 232;  /* #DDF0E8 */
+  --illus-300: 162 215 181;  /* #A2D7B5 */
+  --illus-500: 22 156 71;    /* #169C47 */
+}
+
+/* Illustration grey mode — THEME-INDEPENDENT. Add `illus-grey` to an illustration
+ * itself (the `grey` prop does this) or to any ancestor for a global toggle, and
+ * it renders greyscale whatever the brand theme is. Declared AFTER .theme-green
+ * so it wins when both land on the same element. Only the illustration greens go
+ * grey — white accents stay white (they don't read --illus-*); the whole drawing
+ * dims to 80% per design. */
+.illus-grey {
+  --illus-100: 229 229 229;  /* #E5E5E5 */
+  --illus-300: 229 229 229;  /* #E5E5E5 — pure white washed out on white bg (e.g. CrawlingIllustration's magnifier halo), so grey collapses 300 onto 100; blue/green keep their own mid tone */
+  --illus-500: 188 188 188;  /* #BCBCBC */
+}
+.illus-grey.brand-illustration,
+.illus-grey .brand-illustration {
+  opacity: 0.8;
 }
 
 /* Brand primary button — GREEN theme override (组件-Button按钮.md §6.2,
@@ -197,5 +262,40 @@
     width: max(100%, 44px);
     height: max(100%, 44px);
     transform: translate(-50%, -50%);
+  }
+}
+
+/* Input hit-area expansion (组件-Input输入框.md §6): the field keeps its 24/32/40
+ * height while the tappable area grows to ≥44px on touch. Two strips above and
+ * below — NOT one overlay like the button's: an overlay lying on the field would
+ * swallow the tap that places the caret. The shell sets `relative` + this class
+ * and focuses the field when a strip is tapped. */
+@media (hover: none) and (pointer: coarse) {
+  .input-touch-hit::before,
+  .input-touch-hit::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: max(0px, calc((44px - 100%) / 2));
+  }
+  .input-touch-hit::before {
+    bottom: 100%;
+  }
+  .input-touch-hit::after {
+    top: 100%;
+  }
+}
+
+/* iOS anti-zoom (组件-Input输入框.md §6): Safari zooms the whole page when a
+ * field smaller than 16px takes focus. Every size档 therefore types at 16px on
+ * touch / narrow screens — the 双判定 of 多端适配原则 §4. Element+class selector
+ * on purpose: it must beat the size档's own `text-[length:…]` utility whatever
+ * order the stylesheets end up in. */
+@media (max-width: 768px), (hover: none) and (pointer: coarse) {
+  input.input-no-zoom,
+  textarea.input-no-zoom {
+    font-size: 16px;
+    line-height: 24px;
   }
 }

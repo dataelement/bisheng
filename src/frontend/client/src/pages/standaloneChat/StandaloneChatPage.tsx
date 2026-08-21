@@ -180,7 +180,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                   'min-h-0 min-w-0 flex-1 overflow-hidden',
                   isGuestMode
                     ? 'bg-white'
-                    : 'rounded-xl border border-[#EBECF0] bg-white shadow-xl',
+                    : 'rounded-xl border border-border-base bg-white shadow-xl',
                   !isGuestMode && 'touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none',
                 )}
               >

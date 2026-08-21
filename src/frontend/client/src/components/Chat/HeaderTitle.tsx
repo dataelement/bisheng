@@ -35,7 +35,7 @@ export default function HeaderTitle({ conversation, readOnly, hideShare = false,
   return (
     <div
       className={cn(
-        'sticky top-0 z-10 flex h-[56px] w-full items-center justify-between bg-white pl-4 pr-4 text-[#212121]',
+        'sticky top-0 z-10 flex h-[56px] w-full items-center justify-between bg-white pl-4 pr-4 text-text-1',
       )}
     >
       {/* Left placeholder to balance the center layout */}

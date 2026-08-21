@@ -59,18 +59,18 @@ function PendingFileRow({ entry, isSelected, onClick }: PendingFileRowProps) {
             onClick={onClick}
             className={[
                 "w-full text-left px-3 py-3 transition-colors rounded-lg flex items-start gap-2 mb-1",
-                "hover:bg-[#f2f3f5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                "hover:bg-fill-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 isSelected ? "bg-[#F0F5FF]" : "bg-transparent",
             ].join(" ")}
         >
-            <FileSearch className={["shrink-0 size-[14px] mt-0.5", isSelected ? "text-blue-500" : "text-[#4e5969]"].join(" ")} />
+            <FileSearch className={["shrink-0 size-[14px] mt-0.5", isSelected ? "text-blue-500" : "text-text-2"].join(" ")} />
             <div className="flex-1 min-w-0">
                 <Tooltip>
                     <TooltipTrigger asChild>
                         <p
                             className={[
                                 "truncate text-[14px] font-medium leading-5",
-                                isSelected ? "text-blue-500" : "text-[#1d2129]",
+                                isSelected ? "text-blue-500" : "text-text-1",
                             ].join(" ")}
                         >
                             {entry.file_name}
@@ -84,7 +84,7 @@ function PendingFileRow({ entry, isSelected, onClick }: PendingFileRowProps) {
                         {entry.file_name}
                     </TooltipContent>
                 </Tooltip>
-                <p className="mt-1 text-[12px] text-[#86909c]">
+                <p className="mt-1 text-[12px] text-text-3">
                     {localize("com_knowledge.version.pending_row_recommend_count", {
                         count: entry.candidate_count,
                     })}
@@ -114,12 +114,12 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
         : `当前主版本 V${entry.current_primary_version_no ?? 1}`;
 
     return (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-[#EBECF0] bg-white px-4 py-3 hover:border-blue-500 hover:bg-[#F4F8FF] transition-colors group">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border-base bg-white px-4 py-3 hover:border-blue-500 hover:bg-[#F4F8FF] transition-colors group">
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <p className="min-w-0 cursor-default truncate text-[14px] font-medium text-[#1d2129]">
+                            <p className="min-w-0 cursor-default truncate text-[14px] font-medium text-text-1">
                                 {entry.title}
                             </p>
                         </TooltipTrigger>
@@ -135,9 +135,9 @@ function RecommendationCard({ entry, disabled, onLink }: RecommendationCardProps
                         {localize("com_knowledge.version.similarity_label")} {(entry.similarity * 100).toFixed(0)}%
                     </span>
                 </div>
-                <p className="text-[12px] text-[#86909c] mb-0.5">{versionLine}</p>
+                <p className="text-[12px] text-text-3 mb-0.5">{versionLine}</p>
                 {uploadTimeDisplay && (
-                    <p className="text-[12px] text-[#86909c]">{entry.title} · {uploadTimeDisplay}</p>
+                    <p className="text-[12px] text-text-3">{entry.title} · {uploadTimeDisplay}</p>
                 )}
             </div>
             <Button
@@ -167,10 +167,10 @@ interface SearchResultRowProps {
 function SearchResultRow({ entry, disabled, onLink }: SearchResultRowProps) {
     const localize = useLocalize();
     return (
-        <div className="flex items-center justify-between gap-3 border-b border-[#F2F3F5] px-3 py-2.5 last:border-b-0 hover:bg-[#FAFAFA]">
+        <div className="flex items-center justify-between gap-3 border-b border-fill-2 px-3 py-2.5 last:border-b-0 hover:bg-[#FAFAFA]">
             <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-[#1d2129]">{entry.title}</p>
-                <div className="mt-0.5 flex items-center gap-2 text-xs text-[#86909c]">
+                <p className="truncate text-sm text-text-1">{entry.title}</p>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-text-3">
                     <span>V{entry.current_primary_version_no}</span>
                     {entry.doc_code && <span>{entry.doc_code}</span>}
                     {entry.primary_uploader_name && <span>{entry.primary_uploader_name}</span>}
@@ -290,14 +290,14 @@ function RightPanel({
     return (
         <div className="flex flex-col gap-5 px-5 py-4 h-full">
             {/* ── Section 1: Current file ─────────────────────────────── */}
-            <section className="rounded-lg border border-[#EBECF0] bg-[#FAFAFA] px-4 py-3 flex items-start justify-between shrink-0">
+            <section className="rounded-lg border border-border-base bg-[#FAFAFA] px-4 py-3 flex items-start justify-between shrink-0">
                 <div className="flex-1 min-w-0 pr-4">
-                    <p className="text-[12px] text-[#86909c] mb-1">
+                    <p className="text-[12px] text-text-3 mb-1">
                         {localize("com_knowledge.version.section_current_file")}
                     </p>
                     <Tooltip>
                         <TooltipTrigger asChild>
-                            <p className="truncate text-[16px] font-medium text-[#1d2129] mb-1">
+                            <p className="truncate text-[16px] font-medium text-text-1 mb-1">
                                 {selectedFile.file_name}
                             </p>
                         </TooltipTrigger>
@@ -309,7 +309,7 @@ function RightPanel({
                             {selectedFile.file_name}
                         </TooltipContent>
                     </Tooltip>
-                    <p className="text-[12px] text-[#86909c]">
+                    <p className="text-[12px] text-text-3">
                         {selectedFile.file_code ? `${selectedFile.file_code} · ` : ""}当前主版本 V{selectedFile.current_primary_version_no ?? 1} · 上传人 {selectedFile.primary_uploader_name ?? "未知"}
                     </p>
                 </div>
@@ -321,21 +321,21 @@ function RightPanel({
             </section>
 
             {/* ── Sections 2 & 3: Recommendations and Search ──────────── */}
-            <div className="shrink-0 flex flex-col gap-5 rounded-lg border border-[#EBECF0] bg-[#FAFAFA] p-4">
+            <div className="shrink-0 flex flex-col gap-5 rounded-lg border border-border-base bg-[#FAFAFA] p-4">
                 {/* ── Section 2: Recommendations ──────────────────────────── */}
                 <section>
-                    <h3 className="mb-0.5 text-[14px] font-medium text-[#1d2129]">
+                    <h3 className="mb-0.5 text-[14px] font-medium text-text-1">
                         {localize("com_knowledge.version.section_recommendations")}
                     </h3>
-                    <p className="mb-3 text-[12px] text-[#86909c]">
+                    <p className="mb-3 text-[12px] text-text-3">
                         {localize("com_knowledge.version.section_recommendations_subtitle")}
                     </p>
                     {candidatesLoading ? (
                         <div className="flex h-16 items-center justify-center">
-                            <Loader2 className="size-5 animate-spin text-[#86909c]" />
+                            <Loader2 className="size-5 animate-spin text-text-3" />
                         </div>
                     ) : candidates.length === 0 ? (
-                        <p className="text-[14px] text-[#86909c]">
+                        <p className="text-[14px] text-text-3">
                             {localize("com_knowledge.version.no_recommendations")}
                         </p>
                     ) : (
@@ -354,10 +354,10 @@ function RightPanel({
 
                 {/* ── Section 3: Search existing documents ────────────────── */}
                 <section>
-                    <h3 className="mb-0.5 text-[14px] font-medium text-[#1d2129]">
+                    <h3 className="mb-0.5 text-[14px] font-medium text-text-1">
                         {localize("com_knowledge.version.section_search")}
                     </h3>
-                    <p className="mb-3 text-[12px] text-[#86909c]">
+                    <p className="mb-3 text-[12px] text-text-3">
                         {localize("com_knowledge.version.section_search_subtitle")}
                     </p>
                     {/* Search input + button row */}
@@ -368,14 +368,14 @@ function RightPanel({
                             onChange={(e) => setKeyword(e.target.value)}
                             onKeyDown={handleKeyDown}
                             placeholder={localize("com_knowledge.version.search_placeholder")}
-                            className="h-8 flex-1 rounded-md border-[#EBECF0] text-[12px] bg-white"
+                            className="h-8 flex-1 rounded-md border-border-base text-[12px] bg-white"
                         />
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={handleSearchSubmit}
-                            className="h-8 rounded-md px-4 text-[12px] text-[#4e5969] bg-white border-[#EBECF0]"
+                            className="h-8 rounded-md px-4 text-[12px] text-text-2 bg-white border-border-base"
                         >
                             <Search className="mr-1.5 size-4" />
                             {localize("com_knowledge.version.search_button")}
@@ -385,19 +385,19 @@ function RightPanel({
                     {/* Search results or placeholder */}
                     {!hasSearched ? (
                         // Centered placeholder hint when no keyword has been entered
-                        <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-[#EBECF0] bg-white">
-                            <p className="text-[14px] text-[#c9cdd4]">
+                        <div className="flex h-16 items-center justify-center rounded-md border border-dashed border-border-base bg-white">
+                            <p className="text-[14px] text-text-4">
                                 {localize("com_knowledge.version.search_placeholder")}
                             </p>
                         </div>
                     ) : (
-                        <div className="rounded-md border border-[#EBECF0] bg-white">
+                        <div className="rounded-md border border-border-base bg-white">
                             {searchLoading ? (
                                 <div className="flex h-16 items-center justify-center">
-                                    <Loader2 className="size-5 animate-spin text-[#86909c]" />
+                                    <Loader2 className="size-5 animate-spin text-text-3" />
                                 </div>
                             ) : searchResults.length === 0 ? (
-                                <p className="px-3 py-4 text-[14px] text-[#86909c]">
+                                <p className="px-3 py-4 text-[14px] text-text-3">
                                     {localize("com_knowledge.version.no_search_results")}
                                 </p>
                             ) : (
@@ -418,12 +418,12 @@ function RightPanel({
             </div>
 
             {/* ── Section 4: Skip linking ─────────────────────────────── */}
-            <section className="mt-auto shrink-0 rounded-lg border border-dashed border-[#EBECF0] bg-white px-4 py-3 flex items-center justify-between">
+            <section className="mt-auto shrink-0 rounded-lg border border-dashed border-border-base bg-white px-4 py-3 flex items-center justify-between">
                 <div>
-                    <h3 className="mb-1 text-[14px] font-medium text-[#1d2129]">
+                    <h3 className="mb-1 text-[14px] font-medium text-text-1">
                         {localize("com_knowledge.version.section_dismiss")}
                     </h3>
-                    <p className="text-[12px] text-[#86909c]">
+                    <p className="text-[12px] text-text-3">
                         {localize("com_knowledge.version.section_dismiss_subtitle")}
                     </p>
                 </div>
@@ -433,7 +433,7 @@ function RightPanel({
                     size="sm"
                     disabled={dismissPending || isLinking}
                     onClick={onDismiss}
-                    className="h-8 shrink-0 rounded-md px-4 text-[12px] text-[#4e5969]"
+                    className="h-8 shrink-0 rounded-md px-4 text-[12px] text-text-2"
                 >
                     <Check className="mr-1.5 size-4" />
                     {localize("com_knowledge.version.btn_dismiss")}
@@ -531,8 +531,8 @@ export function SimilarDocumentDialog({
                 className="flex max-w-[960px] min-h-[560px] max-h-[80vh] flex-col gap-0 rounded-xl border-none bg-white p-0 shadow-[0px_5px_22px_0px_rgba(61,68,110,0.2)] outline-none overflow-hidden"
             >
                 {/* ── Header ──────────────────────────────────────────────── */}
-                <DialogHeader className="shrink-0 border-b border-[#e5e6eb] px-6 py-4 text-left">
-                    <DialogTitle className="text-base font-semibold text-[#1d2129]">
+                <DialogHeader className="shrink-0 border-b border-border-base px-6 py-4 text-left">
+                    <DialogTitle className="text-base font-semibold text-text-1">
                         {localize("com_knowledge.version.similar_dialog_title")}
                     </DialogTitle>
                 </DialogHeader>
@@ -541,19 +541,19 @@ export function SimilarDocumentDialog({
                 {isLoading ? (
                     // Loading state — simple centered spinner
                     <div className="flex flex-1 items-center justify-center py-16">
-                        <Loader2 className="size-6 animate-spin text-[#86909c]" />
+                        <Loader2 className="size-6 animate-spin text-text-3" />
                     </div>
                 ) : visiblePending.length === 0 ? (
                     // Empty state — all files processed
-                    <div className="flex flex-1 items-center justify-center py-16 text-sm text-[#86909c]">
+                    <div className="flex flex-1 items-center justify-center py-16 text-sm text-text-3">
                         {localize("com_knowledge.version.similar_dialog_empty")}
                     </div>
                 ) : (
                     // Two-column layout: left = file list (~30%), right = action panel
                     <div className="flex min-h-0 flex-1 overflow-hidden">
                         {/* Left column — pending file list (~30%) */}
-                        <div className="flex w-[260px] shrink-0 flex-col border-r border-[#e5e6eb] bg-[#FAFAFA]">
-                            <div className="px-5 py-4 text-[12px] text-[#86909c] border-b border-[#e5e6eb]">
+                        <div className="flex w-[260px] shrink-0 flex-col border-r border-border-base bg-[#FAFAFA]">
+                            <div className="px-5 py-4 text-[12px] text-text-3 border-b border-border-base">
                                 {localize("com_knowledge.version.similar_dialog_subtitle", { count: visiblePending.length })}
                             </div>
                             {/* Scrollable file list */}
@@ -575,7 +575,7 @@ export function SimilarDocumentDialog({
                         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                             {selectedFileId === null || selectedFile === null ? (
                                 // No selection placeholder
-                                <div className="flex flex-1 items-center justify-center text-sm text-[#86909c]">
+                                <div className="flex flex-1 items-center justify-center text-sm text-text-3">
                                     {localize("com_knowledge.version.similar_dialog_right_empty")}
                                 </div>
                             ) : (
@@ -597,7 +597,7 @@ export function SimilarDocumentDialog({
                 )}
 
                 {/* ── Footer ──────────────────────────────────────────────── */}
-                <div className="shrink-0 border-t border-[#e5e6eb] px-6 py-3 flex justify-end">
+                <div className="shrink-0 border-t border-border-base px-6 py-3 flex justify-end">
                     <Button
                         type="button"
                         variant="outline"

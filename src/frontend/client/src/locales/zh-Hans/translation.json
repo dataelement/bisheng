@@ -479,7 +479,8 @@
     "saveToKnowledgeSaving": "正在存入知识空间…",
     "saveToKnowledgeSuccess": "已存入知识空间：{{name}}",
     "saveToKnowledgePending": "已提交审批，通过后将存入知识空间",
-    "saveToKnowledgeFailed": "存入知识空间失败，请稍后重试"
+    "saveToKnowledgeFailed": "存入知识空间失败，请稍后重试",
+    "downloadAs": "下载为 {{format}}"
   },
   "com_message_content_copied": "内容已复制",
   "com_notifications_approved": "已同意",
@@ -2142,5 +2143,9 @@
     "version": "版本",
     "route": "页面",
     "user": "用户"
-  }
+  },
+  "com_settings_general": "通用",
+  "com_settings_lang_en": "English",
+  "com_settings_lang_ja": "日本語",
+  "com_settings_lang_zh": "中文"
 }

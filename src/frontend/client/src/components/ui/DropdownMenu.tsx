@@ -25,14 +25,14 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      'flex cursor-default select-none items-center rounded-md px-2 py-[5px] text-sm font-medium outline-none hover:bg-[#F2F3F5] focus:bg-[#F2F3F5] data-[state=open]:bg-[#F2F3F5] dark:hover:bg-gray-900 dark:focus:bg-gray-900 dark:data-[state=open]:bg-gray-900',
+      'flex cursor-default select-none items-center rounded-md px-2 py-[5px] text-sm font-medium outline-none hover:bg-fill-2 focus:bg-fill-2 data-[state=open]:bg-fill-2 dark:hover:bg-gray-900 dark:focus:bg-gray-900 dark:data-[state=open]:bg-gray-900',
       inset ? 'pl-8' : '',
       className,
     )}
     {...props}
   >
     {children}
-    <Outlined.Right className="ml-auto h-4 w-4 text-[#999]" />
+    <Outlined.Right className="ml-auto h-4 w-4 text-text-3" />
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
@@ -89,7 +89,7 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center rounded-md px-2 py-[5px] text-sm text-[#1D2129] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-[#F2F3F5] data-[highlighted]:text-[#1D2129]',
+      'relative flex cursor-pointer select-none items-center rounded-md px-2 py-[5px] text-sm text-text-1 outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-fill-2 data-[highlighted]:text-text-1',
       inset ? 'pl-8' : '',
       className,
     )}
@@ -109,7 +109,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer select-none items-center rounded-lg py-1.5 text-sm text-[#1D2129] outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-[#F2F3F5] data-[highlighted]:text-[#1D2129]',
+      'relative flex cursor-pointer select-none items-center rounded-lg py-1.5 text-sm text-text-1 outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-fill-2 data-[highlighted]:text-text-1',
       indicatorSide === 'left' ? 'pl-8 pr-2' : 'px-2',
       className,
     )}

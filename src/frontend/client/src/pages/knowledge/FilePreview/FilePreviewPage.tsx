@@ -219,7 +219,7 @@ export default function FilePreviewPage() {
                     className="h-8 w-8 p-2"
                     aria-label={localize("com_knowledge.more")}
                 >
-                    <Outlined.MoreCircle className="size-4 text-[#4e5969]" />
+                    <Outlined.MoreCircle className="size-4 text-text-2" />
                 </Button>
             </DropdownMenuTrigger>
             <ActionMenuContent align="end">
@@ -274,7 +274,7 @@ export default function FilePreviewPage() {
     if (loading) {
         return (
             <div className="h-[var(--bs-vh,100vh)] flex items-center justify-center bg-white">
-                <div className="text-[#86909c]">{localize("com_knowledge.loading")}</div>
+                <div className="text-text-3">{localize("com_knowledge.loading")}</div>
             </div>
         );
     }
@@ -283,7 +283,7 @@ export default function FilePreviewPage() {
     if (!fileUrl && !conversionFailed && !isRichPreviewData(previewData)) {
         return (
             <div className="h-[var(--bs-vh,100vh)] flex items-center justify-center bg-white">
-                <div className="text-[#86909c]">{localize("com_knowledge.fetch_preview_link_failed")}</div>
+                <div className="text-text-3">{localize("com_knowledge.fetch_preview_link_failed")}</div>
             </div>
         );
     }
@@ -315,7 +315,7 @@ export default function FilePreviewPage() {
                         type="button"
                         onClick={handleDownloadFile}
                         aria-label={localize("com_knowledge.download_file")}
-                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-[#212121] shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
+                        className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+12px)] z-10 inline-flex size-9 items-center justify-center rounded-xl border border-black/5 bg-white/70 text-text-1 shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:bg-white/85"
                     >
                         <Outlined.Download className="size-5" />
                     </button>

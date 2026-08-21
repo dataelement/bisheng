@@ -46,8 +46,8 @@ interface Props {
 
 function iconForGroup(group: AvailableToolGroup) {
   const firstKey = group.children?.[0]?.tool_key;
-  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-[#4E5969]" />;
-  return <Outlined.Hammer className="size-4 text-[#4E5969]" />;
+  if (firstKey === "web_search") return <Outlined.Earth className="size-4 text-text-2" />;
+  return <Outlined.Hammer className="size-4 text-text-2" />;
 }
 
 export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
@@ -120,8 +120,8 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
           // Tools Select never sets a value (selection is via inner switches), so
           // Radix keeps the trigger in [data-placeholder] state; without this the
           // base `data-[placeholder]:text-gray-500` would override to #595959 and
-          // mismatch the knowledge/model selects. Pin it to the shared #334155.
-          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-[#f8f8f8] px-2 text-[#334155] data-[placeholder]:text-[#334155] focus:ring-0 outline-none w-auto gap-1",
+          // mismatch the knowledge/model selects. Pin it to the shared #4E5969.
+          "h-8 min-w-0 max-w-[min(52vw,220px)] rounded-lg border-none bg-transparent shadow-none hover:bg-fill-1 px-2 text-text-2 data-[placeholder]:text-text-2 focus:ring-0 outline-none w-auto gap-1",
         )}
       >
         <div className="flex min-w-0 gap-1.5 items-center">
@@ -129,7 +129,7 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
               brand-blue once a tool is selected — mirrors the knowledge-space
               selector (ChatKnowledge) so both pickers signal an active selection. */}
           <div className="relative shrink-0">
-            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-[#4E5969]")} strokeWidth={1.5} />
+            <ApiAppIcon size="15" className={cn("shrink-0", isActive ? "text-blue-500" : "text-text-2")} strokeWidth={1.5} />
           </div>
           {/* Compact: collapse to icon + chevron only to save horizontal space. */}
           {!compact && (

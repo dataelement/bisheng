@@ -152,7 +152,7 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
                         'flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs font-normal outline-none transition-colors hover:bg-black/5',
                         // Active highlight uses brand-600 to match the checked-checkbox
                         // color in the picker rows below (renderRow).
-                        active ? 'text-blue-600' : 'text-[#334155]',
+                        active ? 'text-blue-600' : 'text-text-2',
                         disabled && 'cursor-not-allowed opacity-50',
                     )}
                     onMouseEnter={() => setWarm(true)}
@@ -189,7 +189,7 @@ export function KnowledgeSpaceSelect({ value, disabled = false, onChange, compac
                 <div className="relative shrink-0">
                     <SearchIcon className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                     <Input
-                        className="h-[28px] rounded-[6px] border border-[#ECECEC] bg-white pl-8 text-xs focus-visible:ring-1 focus-visible:ring-blue-500/20"
+                        className="h-[28px] rounded-md border border-border-base bg-white pl-8 text-xs focus-visible:ring-1 focus-visible:ring-blue-500/20"
                         // size=1 kills the input's ~180px intrinsic width so it can't
                         // floor the content-fit popup above its min-w; still renders 100%.
                         size={1}

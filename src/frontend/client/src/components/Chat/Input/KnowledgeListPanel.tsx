@@ -13,7 +13,7 @@ import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenuItem, Input } from "~/components/ui";
 import { Checkbox } from "~/components/ui/Checkbox";
-import { EmptyStateIllustration } from "~/components/illustrations";
+import { StateView } from "@bisheng/ui";
 import { useScrollRevealRef } from "~/hooks";
 import { cn } from "~/utils";
 import type { KnowledgeItem } from "./knowledgeTypes";
@@ -132,7 +132,7 @@ export const KnowledgeListPanel = ({
             own box, so a mathematically centred icon reads high next to the text. */}
         <Outlined.Search size={14} className="absolute left-3 top-[calc(50%+1px)] -translate-y-1/2 text-slate-400" />
         <Input
-          className="h-[28px] py-0 text-[12px] bg-white border border-[#ECECEC] rounded-lg pl-8 placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
+          className="h-[28px] py-0 text-[12px] bg-white border border-border-base rounded-lg pl-8 placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
           // size=1 kills the input's ~180px intrinsic width so it can't floor
           // the content-fit popup above its min-w; rendered width is still 100%.
           size={1}
@@ -192,7 +192,7 @@ export const KnowledgeListPanel = ({
                       e.preventDefault();
                       onToggle(item);
                     }}
-                    className="flex h-8 items-center gap-2 px-2 cursor-pointer rounded-lg data-[highlighted]:bg-[#f2f3f5] focus:bg-[#f2f3f5] outline-none transition-colors"
+                    className="flex h-8 items-center gap-2 px-2 cursor-pointer rounded-lg data-[highlighted]:bg-fill-2 focus:bg-fill-2 outline-none transition-colors"
                   >
                     <Checkbox
                       checked={isChecked}
@@ -214,11 +214,12 @@ export const KnowledgeListPanel = ({
             </div>
           )}
           {!isFetching && totalCount === 0 && (
-            // Fills the scroll viewport so the copy sits in the panel's middle
-            // rather than stranded under the search box.
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-4">
-              <EmptyStateIllustration grey className="size-[100px] shrink-0" />
-              <p className="text-center text-[12px] text-slate-400">{emptyText}</p>
+            // Inline tier (组件-State状态页.md §3): a selector with no options
+            // gets one centered line and no artwork. Fills the scroll viewport
+            // so the copy sits in the panel's middle rather than stranded under
+            // the search box.
+            <div className="flex min-h-0 flex-1 items-center justify-center">
+              <StateView size="inline" title={emptyText} />
             </div>
           )}
         </div>

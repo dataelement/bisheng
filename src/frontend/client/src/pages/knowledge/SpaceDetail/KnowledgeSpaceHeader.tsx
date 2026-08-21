@@ -138,7 +138,7 @@ export function KnowledgeSpaceHeader({
                     <DropdownMenuTrigger asChild>
                         <button
                             type="button"
-                            className="inline-flex h-8 shrink-0 items-center justify-center gap-0.5 rounded-md border border-[#e5e6eb] bg-white px-3 text-sm font-normal text-text-2 transition-colors hover:bg-fill-1"
+                            className="inline-flex h-8 shrink-0 items-center justify-center gap-0.5 rounded-md border border-border-base bg-white px-3 text-sm font-normal text-text-2 transition-colors hover:bg-fill-1"
                         >
                             {localize("com_knowledge.batch_operation")}
                             <Outlined.Down className="size-4" />
@@ -247,7 +247,7 @@ export function KnowledgeSpaceHeader({
                         <button
                             type="button"
                             disabled={isSearching}
-                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-[#212121] transition-colors hover:bg-[#f7f8fa] disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
+                            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-md border border-[#ebebeb] bg-white px-4 text-sm text-text-1 transition-colors hover:bg-fill-1 disabled:cursor-not-allowed disabled:text-[#c9cdd4] disabled:hover:bg-transparent"
                         >
                             {localize("com_knowledge.add_new")}
                             <Outlined.Down className="size-4" />
@@ -343,24 +343,24 @@ export function KnowledgeSpaceHeader({
                                         onNavigateFolder(parent?.id);
                                     }}
                                     aria-label={localize("com_ui_go_back")}
-                                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-[#4e5969] transition-colors hover:bg-[#f7f8fa]"
+                                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-md p-2 text-text-2 transition-colors hover:bg-fill-1"
                                 >
                                     <Outlined.ArrowLeft className="size-4" />
                                 </button>
                                 <div className="mx-1 h-4 w-px shrink-0 bg-[#e5e6eb]" aria-hidden />
                                 */}
-                                <h1 className="min-w-0 truncate text-base font-normal text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                <h1 className="min-w-0 truncate text-base font-normal text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {currentPath[currentPath.length - 1]?.name || space.name}
                                 </h1>
                             </>
                         ) : (
                             <div className="flex min-w-0 flex-1 items-center gap-1">
-                                <h1 className="min-w-0 truncate text-base text-[#1d2129] max-[767px]:text-[16px] max-[767px]:leading-6">
+                                <h1 className="min-w-0 truncate text-base text-text-1 max-[767px]:text-[16px] max-[767px]:leading-6">
                                     {space.name}
                                 </h1>
                                 <Tooltip>
                                     <TooltipTrigger className="shrink-0 cursor-pointer">
-                                        <Outlined.Info className="size-4 text-[#86909c] outline-none hover:text-blue-500" />
+                                        <Outlined.Info className="size-4 text-text-3 outline-none hover:text-blue-500" />
                                     </TooltipTrigger>
                                     <TooltipContent noArrow className="bg-white shadow-md px-3 py-2 max-w-md w-64 z-[999] relative">
                                         <div className="space-y-1.5 text-gray-800 text-sm">
@@ -392,8 +392,8 @@ export function KnowledgeSpaceHeader({
                                 sharePath={`/knowledge/share/${space.id}`}
                                 successMessage={localize("com_knowledge.share_link_copied")}
                                 errorMessage={localize("com_knowledge.copy_failed_retry")}
-                                className="size-8 shrink-0 rounded-md border border-[#ebebeb] bg-white p-0 transition-colors hover:bg-[#f7f8fa]"
-                                icon={<Outlined.Share className="size-4 text-[#4e5969]" />}
+                                className="size-8 shrink-0 rounded-md border border-[#ebebeb] bg-white p-0 transition-colors hover:bg-fill-1"
+                                icon={<Outlined.Share className="size-4 text-text-2" />}
                                 aria-label={localize("com_knowledge.share")}
                             />
                         )}

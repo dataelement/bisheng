@@ -238,18 +238,18 @@ export default function KnowledgeSpaceItem({
 
                     <div className="flex-shrink-0 flex items-center justify-center size-5 rounded-md">
                         {type === "department" ? (
-                            <Outlined.City className={`size-4 ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.City className={`size-4 ${showSpaceHighlight ? "text-text-1" : "text-text-3"}`} />
                         ) : (
-                            <Outlined.Notebook className={`size-4 ${showSpaceHighlight ? "text-[#1d2129]" : "text-[#86909C]"}`} />
+                            <Outlined.Notebook className={`size-4 ${showSpaceHighlight ? "text-text-1" : "text-text-3"}`} />
                         )}
                     </div>
 
                     <DynamicEllipsisName
                         name={space.name}
-                        textClassName={`${compact ? "text-[14px]" : "text-[12px]"} leading-5 text-[#1d2129] ${showSpaceHighlight ? "font-semibold" : ""}`}
+                        textClassName={`${compact ? "text-[14px]" : "text-[12px]"} leading-5 text-text-1 ${showSpaceHighlight ? "font-semibold" : ""}`}
                         trailing={
                             space.isPinned ? (
-                                <Outlined.Pin className="size-3 shrink-0 text-[#86909C]" aria-hidden />
+                                <Outlined.Pin className="size-3 shrink-0 text-text-3" aria-hidden />
                             ) : null
                         }
                     />
@@ -284,7 +284,7 @@ export default function KnowledgeSpaceItem({
                                 }}
                                 onClick={(e) => e.stopPropagation()}
                             >
-                                <Outlined.More className="size-4 text-[#4e5969]" />
+                                <Outlined.More className="size-4 text-text-2" />
                             </button>
                         </DropdownMenuTrigger>
 

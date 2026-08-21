@@ -208,7 +208,7 @@ export function ConversationHistory({
                         type="button"
                         onClick={onCollapse}
                         aria-label={localize("com_ui_collapse")}
-                        className="inline-flex size-4 shrink-0 items-center justify-center text-[#999999] transition-colors hover:text-[#4e5969]"
+                        className="inline-flex size-4 shrink-0 items-center justify-center text-text-3 transition-colors hover:text-text-2"
                     >
                         <Outlined.DoubleDown className="size-4" />
                     </button>
@@ -220,8 +220,8 @@ export function ConversationHistory({
             <div className="min-h-0 flex-1 overflow-y-auto">
                 {!Array.isArray(sessions) || sessions.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center px-6 gap-2">
-                        <MessageSquareIcon className="size-10 text-[#c9cdd4]" />
-                        <p className="text-sm text-[#86909c]">
+                        <MessageSquareIcon className="size-10 text-text-4" />
+                        <p className="text-sm text-text-3">
                             {localize("com_knowledge.no_history_chat")}
                         </p>
                     </div>
@@ -235,7 +235,7 @@ export function ConversationHistory({
                                     key={session.chat_id}
                                     className={cn(
                                         // Active + hover colors match the knowledge-space sidebar item (gray, no blue).
-                                        "group flex h-8 items-center gap-2 rounded-lg px-3 text-[#1d2129] transition-colors",
+                                        "group flex h-8 items-center gap-2 rounded-lg px-3 text-text-1 transition-colors",
                                         isEditing ? "cursor-default" : "cursor-pointer",
                                         session.chat_id === activeChatId
                                             ? "bg-[#EEEEEE] hover:bg-[#EEEEEE]"
@@ -252,7 +252,7 @@ export function ConversationHistory({
                                             value={renameValue}
                                             onChange={(e) => setRenameValue(e.target.value)}
                                             disabled={renameSubmitting}
-                                            className="h-6 flex-1 px-2 py-0 text-sm font-medium border-[#c9cdd4] focus-visible:ring-1"
+                                            className="h-6 flex-1 px-2 py-0 text-sm font-medium border-border-deep focus-visible:ring-1"
                                             onClick={(e) => e.stopPropagation()}
                                             onKeyDown={(e) => {
                                                 if (e.key === "Enter") {
@@ -279,7 +279,7 @@ export function ConversationHistory({
                                             >
                                                 {getSessionDisplayName(session)}
                                             </span>
-                                            <span className="shrink-0 text-xs text-[#86909c]">
+                                            <span className="shrink-0 text-xs text-text-3">
                                                 {formatDate(session.update_time || session.create_time)}
                                             </span>
                                         </div>
@@ -295,7 +295,7 @@ export function ConversationHistory({
                                                 <button
                                                     type="button"
                                                     className={cn(
-                                                        "flex-shrink-0 rounded p-1 text-[#86909c] hover:bg-black/5 hover:text-[#4e5969] transition-opacity",
+                                                        "flex-shrink-0 rounded p-1 text-text-3 hover:bg-black/5 hover:text-text-2 transition-opacity",
                                                         // Desktop mouse: show on row hover or when menu open / active session; touch: always visible
                                                         "opacity-0 group-hover:opacity-100 coarse-pointer:opacity-100",
                                                         (menuOpen || session.chat_id === activeChatId) &&

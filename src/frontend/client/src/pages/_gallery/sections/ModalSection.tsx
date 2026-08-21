@@ -1,5 +1,5 @@
 /**
- * Modal spec page — DEV-ONLY. See docs-ui-refactor/组件-Modal弹窗.md.
+ * Modal spec page — DEV-ONLY. See packages/ui/docs/组件-Modal弹窗.md.
  *
  * The unified modal standard is NOT finalized yet — this page documents what IS
  * decided (the C-set shell candidate) plus interim guidance, and clearly marks

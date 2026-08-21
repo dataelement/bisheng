@@ -37,8 +37,8 @@ const MAX_GROUP_LEN = 30;
 const ROLE_SELECT_WIDTH_CLASS = "h-8 w-24";
 const ROLE_SELECT_TRIGGER_CLASS = cn(
     ROLE_SELECT_WIDTH_CLASS,
-    "box-border shrink-0 appearance-none rounded-md border-[#EBECF0] bg-white shadow-none",
-    "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-[#818181]",
+    "box-border shrink-0 appearance-none rounded-md border-border-base bg-white shadow-none",
+    "inline-flex items-center justify-end gap-1 px-2 text-[14px] text-text-3",
     "hover:border-[#CED4E0] hover:text-blue-500",
 );
 
@@ -209,7 +209,7 @@ export function ChannelMemberManagementPanel({
                 <span
                     className={cn(
                         ROLE_SELECT_WIDTH_CLASS,
-                        "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-[#818181]",
+                        "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-text-3",
                     )}
                 >
                     {getRoleLabel(member.role, localize)}
@@ -223,7 +223,7 @@ export function ChannelMemberManagementPanel({
                     <span
                         className={cn(
                             ROLE_SELECT_WIDTH_CLASS,
-                            "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-[#818181]",
+                            "inline-flex items-center justify-end rounded-md px-2 text-[14px] text-text-3",
                         )}
                     >
                         {getRoleLabel(member.role, localize)}
@@ -238,7 +238,7 @@ export function ChannelMemberManagementPanel({
                             <ChevronDown className="size-3.5" />
                         </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="z-[120] w-28 rounded-lg border-[#EBECF0] p-1">
+                    <DropdownMenuContent align="end" className="z-[120] w-28 rounded-lg border-border-base p-1">
                         <DropdownMenuItem
                             className={cn(
                                 "cursor-default",
@@ -270,7 +270,7 @@ export function ChannelMemberManagementPanel({
                         <ChevronDown className="size-3.5" />
                     </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="z-[120] w-28 rounded-lg border-[#EBECF0] p-1">
+                <DropdownMenuContent align="end" className="z-[120] w-28 rounded-lg border-border-base p-1">
                     <DropdownMenuItem
                         className={cn(
                             member.role === "admin" &&
@@ -317,19 +317,19 @@ export function ChannelMemberManagementPanel({
                         value={keyword}
                         onChange={(e) => setKeyword(e.target.value)}
                         placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
-                        className="h-8 w-full rounded-md border border-[#EBECF0] pl-9 pr-3 text-[14px] text-[#212121] placeholder:text-[#818181] focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
+                        className="h-8 w-full rounded-md border border-border-base pl-9 pr-3 text-[14px] text-text-1 placeholder:text-text-3 focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
                     />
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {loading ? (
-                        <div className="flex h-full items-center justify-center py-10 text-[13px] text-[#86909C]">
+                        <div className="flex h-full items-center justify-center py-10 text-[13px] text-text-3">
                             {localize("loading") || "加载中..."}
                         </div>
                     ) : members.length === 0 ? (
                         <div className="flex h-full flex-col items-center justify-center py-8 text-center">
                             <EmptyStateIllustration className="mb-4 size-[120px]" />
-                            <p className="text-[14px] font-normal text-[#999999]">
+                            <p className="text-[14px] font-normal text-text-3">
                                 {localize("com_subscription.nofound_mathcing_member")}
                             </p>
                         </div>
@@ -337,22 +337,22 @@ export function ChannelMemberManagementPanel({
                         members.map((member) => (
                             <div
                                 key={member.user_id}
-                                className="flex min-h-12 items-center gap-4 border-b border-[#ECECEC] px-0 py-3 last:border-b-0"
+                                className="flex min-h-12 items-center gap-4 border-b border-border-base px-0 py-3 last:border-b-0"
                             >
                                 <div className="flex min-w-0 flex-1 items-center gap-4">
                                     <div className="flex w-[132px] min-w-[132px] items-center gap-2">
-                                        <div className="flex size-8 items-center justify-center rounded-full bg-[#C9CDD4] text-[12px] text-white">
+                                        <div className="flex size-8 items-center justify-center rounded-full bg-fill-4 text-[12px] text-white">
                                             {getInitials(member.user_name)}
                                         </div>
                                         <div
                                             title={member.user_name}
-                                            className="min-w-0 flex-1 truncate text-[14px] text-[#212121]"
+                                            className="min-w-0 flex-1 truncate text-[14px] text-text-1"
                                         >
                                             {truncateText(member.user_name, MAX_NAME_LEN)}
                                         </div>
                                     </div>
                                     <div
-                                        className="min-w-0 flex-1 truncate text-[12px] text-[#818181]"
+                                        className="min-w-0 flex-1 truncate text-[12px] text-text-3"
                                         title={(member.groups || []).join("、")}
                                     >
                                         {truncateText((member.groups || []).join("、"), MAX_GROUP_LEN)}
@@ -367,19 +367,19 @@ export function ChannelMemberManagementPanel({
                 </div>
             </div>
 
-            <div className="flex items-center justify-end border-t border-[#ECECEC] px-0 py-4 text-[14px]">
+            <div className="flex items-center justify-end border-t border-border-base px-0 py-4 text-[14px]">
                 <div className="flex items-center gap-2">
                     <span className="shrink-0 leading-none text-[14px]">
-                        <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_1")}</span>
+                        <span className="text-text-2">{localize("com_subscription.member_pagination_1")}</span>
                         <span className="text-blue-500">{total}</span>
-                        <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_2")}</span>
-                        <span className="text-[#4E5969]">{PAGE_SIZE}</span>
-                        <span className="text-[#4E5969]">{localize("com_subscription.member_pagination_3")}</span>
+                        <span className="text-text-2">{localize("com_subscription.member_pagination_2")}</span>
+                        <span className="text-text-2">{PAGE_SIZE}</span>
+                        <span className="text-text-2">{localize("com_subscription.member_pagination_3")}</span>
                     </span>
                     <div className="flex shrink-0 items-center gap-1.5">
                         <Button
                             variant="ghost"
-                            className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
+                            className="h-7 w-7 shrink-0 p-0 text-text-2 hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
                             disabled={page <= 1}
                             onClick={() => {
                                 void fetchMembers(Math.max(1, page - 1));
@@ -392,14 +392,14 @@ export function ChannelMemberManagementPanel({
                             const showDots = prev && pageNumber - prev > 1;
                             return (
                                 <div key={`page-${pageNumber}`} className="flex items-center gap-1.5">
-                                    {showDots && <span className="text-[#4E5969]">...</span>}
+                                    {showDots && <span className="text-text-2">...</span>}
                                     <button
                                         type="button"
                                         className={cn(
                                             "flex h-6 min-w-6 items-center justify-center px-1.5 text-[14px] transition-colors",
                                             pageNumber === page
                                                 ? "rounded-lg border border-blue-500 text-blue-500"
-                                                : "rounded-[4px] border border-transparent text-[#4E5969] hover:text-blue-500",
+                                                : "rounded-[4px] border border-transparent text-text-2 hover:text-blue-500",
                                         )}
                                         onClick={() => {
                                             void fetchMembers(pageNumber);
@@ -412,7 +412,7 @@ export function ChannelMemberManagementPanel({
                         })}
                         <Button
                             variant="ghost"
-                            className="h-7 w-7 shrink-0 p-0 text-[#4E5969] hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
+                            className="h-7 w-7 shrink-0 p-0 text-text-2 hover:bg-transparent hover:text-blue-500 disabled:opacity-40"
                             disabled={page >= totalPages}
                             onClick={() => {
                                 void fetchMembers(Math.min(totalPages, page + 1));

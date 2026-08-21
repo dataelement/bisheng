@@ -89,7 +89,7 @@ export default function Knowledge() {
     const skipSelectionPersistRef = useRef(false);
     // Mobile: full-page file search (opened from the file-page top-bar search icon).
     const [knowledgeSearchMode, setKnowledgeSearchMode] = useState(false);
-    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-[#212121]";
+    const mobileHeadIconBtnClassName = "inline-flex size-5 shrink-0 items-center justify-center text-text-1";
     const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
 
     const { showToast } = useToastContext();
@@ -888,7 +888,7 @@ export default function Knowledge() {
                             >
                                 <Outlined.SidebarMenu className="size-5" />
                             </button>
-                            <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-[#212121]">
+                            <span className="min-w-0 flex-1 truncate text-center text-[16px] font-medium leading-6 text-text-1">
                                 {menuNames.knowledge}
                             </span>
                             <span className="size-5 shrink-0" aria-hidden />
@@ -900,14 +900,14 @@ export default function Knowledge() {
                            (mirrors the subscription channel empty state). */
                         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 pb-16">
                             <EmptyStateIllustration className="size-[120px]" />
-                            <p className="mt-6 text-[14px] leading-6 text-[#999999]">
+                            <p className="mt-6 text-[14px] leading-6 text-text-3">
                                 {localize("com_knowledge.no_related_content_you_can")}
                             </p>
                             <div className="mt-5 flex items-center gap-4">
                                 <button
                                     type="button"
                                     onClick={() => setShowKnowledgeSquare(true)}
-                                    className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors active:border-blue-500 active:text-blue-500"
+                                    className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors active:border-blue-500 active:text-blue-500"
                                 >
                                     {localize("com_knowledge.go_to_square")}
                                 </button>
@@ -948,21 +948,21 @@ export default function Knowledge() {
             ) : spacesResolving ? (
                 /* PC loading state — keep the loading view up until the space lists
                    settle so the empty state never flashes before auto-select. */
-                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-[#86909c]">
+                <div className="flex flex-1 flex-col items-center justify-center py-10 text-center text-text-3">
                     <LoadingIcon className="size-20 text-primary" />
                 </div>
             ) : (
                 /* PC empty state when no space is selected — illustration + two actions */
                 <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
                     <EmptyStateIllustration className="size-[120px]" />
-                    <p className="mt-6 text-[14px] font-normal leading-6 text-[#999999]">
+                    <p className="mt-6 text-[14px] font-normal leading-6 text-text-3">
                         {localize("com_knowledge.no_related_content_you_can")}
                     </p>
                     <div className="mt-5 flex items-center gap-4">
                         <button
                             type="button"
                             onClick={() => setShowKnowledgeSquare(true)}
-                            className="h-8 rounded-md border border-[#E5E6EB] bg-white px-4 text-[14px] leading-[22px] text-[#4E5969] transition-colors hover:border-blue-500 hover:text-blue-500"
+                            className="h-8 rounded-md border border-border-base bg-white px-4 text-[14px] leading-[22px] text-text-2 transition-colors hover:border-blue-500 hover:text-blue-500"
                         >
                             {localize("com_knowledge.go_to_square")}
                         </button>

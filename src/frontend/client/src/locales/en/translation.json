@@ -491,7 +491,8 @@
     "saveToKnowledgeSaving": "Saving to knowledge space…",
     "saveToKnowledgeSuccess": "Saved to knowledge space: {{name}}",
     "saveToKnowledgePending": "Submitted for approval; it will be saved to the knowledge space once approved",
-    "saveToKnowledgeFailed": "Failed to save to knowledge space, please try again later"
+    "saveToKnowledgeFailed": "Failed to save to knowledge space, please try again later",
+    "downloadAs": "Download as {{format}}"
   },
   "com_message_content_copied": "Content copied",
   "com_notifications_approved": "Approved",
@@ -2213,5 +2214,9 @@
     "version": "Version",
     "route": "Page",
     "user": "User"
-  }
+  },
+  "com_settings_general": "General",
+  "com_settings_lang_en": "English",
+  "com_settings_lang_ja": "日本語",
+  "com_settings_lang_zh": "中文"
 }

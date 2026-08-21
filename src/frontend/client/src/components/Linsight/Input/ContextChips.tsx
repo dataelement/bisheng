@@ -107,7 +107,7 @@ export function ContextChips({
                 {skills.map((skill) => (
                     <Chip
                         key={`skill-${skill.name}`}
-                        icon={<Sparkles className="mr-1 size-4 shrink-0 text-[#999]" />}
+                        icon={<Sparkles className="mr-1 size-4 shrink-0 text-text-3" />}
                         label={skill.display_name}
                         onRemove={() => onRemoveSkill(skill)}
                     />
@@ -117,9 +117,9 @@ export function ContextChips({
                         key={`${item.type}-${item.id}`}
                         icon={
                             item.type === 'space' ? (
-                                <Outlined.Book size={16} className="mr-1 shrink-0 text-[#999]" />
+                                <Outlined.Book size={16} className="mr-1 shrink-0 text-text-3" />
                             ) : (
-                                <Outlined.Books size={16} className="mr-1 shrink-0 text-[#999]" />
+                                <Outlined.Books size={16} className="mr-1 shrink-0 text-text-3" />
                             )
                         }
                         label={item.name}

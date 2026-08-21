@@ -1456,7 +1456,7 @@ export async function deleteSpaceApi(space_id: string): Promise<void> {
 export async function getFolderParentPathApi(
     spaceId: string,
     folderId: string
-     
+
 ): Promise<Array<{ id: string; name: string }>> {
     const res = await request.get<ApiResponse<any>>(
         `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/parent`

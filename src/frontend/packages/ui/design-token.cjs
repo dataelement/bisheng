@@ -48,8 +48,12 @@ const FONT_FAMILY = {
   },
 };
 
-/** Semantic type scale — each entry is a Tailwind fontSize key AND its own weight. */
+/** Semantic type scale — each entry is a Tailwind fontSize key AND its own weight.
+ * Array order = primitive ladder order; PrimitiveTable derives `font-size-N`
+ * from the 0-based index (caption-sm sits BELOW the original 1–9 ladder as
+ * font-size-0, so existing numbered vars never renumber). */
 const TYPE_SCALE = [
+  { name: 'caption-sm', desktop: [10, 18], mobile: [10, 18], weight: 400, cssVar: '--text-caption-sm', leadingVar: '--leading-caption-sm', usage: '角标、徽标数字、极小标注（仅纯展示，禁用于可点击文字）' },
   { name: 'caption',  desktop: [12, 20], mobile: [12, 20], weight: 400, cssVar: '--text-caption',  leadingVar: '--leading-caption',  usage: '时间戳、标签、水印' },
   { name: 'body-sm',  desktop: [13, 21], mobile: [14, 22], weight: 400, cssVar: '--text-body-sm',  leadingVar: '--leading-body-sm',  usage: '密集表格、侧栏次要项' },
   { name: 'body',     desktop: [14, 22], mobile: [16, 24], weight: 400, cssVar: '--text-body',     leadingVar: '--leading-body',     usage: '正文基准，表单、表格默认' },
@@ -87,23 +91,54 @@ const BRAND = {
 };
 
 /* ------------------------------------------------------------------ *
- * Neutral primitive — Arco gray 1–10 (§2.1). Numbered = the lightness
+ * Illustration palette (§5) — a SEPARATE ramp from the brand one: the green
+ * theme renders the illustrations' own vivid greens rather than the darker UI
+ * brand green, so artwork keeps looking like the artwork. `grey` is the
+ * theme-independent draft mode (`.illus-grey`, whole drawing at 80% opacity).
+ * No Tailwind classes: SVG presentation attributes ignore var(), so components
+ * set `style={{ fill: 'rgb(var(--illus-500))' }}` instead.
+ * Runtime carriers: :root / .theme-green / .illus-grey in tokens.css.
+ * ------------------------------------------------------------------ */
+
+const ILLUS_STEPS = ['100', '300', '500'];
+
+const ILLUS = {
+  role: { '100': '浅底 / 大色块', '300': '中间调 / 点缀', '500': '主体' },
+  blue:  { '100': '#BEDAFF', '300': '#6AA1FF', '500': '#165DFF' },
+  green: { '100': '#DDF0E8', '300': '#A2D7B5', '500': '#169C47' },
+  // Grey collapses 300 onto 100 on purpose — pure white washed out on white
+  // backgrounds (e.g. CrawlingIllustration's magnifier halo).
+  grey:  { '100': '#E5E5E5', '300': '#E5E5E5', '500': '#BCBCBC' },
+  greyOpacity: 0.8,
+};
+
+/* ------------------------------------------------------------------ *
+ * Neutral primitive — gray 1–10 (§2.1). Numbered = the lightness
  * scale itself; components consume the semantic layer below, not this.
  * `channels` = "r g b" for rgb(var(--arco-gray-N)/α).
  * `darkHex` / `darkChannels` = official @arco-design/color gray.dark ramp
  * (lightness inverts). Runtime carrier: `.dark` override in src/style.css.
+ *
+ * The LIGHT ramp is Arco-derived but rebalanced for one coherent colour
+ * temperature; the var name keeps its `arco-` prefix for compatibility.
+ * Arco's hue wandered 252°–277° (OKLCH) step to step, which reads as the
+ * temperature drifting as you scan the ramp. Every step now sits on a single
+ * hue — 264°, taken from gray-10 — and chroma rises smoothly from 0 at gray-1,
+ * so the ramp warms into its cool tint instead of jumping. gray-1 / gray-5 /
+ * gray-10 are unchanged; every other step moved by ΔE ≤ 0.8 (OKLab).
+ * Each step's OKLab lightness is preserved, so contrast ratios are untouched.
  * ------------------------------------------------------------------ */
 
 const GRAY = [
-  { n: 1,  hex: '#F7F8FA', channels: '247 248 250', darkHex: '#17171A', darkChannels: '23 23 26',    role: 'hover 底' },
-  { n: 2,  hex: '#F2F3F5', channels: '242 243 245', darkHex: '#2E2E30', darkChannels: '46 46 48',    role: 'filled 底' },
-  { n: 3,  hex: '#E5E6EB', channels: '229 230 235', darkHex: '#484849', darkChannels: '72 72 73',    role: '边框' },
-  { n: 4,  hex: '#C9CDD4', channels: '201 205 212', darkHex: '#5F5F60', darkChannels: '95 95 96',    role: '禁用 / 占位' },
+  { n: 1,  hex: '#F8F8F8', channels: '248 248 248', darkHex: '#17171A', darkChannels: '23 23 26',    role: 'hover 底' },
+  { n: 2,  hex: '#F3F3F4', channels: '243 243 244', darkHex: '#2E2E30', darkChannels: '46 46 48',    role: 'filled 底' },
+  { n: 3,  hex: '#E5E6E9', channels: '229 230 233', darkHex: '#484849', darkChannels: '72 72 73',    role: '边框' },
+  { n: 4,  hex: '#CACDD4', channels: '202 205 212', darkHex: '#5F5F60', darkChannels: '95 95 96',    role: '禁用 / 占位' },
   { n: 5,  hex: '#A9AEB8', channels: '169 174 184', darkHex: '#78787A', darkChannels: '120 120 122', role: '过渡' },
-  { n: 6,  hex: '#86909C', channels: '134 144 156', darkHex: '#929293', darkChannels: '146 146 147', role: '辅助文字' },
-  { n: 7,  hex: '#6B7785', channels: '107 119 133', darkHex: '#ABABAC', darkChannels: '171 171 172', role: '过渡' },
-  { n: 8,  hex: '#4E5969', channels: '78 89 105',   darkHex: '#C5C5C5', darkChannels: '197 197 197', role: '次文字' },
-  { n: 9,  hex: '#272E3B', channels: '39 46 59',    darkHex: '#DFDFDF', darkChannels: '223 223 223', role: '过渡' },
+  { n: 6,  hex: '#898F9C', channels: '137 143 156', darkHex: '#929293', darkChannels: '146 146 147', role: '辅助文字' },
+  { n: 7,  hex: '#6F7683', channels: '111 118 131', darkHex: '#ABABAC', darkChannels: '171 171 172', role: '过渡' },
+  { n: 8,  hex: '#525865', channels: '82 88 101',   darkHex: '#C5C5C5', darkChannels: '197 197 197', role: '次文字' },
+  { n: 9,  hex: '#292E37', channels: '41 46 55',    darkHex: '#DFDFDF', darkChannels: '223 223 223', role: '过渡' },
   { n: 10, hex: '#1D2129', channels: '29 33 41',    darkHex: '#F6F6F6', darkChannels: '246 246 246', role: '主文字' },
 ];
 
@@ -117,21 +152,21 @@ const GRAY = [
 // `hex` = light value; `darkHex` = same gray ref resolved on the dark ramp.
 const TEXT = [
   { name: 'strong',    legacy: '1', cssVar: '--text-1', ref: 'gray-10', hex: '#1D2129', darkHex: '#F6F6F6', usage: '主文字：标题、正文主体' },
-  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#4E5969', darkHex: '#C5C5C5', usage: '次要文字：次要说明、默认按钮文字' },
-  { name: 'hint',      legacy: '3', cssVar: '--text-3', ref: 'gray-6',  hex: '#86909C', darkHex: '#929293', usage: '辅助文字：弱提示、时间戳、占位符' },
-  { name: 'disabled',  legacy: '4', cssVar: '--text-4', ref: 'gray-4',  hex: '#C9CDD4', darkHex: '#5F5F60', usage: '禁用文字' },
+  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#525865', darkHex: '#C5C5C5', usage: '次要文字：次要说明、默认按钮文字' },
+  { name: 'hint',      legacy: '3', cssVar: '--text-3', ref: 'gray-6',  hex: '#898F9C', darkHex: '#929293', usage: '辅助文字：弱提示、时间戳、占位符' },
+  { name: 'disabled',  legacy: '4', cssVar: '--text-4', ref: 'gray-4',  hex: '#CACDD4', darkHex: '#5F5F60', usage: '禁用文字' },
 ];
 
 const FILL = [
-  { name: 'subtle',  legacy: '1', cssVar: '--fill-1', ref: 'gray-1', hex: '#F7F8FA', darkHex: '#17171A', usage: '浅填充：hover 底、页面浅灰背景' },
-  { name: 'default', legacy: '2', cssVar: '--fill-2', ref: 'gray-2', hex: '#F2F3F5', darkHex: '#2E2E30', usage: '填充：active 底、filled 控件底' },
-  { name: 'hover',   legacy: '3', cssVar: '--fill-3', ref: 'gray-3', hex: '#E5E6EB', darkHex: '#484849', usage: '深填充：filled hover' },
-  { name: 'active',  legacy: '4', cssVar: '--fill-4', ref: 'gray-4', hex: '#C9CDD4', darkHex: '#5F5F60', usage: '重填充：filled active' },
+  { name: 'subtle',  legacy: '1', cssVar: '--fill-1', ref: 'gray-1', hex: '#F8F8F8', darkHex: '#17171A', usage: '浅填充：hover 底、页面浅灰背景' },
+  { name: 'default', legacy: '2', cssVar: '--fill-2', ref: 'gray-2', hex: '#F3F3F4', darkHex: '#2E2E30', usage: '填充：active 底、filled 控件底' },
+  { name: 'hover',   legacy: '3', cssVar: '--fill-3', ref: 'gray-3', hex: '#E5E6E9', darkHex: '#484849', usage: '深填充：filled hover' },
+  { name: 'active',  legacy: '4', cssVar: '--fill-4', ref: 'gray-4', hex: '#CACDD4', darkHex: '#5F5F60', usage: '重填充：filled active' },
 ];
 
 const BORDER = [
-  { name: 'base', cssVar: '--border-base', ref: 'gray-3', hex: '#E5E6EB', darkHex: '#484849', usage: '常规边框：输入框、卡片、分割线' },
-  { name: 'deep', cssVar: '--border-deep', ref: 'gray-4', hex: '#C9CDD4', darkHex: '#5F5F60', usage: '深边框：强调分割、hover 边框' },
+  { name: 'base', cssVar: '--border-base', ref: 'gray-3', hex: '#E5E6E9', darkHex: '#484849', usage: '常规边框：输入框、卡片、分割线' },
+  { name: 'deep', cssVar: '--border-deep', ref: 'gray-4', hex: '#CACDD4', darkHex: '#5F5F60', usage: '深边框：强调分割、hover 边框' },
 ];
 
 /* Background surfaces — the "white that darkens" family. The gray ramp starts
@@ -185,6 +220,51 @@ const RADIUS = [
   { name: 'full', px: 9999, usage: '胶囊 / 圆形：头像、圆形图标按钮、pill 标签' },
 ];
 
+/* Shadow: exactly two tiers (基础-圆角与阴影规范.mdx §2.1). Anything else —
+ * including Tailwind's shadow-sm/md/lg/xl presets and `shadow-[…]` arbitrary
+ * values — is off-spec. Carried as CSS vars (tokens.css) so dark mode can
+ * retune them centrally. */
+const SHADOW = [
+  {
+    name: 'popup',
+    cssVar: '--shadow-popup',
+    value: '0 2px 16px -2px rgba(0, 23, 66, 0.10)',
+    usage: '浮层：下拉菜单、选择器面板、气泡卡片、轻提示——点开即现、点外即走',
+  },
+  {
+    name: 'modal',
+    cssVar: '--shadow-modal',
+    value: '0 0 16px 0 rgba(3, 7, 117, 0.05)',
+    usage: '模态：弹窗、抽屉——要求用户处理完才关闭的打断式浮层',
+  },
+];
+
+/* Focus ring — deliberately NOT a member of SHADOW above. It is a focus
+ * INDICATOR (组件-Input输入框.md §5.1: 灰描边加深 + 一圈灰阴影), it expresses no
+ * elevation, and every value in it comes from existing tokens, which is the
+ * exception 圆角与阴影规范 §4 allows. The ring COLOR sits in its own var so a
+ * field in error / warning swaps it for the matching tint (danger-tint /
+ * warning-tint) without inventing a second shadow token. */
+const FOCUS_RING = {
+  name: 'focus',
+  colorVar: '--shadow-focus-ring',
+  colorDefault: '--fill-2',
+  value: '0 0 0 2px rgb(var(--shadow-focus-ring))',
+  usage: '控件聚焦指示环：输入框、文本域；错误 / 警告态由 --shadow-focus-ring 换成对应 tint',
+};
+
+/* Overlay stacking — exactly four tiers (组件-Modal弹窗.md §5 is the SSOT for
+ * layering). Every new overlay picks one of these; hand-rolled `z-[…]` values
+ * are what produced the old z-50 / z-[100] / z-[110] / z-[9999] zoo. Ordered so
+ * each tier can cover the one below: a dropdown opens inside a dialog, a toast
+ * shows over both, and a tooltip beats everything. */
+const Z_INDEX = [
+  { name: 'modal',   cssVar: '--z-modal',   value: 1000, usage: '弹窗、抽屉（含各自的遮罩）' },
+  { name: 'popover', cssVar: '--z-popover', value: 1100, usage: '气泡卡片、下拉菜单' },
+  { name: 'toast',   cssVar: '--z-toast',   value: 1200, usage: '轻提示 Toast' },
+  { name: 'tooltip', cssVar: '--z-tooltip', value: 1300, usage: '文字提示 Tooltip' },
+];
+
 const ICON_SIZE = [
   { name: 'xs',  px: 12, strokeWidth: 2.5, usage: '极小标记（badge、密集表格角标），仅纯展示' },
   { name: 'sm',  px: 14, usage: 'small / medium 按钮的文字+icon' },
@@ -231,7 +311,18 @@ TYPE_SCALE.forEach((s) => {
   fontSize[s.name] = [`var(${s.cssVar})`, { lineHeight: `var(${s.leadingVar})`, fontWeight: String(s.weight) }];
 });
 
-const tailwindTheme = { colors, fontSize };
+const boxShadow = {};
+SHADOW.forEach((s) => {
+  boxShadow[s.name] = `var(${s.cssVar})`;
+});
+boxShadow[FOCUS_RING.name] = FOCUS_RING.value;
+
+const zIndex = {};
+Z_INDEX.forEach((z) => {
+  zIndex[z.name] = `var(${z.cssVar})`;
+});
+
+const tailwindTheme = { colors, fontSize, boxShadow, zIndex };
 
 /* ================================================================== *
  * Migration map — old numeric class → new role class, for the app's
@@ -250,6 +341,8 @@ module.exports = {
   FONT_WEIGHT,
   BRAND,
   BRAND_STEPS,
+  ILLUS,
+  ILLUS_STEPS,
   GRAY,
   TEXT,
   FILL,
@@ -258,6 +351,9 @@ module.exports = {
   FUNCTIONAL,
   TAG,
   RADIUS,
+  SHADOW,
+  FOCUS_RING,
+  Z_INDEX,
   ICON_SIZE,
   tailwindTheme,
   MIGRATION,

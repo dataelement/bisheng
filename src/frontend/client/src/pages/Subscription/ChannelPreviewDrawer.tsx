@@ -251,21 +251,21 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >
                 {isLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-3 text-[#86909c]">
+                    <div className="flex flex-col items-center justify-center h-full gap-3 text-text-3">
                         <LoadingIcon className="size-20 text-primary" />
                     </div>
                 ) : channelDetail ? (
                     <>
                         {/* Channel Info Header */}
-                        <SheetHeader className="gap-4 border-b border-[#ECECEC] pb-6 text-left">
+                        <SheetHeader className="gap-4 border-b border-border-base pb-6 text-left">
                             <div className="flex items-center justify-between">
-                                <SheetTitle className="text-[20px] font-medium leading-7 text-[#212121]">
+                                <SheetTitle className="text-[20px] font-medium leading-7 text-text-1">
                                     {channelDetail.name}
                                 </SheetTitle>
                                 <button
                                     type="button"
                                     onClick={() => onOpenChange(false)}
-                                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F7F8FA]"
+                                    className="inline-flex size-10 shrink-0 items-center justify-center rounded-md text-text-2 hover:bg-fill-1"
                                     aria-label={localize("close")}
                                 >
                                     <X className="size-5" />
@@ -292,12 +292,12 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                     {/* Backend currently doesn't provide creator_avatar, use AvatarName fallback directly for now */}
                                     <AvatarName name={channelDetail.creator_name} className="text-xs" />
                                 </Avatar>
-                                <span className="text-[14px] leading-[22px] text-[#818181]">{channelDetail.creator_name}</span>
+                                <span className="text-[14px] leading-[22px] text-text-3">{channelDetail.creator_name}</span>
                             </div>
 
                             {/* Data Overview Row & Button */}
                             <div className="flex items-center justify-between gap-3">
-                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] leading-[22px] text-[#818181]">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2 text-[14px] leading-[22px] text-text-3">
                                     {channelDetail.source_infos && channelDetail.source_infos.length > 0 && (
                                         <div className="flex items-center">
                                             <div className="flex -space-x-1.5">
@@ -328,10 +328,10 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                         disabled={btnConfig.disabled || subscribing}
                                         onClick={handleSubscribe}
                                         className={`h-8 rounded-md px-4 py-[5px] text-[14px] font-normal leading-[22px] flex-shrink-0 ${effectiveSubscribeStatus === "subscribed"
-                                            ? "bg-[#f2f3f5] text-[#86909c] border-[#e5e6eb] cursor-default"
+                                            ? "bg-fill-2 text-text-3 border-border-base cursor-default"
                                             : effectiveSubscribeStatus === "pending"
-                                                ? "bg-[#f2f3f5] text-[#c9cdd4] border-[#e5e6eb] cursor-not-allowed"
-                                                : "text-[#1d2129] border-[#e5e6eb] hover:bg-gray-50"
+                                                ? "bg-fill-2 text-text-4 border-border-base cursor-not-allowed"
+                                                : "text-text-1 border-border-base hover:bg-gray-50"
                                             }`}
                                     >
                                         {subscribing ? localize("com_subscription.processing") : btnConfig.text}
@@ -345,7 +345,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                             {hideArticles ? (
                                 <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
                                     <NoPermissionIllustration className="size-[120px] mb-4" />
-                                    <div className="text-[14px] font-normal text-[#999999]">{localize("com_subscription.channel_content_needs_approval")}</div>
+                                    <div className="text-[14px] font-normal text-text-3">{localize("com_subscription.channel_content_needs_approval")}</div>
                                 </div>
                             ) : articles.length > 0 ? (
                                 <InfiniteScroll
@@ -358,7 +358,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                     {articles.map((article, i) => (
                                         <div
                                             key={article.id}
-                                            className={i > 0 ? "border-t border-dashed border-[#EBECF0]" : undefined}
+                                            className={i > 0 ? "border-t border-dashed border-border-base" : undefined}
                                         >
                                             <ArticleCard
                                                 article={article}
@@ -388,7 +388,7 @@ export function ChannelPreviewDrawer({ channelId, open, onOpenChange, onSubscrip
                                     ))}
                                 </InfiniteScroll>
                             ) : (
-                                <div className="flex items-center justify-center h-64 text-[#86909c] text-sm">{localize("com_subscription.no_articles")}</div>
+                                <div className="flex items-center justify-center h-64 text-text-3 text-sm">{localize("com_subscription.no_articles")}</div>
                             )}
                         </div>
                     </>

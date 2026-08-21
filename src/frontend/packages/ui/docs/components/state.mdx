@@ -1,0 +1,186 @@
+# 状态页 State
+
+一块区域没有正常内容可显示时，用来替代那片空白的一组图文——空状态与结果反馈都走这一个壳。组件库 `@bisheng/ui` 导出名为 **`StateView`**（`State` 在 React 代码里容易被当成状态变量读），设计语言里仍叫「状态页 / State」。规范全文见「文档 → 组件规范 → 状态页 State」。
+
+**只有 `size` 一根轴**：看容器有多大（`page` 120px 插画 / `panel` 80px / `inline` 不放）。场景是空状态还是结果反馈，只决定你写什么字、配哪张图——排版只有一套，所以没有 `variant` 这类 prop。「抽屉里的创建成功」就是 `size="panel"`。
+
+排版三个数：**插画 ↓16 主提示 ↓4 辅助说明 ↓16 按钮**。16 是块与块之间，4 是一块之内——主提示和辅助说明是一句话拆成两段，拉开就散成两块。
+
+主提示的样式取决于**它算不算标题**：下面还有辅助说明时它是标题（16/24、500、主文字色）；**只有一行时它本来就不是标题，而是一句描述**（14/22、400、第三档文字色）——「还没有知识库」这种话加粗放大，会比周围正文喊得还响。想让它立成标题，就给它一句辅助说明。
+
+## 没有内容
+
+自上而下：插画 → 主提示（必需）→ 辅助说明（可选）→ 按钮（可选）。
+
+```tsx
+import { Button, EmptyStateIllustration, ListWebLinkIllustration, NoPermissionIllustration, StateView } from '@bisheng/ui';
+
+const Box = ({ label, children }) => (
+  <div style={{ flex: '1 1 280px', minWidth: 260 }}>
+    <div style={{ marginBottom: 8, fontSize: 12, color: 'rgb(var(--text-3))' }}>{label}</div>
+    <div style={{ border: '1px dashed rgb(var(--border-base))', borderRadius: 8 }}>{children}</div>
+  </div>
+);
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+    <Box label="从来没有过 — 给主按钮，这是唯一出路">
+      <StateView
+        image={<EmptyStateIllustration />}
+        title="还没有知识库"
+        description="知识库用来存放你的文档，建好后可在对话里引用"
+        action={<Button>新建知识库</Button>}
+      />
+    </Box>
+    <Box label="搜索无结果 — 不给「新建」，让他改条件">
+      <StateView
+        image={<ListWebLinkIllustration />}
+        title="没有找到匹配的内容，换个关键词试试"
+      />
+    </Box>
+    <Box label="无权限 — 出路做成文案里的文字链接">
+      <StateView
+        image={<NoPermissionIllustration />}
+        title="你没有权限查看这个空间"
+        description={
+          <>
+            需要访问权限？<a href="#" style={{ color: 'rgb(var(--brand-500))' }}>联系管理员</a>
+          </>
+        }
+      />
+    </Box>
+  </div>
+);
+```
+
+## 有结果要报
+
+同一套排版，只是话不一样：报结果时主提示是一句结论，下面那句说明用户接下来能做什么。**只做成功与 404 / 500 三类**——保存失败、上传失败这类用轻提示，关键失败用弹窗。
+
+```tsx
+import { Button, StateView, SuccessIllustration, SystemErrorIllustration, SystemMaintenanceIllustration } from '@bisheng/ui';
+
+const Box = ({ label, children }) => (
+  <div style={{ flex: '1 1 280px', minWidth: 260 }}>
+    <div style={{ marginBottom: 8, fontSize: 12, color: 'rgb(var(--text-3))' }}>{label}</div>
+    <div style={{ border: '1px dashed rgb(var(--border-base))', borderRadius: 8 }}>{children}</div>
+  </div>
+);
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+    <Box label="成功 — 只有终结了一整个流程才占整块区域">
+      <StateView
+        image={<SuccessIllustration />}
+        title="知识库创建完成"
+        description="现在可以上传文档，或直接在对话里引用它"
+        action={
+          // 次要在左、主按钮在右；手机上组件自己翻成「主按钮在上」的堆叠
+          <>
+            <Button color="default" variant="outlined">继续新建</Button>
+            <Button>查看知识库</Button>
+          </>
+        }
+      />
+    </Box>
+    <Box label="404 — 链接失效或地址打错">
+      <StateView
+        image={<SystemErrorIllustration />}
+        title="页面不存在"
+        description="链接可能已经失效，或者地址打错了"
+        action={<Button>回首页</Button>}
+      />
+    </Box>
+    <Box label="500 — 不要说得像用户的错">
+      <StateView
+        image={<SystemMaintenanceIllustration />}
+        title="服务暂时不可用"
+        description="暂时加载不出来，请稍后重试"
+        action={<Button>刷新</Button>}
+      />
+    </Box>
+  </div>
+);
+```
+
+## 三档尺寸
+
+**看容器有多大，不看是哪个场景。** 放不下就不放插画，不缩小——80px 的图加一行字再加上下呼吸就要 200px，硬塞进去会挤成一团。
+
+```tsx
+import { EmptyStateIllustration, StateView } from '@bisheng/ui';
+
+const Box = ({ label, note, children }) => (
+  <div style={{ flex: '1 1 280px', minWidth: 260 }}>
+    <div style={{ marginBottom: 8, fontSize: 12, color: 'rgb(var(--text-3))' }}>{label}</div>
+    <div style={{ border: '1px dashed rgb(var(--border-base))', borderRadius: 8 }}>{children}</div>
+    <div style={{ marginTop: 8, fontSize: 12, color: 'rgb(var(--text-3))' }}>{note}</div>
+  </div>
+);
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+    <Box label='size="page" — 120px' note="整块内容区、页面主体、抽屉与弹窗的主体区域；最小高 320px">
+      <StateView image={<EmptyStateIllustration />} title="还没有应用" />
+    </Box>
+    <Box label='size="panel" — 80px' note="卡片内、侧栏、AI dock 等矮容器；最小高 200px">
+      <StateView size="panel" image={<EmptyStateIllustration />} title="还没有应用" />
+    </Box>
+    <Box label='size="inline" — 不放插画' note="表格空行、下拉与选择器无选项、行内小区域；不给按钮">
+      <StateView size="inline" title="无匹配结果" />
+    </Box>
+  </div>
+);
+```
+
+`inline` 档只服务「没有内容」这一组：表格行里不报「创建成功」，结果反馈至少要有一张图才立得住。`size="inline"` 时 `image` / `action` 在类型上就传不进来，写了直接是编译错误。
+
+## 在区域内的位置
+
+**就一种机制：flex 居中**，横竖都居中，占满它所替代的那块区域（最小高 320 / 200）。不做顶距封顶、也不按百分比定位——多一套算法就多一处会跑偏的地方。
+
+少数容器需要把内容往上挪：容器比内容高出太多，或者底部压着悬浮元素（AI dock、批量操作条）。**这时业务侧自己加一个不对称的下内边距**，居中在剩下的框里重新解算，内容上移一半的量。
+
+```tsx
+import { EmptyStateIllustration, StateView } from '@bisheng/ui';
+
+const Frame = ({ label, children }) => (
+  <div style={{ flex: '1 1 280px', minWidth: 260 }}>
+    <div style={{ marginBottom: 8, fontSize: 12, color: 'rgb(var(--text-3))' }}>{label}</div>
+    <div style={{ height: 420, overflow: 'hidden', border: '1px dashed rgb(var(--border-base))', borderRadius: 8 }}>
+      {children}
+    </div>
+  </div>
+);
+
+export default () => (
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
+    <Frame label="默认 — 居中">
+      <StateView image={<EmptyStateIllustration />} title="还没有知识库" />
+    </Frame>
+    <Frame label='上移 — className="pb-16"（内容上移 32px）'>
+      <StateView className="pb-16" image={<EmptyStateIllustration />} title="还没有知识库" />
+    </Frame>
+  </div>
+);
+```
+
+## 使用规则速查
+
+- **空白本身不是状态**：只要一块区域可能出现「什么都没有」，就要为它准备状态页。
+- **加载中不用状态页**：请求没回来先显示骨架屏，回来是零条再换状态页——别让「暂无数据」闪一下又被数据顶掉。
+- **状态页替换的是内容，不替换容器的框架**：表头、工具栏、筛选器、标签页、分页器一律保留。筛选无结果时把筛选器一起藏掉，用户就没法把条件改回来了。
+- **最多一主一次两个按钮**，横排居中、**主按钮在右**、medium（32px）档；再多的出路做成辅助说明里的文字链接。按调用顺序渲染（次要在前、主按钮在后），手机上组件自动翻成「主按钮在上」的整行堆叠。
+- **文案说「是什么状态」**：「还没有知识库」而不是「暂无数据」；出错类要给可执行的下一步；句末不加句号。
+- **插画是装饰**：组件已经替你加了 `aria-hidden`，所有信息必须由文字承担。搜索结果由有变无时，业务侧要用 live region 播报。
+
+## API
+
+| 属性 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `size` | `'page' \| 'panel' \| 'inline'` | `'page'` | 看容器有多大（§3）。`inline` 不渲染插画与按钮 |
+| `title` | `ReactNode` | — | 主提示，必需。**有 `description` 时按标题排，没有时按一句描述排** |
+| `description` | `ReactNode` | — | 辅助说明，最多两行；文字链接放这里 |
+| `image` | `ReactNode` | — | 插画元素，如 `<EmptyStateIllustration />`；**尺寸由组件控制，调用侧不要传 className** |
+| `action` | `ReactNode` | — | 至多一主一次两个 `<Button>` |
+| `className` | `string` | — | 透传到最外层容器；**特殊容器的上移就靠它**（`pb-16`、`pb-[112px]`），组件的定位类可被 twMerge 覆盖 |

@@ -476,7 +476,8 @@
     "saveToKnowledgeSaving": "ナレッジスペースに保存中…",
     "saveToKnowledgeSuccess": "ナレッジスペースに保存しました：{{name}}",
     "saveToKnowledgePending": "承認申請を送信しました。承認後にナレッジスペースへ保存されます",
-    "saveToKnowledgeFailed": "ナレッジスペースへの保存に失敗しました。後でもう一度お試しください"
+    "saveToKnowledgeFailed": "ナレッジスペースへの保存に失敗しました。後でもう一度お試しください",
+    "downloadAs": "{{format}} 形式でダウンロード"
   },
   "com_message_content_copied": "内容をコピーしました",
   "com_notifications_approved": "承認済み",
@@ -2136,5 +2137,9 @@
     "version": "バージョン",
     "route": "ページ",
     "user": "ユーザー"
-  }
+  },
+  "com_settings_general": "一般",
+  "com_settings_lang_en": "English",
+  "com_settings_lang_ja": "日本語",
+  "com_settings_lang_zh": "中文"
 }
