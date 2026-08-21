@@ -16,6 +16,7 @@ import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Ar
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus, taskModeState } from '~/store/linsight';
+import { useConversationDraft } from '~/store/chatDraft';
 import { findPendingUserInput, splitSessionPseudoTask } from '~/components/Linsight/Execution/stepUtils';
 import type { ExecStepEventData } from '~/components/Linsight/Execution/stepUtils';
 import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/useCitationReferencePanel';
@@ -68,7 +69,10 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const location = useLocation();
   const conversationId = (cid ?? id) || 'new';
 
-  const [inputText, setInputText] = useState('');
+  // Draft text belongs to the conversation, not to this component: ChatView is
+  // not remounted when `conversationId` changes (and is KeepAlive-cached), so a
+  // local useState leaked half-typed text into the next conversation opened.
+  const [inputText, setInputText] = useConversationDraft(conversationId);
 
   // F035: task mode is a toggle on the daily welcome page — no route jump.
   // The route stays `/c`; only submitting in task mode navigates to /linsight.
@@ -391,7 +395,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
     sendMessage(text, files);
     setInputText('');
-  }, [taskMode, canUseTaskMode, sendMessage]);
+  }, [taskMode, canUseTaskMode, sendMessage, setInputText]);
 
   const isNew = conversationId === 'new';
   const hasMessages = messages.length > 0;
