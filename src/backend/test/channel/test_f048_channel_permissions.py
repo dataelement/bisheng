@@ -264,6 +264,30 @@ async def test_shared_and_system_channels_are_read_only(channel) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "channel",
+    (
+        _channel(shared_read_only=True),
+        _channel(system_read_only=True),
+    ),
+)
+async def test_read_only_marker_does_not_lock_owner_tenant(channel) -> None:
+    permission = _Permission()
+    adapter = F048ChannelPermissionAdapter(
+        loader=_Loader(channel),
+        source_service=GrantSourceService(),
+        permission=permission,
+    )
+
+    assert await adapter.check_action(
+        resource_id="channel-1",
+        actor=_actor(),
+        action="manage_permission",
+    )
+    assert permission.calls[0][1][2] == "manage_permission"
+
+
+@pytest.mark.asyncio
 async def test_wrong_tenant_and_fga_failure_fail_closed() -> None:
     permission = _Permission()
     unshared = F048ChannelPermissionAdapter(
