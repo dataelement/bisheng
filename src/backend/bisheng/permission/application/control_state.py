@@ -19,6 +19,7 @@ from bisheng.permission.application.sql_runtime import (
     stable_grant_key,
 )
 from bisheng.permission.domain.models import (
+    DECIDABLE_PROJECTION_STATES,
     AuthorizationModelRelease,
     PermissionAction,
     PermissionCatalogRelease,
@@ -200,7 +201,7 @@ class SqlPermissionControlState:
                 ResourcePermissionMode.resource_id == resource_id,
             )
             row = (await session.execute(statement)).scalars().first()
-        if row is None or row.projection_state != "CURRENT":
+        if row is None or row.projection_state not in DECIDABLE_PROJECTION_STATES:
             raise PermissionPublishNotReadyError(msg="Resource permission projection is not current")
         context = "|".join(
             (
@@ -1283,6 +1284,47 @@ class SqlPermissionControlState:
             .scalars()
             .first()
         )
+        if row is not None and row.id != source.source_id:
+            signature = (
+                row.subject_type,
+                row.subject_id,
+                row.userset_relation,
+                row.source_locator,
+                bool(row.protected),
+            )
+            expected = (
+                source.subject_type,
+                source.subject_id,
+                source.userset_relation,
+                source.source_locator,
+                source.protected,
+            )
+            if signature != expected:
+                raise PermissionVersionConflictError(msg="Permission source fingerprint collision")
+            if row.state != "INACTIVE":
+                raise PermissionVersionConflictError(
+                    msg="Target Grant already contains another current assignee identity",
+                )
+            visible_owner_key = f"grant_assignee:{row.id}"
+            current_visible_source = (
+                await session.execute(
+                    select(PermissionVisibleSourceProjection.id)
+                    .where(
+                        PermissionVisibleSourceProjection.tenant_id == grant_row.tenant_id,
+                        PermissionVisibleSourceProjection.source_kind == "GRANT_ASSIGNEE",
+                        PermissionVisibleSourceProjection.source_owner_key == visible_owner_key,
+                        PermissionVisibleSourceProjection.state != "RETIRED",
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if current_visible_source is not None:
+                raise PermissionVersionConflictError(
+                    msg="Historical target assignee still owns a current visible projection",
+                )
+            await session.delete(row)
+            await session.flush()
+            row = None
         if row is None:
             id_collision = await session.get(
                 PermissionGrantAssignee,

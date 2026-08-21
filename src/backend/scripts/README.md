@@ -51,12 +51,16 @@ explicit Store scan to report missing and orphan direct `visible` tuple keys:
 
 ```bash
 PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
-  --audit-orphan-tuples
+  --audit-orphan-tuples \
+  --orphan-object folder:97394
 ```
 
 The audit treats the union of canonical Grant sources and every ACTIVE SQL
 visible-source contribution as supported, so non-Grant system/resource sources
-are not classified as orphans. It prints exact tuple keys and stable checksums.
+are not classified as orphans. With `--orphan-object`, it uses an exact OpenFGA
+Read for those resources and prints the scoped anomaly set plus a stable cleanup
+checksum. Repeat the flag to select more than one reviewed resource. Omit it to
+scan the whole Store and select every audited orphan.
 
 For apply, stop ingress traffic and all API/Worker/Linsight processes, wait for
 their F048 heartbeat TTL to expire, and copy the dry-run `store_id` into the
@@ -91,18 +95,21 @@ dry-run:
 PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
   --apply \
   --audit-orphan-tuples \
+  --orphan-object folder:97394 \
   --cleanup-orphan-tuples \
   --confirm-orphan-checksum <orphan-tuple-checksum> \
   --confirm-store-id <store-id> \
   --operator-id <operator-user-id>
 ```
 
-Cleanup is refused if the reviewed orphan set changes. Each resource is fenced
-by its current permission version, each exact delete is recorded as a
+Cleanup is an independent operation: it does not backfill or retire SQL source
+rows and does not publish an Authorization Model/Catalog release. It is refused
+if the selected orphan set changes. Each resource is fenced by its current
+permission version, each exact delete is recorded as a
 `VISIBLE_ORPHAN_CLEANUP` projection operation, and higher-consistency reads must
-confirm that no orphan direct tuple remains. Effective `visible` checks can
-still be true through an inherited parent; the audit verifies exact direct
-tuple presence instead.
+confirm that no selected orphan direct tuple remains. Other unselected anomalies
+are untouched. Effective `visible` checks can still be true through an inherited
+parent; the audit verifies exact direct tuple presence instead.
 Restart all permission-using processes after success; they discover the latest
 model through the stable Store name and validate the new SQL CURRENT Catalog
 pin.

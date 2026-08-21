@@ -53,7 +53,7 @@ class _PermissionCoordinator:
         return self.allowed
 
 
-def _app(decision_api) -> FastAPI:
+def _app(decision_api, *, super_admin: bool = False) -> FastAPI:
     app = FastAPI()
     app.include_router(router, prefix="/api/v1/permissions")
     app.dependency_overrides[get_permission_decision_api] = lambda: decision_api
@@ -62,6 +62,7 @@ def _app(decision_api) -> FastAPI:
         user_name="member",
         user_role=[],
         tenant_id=5,
+        is_global_super=super_admin,
     )
     return app
 
@@ -104,6 +105,34 @@ def test_concrete_action_check_returns_true_and_normal_false_as_200() -> None:
         assert response.json()["data"] == {"allowed": allowed}
         assert business.calls[0]["action"] == "download"
         assert coordinator.targets[0].context_version == "business-v7"
+
+
+def test_super_admin_visible_check_short_circuits_only_the_http_decision() -> None:
+    decision, business, coordinator = _decision(allowed=False)
+    with TestClient(_app(decision, super_admin=True)) as client:
+        visible = client.post(
+            "/api/v1/permissions/check",
+            json={
+                "resource_type": "knowledge_library",
+                "resource_id": "4192",
+                "action": "visible",
+            },
+        )
+        edit = client.post(
+            "/api/v1/permissions/check",
+            json={
+                "resource_type": "knowledge_file",
+                "resource_id": "file-1",
+                "action": "edit",
+            },
+        )
+
+    assert visible.status_code == 200
+    assert visible.json()["data"] == {"allowed": True}
+    assert edit.status_code == 200
+    assert edit.json()["data"] == {"allowed": False}
+    assert [call["action"] for call in business.calls] == ["edit"]
+    assert len(coordinator.targets) == 1
 
 
 def test_client_cannot_forge_verified_target_fields_or_legacy_aliases() -> None:

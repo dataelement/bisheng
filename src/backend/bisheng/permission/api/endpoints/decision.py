@@ -35,11 +35,16 @@ async def check_permission_action(
     except ValidationError:
         return InvalidCatalogActionError.return_resp()
     try:
+        actor = await permission_actor(login_user)
+        if request.action == "visible" and actor.super_admin:
+            # This HTTP contract answers privileged operational access. Keep the
+            # domain visible Check/BatchCheck/ListObjects relation unchanged.
+            return resp_200({"allowed": True})
         allowed = await api.check(
             resource_type=request.resource_type,
             resource_id=request.resource_id,
             action=request.action,
-            actor=await permission_actor(login_user),
+            actor=actor,
         )
     except BaseErrorCode as error:
         return permission_error_response(error)

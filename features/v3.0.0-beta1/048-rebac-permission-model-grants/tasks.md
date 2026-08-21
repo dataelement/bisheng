@@ -1631,6 +1631,32 @@
 
 ---
 
+---
+
+## Wave 15 — 投影写锁与普通鉴权解耦
+
+- [x] **T195：非 CURRENT 投影鉴权合同测试**
+  - **文件**：`src/backend/test/permission/test_stale_projection_fail_soft.py`,
+    `src/backend/test/permission/test_f048_resource_api.py`
+  - **测试**：覆盖 `CURRENT/PROJECTING/FAILED_CLOSED` decision fence、请求内 version 切换、
+    higher-consistency 强制、PENDING 拒绝、FAILED_CLOSED 新权限写拒绝，以及 degraded
+    `my-permissions` 不读取 staged source explanation。
+  - **覆盖 AC**：AC-178, AC-179, AC-180, AC-181
+
+- [x] **T196：解耦资源投影写锁与 OpenFGA 决策路径**
+  - **文件**：`src/backend/bisheng/permission/domain/models/grant.py`,
+    `src/backend/bisheng/permission/application/control_state.py`,
+    `src/backend/bisheng/permission/application/sql_runtime.py`,
+    `src/backend/bisheng/permission/domain/services/permission_action_service.py`,
+    `src/backend/bisheng/permission/application/resource_api.py`
+  - **逻辑**：允许现有资源在 `PROJECTING/FAILED_CLOSED` 镜像状态下生成 verified target 并执行
+    OpenFGA action/visible；非 CURRENT 或版本切换强制 higher consistency；Grant/mode/lifecycle
+    新 operation 仍只从 CURRENT claim；degraded `my-permissions` 返回实际 action 与投影状态，
+    不把 PENDING/PENDING_DELETE 来源作为最终事实。
+  - **验收**：T195、F048 permission service、projection SQL runtime 定向回归、Ruff、
+    arch-guard 与 diff-check 通过。
+  - **依赖**：T195
+
 ## 实际偏差记录
 
 > 只记录一句话指针；设计原因和反直觉事实回写 [design.md](./design.md)。

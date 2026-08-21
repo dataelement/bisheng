@@ -63,7 +63,7 @@
 | INV-16 | 权限继承复用资源既有的直接 `parent` 语义，不建立第二套 `permission_parent` 层级；`CUSTOM` 只切断权限继承，不能改变业务结构父子关系 | ResourcePermissionMode | F048 |
 | INV-17 | 任一有效 Grant 可以产生资源列表/基础元数据可见性，但可见性不能替代下载、搜索、RAG 或业务变更动作的具体鉴权。文件预览不设置 PermissionAction；只有原件/打包下载必须检查 `download`，不得由“可预览”推导下载能力 | PermissionAction, PermissionGrant | F048 |
 | INV-18 | 权限升级采用应用自动阻断业务访问后的单向正式数据迁移：更新镜像并启动进程后，旧 model 只能进入 `MIGRATION_REQUIRED/NOT_READY` 运维态，不初始化 F048 权限运行时、不发布 ready heartbeat，HTTP/WS 迁移门禁除 `/health` 外统一拒绝访问，Celery/Linsight 暂停消费任务；schema upgrade 成功后，由 `src/backend/scripts/` 专用脚本沿用现有 Store 发布一个新 model ID，原地转换 tuple 并退役旧运行数据，校验通过后重启全部进程并自动恢复访问/任务消费。F048 不提供独立迁移预演、旧/新 model 影子运行、应用级回滚、新→旧转换、dual/legacy model client、长期双写、旧动作别名、Config 第二 PDP 或逐请求旧系统 ALLOW fallback；失败保持维护并前向修复 | PermissionMigrationRun | F048 |
-| INV-19 | 对需要进入资源 ReBAC 的请求，权限服务不可用、模型未生效、动作未分级、迁移记录不明确或授权状态不可判定时必须 fail closed | PermissionAction, PermissionModel, PermissionGrant | F048 |
+| INV-19 | 对需要进入资源 ReBAC 的请求，权限服务不可用、模型未生效、动作未分级、迁移记录不明确或 OpenFGA 具体决策不可获得时必须 fail closed；资源投影处于 PROJECTING/COMMIT_UNKNOWN/COMMITTED/FAILED_CLOSED 本身不等于具体决策不可判定，普通 action/visible 继续通过唯一 OpenFGA 执行面以 higher consistency 决策，但新的权限配置写持续冻结且 SQL Grant/待处理来源不得补充 ALLOW | PermissionAction, PermissionModel, PermissionGrant | F048 |
 | INV-20 | 动作、模型、模型动作、资源 Grant、Grant 主体和权限模式的运行时事实必须存于规范化关系表；`permission_relation_models_v1`、`permission_relation_model_bindings_v1` 及任何新的大 JSON 不得继续作为运行时真相 | PermissionAction, PermissionModel, PermissionGrant, ResourcePermissionMode | F048 |
 | INV-21 | 所有生产 OpenFGA Check、List 和 Write 必须显式指定经发布门禁确认的 Authorization Model ID；发布新模型不得依赖“自动使用最新模型”完成切换 | AuthorizationModelRelease | F048 |
 | INV-22 | 旧 `owner/manager/editor/viewer` 只迁移直接关系事实；由旧模型计算出的层级、父级或角色蕴含结果不得展开为新的 Grant assignee | PermissionGrant, PermissionGrantAssignee | F048 |
@@ -144,3 +144,4 @@
 | 2026-08-13 | 明确模型停用/删除语义：停用只禁止新增或变更授权，已有 Grant 保持有效；删除必须先清零或替换全部绑定并完成残留投影对账。因停用不再触发批量撤权，F048 可见执行投影采用单槽浅层 `visible`，不引入 A/B 槽与运行时 switch | F048 |
 | 2026-08-14 | 登记 F049 知识空间目录与搜索读取优化：指定资源的超级管理员按 C4 系统身份策略放行、去重空间鉴权、页大小驱动的有界候选扫描、移除未展示的文件夹数量统计并保留失败存在性、增加分段性能观测；普通用户候选最终可见性继续统一使用 OpenFGA BatchCheck，不新增继承捷径 | F049、F027、F040、F048 |
 | 2026-08-14 | 登记 F050 统一权限设置入口：保留 v2.6.0 F044 页面目标，创建/编辑权限完全改接 F048，并增加创建后初始 Grant 部分失败与持久幂等约束 INV-28 | F050、F048 |
+| 2026-08-20 | 澄清 INV-19 的决策与写入边界：资源权限投影非 CURRENT 时冻结新的权限配置写，但不暂停普通资源鉴权；具体 action/visible 继续使用 higher-consistency OpenFGA，OpenFGA/Catalog/model/verified identity 不可用时仍 fail closed，SQL 不兜底 ALLOW | F048 |

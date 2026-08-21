@@ -349,8 +349,15 @@ const AiChatInput = memo(
             const trimmed = text.trim();
             // Workbench: uploaded files require accompanying text before send.
             if (!trimmed || disabled || sendDisabled || isStreaming || isParsingMedia || fileUploading || filesParsing) return;
-            // Pass files through to parent
-            onSend(trimmed, chatFiles);
+            // Pass files through to parent. The local first-frame poster is a blob
+            // that this component revokes on the very next line, and it outranks
+            // the server cover in the message bubble — so it stops here, and the
+            // bubble goes back to `cover_filepath` once parsing produces it.
+            onSend(trimmed, chatFiles?.map((file) => (
+                file?.mediaCoverUrl?.startsWith('blob:')
+                    ? { ...file, mediaCoverUrl: undefined }
+                    : file
+            )) ?? chatFiles);
             setText("");
             setChatFiles(null);
             setUploadingFiles([]);

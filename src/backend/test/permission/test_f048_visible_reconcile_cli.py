@@ -74,6 +74,8 @@ def test_parse_defaults_to_dry_run_and_apply_requires_store_confirmation() -> No
             "--operator-id",
             "7",
             "--audit-orphan-tuples",
+            "--orphan-object",
+            "folder:97394",
             "--cleanup-orphan-tuples",
             "--confirm-orphan-checksum",
             "a" * 64,
@@ -81,6 +83,7 @@ def test_parse_defaults_to_dry_run_and_apply_requires_store_confirmation() -> No
     )
     assert args.cleanup_orphan_tuples is True
     assert args.confirm_orphan_checksum == "a" * 64
+    assert args.orphan_object == ["folder:97394"]
 
 
 def test_report_deduplicates_only_the_same_projected_subject_tuple() -> None:
@@ -143,9 +146,14 @@ class _FGAClient:
         self.checks.append((checks, consistency))
         return [True] * len(checks)
 
-    async def read_tuples(self, consistency=None):
+    async def read_tuples(self, user=None, relation=None, object=None, consistency=None):
+        del user
         assert consistency == cli.HIGHER_CONSISTENCY
-        return self.tuples
+        return [
+            row
+            for row in self.tuples
+            if (relation is None or row["relation"] == relation) and (object is None or row["object"] == object)
+        ]
 
 
 @pytest.mark.asyncio
@@ -201,9 +209,74 @@ async def test_orphan_audit_uses_canonical_and_all_active_persisted_sources() ->
     )
 
     assert audit.live_direct_visible_count == 3
+    assert audit.object_filters == ()
     assert audit.supported_tuple_count == 2
     assert audit.missing_tuple_count == 0
     assert audit.orphan_tuples == (("user:9", "visible", "knowledge_space:42"),)
+
+
+def test_orphan_cleanup_selection_can_limit_one_reviewed_resource() -> None:
+    tuples = (
+        ("user:7", "visible", "folder:97394"),
+        ("user:8", "visible", "knowledge_space:4166"),
+    )
+    audit = cli.OrphanTupleAudit(
+        object_filters=(),
+        live_direct_visible_count=2,
+        supported_tuple_count=0,
+        missing_tuple_count=0,
+        orphan_tuple_count=2,
+        missing_tuple_checksum=cli._checksum(()),
+        orphan_tuple_checksum=cli._checksum(tuples),
+        missing_tuples=(),
+        orphan_tuples=tuples,
+    )
+
+    selection = cli._select_orphan_tuples(
+        audit,
+        object_filters=("folder:97394",),
+    )
+
+    assert selection.object_filters == ("folder:97394",)
+    assert selection.tuple_count == 1
+    assert selection.tuples == (("user:7", "visible", "folder:97394"),)
+    assert selection.tuple_checksum == cli._checksum(selection.tuples)
+
+    clean_selection = cli._select_orphan_tuples(
+        cli.OrphanTupleAudit(
+            object_filters=("folder:97394",),
+            live_direct_visible_count=1,
+            supported_tuple_count=1,
+            missing_tuple_count=0,
+            orphan_tuple_count=0,
+            missing_tuple_checksum=cli._checksum(()),
+            orphan_tuple_checksum=cli._checksum(()),
+            missing_tuples=(),
+            orphan_tuples=(),
+        ),
+        object_filters=("folder:97394",),
+    )
+    assert clean_selection.tuple_count == 0
+    assert clean_selection.tuples == ()
+
+
+@pytest.mark.asyncio
+async def test_orphan_audit_reads_only_selected_resource() -> None:
+    client = _FGAClient()
+    client.tuples = [
+        {"user": "user:7", "relation": "visible", "object": "folder:97394"},
+        {"user": "user:8", "relation": "visible", "object": "knowledge_space:4166"},
+    ]
+
+    audit = await cli._audit_orphan_tuples(
+        client,
+        canonical_sources=(),
+        persisted=(),
+        object_filters=("folder:97394",),
+    )
+
+    assert audit.object_filters == ("folder:97394",)
+    assert audit.orphan_tuples == (("user:7", "visible", "folder:97394"),)
 
 
 def test_build_orphan_cleanup_plan_is_exact_and_resource_fenced() -> None:
