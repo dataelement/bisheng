@@ -58,7 +58,7 @@ def _spec() -> PdfWatermarkSpec:
     return PdfWatermarkSpec(
         lines=(
             "设备管理部-张三-SG001-2026/07/21",
-            "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
+            "首钢股份内部资料，严禁外传，违者必究",
         )
     )
 
@@ -85,7 +85,7 @@ def test_watermark_preserves_source_and_pages_while_tiling_each_page(tmp_path: P
             text = watermarked_page.get_text()
             assert original_page.get_text().strip() in text
             assert text.count("设备管理部-张三-SG001-2026/07/21") >= 2
-            assert text.count("首钢股份内部资料，严禁外传，违者必究") >= 2  # noqa: RUF001
+            assert text.count("首钢股份内部资料，严禁外传，违者必究") >= 2
 
 
 def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path) -> None:
@@ -108,14 +108,34 @@ def test_watermark_uses_chinese_text_opacity_and_arbitrary_angle(tmp_path: Path)
         assert all(trace["opacity"] == pytest.approx(0.31) for trace in watermark_traces)
 
 
-def _create_image_source(path: Path, *, color: tuple[int, int, int] = (40, 80, 40)) -> None:
+def _create_image_source(
+    path: Path,
+    *,
+    color: tuple[int, int, int] = (40, 80, 40),
+    size: tuple[int, int] = (1000, 750),
+) -> None:
     """用 Pillow 整页图生成源 PDF，模拟门户图片下载转 PDF 产物。"""
     from PIL import Image
 
     image_path = path.with_suffix(".png")
-    Image.new("RGB", (1000, 750), color=color).save(image_path)
+    Image.new("RGB", size, color=color).save(image_path)
     with Image.open(image_path) as image:
         image.save(path, "PDF", resolution=150.0)
+
+
+def _max_pixmap_delta(before: fitz.Pixmap, after: fitz.Pixmap, *, step: int = 1) -> tuple[int, int]:
+    changed = 0
+    max_delta = 0
+    for y in range(0, after.height, step):
+        for x in range(0, after.width, step):
+            before_pixel = before.pixel(x, y)
+            after_pixel = after.pixel(x, y)
+            delta = max(abs(after_pixel[i] - before_pixel[i]) for i in range(3))
+            if delta:
+                changed += 1
+            if delta > max_delta:
+                max_delta = delta
+    return changed, max_delta
 
 
 def test_watermark_is_visually_contrastive_on_image_pdf(tmp_path: Path) -> None:
@@ -133,22 +153,62 @@ def test_watermark_is_visually_contrastive_on_image_pdf(tmp_path: Path) -> None:
         after = page.get_pixmap()
         text = page.get_text()
         assert "设备管理部-张三-SG001-2026/07/21" in text
-        assert "首钢股份内部资料，严禁外传，违者必究" in text  # noqa: RUF001
-        # 图片页双描：白底 + 深色字，同一文案至少出现两层
-        assert text.count("设备管理部-张三-SG001-2026/07/21") >= 4
+        assert "首钢股份内部资料，严禁外传，违者必究" in text
+        # 图片页双描：白底 + 深色字，同一完整文案至少两层（小页可能只有一组瓦片）
+        assert text.count("设备管理部-张三-SG001-2026/07/21") >= 2
 
     assert before.width == after.width and before.height == after.height
-    max_delta = 0
-    changed = 0
-    for y in range(after.height):
-        for x in range(after.width):
-            before_pixel = before.pixel(x, y)
-            after_pixel = after.pixel(x, y)
-            delta = max(abs(after_pixel[i] - before_pixel[i]) for i in range(3))
-            if delta:
-                changed += 1
-            if delta > max_delta:
-                max_delta = delta
+    changed, max_delta = _max_pixmap_delta(before, after)
+    assert changed > 0
+    assert max_delta >= 40
+
+
+def test_watermark_layout_scales_font_on_large_image_page() -> None:
+    """大图转 PDF 后页宽远超 A4，字号须按页宽放大，避免适应宽度时看不见。"""
+    page_rect = fitz.Rect(0, 0, 1920, 1440)
+    font = _resolve_cjk_font()
+    document_layout = _calculate_watermark_layout(page_rect, _spec(), font)
+    image_layout = _calculate_watermark_layout(
+        page_rect,
+        _spec(),
+        font,
+        image_dominated=True,
+    )
+
+    assert document_layout.font_size == 12.0
+    assert image_layout.font_size == pytest.approx(12.0 * 1920 / 595)
+    assert image_layout.font_size > document_layout.font_size
+    assert image_layout.horizontal_step > document_layout.horizontal_step
+
+
+def test_watermark_stays_visible_when_large_image_pdf_is_fit_to_width(tmp_path: Path) -> None:
+    """高分辨率照片下载成 PDF 后，按约 800px 适应宽度渲染仍应能看出水印。"""
+    source = tmp_path / "large-image-source.pdf"
+    output = tmp_path / "large-image-watermarked.pdf"
+    _create_image_source(source, color=(40, 80, 40), size=(4000, 3000))
+
+    with fitz.open(source) as original:
+        page = original.load_page(0)
+        zoom = 800.0 / float(page.rect.width)
+        before = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+        layout = _calculate_watermark_layout(
+            page.rect,
+            _spec(),
+            _resolve_cjk_font(),
+            image_dominated=True,
+        )
+        assert layout.font_size > 30
+
+    apply_pdf_watermark(source, output, _spec())
+
+    with fitz.open(output) as watermarked:
+        page = watermarked.load_page(0)
+        zoom = 800.0 / float(page.rect.width)
+        after = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
+        assert "设备管理部-张三-SG001-2026/07/21" in page.get_text()
+
+    assert before.width == after.width and before.height == after.height
+    changed, max_delta = _max_pixmap_delta(before, after, step=2)
     assert changed > 0
     assert max_delta >= 40
 
@@ -204,7 +264,7 @@ def test_watermark_layout_expands_for_long_identity_without_shrinking_text() -> 
     long_spec = PdfWatermarkSpec(
         lines=(
             f"{'超长部门名称' * 8}-张三-{'SG-VERY-LONG-ACCOUNT-' * 5}-2026/07/21",
-            "首钢股份内部资料，严禁外传，违者必究",  # noqa: RUF001
+            "首钢股份内部资料，严禁外传，违者必究",
         )
     )
 

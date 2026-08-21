@@ -83,15 +83,27 @@ _HORIZONTAL_CLEARANCE = 36.0
 _VERTICAL_CLEARANCE = 27.0
 _MIN_HORIZONTAL_STEP = 180.0
 _MIN_VERTICAL_STEP = 135.0
+# 文档页按 A4 竖向宽度排版；图片转 PDF 页常按像素放大，需按此比例放大字号。
+_A4_PORTRAIT_WIDTH = 595.0
 
 
 def _calculate_watermark_layout(
     page_rect: fitz.Rect,
     spec: PdfWatermarkSpec,
     font: _FontSelection,
+    *,
+    image_dominated: bool = False,
 ) -> _WatermarkLayout:
+    """计算平铺水印几何。
+
+    图片主导页（整页照片）页面远大于 A4 时，若仍用 12pt，适应宽度预览只有几像素，
+    看起来像「下载没有水印」。按页宽相对 A4 放大，使屏幕观感接近文档页。
+    """
     page_size = min(float(page_rect.width), float(page_rect.height))
-    font_size = min(spec.font_size, max(8.0, page_size / 40.0))
+    if image_dominated:
+        font_size = spec.font_size * max(1.0, float(page_rect.width) / _A4_PORTRAIT_WIDTH)
+    else:
+        font_size = min(spec.font_size, max(8.0, page_size / 40.0))
     line_height = font_size * 1.25
     block_height = line_height * len(spec.lines)
     try:
@@ -208,9 +220,14 @@ def _apply_page_watermark(
     spec: PdfWatermarkSpec,
     font: _FontSelection,
 ) -> None:
-    layout = _calculate_watermark_layout(page.rect, spec, font)
-    rotation_matrix = fitz.Matrix(spec.rotation)
     image_dominated = _page_is_image_dominated(page)
+    layout = _calculate_watermark_layout(
+        page.rect,
+        spec,
+        font,
+        image_dominated=image_dominated,
+    )
+    rotation_matrix = fitz.Matrix(spec.rotation)
     for anchor in _tile_positions(page.rect, layout):
         for line_index, line in enumerate(spec.lines):
             point = fitz.Point(anchor.x, anchor.y + line_index * layout.line_height)
