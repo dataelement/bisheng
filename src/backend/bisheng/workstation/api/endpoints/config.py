@@ -19,8 +19,8 @@ router = APIRouter()
 
 @router.get("/config", summary="Get workbench configuration", response_model=UnifiedResponseModel)
 async def get_config(request: Request, login_user=LoginUserDep):
-    ret = await WorkStationService.get_daily_chat_config()
-    linsight_config = await WorkStationService.get_linsight_config()
+    ret = await WorkStationService.get_daily_chat_config(login_user=login_user)
+    linsight_config = await WorkStationService.get_linsight_config(login_user=login_user)
     # `enable_etl4lm` historically gated the frontend on `etl4lm.url` alone, but the
     # parse pipeline now supports mineru / paddle_ocr as alternative providers that
     # also handle images. Use the unified image-parsing capability flag so the flag
@@ -60,18 +60,16 @@ async def get_config(request: Request, login_user=LoginUserDep):
     ret["subscription"] = {"assistant_name": (sub_assistant_cfg.assistant_name or "") if sub_assistant_cfg else ""}
     # Sidebar entry names for the knowledge-space / subscription modules; the home and
     # app-center ones ride along in the daily config dump above. Empty => client i18n default.
-    ret["knowledge_space"]["menu_display_name"] = (
-        (ks_assistant_cfg.menu_display_name or "") if ks_assistant_cfg else ""
-    )
-    ret["subscription"]["menu_display_name"] = (
-        (sub_assistant_cfg.menu_display_name or "") if sub_assistant_cfg else ""
-    )
+    ret["knowledge_space"]["menu_display_name"] = (ks_assistant_cfg.menu_display_name or "") if ks_assistant_cfg else ""
+    ret["subscription"]["menu_display_name"] = (sub_assistant_cfg.menu_display_name or "") if sub_assistant_cfg else ""
     return resp_200(data=ret)
 
 
 @router.get("/config/daily", summary="Get daily workbench configuration", response_model=UnifiedResponseModel)
 async def get_daily_config(request: Request, login_user=LoginUserDep):
-    ret, inherited, source_tenant_id, has_override = await WorkStationService.get_daily_chat_config_with_meta()
+    ret, inherited, source_tenant_id, has_override = await WorkStationService.get_daily_chat_config_with_meta(
+        login_user=login_user
+    )
     return resp_200(
         data={
             "data": ret.model_dump(exclude_unset=True) if ret else None,
@@ -94,7 +92,9 @@ async def update_daily_config(
 
 @router.get("/config/linsight", summary="Get linsight configuration", response_model=UnifiedResponseModel)
 async def get_linsight_config(request: Request, login_user=LoginUserDep):
-    ret, inherited, source_tenant_id, has_override = await WorkStationService.get_linsight_config_with_meta()
+    ret, inherited, source_tenant_id, has_override = await WorkStationService.get_linsight_config_with_meta(
+        login_user=login_user
+    )
     return resp_200(
         data={
             "data": ret.model_dump(exclude_unset=True) if ret else None,

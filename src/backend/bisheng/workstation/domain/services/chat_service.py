@@ -84,7 +84,7 @@ async def get_file_content(filepath_local: str, file_name: str, invoke_user_id: 
 
 async def initialize_chat(data: APIChatCompletion, login_user: UserPayload):
     """Initialize chat session, message, and llm."""
-    ws_config = await WorkStationService.aget_config()
+    ws_config = await WorkStationService.aget_config(login_user=login_user)
     model_info = next((model for model in ws_config.models if model.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
@@ -1169,7 +1169,7 @@ async def _agent_initialize_chat(data: APIChatCompletion, login_user: UserPayloa
       - `extra` is '{}' (no parentMessageId — new data is linear, no tree)
       - `overrideParentMessageId` is ignored (regenerate UI removed)
     """
-    ws_config = await WorkStationService.aget_config()
+    ws_config = await WorkStationService.aget_config(login_user=login_user)
     model_info = next((m for m in ws_config.models if m.id == data.model), None)
     if not model_info:
         raise ValueError(f"Model with id '{data.model}' not found.")
