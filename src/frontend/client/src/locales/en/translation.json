@@ -490,6 +490,7 @@
   "com_linsight_export_success": "File downloaded",
   "com_linsight_export_failed": "Export failed, please try again later",
   "com_linsight": {
+    "downloadAs": "Download as {{format}}",
     "downloadToLocal": "Download to local",
     "saveToKnowledge": "Save to knowledge space",
     "saveToKnowledgeSaving": "Saving to knowledge space…",

@@ -478,6 +478,7 @@
   "com_linsight_export_success": "文件下载成功",
   "com_linsight_export_failed": "导出失败，请稍后重试",
   "com_linsight": {
+    "downloadAs": "下载为 {{format}}",
     "downloadToLocal": "下载到本地",
     "saveToKnowledge": "存入知识空间",
     "saveToKnowledgeSaving": "正在存入知识空间…",

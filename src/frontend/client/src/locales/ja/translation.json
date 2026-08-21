@@ -475,6 +475,7 @@
   "com_linsight_export_success": "ファイルをダウンロードしました",
   "com_linsight_export_failed": "エクスポートに失敗しました。後でもう一度お試しください",
   "com_linsight": {
+    "downloadAs": "{{format}} 形式でダウンロード",
     "downloadToLocal": "ローカルにダウンロード",
     "saveToKnowledge": "ナレッジスペースに保存",
     "saveToKnowledgeSaving": "ナレッジスペースに保存中…",
