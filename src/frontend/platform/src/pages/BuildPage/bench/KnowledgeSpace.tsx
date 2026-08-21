@@ -146,7 +146,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                     <div className="mt-3">
                                         <Textarea
                                             value={formData.systemPrompt}
-                                            placeholder={t('chatConfig.aiPrompt')}
+                                            placeholder={t('chatConfig.knowledgeSpacePrompt')}
                                             className="min-h-48"
                                             maxLength={30000}
                                             onChange={(e) => {
@@ -341,11 +341,19 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             const menuDisplayNameFromRes = cfg?.menu_display_name ?? cfg?.menuDisplayName;
             // When backend returns no saved value, seed the textarea with the
             // localized default template so it is editable as a real value.
+            // knowledgeSpacePrompt (NOT the shared aiPrompt): saving this form
+            // pins system_prompt in the DB, and from then on the backend uses it
+            // verbatim instead of its own knowledge_space.yaml rag_prompt. If the
+            // seeded text omits the citation rules, the model never emits the
+            // \ue200 source markers the client turns into footnotes, and raw
+            // <chunk_id> tags leak into the answer. This key mirrors that yaml
+            // template; the subscription form keeps aiPrompt, whose surface has
+            // no citation registry at all.
             const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
             const resolvedUserPrompt = resolveConfigString(userPromptFromRes, '');
             setFormData((prev) => ({
                 ...prev,
-                systemPrompt: resolvedSystemPrompt || t('chatConfig.aiPrompt'),
+                systemPrompt: resolvedSystemPrompt || t('chatConfig.knowledgeSpacePrompt'),
                 userPrompt: resolvedUserPrompt || t('chatConfig.retrievedAndQuestion'),
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
                 autoTagVisible: Boolean(autoTagVisibleFromRes),
@@ -363,7 +371,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
     const handleSave = async () => {
         // Refill blank prompts with the i18n default template so the empty input
         // never reaches the server; reflect the refill in formData for the UI too.
-        const finalSystemPrompt = (formData.systemPrompt || '').trim() || t('chatConfig.aiPrompt');
+        const finalSystemPrompt = (formData.systemPrompt || '').trim() || t('chatConfig.knowledgeSpacePrompt');
         const finalUserPrompt = (formData.userPrompt || '').trim() || t('chatConfig.retrievedAndQuestion');
         if (finalSystemPrompt !== formData.systemPrompt || finalUserPrompt !== formData.userPrompt) {
             setFormData((prev) => ({
