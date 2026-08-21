@@ -28,11 +28,11 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     ShougangPortalAdvancedFileSearchReq,
     ShougangPortalAdvancedUploaderSearchReq,
     ShougangPortalAdvancedUploaderSearchResp,
+    ShougangPortalCategoryFileCountReq,
+    ShougangPortalCategoryFileCountResp,
     ShougangPortalDomainBindableSpacesResp,
     ShougangPortalDomainFileCountReq,
     ShougangPortalDomainFileCountResp,
-    ShougangPortalCategoryFileCountReq,
-    ShougangPortalCategoryFileCountResp,
     ShougangPortalFavoriteCreateReq,
     ShougangPortalFavoriteCreateResp,
     ShougangPortalFavoriteFilesResp,
@@ -72,6 +72,9 @@ from bisheng.knowledge.domain.schemas.portal_hot_search_schema import (
     PortalHotSearchTriggerRebuildResp,
 )
 from bisheng.knowledge.domain.schemas.portal_pdf_download_schema import PortalPdfDownloadRequest
+from bisheng.knowledge.domain.services.knowledge_fulltext_engagement_service import (
+    project_knowledge_fulltext_engagement_best_effort,
+)
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
     KnowledgeSpaceChatService,
 )
@@ -80,9 +83,6 @@ from bisheng.knowledge.domain.services.portal_hot_search_admin_service import (
 )
 from bisheng.telemetry.domain.mid_table.realtime_qa_question import (
     RealtimeQaQuestionFact,
-)
-from bisheng.knowledge.domain.services.knowledge_fulltext_engagement_service import (
-    project_knowledge_fulltext_engagement_best_effort,
 )
 from bisheng.utils import generate_uuid
 
@@ -335,9 +335,7 @@ async def count_shougang_portal_files(
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.count_shougang_portal_files(req)
-    return resp_200(
-        ShougangPortalFileCountResp(**result).model_dump(mode="json")
-    )
+    return resp_200(ShougangPortalFileCountResp(**result).model_dump(mode="json"))
 
 
 @router.post("/home")
@@ -424,11 +422,15 @@ async def get_shougang_portal_home_stats(
 async def get_shougang_portal_file_preview(
     space_id: int,
     file_id: int,
+    qa_question_id: int | None = Query(default=None, ge=1),
+    qa_doc_source: Literal["question", "answer"] | None = Query(default=None),
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_shougang_portal_file_preview(
         space_id=space_id,
         file_id=file_id,
+        qa_question_id=qa_question_id,
+        qa_doc_source=qa_doc_source,
     )
     return resp_200(result)
 
@@ -439,6 +441,8 @@ async def get_shougang_portal_file_chunks(
     file_id: int,
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=100, ge=1, le=100),
+    qa_question_id: int | None = Query(default=None, ge=1),
+    qa_doc_source: Literal["question", "answer"] | None = Query(default=None),
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.get_shougang_portal_file_chunks(
@@ -446,6 +450,8 @@ async def get_shougang_portal_file_chunks(
         file_id=file_id,
         page=page,
         limit=limit,
+        qa_question_id=qa_question_id,
+        qa_doc_source=qa_doc_source,
     )
     return resp_200(result)
 
@@ -501,9 +507,16 @@ async def list_shougang_portal_related_files(
 async def get_shougang_portal_file(
     space_id: int,
     file_id: int,
+    qa_question_id: int | None = Query(default=None, ge=1),
+    qa_doc_source: Literal["question", "answer"] | None = Query(default=None),
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
-    item = await svc.get_shougang_portal_file(space_id=space_id, file_id=file_id)
+    item = await svc.get_shougang_portal_file(
+        space_id=space_id,
+        file_id=file_id,
+        qa_question_id=qa_question_id,
+        qa_doc_source=qa_doc_source,
+    )
     raw = item.model_dump(mode="json") if hasattr(item, "model_dump") else item
     return resp_200(ShougangPortalFileDetailResp(data=raw).model_dump(mode="json"))
 
@@ -532,9 +545,7 @@ async def search_shougang_portal_advanced_uploaders(
     svc: Any = Depends(get_knowledge_space_service),
 ) -> Any:
     result = await svc.search_shougang_portal_advanced_uploaders(req)
-    return resp_200(
-        ShougangPortalAdvancedUploaderSearchResp(**result).model_dump(mode="json")
-    )
+    return resp_200(ShougangPortalAdvancedUploaderSearchResp(**result).model_dump(mode="json"))
 
 
 @router.post("/files/browse")

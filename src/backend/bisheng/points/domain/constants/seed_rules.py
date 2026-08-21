@@ -14,7 +14,7 @@ SEED_RULES = [
     {
         "rule_code": "G1",
         "rule_type": "earn",
-        "name": "发布/上传到公共库",
+        "name": "发布/上传文档到公共库",
         "score_expr": {"mode": "fixed", "score": 3},
         "daily_cap": 15,
         "beneficiary": "uploader",
@@ -24,7 +24,7 @@ SEED_RULES = [
     {
         "rule_code": "G2",
         "rule_type": "earn",
-        "name": "发布/上传到部门库",
+        "name": "发布/上传文档到部门库",
         "score_expr": {"mode": "fixed", "score": 2},
         "daily_cap": 10,
         "beneficiary": "uploader",
@@ -63,7 +63,7 @@ SEED_RULES = [
     {
         "rule_code": "G5",
         "rule_type": "earn",
-        "name": "上传团队库文档",
+        "name": "发布/上传文档团队库",
         "score_expr": {"mode": "fixed", "score": 2},
         "daily_cap": 10,
         "beneficiary": "uploader",
@@ -73,7 +73,7 @@ SEED_RULES = [
     {
         "rule_code": "G6",
         "rule_type": "earn",
-        "name": "上传科室库文档",
+        "name": "发布/上传文档科室库",
         "score_expr": {"mode": "fixed", "score": 2},
         "daily_cap": 10,
         "beneficiary": "uploader",

@@ -1844,3 +1844,109 @@ async def test_df_question_created_at_is_beijing_wall_clock(flow_env):
     hit = next((item for item in questions if int(item.get("id")) == qid), None)
     assert hit is not None
     assert str(hit.get("created_at") or "").endswith("+08:00")
+
+
+async def test_df04d_public_no_invite_active_expert_views_question_related_docs(flow_env, monkeypatch):
+    """公开题未指定专家：专家库在库专家可读提问关联文档（无 can_read）。"""
+    from bisheng.qa_expert.domain import related_docs_access as related_docs_access_mod
+
+    env = flow_env
+    monkeypatch.setattr(
+        related_docs_access_mod,
+        "_file_belongs_to_space",
+        AsyncMock(return_value=True),
+    )
+    await env.seed_expert(user_id=201, name="专家公开")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df04d公开关联",
+            "description": "正文",
+            "business_domain": "steel",
+            "question_type": "public",
+            "related_doc_ids": ["8-15"],
+        },
+    )
+    expert_user = env.user(201, name="expert-user")
+    env.as_user(expert_user)
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    views = (detail.get("data") or {}).get("related_doc_views") or []
+    assert len(views) == 1
+    assert views[0].get("accessible") is True
+
+    env.as_user(env.stranger)
+    stranger = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    stranger_views = (stranger.get("data") or {}).get("related_doc_views") or []
+    assert stranger_views[0].get("accessible") is False
+
+
+async def test_df04e_directed_invited_expert_views_question_related_docs(flow_env, monkeypatch):
+    """定向题：被邀请专家可读提问关联文档。"""
+    from bisheng.qa_expert.domain import related_docs_access as related_docs_access_mod
+
+    env = flow_env
+    monkeypatch.setattr(
+        related_docs_access_mod,
+        "_file_belongs_to_space",
+        AsyncMock(return_value=True),
+    )
+    expert = await env.seed_expert(user_id=202, name="专家定向")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df04e定向关联",
+            "description": "正文",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [expert.id],
+            "related_doc_ids": ["8-16"],
+        },
+    )
+    invited_user = env.user(202, name="invited-expert")
+    env.as_user(invited_user)
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    views = (detail.get("data") or {}).get("related_doc_views") or []
+    assert views[0].get("accessible") is True
+
+
+async def test_df04f_asker_views_answer_related_docs(flow_env, monkeypatch):
+    """提问者可读回答中的关联文档（无 can_read）。"""
+    from bisheng.qa_expert.domain import related_docs_access as related_docs_access_mod
+
+    env = flow_env
+    monkeypatch.setattr(
+        related_docs_access_mod,
+        "_file_belongs_to_space",
+        AsyncMock(return_value=True),
+    )
+    await env.seed_expert(user_id=203, name="答主")
+    expert_user = env.user(203, name="answer-expert")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df04f回答关联",
+            "description": "正文",
+            "business_domain": "steel",
+            "question_type": "public",
+        },
+    )
+    env.as_user(expert_user)
+    await env.client.post(
+        f"{PREFIX}/answers",
+        json={
+            "question_id": qid,
+            "content": "回答正文",
+            "related_docs": "8-17",
+            "reveal_on_public": True,
+        },
+    )
+    env.as_user(env.asker)
+    answers = _ok(await env.client.get(f"{PREFIX}/answers/{qid}"))
+    items = (answers.get("data") or {}).get("answers") or []
+    assert items
+    views = items[0].get("related_doc_views") or []
+    assert views
+    assert views[0].get("accessible") is True
