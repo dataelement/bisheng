@@ -243,6 +243,7 @@ export interface TimeFilter {
 export interface DataConfig {
   dimensions: DimensionField[]  // 维度字段列表（对应 echarts xAxis）
   stackDimension?: DimensionField // 堆叠维度字段（某些图表类型才有，如堆叠柱状图）
+  stackDimensions?: DimensionField[] // Ordered pivot column dimensions; legacy configs fall back to stackDimension
   metrics: MetricField[]        // 指标字段列表（对应 echarts yAxis）
   fieldOrder: {
     fieldId: string               // 字段ID

@@ -8,6 +8,49 @@ import { useToast } from "@/components/bs-ui/toast/use-toast"
 import { useComponentEditorStore, useEditorDashboardStore } from "@/store/dashboardStore"
 import { useTranslation } from "react-i18next"
 
+type MetricNumberFormat = DataConfig["metrics"][number]["numberFormat"]
+
+interface MetricFormatSource {
+  isDivide?: string
+  numberFormat?: MetricNumberFormat
+}
+
+export function getMaxStackDimensionCount(chartType: ChartType): number {
+  return chartType === ChartType.PivotTable ? 2 : 1
+}
+
+export function resolveMetricNumberFormat(metric: MetricFormatSource): MetricNumberFormat {
+  if (metric.isDivide === "divide") {
+    if (metric.numberFormat?.type === "percent") {
+      return metric.numberFormat
+    }
+    if (metric.numberFormat) {
+      return {
+        type: "percent",
+        decimalPlaces: metric.numberFormat.decimalPlaces || 2,
+        unit: undefined,
+        suffix: metric.numberFormat.suffix || "",
+        thousandSeparator: false,
+      }
+    }
+    return {
+      type: "percent",
+      decimalPlaces: 2,
+      unit: undefined,
+      suffix: "",
+      thousandSeparator: false,
+    }
+  }
+
+  return metric.numberFormat || {
+    type: "number",
+    decimalPlaces: 0,
+    unit: undefined,
+    suffix: undefined,
+    thousandSeparator: true,
+  }
+}
+
 
 export function useChartState(
   initialComponent: DashboardComponent,
@@ -105,23 +148,33 @@ export function useChartState(
         }
 
         // 2. 初始化堆叠维度
-        if (dc.stackDimension) {
-          const componentId = `stack_0_${Date.now()}`
-          fieldIdToComponentId.set(dc.stackDimension.fieldId, componentId)
-          const formattedStackDim = {
-            id: componentId,
-            fieldId: dc.stackDimension.fieldId,
-            name: dc.stackDimension.fieldCode,
-            displayName: dc.stackDimension.displayName || dc.stackDimension.fieldName,
-            originalName: dc.stackDimension.fieldName,
-            sort: dc.stackDimension.sort || null,
-            timeGranularity: dc.stackDimension.timeGranularity || null,
-            sortPriority: 0,
-            fieldType: 'dimension'
-          }
-          newStackDimensions.push(formattedStackDim)
-          setStackDimensions([formattedStackDim])
-          console.log('设置堆叠维度:', formattedStackDim)
+        const savedStackDimensions = dc.stackDimensions?.length
+          ? dc.stackDimensions
+          : dc.stackDimension
+            ? [dc.stackDimension]
+            : []
+        const maxStackDimensions = getMaxStackDimensionCount(newChartType)
+        if (savedStackDimensions.length > 0) {
+          const formattedStackDims = savedStackDimensions
+            .slice(0, maxStackDimensions)
+            .map((dimension, index) => {
+              const componentId = `stack_${index}_${Date.now()}`
+              fieldIdToComponentId.set(dimension.fieldId, componentId)
+              return {
+                id: componentId,
+                fieldId: dimension.fieldId,
+                name: dimension.fieldCode,
+                displayName: dimension.displayName || dimension.fieldName,
+                originalName: dimension.fieldName,
+                sort: dimension.sort || null,
+                timeGranularity: dimension.timeGranularity || null,
+                sortPriority: 0,
+                fieldType: 'dimension'
+              }
+            })
+          newStackDimensions.push(...formattedStackDims)
+          setStackDimensions(formattedStackDims)
+          console.log('设置堆叠维度:', formattedStackDims)
         }
 
         // 3. 初始化指标（value）
@@ -276,6 +329,11 @@ export function useChartState(
 
     setChartType(value)
 
+    const maxStackDimensions = getMaxStackDimensionCount(value)
+    if (isNewStackChart && stackDimensions.length > maxStackDimensions) {
+      setStackDimensions(stackDimensions.slice(0, maxStackDimensions))
+    }
+
     // 从堆叠 → 非堆叠：清理 stack 维度
     if (isCurrentStackChart && !isNewStackChart && stackDimensions.length > 0) {
       const stackDim = stackDimensions[0]
@@ -329,7 +387,8 @@ export function useChartState(
         // 特殊处理：从类别维度拖到堆叠维度
         if (sourceSection === 'category' && section === 'stack') {
           // 检查堆叠维度是否已满
-          if (stackDimensions.length >= 1) {
+          const maxStackDimensions = getMaxStackDimensionCount(chartType)
+          if (stackDimensions.length >= maxStackDimensions) {
             toast({
               description: t('useChartState.warn.maxStackDimension'),
               variant: "warning",
@@ -357,7 +416,7 @@ export function useChartState(
           };
 
           setCategoryDimensions(updatedCategoryDimensions);
-          setStackDimensions([movedDimension]);
+          setStackDimensions(prev => [...prev, movedDimension]);
 
           setDragOverSection(null);
           return;
@@ -388,8 +447,7 @@ export function useChartState(
             id: `category_${Date.now()}_${fieldId}`, // 生成新的ID
           };
 
-          // 清空堆叠维度
-          setStackDimensions([]);
+          setStackDimensions(prev => prev.filter(dimension => dimension.id !== dimensionToMove.id));
           setCategoryDimensions(prev => [...prev, movedDimension]);
 
           setDragOverSection(null);
@@ -424,9 +482,9 @@ export function useChartState(
         return
       }
 
-      // 堆叠维度只能有一个
-      if (section === 'stack' && stackDimensions.length >= 1) {
-        console.warn('堆叠维度只能有一个，请先删除现有的堆叠维度')
+      const maxStackDimensions = getMaxStackDimensionCount(chartType)
+      if (section === 'stack' && stackDimensions.length >= maxStackDimensions) {
+        console.warn(`堆叠维度最多只能有 ${maxStackDimensions} 个`)
         toast({
           description: t('useChartState.warn.maxStackDimension'),
           variant: "warning",
@@ -520,6 +578,7 @@ export function useChartState(
         timeGranularity: data.timeGranularity,
         fieldType,
         isDivide: data.isDivide,
+        numberFormat: data.numberFormat,
       }
 
       if (section === 'category') {
@@ -534,8 +593,7 @@ export function useChartState(
         }
         setCategoryDimensions(prev => [...prev, newDimension])
       } else if (section === 'stack') {
-        // 堆叠维度 - 特殊处理
-        setStackDimensions([newDimension])
+        setStackDimensions(prev => [...prev, newDimension])
       } else if (section === 'value') {
         setValueDimensions(prev => [...prev, newDimension])
       }
@@ -616,50 +674,20 @@ export function useChartState(
       timeGranularity: dim.timeGranularity || null
     }))
 
-    const stackDimension = stackDimensions.length > 0 ? {
-      fieldId: stackDimensions[0].fieldId,
-      fieldName: stackDimensions[0].originalName,
-      fieldCode: stackDimensions[0].name,
-      displayName: stackDimensions[0].displayName,
-      sort: stackDimensions[0].sort,
-      timeGranularity: stackDimensions[0].timeGranularity || null
-    } : undefined
+    const serializedStackDimensions = stackDimensions
+      .slice(0, getMaxStackDimensionCount(chartType))
+      .map(dimension => ({
+        fieldId: dimension.fieldId,
+        fieldName: dimension.originalName,
+        fieldCode: dimension.name,
+        displayName: dimension.displayName,
+        sort: dimension.sort,
+        timeGranularity: dimension.timeGranularity || null
+      }))
+    const stackDimension = serializedStackDimensions[0]
 
     const metrics = valueDimensions.map(metric => {
-      let numberFormat;
-      if (metric.isDivide === "divide") {
-        console.log('检测到除法指标:', metric.displayName);
-        if (metric.numberFormat) {
-          if (metric.numberFormat.type === 'percent') {
-            numberFormat = metric.numberFormat;
-            console.log('已使用百分比格式:', numberFormat);
-          } else {
-            numberFormat = {
-              type: 'percent' as const,
-              decimalPlaces: metric.numberFormat.decimalPlaces || 2,
-              unit: undefined,
-              suffix: metric.numberFormat.suffix || '',
-              thousandSeparator: false
-            };
-          }
-        } else {
-          numberFormat = {
-            type: 'percent' as const,
-            decimalPlaces: 2,
-            unit: undefined,
-            suffix: '',
-            thousandSeparator: false
-          };
-        }
-      } else {
-        numberFormat = metric.numberFormat || {
-          type: 'number' as const,
-          decimalPlaces: 0,
-          unit: undefined,
-          suffix: undefined,
-          thousandSeparator: true
-        };
-      }
+      const numberFormat = resolveMetricNumberFormat(metric)
 
       // console.log('最终 numberFormat:', numberFormat);
 
@@ -742,6 +770,9 @@ export function useChartState(
     return {
       dimensions,
       stackDimension,
+      stackDimensions: chartType === ChartType.PivotTable
+        ? serializedStackDimensions
+        : undefined,
       metrics,
       fieldOrder,
       filters,

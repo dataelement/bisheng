@@ -24,7 +24,7 @@ import { DimensionBlock } from "./DimensionBlock"
 import { FilterConditionDialog } from "./FilterConditionDialog"
 import { StyleConfigPanel } from "./StyleConfigPanel"
 import { resolveAppliedComponentTitle } from "./componentConfigDraft"
-import { useChartState } from "./useChartState"
+import { getMaxStackDimensionCount, useChartState } from "./useChartState"
 import { generateUUID } from "@/components/bs-ui/utils"
 
 type ResultDisplayMode = "all" | "limit" | "limitWithOther"
@@ -173,6 +173,7 @@ export function ComponentConfigDrawer() {
     return STACKED_CHART_TYPES.has(chartType) ? 3 : 1
   }
   const isPivotTable = chartType === ChartType.PivotTable
+  const maxStackDimensions = getMaxStackDimensionCount(chartType)
   const isCircularChart = chartType === ChartType.Pie || chartType === ChartType.Donut
   const isVirtualMetric = (field: DatasetField) => {
     return field.isVirtual === true
@@ -282,7 +283,7 @@ export function ComponentConfigDrawer() {
           sort: null
         }
         chartState.setCategoryDimensions(prev => [...prev, newDimension])
-      } else if (currentChartHasStack && stackDimensions.length === 0 && isMetricCard) {
+      } else if (currentChartHasStack && stackDimensions.length < maxStackDimensions && isMetricCard) {
         if (isFieldInCategoryOrStack(safeFieldId)) {
           toast({
             description: t("useChartState.warn.fieldExists"),
@@ -379,6 +380,7 @@ export function ComponentConfigDrawer() {
       const newMetric = {
         id: `${safeFieldId}-${Date.now()}`,
         fieldId: safeFieldId,
+        name: field.fieldCode,
         displayName: field.displayName || field.fieldName,
         originalName: field.displayName || field.fieldName,
         fieldType: field.role,
@@ -386,12 +388,13 @@ export function ComponentConfigDrawer() {
         aggregation: 'sum' as const,
         isVirtual: currentIsVirtual,
         isDivide: field.isDivide,
+        numberFormat: field.numberFormat,
       }
 
       chartState.setValueDimensions(prev => [...prev, newMetric])
     }
 
-  }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, toast, t])
+  }, [editingComponent, categoryDimensions, stackDimensions, valueDimensions, currentChartHasStack, chartState, maxStackDimensions, toast, t])
 
   const invalidFieldIds = useMemo(() => {
     const validSet = new Set(
@@ -1070,6 +1073,7 @@ export function ComponentConfigDrawer() {
                                         isDimension={true}
                                         isStack={'stack'}
                                         dimensions={stackDimensions}
+                                        maxDimensions={maxStackDimensions}
                                         isDragOver={dragOverSection === 'stack'}
                                         onDragOver={(e) => handleDragOver(e, 'stack')}
                                         onDragLeave={handleDragLeave}

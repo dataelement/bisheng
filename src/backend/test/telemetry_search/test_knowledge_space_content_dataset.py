@@ -1,4 +1,5 @@
 from bisheng.common.constants.telemetry import KNOWLEDGE_SPACE_CONTENT_STAT_INDEX
+from bisheng.telemetry.domain.mid_table.knowledge_space_content import KnowledgeSpaceContentRecord
 from bisheng.telemetry_search.domain.init_dataset import DASHBOARD_DATASET
 
 
@@ -50,3 +51,43 @@ def test_knowledge_space_content_dataset_favorite_metric_uses_daily_projection()
             "aggs": None,
         }
     ]
+
+
+def test_knowledge_space_content_dataset_exposes_single_query_time_contribution_ratio():
+    metrics = {item["field"]: item for item in _dataset_schema()["metrics"]}
+    field = "knowledge_contribution_ratio"
+    metric = metrics[field]
+
+    assert metric["name"] == "知识贡献占比"
+    assert metric["is_virtual"] is True
+    assert metric["calculation"] == "share_of_total"
+    assert "share_dimension_hierarchy" not in metric
+    assert metric["default_number_format"] == {
+        "type": "percent",
+        "decimalPlaces": 1,
+        "thousandSeparator": False,
+    }
+    assert metric["filter"]["filters"] == [
+        {"operator": "term", "field": "record_type", "value": "file"},
+        {"operator": "term", "field": "file_type", "value": 1},
+        {
+            "operator": "terms",
+            "field": "space_level",
+            "value": ["public", "department", "team", "team_ks", "personal"],
+        },
+    ]
+    assert metric["aggregations"] == [
+        {
+            "name": field,
+            "type": "value_count",
+            "field": "file_id",
+            "custom_params": None,
+            "time_interval": None,
+            "aggs": None,
+        }
+    ]
+    assert not {
+        "uploader_knowledge_contribution_ratio",
+        "belonging_knowledge_contribution_ratio",
+    }.intersection(metrics)
+    assert field not in KnowledgeSpaceContentRecord.model_fields

@@ -114,6 +114,14 @@ export function DimensionFilterConfigurator({
     )
   }
 
+  const targetChartIds = targetCharts.map(target => target.id)
+  const allTargetsSelected = targetChartIds.length > 0
+    && targetChartIds.every(id => linkedComponentIds.includes(id))
+
+  const toggleAllTargets = () => {
+    setLinkedComponentIds(allTargetsSelected ? [] : targetChartIds)
+  }
+
   return (
     <div className="flex h-full w-[360px] flex-col border-l border-border bg-background">
       <div className="border-b border-border px-4 py-3">
@@ -181,6 +189,15 @@ export function DimensionFilterConfigurator({
         <section className="space-y-2">
           <label className="text-sm font-medium">作用图表</label>
           <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border border-border p-2">
+            {targetCharts.length > 0 && (
+              <label className="flex cursor-pointer items-center gap-2 rounded border-b border-border px-2 py-1.5 pb-2 text-sm font-medium hover:bg-accent/50">
+                <Checkbox
+                  checked={allTargetsSelected}
+                  onCheckedChange={toggleAllTargets}
+                />
+                <span>全选</span>
+              </label>
+            )}
             {targetCharts.map(target => (
               <label
                 key={target.id}

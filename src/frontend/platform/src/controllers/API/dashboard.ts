@@ -108,21 +108,31 @@ export interface TimeGranularity {
 // 维度配置
 export interface DimensionConfig {
     name: string
-    type: 'integer' | 'keyword' | 'date'
     field: string
-    time_granularity?: TimeGranularity[]
-    aggregation?: Record<string, any>
-    aggregation_name: string
-    bucket_path: string
+    field_type: 'string' | 'number' | 'date'
+    time_granularitys?: string[]
 }
 
 // 指标配置
 export interface MetricConfig {
+    field: string
+    field_type: 'string' | 'number' | 'date'
     name: string
     filter?: Record<string, any>
-    aggregation: Record<string, any>
-    aggregation_name: string
-    bucket_path?: string
+    aggregations?: Record<string, any>[]
+    formula?: 'add' | 'subtract' | 'multiply' | 'divide'
+    calculation?: 'share_of_total'
+    default_number_format?: {
+        type: 'number' | 'percent' | 'duration' | 'storage'
+        decimalPlaces: number
+        unit?: string
+        suffix?: string
+        thousandSeparator: boolean
+    }
+    index?: number
+    sum_field?: string
+    sum_type?: string
+    is_virtual?: boolean
 }
 
 // Schema 配置
@@ -196,10 +206,16 @@ function transformNormalData(resData: any, component: DashboardComponent) {
 const MAX_PIVOT_ROWS = 500;
 const MAX_PIVOT_COLUMNS = 100;
 
-function transformPivotData(resData: any, component: DashboardComponent) {
+export function transformPivotData(resData: any, component: DashboardComponent) {
     const config = component.data_config;
     const rowDimensionCount = config.dimensions?.length || 0;
-    const columns: string[] = [];
+    const stackDimensions = config.stackDimensions?.length
+        ? config.stackDimensions.slice(0, 2)
+        : config.stackDimension
+            ? [config.stackDimension]
+            : [];
+    const columnDimensionCount = stackDimensions.length;
+    const columnPaths: string[][] = [];
     const columnIndex = new Map<string, number>();
     const rows = new Map<string, { key: string[], values: Map<string, number> }>();
     let truncated = false;
@@ -208,16 +224,20 @@ function transformPivotData(resData: any, component: DashboardComponent) {
         const rowValues = dimensionValues
             .slice(0, rowDimensionCount)
             .map(value => String(value ?? '未分类'));
-        const columnValue = String(dimensionValues[rowDimensionCount] ?? '未分类');
+        const columnPath = dimensionValues
+            .slice(rowDimensionCount, rowDimensionCount + columnDimensionCount)
+            .map(value => String(value ?? '未分类'));
+        const normalizedColumnPath = columnPath.length > 0 ? columnPath : ['未分类'];
         const rowKey = JSON.stringify(rowValues);
+        const columnKey = JSON.stringify(normalizedColumnPath);
 
-        if (!columnIndex.has(columnValue)) {
-            if (columns.length >= MAX_PIVOT_COLUMNS) {
+        if (!columnIndex.has(columnKey)) {
+            if (columnPaths.length >= MAX_PIVOT_COLUMNS) {
                 truncated = true;
                 return;
             }
-            columnIndex.set(columnValue, columns.length);
-            columns.push(columnValue);
+            columnIndex.set(columnKey, columnPaths.length);
+            columnPaths.push(normalizedColumnPath);
         }
         if (!rows.has(rowKey)) {
             if (rows.size >= MAX_PIVOT_ROWS) {
@@ -227,13 +247,15 @@ function transformPivotData(resData: any, component: DashboardComponent) {
             rows.set(rowKey, { key: rowValues, values: new Map() });
         }
         const metricValue = Number(resData.value[index]?.[0] ?? 0);
-        rows.get(rowKey)!.values.set(columnValue, metricValue);
+        const row = rows.get(rowKey)!;
+        row.values.set(columnKey, (row.values.get(columnKey) ?? 0) + metricValue);
     });
 
-    const columnTotals = columns.map(() => 0);
+    const columnKeys = columnPaths.map(path => JSON.stringify(path));
+    const columnTotals = columnPaths.map(() => 0);
     const pivotRows = Array.from(rows.values()).map(row => {
-        const values = columns.map((column, index) => {
-            const value = row.values.get(column) ?? 0;
+        const values = columnKeys.map((columnKey, index) => {
+            const value = row.values.get(columnKey) ?? 0;
             columnTotals[index] += value;
             return value;
         });
@@ -244,23 +266,31 @@ function transformPivotData(resData: any, component: DashboardComponent) {
         };
     });
 
+    const displayColumnPaths = columnPaths.map(path => path.map((value, index) => {
+        const dimension = stackDimensions[index];
+        return resolvePivotColumnLabels({
+            columns: [value],
+            stackDimension: dimension,
+            aliasConfig: config.pivotColumnAliases,
+        })[0];
+    }));
+    const columnHeaders = stackDimensions.map(
+        dimension => dimension.displayName || dimension.fieldName || dimension.fieldId
+    );
+
     return {
         rowHeaders: (config.dimensions || []).map(
             dimension => dimension.displayName || dimension.fieldName || dimension.fieldId
         ),
-        columnHeader: config.stackDimension?.displayName
-            || config.stackDimension?.fieldName
-            || config.stackDimension?.fieldId
-            || '',
+        columnHeader: columnHeaders[0] || '',
+        columnHeaders,
         metricName: config.metrics?.[0]?.displayName
             || config.metrics?.[0]?.fieldName
             || '',
-        columns: resolvePivotColumnLabels({
-            columns,
-            stackDimension: config.stackDimension,
-            aliasConfig: config.pivotColumnAliases,
-        }),
-        originalColumns: columns,
+        columns: displayColumnPaths.map(path => path[path.length - 1]),
+        originalColumns: columnPaths.map(path => path[path.length - 1]),
+        columnPaths: displayColumnPaths,
+        originalColumnPaths: columnPaths,
         rows: pivotRows,
         columnTotals,
         grandTotal: columnTotals.reduce((sum, value) => sum + value, 0),

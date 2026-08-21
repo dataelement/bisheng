@@ -111,8 +111,8 @@ def test_realtime_dashboard_seed_contains_three_target_datasets():
         dimension["field"]: dimension["name"]
         for dimension in knowledge_dataset.schema_config["dimensions"]
     }
-    assert knowledge_dimensions["space_department_name"] == "所属部门"
-    assert knowledge_dimensions["primary_department_name"] == "上传人所在部门"
+    assert knowledge_dimensions["belonging_department_name"] == "所属部门"
+    assert knowledge_dimensions["uploader_department_name"] == "上传人部门"
 
 
 def test_component_data_config_preserves_pivot_column_aliases():

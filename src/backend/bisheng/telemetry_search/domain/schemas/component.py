@@ -158,6 +158,12 @@ class ComponentDataConfig(BaseModel):
     dimensions: List[DimensionField] = Field(default_factory=list, description="list of dimension fields")
     stack_dimension: Optional[DimensionField] = Field(default=None, alias="stackDimension",
                                                       description="list of stack dimension fields")
+    stack_dimensions: List[DimensionField] = Field(
+        default_factory=list,
+        alias="stackDimensions",
+        max_length=2,
+        description="ordered pivot table column dimensions",
+    )
     metrics: List[MetricField] = Field(default_factory=list, description="list of metric fields")
     field_order: List[FieldOrder] = Field(default_factory=list, alias="fieldOrder", description="list of field order")
     filters: List[FilterCondition] = Field(default_factory=list, description="list of filter conditions")
@@ -168,6 +174,12 @@ class ComponentDataConfig(BaseModel):
         default=None,
         alias="pivotColumnAliases",
     )
+
+    def get_stack_dimensions(self) -> List[DimensionField]:
+        """Return the new ordered column dimensions or the legacy single dimension."""
+        if self.stack_dimensions:
+            return self.stack_dimensions
+        return [self.stack_dimension] if self.stack_dimension else []
 
 
 class DataQueryResult(BaseModel):

@@ -3,11 +3,11 @@
 ## 元信息 Metadata
 
 - Feature ID: `055-knowledge-space-content-stat-rebuild`
-- Status: `design-updated-awaiting-confirmation`
+- Status: `req008-correction-implemented-verified`
 - Based on: `requirements.md` 中 `REQ-001` 至 `REQ-008`
 - Created: `2026-08-20`
 - Updated: `2026-08-20`
-- Implementation state: `REQ-001` 至 `REQ-007` 的代码实现和只读验证已完成；`REQ-008` 已形成设计和任务，尚未实现；实际索引重建仍需 T014 单独确认
+- Implementation state: `REQ-001` 至 `REQ-008` 已完成实现与自动化验证；`share_of_parent` 已替换为 `share_of_total`；实际索引重建仍需 T014 单独确认
 
 ## 1. 设计目标与边界
 
@@ -19,7 +19,7 @@
 4. 让预览、下载统计失败不影响主业务，并能从带快照的原始事件幂等补偿。
 5. 组织、主组织或知识库绑定变化后准实时覆写受影响的 `file` 快照，每日全量任务只作为最终一致性校准。
 6. 破坏性重建后只同步当前有效文件，不恢复旧预览、下载、收藏和 `portal_engagement_daily` 历史。
-7. 通过可声明的虚拟指标策略提供上传人和文件所属组织知识贡献占比，并支持父级组织及非组织切片分母。
+7. 通过可声明的虚拟指标策略提供单一通用知识贡献占比，使任意维度或维度组合的文件数都除以当前筛选范围有效文件总数。
 
 ### 1.2 非目标
 
@@ -29,7 +29,7 @@
 - 不引入 `tenant_id`、组织 ID 或新的关系型数据库表。
 - 不修改文件可见性、下载权限、收藏权限和组织管理权限。
 - 不为知识贡献占比新增 ES 字段、记录类型、历史回填或索引重建步骤。
-- 不强制校验知识贡献占比与组织维度的配对关系。
+- 不为不同维度分别定义知识贡献占比指标或专用计算规则。
 
 ## 2. 当前实现依据与问题定位
 
@@ -47,17 +47,18 @@
 | `src/backend/bisheng/telemetry_search/domain/init_dataset.py` | 看板数据集指标和维度定义 | 暴露重复旧部门字段；无 8 个新维度和收藏次数 |
 | `src/backend/scripts/rebuild_knowledge_space_content_stat.py` | 删除并重建精确索引 | 预检缺少下载、收藏和门户参与度分类计数；当前重建会恢复旧下载历史 |
 
-### 2.1 `REQ-008` 更新时的实现基线
+### 2.1 `REQ-008` 口径纠正时的实现基线
 
-`REQ-001` 至 `REQ-007` 已按本设计实现。新增贡献占比涉及的当前基线如下：
+`REQ-001` 至 `REQ-007` 已按本设计实现。`T015`～`T018` 曾按错误理解实现组织父级占比，当前基线和纠正差距如下：
 
 | 位置 | 当前能力 | `REQ-008` 差距 |
 |---|---|---|
-| `src/backend/bisheng/telemetry_search/domain/models/dashboard_dataset.py` | `MetricConfig` 支持普通聚合、`formula`、`index`、`sum_field` | 没有“占总体/父级”策略、组织层级字段列表和默认格式元数据 |
-| `src/backend/bisheng/telemetry_search/domain/services/component.py` | `query_formula_metric` 分两次查询并按相同维度合并 | 分母无法只移除最末级组织维度；直接 divide 会得到逐行自身相除 |
-| `src/backend/bisheng/telemetry_search/domain/schemas/query_builder.py` | 支持 term、terms、range、match_all、match_phrase | 缺少显式 `exists` 过滤，无法保证缺失组织字段同时退出分子和分母 |
-| `src/frontend/platform/src/pages/Dashboard/components/config/DatasetSelector.tsx` | 传递虚拟指标和 divide 标记 | 未传递数据集级默认数值格式 |
-| `src/frontend/platform/src/pages/Dashboard/components/config/useChartState.tsx` | divide 指标默认百分比、2 位小数 | 无法只让两个贡献占比默认 1 位小数 |
+| `src/backend/bisheng/telemetry_search/domain/models/dashboard_dataset.py` | 已声明 `SHARE_OF_PARENT`、`share_dimension_hierarchy` 和默认格式 | 应改为不依赖层级的 `SHARE_OF_TOTAL`，层级声明不再需要 |
+| `src/backend/bisheng/telemetry_search/domain/services/component.py` | `query_share_of_parent_metric` 对非组织维度直接返回 `1.0`，组织维度只移除最深层级 | 导致普通维度恒为 `100%`，且组织维度分母不是有效文件总数 |
+| `src/backend/bisheng/telemetry_search/domain/schemas/query_builder.py` | 曾增加 `ExistsOp` | 新口径不追加维度 `exists` 过滤；该操作符无其他调用，已删除 |
+| `src/backend/bisheng/telemetry_search/domain/init_dataset.py` | 暴露两个组织专用占比指标 | 应替换成唯一 `knowledge_contribution_ratio` |
+| `src/frontend/platform/src/pages/Dashboard/components/config/DatasetSelector.tsx` | 已能透传数据集默认数值格式 | 继续复用，无需按维度区分 |
+| `src/frontend/platform/src/pages/Dashboard/components/config/useChartState.tsx` | 已能采用数据集默认百分比格式 | 保留 percent + 1 位小数行为 |
 
 ## 3. 目标数据模型
 
@@ -307,8 +308,7 @@ Redis 保存 `REPLAY_FLOOR_KEY`。破坏性重建持有投影锁后记录 `rebui
 | 预览次数 | `sum(preview_count)` | `record_type=preview_daily`、有效空间级别 |
 | 下载次数 | `sum(download_count)` | `record_type=download_daily`、有效空间级别 |
 | 收藏次数 | `sum(favorite_count)` | `record_type=favorite_daily`、有效空间级别 |
-| 上传人知识贡献占比 | `share_of_parent(value_count(file_id))` | `record_type=file`、`file_type=1`、有效空间级别、当前上传人组织字段存在 |
-| 文件所属知识贡献占比 | `share_of_parent(value_count(file_id))` | `record_type=file`、`file_type=1`、有效空间级别、当前所属组织字段存在 |
+| 知识贡献占比 | `share_of_total(value_count(file_id))` | `record_type=file`、`file_type=1`、有效空间级别 |
 
 收藏次数是独立指标，不读取普通 `portal_favorite` 事件数量，也不读取 `portal_engagement_daily`。
 
@@ -318,54 +318,51 @@ Redis 保存 `REPLAY_FLOOR_KEY`。破坏性重建持有投影锁后记录 `rebui
 
 启动时数据集 seed 会刷新系统数据集定义。已有自定义看板若引用已移除字段将失效，本次不自动重写，其迁移仍是独立事项 `OPEN-002`，不阻塞本功能实现。
 
-### 9.3 通用 `share_of_parent` 虚拟指标策略
+### 9.3 通用 `share_of_total` 虚拟指标策略
 
-扩展 `MetricConfig`，增加三个可选且向后兼容的声明字段：
+`MetricConfig` 使用以下声明：
 
 ```text
-calculation = "share_of_parent"
-share_dimension_hierarchy = [company_field, department_field, office_field, squad_field]
+calculation = "share_of_total"
 default_number_format = {type: "percent", decimalPlaces: 1, thousandSeparator: false}
 ```
 
-- `calculation` 使用新枚举 `VirtualMetricCalculationEnum.SHARE_OF_PARENT`；已有 `formula`、`index` 和 `sum_field` 语义不变。
-- `share_dimension_hierarchy` 由数据集声明，不在查询服务中硬编码 `mid_knowledge_space_content_stat` 或具体指标字段名。
-- 两个贡献指标分别声明上传人和文件所属组织的四级字段顺序。
+- `calculation` 使用 `VirtualMetricCalculationEnum.SHARE_OF_TOTAL`；已有 `formula`、`index` 和 `sum_field` 语义不变。
+- 删除新引入但口径错误的 `SHARE_OF_PARENT` 调度和 `share_dimension_hierarchy` 配置，不在查询服务中硬编码 `mid_knowledge_space_content_stat`、具体指标字段名或任何维度名。
+- 系统数据集只声明一个 `knowledge_contribution_ratio` 指标，基础过滤与“总文件数”一致。
 - `default_number_format` 只作为新指标首次加入组件时的默认值；保存后的组件格式继续以自身 `data_config.metrics[].numberFormat` 为准。
 
 查询算法：
 
-1. 将普通维度和堆叠维度按结果顺序视为统一维度列表。
-2. 从 `share_dimension_hierarchy` 中找出当前查询已经选择的字段，并按声明层级选取最深字段作为 `target_dimension`，不依赖拖放顺序。
-3. 分子查询保留全部维度和全部筛选，使用指标声明的 `value_count(file_id)`，并追加 `exists(target_dimension)`。
-4. 分母查询复制全部筛选和聚合，但从分组维度中只移除 `target_dimension`；父级组织、时间、业务域、空间等其他维度全部保留，同时追加相同的 `exists(target_dimension)`。
-5. 以“分子结果去掉目标维度后的上下文键”关联分母结果，返回原始完整维度列和 `numerator / denominator`。
-6. 分母缺失或为 0 时返回 `0`；分子或分母都不做百分数乘 100，展示层负责格式化。
-7. 若未选择任何声明的组织维度，不抛配对错误；将当前过滤和非组织分组上下文视为整体，非空上下文返回 `1`。该行为只保证查询稳定，不属于组织贡献口径的推荐用法。
-
-`query_builder.py` 新增通用 `ExistsOp`，生成 `{ "exists": { "field": ... } }`。它属于查询 Schema 的向后兼容扩展，也可被其他数据集复用。
+1. 分子查询保留全部普通维度、stack dimension、指标基础过滤和请求筛选，使用指标声明的 `value_count(file_id)`。
+2. 分母查询复制相同指标聚合和全部过滤，但把 `dimensions` 设为空列表、`stack_dimension` 设为 `None`；不得移除看板条件筛选、联动筛选或时间范围。
+3. 分母查询不追加任何维度 `exists` 过滤，因此缺少所选维度值的有效文件仍计入总数。
+4. 分母结果是当前筛选范围的单一有效文件总数；每个分子结果行都除以该值，返回分子原始完整维度列和比例。
+5. 分母缺失或为 0 时返回 `0`；分子或分母都不乘 100，展示层负责格式化。
+6. 未选择任何维度时，分子和分母均为当前筛选范围总数，因此非零返回 `1`，零文件返回 `0`。
 
 ### 9.4 结果形状与排序兼容
 
-- `query_share_of_parent_metric` 始终返回与分子查询相同的完整维度列顺序，因此 `query_all_metrics` 仍可按现有 tuple key 合并多个指标。
-- 分母查询内部减少一个维度，但其结果不直接暴露给前端。
-- 排序、Top N 和组件结果限制继续在占比计算完成后执行；Top N 只限制展示行，不缩小分母，所以只展示部分组织时可见占比之和允许小于 100%。
-- 看板条件筛选和联动维度筛选同时作用于分子与分母；即使筛选字段等于目标组织字段，也不移除该筛选条件。
+- `query_share_of_total_metric` 始终返回与分子查询相同的完整维度列顺序，因此 `query_all_metrics` 仍可按现有 tuple key 合并多个指标。
+- 分母查询内部不包含任何分组维度，其结果不直接暴露给前端。
+- 排序、Top N 和组件结果限制继续在占比计算完成后执行；Top N 只限制展示行，不缩小分母。
+- 缺失维度值的文件不产生分子行但仍进入分母，或 Top N 隐藏部分行时，可见占比之和允许小于 `100%`。
+- 看板条件筛选和联动维度筛选同时作用于分子与分母；即使筛选字段也被用于分组，也不移除该筛选条件。
 
 ### 9.5 文件结构计划 File Structure Plan
 
 | 文件 | 变更 | 目的 |
 |---|---|---|
-| `src/backend/bisheng/telemetry_search/domain/models/dashboard_dataset.py` | 修改 | 新增通用虚拟计算策略、层级字段列表和默认格式元数据 |
-| `src/backend/bisheng/telemetry_search/domain/schemas/query_builder.py` | 修改 | 新增通用 `ExistsOp` |
-| `src/backend/bisheng/telemetry_search/domain/services/component.py` | 修改 | 实现父级/总体分母查询和维度键合并；保留现有 divide 路径 |
-| `src/backend/bisheng/telemetry_search/domain/init_dataset.py` | 修改 | 注册两个知识贡献占比指标及两套组织层级 |
-| `src/backend/test/telemetry_search/test_knowledge_contribution_ratio.py` | 新增 | 参数化覆盖单层、多层、非组织切片、空值、零分母和回归 |
-| `src/backend/test/telemetry_search/test_knowledge_space_content_dataset.py` | 修改 | 固定两个指标的数据集声明契约 |
+| `src/backend/bisheng/telemetry_search/domain/models/dashboard_dataset.py` | 修改 | 将错误的 `SHARE_OF_PARENT`/层级配置替换为 `SHARE_OF_TOTAL`，保留默认格式元数据 |
+| `src/backend/bisheng/telemetry_search/domain/schemas/query_builder.py` | 修改 | 删除仅由错误占比实现引入且当前无其他调用的 `ExistsOp` |
+| `src/backend/bisheng/telemetry_search/domain/services/component.py` | 修改 | 实现移除全部分组的总体分母查询；保留现有 divide 路径 |
+| `src/backend/bisheng/telemetry_search/domain/init_dataset.py` | 修改 | 删除两个错误指标，注册单一通用知识贡献占比指标 |
+| `src/backend/test/telemetry_search/test_knowledge_contribution_ratio.py` | 修改 | 参数化覆盖任意单维、多维组合、筛选、缺失维度入分母、无维度、零分母和回归 |
+| `src/backend/test/telemetry_search/test_knowledge_space_content_dataset.py` | 修改 | 固定单一指标的数据集声明契约，并断言两个旧指标不存在 |
 | `src/frontend/platform/src/controllers/API/dashboard.ts` | 修改 | 补齐真实数据集 MetricConfig 类型及默认格式字段 |
 | `src/frontend/platform/src/pages/Dashboard/components/config/DatasetSelector.tsx` | 修改 | 将默认格式随指标选择/拖拽传递 |
 | `src/frontend/platform/src/pages/Dashboard/components/config/useChartState.tsx` | 修改 | 首次配置时优先采用数据集默认百分比格式 |
-| `src/frontend/platform/src/test/knowledgeContributionMetricFormat.test.ts` | 新增 | 验证两个指标默认 percent + 1 位小数，已有 divide 默认不变 |
+| `src/frontend/platform/src/test/knowledgeContributionMetricFormat.test.ts` | 修改 | 验证单一指标默认 percent + 1 位小数，已有 divide 默认不变 |
 
 ## 10. 并发、失败与兼容性
 
@@ -376,7 +373,7 @@ default_number_format = {type: "percent", decimalPlaces: 1, thousandSeparator: f
 - 事件原始记录由 `event_id` 作为 ES `_id` 去重。
 - 日统计由维度哈希 `_id` 和绝对计数的单调 `max` 更新保证并发安全。
 - 重建、当前快照全量和事件队列共享重建锁；重建期间消息可入队但不消费。
-- 知识贡献占比执行两次只读聚合查询，不维护共享状态；同一查询请求内使用深拷贝隔离分子和分母的维度、过滤配置。
+- 知识贡献占比执行“保留全部分组的分子查询”和“移除全部分组的分母查询”两次只读聚合，不维护共享状态；同一请求内使用深拷贝隔离查询参数。
 
 ### 10.2 失败语义
 
@@ -388,7 +385,7 @@ default_number_format = {type: "percent", decimalPlaces: 1, thousandSeparator: f
 | 日统计写失败 | 业务已成功、原始事件已存在 | 消息重试或按日期手工回放 |
 | 当前文件投影失败 | 组织/文件业务已成功 | 当前队列重试；每日全量最终校准 |
 | 占比分子或分母查询失败 | 当前看板组件查询失败 | 沿用查询服务错误响应和日志；不返回伪造比例，不影响数据写入 |
-| 占比分母为 0 或找不到匹配上下文 | 当前看板组件查询成功 | 返回 `0` |
+| 占比分母为 0 或分母结果缺失 | 当前看板组件查询成功 | 返回 `0` |
 
 在 Redis 和 ES 同时不可用时，系统仍优先保证用户操作成功；此时只能通过告警暴露无法持久化的统计风险，不能虚假承诺绝对零丢失。
 
@@ -398,9 +395,10 @@ default_number_format = {type: "percent", decimalPlaces: 1, thousandSeparator: f
 - 普通门户遥测调用保持原接口；新增严格写入口只供可重试 Worker 使用。
 - `portal_engagement_daily` 的字段和查询保持不变。
 - 新索引与旧 Mapping 不兼容，必须通过已确认的删除重建切换，不支持原地映射回退。
-- `MetricConfig` 新字段全部可选；未声明 `calculation=share_of_parent` 的数据集继续走原 `formula/index/sum_field/普通聚合` 分支。
+- `MetricConfig.calculation` 与 `default_number_format` 保持可选；未声明 `calculation=share_of_total` 的数据集继续走原 `formula/index/sum_field/普通聚合` 分支。
 - 已保存组件继续使用自身 `numberFormat`，新增默认格式只影响以后首次添加的贡献占比指标。
 - `REQ-008` 不需要数据库迁移、ES Mapping 更新或再次重建索引；系统数据集 seed 刷新后即可暴露新指标。
+- 引用两个旧占比字段的已保存测试组件不会自动迁移；刷新 seed 后需人工重新选择 `knowledge_contribution_ratio`。
 
 ## 11. 验证设计
 
@@ -418,8 +416,8 @@ default_number_format = {type: "percent", decimalPlaces: 1, thousandSeparator: f
 | `V-FAVORITE-DAILY-001` | 收藏事件分桶测试 | 相同快照累计、不同快照拆分 |
 | `V-FAVORITE-REBUILD-001` | 重建与回放起点测试 | 旧收藏事件不恢复 |
 | `V-FAVORITE-REGRESSION-001` | 门户参与度及预览/下载回归 | 原有独立口径不被收藏改造改变 |
-| `V-CONTRIBUTION-SCHEMA-001` | 数据集 seed 契约测试 | 两个指标声明正确，Mapping 和重建脚本无持久化变化 |
-| `V-CONTRIBUTION-QUERY-001` | `DataQueryService` 参数化服务测试 | 单层、父级、多维切片、exists、零分母与两套组织层级 |
+| `V-CONTRIBUTION-SCHEMA-001` | 数据集 seed 契约测试 | 只暴露一个通用指标，两个旧指标不存在，Mapping 和重建脚本无持久化变化 |
+| `V-CONTRIBUTION-QUERY-001` | `DataQueryService` 参数化服务测试 | 单维、多维组合、普通与 stack dimension、筛选保留、缺失维度入分母、无维度和零分母 |
 | `V-CONTRIBUTION-FORMAT-001` | 前端指标选择状态测试 | 新贡献指标默认 percent + 1 位小数，保存后格式可覆盖 |
 | `V-CONTRIBUTION-REGRESSION-001` | 查询服务定向回归 | 既有 divide、普通虚拟指标、多个指标结果合并不变 |
 
@@ -427,9 +425,9 @@ default_number_format = {type: "percent", decimalPlaces: 1, thousandSeparator: f
 
 | Requirement | Design | Tasks | Verification |
 |---|---|---|---|
-| `REQ-008` 指标声明与默认格式 | 9.1、9.3、9.5 | `T016`, `T017` | `V-CONTRIBUTION-SCHEMA-001`, `V-CONTRIBUTION-FORMAT-001` |
-| `REQ-008` 父级/总体分母与空值 | 9.3、9.4 | `T015` | `V-CONTRIBUTION-QUERY-001` |
-| `REQ-008` 兼容性与无持久化变化 | 9.5、10.3、12 | `T015`, `T016`, `T017`, `T018` | `V-CONTRIBUTION-REGRESSION-001`, `V-CONTRIBUTION-SCHEMA-001` |
+| `REQ-008` 单一指标声明与默认格式 | 9.1、9.3、9.5 | `T020`, `T021` | `V-CONTRIBUTION-SCHEMA-001`, `V-CONTRIBUTION-FORMAT-001` |
+| `REQ-008` 总体分母、多维组合与空值 | 9.3、9.4 | `T019` | `V-CONTRIBUTION-QUERY-001` |
+| `REQ-008` 兼容性与无持久化变化 | 9.5、10.3、12 | `T019`, `T020`, `T021`, `T022` | `V-CONTRIBUTION-REGRESSION-001`, `V-CONTRIBUTION-SCHEMA-001` |
 
 ## 12. 回退策略
 
@@ -442,7 +440,7 @@ default_number_format = {type: "percent", decimalPlaces: 1, thousandSeparator: f
 
 实际执行破坏性重建前必须再次展示 preflight 数量并取得执行确认。
 
-`REQ-008` 本身没有数据迁移或不可逆操作，可独立回退：移除两个数据集指标声明、前端默认格式透传和 `share_of_parent` 查询分支即可；已有索引文档与已保存组件数据不需要恢复。
+`REQ-008` 本身没有数据迁移或不可逆操作，可独立回退查询策略和数据集 seed；已有索引文档不需要恢复。由于旧占比字段会被新单一指标替换，回退或再次前进后，引用这些字段的测试组件均可能需要人工重新选择指标。
 
 ## 13. 设计决策摘要
 
@@ -456,6 +454,6 @@ default_number_format = {type: "percent", decimalPlaces: 1, thousandSeparator: f
 - `DEC-008`: 组织变化通过 `user`、`department` 队列扇出，历史日统计不回写。
 - `DEC-009`: 收藏次数只由实际新建收藏关系触发，不信任客户端普通收藏遥测作为计数依据。
 - `DEC-010`: `portal_engagement_daily` 旧历史随重建清空，结构和后续实时写入逻辑不改。
-- `DEC-011`: 知识贡献占比使用通用 `share_of_parent` 虚拟指标策略，不为两个指标写硬编码查询分支。
-- `DEC-012`: 分母只移除最末级匹配组织维度，保留上级组织、非组织分组及全部筛选，并以 `exists(target_dimension)` 同时排除空组织文件。
+- `DEC-011`: 知识贡献占比使用通用 `share_of_total` 虚拟指标策略，不硬编码数据集、指标字段或维度字段。
+- `DEC-012`: 分母移除全部普通分组和 stack dimension，保留全部筛选且不追加维度 `exists`；缺少维度值的有效文件继续计入总数。
 - `DEC-013`: 数据集通过 `default_number_format` 声明 percent + 1 位小数；已有组件自身格式优先，不改变其他 divide 指标默认行为。
