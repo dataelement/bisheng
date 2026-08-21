@@ -56,6 +56,10 @@
   "com_app_share_link_copy_failed": "リンクのコピーに失敗しました",
   "com_app_start_chat": "チャットを開始",
   "com_app_chat_sidebar_title": "アプリでの会話",
+  "com_settings_general": "一般",
+  "com_settings_lang_en": "English",
+  "com_settings_lang_ja": "日本語",
+  "com_settings_lang_zh": "中文",
   "com_standalone_guest_app_name_label": "アプリ名：",
   "com_standalone_guest_desc_label": "説明：",
   "com_app_no_matching_apps": "該当するアプリがありません",
@@ -470,6 +474,15 @@
   "com_linsight_exporting": "エクスポート中です。しばらくお待ちください…",
   "com_linsight_export_success": "ファイルをダウンロードしました",
   "com_linsight_export_failed": "エクスポートに失敗しました。後でもう一度お試しください",
+  "com_linsight": {
+    "downloadAs": "{{format}} 形式でダウンロード",
+    "downloadToLocal": "ローカルにダウンロード",
+    "saveToKnowledge": "ナレッジスペースに保存",
+    "saveToKnowledgeSaving": "ナレッジスペースに保存中…",
+    "saveToKnowledgeSuccess": "ナレッジスペースに保存しました：{{name}}",
+    "saveToKnowledgePending": "承認申請を送信しました。承認後にナレッジスペースへ保存されます",
+    "saveToKnowledgeFailed": "ナレッジスペースへの保存に失敗しました。後でもう一度お試しください"
+  },
   "com_message_content_copied": "内容をコピーしました",
   "com_notifications_approved": "承認済み",
   "com_notifications_rejected": "却下済み",
@@ -2002,6 +2015,14 @@
     }
   },
   "com_linsight_legacy_sop": "旧バージョンの SOP ドキュメント",
+  "com_storage_quota": {
+    "title": "個人ストレージ",
+    "usage": "{{0}} / {{1}} 使用中",
+    "unlimited": "無制限",
+    "full_hint": "個人ストレージの容量がいっぱいのため、アップロードを一時停止しています。ファイルを削除して空き容量を確保するか、管理者にロール容量の調整を依頼してください。",
+    "exceeded_hint": "個人ストレージが現在の有効容量を超えているため、アップロードを一時停止しています。ファイルを削除して空き容量を確保するか、管理者にロール容量の調整を依頼してください。",
+    "insufficient_hint": "個人ストレージの空き容量が不足しているため、アップロードを続行できません。"
+  },
   "com_error_page": {
     "title": "おっと、問題が発生しました",
     "description": "ご安心ください。データは安全です。最も早い解決方法：この画面をスクリーンショットして、サポートまたは開発担当者にお送りください。",

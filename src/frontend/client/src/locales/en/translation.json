@@ -61,6 +61,10 @@
   "com_app_chat_empty_line1": "No conversations yet, ",
   "com_app_chat_empty_cta": "start a new chat~",
   "com_app_chat_sidebar_empty": "No conversations yet. Start a new chat~",
+  "com_settings_general": "General",
+  "com_settings_lang_en": "English",
+  "com_settings_lang_ja": "日本語",
+  "com_settings_lang_zh": "中文",
   "com_standalone_guest_app_name_label": "App name:",
   "com_standalone_guest_desc_label": "Description:",
   "com_app_no_matching_apps": "No matching apps",
@@ -485,6 +489,15 @@
   "com_linsight_exporting": "Exporting, please wait…",
   "com_linsight_export_success": "File downloaded",
   "com_linsight_export_failed": "Export failed, please try again later",
+  "com_linsight": {
+    "downloadAs": "Download as {{format}}",
+    "downloadToLocal": "Download to local",
+    "saveToKnowledge": "Save to knowledge space",
+    "saveToKnowledgeSaving": "Saving to knowledge space…",
+    "saveToKnowledgeSuccess": "Saved to knowledge space: {{name}}",
+    "saveToKnowledgePending": "Submitted for approval; it will be saved to the knowledge space once approved",
+    "saveToKnowledgeFailed": "Failed to save to knowledge space, please try again later"
+  },
   "com_message_content_copied": "Content copied",
   "com_notifications_approved": "Approved",
   "com_notifications_rejected": "Rejected",
@@ -2079,6 +2092,14 @@
     }
   },
   "com_linsight_legacy_sop": "Legacy SOP document (pre-migration session)",
+  "com_storage_quota": {
+    "title": "Personal storage",
+    "usage": "{{0}} of {{1}} used",
+    "unlimited": "Unlimited",
+    "full_hint": "Your personal storage is full, so uploads are paused. Delete files to free up space, or ask an administrator to adjust your role quota.",
+    "exceeded_hint": "Your personal storage exceeds the current effective capacity, so uploads are paused. Delete files to free up space, or ask an administrator to adjust your role quota.",
+    "insufficient_hint": "There is not enough space left in your personal storage, so the upload cannot continue."
+  },
   "com_error_page": {
     "title": "Oops, something went wrong",
     "description": "Don't worry — your data is safe. The quickest way to get help: screenshot this page and send it to support or your engineering contact.",

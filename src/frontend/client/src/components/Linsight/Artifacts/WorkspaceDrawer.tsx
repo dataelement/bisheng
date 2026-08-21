@@ -32,20 +32,21 @@ export function WorkspaceDrawer({ open, onOpenChange, files, versionId, onPrevie
             key={file.file_id || file.file_url}
             role="button"
             tabIndex={0}
-            className="group/row flex cursor-pointer items-center gap-1 rounded-lg py-2.5 pl-2 pr-2 hover:bg-gray-50"
+            /* has-[[data-state=open]]: hold the hover look while this row's own
+               "另存为" menu is open — the pointer is on the panel by then. */
+            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-2.5 pl-2 pr-1 hover:bg-gray-50 has-[[data-state=open]]:bg-gray-50"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
-            <FileIcon type={getFileExtension(file.file_name) as any} className="mr-1.5 size-5 min-w-5" />
-            {/* min-w-0 without flex-1 — the action follows the NAME, not the sheet
-                edge; a 480px drawer would otherwise strand it far to the right. */}
-            <span className="min-w-0 truncate text-sm text-gray-800">{file.file_name}</span>
-            <NewTabHint file={file} />
-            {/* The trailing gutter used to hold a hover-only eye that just repeated
-                the row's own click. The one action the row couldn't otherwise
-                reach — keeping the file — now sits beside the name instead. */}
-            <SaveAsButton file={file} versionId={versionId} />
+            <span className="flex min-w-0 items-center">
+                {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- FileIcon accepts more types than its union */}
+                <FileIcon type={getFileExtension(file.file_name) as any} className="mr-1.5 size-5 min-w-5" />
+                <span className="min-w-0 truncate text-sm text-gray-800">{file.file_name}</span>
+                <NewTabHint file={file} className="ml-1.5" />
+            </span>
+            {/* Always-visible worded action at the row's end — same treatment as
+                the delivery card's and workspace panel's rows. */}
+            <SaveAsButton file={file} versionId={versionId} variant="labeled" />
         </div>
     );
 
