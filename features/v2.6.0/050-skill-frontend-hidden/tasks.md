@@ -34,3 +34,4 @@
 ## 实际偏差记录
 
 - T004 补坑 → 本地全量跑时早期套件泄漏全局租户监听器,跨租户 insert 会打真库;测试改为「上下文内建行 + rowcount=0 断言」等价验证租户隔离
+- 2026-08-20 AC-03 修订(shanghang 提出)→ 停用时同一条 UPDATE 顺带清掉 `frontend_hidden`,使「隐藏 ⇒ 启用」在两个方向都成立;`LinsightSkillDao.set_enabled` + `SkillManagement.handleToggle` 乐观更新,测试 `test_skill_frontend_hidden.py::TestDao` 三例
