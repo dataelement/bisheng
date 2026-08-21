@@ -440,6 +440,7 @@ export function hasRenderableTimeline(history: ExecStepEventData[] | null | unde
 export function isTimelineNodeRunning(node: TimelineNode): boolean {
     if (node.kind === 'subagent_group') return node.agents.some((a) => a.step.running);
     if (node.kind === 'deep_step_group') return node.running;
+    if (node.kind === 'intent') return false; // an answered clarify is never running
     return node.step.running;
 }
 
