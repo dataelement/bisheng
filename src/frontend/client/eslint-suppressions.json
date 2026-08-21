@@ -146,20 +146,6 @@
       "count": 1
     }
   },
-  "src/components/AccountInfoDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 3
-    },
-    "no-useless-escape": {
-      "count": 2
-    }
-  },
   "src/components/Artifacts/Artifact.tsx": {
     "no-restricted-imports": {
       "count": 1
@@ -2429,14 +2415,6 @@
     },
     "react-hooks/exhaustive-deps": {
       "count": 2
-    }
-  },
-  "src/layouts/UserPopMenu.tsx": {
-    "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
     }
   },
   "src/locales/i18n.ts": {
