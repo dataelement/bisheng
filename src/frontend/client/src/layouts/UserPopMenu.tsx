@@ -27,7 +27,8 @@ import { useNotificationCount } from "~/hooks/useNotificationCount";
 import { useNotificationsFromUrl } from "~/hooks/useNotificationsFromUrl";
 import store from "~/store";
 import { cn } from "~/utils";
-
+import { usePersonalStorageQuota } from "~/hooks/usePersonalStorageQuota";
+import { PersonalStorageCard } from "./PersonalStorageCard";
 /** 左侧窄栏仅头像 = PC；会话历史抽屉内整行 = 移动端，菜单内容与 PC 一致 */
 export type UserPopMenuVariant = "rail" | "drawer";
 
@@ -49,6 +50,7 @@ function UserPopMenuDrawer() {
 
     const { user, logout } = useAuthContext();
     const { unreadCount, refreshCount } = useNotificationCount();
+    const { refresh: refreshQuota } = usePersonalStorageQuota();
     const localize = useLocalize();
     const [langcode, setLangcode] = useRecoilState(store.lang);
     const changeLang = (lang: string) => {
@@ -98,6 +100,7 @@ function UserPopMenuDrawer() {
             return;
         }
         void refreshCount();
+        void refreshQuota();
         const onPointerDown = (e: PointerEvent) => {
             const el = rootRef.current;
             if (el && !el.contains(e.target as Node)) {
@@ -106,7 +109,7 @@ function UserPopMenuDrawer() {
         };
         document.addEventListener("pointerdown", onPointerDown, true);
         return () => document.removeEventListener("pointerdown", onPointerDown, true);
-    }, [menuOpen, refreshCount]);
+    }, [menuOpen, refreshCount, refreshQuota]);
 
     useEffect(() => {
         if (!menuOpen) return;
@@ -173,6 +176,8 @@ function UserPopMenuDrawer() {
                             </span>
                         </button>
                     </div>
+
+                    <PersonalStorageCard className="px-3 pb-1 pt-1.5" />
 
                     <div className="mx-3 my-1 h-px bg-gray-100" />
 
@@ -305,6 +310,7 @@ function UserPopMenuRail() {
 
     const { user, logout } = useAuthContext();
     const { unreadCount, refreshCount } = useNotificationCount();
+    const { refresh: refreshQuota } = usePersonalStorageQuota();
 
     const localize = useLocalize();
     const [langcode, setLangcode] = useRecoilState(store.lang);
@@ -340,6 +346,7 @@ function UserPopMenuRail() {
     const handleDropdownOpenChange = (nextOpen: boolean) => {
         setDropdownOpen(nextOpen);
         if (nextOpen) {
+            void refreshQuota();
             suppressMenuItemClicksRef.current = true;
             window.setTimeout(() => {
                 suppressMenuItemClicksRef.current = false;
@@ -442,6 +449,8 @@ function UserPopMenuRail() {
                         </Avatar>
                         <span className={cn(actionMenuLabelClassName, "font-medium")}>{displayName}</span>
                     </div>
+
+                    <PersonalStorageCard className="px-2 pb-1 pt-1.5" />
 
                     <ActionMenuDivider />
 
