@@ -320,32 +320,49 @@ export function applyHtmlViewerTabIdentity(htmlContent: string): void {
     }
 }
 
+/**
+ * Resolve, fetch and name an artifact's real bytes.
+ *
+ * Shared by the local download and the save-to-knowledge-space flow so the
+ * name rule can't drift between them: a user-uploaded non-image source is
+ * stored as its PARSED MARKDOWN, so the bytes are markdown regardless of the
+ * original extension and the name must become `<stem>.md`. Image uploads and
+ * model-generated outputs keep their real name/content.
+ */
+export async function fetchArtifactBlob(
+  file: ArtifactFile,
+  versionId: string,
+): Promise<{ blob: Blob; fileName: string }> {
+  const url = await resolveArtifactUrl(file.file_url, versionId);
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to download file: ${response.status}`);
+  }
+  const blob = await response.blob();
+  const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage;
+  return {
+    blob,
+    fileName: isUploadMarkdown
+      ? `${file.file_name.replace(/\.[^./\\]+$/, '')}.md`
+      : file.file_name,
+  };
+}
+
 /** Download the original artifact file ("save as" action). */
 export async function downloadArtifactFile(file: ArtifactFile, versionId: string): Promise<void> {
-    const url = await resolveArtifactUrl(file.file_url, versionId);
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.status}`);
-    }
-    const data = await response.blob();
-    // A user-uploaded non-image source is stored as its PARSED MARKDOWN, so the
-    // bytes fetched here are markdown regardless of the original extension —
-    // download it as `<name>.md`. Image uploads and model-generated outputs keep
-    // their real name/content.
-    const isUploadMarkdown = file.source === 'upload' && !file.previewAsImage;
-    const downloadName = isUploadMarkdown
-        ? `${file.file_name.replace(/\.[^./\\]+$/, '')}.md`
-        : file.file_name;
-    // CSV needs a UTF-8 BOM so Excel opens it with the right encoding
-    const blob =
-        !isUploadMarkdown && getFileExtension(file.file_name) === 'csv'
-            ? new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), data], { type: 'text/csv;charset=utf-8;' })
-            : data;
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = downloadName;
-    link.click();
-    URL.revokeObjectURL(link.href);
+  const { blob: data, fileName } = await fetchArtifactBlob(file, versionId);
+  // CSV needs a UTF-8 BOM so Excel opens it with the right encoding. Download
+  // only — a BOM prepended to a file entering knowledge-base parsing would
+  // corrupt its first cell, so it stays out of fetchArtifactBlob.
+  const blob =
+    fileName === file.file_name && getFileExtension(file.file_name) === 'csv'
+      ? new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), data], { type: 'text/csv;charset=utf-8;' })
+      : data;
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 /** Save an exported blob (md → pdf/docx) with the converted extension. */

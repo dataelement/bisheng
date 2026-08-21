@@ -473,6 +473,14 @@
   "com_linsight_exporting": "正在导出，请稍候…",
   "com_linsight_export_success": "文件下载成功",
   "com_linsight_export_failed": "导出失败，请稍后重试",
+  "com_linsight": {
+    "downloadToLocal": "下载到本地",
+    "saveToKnowledge": "存入知识空间",
+    "saveToKnowledgeSaving": "正在存入知识空间…",
+    "saveToKnowledgeSuccess": "已存入知识空间：{{name}}",
+    "saveToKnowledgePending": "已提交审批，通过后将存入知识空间",
+    "saveToKnowledgeFailed": "存入知识空间失败，请稍后重试"
+  },
   "com_message_content_copied": "内容已复制",
   "com_notifications_approved": "已同意",
   "com_notifications_rejected": "已拒绝",

@@ -120,8 +120,8 @@ const COLLAPSIBLE_CODES = new Set([18024, 19402, 19403]);
 /** Total byte size of an upload batch, for the personal-storage pre-check. */
 const sumFileSizes = (files: File[]): number => files.reduce((sum, file) => sum + file.size, 0);
 
-interface UploadFailure { name: string; reason: string; statusCode?: number }
-interface EarlyStop { reason: string; statusCode: number; skippedCount: number }
+export interface UploadFailure { name: string; reason: string; statusCode?: number }
+export interface EarlyStop { reason: string; statusCode: number; skippedCount: number }
 
 /**
  * Upload files sequentially, stopping early when a COLLAPSIBLE_CODES quota /
@@ -130,7 +130,7 @@ interface EarlyStop { reason: string; statusCode: number; skippedCount: number }
  * per uploaded file; `filenameOf` overrides the multipart filename (folder
  * upload passes `file.name` to strip the Chromium directory prefix).
  */
-async function uploadFilesSequential(
+export async function uploadFilesSequential(
     spaceId: string,
     files: File[],
     onSuccess: (res: UploadFileResponse, file: File) => void,
@@ -166,7 +166,7 @@ async function uploadFilesSequential(
  * files skipped by early-stop); all other failures list per file. Returns ""
  * when there is nothing to report.
  */
-function buildUploadFailureMessage(
+export function buildUploadFailureMessage(
     failures: UploadFailure[],
     earlyStop: EarlyStop | null,
     localize: (key: string, options?: Record<string, unknown>) => string,
