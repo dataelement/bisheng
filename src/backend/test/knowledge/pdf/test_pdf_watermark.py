@@ -11,6 +11,7 @@ from bisheng.knowledge.pdf.watermark import (
     PdfWatermarkError,
     PdfWatermarkSpec,
     _calculate_watermark_layout,
+    _page_is_image_dominated,
     _resolve_cjk_font,
     _tile_positions,
     apply_pdf_watermark,
@@ -179,6 +180,18 @@ def test_watermark_layout_scales_font_on_large_image_page() -> None:
     assert image_layout.font_size == pytest.approx(12.0 * 1920 / 595)
     assert image_layout.font_size > document_layout.font_size
     assert image_layout.horizontal_step > document_layout.horizontal_step
+
+
+def test_image_dominated_detects_photo_page_with_white_border(tmp_path: Path) -> None:
+    from PIL import Image
+
+    document = fitz.open()
+    page = document.new_page(width=842, height=595)
+    image_path = tmp_path / "border_photo.png"
+    Image.new("RGB", (600, 400), color=(30, 90, 40)).save(image_path)
+    page.insert_image(fitz.Rect(121, 97.5, 721, 497.5), filename=str(image_path))
+    assert _page_is_image_dominated(page) is True
+    document.close()
 
 
 def test_watermark_stays_visible_when_large_image_pdf_is_fit_to_width(tmp_path: Path) -> None:

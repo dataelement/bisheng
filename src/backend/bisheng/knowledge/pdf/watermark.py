@@ -188,7 +188,10 @@ def _page_is_image_dominated(page: fitz.Page) -> bool:
 
     文档页保持原有单层浅灰水印；图片页改用描边增强，避免「能下但看不见水印」。
     """
-    return _page_image_coverage_ratio(page) >= _IMAGE_PAGE_COVERAGE_RATIO
+    if _page_image_coverage_ratio(page) >= _IMAGE_PAGE_COVERAGE_RATIO:
+        return True
+    # 扫件/照片页可能带白边，位图占比不足 45% 但仍几乎无正文，须走图片增强。
+    return bool(page.get_images(full=True)) and not page.get_text().strip()
 
 
 def _insert_watermark_line(
