@@ -85,7 +85,9 @@ async def test_overview_cache_is_scoped_per_tenant():
 @pytest.mark.asyncio
 async def test_overview_falls_back_to_db_when_redis_unavailable(caplog):
     """Redis 不可用时概览仍可返回，不向上抛错。"""
-    import bisheng.core.cache.redis_manager as redis_manager_module
+    import importlib
+
+    redis_manager_module = importlib.import_module("bisheng.core.cache.redis_manager")
 
     repo = _repo()
     service = PointsQueryService(session=None, repository=repo, ledger=None)
