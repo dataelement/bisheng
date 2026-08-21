@@ -700,6 +700,16 @@ class KnowledgePdfWatermarkConf(BaseModel):
         return self
 
 
+class KnowledgeChunkingConf(BaseModel):
+    """知识文件分块的全局安全限制。"""
+
+    max_chunk_chars: int = Field(
+        default=10000,
+        ge=1000,
+        description="Maximum character count allowed for a parsed knowledge chunk",
+    )
+
+
 class KnowledgeConf(BaseModel):
     """Knowledge Configure"""
 
@@ -723,6 +733,11 @@ class KnowledgeConf(BaseModel):
         default_factory=KnowledgePdfWatermarkConf,
         description="Portal PDF Watermark Configure",
     )
+    chunking: KnowledgeChunkingConf = Field(
+        default_factory=KnowledgeChunkingConf,
+        description="Knowledge chunking safety limits",
+    )
+
     @property
     def image_parser_enabled(self) -> bool:
         """Whether the active loader_provider can parse images (and richer PDFs).

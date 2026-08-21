@@ -8,6 +8,7 @@ import {
   TabsTrigger,
 } from "../../components/bs-ui/tabs"
 import Config from "./components/Config"
+import ApiRateLimit from "./components/ApiRateLimit"
 import DeveloperToken from "./components/DeveloperToken"
 import OrganizationAndMembers from "./components/OrganizationAndMembers"
 import OrgSync from "./components/OrgSync"
@@ -15,6 +16,7 @@ import RolesAndPermissions from "./components/RolesAndPermissions"
 import Theme from "./theme"
 import UserGroups from "./components/UserGroup"
 import Users from "./components/Users"
+import { isGlobalSuperUser } from "@/pages/ModelPage/manage/permissions"
 
 export default function index() {
   const { user } = useContext(userContext)
@@ -35,6 +37,7 @@ export default function index() {
   /** 组织同步仅超级管理员可见（网关掉对接口推送后，本页只读看记录与日志） */
   const showOrgSyncTab = isSuperAdmin
   const showDeveloperTokenTab = isSuperAdmin || isChildAdmin
+  const showApiRateLimitTab = isGlobalSuperUser(user)
   /** PRD §4.5: Child Admin manages own tenant's user groups. Backend now
    *  flips can_manage_user_groups true for Child Admin too; the explicit
    *  is_child_admin term keeps the tab visible if the backend regresses. */
@@ -77,6 +80,9 @@ export default function index() {
           {showDeveloperTokenTab && (
             <TabsTrigger value="developerToken">{t("system.developerToken.title")}</TabsTrigger>
           )}
+          {showApiRateLimitTab && (
+            <TabsTrigger value="apiRateLimit">{t("system.apiRateLimit.title")}</TabsTrigger>
+          )}
           {canAccessSystemConfig && (
             <TabsTrigger value="system">{t("system.systemConfiguration")}</TabsTrigger>
           )}
@@ -112,6 +118,11 @@ export default function index() {
         {showDeveloperTokenTab && (
           <TabsContent value="developerToken" className="min-h-0 flex-1 overflow-hidden">
             <DeveloperToken />
+          </TabsContent>
+        )}
+        {showApiRateLimitTab && (
+          <TabsContent value="apiRateLimit" className="min-h-0 flex-1 overflow-hidden">
+            <ApiRateLimit />
           </TabsContent>
         )}
         {canAccessSystemConfig && (

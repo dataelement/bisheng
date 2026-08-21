@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse, ORJSONResponse
 from loguru import logger
 
 from bisheng.api.router import router, router_rpc
+from bisheng.api_rate_limit.middleware import ApiRateLimitMiddleware
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.filelib_sync import FilelibSyncError
 from bisheng.common.exceptions.auth import AuthJWTException
@@ -95,6 +96,8 @@ def create_app():
     def get_health():
         return {"status": "OK"}
 
+    # Register first so CORS and request logging wrap short-circuited 429 responses.
+    app.add_middleware(ApiRateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,

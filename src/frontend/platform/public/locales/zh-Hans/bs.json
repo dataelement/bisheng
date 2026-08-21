@@ -153,6 +153,72 @@
     "noAdminConsoleAccess": "当前用户没有访问管理后台的权限"
   },
   "system": {
+    "apiRateLimit": {
+      "title": "接口限流",
+      "globalTitle": "全局限流配置",
+      "globalHelp": "未命中单独路由规则时使用；留空或 0 表示该时间维度不限流。",
+      "routesTitle": "单独路由配置",
+      "routesHelp": "单独路由命中后整组覆盖全局配置，四项均留空表示该路由不限流。",
+      "addRoute": "添加路由",
+      "createRoute": "新增路由配置",
+      "editRoute": "编辑",
+      "deleteRoute": "删除",
+      "deleteConfirm": "确认删除路由 {{path}} 的限流配置吗？",
+      "removeRoute": "删除路由",
+      "emptyRoutes": "暂无单独路由规则，所有接口使用全局配置。",
+      "noSearchResults": "未查询到匹配的路由配置。",
+      "searchPlaceholder": "查询路径、请求方法、匹配类型或提示文案",
+      "query": "查询",
+      "reset": "重置",
+      "pathPlaceholder": "例如：/api/v1/knowledge/{knowledge_id}",
+      "routeCatalog": {
+        "selectRoute": "选择接口路由",
+        "selectPlaceholder": "按分类查询并选择路由",
+        "searchPlaceholder": "查询路径、方法、分类或接口名称",
+        "categoryFilter": "路由分类",
+        "methodFilter": "请求方法筛选",
+        "allCategories": "全部分类",
+        "allMethods": "全部方法",
+        "uncategorized": "未分类",
+        "loading": "正在加载路由…",
+        "loadFailed": "路由目录加载失败，可切换为手动输入继续配置。",
+        "empty": "未查询到匹配的接口路由。",
+        "manualInput": "手动输入路径",
+        "useCatalog": "使用路由目录",
+        "loadMore": "加载更多",
+        "total": "共 {{total}} 条路由"
+      },
+      "anyMethod": "任意方法",
+      "useGlobalMessage": "使用全局提示文案",
+      "message": "限流提示文案",
+      "routeMessagePlaceholder": "留空时使用全局提示文案",
+      "unlimited": "不限流",
+      "limitInvalid": "限流次数必须为 1 到 10000000 的整数，或留空表示不限流。",
+      "ruleInvalid": "第 {{index}} 条路由规则无效或与其他规则重复，请检查后重试。",
+      "save": "保存配置",
+      "saving": "保存中…",
+      "saved": "接口限流配置已保存并生效。",
+      "defaultMessage": "请求过于频繁，请稍后重试",
+      "columns": {
+        "matchType": "匹配类型",
+        "method": "请求方法",
+        "path": "路由路径",
+        "limits": "限流配置",
+        "message": "提示文案",
+        "actions": "操作"
+      },
+      "dimensions": {
+        "second": "每秒请求数",
+        "minute": "每分钟请求数",
+        "hour": "每小时请求数",
+        "day": "每天请求数"
+      },
+      "matchTypes": {
+        "METHOD_PATH": "方法 + 路径",
+        "PATH": "精确路径",
+        "PREFIX": "路径前缀"
+      }
+    },
     "userManagement": "用户管理",
     "developerToken": {
       "title": "开发者 Token",

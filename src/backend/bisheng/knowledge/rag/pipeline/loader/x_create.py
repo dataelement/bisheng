@@ -27,6 +27,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
             header_rows: list[int] | None = None,
             data_rows: int = 12,
             append_header: bool = True,
+            max_chunk_chars: int = 10000,
             *args,
             **kwargs,
     ):
@@ -35,6 +36,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
         self.header_rows = header_rows or [0, 1]
         self.data_rows = data_rows
         self.append_header = append_header
+        self.max_chunk_chars = max_chunk_chars
 
     def load(self) -> list[Document]:
         target_ext, loader_type = self.FORMAT_MAP.get(self.file_extension, (None, None))
@@ -82,6 +84,7 @@ class XinChuangFormatterLoader(BaseBishengLoader):
                 header_rows=self.header_rows,
                 data_rows=self.data_rows,
                 append_header=self.append_header,
+                max_chunk_chars=self.max_chunk_chars,
             )
         if loader_type == "ppt":
             return BishengPptLoader(**params, retain_images=self.retain_images)
