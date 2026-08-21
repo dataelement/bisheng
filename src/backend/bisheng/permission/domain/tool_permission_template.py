@@ -4,24 +4,37 @@ from __future__ import annotations
 
 from typing import Dict, List, Set
 
-_RELATION_LEVEL: Dict[str, int] = {
-    'can_read': 1,
-    'can_edit': 2,
-    'can_manage': 3,
-    'can_delete': 4,
-}
-
-_MODEL_LEVEL: Dict[str, int] = {
-    'viewer': 1,
-    'editor': 2,
-    'manager': 3,
-    'owner': 4,
-}
-_COMPUTED_TO_MODEL_RELATION: Dict[str, str] = {
-    'can_read': 'viewer',
-    'can_edit': 'editor',
-    'can_manage': 'manager',
-    'can_delete': 'owner',
+# NOTE: keep these tier lists in lockstep with the channel template
+# (channel_permission_template._DEFAULT_PERMISSION_IDS_BY_RELATION) so a
+# "manager" subject never inherits the "manage_*_owner" permission by default —
+# that would let a manager add or remove owners, breaking the owner/manager
+# hierarchy. The previous level-based calculation gave can_manage-level managers
+# the owner-tier manage permission as well (IKABS3).
+_DEFAULT_PERMISSION_IDS_BY_RELATION: Dict[str, Set[str]] = {
+    'owner': {
+        'view_tool',
+        'use_tool',
+        'edit_tool',
+        'delete_tool',
+        'manage_tool_owner',
+        'manage_tool_manager',
+        'manage_tool_viewer',
+    },
+    'manager': {
+        'view_tool',
+        'use_tool',
+        'edit_tool',
+        'manage_tool_manager',
+        'manage_tool_viewer',
+    },
+    'editor': {
+        'view_tool',
+        'use_tool',
+        'edit_tool',
+    },
+    'viewer': {
+        'view_tool',
+    },
 }
 
 TOOL_PERMISSION_TEMPLATE: dict = {
@@ -61,10 +74,10 @@ def tool_template_permissions() -> List[dict]:
 
 
 def default_permission_ids_for_relation(relation: str) -> Set[str]:
-    normalized = _COMPUTED_TO_MODEL_RELATION.get(relation, relation)
-    relation_level = _MODEL_LEVEL.get(normalized, 0)
-    return {
-        item['id']
-        for item in tool_template_permissions()
-        if relation_level >= _RELATION_LEVEL.get(item['relation'], 99)
-    }
+    """System-model default permissions for owner/manager/editor/viewer.
+
+    A manager is intentionally denied ``manage_tool_owner`` so the manager
+    cannot add or remove owners — only the owner can. This mirrors the
+    channel and application templates.
+    """
+    return set(_DEFAULT_PERMISSION_IDS_BY_RELATION.get(relation, set()))

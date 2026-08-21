@@ -33,11 +33,20 @@ def test_application_permission_defaults_accept_computed_relations():
 
 
 def test_tool_permission_defaults_accept_computed_relations():
+    # IKABS3: manager must not inherit manage_tool_owner — only the owner tier
+    # is allowed to add or remove owners.
     assert default_tool_permission_ids_for_relation("can_read") == {"view_tool", "use_tool"}
     assert default_tool_permission_ids_for_relation("can_manage") == {
         "view_tool",
         "use_tool",
         "edit_tool",
+        "manage_tool_manager",
+        "manage_tool_viewer",
+    }
+    assert "manage_tool_owner" not in default_tool_permission_ids_for_relation("can_manage")
+    # owner gets every permission
+    assert default_tool_permission_ids_for_relation("can_delete") >= {
+        "delete_tool",
         "manage_tool_owner",
         "manage_tool_manager",
         "manage_tool_viewer",
