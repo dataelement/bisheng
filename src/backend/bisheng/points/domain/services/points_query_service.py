@@ -32,7 +32,7 @@ from bisheng.points.domain.services.points_notify_service import PointsNotifySer
 logger = logging.getLogger(__name__)
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 # 运营概览缓存：三个指标均为全历史聚合，AC-19 允许 5min 陈旧。
-OVERVIEW_CACHE_PREFIX = "points:overview:"
+OVERVIEW_CACHE_PREFIX = "points:overview:v2:"
 OVERVIEW_CACHE_TTL = 300
 
 
@@ -287,8 +287,9 @@ class PointsQueryService:
         return name_by_user, dept_by_user
 
     async def overview(self, tenant_id: int, user: UserPayload) -> PointOverviewResponse:
-        """运营概览：总发放 / 余额合计 / 违规扣减。
+        """运营概览：总发放 / 有效可用总积分 / 违规扣减。
 
+        当前有效可用总积分 = 平台总积分发放 − 违规扣减积分（非账户余额合计）。
         三个指标都是全历史聚合，耗时随流水量线性增长；按 AC-19 允许 5min 陈旧，
         因此走 Redis 缓存。缓存不可用时退化为直查库，不影响可用性。
         """
@@ -298,10 +299,12 @@ class PointsQueryService:
         if cached is not None:
             return PointOverviewResponse(**cached)
         month_start, month_end = self._month_bounds()
+        total_issued = await self.repository.sum_total_issued(tenant_id)
+        total_violation_deducted = await self.repository.sum_violation_deducted(tenant_id)
         payload = {
-            "total_issued": await self.repository.sum_total_issued(tenant_id),
-            "total_balance": await self.repository.sum_total_balance(tenant_id),
-            "total_violation_deducted": await self.repository.sum_violation_deducted(tenant_id),
+            "total_issued": total_issued,
+            "total_balance": max(0, total_issued - total_violation_deducted),
+            "total_violation_deducted": total_violation_deducted,
             "total_issued_mom": await self.repository.sum_tenant_earn(tenant_id, month_start, month_end),
         }
         await self._overview_cache_set(cache_key, payload)

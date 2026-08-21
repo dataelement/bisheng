@@ -81,6 +81,7 @@ class PointOverviewResponse(BaseModel):
     """运营概览三绝对数。"""
 
     total_issued: int
+    # 当前有效可用总积分 = 平台总积分发放 − 违规扣减积分（与 PRD 运营口径一致）
     total_balance: int
     total_violation_deducted: int
     total_issued_mom: int = 0
