@@ -80,9 +80,13 @@ class KnowledgeBase(SQLModelSerializable):
         default=False,
         sa_column=Column(Boolean, nullable=False, server_default=text('0'), comment='是否启用自动标签'),
     )
+    # Retired by f093: knowledge_tag_library_link is the only record of which
+    # libraries a space is bound to. Nothing writes this column any more and the
+    # migration blanked it; the singular field still on the wire is derived from
+    # the links. Kept until no caller depends on that field, then dropped.
     auto_tag_library_id: Optional[int] = Field(
         default=None,
-        sa_column=Column(Integer, nullable=True, index=True, comment='绑定的自动标签库ID'),
+        sa_column=Column(Integer, nullable=True, index=True, comment='已废弃，绑定关系见 knowledge_tag_library_link'),
     )
     business_domain_codes: Optional[List[str]] = Field(
         default_factory=list,

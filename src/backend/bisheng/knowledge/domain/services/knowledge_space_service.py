@@ -3929,8 +3929,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _decorate_auto_tag_for_info(result: KnowledgeSpaceInfoResp) -> None:
         """Populate auto-tag wire fields and mask private-library ids."""
         library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(result.id)
-        if not library_ids and result.auto_tag_library_id:
-            library_ids = [int(result.auto_tag_library_id)]
 
         public_ids: list[int] = []
         custom_tags: list[str] = []
@@ -3996,7 +3994,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 existing_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(
                     knowledge.id,
                 )
-                primary = existing_ids[0] if existing_ids else knowledge.auto_tag_library_id
+                primary = existing_ids[0] if existing_ids else None
             return False, primary
 
         requested_ids = cls._resolve_requested_library_ids(
@@ -4210,8 +4208,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 validate_libraries=validate_tag_libraries,
             )
             if resolved_enabled or resolved_library_id is not None:
+                # The library binding itself lives in knowledge_tag_library_link,
+                # written by _apply_auto_tag_binding above. Only the on/off flag
+                # belongs on the space row.
                 knowledge_space.auto_tag_enabled = resolved_enabled
-                knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
             log_perf_stage("auto_tag")
 
@@ -12021,8 +12021,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 and desired_custom_tags is None
             ):
                 desired_library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space.id)
-                if not desired_library_ids and space.auto_tag_library_id:
-                    desired_library_ids = [space.auto_tag_library_id]
 
             resolved_enabled, resolved_library_id = await self._apply_auto_tag_binding(
                 knowledge=space,
@@ -12034,7 +12032,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tenant_id=self.login_user.tenant_id,
             )
             space.auto_tag_enabled = resolved_enabled
-            space.auto_tag_library_id = resolved_library_id
 
         prepared_portal_rebind_plan = None
         if (

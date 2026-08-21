@@ -1472,7 +1472,16 @@
       "selectKnowledge": "请选择知识库",
       "tabPending": "待审核",
       "tabReviewed": "已审核",
-      "emptyReviewed": "暂无已审核标签"
+      "emptyReviewed": "暂无已审核标签",
+      "boundKnowledges": "关联知识库",
+      "addKnowledge": "添加知识库",
+      "searchKnowledge": "搜索知识库",
+      "noKnowledge": "暂无知识库",
+      "alreadyBound": "已关联",
+      "publicSpaces": "公共知识库",
+      "departmentSpaces": "部门知识库",
+      "teamSpaces": "团队/科室知识库",
+      "personalSpaces": "个人知识库"
     }
   },
   "bench": {

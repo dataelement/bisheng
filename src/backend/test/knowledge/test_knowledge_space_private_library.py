@@ -255,7 +255,6 @@ async def test_decorate_private_library_masks_id_and_returns_tags():
         id=42,
         name="space",
         type=KnowledgeTypeEnum.SPACE.value,
-        auto_tag_library_id=555,
     )
     private = KnowledgeSpaceTagLibrary(
         id=555,
@@ -271,7 +270,7 @@ async def test_decorate_private_library_masks_id_and_returns_tags():
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service."
             "KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
-            new=AsyncMock(return_value=[]),
+            new=AsyncMock(return_value=[555]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
@@ -296,7 +295,6 @@ async def test_decorate_public_library_keeps_id_and_marks_library_mode():
         id=42,
         name="space",
         type=KnowledgeTypeEnum.SPACE.value,
-        auto_tag_library_id=10,
     )
     public = KnowledgeSpaceTagLibrary(
         id=10,
@@ -312,7 +310,7 @@ async def test_decorate_public_library_keeps_id_and_marks_library_mode():
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service."
             "KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
-            new=AsyncMock(return_value=[]),
+            new=AsyncMock(return_value=[10]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",
@@ -336,7 +334,6 @@ async def test_decorate_private_library_owned_by_other_space_treated_as_library(
         id=42,
         name="space",
         type=KnowledgeTypeEnum.SPACE.value,
-        auto_tag_library_id=999,
     )
     foreign_private = KnowledgeSpaceTagLibrary(
         id=999,
@@ -352,7 +349,7 @@ async def test_decorate_private_library_owned_by_other_space_treated_as_library(
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service."
             "KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
-            new=AsyncMock(return_value=[]),
+            new=AsyncMock(return_value=[999]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeSpaceTagLibraryDao.aget",

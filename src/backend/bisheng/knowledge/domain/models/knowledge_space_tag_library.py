@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     Integer,
     String,
+    case,
     delete,
     func,
     text,
@@ -67,6 +68,14 @@ class KnowledgeSpaceTagLibraryBase(SQLModelSerializable):
         default=0,
         sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="创建人ID"),
     )
+    sort_weight: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            nullable=True,
+            comment="Admin drag order; NULL means never reordered",
+        ),
+    )
     create_time: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP")),
@@ -109,13 +118,56 @@ class KnowledgeSpaceTagLibraryDao:
             return (await session.exec(statement)).all()
 
     @classmethod
+    def _display_order(cls):
+        """Order clauses shared by every list that shows libraries to a user.
+
+        Rows an admin has dragged carry a weight and sort by it. Rows that have
+        never been dragged carry NULL and stay on the historical newest-first
+        ordering, ahead of the arranged ones — a library created after a reorder
+        appears at the top, where a new library has always appeared.
+        """
+        return (
+            case((col(KnowledgeSpaceTagLibrary.sort_weight).is_(None), 0), else_=1).asc(),
+            col(KnowledgeSpaceTagLibrary.sort_weight).asc(),
+            col(KnowledgeSpaceTagLibrary.id).desc(),
+        )
+
+    @classmethod
+    async def alist_all_ordered(cls) -> list[KnowledgeSpaceTagLibrary]:
+        """Every tenant-public library in display order, unpaged.
+
+        Reordering needs the whole list: the neighbours a row is dropped between
+        must be validated against it, and a re-spread has to renumber all of it.
+        """
+        statement = (
+            select(KnowledgeSpaceTagLibrary)
+            .where(KnowledgeSpaceTagLibrary.owner_knowledge_id.is_(None))
+            .order_by(*cls._display_order())
+        )
+        async with get_async_db_session() as session:
+            return (await session.exec(statement)).all()
+
+    @classmethod
+    async def aupdate_sort_weights(cls, weights: dict[int, int]) -> None:
+        if not weights:
+            return
+        async with get_async_db_session() as session:
+            for library_id, weight in weights.items():
+                await session.exec(
+                    update(KnowledgeSpaceTagLibrary)
+                    .where(col(KnowledgeSpaceTagLibrary.id) == int(library_id))
+                    .values(sort_weight=int(weight))
+                )
+            await session.commit()
+
+    @classmethod
     async def alist(
         cls, page: int = 1, page_size: int = 20, keyword: str | None = None
     ) -> list[KnowledgeSpaceTagLibrary]:
         statement = select(KnowledgeSpaceTagLibrary).where(KnowledgeSpaceTagLibrary.owner_knowledge_id.is_(None))
         if keyword:
             statement = statement.where(KnowledgeSpaceTagLibrary.name.like(f"%{keyword}%"))
-        statement = statement.order_by(KnowledgeSpaceTagLibrary.id.desc())
+        statement = statement.order_by(*cls._display_order())
         if page > 0 and page_size > 0:
             statement = statement.offset((page - 1) * page_size).limit(page_size)
         async with get_async_db_session() as session:
@@ -194,6 +246,7 @@ class KnowledgeSpaceTagLibraryDao:
         from bisheng.knowledge.domain.models.knowledge import Knowledge
         from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
             KnowledgeTagLibraryLink,
+            KnowledgeTagLibraryLinkDao,
         )
 
         async with get_async_db_session() as session:
@@ -209,18 +262,14 @@ class KnowledgeSpaceTagLibraryDao:
             await session.commit()
 
         for knowledge_id in knowledge_ids:
-            remaining = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(knowledge_id)
+            # Losing the last library turns auto-tagging off; a space that still
+            # has others keeps it on and simply tags against what is left.
+            if await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(knowledge_id):
+                continue
             async with get_async_db_session() as session:
-                if remaining:
-                    await session.exec(
-                        update(Knowledge).where(Knowledge.id == knowledge_id).values(auto_tag_library_id=remaining[0])
-                    )
-                else:
-                    await session.exec(
-                        update(Knowledge)
-                        .where(Knowledge.id == knowledge_id)
-                        .values(auto_tag_enabled=False, auto_tag_library_id=None)
-                    )
+                await session.exec(
+                    update(Knowledge).where(Knowledge.id == knowledge_id).values(auto_tag_enabled=False)
+                )
                 await session.commit()
 
     @classmethod

@@ -114,3 +114,35 @@ export async function getKnowledgeSpaceFolderStatsApi(params: {
   const payload: any = response?.data || response || {}
   return payload.stats || []
 }
+
+/** One space in the grouped picker tree. */
+export interface GroupedKnowledgeSpace {
+  id: number
+  name: string
+  is_favorite?: boolean
+}
+
+/**
+ * Spaces the current user can reach, in the four groups the knowledge sidebar
+ * shows: public, department, team (clinic-level spaces fold in here), personal.
+ *
+ * Scoped to the caller — a tenant admin sees every shared space, but the
+ * personal group only ever holds their own.
+ */
+export interface GroupedKnowledgeSpaces {
+  publicSpaces: GroupedKnowledgeSpace[]
+  departmentSpaces: GroupedKnowledgeSpace[]
+  teamSpaces: GroupedKnowledgeSpace[]
+  personalSpaces: GroupedKnowledgeSpace[]
+}
+
+export async function getGroupedKnowledgeSpacesApi(): Promise<GroupedKnowledgeSpaces> {
+  const payload: any = await axios.get(`/api/v1/knowledge/space/grouped`)
+  const asArray = (value: unknown): GroupedKnowledgeSpace[] => (Array.isArray(value) ? value : [])
+  return {
+    publicSpaces: asArray(payload?.public_spaces),
+    departmentSpaces: asArray(payload?.department_spaces),
+    teamSpaces: asArray(payload?.team_spaces),
+    personalSpaces: asArray(payload?.personal_spaces),
+  }
+}
