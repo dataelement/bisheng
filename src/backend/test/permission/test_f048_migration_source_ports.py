@@ -52,6 +52,7 @@ async def test_knowledge_source_keeps_creator_divergence_and_canonical_parent():
                 status="PUBLISHED",
                 owner_user_id=11,
                 creator_user_ids=(12,),
+                migrate_ordinary_grants=False,
             ),
             KnowledgeMigrationRow(
                 tenant_id=7,
@@ -86,6 +87,7 @@ async def test_knowledge_source_keeps_creator_divergence_and_canonical_parent():
     assert page.next_cursor == "knowledge:2"
     assert page.items[0].creator_user_ids == (12,)
     assert page.items[0].owner_user_id == 11
+    assert page.items[0].migrate_ordinary_grants is False
     assert page.items[1].parent_type == "knowledge_space"
     assert page.items[1].parent_id == "1"
     assert page.items[2].migratable is False
@@ -126,6 +128,7 @@ async def test_channel_source_keeps_creator_and_user_id_as_separate_facts():
                 status="ACTIVE",
                 owner_user_id=11,
                 creator_user_ids=(12,),
+                migrate_ordinary_grants=False,
             ),
         )
     )
@@ -140,6 +143,7 @@ async def test_channel_source_keeps_creator_and_user_id_as_separate_facts():
     assert item.owner_user_id == 11
     assert item.creator_user_ids == (12,)
     assert item.ownership_kind == "USER"
+    assert item.migrate_ordinary_grants is False
 
 
 async def test_application_source_requires_builtin_and_allowlist_for_system_owner():

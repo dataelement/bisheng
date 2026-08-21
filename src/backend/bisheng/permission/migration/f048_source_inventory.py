@@ -111,6 +111,7 @@ class PermissionMigrationResourceDTO:
     creator_user_ids: tuple[int, ...] = ()
     system_allowlisted: bool = False
     permission_mode: str | None = None
+    migrate_ordinary_grants: bool = True
     source_version: str = "1"
     migratable: bool = True
     skip_reason: str | None = None
@@ -283,6 +284,10 @@ def _resource_items(
     seen_keys: set[str] = set()
     locators: set[str] = set()
     for resource in sorted(resources, key=lambda row: row.source_locator):
+        payload = asdict(resource)
+        if resource.migrate_ordinary_grants:
+            # Keep pre-field frozen snapshots checksum-compatible on resume.
+            payload.pop("migrate_ordinary_grants")
         difference_type, severity = _resource_difference(resource)
         if resource.key in seen_keys or resource.source_locator in locators:
             difference_type = "DUPLICATE_RESOURCE_SOURCE"
@@ -296,7 +301,7 @@ def _resource_items(
                 source_kind="RESOURCE",
                 source_locator=resource.source_locator,
                 tenant_id=resource.tenant_id,
-                payload=asdict(resource),
+                payload=payload,
                 difference_type=difference_type,
                 severity=severity,
             )

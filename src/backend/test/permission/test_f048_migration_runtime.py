@@ -19,6 +19,7 @@ from bisheng.core.openfga.authorization_model_f048 import (
     build_authorization_model_f048,
 )
 from bisheng.core.openfga.discovery import OpenFGARuntimePin
+from bisheng.database.models.failed_tuple import FailedTuple
 from bisheng.permission.domain.models import (
     AuthorizationModelRelease,
     PermissionAction,
@@ -36,7 +37,7 @@ from bisheng.permission.domain.models import (
 from bisheng.permission.domain.repositories.migration_repository import (
     MigrationRepository,
 )
-from bisheng.permission.migration import f048_runtime_storage
+from bisheng.permission.migration import f048_runtime_source, f048_runtime_storage
 from bisheng.permission.migration.f048_runtime_source import (
     LiveMigrationSourceProvider,
 )
@@ -157,6 +158,31 @@ async def test_sql_run_store_rebuilds_complete_frozen_source_payload():
     assert restored.config_sources[0].raw_value == ('[{"id":"legacy-owner","permissions":[]}]')
     assert restored.resources == _snapshot().resources
     assert restored.tuples == _snapshot().tuples
+
+
+def test_resource_snapshot_only_persists_non_default_private_grant_policy():
+    default_inventory = build_source_inventory(_snapshot())
+    default_resource = next(item for item in default_inventory.items if item.source_kind == "RESOURCE")
+    assert "migrate_ordinary_grants" not in default_resource.payload
+
+    private_resource = PermissionMigrationResourceDTO(
+        tenant_id=7,
+        resource_type="channel",
+        resource_id="private-1",
+        status="ACTIVE",
+        owner_user_id=11,
+        ownership_kind="USER",
+        source_locator="channel:private-1",
+        creator_user_ids=(11,),
+        migrate_ordinary_grants=False,
+    )
+    private_snapshot = SourceInventorySnapshot(
+        environment=_snapshot().environment,
+        resources=(private_resource,),
+    )
+    private_inventory = build_source_inventory(private_snapshot)
+    private_item = next(item for item in private_inventory.items if item.source_kind == "RESOURCE")
+    assert private_item.payload["migrate_ordinary_grants"] is False
 
 
 class _NoopDashboardRepository:
@@ -315,6 +341,152 @@ def test_failed_tuple_reconciliation_only_auto_resolves_proven_outcomes():
         )
         == "CANONICAL_IDENTITY_STATE"
     )
+
+
+async def test_failed_tuple_source_queries_only_candidates_and_keeps_latest_action(monkeypatch):
+    duplicate_one = FailedTuple(
+        id=1,
+        action="write",
+        fga_user="user:11",
+        relation="owner",
+        object="llm_model:legacy",
+        status="dead",
+        tenant_id=7,
+        error_message="deadline_exceeded",
+    )
+    duplicate_two = FailedTuple(
+        id=2,
+        action="write",
+        fga_user="user:11",
+        relation="owner",
+        object="llm_model:legacy",
+        status="pending",
+        tenant_id=7,
+        error_message="timed out",
+    )
+    canonical = FailedTuple(
+        id=3,
+        action="write",
+        fga_user="user:12",
+        relation="member",
+        object="tenant:7",
+        status="dead",
+        tenant_id=7,
+    )
+    resolved = FailedTuple(
+        id=4,
+        action="write",
+        fga_user="user:13",
+        relation="owner",
+        object="workflow:wf-1",
+        status="dead",
+        tenant_id=7,
+    )
+
+    statements = []
+
+    class FakeResult:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def scalars(self):
+            return self
+
+        def all(self):
+            return self.rows
+
+    class FakeSession:
+        async def execute(self, statement):
+            statements.append(statement)
+            return FakeResult((resolved, canonical, duplicate_two, duplicate_one))
+
+    @asynccontextmanager
+    async def session_factory():
+        yield FakeSession()
+
+    class IdentityStateSource:
+        async def aresolve_expected_states(self, tuple_identities):
+            identity = ("user:12", "member", "tenant:7")
+            return {identity: True} if identity in tuple_identities else {}
+
+    provider = LiveMigrationSourceProvider(
+        source_client=SimpleNamespace(),
+        actual_store_id="store-live",
+        source_model_id="legacy-model",
+        sources=(),
+        dashboard_repository=_NoopDashboardRepository(),
+        identity_state_source=IdentityStateSource(),
+    )
+    monkeypatch.setattr(f048_runtime_source, "get_async_db_session", session_factory)
+
+    candidates = (
+        LegacyTupleSource(
+            tenant_id=7,
+            user="user:11",
+            relation="owner",
+            object="llm_model:legacy",
+        ),
+        LegacyTupleSource(
+            tenant_id=None,
+            user="user:12",
+            relation="member",
+            object="tenant:7",
+        ),
+        LegacyTupleSource(
+            tenant_id=7,
+            user="user:13",
+            relation="owner",
+            object="workflow:wf-1",
+        ),
+    )
+    rows = await provider.aload_failed_tuples(
+        candidates=candidates,
+        resources=(
+            PermissionMigrationResourceDTO(
+                tenant_id=7,
+                resource_type="workflow",
+                resource_id="wf-1",
+                status="ONLINE",
+                owner_user_id=13,
+                ownership_kind="USER",
+                source_locator="workflow:wf-1",
+            ),
+        ),
+        tuples=(),
+    )
+
+    assert len(rows) == 3
+    assert {row.tuple_key for row in rows} == {
+        "user:11|owner|llm_model:legacy",
+        "user:12|member|tenant:7",
+        "user:13|owner|workflow:wf-1",
+    }
+    assert {row.resolution for row in rows} == {
+        None,
+        "BINDING_WRITE_INTENT",
+        "CANONICAL_IDENTITY_STATE",
+    }
+    assert next(row for row in rows if row.tuple_key.startswith("user:11|")).status == "pending"
+    assert len(statements) == 1
+    assert "max(failed_tuple.id)" in str(statements[0]).casefold()
+
+
+async def test_failed_tuple_source_skips_database_when_no_candidates(monkeypatch):
+    provider = LiveMigrationSourceProvider(
+        source_client=SimpleNamespace(),
+        actual_store_id="store-live",
+        source_model_id="legacy-model",
+        sources=(),
+        dashboard_repository=_NoopDashboardRepository(),
+    )
+
+    async def unexpected_session():
+        raise AssertionError("failed_tuple database must not be queried")
+        yield
+
+    monkeypatch.setattr(f048_runtime_source, "get_async_db_session", unexpected_session)
+
+    assert await provider.aload_failed_tuples(candidates=(), resources=(), tuples=()) == ()
 
 
 class _PublisherSourceClient:
@@ -942,6 +1114,41 @@ async def test_blocked_source_reset_replaces_only_pre_target_snapshot(
         "new-watermark",
         None,
         5,
+    )
+    async with session_factory() as session:
+        remaining = list(
+            (await session.execute(sa.select(PermissionMigrationItem).where(PermissionMigrationItem.run_id == 8)))
+            .scalars()
+            .all()
+        )
+    assert remaining == []
+
+    async with session_factory() as session:
+        async with session.begin():
+            session.add(
+                PermissionMigrationItem(
+                    run_id=8,
+                    source_kind="RESOURCE",
+                    source_locator="workflow:wf-1",
+                    source_checksum="r" * 64,
+                    status="READY",
+                    severity="INFO",
+                )
+            )
+    requested = await store.arequest_source_reset(
+        run_id=8,
+        expected_version=5,
+    )
+    assert (
+        requested.status,
+        requested.checkpoint,
+        requested.source_checksum,
+        requested.version,
+    ) == (
+        "BLOCKED",
+        "source-reset-requested",
+        None,
+        6,
     )
     async with session_factory() as session:
         remaining = list(
