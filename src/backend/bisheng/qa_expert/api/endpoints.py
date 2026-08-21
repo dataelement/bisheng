@@ -747,6 +747,8 @@ async def download_watermarked_asset(
     user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     """将专家问答上传的图片/附件转为带水印 PDF 后下载。"""
+    from urllib.parse import quote
+
     from bisheng.core.context.tenant import get_current_tenant_id
     from bisheng.qa_expert.domain.watermarked_download import (
         QaWatermarkDownloadError,
@@ -771,11 +773,13 @@ async def download_watermarked_asset(
         logger.exception("QA watermarked download failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="水印下载失败") from exc
 
+    # HTTP 头须 latin-1；中文文件名走 RFC 5987 filename*
+    encoded_filename = quote(filename, safe="")
     return Response(
         content=payload,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": (f"attachment; filename=\"qa-asset.pdf\"; filename*=UTF-8''{encoded_filename}"),
         },
     )
 
