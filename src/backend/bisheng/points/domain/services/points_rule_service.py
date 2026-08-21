@@ -8,6 +8,8 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.points import PointsRuleConflictError, PointsRuleNotFoundError
 from bisheng.points.domain.constants.beneficiary import allowed_beneficiaries
 from bisheng.points.domain.constants.optional_fixed_score_rules import validate_deferred_config_rule_can_enable
+from bisheng.points.domain.constants.rule_display_name import resolve_point_rule_display_name
+from bisheng.points.domain.constants.seed_rules import seed_default_name
 from bisheng.points.domain.constants.tier_rule_score_expr import validate_g3_tier_score_expr
 from bisheng.points.domain.models import PointRule
 from bisheng.points.domain.schemas.points_schema import (
@@ -46,6 +48,7 @@ class PointsRuleService:
             rule_code=rule.rule_code,
             rule_type=rule.rule_type,
             name=rule.name,
+            display_name=resolve_point_rule_display_name(rule),
             score_expr=rule.score_expr or {},
             daily_cap=rule.daily_cap,
             beneficiary=rule.beneficiary,
@@ -81,9 +84,13 @@ class PointsRuleService:
     async def create_rule(self, tenant_id: int, user: UserPayload, body: PointRuleRequest) -> PointRuleResponse:
         """创建规则；rule_code 租户内唯一。"""
         require_platform_admin(user)
-        if not body.rule_code or not body.rule_type or not body.name:
+        if not body.rule_code or not body.rule_type:
             raise PointsRuleConflictError(msg="创建规则缺少必填字段")
         code = body.rule_code.strip().upper()
+        default_name = seed_default_name(code) or (body.name or "").strip()
+        display_name = (body.display_name or body.name or default_name or "").strip()
+        if not default_name or not display_name:
+            raise PointsRuleConflictError(msg="创建规则缺少必填字段")
         if await self.repository.get_rule(tenant_id, code):
             raise PointsRuleConflictError(msg=f"规则编码 {code} 已存在")
         self.validate_beneficiary(code, body.rule_type, body.beneficiary)
@@ -92,7 +99,8 @@ class PointsRuleService:
             tenant_id=tenant_id,
             rule_code=code,
             rule_type=body.rule_type,
-            name=body.name,
+            name=default_name,
+            display_name=display_name,
             score_expr=body.score_expr or {},
             daily_cap=body.daily_cap,
             beneficiary=body.beneficiary,
@@ -117,8 +125,17 @@ class PointsRuleService:
         if rule is None or int(rule.tenant_id) != tenant_id:
             raise PointsRuleNotFoundError()
         fields = body.model_fields_set
-        if "name" in fields and body.name is not None:
-            rule.name = body.name
+        if "display_name" in fields and body.display_name is not None:
+            display_name = body.display_name.strip()
+            if not display_name:
+                raise PointsRuleConflictError(msg="积分项展示名称不能为空")
+            rule.display_name = display_name
+        elif "name" in fields and body.name is not None:
+            # 兼容旧客户端：name 字段视为展示名写入。
+            display_name = body.name.strip()
+            if not display_name:
+                raise PointsRuleConflictError(msg="积分项展示名称不能为空")
+            rule.display_name = display_name
         if "score_expr" in fields and body.score_expr is not None:
             self.validate_score_expr(rule.rule_code, body.score_expr)
             rule.score_expr = body.score_expr

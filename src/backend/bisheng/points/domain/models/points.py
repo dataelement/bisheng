@@ -22,36 +22,24 @@ class UserPointAccount(SQLModelSerializable, table=True):
     )
     tenant_id: int = Field(
         default=1,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("1"), comment="租户ID"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
-    user_id: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="用户ID")
-    )
+    user_id: int = Field(sa_column=Column(Integer, nullable=False, comment="用户ID"))
     balance: int = Field(
         default=0,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("0"), comment="当前积分余额（可为负）"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="当前积分余额（可为负）"),
     )
     lifetime_earned: int = Field(
         default=0,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("0"), comment="累计获得积分"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="累计获得积分"),
     )
     lifetime_deducted: int = Field(
         default=0,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("0"), comment="累计扣减积分（绝对值合计）"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="累计扣减积分（绝对值合计）"),
     )
     version: int = Field(
         default=0,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("0"), comment="乐观锁版本号"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="乐观锁版本号"),
     )
     create_time: datetime | None = Field(
         default=None,
@@ -95,31 +83,17 @@ class UserPointLog(SQLModelSerializable, table=True):
     )
     tenant_id: int = Field(
         default=1,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("1"), comment="租户ID"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
-    user_id: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="用户ID")
-    )
-    delta: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="本次变动分值（正为获得，负为扣减）")
-    )
-    balance_after: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="变动后余额")
-    )
-    direction: str = Field(
-        sa_column=Column(
-            String(16), nullable=False, comment="变动方向：earn/deduct 等"
-        )
-    )
+    user_id: int = Field(sa_column=Column(Integer, nullable=False, comment="用户ID"))
+    delta: int = Field(sa_column=Column(Integer, nullable=False, comment="本次变动分值（正为获得，负为扣减）"))
+    balance_after: int = Field(sa_column=Column(Integer, nullable=False, comment="变动后余额"))
+    direction: str = Field(sa_column=Column(String(16), nullable=False, comment="变动方向：earn/deduct 等"))
     rule_code: str | None = Field(
         default=None,
         sa_column=Column(String(32), comment="规则编码，如 G1/R1/M1"),
     )
-    title: str = Field(
-        sa_column=Column(String(64), nullable=False, comment="流水标题（展示用）")
-    )
+    title: str = Field(sa_column=Column(String(64), nullable=False, comment="流水标题（展示用）"))
     source: str = Field(
         sa_column=Column(
             String(32),
@@ -135,9 +109,7 @@ class UserPointLog(SQLModelSerializable, table=True):
         default=None,
         sa_column=Column(String(64), comment="业务主键（字符串）"),
     )
-    idempotency_key: str = Field(
-        sa_column=Column(String(128), nullable=False, comment="幂等键，租户内唯一")
-    )
+    idempotency_key: str = Field(sa_column=Column(String(128), nullable=False, comment="幂等键，租户内唯一"))
     operator_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, comment="操作人用户ID（人工调分/扣分时）"),
@@ -192,13 +164,9 @@ class PointRule(SQLModelSerializable, table=True):
     )
     tenant_id: int = Field(
         default=1,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("1"), comment="租户ID"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
-    rule_code: str = Field(
-        sa_column=Column(String(16), nullable=False, comment="规则编码，如 G1/R1/M1")
-    )
+    rule_code: str = Field(sa_column=Column(String(16), nullable=False, comment="规则编码，如 G1/R1/M1"))
     rule_type: str = Field(
         sa_column=Column(
             String(32),
@@ -206,8 +174,9 @@ class PointRule(SQLModelSerializable, table=True):
             comment="规则类型：earn/deduct/admin_reward",
         )
     )
-    name: str = Field(
-        sa_column=Column(String(40), nullable=False, comment="规则名称")
+    name: str = Field(sa_column=Column(String(40), nullable=False, comment="积分项默认名称（系统内置，运营不可改）"))
+    display_name: str = Field(
+        sa_column=Column(String(40), nullable=False, comment="积分项展示名称（运营可改，列表与流水展示）")
     )
     score_expr: dict = Field(
         default_factory=dict,
@@ -236,9 +205,7 @@ class PointRule(SQLModelSerializable, table=True):
     )
     sort_order: int = Field(
         default=0,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("0"), comment="排序权重，越小越靠前"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="排序权重，越小越靠前"),
     )
     create_time: datetime | None = Field(
         default=None,
@@ -271,21 +238,13 @@ class PointCopy(SQLModelSerializable, table=True):
     )
     tenant_id: int = Field(
         default=1,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("1"), comment="租户ID"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
-    copy_key: str = Field(
-        sa_column=Column(String(64), nullable=False, comment="文案键，如 guide")
-    )
-    content: str = Field(
-        sa_column=Column(LargeText, nullable=False, comment="文案内容（富文本/纯文本）")
-    )
+    copy_key: str = Field(sa_column=Column(String(64), nullable=False, comment="文案键，如 guide"))
+    content: str = Field(sa_column=Column(LargeText, nullable=False, comment="文案内容（富文本/纯文本）"))
     sort_order: int = Field(
         default=0,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("0"), comment="排序权重"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="排序权重"),
     )
     create_time: datetime | None = Field(
         default=None,
@@ -318,20 +277,10 @@ class PointRankSnapshot(SQLModelSerializable, table=True):
     )
     tenant_id: int = Field(
         default=1,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("1"), comment="租户ID"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
-    period: str = Field(
-        sa_column=Column(
-            String(16), nullable=False, comment="周期类型：month/year/all"
-        )
-    )
-    scope: str = Field(
-        sa_column=Column(
-            String(16), nullable=False, comment="榜单范围：global（公司）/dept（部门桶）"
-        )
-    )
+    period: str = Field(sa_column=Column(String(16), nullable=False, comment="周期类型：month/year/all"))
+    scope: str = Field(sa_column=Column(String(16), nullable=False, comment="榜单范围：global（公司）/dept（部门桶）"))
     scope_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, comment="范围ID：公司部门ID或部门桶ID"),
@@ -343,18 +292,10 @@ class PointRankSnapshot(SQLModelSerializable, table=True):
             comment="周期键：YYYY-MM / YYYY / all",
         )
     )
-    user_id: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="用户ID")
-    )
-    rank_no: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="名次（同分稠密并列）")
-    )
-    period_score: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="周期内积分净变动（all 为终身获得）")
-    )
-    balance: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="快照时账户余额")
-    )
+    user_id: int = Field(sa_column=Column(Integer, nullable=False, comment="用户ID"))
+    rank_no: int = Field(sa_column=Column(Integer, nullable=False, comment="名次（同分稠密并列）"))
+    period_score: int = Field(sa_column=Column(Integer, nullable=False, comment="周期内积分净变动（all 为终身获得）"))
+    balance: int = Field(sa_column=Column(Integer, nullable=False, comment="快照时账户余额"))
     dept_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, comment="用户所属部门桶ID（展示用）"),
@@ -419,19 +360,11 @@ class PointFavoriteTierAward(SQLModelSerializable, table=True):
     )
     tenant_id: int = Field(
         default=1,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("1"), comment="租户ID"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
-    file_id: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="知识文件ID")
-    )
-    highest_tier: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="已发放的最高阶梯档位")
-    )
-    points_granted_total: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="该文件累计已发 G3 积分")
-    )
+    file_id: int = Field(sa_column=Column(Integer, nullable=False, comment="知识文件ID"))
+    highest_tier: int = Field(sa_column=Column(Integer, nullable=False, comment="已发放的最高阶梯档位"))
+    points_granted_total: int = Field(sa_column=Column(Integer, nullable=False, comment="该文件累计已发 G3 积分"))
     create_time: datetime | None = Field(
         default=None,
         sa_column=Column(
@@ -463,27 +396,13 @@ class PointPendingDeduct(SQLModelSerializable, table=True):
     )
     tenant_id: int = Field(
         default=1,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("1"), comment="租户ID"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
-    user_id: int = Field(
-        sa_column=Column(Integer, nullable=False, comment="待扣分用户ID")
-    )
-    rule_code: str = Field(
-        sa_column=Column(String(32), nullable=False, comment="扣减规则编码，如 R1")
-    )
-    biz_type: str = Field(
-        sa_column=Column(
-            String(32), nullable=False, comment="业务类型，如 qa_question/qa_answer"
-        )
-    )
-    biz_id: str = Field(
-        sa_column=Column(String(64), nullable=False, comment="业务主键")
-    )
-    idempotency_key: str = Field(
-        sa_column=Column(String(128), nullable=False, comment="幂等键，与正式扣分一致")
-    )
+    user_id: int = Field(sa_column=Column(Integer, nullable=False, comment="待扣分用户ID"))
+    rule_code: str = Field(sa_column=Column(String(32), nullable=False, comment="扣减规则编码，如 R1"))
+    biz_type: str = Field(sa_column=Column(String(32), nullable=False, comment="业务类型，如 qa_question/qa_answer"))
+    biz_id: str = Field(sa_column=Column(String(64), nullable=False, comment="业务主键"))
+    idempotency_key: str = Field(sa_column=Column(String(128), nullable=False, comment="幂等键，与正式扣分一致"))
     operator_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, comment="发起违规删除的操作人ID"),
@@ -504,9 +423,7 @@ class PointPendingDeduct(SQLModelSerializable, table=True):
     )
     retry_count: int = Field(
         default=0,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("0"), comment="已重试次数"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="已重试次数"),
     )
     next_retry_at: datetime | None = Field(
         default=None,
@@ -550,13 +467,9 @@ class PointSyncOutbox(SQLModelSerializable, table=True):
     )
     tenant_id: int = Field(
         default=1,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("1"), comment="租户ID"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("1"), comment="租户ID"),
     )
-    log_id: int = Field(
-        sa_column=Column(BigInteger, nullable=False, comment="关联 user_point_log.id")
-    )
+    log_id: int = Field(sa_column=Column(BigInteger, nullable=False, comment="关联 user_point_log.id"))
     payload: dict = Field(
         default_factory=dict,
         sa_column=Column(JsonType, nullable=False, comment="同步载荷 JSON"),
@@ -572,9 +485,7 @@ class PointSyncOutbox(SQLModelSerializable, table=True):
     )
     retry_count: int = Field(
         default=0,
-        sa_column=Column(
-            Integer, nullable=False, server_default=text("0"), comment="已重试次数"
-        ),
+        sa_column=Column(Integer, nullable=False, server_default=text("0"), comment="已重试次数"),
     )
     next_retry_at: datetime | None = Field(
         default=None,

@@ -193,7 +193,7 @@ class PointsAwardFacade:
             tenant_id=event.tenant_id,
             user_id=payee,
             delta=score,
-            title=rule.name or rule_code,
+            title=resolve_point_rule_display_name(rule),
             rule_code=rule_code,
             idempotency_key=key,
             daily_cap=rule.daily_cap,
@@ -208,7 +208,7 @@ class PointsAwardFacade:
             result=result,
             user_id=payee,
             rule_code=rule_code,
-            rule_name=rule.name or rule_code,
+            rule_name=resolve_point_rule_display_name(rule),
         )
 
     async def _award_document_shared(self, event: DocumentSharedEvent) -> AwardOutcome:
@@ -233,7 +233,7 @@ class PointsAwardFacade:
             tenant_id=event.tenant_id,
             user_id=payee,
             delta=score,
-            title=rule.name or "G7",
+            title=resolve_point_rule_display_name(rule),
             rule_code="G7",
             idempotency_key=key,
             daily_cap=rule.daily_cap,
@@ -247,7 +247,7 @@ class PointsAwardFacade:
             result=result,
             user_id=payee,
             rule_code="G7",
-            rule_name=rule.name or "G7",
+            rule_name=resolve_point_rule_display_name(rule),
         )
 
     async def _award_favorite_tier(self, event: FavoriteChangedEvent) -> AwardOutcome:
@@ -271,7 +271,7 @@ class PointsAwardFacade:
             tenant_id=event.tenant_id,
             user_id=payee,
             delta=delta,
-            title=rule.name or "G3",
+            title=resolve_point_rule_display_name(rule),
             rule_code="G3",
             idempotency_key=key,
             daily_cap=rule.daily_cap,
@@ -292,7 +292,7 @@ class PointsAwardFacade:
             result=result,
             user_id=payee,
             rule_code="G3",
-            rule_name=rule.name or "G3",
+            rule_name=resolve_point_rule_display_name(rule),
             notify_extra={"favorite_count": int(event.unique_favoriter_count)},
         )
 
@@ -312,7 +312,7 @@ class PointsAwardFacade:
             tenant_id=event.tenant_id,
             user_id=payee,
             delta=score,
-            title=rule.name or "G4",
+            title=resolve_point_rule_display_name(rule),
             rule_code="G4",
             idempotency_key=key,
             daily_cap=rule.daily_cap,
@@ -328,7 +328,7 @@ class PointsAwardFacade:
             result=result,
             user_id=payee,
             rule_code="G4",
-            rule_name=rule.name or "G4",
+            rule_name=resolve_point_rule_display_name(rule),
         )
 
     async def _should_skip_payee(self, payee: int, manager_ids: frozenset[int]) -> str | None:
