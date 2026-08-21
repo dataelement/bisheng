@@ -44,7 +44,7 @@ class TempFilePipeline(BaseFilePipeline):
     def _init_common_transformers(self) -> List[BaseDocumentTransformer]:
         transformers = self._init_abstract_transformers()
         if self.should_use_ppt_page_split():
-            transformers.append(DirectChunkTransformer())
+            transformers.append(DirectChunkTransformer(max_chunk_limit=self.max_chunk_chars))
         elif self.should_use_hierarchical_split():
             transformers.append(HierarchicalSplitterTransformer(
                 hierarchy_level=self.file_split_rule.hierarchy_level,
@@ -54,6 +54,7 @@ class TempFilePipeline(BaseFilePipeline):
                 fallback_separator_rule=self.file_split_rule.separator_rule,
                 fallback_chunk_size=self.file_split_rule.chunk_size,
                 fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
+                max_chunk_limit=self.max_chunk_chars,
             ))
         else:
             transformers.append(SplitterTransformer(**self.get_splitter_kwargs()))

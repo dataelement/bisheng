@@ -1,6 +1,6 @@
 """KnowledgeFileSimilarityCandidateRepository implementation."""
 
-from sqlalchemy import delete, func, or_
+from sqlalchemy import delete, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 from sqlmodel import col, select
@@ -66,12 +66,19 @@ class KnowledgeFileSimilarityCandidateRepositoryImpl(
         self,
         source_file_ids: list[int],
     ) -> set[int]:
+        """Source files with at least one candidate the user can still act on.
+
+        A candidate counts when its document still points at the file the scan
+        matched (the primary version) and that file is a parsed, non-folder
+        entry. How many versions the target document already has is not part of
+        it: linking accepts a versioned target, so excluding one here only hid
+        the badge on work the user could have done.
+        """
         if not source_file_ids:
             return set()
         source_file = aliased(KnowledgeFile)
         candidate_file = aliased(KnowledgeFile)
         primary_version = aliased(KnowledgeDocumentVersion)
-        all_versions = aliased(KnowledgeDocumentVersion)
         stmt = (
             select(KnowledgeFileSimilarityCandidate.source_file_id)
             .join(
@@ -90,7 +97,6 @@ class KnowledgeFileSimilarityCandidateRepositoryImpl(
                 candidate_file,
                 candidate_file.id == primary_version.knowledge_file_id,
             )
-            .join(all_versions, all_versions.document_id == KnowledgeDocument.id)
             .where(
                 col(KnowledgeFileSimilarityCandidate.source_file_id).in_(source_file_ids),
                 KnowledgeFileSimilarityCandidate.knowledge_id == source_file.knowledge_id,
@@ -99,11 +105,7 @@ class KnowledgeFileSimilarityCandidateRepositoryImpl(
                 candidate_file.file_type == FileType.FILE.value,
                 candidate_file.status == KnowledgeFileStatus.SUCCESS.value,
             )
-            .group_by(
-                KnowledgeFileSimilarityCandidate.source_file_id,
-                KnowledgeFileSimilarityCandidate.candidate_document_id,
-            )
-            .having(func.count(all_versions.id) == 1)
+            .distinct()
         )
         result = await self.session.execute(stmt)
         return {int(source_file_id) for source_file_id in result.scalars().all()}

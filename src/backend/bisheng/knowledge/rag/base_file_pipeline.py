@@ -3,7 +3,7 @@ from abc import abstractmethod
 from functools import cached_property
 
 from bisheng.api.v1.schemas import FileProcessBase
-from bisheng.common.errcode.knowledge import KnowledgeFileNotSupportedError
+from bisheng.common.errcode.knowledge import KnowledgeFileChunkMaxError, KnowledgeFileNotSupportedError
 from bisheng.common.services.config_service import settings
 from bisheng.knowledge.domain.models.knowledge_file import ParseType
 from bisheng.knowledge.rag.pipeline.base import BasePipeline, NormalPipeline
@@ -65,6 +65,15 @@ class BaseFilePipeline(BasePipeline):
         self.invoke_user_id = invoke_user_id
         self.file_name = file_name
         self.file_split_rule = file_rule
+        self.max_chunk_chars = settings.get_knowledge().chunking.max_chunk_chars
+        if self.file_split_rule.chunk_size and self.file_split_rule.chunk_size > self.max_chunk_chars:
+            raise KnowledgeFileChunkMaxError(
+                msg=f"chunk_size cannot exceed the system limit of {self.max_chunk_chars} characters"
+            )
+        if self.file_split_rule.max_chunk_size and self.file_split_rule.max_chunk_size > self.max_chunk_chars:
+            raise KnowledgeFileChunkMaxError(
+                msg=f"max_chunk_size cannot exceed the system limit of {self.max_chunk_chars} characters"
+            )
 
         self.local_file_path: str | None = getattr(self, 'local_file_path', None)
         self.tmp_dir: str | None = getattr(self, 'tmp_dir', None)
@@ -101,6 +110,7 @@ class BaseFilePipeline(BasePipeline):
             "separator_rule": self.file_split_rule.separator_rule,
             "chunk_size": self.file_split_rule.chunk_size,
             "chunk_overlap": chunk_overlap,
+            "max_chunk_limit": self.max_chunk_chars,
         }
 
     @property
@@ -155,7 +165,8 @@ class BaseFilePipeline(BasePipeline):
             header_rows=[self.file_split_rule.excel_rule.header_start_row,
                          self.file_split_rule.excel_rule.header_end_row],
             data_rows=self.file_split_rule.excel_rule.slice_length,
-            append_header=self.file_split_rule.excel_rule.append_header
+            append_header=self.file_split_rule.excel_rule.append_header,
+            max_chunk_chars=self.max_chunk_chars,
         )
 
     def _init_txt_loader(self) -> BaseBishengLoader:
@@ -200,6 +211,7 @@ class BaseFilePipeline(BasePipeline):
             ],
             data_rows=self.file_split_rule.excel_rule.slice_length,
             append_header=self.file_split_rule.excel_rule.append_header,
+            max_chunk_chars=self.max_chunk_chars,
         )
 
     def _init_pdf_loader(self) -> BaseBishengLoader:

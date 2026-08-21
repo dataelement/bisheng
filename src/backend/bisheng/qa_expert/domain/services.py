@@ -797,11 +797,18 @@ class QuestionService:
             )
 
     async def hydrate_related_docs(
-        self, related_docs: str | None, user=None, owner_user_id: int | None = None
+        self,
+        related_docs: str | None,
+        user=None,
+        owner_user_id: int | None = None,
+        *,
+        question_id: int | None = None,
+        doc_source: str | None = None,
     ) -> list[dict]:
         """解析关联文档串。问答可见不等于文档可读；无权 forbidden，缺失 not_found。
 
         owner_user_id 仅为兼容旧调用方，不再按提问者特判。
+        question_id + doc_source 启用 QA 上下文只读放行（邀请专家/公开全体专家/提问者看回答文档）。
         """
         del owner_user_id
         views: list[dict] = []
@@ -809,9 +816,18 @@ class QuestionService:
         space_cache: dict[int, bool] = {}
 
         async def _default_checker(_user, space_id: int, file_id: int):
-            from bisheng.qa_expert.domain.related_docs_access import check_related_doc_access
+            from bisheng.qa_expert.domain.related_docs_access import (
+                check_related_doc_access_with_qa_context,
+            )
 
-            return await check_related_doc_access(_user, space_id, file_id, space_cache=space_cache)
+            return await check_related_doc_access_with_qa_context(
+                _user,
+                space_id,
+                file_id,
+                space_cache=space_cache,
+                question_id=question_id,
+                doc_source=doc_source,
+            )
 
         checker = injected if callable(injected) else _default_checker
         from bisheng.qa_expert.domain.related_docs_access import load_related_doc_title
@@ -980,6 +996,8 @@ class QuestionService:
                 getattr(resolved, "related_docs", None),
                 user=viewer,
                 owner_user_id=int(getattr(resolved, "user_id", 0) or 0),
+                question_id=int(resolved.id),
+                doc_source="question",
             ),
         )
         from bisheng.qa_expert.domain.publish_service import PublishService, serialize_publish_request
@@ -1679,6 +1697,8 @@ class AnswerService:
                 getattr(item, "related_docs", None),
                 user=viewer,
                 owner_user_id=int(getattr(question, "user_id", 0) or 0),
+                question_id=int(question.id),
+                doc_source="answer",
             )
             self._annotate(item, can_delete=can_delete, related_doc_views=related_doc_views)
             resolved.append(item)

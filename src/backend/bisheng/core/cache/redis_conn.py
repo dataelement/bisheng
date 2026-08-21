@@ -505,6 +505,24 @@ class RedisClient:
         """Get AsynchronouspipelineObjects"""
         return self.async_connection.pipeline(transaction=transaction)
 
+    async def aeval(
+        self,
+        script: str,
+        *,
+        keys: list[str],
+        args: list[typing.Any] | None = None,
+    ) -> typing.Any:
+        """Execute a Lua script and route Redis Cluster calls by the first key."""
+        if not keys:
+            raise ValueError("Redis Lua scripts require at least one key")
+        await self.acluster_nodes(keys[0])
+        return await self.async_connection.eval(
+            script,
+            len(keys),
+            *keys,
+            *(args or []),
+        )
+
     async def allen(self, key: str) -> int:
         """Check if the key is in the cache using the 'in' operator."""
         await self.acluster_nodes(key)

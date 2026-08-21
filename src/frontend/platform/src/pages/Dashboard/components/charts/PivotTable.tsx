@@ -12,6 +12,40 @@ interface PivotTableProps {
   isDark: boolean
 }
 
+interface PivotHeaderCell {
+  label: string
+  path: string[]
+  colSpan: number
+}
+
+const buildHeaderRows = (columnPaths: string[][]): PivotHeaderCell[][] => {
+  const depth = Math.max(1, ...columnPaths.map(path => path.length))
+  return Array.from({ length: depth }, (_, level) => {
+    const cells: PivotHeaderCell[] = []
+    let columnIndex = 0
+
+    while (columnIndex < columnPaths.length) {
+      const currentPath = columnPaths[columnIndex]
+      const prefix = currentPath.slice(0, level + 1)
+      let colSpan = 1
+      while (
+        columnIndex + colSpan < columnPaths.length
+        && JSON.stringify(columnPaths[columnIndex + colSpan].slice(0, level + 1)) === JSON.stringify(prefix)
+      ) {
+        colSpan += 1
+      }
+      cells.push({
+        label: currentPath[level] || "未分类",
+        path: currentPath,
+        colSpan,
+      })
+      columnIndex += colSpan
+    }
+
+    return cells
+  })
+}
+
 const formatValue = (value: number, dataConfig: DataConfig) => {
   const metric = dataConfig.metrics?.[0]
   if (!metric?.numberFormat) {
@@ -30,6 +64,20 @@ export const PivotTable = memo(function PivotTable({
     () => Math.max(0, ...data.rows.flatMap(row => row.values)),
     [data.rows]
   )
+  const columnPaths = useMemo(
+    () => data.columnPaths?.length === data.columns.length
+      ? data.columnPaths
+      : data.columns.map(column => [column]),
+    [data.columnPaths, data.columns]
+  )
+  const originalColumnPaths = useMemo(
+    () => data.originalColumnPaths?.length === data.columns.length
+      ? data.originalColumnPaths
+      : (data.originalColumns || data.columns).map(column => [column]),
+    [data.columns, data.originalColumnPaths, data.originalColumns]
+  )
+  const headerRows = useMemo(() => buildHeaderRows(columnPaths), [columnPaths])
+  const headerDepth = headerRows.length
 
   const cellBackground = (value: number) => {
     if (!value || !maxValue) return isDark ? "rgba(71, 85, 105, 0.18)" : "#f8fafc"
@@ -53,46 +101,67 @@ export const PivotTable = memo(function PivotTable({
           aria-label={`${data.metricName}交叉表`}
         >
         <thead className="sticky top-0 z-20">
-          <tr>
-            {data.rowHeaders.map((header, index) => (
-              <th
-                key={`${header}-${index}`}
-                className="sticky left-0 z-30 w-32 min-w-32 max-w-32 border-b border-r border-border bg-sky-600 px-3 py-2 text-left font-semibold text-white"
-                style={{ left: `${index * 128}px` }}
-              >
-                {header}
-              </th>
-            ))}
-            {data.columns.map((column, columnIndex) => {
-              const originalColumn = data.originalColumns?.[columnIndex] || column
-              return (
+          {headerRows.map((headerRow, level) => (
+            <tr key={`header-${level}`}>
+              {level === 0 && (
                 <th
-                  key={`${originalColumn}-${columnIndex}`}
-                  className="min-w-24 border-b border-r border-border bg-emerald-600 px-3 py-2 text-right font-semibold text-white"
-                  title={
-                    originalColumn === column
-                      ? `${data.columnHeader}：${column}`
-                      : `${data.columnHeader}：${originalColumn} → ${column}`
-                  }
+                  scope="col"
+                  rowSpan={headerDepth}
+                  className="sticky left-0 z-40 w-16 min-w-16 max-w-16 border-b border-r border-border bg-sky-700 px-2 py-2 text-center font-semibold text-white"
                 >
-                  {column}
+                  序号
                 </th>
-              )
-            })}
-            <th className="min-w-24 border-b border-border bg-amber-500 px-3 py-2 text-right font-semibold text-white">
-              合计
-            </th>
-          </tr>
+              )}
+              {level === 0 && data.rowHeaders.map((header, index) => (
+                <th
+                  key={`${header}-${index}`}
+                  scope="col"
+                  rowSpan={headerDepth}
+                  className="sticky left-0 z-30 w-32 min-w-32 max-w-32 border-b border-r border-border bg-sky-600 px-3 py-2 text-left font-semibold text-white"
+                  style={{ left: `${64 + index * 128}px` }}
+                >
+                  {header}
+                </th>
+              ))}
+              {headerRow.map((cell, cellIndex) => (
+                <th
+                  key={`${cell.path.join("-")}-${level}-${cellIndex}`}
+                  scope="col"
+                  colSpan={cell.colSpan}
+                  className={`${level === 0 ? "bg-emerald-700" : "bg-emerald-600"} min-w-24 border-b border-r border-border px-3 py-2 text-center font-semibold text-white`}
+                  title={`${data.columnHeaders?.[level] || data.columnHeader}：${cell.label}`}
+                >
+                  {cell.label}
+                </th>
+              ))}
+              {level === 0 && (
+                <th
+                  scope="col"
+                  rowSpan={headerDepth}
+                  className="min-w-24 border-b border-border bg-amber-500 px-3 py-2 text-right font-semibold text-white"
+                >
+                  合计
+                </th>
+              )}
+            </tr>
+          ))}
         </thead>
         <tbody>
           {data.rows.map((row, rowIndex) => (
             <tr key={JSON.stringify(row.key)} className="hover:brightness-[0.98]">
+              <th
+                scope="row"
+                className="sticky left-0 z-20 w-16 min-w-16 max-w-16 border-b border-r border-border bg-background px-2 py-2 text-center font-medium tabular-nums text-foreground"
+              >
+                {rowIndex + 1}
+              </th>
               {row.key.map((label, dimensionIndex) => (
                 <th
                   key={`${label}-${dimensionIndex}`}
+                  scope="row"
                   className="sticky z-10 w-32 min-w-32 max-w-32 border-b border-r border-border bg-background px-3 py-2 text-left font-medium text-foreground"
                   style={{
-                    left: `${dimensionIndex * 128}px`,
+                    left: `${64 + dimensionIndex * 128}px`,
                     paddingLeft: `${12 + dimensionIndex * 12}px`,
                   }}
                   title={label}
@@ -110,10 +179,10 @@ export const PivotTable = memo(function PivotTable({
               ))}
               {row.values.map((value, columnIndex) => (
                 <td
-                  key={`${rowIndex}-${data.originalColumns?.[columnIndex] || data.columns[columnIndex]}`}
+                  key={`${rowIndex}-${JSON.stringify(originalColumnPaths[columnIndex])}`}
                   className="border-b border-r border-border px-3 py-2 text-right tabular-nums text-foreground"
                   style={{ backgroundColor: cellBackground(value) }}
-                  title={`${row.key.join(" / ")} · ${data.columns[columnIndex]}：${formatValue(value, dataConfig)}`}
+                  title={`${row.key.join(" / ")} · ${columnPaths[columnIndex].join(" / ")}：${formatValue(value, dataConfig)}`}
                 >
                   {value ? formatValue(value, dataConfig) : "—"}
                 </td>
@@ -127,14 +196,14 @@ export const PivotTable = memo(function PivotTable({
         <tfoot className="sticky bottom-0 z-10">
           <tr>
             <th
-              colSpan={Math.max(1, data.rowHeaders.length)}
+              colSpan={Math.max(1, data.rowHeaders.length + 1)}
               className="sticky left-0 z-30 border-r border-t border-border bg-slate-100 px-3 py-2 text-left font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
               合计
             </th>
             {data.columnTotals.map((value, index) => (
               <td
-                key={`total-${data.originalColumns?.[index] || data.columns[index]}`}
+                key={`total-${JSON.stringify(originalColumnPaths[index])}`}
                 className="border-r border-t border-border bg-slate-100 px-3 py-2 text-right font-semibold tabular-nums text-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {formatValue(value, dataConfig)}

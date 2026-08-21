@@ -104,20 +104,21 @@ from bisheng.core.openfga.client import (
     finish_fga_read_stats,
 )
 from bisheng.core.storage.minio.minio_manager import get_minio_storage_sync
+from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.department import DepartmentDao, UserDepartment, UserDepartmentDao
 from bisheng.database.models.department_admin_grant import DepartmentAdminGrantDao
-from bisheng.database.models.audit_log import AuditLogDao
 from bisheng.database.models.group import GroupDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.review_tags import ReviewTag, ReviewTagDao
 from bisheng.database.models.tag import Tag, TagBusinessTypeEnum, TagDao, TagResourceTypeEnum
 from bisheng.database.models.tenant import TenantDao
 from bisheng.database.models.user_group import UserGroupDao
-from bisheng.department.domain.services.department_service import DepartmentService
 from bisheng.department.domain.services.department_display_service import (
     build_department_name_projection,
     get_department_display_name,
 )
+from bisheng.department.domain.services.department_service import DepartmentService
+from bisheng.knowledge.domain import knowledge_fulltext_constants as fulltext_constants
 from bisheng.knowledge.domain.constants import (
     BUSINESS_DOMAIN_CODE_KEY,
     BUSINESS_DOMAIN_OPTIONS,
@@ -126,7 +127,6 @@ from bisheng.knowledge.domain.constants import (
     parse_shougang_file_encoding_codes,
 )
 from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
-from bisheng.knowledge.domain import knowledge_fulltext_constants as fulltext_constants
 from bisheng.knowledge.domain.models.department_knowledge_space import (
     DepartmentKnowledgeSpaceDao,
 )
@@ -190,6 +190,8 @@ from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
     KnowledgeFulltextAdvancedSearchQuery,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
+    BatchAliasActionResult,
+    BatchAliasFailure,
     GroupedKnowledgeSpacesResp,
     KnowledgeSpaceCreateOptionDepartment,
     KnowledgeSpaceCreateOptionDepartmentsResp,
@@ -241,8 +243,6 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationItemResp,
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
-    BatchAliasActionResult,
-    BatchAliasFailure,
 )
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessDecision,
@@ -352,11 +352,11 @@ if TYPE_CHECKING:
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
         KnowledgeDocumentVersionRepository,
     )
-    from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
-        KnowledgeFileSimilarityCandidateRepository,
-    )
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
         KnowledgeFileRepository,
+    )
+    from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_similarity_candidate_repository import (
+        KnowledgeFileSimilarityCandidateRepository,
     )
     from bisheng.knowledge.domain.repositories.interfaces.knowledge_space_scope_repository import (
         KnowledgeSpaceScopeRepository,
@@ -742,12 +742,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return True
         if file_record.entry_status != KnowledgeFileEntryStatus.ACTIVE.value:
             raise KnowledgeDocumentStateConflictError()
-        if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
-            raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除")
         if self.document_distribution_service is None:
             raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
 
         try:
+            if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
+                await self.document_distribution_service.remove_publish_entry(
+                    tenant_id=int(file_record.tenant_id),
+                    document_id=int(file_record.reference_document_id),
+                    publish_entry_id=int(file_record.id),
+                )
+                await self._enqueue_document_distribution_projection(
+                    tenant_id=int(file_record.tenant_id),
+                    entry_ids=[int(file_record.id)],
+                )
+                return True
             if file_record.entry_type == KnowledgeFileEntryType.SHARE.value:
                 await self.document_distribution_service.remove_share_entry(
                     tenant_id=int(file_record.tenant_id),
@@ -792,19 +801,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> bool:
         if file_record.reference_document_id is None:
             return False
-        if (
-            file_record.entry_status == KnowledgeFileEntryStatus.INVALID.value
-            and file_record.entry_type
-            in {
-                KnowledgeFileEntryType.PUBLISH.value,
-                KnowledgeFileEntryType.SHARE.value,
-            }
-        ):
+        if file_record.entry_status == KnowledgeFileEntryStatus.INVALID.value and file_record.entry_type in {
+            KnowledgeFileEntryType.PUBLISH.value,
+            KnowledgeFileEntryType.SHARE.value,
+        }:
             if self.document_distribution_service is None:
                 raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
             return True
-        if file_record.entry_type == KnowledgeFileEntryType.PUBLISH.value:
-            raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除")
         if self.document_distribution_service is None:
             raise KnowledgeDocumentStateConflictError(msg="文档分发生命周期服务不可用")
 
@@ -819,8 +822,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 entry_id=int(file_record.id),
             )
         except KnowledgeDocumentDistributionError as exc:
-            if "publish entries cannot be deleted" in str(exc):
-                raise KnowledgeDocumentEntryTypeInvalidError(msg="发布入口不能删除") from exc
             raise KnowledgeDocumentStateConflictError() from exc
         return True
 
@@ -1059,9 +1060,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if resolved is not None:
             return resolved
 
-        ancestor_folder_ids = [
-            int(part) for part in (file_record.file_level_path or "").split("/") if part
-        ]
+        ancestor_folder_ids = [int(part) for part in (file_record.file_level_path or "").split("/") if part]
         parent_folder_id = ancestor_folder_ids[-1] if ancestor_folder_ids else None
         if parent_folder_id:
             await self._require_permission_id(
@@ -1704,9 +1703,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             DepartmentAdminGrantDao.aget_department_ids_by_user_id(self.login_user.user_id),
         )
         root_department_ids = {
-            int(row.department_id)
-            for row in user_departments
-            if getattr(row, "department_id", None) is not None
+            int(row.department_id) for row in user_departments if getattr(row, "department_id", None) is not None
         }
         root_department_ids.update(int(department_id) for department_id in admin_department_ids)
         if not root_department_ids:
@@ -1714,9 +1711,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
         visible_root_paths = {
-            dept.path
-            for dept in all_departments
-            if int(dept.id) in root_department_ids and getattr(dept, "path", None)
+            dept.path for dept in all_departments if int(dept.id) in root_department_ids and getattr(dept, "path", None)
         }
         if not visible_root_paths:
             return []
@@ -2168,13 +2163,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tree = await self._department_tree_for_create(approval_request=approval_request)
         normalized_keyword = str(keyword or "").strip().casefold()
         if normalized_keyword:
+
             def _filter_tree(nodes: list[dict]) -> list[dict]:
                 filtered: list[dict] = []
                 for node in nodes:
                     children = _filter_tree(node.get("children", []))
                     search_text = " ".join(
-                        str(node.get(field) or "")
-                        for field in ("name", "short_name", "display_name")
+                        str(node.get(field) or "") for field in ("name", "short_name", "display_name")
                     ).casefold()
                     if normalized_keyword in search_text or children:
                         filtered.append({**node, "children": children})
@@ -2265,9 +2260,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             discovery_kind = self._portal_discovery_kind(scope, binding)
             space.portal_discovery_enabled = (
-                bool(scope.portal_discovery_enabled)
-                if scope is not None and discovery_kind is not None
-                else None
+                bool(scope.portal_discovery_enabled) if scope is not None and discovery_kind is not None else None
             )
 
             if space.owner_type in {
@@ -2313,10 +2306,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             return None
         if scope.level == KnowledgeSpaceLevelEnum.PUBLIC:
             return "public"
-        binding_matches_space = (
-            binding is not None
-            and int(getattr(binding, "space_id", 0) or 0) == int(scope.space_id)
-        )
+        binding_matches_space = binding is not None and int(getattr(binding, "space_id", 0) or 0) == int(scope.space_id)
         if (
             scope.level == KnowledgeSpaceLevelEnum.DEPARTMENT
             and scope.owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT
@@ -2345,9 +2335,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise RuntimeError("DepartmentSpaceBindingRepository is not configured")
 
         tenant_id = int(self.login_user.tenant_id)
-        scopes = await self.knowledge_space_scope_repo.list_portal_candidates(
-            tenant_id=tenant_id
-        )
+        scopes = await self.knowledge_space_scope_repo.list_portal_candidates(tenant_id=tenant_id)
         space_ids = sorted({int(item.space_id) for item in scopes})
         bindings = await self.department_space_binding_repo.find_by_space_ids(space_ids)
         bindings_by_space: dict[int, list[Any]] = {}
@@ -2355,9 +2343,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             bindings_by_space.setdefault(int(binding.space_id), []).append(binding)
 
         department_ids = {
-            int(binding.department_id)
-            for binding in bindings
-            if getattr(binding, "department_id", None) is not None
+            int(binding.department_id) for binding in bindings if getattr(binding, "department_id", None) is not None
         }
         departments = await DepartmentDao.aget_by_ids(sorted(department_ids))
         valid_department_ids = {
@@ -2378,13 +2364,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             matching_bindings = bindings_by_space.get(space_id, [])
             binding = matching_bindings[0] if len(matching_bindings) == 1 else None
             if binding is not None:
-                binding_tenant_id = int(
-                    getattr(binding, "tenant_id", tenant_id) or tenant_id
-                )
-                if (
-                    binding_tenant_id != tenant_id
-                    or int(binding.department_id) not in valid_department_ids
-                ):
+                binding_tenant_id = int(getattr(binding, "tenant_id", tenant_id) or tenant_id)
+                if binding_tenant_id != tenant_id or int(binding.department_id) not in valid_department_ids:
                     binding = None
                 else:
                     valid_binding_by_space_id[space_id] = binding
@@ -2415,16 +2396,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if scope == "portal_configured":
             is_global_admin = bool(self.login_user.is_admin())
             if is_global_admin:
-                memberships = await SpaceChannelMemberDao.async_get_user_space_members(
-                    int(self.login_user.user_id)
-                )
+                memberships = await SpaceChannelMemberDao.async_get_user_space_members(int(self.login_user.user_id))
                 readable_ids: list[str] = []
                 manageable_ids: list[str] = []
             else:
                 memberships, readable_ids, manageable_ids = await asyncio.gather(
-                    SpaceChannelMemberDao.async_get_user_space_members(
-                        int(self.login_user.user_id)
-                    ),
+                    SpaceChannelMemberDao.async_get_user_space_members(int(self.login_user.user_id)),
                     PermissionService.list_accessible_ids(
                         user_id=int(self.login_user.user_id),
                         relation="can_read",
@@ -2444,25 +2421,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 for member in memberships
                 if str(getattr(member, "business_id", "")).isdigit()
                 and int(member.business_id) in scope_by_space_id
-                and (
-                    not is_global_admin
-                    or space_kind_by_id.get(int(member.business_id)) != "personal"
-                )
+                and (not is_global_admin or space_kind_by_id.get(int(member.business_id)) != "personal")
             )
             explicit_space_ids.update(
                 int(item.space_id)
                 for item in scopes
-                if int(getattr(item, "created_by", 0) or 0)
-                == int(self.login_user.user_id)
+                if int(getattr(item, "created_by", 0) or 0) == int(self.login_user.user_id)
             )
 
             if is_global_admin:
                 binding_candidate_ids = sorted(
-                    {
-                        space_id
-                        for space_id, kind in space_kind_by_id.items()
-                        if kind != "personal"
-                    }
+                    {space_id for space_id, kind in space_kind_by_id.items() if kind != "personal"}
                     - discoverable_space_ids
                     - explicit_space_ids
                 )
@@ -2479,17 +2448,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 manageable_space_ids = {
                     int(space_id)
                     for space_id in manageable_ids or []
-                    if str(space_id).isdigit()
-                    and int(space_id) in scope_by_space_id
+                    if str(space_id).isdigit() and int(space_id) in scope_by_space_id
                 }
-                explicit_space_ids.update(
-                    manageable_space_ids
-                )
+                explicit_space_ids.update(manageable_space_ids)
                 readable_space_ids = {
                     int(space_id)
                     for space_id in readable_ids or []
-                    if str(space_id).isdigit()
-                    and int(space_id) in scope_by_space_id
+                    if str(space_id).isdigit() and int(space_id) in scope_by_space_id
                 }
                 closed_public_readable_ids = sorted(
                     space_id
@@ -2526,10 +2491,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     if space_kind_by_id.get(parent_space_id) not in {"department", "clinic"}:
                         continue
                     binding = valid_binding_by_space_id.get(parent_space_id)
-                    if (
-                        binding is None
-                        or int(binding.department_id) != int(grant.department_id)
-                    ):
+                    if binding is None or int(binding.department_id) != int(grant.department_id):
                         continue
                     candidate_grants.append(grant)
 
@@ -2537,11 +2499,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     granted_files = await KnowledgeFileDao.aget_file_by_ids(
                         sorted({int(grant.file_id) for grant in candidate_grants})
                     )
-                    file_by_id = {
-                        int(file.id): file
-                        for file in granted_files
-                        if getattr(file, "id", None) is not None
-                    }
+                    file_by_id = {int(file.id): file for file in granted_files if getattr(file, "id", None) is not None}
                     try:
                         decisions = await access_service.evaluate_files(
                             login_user=self.login_user,
@@ -2549,8 +2507,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         )
                     except Exception as exc:
                         logger.warning(
-                            "portal discovery grant revalidation failed closed: "
-                            "tenant_id={} user_id={} error={}",
+                            "portal discovery grant revalidation failed closed: tenant_id={} user_id={} error={}",
                             tenant_id,
                             int(self.login_user.user_id),
                             type(exc).__name__,
@@ -2571,9 +2528,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                         explicit_file_space_by_id[file_id] = parent_space_id
                         grant_parent_space_ids.add(parent_space_id)
 
-        query_space_ids = sorted(
-            discoverable_space_ids | explicit_space_ids | grant_parent_space_ids
-        )
+        query_space_ids = sorted(discoverable_space_ids | explicit_space_ids | grant_parent_space_ids)
         snapshot = self.knowledge_space_scope_repo.build_discovery_snapshot(
             scopes=configurable_scope_rows,
             explicit_space_ids=sorted(explicit_space_ids),
@@ -2819,11 +2774,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         Verify that the current user has can_delete permission on the space.
         """
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if (
-            not space
-            or space.type != KnowledgeTypeEnum.SPACE.value
-            or space.state == KnowledgeState.DELETING.value
-        ):
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value or space.state == KnowledgeState.DELETING.value:
             raise SpaceNotFoundError()
         allowed = await PermissionService.check(
             user_id=self.login_user.user_id,
@@ -3754,11 +3705,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if space_id is None:
             return set()
         space = await KnowledgeDao.aquery_by_id(int(space_id))
-        if (
-            not space
-            or space.type != KnowledgeTypeEnum.SPACE.value
-            or space.state == KnowledgeState.DELETING.value
-        ):
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value or space.state == KnowledgeState.DELETING.value:
             return set()
         space_level = getattr(space, "space_level", None)
         if space_level is None:
@@ -3808,11 +3755,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _require_read_permission(self, space_id: int) -> Knowledge:
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if (
-            not space
-            or space.type != KnowledgeTypeEnum.SPACE.value
-            or space.state == KnowledgeState.DELETING.value
-        ):
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value or space.state == KnowledgeState.DELETING.value:
             raise SpaceNotFoundError()
         effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
         if "view_space" not in effective_permissions:
@@ -3841,11 +3784,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def _require_space_info_permission(self, space_id: int) -> tuple[Knowledge, bool]:
         space = await KnowledgeDao.aquery_by_id(space_id)
-        if (
-            not space
-            or space.type != KnowledgeTypeEnum.SPACE.value
-            or space.state == KnowledgeState.DELETING.value
-        ):
+        if not space or space.type != KnowledgeTypeEnum.SPACE.value or space.state == KnowledgeState.DELETING.value:
             raise SpaceNotFoundError()
         effective_permissions = await self._get_effective_permission_ids("knowledge_space", space_id)
         if "view_space" in effective_permissions:
@@ -3929,8 +3868,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def _decorate_auto_tag_for_info(result: KnowledgeSpaceInfoResp) -> None:
         """Populate auto-tag wire fields and mask private-library ids."""
         library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(result.id)
-        if not library_ids and result.auto_tag_library_id:
-            library_ids = [int(result.auto_tag_library_id)]
 
         public_ids: list[int] = []
         custom_tags: list[str] = []
@@ -3996,7 +3933,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 existing_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(
                     knowledge.id,
                 )
-                primary = existing_ids[0] if existing_ids else knowledge.auto_tag_library_id
+                primary = existing_ids[0] if existing_ids else None
             return False, primary
 
         requested_ids = cls._resolve_requested_library_ids(
@@ -4210,8 +4147,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 validate_libraries=validate_tag_libraries,
             )
             if resolved_enabled or resolved_library_id is not None:
+                # The library binding itself lives in knowledge_tag_library_link,
+                # written by _apply_auto_tag_binding above. Only the on/off flag
+                # belongs on the space row.
                 knowledge_space.auto_tag_enabled = resolved_enabled
-                knowledge_space.auto_tag_library_id = resolved_library_id
                 knowledge_space = await KnowledgeDao.async_update_space(knowledge_space)
             log_perf_stage("auto_tag")
 
@@ -5469,23 +5408,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         visible_scopes: dict[str, set[int]] = {}
         if discovery_scope in {"portal_public", "portal_configured"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
-            full_space_ids = set(discovery.discoverable_space_ids) | set(
-                discovery.explicitly_visible_space_ids
-            )
+            full_space_ids = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_ids
             visible_file_ids: dict[str, set[int]] = {}
             for domain in domains:
-                requested_ids = {
-                    int(space_id) for space_id in domain.space_ids if int(space_id) > 0
-                }
-                visible_scopes.setdefault(domain.code, set()).update(
-                    requested_ids & full_space_ids
-                )
+                requested_ids = {int(space_id) for space_id in domain.space_ids if int(space_id) > 0}
+                visible_scopes.setdefault(domain.code, set()).update(requested_ids & full_space_ids)
                 visible_file_ids.setdefault(domain.code, set()).update(
                     file_id
                     for file_id, parent_space_id in discovery.explicit_file_space_by_id.items()
-                    if parent_space_id in requested_ids
-                    and parent_space_id in grant_only_parent_ids
+                    if parent_space_id in requested_ids and parent_space_id in grant_only_parent_ids
                 )
             return await KnowledgeFileDao.async_count_files_by_domain_scopes(
                 visible_scopes,
@@ -5512,23 +5444,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
         visible_scopes: dict[str, set[int]] = {}
         if discovery_scope in {"portal_public", "portal_configured"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
-            full_space_ids = set(discovery.discoverable_space_ids) | set(
-                discovery.explicitly_visible_space_ids
-            )
+            full_space_ids = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_ids
             visible_file_ids: dict[str, set[int]] = {}
             for category in categories:
-                requested_ids = {
-                    int(space_id) for space_id in category.space_ids if int(space_id) > 0
-                }
-                visible_scopes.setdefault(category.code, set()).update(
-                    requested_ids & full_space_ids
-                )
+                requested_ids = {int(space_id) for space_id in category.space_ids if int(space_id) > 0}
+                visible_scopes.setdefault(category.code, set()).update(requested_ids & full_space_ids)
                 visible_file_ids.setdefault(category.code, set()).update(
                     file_id
                     for file_id, parent_space_id in discovery.explicit_file_space_by_id.items()
-                    if parent_space_id in requested_ids
-                    and parent_space_id in grant_only_parent_ids
+                    if parent_space_id in requested_ids and parent_space_id in grant_only_parent_ids
                 )
             return await KnowledgeFileDao.async_count_files_by_category_scopes(
                 visible_scopes,
@@ -5556,9 +5481,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             search_payload["limit"] = PORTAL_SEARCH_FINAL_LIMIT
             search_payload["cursor"] = None
-            result = await self.search_shougang_portal_files(
-                ShougangPortalFileSearchReq.model_validate(search_payload)
-            )
+            result = await self.search_shougang_portal_files(ShougangPortalFileSearchReq.model_validate(search_payload))
             discovery = getattr(self, "_portal_discovery_result", None)
             return {
                 "total": len(result.get("data") or []),
@@ -5576,9 +5499,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             seen_cursors: set[str] = set()
             while True:
                 result = await self.advanced_search_shougang_portal_files(
-                    ShougangPortalAdvancedFileSearchReq.model_validate(
-                        advanced_payload
-                    )
+                    ShougangPortalAdvancedFileSearchReq.model_validate(advanced_payload)
                 )
                 total += len(result.get("data") or [])
                 next_cursor = str(result.get("next_cursor") or "")
@@ -5626,9 +5547,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     ShougangPortalFileBrowseReq.model_validate(browse_payload)
                 )
                 for item in result.get("data") or []:
-                    canonical_id = int(
-                        item.get("canonical_document_id") or item.get("id") or 0
-                    )
+                    canonical_id = int(item.get("canonical_document_id") or item.get("id") or 0)
                     if canonical_id > 0:
                         seen_documents.add(canonical_id)
                 next_cursor = str(result.get("next_cursor") or "")
@@ -5682,19 +5601,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
             }
         if tag_file_ids is not None and filter_tag_file_ids is not None:
             filter_tag_file_id_set = set(filter_tag_file_ids)
-            tag_file_ids = [
-                file_id for file_id in tag_file_ids if file_id in filter_tag_file_id_set
-            ]
+            tag_file_ids = [file_id for file_id in tag_file_ids if file_id in filter_tag_file_id_set]
         elif filter_tag_file_ids is not None:
             tag_file_ids = filter_tag_file_ids
 
         full_space_ids: list[int] | None = None
         explicit_file_ids: list[int] | None = None
         if req.discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
-            full_space_id_set = (
-                set(discovery.discoverable_space_ids)
-                | set(discovery.explicitly_visible_space_ids)
-            )
+            full_space_id_set = set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids)
             full_space_ids = sorted(full_space_id_set)
             grant_only_parent_ids = set(discovery.grant_parent_space_ids) - full_space_id_set
             explicit_file_ids = sorted(
@@ -5756,9 +5670,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 }
                 for space in spaces
             ]
-        department_space_ids = await self._get_valid_department_space_ids(
-            {int(space.id) for space in spaces}
-        )
+        department_space_ids = await self._get_valid_department_space_ids({int(space.id) for space in spaces})
         return [
             {
                 "id": int(space.id),
@@ -6357,9 +6269,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         req: ShougangPortalAdvancedFileSearchReq,
     ) -> dict:
-        spaces, effective_discovery_scope, trusted_public_scope = (
-            await self._resolve_shougang_portal_advanced_search_spaces(req)
-        )
+        (
+            spaces,
+            effective_discovery_scope,
+            trusted_public_scope,
+        ) = await self._resolve_shougang_portal_advanced_search_spaces(req)
         if not spaces:
             return self._build_shougang_portal_cursor_response([], False, None)
 
@@ -6412,18 +6326,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ):
                 batch_size = min(
                     fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_BATCH_SIZE,
-                    fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_MAX_SCAN_HITS
-                    - scanned_hits,
+                    fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_MAX_SCAN_HITS - scanned_hits,
                 )
                 batch = await search_service.fetch(query, session, size=batch_size)
                 scanned_batches += 1
                 scanned_hits += len(batch.hits)
                 failure_stage = "database_recheck"
-                raw_files = list(
-                    await file_repository.find_by_ids(
-                        [hit.file_id for hit in batch.hits]
-                    )
-                )
+                raw_files = list(await file_repository.find_by_ids([hit.file_id for hit in batch.hits]))
                 valid_files = self._restore_valid_fulltext_files(
                     raw_files,
                     hits=batch.hits,
@@ -6436,13 +6345,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     visible_batch = await self._filter_shougang_portal_search_files(
                         valid_files,
                         spaces=spaces,
-                        defer_department_access=effective_discovery_scope
-                        == "public_and_department",
+                        defer_department_access=effective_discovery_scope == "public_and_department",
                     )
                 visible_ids = {int(file.id) for file in visible_batch}
-                sort_by_file_id = {
-                    hit.file_id: list(hit.sort_values) for hit in batch.hits
-                }
+                sort_by_file_id = {hit.file_id: list(hit.sort_values) for hit in batch.hits}
                 for file in valid_files:
                     file_id = int(file.id)
                     if file_id not in visible_ids:
@@ -6533,9 +6439,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self,
         req: ShougangPortalAdvancedUploaderSearchReq,
     ) -> dict:
-        spaces, _, trusted_public_scope = (
-            await self._resolve_shougang_portal_advanced_search_spaces(req)
-        )
+        spaces, _, trusted_public_scope = await self._resolve_shougang_portal_advanced_search_spaces(req)
         if not spaces:
             return {"data": []}
         search_service, file_repository = self._require_shougang_portal_fulltext_dependencies()
@@ -6554,9 +6458,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             uploader_ids=[int(user.user_id) for user in users],
             per_uploader_limit=fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_SUPPORT_LIMIT,
         )
-        support_file_ids = list(
-            dict.fromkeys(file_id for support in supports for file_id in support.file_ids)
-        )
+        support_file_ids = list(dict.fromkeys(file_id for support in supports for file_id in support.file_ids))
         files = list(await file_repository.find_by_ids(support_file_ids))
         valid_files = self._restore_valid_fulltext_files(
             files,
@@ -6572,11 +6474,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 defer_department_access=False,
             )
         visible_ids = {int(file.id) for file in visible_files}
-        supported_user_ids = {
-            support.user_id
-            for support in supports
-            if visible_ids.intersection(support.file_ids)
-        }
+        supported_user_ids = {support.user_id for support in supports if visible_ids.intersection(support.file_ids)}
         candidates = [
             ShougangPortalAdvancedUploaderItemResp(
                 user_id=int(user.user_id),
@@ -6589,14 +6487,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
         return {
             "data": [
                 item.model_dump(mode="json")
-                for item in candidates[: min(req.limit, fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_RESULT_LIMIT)]
+                for item in candidates[
+                    : min(req.limit, fulltext_constants.KNOWLEDGE_FULLTEXT_SEARCH_UPLOADER_RESULT_LIMIT)
+                ]
             ]
         }
 
     async def _resolve_shougang_portal_advanced_search_spaces(
         self,
-        req: ShougangPortalAdvancedFileSearchReq
-        | ShougangPortalAdvancedUploaderSearchReq,
+        req: ShougangPortalAdvancedFileSearchReq | ShougangPortalAdvancedUploaderSearchReq,
     ) -> tuple[list[Knowledge], str, bool]:
         effective_discovery_scope = (
             req.discovery_scope
@@ -7305,10 +7204,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         space_id: int,
         file_id: int,
+        qa_question_id: int | None = None,
+        qa_doc_source: str | None = None,
     ) -> ShougangPortalFileItemResp | None:
         file, spaces = await self._get_authorized_shougang_portal_file(
             space_id=space_id,
             file_id=file_id,
+            qa_question_id=qa_question_id,
+            qa_doc_source=qa_doc_source,
         )
         if file is None:
             return None
@@ -7327,10 +7230,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         space_id: int,
         file_id: int,
+        qa_question_id: int | None = None,
+        qa_doc_source: str | None = None,
     ) -> dict:
         file, _ = await self._get_authorized_shougang_portal_file(
             space_id=space_id,
             file_id=file_id,
+            qa_question_id=qa_question_id,
+            qa_doc_source=qa_doc_source,
         )
         if file is None:
             return {}
@@ -7382,12 +7289,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_id: int,
         page: int,
         limit: int,
+        qa_question_id: int | None = None,
+        qa_doc_source: str | None = None,
     ) -> dict:
         file, spaces = await self._get_authorized_shougang_portal_file(
             space_id=space_id,
             file_id=file_id,
+            qa_question_id=qa_question_id,
+            qa_doc_source=qa_doc_source,
         )
-        if file is None or not spaces:
+        qa_decision = self._portal_file_access_decision_map.get(int(file.id)) if file is not None else None
+        if file is None or (not spaces and not (qa_decision and qa_decision.allowed)):
             return {"data": [], "total": 0}
         resolved = await self._resolve_shougang_portal_content_entry(
             file,
@@ -7562,11 +7474,54 @@ class KnowledgeSpaceService(KnowledgeUtils):
         visible_files = await self._filter_shougang_portal_visible_files([file], spaces=spaces)
         return (visible_files[0], spaces) if visible_files else (None, spaces)
 
+    async def _portal_access_via_expert_qa_context(
+        self,
+        *,
+        file: KnowledgeFile,
+        space_id: int,
+        qa_question_id: int | None,
+        qa_doc_source: str | None,
+    ) -> tuple[KnowledgeFile, list[Knowledge]] | None:
+        """专家问答关联文档只读预览：不走部门审批与空间 discover，禁止下载。"""
+        if not qa_question_id or qa_doc_source not in {"question", "answer"}:
+            return None
+        from bisheng.knowledge.domain.services.department_file_view_access_service import (
+            DepartmentFileAccessDecision,
+            DepartmentFileAccessSource,
+            DepartmentFileAccessStatus,
+        )
+        from bisheng.qa_expert.domain.qa_related_doc_context_access import (
+            check_qa_related_doc_context_access,
+        )
+
+        allowed = await check_qa_related_doc_context_access(
+            self.login_user,
+            question_id=int(qa_question_id),
+            space_id=int(space_id),
+            file_id=int(file.id),
+            doc_source=qa_doc_source,  # type: ignore[arg-type]
+        )
+        if not allowed:
+            return None
+        decision = DepartmentFileAccessDecision(
+            file_id=int(file.id),
+            space_id=int(space_id),
+            status=DepartmentFileAccessStatus.ALLOWED,
+            source=DepartmentFileAccessSource.EXPERT_QA,
+            can_download=False,
+        )
+        self._portal_file_access_decision_map[int(file.id)] = decision
+        self._portal_file_download_map[int(file.id)] = False
+        space = await KnowledgeDao.aquery_by_id(int(space_id))
+        return (file, [space] if space else [])
+
     async def _get_authorized_shougang_portal_file(
         self,
         *,
         space_id: int,
         file_id: int,
+        qa_question_id: int | None = None,
+        qa_doc_source: str | None = None,
     ) -> tuple[KnowledgeFile | None, list[Knowledge]]:
         if self.document_durable_reference_resolver is not None:
             from bisheng.knowledge.domain.services.knowledge_document_entry_resolver import (
@@ -7591,6 +7546,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
             or int(file.status) != KnowledgeFileStatus.SUCCESS.value
         ):
             return None, []
+
+        qa_access = await self._portal_access_via_expert_qa_context(
+            file=file,
+            space_id=int(space_id),
+            qa_question_id=qa_question_id,
+            qa_doc_source=qa_doc_source,
+        )
+        if qa_access is not None:
+            return qa_access
 
         access_service = self.department_file_view_access_service
         if access_service is None:
@@ -8917,10 +8881,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         full_space_ids: list[int] | None = None
         explicit_file_ids: list[int] | None = None
         if req.discovery_scope in {"portal_public", "portal_configured"} and discovery is not None:
-            full_space_ids = sorted(
-                set(discovery.discoverable_space_ids)
-                | set(discovery.explicitly_visible_space_ids)
-            )
+            full_space_ids = sorted(set(discovery.discoverable_space_ids) | set(discovery.explicitly_visible_space_ids))
             explicit_file_ids = list(discovery.explicitly_visible_file_ids)
         while True:
             raw_files = await KnowledgeFileDao.aget_file_by_space_filters_cursor(
@@ -9145,12 +9106,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             list(space_by_id),
             spaces=spaces,
         )
-        content_space_ids = public_space_ids | {
-            int(space_id) for space_id in discovery.explicitly_visible_space_ids
-        }
-        content_spaces = [
-            space for space in spaces if int(space.id) in content_space_ids
-        ]
+        content_space_ids = public_space_ids | {int(space_id) for space_id in discovery.explicitly_visible_space_ids}
+        content_spaces = [space for space in spaces if int(space.id) in content_space_ids]
 
         recall_jobs: list[Any] = []
         if content_spaces:
@@ -9171,17 +9128,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ]
             )
 
-        explicit_file_ids = {
-            int(file_id) for file_id in discovery.explicitly_visible_file_ids
-        }
+        explicit_file_ids = {int(file_id) for file_id in discovery.explicitly_visible_file_ids}
         if tag_file_ids is not None:
             explicit_file_ids.intersection_update(int(file_id) for file_id in tag_file_ids)
-        grant_parent_ids = {
-            int(space_id) for space_id in discovery.grant_parent_space_ids
-        } - content_space_ids
-        grant_parent_spaces = [
-            space for space in spaces if int(space.id) in grant_parent_ids
-        ]
+        grant_parent_ids = {int(space_id) for space_id in discovery.grant_parent_space_ids} - content_space_ids
+        grant_parent_spaces = [space for space in spaces if int(space.id) in grant_parent_ids]
         if grant_parent_spaces and explicit_file_ids:
             grant_filter_ids = sorted(explicit_file_ids)
             recall_jobs.extend(
@@ -9201,17 +9152,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ]
             )
 
-        recalled_chunks = [
-            chunk
-            for chunk_group in await asyncio.gather(*recall_jobs)
-            for chunk in chunk_group
-        ] if recall_jobs else []
+        recalled_chunks = (
+            [chunk for chunk_group in await asyncio.gather(*recall_jobs) for chunk in chunk_group]
+            if recall_jobs
+            else []
+        )
 
         metadata_space_ids = sorted(
-            {
-                int(space_id) for space_id in discovery.discoverable_space_ids
-            }
-            - content_space_ids
+            {int(space_id) for space_id in discovery.discoverable_space_ids} - content_space_ids
         )
         metadata_files: list[KnowledgeFile] = []
         if metadata_space_ids:
@@ -10521,13 +10469,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if discovery_scope in {"portal_public", "portal_configured"}:
             discovery = await self.resolve_portal_discovery(scope=discovery_scope)
             allowed_ids = set(discovery.query_space_ids)
-            requested_ids = list(
-                dict.fromkeys(
-                    int(space_id)
-                    for space_id in requested_space_ids
-                    if int(space_id) > 0
-                )
-            )
+            requested_ids = list(dict.fromkeys(int(space_id) for space_id in requested_space_ids if int(space_id) > 0))
             ordered_ids = (
                 [space_id for space_id in requested_ids if space_id in allowed_ids]
                 if requested_ids
@@ -10542,9 +10484,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     KnowledgeSpaceLevelEnum.PERSONAL: {"personal"},
                 }.get(space_level, set())
                 ordered_ids = [
-                    space_id
-                    for space_id in ordered_ids
-                    if discovery.space_kind_by_id.get(space_id) in expected_kinds
+                    space_id for space_id in ordered_ids if discovery.space_kind_by_id.get(space_id) in expected_kinds
                 ]
             if not ordered_ids:
                 return []
@@ -10555,17 +10495,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
             space_map = {
                 int(space.id): space
                 for space in spaces
-                if space.id is not None
-                and int(space.type) == KnowledgeTypeEnum.SPACE.value
+                if space.id is not None and int(space.type) == KnowledgeTypeEnum.SPACE.value
             }
-            public_can_download = "download_file" in default_permission_ids_for_relation(
-                "viewer"
-            )
+            public_can_download = "download_file" in default_permission_ids_for_relation("viewer")
             for space_id in ordered_ids:
                 self._portal_space_download_map[space_id] = (
-                    public_can_download
-                    if discovery.space_kind_by_id.get(space_id) == "public"
-                    else False
+                    public_can_download if discovery.space_kind_by_id.get(space_id) == "public" else False
                 )
             return [space_map[space_id] for space_id in ordered_ids if space_id in space_map]
         if discovery_scope not in {"public", "public_and_department"}:
@@ -10750,11 +10685,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ).casefold()
             if normalized_keyword and normalized_keyword not in search_text:
                 continue
-            label = (
-                f"{space_name} ({projection.display_name})"
-                if projection.display_name
-                else space_name
-            )
+            label = f"{space_name} ({projection.display_name})" if projection.display_name else space_name
             options.append(
                 {
                     "value": str(space_id),
@@ -11071,9 +11002,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         department_space_ids = await self._get_valid_department_space_ids(set(grouped_files) - public_space_ids)
         portal_space_kind_map = getattr(self, "_portal_space_kind_map", {})
         guarded_space_ids = department_space_ids | {
-            space_id
-            for space_id in grouped_files
-            if portal_space_kind_map.get(space_id) in {"department", "clinic"}
+            space_id for space_id in grouped_files if portal_space_kind_map.get(space_id) in {"department", "clinic"}
         }
         visible_files: list[KnowledgeFile] = []
         for space_id, items in grouped_files.items():
@@ -11088,9 +11017,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 )
                 if not has_full_space_access:
                     items = [
-                        item
-                        for item in items
-                        if int(item.id) in getattr(self, "_portal_explicit_file_ids", set())
+                        item for item in items if int(item.id) in getattr(self, "_portal_explicit_file_ids", set())
                     ]
                     if not items:
                         continue
@@ -11164,9 +11091,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         department_space_ids = await self._get_valid_department_space_ids(space_ids - public_space_ids)
         portal_space_kind_map = getattr(self, "_portal_space_kind_map", {})
         guarded_space_ids = department_space_ids | {
-            space_id
-            for space_id in space_ids
-            if portal_space_kind_map.get(space_id) in {"department", "clinic"}
+            space_id for space_id in space_ids if portal_space_kind_map.get(space_id) in {"department", "clinic"}
         }
 
         public_files: list[KnowledgeFile] = []
@@ -11302,10 +11227,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             not content_allowed
             and (
                 access_decision is not None
-                or (
-                    discovery is not None
-                    and space_id not in discovery.explicitly_visible_space_ids
-                )
+                or (discovery is not None and space_id not in discovery.explicitly_visible_space_ids)
             )
         )
         space_kind = getattr(self, "_portal_space_kind_map", {}).get(space_id)
@@ -11314,7 +11236,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             KnowledgeSpaceLevelEnum.TEAM
             if is_clinic
             else KnowledgeSpaceLevelEnum(space_kind)
-            if space_kind in {
+            if space_kind
+            in {
                 "public",
                 "department",
                 "team",
@@ -11360,7 +11283,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 capability_payload.get("can_download", False)
                 if capability_payload
                 else self._portal_file_download_map.get(file_id, False)
-            ) if content_allowed else False,
+            )
+            if content_allowed
+            else False,
             content_access=content_access,
             access_source=(
                 str(access_decision.source)
@@ -11787,15 +11712,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         has_manual_old_department_viewer = False
         if int(old_department.id) != int(target_department.id):
-            has_manual_old_department_viewer = (
-                await FineGrainedPermissionService.has_explicit_relation_binding(
-                    object_type="knowledge_space",
-                    object_id=space_id,
-                    subject_type="department",
-                    subject_id=int(old_department.id),
-                    relation="viewer",
-                    include_children=True,
-                )
+            has_manual_old_department_viewer = await FineGrainedPermissionService.has_explicit_relation_binding(
+                object_type="knowledge_space",
+                object_id=space_id,
+                subject_type="department",
+                subject_id=int(old_department.id),
+                relation="viewer",
+                include_children=True,
             )
         plan = await self.department_space_binding_repo.prepare_rebind_department(
             space_id=space_id,
@@ -11813,9 +11736,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise RuntimeError("DepartmentFileViewLifecycleService is not configured")
         try:
             await self.department_file_view_lifecycle_service.prepare_department_rebind(
-                tenant_id=int(
-                    getattr(space, "tenant_id", None) or self.login_user.tenant_id
-                ),
+                tenant_id=int(getattr(space, "tenant_id", None) or self.login_user.tenant_id),
                 space_id=space_id,
                 old_department_id=plan.old_department_id,
                 new_department_id=plan.new_department_id,
@@ -11838,9 +11759,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 plan = replace(
                     plan,
                     manager_revoke_user_ids=tuple(
-                        user_id
-                        for user_id in plan.manager_revoke_user_ids
-                        if user_id not in protected_manager_ids
+                        user_id for user_id in plan.manager_revoke_user_ids if user_id not in protected_manager_ids
                     ),
                 )
             await self._write_department_rebind_permissions(plan)
@@ -11870,8 +11789,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             await self._write_department_rebind_permissions(plan, reverse=True)
         except Exception:
             _logger.exception(
-                "Department rebind compensation failed: space_id=%s old_department_id=%s "
-                "new_department_id=%s",
+                "Department rebind compensation failed: space_id=%s old_department_id=%s new_department_id=%s",
                 plan.space_id,
                 plan.old_department_id,
                 plan.new_department_id,
@@ -11917,11 +11835,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 and rebind_scope.owner_type == KnowledgeSpaceOwnerTypeEnum.USER
                 and KnowledgeSpaceLevelEnum.is_team_level(rebind_scope.level)
             )
-            clinic_binding = (
-                await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
-                if is_clinic_scope
-                else None
-            )
+            clinic_binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id) if is_clinic_scope else None
             is_clinic_space = is_clinic_scope and clinic_binding is not None
             if not is_department_space and not is_clinic_space:
                 raise SpaceInvalidScopeOwnerError(msg="仅部门知识库或科室知识库可以修改所属部门")
@@ -11973,9 +11887,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             discovery_scope = await self.knowledge_space_scope_repo.find_by_space_id(space_id)
             discovery_binding = await DepartmentKnowledgeSpaceDao.aget_by_space_id(space_id)
             if self._portal_discovery_kind(discovery_scope, discovery_binding) is None:
-                raise SpaceInvalidScopeOwnerError(
-                    msg="仅公共知识库、部门知识库或科室知识库可以配置门户公开范围"
-                )
+                raise SpaceInvalidScopeOwnerError(msg="仅公共知识库、部门知识库或科室知识库可以配置门户公开范围")
 
         old_auth_type = space.auth_type
         normalized_name = self._normalize_space_name(name) if name is not None else None
@@ -12021,8 +11933,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 and desired_custom_tags is None
             ):
                 desired_library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space.id)
-                if not desired_library_ids and space.auto_tag_library_id:
-                    desired_library_ids = [space.auto_tag_library_id]
 
             resolved_enabled, resolved_library_id = await self._apply_auto_tag_binding(
                 knowledge=space,
@@ -12034,14 +11944,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 tenant_id=self.login_user.tenant_id,
             )
             space.auto_tag_enabled = resolved_enabled
-            space.auto_tag_library_id = resolved_library_id
 
         prepared_portal_rebind_plan = None
-        if (
-            portal_discovery_enabled is not None
-            and department_id is not None
-            and not is_clinic_rebind
-        ):
+        if portal_discovery_enabled is not None and department_id is not None and not is_clinic_rebind:
             prepared_portal_rebind_plan = await self._prepare_department_rebind_for_update(
                 space=space,
                 space_id=space_id,
@@ -12053,34 +11958,25 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if portal_discovery_enabled is not None and discovery_scope is not None:
             old_value = bool(discovery_scope.portal_discovery_enabled)
             atomic_clinic_binding = None
-            if (
-                is_clinic_rebind
-                and int(clinic_binding.department_id) != int(department_id)
-            ):
+            if is_clinic_rebind and int(clinic_binding.department_id) != int(department_id):
                 clinic_binding.department_id = int(department_id)
                 atomic_clinic_binding = clinic_binding
             try:
                 if prepared_portal_rebind_plan is not None:
-                    updated_scope = (
-                        await self.knowledge_space_scope_repo.stage_space_and_portal_discovery(
-                            space=space,
-                            enabled=portal_discovery_enabled,
-                        )
+                    updated_scope = await self.knowledge_space_scope_repo.stage_space_and_portal_discovery(
+                        space=space,
+                        enabled=portal_discovery_enabled,
                     )
                     await self.department_space_binding_repo.commit_prepared_rebind()
                 else:
-                    updated_scope = (
-                        await self.knowledge_space_scope_repo.update_space_and_portal_discovery(
-                            space=space,
-                            enabled=portal_discovery_enabled,
-                            department_binding=atomic_clinic_binding,
-                        )
+                    updated_scope = await self.knowledge_space_scope_repo.update_space_and_portal_discovery(
+                        space=space,
+                        enabled=portal_discovery_enabled,
+                        department_binding=atomic_clinic_binding,
                     )
             except Exception as exc:
                 if prepared_portal_rebind_plan is not None:
-                    await self._rollback_prepared_department_rebind(
-                        prepared_portal_rebind_plan
-                    )
+                    await self._rollback_prepared_department_rebind(prepared_portal_rebind_plan)
                 await self._write_portal_discovery_audit(
                     space=space,
                     old_value=old_value,
@@ -12101,10 +11997,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if is_clinic_rebind:
                 # Clinic spaces only need the department_knowledge_space binding updated;
                 # the scope remains TEAM_KS/USER (or legacy TEAM/USER).
-                if (
-                    portal_discovery_enabled is None
-                    and int(clinic_binding.department_id) != int(department_id)
-                ):
+                if portal_discovery_enabled is None and int(clinic_binding.department_id) != int(department_id):
                     clinic_binding.department_id = int(department_id)
                     await DepartmentKnowledgeSpaceDao.aupdate(clinic_binding)
                 await KnowledgeSpaceContentStat.enqueue_space_rename_stat_async(space_id)
@@ -12197,9 +12090,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         error_type: str | None = None,
     ) -> None:
         request_id = str(
-            getattr(getattr(self.request, "headers", None), "get", lambda _key, _default=None: None)(
-                "X-Request-ID"
-            )
+            getattr(getattr(self.request, "headers", None), "get", lambda _key, _default=None: None)("X-Request-ID")
             or ""
         )
         metadata = {
@@ -13681,14 +13572,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     knowledge_id,
                     "",
                 )
-                resolved_metadata[item_id]["source_department_short_name"] = (
-                    source_department_short_name_map.get(knowledge_id)
+                resolved_metadata[item_id]["source_department_short_name"] = source_department_short_name_map.get(
+                    knowledge_id
                 )
-                resolved_metadata[item_id]["source_department_display_name"] = (
-                    source_department_display_name_map.get(
-                        knowledge_id,
-                        source_department_name_map.get(knowledge_id, ""),
-                    )
+                resolved_metadata[item_id]["source_department_display_name"] = source_department_display_name_map.get(
+                    knowledge_id,
+                    source_department_name_map.get(knowledge_id, ""),
                 )
         return resolved_metadata
 
@@ -13706,7 +13595,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         permission_context: dict | None = None,
     ) -> dict[str, int]:
         from sqlalchemy import or_
-        from sqlmodel import col
 
         prefix = f"{folder.file_level_path or ''}/{folder.id}"
         stmt = (
@@ -13775,7 +13663,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         ``visible_success_file_num`` here means direct SUCCESS files (not deep, not visibility-filtered);
         precise <=20 enforcement stays in ``resolve_qa_scope_file_ids`` at QA time.
         """
-        from sqlmodel import col
 
         folder_counts: dict[int, dict[str, int | bool]] = {}
         if not folders:
@@ -14132,18 +14019,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             KnowledgeFileEntryType.SHARE.value,
         }
         original_uploader_ids = sorted(
-            {
-                int(item.original_uploader_id)
-                for item in file_items
-                if item.original_uploader_id is not None
-            }
+            {int(item.original_uploader_id) for item in file_items if item.original_uploader_id is not None}
         )
         original_knowledge_ids = sorted(
             {
                 int(item.original_knowledge_id)
                 for item in file_items
-                if item.entry_type in distributed_entry_types
-                and item.original_knowledge_id is not None
+                if item.entry_type in distributed_entry_types and item.original_knowledge_id is not None
             }
         )
         invalid_manager_space_ids = sorted(
@@ -14152,8 +14034,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 for item in file_items
                 if item.entry_status == KnowledgeFileEntryStatus.INVALID.value
                 and item.reference_document_id is not None
-                and (document := document_map.get(int(item.reference_document_id)))
-                is not None
+                and (document := document_map.get(int(item.reference_document_id))) is not None
                 and document.lifecycle_status
                 in {
                     KnowledgeDocumentLifecycleStatus.DELETING.value,
@@ -14161,27 +14042,16 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 }
             }
         )
-        distribution_space_ids = sorted(
-            set(original_knowledge_ids) | set(invalid_manager_space_ids)
-        )
+        distribution_space_ids = sorted(set(original_knowledge_ids) | set(invalid_manager_space_ids))
         original_users, original_spaces = await asyncio.gather(
-            UserDao.aget_user_by_ids(original_uploader_ids)
-            if original_uploader_ids
-            else asyncio.sleep(0, result=[]),
+            UserDao.aget_user_by_ids(original_uploader_ids) if original_uploader_ids else asyncio.sleep(0, result=[]),
             KnowledgeDao.async_get_spaces_by_ids(distribution_space_ids)
             if distribution_space_ids
             else asyncio.sleep(0, result=[]),
         )
-        original_user_name_map = {
-            int(user.user_id): str(user.user_name or user.user_id) for user in original_users
-        }
-        original_space_name_map = {
-            int(space.id): str(space.name or space.id) for space in original_spaces
-        }
-        distribution_space_state_map = {
-            int(space.id): getattr(space, "state", None)
-            for space in original_spaces
-        }
+        original_user_name_map = {int(user.user_id): str(user.user_name or user.user_id) for user in original_users}
+        original_space_name_map = {int(space.id): str(space.name or space.id) for space in original_spaces}
+        distribution_space_state_map = {int(space.id): getattr(space, "state", None) for space in original_spaces}
 
         info: dict[int, dict] = {}
         for item in file_items:
@@ -14201,9 +14071,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ),
             )
             capability_payload = capabilities.model_dump()
-            is_invalid = (
-                item.entry_status == KnowledgeFileEntryStatus.INVALID.value
-            )
+            is_invalid = item.entry_status == KnowledgeFileEntryStatus.INVALID.value
             if is_invalid:
                 capability_payload = KnowledgeDocumentEntryCapabilities(
                     can_delete="delete_file" in set(permission_ids)
@@ -14260,9 +14128,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                             KnowledgeDocumentLifecycleStatus.DELETING.value,
                             KnowledgeDocumentLifecycleStatus.INVALID.value,
                         }
-                        and distribution_space_state_map.get(
-                            int(document.knowledge_id)
-                        )
+                        and distribution_space_state_map.get(int(document.knowledge_id))
                         == KnowledgeState.PUBLISHED.value
                         else "manager_space_deleted"
                     )
@@ -16732,11 +16598,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         for file_id in unique_file_ids:
             file_record = file_by_id.get(file_id)
-            if (
-                not file_record
-                or file_record.knowledge_id != space_id
-                or file_record.file_type == FileType.DIR.value
-            ):
+            if not file_record or file_record.knowledge_id != space_id or file_record.file_type == FileType.DIR.value:
                 skipped_ids.append(file_id)
                 continue
             if not file_record.alias_name:
@@ -16748,11 +16610,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 alias_name = self._normalize_alias_target_name(file_record, file_record.alias_name)
                 self._check_filename_sensitive_words(alias_name)
 
-                if resolved is None and await SpaceFileDao.count_file_by_name(
-                    file_record.knowledge_id,
-                    alias_name,
-                    exclude_id=file_id,
-                ) > 0:
+                if (
+                    resolved is None
+                    and await SpaceFileDao.count_file_by_name(
+                        file_record.knowledge_id,
+                        alias_name,
+                        exclude_id=file_id,
+                    )
+                    > 0
+                ):
                     raise SpaceFileNameDuplicateError()
 
                 if alias_name in pending_names:
@@ -16845,11 +16711,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         for file_id in unique_file_ids:
             file_record = file_by_id.get(file_id)
-            if (
-                not file_record
-                or file_record.knowledge_id != space_id
-                or file_record.file_type == FileType.DIR.value
-            ):
+            if not file_record or file_record.knowledge_id != space_id or file_record.file_type == FileType.DIR.value:
                 skipped_ids.append(file_id)
                 continue
             if not file_record.alias_name:
@@ -18181,6 +18043,9 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         await self._apply_cascade_version_delete_plan(delete_plan)
+        distribution_files.sort(
+            key=lambda item: item.entry_type == KnowledgeFileEntryType.MANAGER.value
+        )
         for file_record in distribution_files:
             await self._handle_distribution_file_delete(file_record)
 

@@ -93,5 +93,12 @@ router.add_api_route("/notifications", endpoints.get_notifications, methods=["GE
 router.add_api_route("/notifications/{notification_id}/read", endpoints.mark_notification_read, methods=["POST"])
 
 
+# 带水印下载（须在 /upload 之前注册，避免被其它动态路由吞掉）
+router.add_api_route(
+    "/assets/watermarked-download",
+    endpoints.download_watermarked_asset,
+    methods=["GET"],
+)
+
 # 图片上传
 router.add_api_route("/upload", endpoints.upload_file, methods=["POST"])

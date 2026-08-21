@@ -109,6 +109,50 @@ def resolve_dept_bucket_id(
     return None
 
 
+def dept_path_segment_from_bucket_to_leaf(path: str | None, bucket_id: int) -> list[int]:
+    """返回 dept 桶到主部门叶子之间的 path 段（含两端）。"""
+    ids = _department_path_ids(path)
+    if not ids:
+        return []
+    if bucket_id not in ids:
+        return list(ids)
+    bucket_index = ids.index(bucket_id)
+    return ids[bucket_index:]
+
+
+def resolve_points_user_dept_display_name(
+    primary: Department | None,
+    departments: dict[int, Department],
+) -> str | None:
+    """解析积分模块用户部门展示名。
+
+    沿主部门链（dept 桶 → 用户所在节点）由近及远优先 ``short_name``；
+    链路上均无简称时回退 dept 桶 ``name``。path 上无 ``org_level=dept`` 时不回退叶子名（AC-22）。
+    """
+    from bisheng.department.domain.services.department_display_service import (
+        normalize_department_short_name,
+    )
+
+    if primary is None or not primary.path:
+        return None
+    bucket_id = resolve_dept_bucket_id(primary, departments)
+    if bucket_id is None:
+        return None
+    segment = dept_path_segment_from_bucket_to_leaf(primary.path, bucket_id)
+    for dept_id in reversed(segment):
+        node = departments.get(dept_id)
+        if node is None:
+            continue
+        short_name = normalize_department_short_name(getattr(node, "short_name", None))
+        if short_name:
+            return short_name
+    bucket = departments.get(bucket_id)
+    if bucket is None:
+        return None
+    full_name = str(getattr(bucket, "name", "") or "").strip()
+    return full_name or None
+
+
 def build_ranked_rows(
     *,
     tenant_id: int,
@@ -219,29 +263,16 @@ class PointsRankService:
         refreshed_at = now.replace(tzinfo=None)
         accounts = await repo.list_accounts(tenant_id)
         balances = {int(a.user_id): int(a.balance) for a in accounts}
-        lifetime_earned = {int(a.user_id): int(a.lifetime_earned) for a in accounts}
         last_earned_at = {int(a.user_id): getattr(a, "last_earned_at", None) for a in accounts}
         if not balances:
             return {"tenant_id": tenant_id, "rows": 0}
 
-        from bisheng.points.domain.services.points_query_service import PointsQueryService
-
-        month_start, month_end = PointsQueryService._month_bounds(now)
-        year_start, year_end = year_bounds(now)
-        month_scores = await repo.sum_deltas_by_user(tenant_id, start=month_start, end=month_end)
-        year_scores = await repo.sum_deltas_by_user(tenant_id, start=year_start, end=year_end)
-        all_scores = {user_id: earned for user_id, earned in lifetime_earned.items() if earned > 0}
-
+        period_score_map = await self._period_score_maps(repo, tenant_id, now, balances)
         exclude = await self._load_super_admin_ids()
         company_by_user, bucket_by_user = await self._load_company_and_dept_buckets(list(balances.keys()))
         company_ids = sorted({cid for cid in company_by_user.values() if cid is not None})
 
         written = 0
-        period_score_map = {
-            "month": month_scores,
-            "year": year_scores,
-            "all": all_scores,
-        }
         for period, scores in period_score_map.items():
             period_key = keys[period]
             # 整 period 清桶，去掉旧全租户 global(scope_id=NULL) 与失效公司桶。
@@ -307,6 +338,28 @@ class PointsRankService:
             "rows": written,
             "period_keys": keys,
             "companies": len(company_ids),
+        }
+
+    @staticmethod
+    async def _period_score_maps(
+        repo: PointsRepository,
+        tenant_id: int,
+        now: datetime,
+        balances: dict[int, int],
+    ) -> dict[str, dict[int, int]]:
+        """月/年为时间窗内流水净变动；总榜为账户积分总和（余额）。"""
+        from bisheng.points.domain.services.points_query_service import PointsQueryService
+
+        month_start, month_end = PointsQueryService._month_bounds(now)
+        year_start, year_end = year_bounds(now)
+        month_scores = await repo.sum_deltas_by_user(tenant_id, start=month_start, end=month_end)
+        year_scores = await repo.sum_deltas_by_user(tenant_id, start=year_start, end=year_end)
+        # 与后台「累计积分」一致：全部流水之和 = 当前余额；0 分不进总榜。
+        all_scores = {user_id: score for user_id, score in balances.items() if score != 0}
+        return {
+            "month": month_scores,
+            "year": year_scores,
+            "all": all_scores,
         }
 
     @staticmethod

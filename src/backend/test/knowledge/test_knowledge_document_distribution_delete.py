@@ -51,12 +51,14 @@ from bisheng.knowledge.domain.services.knowledge_document_projection_service imp
 from bisheng.knowledge.domain.services.knowledge_space_retirement_service import (
     KnowledgeSpaceRetirementService,
 )
+from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
 
 
 def _service(
     session: AsyncSession,
     *,
     tuple_writer=AsyncMock(),
+    permission_snapshot_loader=AsyncMock(return_value=[]),
 ) -> KnowledgeDocumentDistributionService:
     file_repository = KnowledgeFileRepositoryImpl(session)
     return KnowledgeDocumentDistributionService(
@@ -68,7 +70,7 @@ def _service(
             file_repository=file_repository,
             tuple_writer=tuple_writer,
         ),
-        permission_snapshot_loader=AsyncMock(return_value=[]),
+        permission_snapshot_loader=permission_snapshot_loader,
     )
 
 
@@ -93,6 +95,13 @@ async def _seed_manager(session: AsyncSession) -> None:
                 id=30,
                 tenant_id=7,
                 name="分享目标库",
+                type=KnowledgeTypeEnum.SPACE.value,
+                state=KnowledgeState.PUBLISHED.value,
+            ),
+            Knowledge(
+                id=40,
+                tenant_id=7,
+                name="二次发布目标库",
                 type=KnowledgeTypeEnum.SPACE.value,
                 state=KnowledgeState.PUBLISHED.value,
             ),
@@ -149,8 +158,30 @@ def _publish_command(
     )
 
 
+async def _publish_to_department_then_public(
+    service: KnowledgeDocumentDistributionService,
+):
+    first = await service.publish_approved(
+        _publish_command(
+            approval_instance_id=7001,
+            source_space=10,
+            target_space=20,
+            target_path="/18",
+        )
+    )
+    second = await service.publish_approved(
+        _publish_command(
+            approval_instance_id=7002,
+            source_space=20,
+            target_space=40,
+            target_path="/28",
+        )
+    )
+    return first, second
+
+
 @pytest.mark.asyncio
-async def test_delete_manager_invalidates_publish_predecessor_and_active_share(
+async def test_delete_manager_rolls_back_to_publish_predecessor_and_keeps_share_active(
     async_db_session: AsyncSession,
 ):
     await _seed_manager(async_db_session)
@@ -172,13 +203,34 @@ async def test_delete_manager_invalidates_publish_predecessor_and_active_share(
             target_space_id=30,
         )
     )
+    tuple_writer = AsyncMock()
+
+    async def permission_snapshot_loader(file_id: int):
+        if file_id == 100:
+            users = ["user:shared", "user:old-manager"]
+        elif file_id == published.publish_entry_id:
+            users = ["user:shared", "user:restored-manager"]
+        else:
+            users = []
+        return [
+            TupleOperation(
+                action="write",
+                user=user,
+                relation="viewer",
+                object=f"knowledge_file:{file_id}",
+            )
+            for user in users
+        ]
+
+    service.permission_snapshot_loader = permission_snapshot_loader
+    service.permission_activation_service.tuple_writer = tuple_writer
     assert (
         await service.preflight_delete_entry(
             tenant_id=7,
             document_id=91,
             entry_id=100,
         )
-        == "final_delete"
+        == "rollback"
     )
 
     first = await service.delete_manager(
@@ -186,12 +238,6 @@ async def test_delete_manager_invalidates_publish_predecessor_and_active_share(
         document_id=91,
         manager_file_id=100,
     )
-    second = await service.delete_manager(
-        tenant_id=7,
-        document_id=91,
-        manager_file_id=100,
-    )
-
     document = await KnowledgeDocumentRepositoryImpl(
         async_db_session
     ).find_by_id(91)
@@ -201,22 +247,285 @@ async def test_delete_manager_invalidates_publish_predecessor_and_active_share(
         published.publish_entry_id
     )
     share = await repository.find_by_id(shared.share_entry_id)
-    assert first.action == "final_delete"
-    assert second.idempotent is True
-    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value
-    assert document.knowledge_id == 20
-    assert document.predecessor_logic_file_id == published.publish_entry_id
-    assert manager.knowledge_id == 20
+    versions = await KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    ).find_by_document_id(91)
+    assert first.action == "rollback"
+    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value
+    assert document.knowledge_id == 10
+    assert document.predecessor_logic_file_id is None
+    assert manager.knowledge_id == 10
     assert manager.object_name == "tenant/7/canonical.pdf"
-    assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
-    assert predecessor.entry_status == KnowledgeFileEntryStatus.INVALID.value
-    assert share.entry_status == KnowledgeFileEntryStatus.INVALID.value
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert [version.knowledge_file_id for version in versions] == [100]
+    assert predecessor.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert share.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
     assert predecessor.projection_status == KnowledgeFileProjectionStatus.PENDING.value
-    assert share.projection_status == KnowledgeFileProjectionStatus.PENDING.value
+    cleanup_operations = tuple_writer.await_args_list[-1].args[0]
+    assert any(
+        operation.action == "delete"
+        and operation.user == "user:old-manager"
+        and operation.relation == "viewer"
+        and operation.object == "knowledge_file:100"
+        for operation in cleanup_operations
+    )
+    assert not any(
+        operation.action == "delete"
+        and operation.user == "user:shared"
+        and operation.relation == "viewer"
+        and operation.object == "knowledge_file:100"
+        for operation in cleanup_operations
+    )
 
 
 @pytest.mark.asyncio
-async def test_delete_manager_turns_legacy_rollback_state_into_cleanup(
+async def test_multi_hop_manager_delete_rolls_back_one_level_and_preserves_identity(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    service = _service(async_db_session)
+    first_publish, second_publish = await _publish_to_department_then_public(service)
+    shared = await service.share_approved(
+        ShareKnowledgeDocumentCommand(
+            tenant_id=7,
+            approval_instance_id=8001,
+            document_id=91,
+            source_entry_id=100,
+            target_space_id=30,
+        )
+    )
+
+    result = await service.delete_manager(
+        tenant_id=7,
+        document_id=91,
+        manager_file_id=100,
+    )
+
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    first_entry = await repository.find_by_id(first_publish.publish_entry_id)
+    second_entry = await repository.find_by_id(second_publish.publish_entry_id)
+    share = await repository.find_by_id(shared.share_entry_id)
+    versions = await KnowledgeDocumentVersionRepositoryImpl(
+        async_db_session
+    ).find_by_document_id(91)
+    assert result.action == "rollback"
+    assert document.knowledge_id == 20
+    assert document.predecessor_logic_file_id == first_publish.publish_entry_id
+    assert manager.id == 100
+    assert manager.knowledge_id == 20
+    assert manager.object_name == "tenant/7/canonical.pdf"
+    assert [version.knowledge_file_id for version in versions] == [100]
+    assert first_entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert second_entry.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert share.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+
+
+@pytest.mark.asyncio
+async def test_delete_publish_entry_rewires_chain_and_manager_delete_skips_it(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    service = _service(async_db_session)
+    first_publish, second_publish = await _publish_to_department_then_public(service)
+
+    removed = await service.remove_publish_entry(
+        tenant_id=7,
+        document_id=91,
+        publish_entry_id=second_publish.publish_entry_id,
+    )
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    after_entry_delete_document = await KnowledgeDocumentRepositoryImpl(
+        async_db_session
+    ).find_by_id(91)
+    after_entry_delete_manager = await repository.find_by_id(100)
+    deleted_publish = await repository.find_by_id(second_publish.publish_entry_id)
+    assert after_entry_delete_document.knowledge_id == 40
+    assert (
+        after_entry_delete_document.predecessor_logic_file_id
+        == first_publish.publish_entry_id
+    )
+    assert after_entry_delete_manager.knowledge_id == 40
+    assert after_entry_delete_manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert deleted_publish.entry_status == KnowledgeFileEntryStatus.DELETING.value
+
+    result = await service.delete_manager(
+        tenant_id=7,
+        document_id=91,
+        manager_file_id=100,
+    )
+
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+    manager = await repository.find_by_id(100)
+    deleted_publish = await repository.find_by_id(second_publish.publish_entry_id)
+    restored_publish = await repository.find_by_id(first_publish.publish_entry_id)
+    assert removed.idempotent is False
+    assert result.action == "rollback"
+    assert document.knowledge_id == 10
+    assert document.predecessor_logic_file_id is None
+    assert manager.knowledge_id == 10
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert deleted_publish.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert restored_publish.entry_status == KnowledgeFileEntryStatus.DELETING.value
+
+
+@pytest.mark.asyncio
+async def test_delete_all_publish_entries_then_manager_uses_final_delete(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    service = _service(async_db_session)
+    first_publish, second_publish = await _publish_to_department_then_public(service)
+    shared = await service.share_approved(
+        ShareKnowledgeDocumentCommand(
+            tenant_id=7,
+            approval_instance_id=8001,
+            document_id=91,
+            source_entry_id=100,
+            target_space_id=30,
+        )
+    )
+    for entry_id in (
+        second_publish.publish_entry_id,
+        first_publish.publish_entry_id,
+    ):
+        await service.remove_publish_entry(
+            tenant_id=7,
+            document_id=91,
+            publish_entry_id=entry_id,
+        )
+
+    result = await service.delete_manager(
+        tenant_id=7,
+        document_id=91,
+        manager_file_id=100,
+    )
+
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    share = await repository.find_by_id(shared.share_entry_id)
+    assert result.action == "final_delete"
+    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value
+    assert document.predecessor_logic_file_id is None
+    assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert share.entry_status == KnowledgeFileEntryStatus.INVALID.value
+
+
+@pytest.mark.asyncio
+async def test_manager_delete_fails_closed_when_publish_chain_contains_cycle(
+    async_db_session: AsyncSession,
+):
+    await _seed_manager(async_db_session)
+    service = _service(async_db_session)
+    published = await service.publish_approved(
+        _publish_command(
+            approval_instance_id=7001,
+            source_space=10,
+            target_space=20,
+            target_path="/18",
+        )
+    )
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    publish = await repository.find_by_id(published.publish_entry_id)
+    publish.predecessor_logic_file_id = int(publish.id)
+    async_db_session.add(publish)
+    await async_db_session.commit()
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match="contains a cycle",
+    ):
+        await service.delete_manager(
+            tenant_id=7,
+            document_id=91,
+            manager_file_id=100,
+        )
+
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+    manager = await repository.find_by_id(100)
+    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+
+
+@pytest.mark.asyncio
+async def test_manager_rollback_revalidates_candidate_after_concurrent_publish_delete(
+    async_db_session: AsyncSession,
+):
+    armed = False
+    tuple_writer = AsyncMock()
+    service: KnowledgeDocumentDistributionService
+
+    async def permission_snapshot_loader(file_id: int):
+        nonlocal armed
+        if armed:
+            armed = False
+            await service.remove_publish_entry(
+                tenant_id=7,
+                document_id=91,
+                publish_entry_id=file_id,
+            )
+        return []
+
+    await _seed_manager(async_db_session)
+    service = _service(
+        async_db_session,
+        tuple_writer=tuple_writer,
+        permission_snapshot_loader=permission_snapshot_loader,
+    )
+    first_publish, second_publish = await _publish_to_department_then_public(service)
+    tuple_writer.reset_mock()
+    armed = True
+
+    with pytest.raises(
+        KnowledgeDocumentDistributionError,
+        match="rollback state changed concurrently",
+    ):
+        await service.delete_manager(
+            tenant_id=7,
+            document_id=91,
+            manager_file_id=100,
+        )
+
+    manager_permission_calls = [
+        call.args[0]
+        for call in tuple_writer.await_args_list
+        if call.args[0]
+        and all(operation.object == "knowledge_file:100" for operation in call.args[0])
+    ]
+    assert len(manager_permission_calls) == 2
+    assert {operation.action for operation in manager_permission_calls[0]} == {"write"}
+    assert {operation.action for operation in manager_permission_calls[1]} == {"delete"}
+    assert {
+        (operation.user, operation.relation, operation.object)
+        for operation in manager_permission_calls[0]
+    } == {
+        (operation.user, operation.relation, operation.object)
+        for operation in manager_permission_calls[1]
+    }
+
+    resumed = await service.delete_manager(
+        tenant_id=7,
+        document_id=91,
+        manager_file_id=100,
+    )
+    document = await KnowledgeDocumentRepositoryImpl(async_db_session).find_by_id(91)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    first_entry = await repository.find_by_id(first_publish.publish_entry_id)
+    second_entry = await repository.find_by_id(second_publish.publish_entry_id)
+    assert resumed.action == "rollback"
+    assert document.knowledge_id == 10
+    assert document.predecessor_logic_file_id is None
+    assert manager.knowledge_id == 10
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert first_entry.entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert second_entry.entry_status == KnowledgeFileEntryStatus.DELETING.value
+
+
+@pytest.mark.asyncio
+async def test_delete_manager_resumes_preparing_rollback_state(
     async_db_session: AsyncSession,
 ):
     await _seed_manager(async_db_session)
@@ -270,30 +579,13 @@ async def test_delete_manager_turns_legacy_rollback_state_into_cleanup(
     predecessor = await repository.find_by_id(published.publish_entry_id)
     tombstone = await repository.find_by_id(102)
     preparing_share = await repository.find_by_id(103)
-    assert result.action == "final_delete"
-    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.DELETING.value
-    assert document.knowledge_id == 20
-    assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
-    assert predecessor.entry_status == KnowledgeFileEntryStatus.INVALID.value
+    assert result.action == "rollback"
+    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value
+    assert document.knowledge_id == 10
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert predecessor.entry_status == KnowledgeFileEntryStatus.DELETING.value
     assert tombstone.entry_status == KnowledgeFileEntryStatus.DELETING.value
-    assert preparing_share.entry_status == KnowledgeFileEntryStatus.DELETING.value
-
-    with pytest.raises(
-        KnowledgeDocumentDistributionError,
-        match="canonical document has no active manager",
-    ):
-        await service.share_approved(
-            ShareKnowledgeDocumentCommand(
-                tenant_id=7,
-                approval_instance_id=8002,
-                document_id=91,
-                source_entry_id=100,
-                target_space_id=30,
-            )
-        )
-    assert (
-        await repository.find_by_id(103)
-    ).entry_status == KnowledgeFileEntryStatus.DELETING.value
+    assert preparing_share.entry_status == KnowledgeFileEntryStatus.PREPARING.value
 
 
 @pytest.mark.asyncio

@@ -52,6 +52,7 @@ class DepartmentFileAccessSource:
     DEPARTMENT_APPROVER = "department_approver"
     PERMISSION_TEMPLATE = "permission_template"
     APPROVAL_GRANT = "approval_grant"
+    EXPERT_QA = "expert_qa"
 
 
 @dataclass(frozen=True)
@@ -135,14 +136,10 @@ class DepartmentFileViewAccessService:
         if (
             level == KnowledgeSpaceLevelEnum.DEPARTMENT.value
             and owner_type == KnowledgeSpaceOwnerTypeEnum.DEPARTMENT.value
-            and int(getattr(scope, "owner_id", 0) or 0)
-            == int(getattr(binding, "department_id", 0) or 0)
+            and int(getattr(scope, "owner_id", 0) or 0) == int(getattr(binding, "department_id", 0) or 0)
         ):
             return "department"
-        if (
-            KnowledgeSpaceLevelEnum.is_team_level(level)
-            and owner_type == KnowledgeSpaceOwnerTypeEnum.USER.value
-        ):
+        if KnowledgeSpaceLevelEnum.is_team_level(level) and owner_type == KnowledgeSpaceOwnerTypeEnum.USER.value:
             return "clinic"
         return None
 
@@ -324,11 +321,7 @@ class DepartmentFileViewAccessService:
         binding_rows_by_space: dict[int, list[DepartmentKnowledgeSpace]] = {}
         for row in bindings_result.scalars().all():
             binding_rows_by_space.setdefault(int(row.space_id), []).append(row)
-        bindings = {
-            space_id: rows[0]
-            for space_id, rows in binding_rows_by_space.items()
-            if len(rows) == 1
-        }
+        bindings = {space_id: rows[0] for space_id, rows in binding_rows_by_space.items() if len(rows) == 1}
         department_ids = {int(binding.department_id) for binding in bindings.values()}
         department_result = await self.session.execute(
             select(Department).where(Department.id.in_(sorted(department_ids)))
@@ -352,11 +345,7 @@ class DepartmentFileViewAccessService:
                     department=None,
                     valid=False,
                     applicable=False,
-                    invalid_reason=(
-                        "ambiguous_binding"
-                        if len(binding_rows_by_space.get(space_id, [])) > 1
-                        else None
-                    ),
+                    invalid_reason=("ambiguous_binding" if len(binding_rows_by_space.get(space_id, [])) > 1 else None),
                 )
                 continue
             department = departments.get(int(binding.department_id)) if binding is not None else None
@@ -493,9 +482,7 @@ class DepartmentFileViewAccessService:
             "file_name": file_name,
             "space_name": space_name,
             "folder_path": (
-                folder_path
-                if folder_path is not None
-                else str(getattr(file_record, "file_level_path", "") or "")
+                folder_path if folder_path is not None else str(getattr(file_record, "file_level_path", "") or "")
             ),
             "file_source": getattr(file_record, "file_source", None),
             "file_ext": suffix,

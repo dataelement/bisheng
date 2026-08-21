@@ -4,16 +4,29 @@ from bisheng.common.constants.telemetry import (
 )
 from bisheng.core.database import get_async_db_session, get_database_connection
 from bisheng.database.models.group import DefaultGroup
-from bisheng.database.models.group_resource import GroupResourceDao, GroupResource, ResourceTypeEnum
+from bisheng.database.models.group_resource import GroupResource, GroupResourceDao, ResourceTypeEnum
 from bisheng.telemetry_search.domain.models.dashboard import DashboardType
 from bisheng.telemetry_search.domain.models.dashboard_dao import DashboardDao
-from bisheng.telemetry_search.domain.models.dashboard_dataset import DashboardDataset, SchemaConfig, MetricConfig, \
-    DimensionConfig, FormulaEnum
-from bisheng.telemetry_search.domain.repositories.implementations.dataset_repository_impl import \
-    DashboardDatasetRepositoryImpl
-from bisheng.telemetry_search.domain.schemas.query_builder import AggregationExpression, AggsTypeEnum, PipelineTypeEnum, \
-    FilterExpression, TermOp, \
-    MatchAllOp, TermsOp
+from bisheng.telemetry_search.domain.models.dashboard_dataset import (
+    DashboardDataset,
+    DimensionConfig,
+    FormulaEnum,
+    MetricConfig,
+    SchemaConfig,
+    VirtualMetricCalculationEnum,
+)
+from bisheng.telemetry_search.domain.repositories.implementations.dataset_repository_impl import (
+    DashboardDatasetRepositoryImpl,
+)
+from bisheng.telemetry_search.domain.schemas.query_builder import (
+    AggregationExpression,
+    AggsTypeEnum,
+    FilterExpression,
+    MatchAllOp,
+    PipelineTypeEnum,
+    TermOp,
+    TermsOp,
+)
 
 DASHBOARD_DATASET = [
     DashboardDataset(
@@ -852,6 +865,32 @@ DASHBOARD_DATASET = [
                             field="favorite_count"
                         )
                     ]
+                ),
+                MetricConfig(
+                    field="knowledge_contribution_ratio",
+                    name="知识贡献占比",
+                    is_virtual=True,
+                    calculation=VirtualMetricCalculationEnum.SHARE_OF_TOTAL,
+                    default_number_format={
+                        "type": "percent",
+                        "decimalPlaces": 1,
+                        "thousandSeparator": False,
+                    },
+                    filter=FilterExpression(bool_operator="must", filters=[
+                        TermOp(field="record_type", value="file"),
+                        TermOp(field="file_type", value=1),
+                        TermsOp(
+                            field="space_level",
+                            value=list(KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS),
+                        ),
+                    ]),
+                    aggregations=[
+                        AggregationExpression(
+                            name="knowledge_contribution_ratio",
+                            type=AggsTypeEnum.VALUE_COUNT,
+                            field="file_id",
+                        )
+                    ],
                 ),
             ],
             dimensions=[

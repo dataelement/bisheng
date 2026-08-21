@@ -19,7 +19,7 @@ import { SourceFileLinks } from "./SourceFileLinks"
 import { BatchApproveLibraryPickerDialog, BatchResultDialog, RejectReasonDialog } from "./TagBatchDialogs"
 import { TagFilterBar } from "./TagFilterBar"
 import { TagReviewDialog } from "./TagReviewDialog"
-import { TagSourceIcon, tagSourceLabel } from "./TagSourceIcon"
+import { TagSourceIcon } from "./TagSourceIcon"
 import {
     buildSearchParams,
     EMPTY_FILTERS,
@@ -138,7 +138,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
     const isPendingTab = tab === "pending"
     // Checkbox + action columns exist only where rows can still be acted on;
     // the reviewed tab shows an outcome column instead.
-    const columnCount = isPendingTab ? 12 : 11
+    const columnCount = isPendingTab ? 11 : 10
 
     const selectedRows = rows.filter((row) => selectedKeys.includes(keyOf(row)))
     // Already-reviewed entries are read-only, so they take part in neither action.
@@ -232,7 +232,6 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                             )}
                             <th className="w-14 px-3 py-3 font-medium">{t("build.tagConsole.index", "序号")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagName", "标签名称")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.tagType", "标签类型")}</th>
                             {!isPendingTab && (
                                 <th className="px-3 py-3 font-medium">{t("build.tagConsole.status", "标签状态")}</th>
                             )}
@@ -307,7 +306,6 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                                             </TooltipProvider>
                                         )}
                                     </td>
-                                    <td className="px-3 py-3">{tagSourceLabel(row.resource_type, t)}</td>
                                     {!isPendingTab && (
                                         <td className={cname("px-3 py-3", reviewStatusColorClass(row.status))}>
                                             {row.status === "approved"

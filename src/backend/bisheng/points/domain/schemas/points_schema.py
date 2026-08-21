@@ -29,6 +29,7 @@ class PointRuleRequest(BaseModel):
     rule_code: str | None = None
     rule_type: str | None = None
     name: str | None = None
+    display_name: str | None = None
     score_expr: dict | None = None
     daily_cap: int | None = None
     beneficiary: str | None = None
@@ -81,6 +82,7 @@ class PointOverviewResponse(BaseModel):
     """运营概览三绝对数。"""
 
     total_issued: int
+    # 当前有效可用总积分 = 平台总积分发放 − 违规扣减积分（与 PRD 运营口径一致）
     total_balance: int
     total_violation_deducted: int
     total_issued_mom: int = 0
@@ -155,6 +157,7 @@ class PointRuleResponse(BaseModel):
     rule_code: str
     rule_type: str
     name: str
+    display_name: str
     score_expr: dict
     daily_cap: int | None
     beneficiary: str | None

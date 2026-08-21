@@ -17,15 +17,16 @@
 
 ---
 
-## 2. 认证
+## 2. 认证与业务用户
 
-沿用 BiSheng OpenAPI（`/api/v2/*`）的统一模式：服务账号身份。
+接口要求 `X-Developer-Token`。Developer Token 先验证调用资格，包括 Token 状态、绑定关系、IP、路由白名单和限流；Token 失败时不会解析业务用户或执行检索。
 
-- 不接收用户 JWT，也不读取 `access_token_cookie`。
-- 后端以「默认操作员」身份发起调用（DB 配置项 `default_operator.user`）。
-- 调用方需在网络层负责访问控制（VPN / 内网 / 反向代理鉴权）。
+- Body 未传 `external_id`：使用 Token 绑定用户的权限和作用域。
+- Body 传入 `external_id`：全局精确解析唯一有效用户，并使用该用户的完整权限执行检索。
+- `external_id` 不存在、禁用或重复时统一返回 HTTP `403`；空白或超过 255 个字符返回 HTTP `422`。
+- 知识空间和文件仍经过现有 `view_file` 可见性过滤。
 
-> 部署前置条件：DB `initdb_config` 已配置 `default_operator.user`，且该用户对要检索的知识库具有访问权限（推荐配置 super_admin 以避免权限边界问题）。
+本契约仅适用于当前未启用租户功能的部署。启用多租户前必须重新评审 Token、目标用户、数据作用域和原文件对象路径。
 
 ---
 
@@ -35,12 +36,14 @@
 
 ```
 Content-Type: application/json
+X-Developer-Token: bst_{REDACTED}
 ```
 
 ### 3.2 Body
 
 ```json
 {
+  "external_id": "EMP001",
   "query": "string",
   "knowledge_base_ids": [1, 2],
   "filters": {
@@ -61,6 +64,7 @@ Content-Type: application/json
 
 | 字段 | 类型 | 必填 | 默认 | 说明 |
 |---|---|---|---|---|
+| `external_id` | string | ❌ | null | 业务用户外部标识；未传时使用 Token 绑定用户，最大 255 个字符。 |
 | `query` | string | ✅ | — | 用户问题。最小长度 1。 |
 | `knowledge_base_ids` | int[] | ✅ | — | 要检索的知识库 ID 列表（即 BiSheng 内部的 knowledge space id），至少 1 个。 |
 | `filters` | object | ❌ | null | 检索过滤器，目前仅支持按知识库分别配置 tag 过滤。 |
@@ -98,7 +102,7 @@ Content-Type: application/json
 ```json
 {
   "status_code": 200,
-  "status_message": "success",
+  "status_message": "SUCCESS",
   "data": {
     "chunks": [
       {
@@ -106,14 +110,18 @@ Content-Type: application/json
         "knowledge_id": 1,
         "document_id": 123,
         "document_name": "产品手册.pdf",
-        "chunk_index": 5
+        "chunk_index": 5,
+        "source_url": "/bisheng/original/123.pdf?X-Amz-Expires=604800&X-Amz-Signature=REDACTED",
+        "source_full_url": "https://files.example.com/bisheng/original/123.pdf?X-Amz-Expires=604800&X-Amz-Signature=REDACTED"
       },
       {
         "content": "...",
         "knowledge_id": 2,
         "document_id": 456,
         "document_name": "API 说明.md",
-        "chunk_index": 0
+        "chunk_index": 0,
+        "source_url": "",
+        "source_full_url": ""
       }
     ],
     "total": 2
@@ -130,6 +138,14 @@ Content-Type: application/json
 | `document_id` | int | 文档（文件）ID，在 BiSheng 内对应 `KnowledgeFile.id`。 |
 | `document_name` | string | 文档名称（含扩展名）。 |
 | `chunk_index` | int | chunk 在文档内的顺序号，从 0 开始。 |
+| `source_url` | string | 原文件预签名 URL 的相对路径和查询串。调用方需拼接正确的文件访问 Origin；原对象缺失时为空。 |
+| `source_full_url` | string | 同一原文件的绝对 GET 预签名 URL，可直接访问且无需 Developer Token；原对象缺失时为空。 |
+
+两个 URL 来自同一次签名，有效期固定为签发后 7 天。同一响应内，同一 `document_id` 的多个 Chunk 复用同一对 URL；不同请求可能获得不同签名。
+
+链接签发只依赖检索阶段已经通过的 `view_file` 可见性结果，不额外检查 `download_file`，也不进入门户下载额度、审计、水印、审批或分发限制链路。文件记录或原对象缺失不会删除 Chunk，只会返回两个空字符串；MinIO 的其他异常会使整个请求失败。
+
+> 预签名 URL 是 7 天内有效的 Bearer 凭证，不能通过撤销用户权限或禁用 Developer Token 提前失效。不得把完整 URL 写入日志、监控、埋点或第三方分析系统。
 
 ### 4.3 顶层包装字段
 
@@ -170,8 +186,8 @@ BiSheng 沿用了「HTTP 200 + body 内 status_code」的统一响应模型用�
 | `status_code` | 含义 | 何时触发 |
 |---|---|---|
 | 404 | 知识库不存在 | `knowledge_base_ids` 中某个 ID 在数据库中查不到 |
-| 403 | 默认操作员对该 KB 无访问权限 | 多租户 / ReBAC 权限检查不通过 |
-| 500 | 服务器内部错误 | 向量库 / ES 不可用、embedding 服务异常等 |
+| 403 | 业务用户无权或 `external_id` 解析失败 | 知识空间/文件权限检查不通过，或外部用户不存在、禁用、重复 |
+| 500 | 服务器内部错误 | 向量库、ES、embedding 或 MinIO 连接/认证/签名异常等 |
 
 ```json
 {
@@ -194,7 +210,9 @@ BiSheng 沿用了「HTTP 200 + body 内 status_code」的统一响应模型用�
 ```bash
 curl -X POST 'http://bisheng-host:7860/api/v2/filelib/retrieve' \
   -H 'Content-Type: application/json' \
+  -H 'X-Developer-Token: bst_{REDACTED}' \
   -d '{
+    "external_id": "EMP001",
     "query": "如何配置 SSO 登录?",
     "knowledge_base_ids": [1],
     "top_k": 5
@@ -206,7 +224,9 @@ curl -X POST 'http://bisheng-host:7860/api/v2/filelib/retrieve' \
 ```bash
 curl -X POST 'http://bisheng-host:7860/api/v2/filelib/retrieve' \
   -H 'Content-Type: application/json' \
+  -H 'X-Developer-Token: bst_{REDACTED}' \
   -d '{
+    "external_id": "EMP001",
     "query": "审批流程的常见问题",
     "knowledge_base_ids": [1, 2, 3],
     "filters": {
@@ -235,7 +255,9 @@ import httpx
 
 resp = httpx.post(
     "http://bisheng-host:7860/api/v2/filelib/retrieve",
+    headers={"X-Developer-Token": "bst_{REDACTED}"},
     json={
+        "external_id": "EMP001",
         "query": "How do I configure tenant isolation?",
         "knowledge_base_ids": [1, 2],
         "top_k": 8,
@@ -259,6 +281,7 @@ def bisheng_retrieve(query: str, knowledge_base_ids: list[int], top_k: int = 10)
     """Retrieve top-k chunks from BiSheng knowledge bases without LLM generation."""
     resp = httpx.post(
         "http://bisheng-host:7860/api/v2/filelib/retrieve",
+        headers={"X-Developer-Token": "bst_{REDACTED}"},
         json={"query": query, "knowledge_base_ids": knowledge_base_ids, "top_k": top_k},
         timeout=30.0,
     )
@@ -276,12 +299,15 @@ def bisheng_retrieve(query: str, knowledge_base_ids: list[int], top_k: int = 10)
 
 每个 KB 独立执行以下流程，最终结果合并：
 
-1. 权限校验：default operator 是否对该 KB 有 view 权限。
-2. 解析过滤：tag 名（如有）→ tag id → file id 列表。无对应文件时该 KB 返回空。
-3. 构建过滤器：file id 列表 + 主版本过滤（排除已废弃的文档版本）→ Milvus expr + ES filter。
-4. 双路召回：Milvus 向量检索 + Elasticsearch 全文检索，各取 top 100。
-5. RRF 合并：两路结果按 Reciprocal Rank Fusion 融合排序。
-6. `max_content` 截断：从前往后累加 chunk 文本长度，超过阈值截断。
+1. 身份解析：Developer Token 校验成功后，按可选 `external_id` 确定 F069 业务用户。
+2. 权限校验：业务用户是否对该 KB 和候选文件具有 `view_file` 权限。
+3. 解析过滤：tag 名（如有）→ tag id → file id 列表。无对应文件时该 KB 返回空。
+4. 构建过滤器：file id 列表 + 主版本过滤（排除已废弃的文档版本）→ Milvus expr + ES filter。
+5. 双路召回：Milvus 向量检索 + Elasticsearch 全文检索，各取 top 100。
+6. RRF 合并：两路结果按 Reciprocal Rank Fusion 融合排序。
+7. `max_content` 截断：从前往后累加 chunk 文本长度，超过阈值截断。
+8. 多库合并、跨库去重并执行 `top_k` 截断。
+9. 对最终 Chunk 的唯一文件批量读取原对象，每个文件签发一次 7 天绝对 URL 并派生相对 URL。
 
 多 KB 间：使用 `asyncio.gather` 并发执行，按 `knowledge_base_ids` 顺序合并，最后 `top_k` 截断。
 
@@ -294,8 +320,8 @@ def bisheng_retrieve(query: str, knowledge_base_ids: list[int], top_k: int = 10)
 
 ### 7.3 多租户
 
-- 接口本身不携带租户参数；租户从 `default_operator` 的关联租户自动注入。
-- 跨租户检索**不支持**——`default_operator` 看不到其他租户的知识库。
+- 当前 `external_id` 全局业务用户上下文和原文件签名契约只允许在未启用租户功能的部署使用。
+- 若启用多租户，必须先更新 F069/F084 规格并重新验证资源过滤和 MinIO 对象前缀，不能直接沿用当前全局作用域。
 
 ### 7.4 文档版本
 
@@ -316,13 +342,21 @@ def bisheng_retrieve(query: str, knowledge_base_ids: list[int], top_k: int = 10)
 - tag 过滤后命中 0 个文件。
 - 所有候选文件都是非主版本（被版本过滤剔除）。
 
+### 7.7 原文件链接安全边界
+
+- 只有最终进入响应的可见 Chunk 才会触发原文件链接解析；被权限过滤或 Top-K 截断的文件不会签发。
+- 只有 `view_file`、没有 `download_file` 的业务用户也能通过本接口读取原文件，这是已确认的接口特例。
+- 链接不应用门户下载额度、审计、水印、审批或分发限制。
+- 原对象缺失返回空链接；网络、认证、服务端或签名异常不降级为成功。
+- 已签发 URL 无单链接提前撤销能力，紧急处置只能移走/删除对象、轮换 MinIO 签名密钥或等待过期，并可能影响其他调用方。
+
 ---
 
 ## 8. 与现有接口的关系
 
 | 接口 | 路径 | 区别 |
 |---|---|---|
-| 本接口 | `POST /api/v2/filelib/retrieve` | 纯检索，JSON 同步响应，服务账号身份 |
+| 本接口 | `POST /api/v2/filelib/retrieve` | 纯检索，JSON 同步响应，Developer Token 验证调用资格，可选 `external_id` 决定业务用户 |
 | 工作台 RAG | `POST /api/v1/knowledge/space/{id}/chat/folder` | 检索 + LLM 生成 + 会话落库，SSE 流式，用户 JWT |
 | 知识库管理 | `POST /api/v2/filelib/...` 其他端点 | 同 namespace 下的上传/QA 管理 |
 

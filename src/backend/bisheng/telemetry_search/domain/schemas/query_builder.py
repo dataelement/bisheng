@@ -1,7 +1,7 @@
 from enum import Enum
-from typing import Optional, Any, Literal, Union, List
+from typing import Any, List, Literal, Optional, Union
 
-from pydantic import BaseModel, field_validator, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 TIME_INTERVALS_MAP = {
     'year': '1y',

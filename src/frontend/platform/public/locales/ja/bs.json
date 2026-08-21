@@ -152,6 +152,72 @@
     "noAdminConsoleAccess": "管理コンソールにアクセスする権限がありません。"
   },
   "system": {
+    "apiRateLimit": {
+      "title": "API レート制限",
+      "globalTitle": "グローバル制限",
+      "globalHelp": "ルート規則に一致しない場合に使用します。空欄または 0 は無制限です。",
+      "routesTitle": "ルート別制限",
+      "routesHelp": "一致したルート規則はグローバル設定全体を上書きします。全項目が空欄なら無制限です。",
+      "addRoute": "ルートを追加",
+      "createRoute": "ルート設定を追加",
+      "editRoute": "編集",
+      "deleteRoute": "削除",
+      "deleteConfirm": "ルート {{path}} のレート制限設定を削除しますか？",
+      "removeRoute": "ルートを削除",
+      "emptyRoutes": "個別ルート規則はありません。全 API にグローバル設定を使用します。",
+      "noSearchResults": "一致するルート設定が見つかりません。",
+      "searchPlaceholder": "パス、メソッド、一致タイプ、メッセージを検索",
+      "query": "検索",
+      "reset": "リセット",
+      "pathPlaceholder": "例：/api/v1/knowledge/{knowledge_id}",
+      "routeCatalog": {
+        "selectRoute": "API ルートを選択",
+        "selectPlaceholder": "カテゴリからルートを検索して選択",
+        "searchPlaceholder": "パス、メソッド、カテゴリ、API 名を検索",
+        "categoryFilter": "ルートカテゴリ",
+        "methodFilter": "HTTP メソッド絞り込み",
+        "allCategories": "すべてのカテゴリ",
+        "allMethods": "すべてのメソッド",
+        "uncategorized": "未分類",
+        "loading": "ルートを読み込み中…",
+        "loadFailed": "ルート一覧を読み込めませんでした。手動入力で続行できます。",
+        "empty": "一致する API ルートが見つかりません。",
+        "manualInput": "パスを手動入力",
+        "useCatalog": "ルート一覧を使用",
+        "loadMore": "さらに読み込む",
+        "total": "全 {{total}} ルート"
+      },
+      "anyMethod": "任意のメソッド",
+      "useGlobalMessage": "グローバルメッセージを使用",
+      "message": "制限時のメッセージ",
+      "routeMessagePlaceholder": "空欄の場合はグローバルメッセージを使用",
+      "unlimited": "無制限",
+      "limitInvalid": "制限値は 1〜10000000 の整数、または無制限の場合は空欄にしてください。",
+      "ruleInvalid": "ルート規則 {{index}} が無効または重複しています。",
+      "save": "設定を保存",
+      "saving": "保存中…",
+      "saved": "API レート制限を保存して有効化しました。",
+      "defaultMessage": "リクエストが多すぎます。しばらくしてから再試行してください。",
+      "columns": {
+        "matchType": "一致タイプ",
+        "method": "HTTP メソッド",
+        "path": "ルートパス",
+        "limits": "制限設定",
+        "message": "メッセージ",
+        "actions": "操作"
+      },
+      "dimensions": {
+        "second": "1 秒あたり",
+        "minute": "1 分あたり",
+        "hour": "1 時間あたり",
+        "day": "1 日あたり"
+      },
+      "matchTypes": {
+        "METHOD_PATH": "メソッド + パス",
+        "PATH": "完全一致パス",
+        "PREFIX": "パス接頭辞"
+      }
+    },
     "userManagement": "ユーザー管理",
     "developerToken": {
       "title": "開発者 Token",
@@ -1466,7 +1532,17 @@
       "selectKnowledge": "ナレッジベースを選択",
       "tabPending": "審査待ち",
       "tabReviewed": "審査済み",
-      "emptyReviewed": "審査済みタグはありません"
+      "emptyReviewed": "審査済みタグはありません",
+      "boundKnowledges": "関連ナレッジベース",
+      "addKnowledge": "ナレッジベースを追加",
+      "searchKnowledge": "ナレッジベースを検索",
+      "noKnowledge": "ナレッジベースがありません",
+      "alreadyBound": "関連済み",
+      "publicSpaces": "公開ナレッジベース",
+      "departmentSpaces": "部門ナレッジベース",
+      "teamSpaces": "チーム/部署ナレッジベース",
+      "personalSpaces": "個人ナレッジベース",
+      "moveTag": "他のタグライブラリへ移動"
     }
   },
   "bench": {

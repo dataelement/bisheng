@@ -1,5 +1,8 @@
 knowledges: # 知识库相关配置
   loader_provider: "etl4lm" # 文档解析模型提供商，支持etl4lm、mineru、paddle_ocr三种选项，默认为etl4lm
+  chunking:
+    # 解析后单个知识块的最大字符数，最小为 1000；普通文档、PPT、层级文档和表格统一受此限制
+    max_chunk_chars: 10000
   etl4lm:
     # 文档解析模型服务配置，包括OCR、版式分析、表格识别、公式识别等
     url: ""  # http://192.168.106.12:8180/v1/etl4llm/predict

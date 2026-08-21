@@ -32,7 +32,7 @@ from bisheng.points.domain.services.points_notify_service import PointsNotifySer
 logger = logging.getLogger(__name__)
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 # 运营概览缓存：三个指标均为全历史聚合，AC-19 允许 5min 陈旧。
-OVERVIEW_CACHE_PREFIX = "points:overview:"
+OVERVIEW_CACHE_PREFIX = "points:overview:v2:"
 OVERVIEW_CACHE_TTL = 300
 
 
@@ -247,14 +247,13 @@ class PointsQueryService:
     ) -> tuple[dict[int, str], dict[int, str]]:
         """批量解析用户名与积分部门名称。
 
-        部门名取主部门沿 path 向上最近的 ``org_level=dept`` 节点，与部门榜桶一致；
-        展示名优先 ``short_name``。找不到该标签时不回退叶子/主部门，调用方按 ``—`` 展示（AC-22）。
+        部门桶与部门榜一致（``org_level=dept``）；展示名沿主部门链优先简称，无简称时回退桶全称。
+        path 上无 dept 标签时不回退叶子名，调用方按 ``—`` 展示（AC-22）。
         """
         if not user_ids:
             return {}, {}
         from bisheng.database.models.department import DepartmentDao, UserDepartmentDao
-        from bisheng.department.domain.services.department_display_service import get_department_display_name
-        from bisheng.points.domain.services.points_rank_service import resolve_dept_bucket_id
+        from bisheng.points.domain.services.points_rank_service import resolve_points_user_dept_display_name
         from bisheng.user.domain.models.user import UserDao
 
         users = await UserDao.aget_user_by_ids(user_ids) or []
@@ -274,21 +273,15 @@ class PointsQueryService:
                     dept_by_id[int(row.id)] = row
         dept_by_user: dict[int, str] = {}
         for uid, primary in primary_map.items():
-            bucket_id = resolve_dept_bucket_id(primary, dept_by_id)
-            node = dept_by_id.get(bucket_id) if bucket_id is not None else None
-            if node is None:
-                continue
-            display = get_department_display_name(
-                str(getattr(node, "name", "") or ""),
-                getattr(node, "short_name", None),
-            ).strip()
+            display = resolve_points_user_dept_display_name(primary, dept_by_id)
             if display:
                 dept_by_user[int(uid)] = display
         return name_by_user, dept_by_user
 
     async def overview(self, tenant_id: int, user: UserPayload) -> PointOverviewResponse:
-        """运营概览：总发放 / 余额合计 / 违规扣减。
+        """运营概览：总发放 / 有效可用总积分 / 违规扣减。
 
+        当前有效可用总积分 = 平台总积分发放 − 违规扣减积分（非账户余额合计）。
         三个指标都是全历史聚合，耗时随流水量线性增长；按 AC-19 允许 5min 陈旧，
         因此走 Redis 缓存。缓存不可用时退化为直查库，不影响可用性。
         """
@@ -298,10 +291,12 @@ class PointsQueryService:
         if cached is not None:
             return PointOverviewResponse(**cached)
         month_start, month_end = self._month_bounds()
+        total_issued = await self.repository.sum_total_issued(tenant_id)
+        total_violation_deducted = await self.repository.sum_violation_deducted(tenant_id)
         payload = {
-            "total_issued": await self.repository.sum_total_issued(tenant_id),
-            "total_balance": await self.repository.sum_total_balance(tenant_id),
-            "total_violation_deducted": await self.repository.sum_violation_deducted(tenant_id),
+            "total_issued": total_issued,
+            "total_balance": max(0, total_issued - total_violation_deducted),
+            "total_violation_deducted": total_violation_deducted,
             "total_issued_mom": await self.repository.sum_tenant_earn(tenant_id, month_start, month_end),
         }
         await self._overview_cache_set(cache_key, payload)
@@ -615,7 +610,7 @@ class PointsQueryService:
             user_id=body.user_id,
             delta=-score,
             rule_code=rule.rule_code,
-            title=rule.name,
+            title=resolve_point_rule_display_name(rule),
             idempotency_key=(f"deduct:{rule.rule_code}:{user.user_id}:{body.user_id}:{uuid.uuid4().hex}"),
             operator_id=int(user.user_id),
             remark=body.remark,
@@ -631,6 +626,9 @@ class PointsQueryService:
             user_id=body.user_id,
             template_code="deduct_admin",
             delta=abs(int(log.delta)),
-            reason=format_deduct_notify_reason(rule_name=rule.name, remark=body.remark),
+            reason=format_deduct_notify_reason(
+                rule_name=resolve_point_rule_display_name(rule),
+                remark=body.remark,
+            ),
         )
         return self._log_response(log)

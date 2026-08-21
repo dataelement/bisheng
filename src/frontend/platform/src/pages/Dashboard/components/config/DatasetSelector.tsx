@@ -10,12 +10,16 @@ import { useQuery } from "react-query"
 import { useTranslation } from "react-i18next"
 
 export interface DatasetField {
+    fieldId?: string
     fieldCode: string          // 真正用来过滤 / SQL
+    fieldName?: string
     displayName: string        // UI 显示
     fieldType: "string" | "number" | "date"
     role: "dimension" | "metric"
     enumValues?: string[]
     isVirtual?: boolean
+    isDivide?: string
+    numberFormat?: MetricConfig["default_number_format"]
     timeGranularity?: string
 }
 
@@ -50,7 +54,20 @@ const getFieldTypeIcon = (type: 'string' | 'number' | 'date') => {
 // 判断是否为虚拟指标
 const isVirtualMetric = (metric: MetricConfig): boolean => {
 
-    return metric.is_virtual
+    return Boolean(metric.is_virtual)
+}
+
+export function createMetricDatasetField(metric: MetricConfig, displayName: string): DatasetField {
+    return {
+        fieldCode: metric.field,
+        fieldId: metric.field,
+        displayName,
+        fieldType: metric.field_type,
+        isVirtual: metric.is_virtual,
+        isDivide: metric.formula,
+        numberFormat: metric.default_number_format,
+        role: "metric",
+    }
 }
 
 export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetChange, onDragStart, onFieldsLoaded, onFieldClick }: DatasetSelectorProps) {
@@ -96,6 +113,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
             fieldCode: data.fieldCode,
             fieldType,
             isDivide: data.isDivide,
+            numberFormat: data.numberFormat,
             timeGranularity: data.timeGranularity,
         }
 
@@ -120,15 +138,10 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
             role: "dimension" as const
         }))
 
-        const metrics = selectedDataset.schema_config.metrics.map(m => ({
-            fieldCode: m.field,
-            fieldId: m.field,
-            displayName: t(m.field, { defaultValue: m.name }),
-            fieldType: m.field_type,
-            isVirtual: m.is_virtual,
-            isDivide: m.formula,
-            role: "metric" as const
-        }))
+        const metrics = selectedDataset.schema_config.metrics.map(m => createMetricDatasetField(
+            m,
+            t(m.field, { defaultValue: m.name }),
+        ))
 
         return [...dimensions, ...metrics]
     }, [selectedDataset, t])
@@ -245,7 +258,7 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                                             displayName: t(dimension.field, {
                                                 defaultValue: dimension.name
                                             }),
-                                            fieldType: dimension.type === "integer" ? "number" : "string",
+                                            fieldType: dimension.field_type,
                                             role: "dimension",
                                         }
 
@@ -285,16 +298,10 @@ export function DatasetSelector({ selectedDatasetCode, isMetricCard, onDatasetCh
                             <div className="flex-1 overflow-y-auto px-4 pb-3 space-y-2 min-h-0">
                                 {selectedDataset.schema_config.metrics.map((metric, index) => {
                                     const isVirtual = isVirtualMetric(metric)
-                                    const field: DatasetField = {
-                                        fieldCode: metric.field,
-                                        displayName: t(metric.field, {
-                                            defaultValue: metric.name
-                                        }),
-                                        fieldType: "number",
-                                        role: "metric" as const,
-                                        isVirtual: metric.is_virtual,
-                                        isDivide: metric.formula,
-                                    }
+                                    const field = createMetricDatasetField(
+                                        metric,
+                                        t(metric.field, { defaultValue: metric.name }),
+                                    )
                                     return (
                                         <div
                                             key={index}

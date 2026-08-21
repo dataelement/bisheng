@@ -13,14 +13,14 @@ import {
     type TagConsoleItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { Trash2 } from "lucide-react"
+import { FolderInput, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AddTagDialog } from "./AddTagDialog"
 import { SourceFileLinks } from "./SourceFileLinks"
 import { BatchResultDialog, LibraryPickerDialog } from "./TagBatchDialogs"
 import { TagFilterBar } from "./TagFilterBar"
-import { TagSourceIcon, tagSourceLabel } from "./TagSourceIcon"
+import { TagSourceIcon } from "./TagSourceIcon"
 import {
     buildSearchParams,
     EMPTY_FILTERS,
@@ -50,7 +50,9 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
     const [loading, setLoading] = useState(false)
     const [selectedIds, setSelectedIds] = useState<number[]>([])
     const [addOpen, setAddOpen] = useState(false)
-    const [moveOpen, setMoveOpen] = useState(false)
+    // Holds the rows a move applies to: the whole selection from the toolbar, or
+    // a single row from its own button. null keeps the picker closed.
+    const [moveIds, setMoveIds] = useState<number[] | null>(null)
     const [saving, setSaving] = useState(false)
     const [batchResult, setBatchResult] = useState<TagConsoleBatchResult | null>(null)
 
@@ -118,9 +120,11 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
     }
 
     const handleMove = async (targetLibraryId: number) => {
+        const ids = moveIds || []
+        if (!ids.length) return
         setSaving(true)
-        setMoveOpen(false)
-        finishBatch(await captureAndAlertRequestErrorHoc(batchMoveTagConsoleApi(selectedIds, targetLibraryId)))
+        setMoveIds(null)
+        finishBatch(await captureAndAlertRequestErrorHoc(batchMoveTagConsoleApi(ids, targetLibraryId)))
     }
 
     const allChecked = rows.length > 0 && selectedIds.length === rows.length
@@ -157,7 +161,12 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                 >
                     {t("build.tagConsole.batchDelete", "批量删除")}
                 </Button>
-                <Button size="sm" variant="outline" disabled={!selectedIds.length} onClick={() => setMoveOpen(true)}>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!selectedIds.length}
+                    onClick={() => setMoveIds(selectedIds)}
+                >
                     {t("build.tagConsole.batchMove", "批量移动")}
                 </Button>
             </div>
@@ -177,12 +186,11 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                             <th className="w-14 px-3 py-3 font-medium">{t("build.tagConsole.index", "序号")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.libraryName", "标签库名")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagName", "标签名称")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.markedCount", "已标识知识数")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.submitter", "提报者")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewer", "审核者")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.tagType", "标签类型")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceLibrary", "标签来源库")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceKnowledge", "标签来源知识")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.submitter", "提报者")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewer", "审核者")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.markedCount", "已标识知识数")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.createDate", "创建日期")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewTime", "审核时间")}</th>
                             <th className="w-16 px-3 py-3 font-medium">{t("build.operation", "操作")}</th>
@@ -191,13 +199,13 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan={13} className="px-3 py-10 text-center text-muted-foreground">
+                                <td colSpan={12} className="px-3 py-10 text-center text-muted-foreground">
                                     {t("loading")}
                                 </td>
                             </tr>
                         ) : !rows.length ? (
                             <tr>
-                                <td colSpan={13} className="px-3 py-10 text-center text-muted-foreground">
+                                <td colSpan={12} className="px-3 py-10 text-center text-muted-foreground">
                                     {t("build.tagConsole.empty", "暂无标签")}
                                 </td>
                             </tr>
@@ -222,22 +230,34 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                                         <TagSourceIcon resourceType={row.resource_type} />
                                         {row.name}
                                     </td>
-                                    <td className="px-3 py-3">{row.marked_knowledge_count}</td>
-                                    <td className="px-3 py-3">{row.submitter_name || "-"}</td>
-                                    <td className="px-3 py-3">{row.reviewer_name || "-"}</td>
-                                    <td className="px-3 py-3">{tagSourceLabel(row.resource_type, t)}</td>
                                     <td className="max-w-48 px-3 py-3">
                                         {sourceLibraryNames(row.source_files).join("、") || "-"}
                                     </td>
                                     <td className="max-w-64 px-3 py-3">
                                         <SourceFileLinks files={row.source_files} />
                                     </td>
+                                    <td className="px-3 py-3">{row.submitter_name || "-"}</td>
+                                    <td className="px-3 py-3">{row.reviewer_name || "-"}</td>
+                                    <td className="px-3 py-3">{row.marked_knowledge_count}</td>
                                     <td className="px-3 py-3 text-muted-foreground">{formatDateTime(row.create_time)}</td>
                                     <td className="px-3 py-3 text-muted-foreground">{formatDateTime(row.review_time)}</td>
                                     <td className="px-3 py-3">
-                                        <button type="button" onClick={() => handleDelete([row.id])}>
-                                            <Trash2 className="size-4 text-muted-foreground hover:text-red-500" />
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                type="button"
+                                                title={t("build.tagConsole.moveTag", "移动到其他标签库")}
+                                                onClick={() => setMoveIds([row.id])}
+                                            >
+                                                <FolderInput className="size-4 text-muted-foreground hover:text-primary" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                title={t("build.deleteTagTitle", "删除标签")}
+                                                onClick={() => handleDelete([row.id])}
+                                            >
+                                                <Trash2 className="size-4 text-muted-foreground hover:text-red-500" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -272,11 +292,15 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                 onConfirm={handleAdd}
             />
             <LibraryPickerDialog
-                open={moveOpen}
-                title={t("build.tagConsole.batchMove", "批量移动")}
+                open={moveIds !== null}
+                title={
+                    (moveIds?.length ?? 0) > 1
+                        ? t("build.tagConsole.batchMove", "批量移动")
+                        : t("build.tagConsole.moveTag", "移动到其他标签库")
+                }
                 libraries={libraries}
                 saving={saving}
-                onOpenChange={setMoveOpen}
+                onOpenChange={(next) => setMoveIds(next ? moveIds : null)}
                 onConfirm={handleMove}
             />
             <BatchResultDialog result={batchResult} onOpenChange={() => setBatchResult(null)} />

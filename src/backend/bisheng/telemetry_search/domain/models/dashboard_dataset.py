@@ -1,16 +1,16 @@
 from enum import Enum
-from typing import Dict, Literal, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel
-from sqlalchemy import Column, VARCHAR, BOOLEAN
-from bisheng.core.database.dialect_helpers import JsonType
+from sqlalchemy import BOOLEAN, VARCHAR, Column
 from sqlmodel import Field
 
 from bisheng.common.models.base import SQLModelSerializable
+from bisheng.core.database.dialect_helpers import JsonType
 from bisheng.telemetry_search.domain.schemas.query_builder import (
+    AggregationExpression,
     AggsTypeEnum,
     FilterExpression,
-    AggregationExpression,
 )
 
 
@@ -29,6 +29,12 @@ class FormulaEnum(str, Enum):
     DIVIDE = 'divide'
 
 
+class VirtualMetricCalculationEnum(str, Enum):
+    """Virtual metric calculation strategies."""
+
+    SHARE_OF_TOTAL = "share_of_total"
+
+
 class MetricConfig(BaseModel):
     """
     Metric Configuration Model
@@ -43,6 +49,8 @@ class MetricConfig(BaseModel):
     aggregations: Optional[List[AggregationExpression]] = None
 
     formula: Optional[FormulaEnum] = None
+    calculation: Optional[VirtualMetricCalculationEnum] = None
+    default_number_format: Optional[Dict[str, Any]] = None
 
     index: Optional[int] = None
     sum_field: Optional[str] = None

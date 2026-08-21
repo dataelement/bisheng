@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, UniqueConstraint, delete, func, text
+from sqlalchemy import Column, DateTime, Integer, UniqueConstraint, delete, func, text, update
 from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -135,29 +135,29 @@ class KnowledgeTagLibraryLinkDao:
 
     @classmethod
     async def acount_bound_knowledge_spaces(cls, library_id: int) -> int:
-        """Count distinct knowledge spaces referencing this library (M:N links + legacy column)."""
-        from bisheng.knowledge.domain.models.knowledge import Knowledge
-
-        async with get_async_db_session() as session:
-            link_ids = (
-                await session.exec(
-                    select(KnowledgeTagLibraryLink.knowledge_id).where(
-                        KnowledgeTagLibraryLink.tag_library_id == library_id,
-                    )
-                )
-            ).all()
-            legacy_ids = (
-                await session.exec(select(Knowledge.id).where(Knowledge.auto_tag_library_id == library_id))
-            ).all()
-        return len({int(knowledge_id) for knowledge_id in (*link_ids, *legacy_ids)})
+        """Count distinct knowledge spaces referencing this library."""
+        return len(await cls.alist_bound_space_ids(library_id))
 
     @classmethod
     async def alist_bound_space_names(cls, library_id: int) -> list[str]:
         """Return ordered knowledge-space names bound to this tag library."""
         from bisheng.knowledge.domain.models.knowledge import Knowledge
 
+        ordered_ids = await cls.alist_bound_space_ids(library_id)
+        if not ordered_ids:
+            return []
+
         async with get_async_db_session() as session:
-            link_ids = (
+            rows = (await session.exec(select(Knowledge.id, Knowledge.name).where(Knowledge.id.in_(ordered_ids)))).all()
+
+        name_by_id = {int(row[0]): (row[1] or "").strip() for row in rows}
+        return [name_by_id[knowledge_id] for knowledge_id in ordered_ids if name_by_id.get(knowledge_id)]
+
+    @classmethod
+    async def alist_bound_space_ids(cls, library_id: int) -> list[int]:
+        """Knowledge spaces bound to this library, in each space's own order."""
+        async with get_async_db_session() as session:
+            rows = (
                 await session.exec(
                     select(KnowledgeTagLibraryLink.knowledge_id)
                     .where(KnowledgeTagLibraryLink.tag_library_id == library_id)
@@ -167,30 +167,87 @@ class KnowledgeTagLibraryLinkDao:
                     )
                 )
             ).all()
-            legacy_ids = (
-                await session.exec(select(Knowledge.id).where(Knowledge.auto_tag_library_id == library_id))
-            ).all()
+        return list(dict.fromkeys(int(row) for row in rows))
 
-            ordered_ids: list[int] = []
-            seen: set[int] = set()
-            for knowledge_id in link_ids:
-                kid = int(knowledge_id)
-                if kid not in seen:
-                    seen.add(kid)
-                    ordered_ids.append(kid)
-            for knowledge_id in legacy_ids:
-                kid = int(knowledge_id)
-                if kid not in seen:
-                    seen.add(kid)
-                    ordered_ids.append(kid)
+    @classmethod
+    async def aadd_links(
+        cls,
+        library_id: int,
+        knowledge_ids: list[int],
+        tenant_id: int | None = None,
+    ) -> list[int]:
+        """Attach spaces to this library, skipping ones already attached.
 
-            if not ordered_ids:
-                return []
+        sort_order here is the space's own merge order over its libraries, not
+        the admin list order, so a newly attached library goes on the end of
+        whatever that space already had.
+        """
+        wanted = list(dict.fromkeys(int(kid) for kid in knowledge_ids if kid))
+        if not wanted:
+            return []
 
-            rows = (await session.exec(select(Knowledge.id, Knowledge.name).where(Knowledge.id.in_(ordered_ids)))).all()
+        added: list[int] = []
+        async with get_async_db_session() as session:
+            existing = {
+                int(row)
+                for row in (
+                    await session.exec(
+                        select(KnowledgeTagLibraryLink.knowledge_id).where(
+                            KnowledgeTagLibraryLink.tag_library_id == library_id,
+                            col(KnowledgeTagLibraryLink.knowledge_id).in_(wanted),
+                        )
+                    )
+                ).all()
+            }
+            for knowledge_id in wanted:
+                if knowledge_id in existing:
+                    continue
+                next_order = (
+                    await session.scalar(
+                        select(func.max(KnowledgeTagLibraryLink.sort_order)).where(
+                            KnowledgeTagLibraryLink.knowledge_id == knowledge_id,
+                        )
+                    )
+                    or 0
+                )
+                session.add(
+                    KnowledgeTagLibraryLink(
+                        tenant_id=tenant_id,
+                        knowledge_id=knowledge_id,
+                        tag_library_id=library_id,
+                        sort_order=int(next_order) + 1,
+                    )
+                )
+                added.append(knowledge_id)
+            await session.commit()
+        return added
 
-        name_by_id = {int(row[0]): (row[1] or "").strip() for row in rows}
-        return [name_by_id[knowledge_id] for knowledge_id in ordered_ids if name_by_id.get(knowledge_id)]
+    @classmethod
+    async def aremove_link(cls, library_id: int, knowledge_id: int) -> None:
+        """Detach one space from this library.
+
+        Losing the last library also turns auto-tagging off: leaving the flag on
+        with nothing to tag against would run the scan every upload and produce
+        nothing.
+        """
+        from bisheng.knowledge.domain.models.knowledge import Knowledge
+
+        async with get_async_db_session() as session:
+            await session.exec(
+                delete(KnowledgeTagLibraryLink).where(
+                    col(KnowledgeTagLibraryLink.tag_library_id) == int(library_id),
+                    col(KnowledgeTagLibraryLink.knowledge_id) == int(knowledge_id),
+                )
+            )
+            await session.commit()
+
+        if await cls.alist_library_ids_by_knowledge(int(knowledge_id)):
+            return
+        async with get_async_db_session() as session:
+            await session.exec(
+                update(Knowledge).where(Knowledge.id == int(knowledge_id)).values(auto_tag_enabled=False)
+            )
+            await session.commit()
 
     @classmethod
     async def adelete_by_library(cls, library_id: int) -> None:

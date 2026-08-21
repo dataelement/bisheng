@@ -14,7 +14,13 @@ from bisheng.common.errcode.telemetry import (
 )
 from bisheng.core.database import get_async_db_session
 
-from ..models.dashboard_dataset import DimensionConfig, FormulaEnum, MetricConfig, SchemaConfig
+from ..models.dashboard_dataset import (
+    DimensionConfig,
+    FormulaEnum,
+    MetricConfig,
+    SchemaConfig,
+    VirtualMetricCalculationEnum,
+)
 from ..repositories.implementations.dataset_repository_impl import DashboardDatasetRepositoryImpl
 from ..schemas.component import (
     AggregationType,
@@ -72,8 +78,16 @@ class DataQueryService(BaseModel):
         dimension_map = {one.field: one for one in schema_config.dimensions}
 
         query_dimensions = await self.convert_dimensions(self.data_config.dimensions, dimension_map)
+        configured_stack_dimensions = self.data_config.get_stack_dimensions()
 
-        if self.data_config.stack_dimension:
+        if self.data_config.stack_dimensions:
+            query_stack_dimensions = await self.convert_dimensions(
+                configured_stack_dimensions,
+                dimension_map,
+            )
+            query_dimensions.extend(query_stack_dimensions)
+            stack_dimension = None
+        elif self.data_config.stack_dimension:
             stack_dimensions = await self.convert_dimensions([self.data_config.stack_dimension], dimension_map)
             stack_dimension = stack_dimensions[0] if stack_dimensions else None
         else:
@@ -111,7 +125,7 @@ class DataQueryService(BaseModel):
         return res
 
     async def query_all_metrics(self, metric_map: Dict[str, MetricConfig], dimension_index: int, index_name: str,
-                                dimensions: List[AggregationExpression], stack_dimension: AggregationExpression,
+                                dimensions: List[AggregationExpression], stack_dimension: AggregationExpression | None,
                                 filters: List[FilterExpression]) -> List[List]:
         all_dimensions = {}
         res = []
@@ -159,7 +173,13 @@ class DataQueryService(BaseModel):
                                dimension_index: int, **search_kwargs) -> List[List]:
         if metric_config.is_virtual:
             # need query twice from telemetry mid table
-            if metric_config.formula is not None:
+            if metric_config.calculation == VirtualMetricCalculationEnum.SHARE_OF_TOTAL:
+                return await self.query_share_of_total_metric(
+                    metric_config,
+                    dimension_index,
+                    **search_kwargs,
+                )
+            elif metric_config.formula is not None:
                 return await self.query_formula_metric(metric_config, dimension_index, **search_kwargs)
             elif metric_config.sum_field is not None:
                 return await self.query_sum_metric(metric_config, dimension_index, **search_kwargs)
@@ -187,6 +207,47 @@ class DataQueryService(BaseModel):
         )
         # eg. [[dim1, dim2, metric1, metric2], [...]]
         return await SearchEngineService(search_params).search()
+
+    async def query_share_of_total_metric(
+        self,
+        metric_config: MetricConfig,
+        dimension_index: int,
+        **search_kwargs,
+    ) -> List[List]:
+        """Calculate each complete dimension bucket's share of the filtered total."""
+        filters = search_kwargs.pop('filters', None)
+        filters = self.merge_filters(filters, metric_config.filter)
+
+        numerator_params = SearchParameters(
+            metrics=metric_config.aggregations,
+            filters=copy.deepcopy(filters),
+            **copy.deepcopy(search_kwargs),
+        )
+        numerator_result = await SearchEngineService(numerator_params).search()
+
+        denominator_kwargs = copy.deepcopy(search_kwargs)
+        denominator_kwargs["dimensions"] = []
+        denominator_kwargs["stack_dimension"] = None
+
+        denominator_params = SearchParameters(
+            metrics=metric_config.aggregations,
+            filters=copy.deepcopy(filters),
+            **denominator_kwargs,
+        )
+        denominator_result = await SearchEngineService(denominator_params).search()
+
+        denominator = (
+            denominator_result[0][0]
+            if denominator_result and denominator_result[0]
+            else 0
+        )
+        dimension_count = dimension_index + 1
+        result: List[List] = []
+        for row in numerator_result:
+            numerator = row[dimension_count]
+            ratio = numerator / denominator if denominator else 0
+            result.append([*row[:dimension_count], ratio])
+        return result
 
     async def query_formula_metric(self, metric_config: MetricConfig, dimension_index: int, **search_kwargs) \
             -> List[List]:
@@ -340,8 +401,7 @@ class DataQueryService(BaseModel):
                 one.sort = "asc"
             sort_field[one.field_id] = (sort_index, one.sort)
             sort_index += 1
-        if self.data_config.stack_dimension:
-            dimension = self.data_config.stack_dimension
+        for dimension in self.data_config.get_stack_dimensions():
             if dimension.field_id == TIMESTAMP_FIELD and dimension.sort is None:
                 dimension.sort = "asc"
             sort_field[dimension.field_id] = (sort_index, dimension.sort)

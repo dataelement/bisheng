@@ -184,6 +184,38 @@ async def _space_can_read(user: Any, space_id: int) -> bool:
         return False
 
 
+async def check_related_doc_access_with_qa_context(
+    user: Any,
+    space_id: int,
+    file_id: int,
+    *,
+    space_cache: dict[int, bool] | None = None,
+    question_id: int | None = None,
+    doc_source: str | None = None,
+) -> bool | None:
+    """在知识空间 can_read 之外，按专家问答上下文补只读 accessible。"""
+    base = await check_related_doc_access(user, space_id, file_id, space_cache=space_cache)
+    if base is True:
+        return True
+    if base is None:
+        return None
+    if question_id is None or doc_source not in {"question", "answer"}:
+        return False
+    from bisheng.qa_expert.domain.qa_related_doc_context_access import (
+        check_qa_related_doc_context_access,
+    )
+
+    if await check_qa_related_doc_context_access(
+        user,
+        question_id=int(question_id),
+        space_id=int(space_id),
+        file_id=int(file_id),
+        doc_source=doc_source,  # type: ignore[arg-type]
+    ):
+        return True
+    return False
+
+
 async def check_related_doc_access(
     user: Any,
     space_id: int,

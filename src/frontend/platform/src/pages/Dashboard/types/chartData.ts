@@ -25,9 +25,12 @@ export interface PivotTableRow {
 export interface PivotTableDataResponse {
   rowHeaders: string[]
   columnHeader: string
+  columnHeaders?: string[]
   metricName: string
   columns: string[]
   originalColumns?: string[]
+  columnPaths?: string[][]
+  originalColumnPaths?: string[][]
   rows: PivotTableRow[]
   columnTotals: number[]
   grandTotal: number

@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, Query
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
@@ -68,6 +68,58 @@ async def get_tag_library_usage(
     """
     count = await svc.get_library_usage(library_id)
     return resp_200({"count": count})
+
+
+@router.post("/{library_id}/sort")
+async def reorder_tag_library(
+    library_id: int,
+    prev_library_id: int | None = Body(default=None, embed=True),
+    next_library_id: int | None = Body(default=None, embed=True),
+    svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
+) -> Any:
+    """Move a library between the two it was dropped between.
+
+    Neighbours rather than an index: only the moved row is written, so two admins
+    reordering at once cannot renumber each other's work.
+    """
+    await svc.reorder_library(
+        library_id=library_id,
+        prev_library_id=prev_library_id,
+        next_library_id=next_library_id,
+    )
+    # Truthy on purpose: the response interceptor hands callers the `data` field,
+    # so an empty body reaches them as null and reads as a failed request.
+    return resp_200(True)
+
+
+@router.get("/{library_id}/knowledges")
+async def list_tag_library_knowledges(
+    library_id: int,
+    svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
+) -> Any:
+    """Knowledge spaces attached to this library."""
+    return resp_200(await svc.list_bound_knowledges(library_id))
+
+
+@router.post("/{library_id}/knowledges")
+async def add_tag_library_knowledges(
+    library_id: int,
+    knowledge_ids: list[int] = Body(default_factory=list, embed=True),
+    svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
+) -> Any:
+    """Attach spaces to this library; ones already attached are left alone."""
+    added = await svc.add_bound_knowledges(library_id, knowledge_ids)
+    return resp_200({"added": added})
+
+
+@router.delete("/{library_id}/knowledges/{knowledge_id}")
+async def remove_tag_library_knowledge(
+    library_id: int,
+    knowledge_id: int,
+    svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
+) -> Any:
+    await svc.remove_bound_knowledge(library_id, knowledge_id)
+    return resp_200(True)
 
 
 @router.get("/{library_id}")
