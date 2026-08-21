@@ -60,6 +60,27 @@ def tool_template_permissions() -> List[dict]:
     ]
 
 
+# Per-permission-id relation map. Built once at import time so callers can
+# look up the OpenFGA relation for a tool permission id without iterating the
+# template on every request. Used by ToolServices.get_tool_list to decide
+# whether the per-tool permission filter is redundant for the requested id.
+_TOOL_PERMISSION_ID_TO_RELATION: Dict[str, str] = {
+    item['id']: item['relation'] for item in tool_template_permissions()
+}
+
+
+def relation_for_tool_permission_id(permission_id: str) -> str | None:
+    """Map a tool permission id (e.g. ``view_tool``) to its OpenFGA relation.
+
+    Returns ``None`` when the id is not part of the tool template so callers
+    can fall back to the full per-resource check rather than silently
+    granting or denying a different permission.
+    """
+    if not permission_id:
+        return None
+    return _TOOL_PERMISSION_ID_TO_RELATION.get(permission_id)
+
+
 def default_permission_ids_for_relation(relation: str) -> Set[str]:
     normalized = _COMPUTED_TO_MODEL_RELATION.get(relation, relation)
     relation_level = _MODEL_LEVEL.get(normalized, 0)
