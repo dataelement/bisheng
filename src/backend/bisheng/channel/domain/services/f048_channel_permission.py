@@ -346,10 +346,11 @@ class F048ChannelPermissionAdapter:
         ):
             raise PermissionInvalidResourceError()
 
+        cross_tenant = record.tenant_id != actor.current_tenant_id and not actor.super_admin
         read_only = record.shared_read_only or record.system_read_only
-        if record.tenant_id != actor.current_tenant_id and not actor.super_admin and not read_only:
+        if cross_tenant and not read_only:
             raise PermissionInvalidResourceError()
-        if read_only and action is not None and action not in READ_ONLY_CHANNEL_ACTIONS:
+        if cross_tenant and read_only and action is not None and action not in READ_ONLY_CHANNEL_ACTIONS:
             raise InvalidCatalogActionError(msg=f"Read-only channel does not support action: {action}")
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=record.tenant_id,

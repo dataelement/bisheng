@@ -16,7 +16,7 @@ import {
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
 import { AlertTriangle, Loader2 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ModeHeader } from "./ModeHeader"
 import { PermissionGrantTab } from "./PermissionGrantTab"
@@ -45,6 +45,8 @@ export function PermissionDialog({
   resourceName,
 }: PermissionDialogProps) {
   const { t } = useTranslation("permission")
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const grantContentRef = useRef<HTMLDivElement | null>(null)
   const [context, setContext] = useState<ResourcePermissionContext | null>(
     null,
   )
@@ -119,10 +121,34 @@ export function PermissionDialog({
   const canAddPermission =
     context?.mode === "CUSTOM" && context.can_manage_permission
 
+  const handleContentOpenAutoFocus = useCallback(
+    (event: Event) => {
+      event.preventDefault()
+      requestAnimationFrame(() =>
+        contentRef.current?.focus({ preventScroll: true }),
+      )
+    },
+    [],
+  )
+
+  const handleGrantContentOpenAutoFocus = useCallback(
+    (event: Event) => {
+      event.preventDefault()
+      requestAnimationFrame(() =>
+        grantContentRef.current?.focus({ preventScroll: true }),
+      )
+    },
+    [],
+  )
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-0">
+        <DialogContent
+          ref={contentRef}
+          onOpenAutoFocus={handleContentOpenAutoFocus}
+          className="flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-0"
+        >
           <DialogHeader className="shrink-0 px-5 pb-4 pt-5">
             <DialogTitle>
               {t("dialog.title")} - {resourceName}
@@ -218,7 +244,11 @@ export function PermissionDialog({
 
       {context && canAddPermission && (
         <Dialog open={grantDialogOpen} onOpenChange={setGrantDialogOpen}>
-          <DialogContent className="flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5">
+          <DialogContent
+            ref={grantContentRef}
+            onOpenAutoFocus={handleGrantContentOpenAutoFocus}
+            className="flex h-[80vh] max-h-[800px] w-[calc(100vw-80px)] max-w-[800px] min-w-0 flex-col gap-0 overflow-hidden p-5"
+          >
             <DialogHeader className="shrink-0">
               <DialogTitle>
                 {t("dialog.tabGrant")} - {resourceName}
