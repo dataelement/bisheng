@@ -457,8 +457,8 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/retrieve' \
         "document_id": 345,
         "document_name": "example.pdf",
         "chunk_index": 3,
-        "source_url": "/knowledge-spaces?spaceId=118&fileId=345",
-        "source_full_url": "http://localhost:5173/knowledge-spaces?spaceId=118&fileId=345"
+        "source_url": "/bisheng/original/345.pdf?X-Amz-Expires=604800&X-Amz-Signature=REDACTED",
+        "source_full_url": "https://files.example.com/bisheng/original/345.pdf?X-Amz-Expires=604800&X-Amz-Signature=REDACTED"
       }
     ],
     "total": 1
@@ -482,8 +482,14 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/retrieve' \
 | `document_id` | integer | 文件 ID。 |
 | `document_name` | string | 文件名称。 |
 | `chunk_index` | integer | Chunk 序号。 |
-| `source_url` | string | 原文预览相对地址。 |
-| `source_full_url` | string | 原文预览完整地址。 |
+| `source_url` | string | 原文件 GET 预签名 URL 的相对路径和查询串；调用方需拼接部署提供的文件访问 Origin。原对象缺失时为空字符串。 |
+| `source_full_url` | string | 同一原文件的绝对 GET 预签名 URL，可直接访问且无需再次提交 Developer Token。原对象缺失时为空字符串。 |
+
+两个 URL 来自同一次签名，对象路径、签名参数和过期时间一致，有效期固定为签发后 7 天。同一响应内，同一 `document_id` 的多个 Chunk 复用相同 URL；不同请求可能重新签发并返回不同值。
+
+链接只会为最终通过业务用户 `view_file` 可见性过滤并进入响应的文件签发。按当前接口契约，不额外要求 `download_file`，也不进入门户下载额度、审计、水印、审批或分发限制链路。文件记录、对象名或原对象不存在时，Chunk 仍然返回，两个 URL 均为空字符串；其他 MinIO 连接、认证或签名异常会使请求失败。
+
+> 安全提示：预签名 URL 是签发后 7 天内有效的 Bearer 凭证。任何持有者都能读取原文件，后续撤销用户权限、禁用 Developer Token 或退出登录不会使已签发 URL 提前失效。调用方不得把完整 URL 写入日志、监控标签、前端埋点或第三方分析系统。
 
 ### 5.6 错误响应
 
@@ -493,3 +499,4 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/retrieve' \
 | `400` | `tag_match_mode=ALL is not yet supported` | `tag_match_mode` 传入 `ALL`。 |
 | `403` | - | `external_id` 未匹配到唯一有效用户，或目标用户无知识资源读取权限。 |
 | `422` | - | Body 参数校验失败。 |
+| `500` | - | MinIO 连接、认证、服务端或签名失败等非“对象不存在”异常。 |

@@ -2,7 +2,6 @@ import json
 import os
 from datetime import datetime
 from typing import Any, List, Literal, Optional
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from loguru import logger
@@ -48,6 +47,7 @@ from bisheng.open_endpoints.api.dependencies import (
     get_filelib_knowledge_document_repository,
     get_filelib_knowledge_document_version_repository,
     get_filelib_request_user,
+    get_filelib_retrieve_source_service,
     get_filelib_user_context_service,
 )
 from bisheng.open_endpoints.domain.schemas.filelib import (
@@ -60,6 +60,10 @@ from bisheng.open_endpoints.domain.schemas.filelib import (
     RetrieveReq,
     RetrieveResp,
 )
+from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
+    EMPTY_RETRIEVE_SOURCE_LINK,
+    FilelibRetrieveSourceService,
+)
 from bisheng.open_endpoints.domain.services.filelib_user_context_service import FilelibUserContextService
 from bisheng.open_endpoints.domain.utils import get_default_operator, get_default_operator_async
 from bisheng.role.domain.services.quota_service import QuotaService
@@ -67,7 +71,6 @@ from bisheng.utils.util import sync_func_to_async
 
 # build router
 router = APIRouter(prefix='/filelib', tags=['OpenAPI', 'Knowledge'])
-PORTAL_KNOWLEDGE_SPACES_PATH = '/knowledge-spaces'
 OPENAPI_FILE_CATEGORY_ID = '入库分类测试'
 OPENAPI_FILE_CATEGORY_GROUP_CLASS_CODE = '分类编码测试'
 OPENAPI_FILE_DOC_TYPE_CODE = '分类赋码测试'
@@ -265,44 +268,6 @@ async def _load_file_primary_flags(file_ids: list[int | None]) -> dict[int, bool
             for knowledge_file_id, is_primary in result.all()
             if knowledge_file_id is not None
         }
-
-
-def _build_portal_knowledge_spaces_path(base_path: str) -> str:
-    base_path = (base_path or '').strip().rstrip('/')
-    if not base_path or base_path == '/':
-        return PORTAL_KNOWLEDGE_SPACES_PATH
-    if base_path.endswith(PORTAL_KNOWLEDGE_SPACES_PATH):
-        return base_path
-    return f'{base_path}{PORTAL_KNOWLEDGE_SPACES_PATH}'
-
-
-def _build_portal_source_urls(
-        portal_base_url: Optional[str],
-        knowledge_id: int,
-        document_id: int,
-) -> tuple[str, str]:
-    query_params = {
-        'spaceId': str(knowledge_id),
-        'fileId': str(document_id),
-    }
-    base_url = (portal_base_url or '').strip()
-    if not base_url:
-        return f'{PORTAL_KNOWLEDGE_SPACES_PATH}?{urlencode(query_params)}', ''
-
-    parsed_base_url = urlsplit(base_url)
-    source_path = _build_portal_knowledge_spaces_path(parsed_base_url.path)
-    merged_query_params = dict(parse_qsl(parsed_base_url.query, keep_blank_values=True))
-    merged_query_params.update(query_params)
-    source_query = urlencode(merged_query_params)
-    source_url = urlunsplit(('', '', source_path, source_query, parsed_base_url.fragment))
-    source_full_url = urlunsplit((
-        parsed_base_url.scheme,
-        parsed_base_url.netloc,
-        source_path,
-        source_query,
-        parsed_base_url.fragment,
-    ))
-    return source_url, source_full_url
 
 
 @router.post('/', status_code=201)
@@ -719,6 +684,9 @@ async def retrieve_chunks(
             get_filelib_knowledge_document_version_repository
         ),
         doc_repo: KnowledgeDocumentRepository = Depends(get_filelib_knowledge_document_repository),
+        source_service: FilelibRetrieveSourceService = Depends(
+            get_filelib_retrieve_source_service
+        ),
 ):
     """Retrieve top-k chunks across one or more knowledge bases (no LLM generation).
 
@@ -750,16 +718,28 @@ async def retrieve_chunks(
         except BaseErrorCode as e:
             return e.return_resp_instance()
 
-        shougang_conf = await settings.aget_shougang_conf()
-        portal_base_url = shougang_conf.portal_base_url
+        prepared_results = [
+            (
+                kb_id,
+                doc,
+                int(doc.metadata.get("document_id", 0)),
+            )
+            for kb_id, doc in results
+        ]
+        document_ids = list(
+            dict.fromkeys(
+                document_id
+                for _, _, document_id in prepared_results
+                if document_id > 0
+            )
+        )
+        source_links = await source_service.resolve_links(document_ids)
         chunks = []
-        for kb_id, doc in results:
-            document_id = int(doc.metadata.get("document_id", 0))
+        for kb_id, doc, document_id in prepared_results:
             document_name = str(doc.metadata.get("document_name", ""))
-            source_url, source_full_url = _build_portal_source_urls(
-                portal_base_url=portal_base_url,
-                knowledge_id=kb_id,
-                document_id=document_id,
+            source_link = source_links.get(
+                document_id,
+                EMPTY_RETRIEVE_SOURCE_LINK,
             )
             chunks.append(RetrieveChunk(
                 content=doc.page_content,
@@ -767,8 +747,8 @@ async def retrieve_chunks(
                 document_id=document_id,
                 document_name=document_name,
                 chunk_index=int(doc.metadata.get("chunk_index", 0)),
-                source_url=source_url,
-                source_full_url=source_full_url,
+                source_url=source_link.source_url,
+                source_full_url=source_link.source_full_url,
             ))
         return resp_200(data=RetrieveResp(chunks=chunks, total=len(chunks)))
 

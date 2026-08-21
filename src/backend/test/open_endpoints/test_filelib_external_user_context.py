@@ -22,6 +22,7 @@ from bisheng.developer_token.domain.schemas import DeveloperTokenPrincipal
 from bisheng.open_endpoints.api.dependencies import (
     get_filelib_knowledge_document_repository,
     get_filelib_knowledge_document_version_repository,
+    get_filelib_retrieve_source_service,
     get_filelib_user_context_service,
 )
 from bisheng.open_endpoints.api.endpoints import filelib as filelib_endpoint
@@ -250,11 +251,11 @@ async def test_retrieve_uses_external_user_for_complete_business_call(monkeypatc
         "build_knowledge_space_chat_service_for_openapi",
         build_service,
     )
-    monkeypatch.setattr(
-        filelib_endpoint.settings,
-        "aget_shougang_conf",
-        AsyncMock(return_value=SimpleNamespace(portal_base_url="https://portal.example.com")),
-    )
+    async def resolve_links(file_ids):
+        context_events.append(("links", file_ids))
+        return {}
+
+    source_service = SimpleNamespace(resolve_links=AsyncMock(side_effect=resolve_links))
     request = MagicMock()
     version_repo = MagicMock()
     doc_repo = MagicMock()
@@ -270,10 +271,12 @@ async def test_retrieve_uses_external_user_for_complete_business_call(monkeypatc
         user_context_service=user_context_service,
         version_repo=version_repo,
         doc_repo=doc_repo,
+        source_service=source_service,
     )
 
     assert context_events == [
         ("enter", (principal, "EMP001")),
+        ("links", []),
         ("exit", target_user),
     ]
     build_service.assert_called_once_with(
@@ -318,6 +321,7 @@ def test_invalid_token_precedes_invalid_external_id(method, path, request_kwargs
     app.dependency_overrides[get_filelib_user_context_service] = lambda: context_service
     app.dependency_overrides[get_filelib_knowledge_document_version_repository] = MagicMock
     app.dependency_overrides[get_filelib_knowledge_document_repository] = MagicMock
+    app.dependency_overrides[get_filelib_retrieve_source_service] = MagicMock
 
     with TestClient(app) as client:
         response = getattr(client, method)(path, **request_kwargs)
@@ -363,6 +367,7 @@ def test_invalid_external_id_returns_422_without_user_lookup(
     app.dependency_overrides[get_filelib_user_context_service] = lambda: context_service
     app.dependency_overrides[get_filelib_knowledge_document_version_repository] = MagicMock
     app.dependency_overrides[get_filelib_knowledge_document_repository] = MagicMock
+    app.dependency_overrides[get_filelib_retrieve_source_service] = MagicMock
 
     with TestClient(app) as client:
         response = getattr(client, method)(path, **request_kwargs)
