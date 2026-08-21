@@ -1532,7 +1532,16 @@
       "selectKnowledge": "ナレッジベースを選択",
       "tabPending": "審査待ち",
       "tabReviewed": "審査済み",
-      "emptyReviewed": "審査済みタグはありません"
+      "emptyReviewed": "審査済みタグはありません",
+      "boundKnowledges": "関連ナレッジベース",
+      "addKnowledge": "ナレッジベースを追加",
+      "searchKnowledge": "ナレッジベースを検索",
+      "noKnowledge": "ナレッジベースがありません",
+      "alreadyBound": "関連済み",
+      "publicSpaces": "公開ナレッジベース",
+      "departmentSpaces": "部門ナレッジベース",
+      "teamSpaces": "チーム/部署ナレッジベース",
+      "personalSpaces": "個人ナレッジベース"
     }
   },
   "bench": {

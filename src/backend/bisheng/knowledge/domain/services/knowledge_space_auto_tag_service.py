@@ -162,8 +162,6 @@ class KnowledgeSpaceAutoTagService:
         library_ids = KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(int(knowledge.id))
         if library_ids:
             return library_ids
-        if knowledge.auto_tag_library_id:
-            return [int(knowledge.auto_tag_library_id)]
         return [1]
 
     @classmethod

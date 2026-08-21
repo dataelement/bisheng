@@ -91,15 +91,7 @@ class KnowledgeSpaceTagLibraryService:
 
     @staticmethod
     async def resolve_bound_library_ids(knowledge_id: int) -> list[int]:
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-
-        library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(knowledge_id)
-        rows = await KnowledgeDao.aget_list_by_ids([knowledge_id])
-        if rows and rows[0].auto_tag_library_id:
-            legacy_id = int(rows[0].auto_tag_library_id)
-            if legacy_id not in library_ids:
-                library_ids.append(legacy_id)
-        return library_ids
+        return await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(knowledge_id)
 
     @classmethod
     async def validate_library_bound_to_knowledge(cls, library_id: int, knowledge_id: int) -> None:
@@ -554,6 +546,117 @@ class KnowledgeSpaceTagLibraryService:
             tag_count=len(non_ai) + len(current_ai),
         )
         return await self.to_detail(library)
+
+    # Spacing between adjacent libraries when the list is renumbered. Wide enough
+    # that ordinary dragging keeps finding a midpoint and only rewrites one row.
+    _SORT_WEIGHT_STEP = 1000
+
+    async def _respread_sort_weights(self, libraries: list[KnowledgeSpaceTagLibrary]) -> None:
+        """Renumber the whole list evenly, following the order it is already in.
+
+        Runs on the first drag, when every weight is still NULL, and rarely after
+        that when two neighbours end up adjacent and leave no midpoint.
+        """
+        weights = {int(item.id): (index + 1) * self._SORT_WEIGHT_STEP for index, item in enumerate(libraries)}
+        await KnowledgeSpaceTagLibraryDao.aupdate_sort_weights(weights)
+        for item in libraries:
+            item.sort_weight = weights[int(item.id)]
+
+    async def reorder_library(
+        self,
+        library_id: int,
+        prev_library_id: int | None = None,
+        next_library_id: int | None = None,
+    ) -> None:
+        """Move a library between the two it was dropped between.
+
+        The caller sends its new neighbours rather than a position, and either is
+        None at the ends of the list. The new weight is their midpoint, so one row
+        is written however long the list is.
+        """
+        libraries = await KnowledgeSpaceTagLibraryDao.alist_all_ordered()
+        library_by_id = {int(item.id): item for item in libraries}
+        if int(library_id) not in library_by_id:
+            raise KnowledgeSpaceTagLibraryNotExistError()
+        for neighbour_id in (prev_library_id, next_library_id):
+            if neighbour_id is not None and int(neighbour_id) not in library_by_id:
+                # A neighbour the server does not have means the client is ordering
+                # against a list that no longer exists — a filtered view, or one
+                # someone else has since edited.
+                raise KnowledgeSpaceTagLibraryNotExistError()
+
+        if any(item.sort_weight is None for item in libraries):
+            await self._respread_sort_weights(libraries)
+
+        prev_weight = library_by_id[int(prev_library_id)].sort_weight if prev_library_id is not None else None
+        next_weight = library_by_id[int(next_library_id)].sort_weight if next_library_id is not None else None
+
+        if prev_weight is None and next_weight is None:
+            return  # Only library in the list; nothing to order against.
+        if prev_weight is None:
+            new_weight = next_weight - self._SORT_WEIGHT_STEP
+        elif next_weight is None:
+            new_weight = prev_weight + self._SORT_WEIGHT_STEP
+        else:
+            new_weight = (prev_weight + next_weight) // 2
+            if new_weight in (prev_weight, next_weight):
+                await self._respread_sort_weights(libraries)
+                prev_weight = library_by_id[int(prev_library_id)].sort_weight
+                next_weight = library_by_id[int(next_library_id)].sort_weight
+                new_weight = (prev_weight + next_weight) // 2
+
+        await KnowledgeSpaceTagLibraryDao.aupdate_sort_weights({int(library_id): new_weight})
+
+    async def _require_public_library(self, library_id: int) -> KnowledgeSpaceTagLibrary:
+        library = await KnowledgeSpaceTagLibraryDao.aget(library_id)
+        if not library:
+            raise KnowledgeSpaceTagLibraryNotExistError()
+        if library.owner_knowledge_id is not None:
+            # A private library belongs to exactly one space by definition; letting
+            # it be attached elsewhere would break that.
+            raise KnowledgeSpaceTagLibraryInvalidError(msg="私有标签库不能管理关联知识库")
+        return library
+
+    async def list_bound_knowledges(self, library_id: int) -> list[dict]:
+        """Knowledge spaces attached to this library, for the edit dialog."""
+        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+        from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceScopeDao
+
+        await self._require_public_library(library_id)
+        space_ids = await KnowledgeTagLibraryLinkDao.alist_bound_space_ids(library_id)
+        if not space_ids:
+            return []
+
+        spaces = await KnowledgeDao.aget_list_by_ids(space_ids)
+        space_by_id = {int(space.id): space for space in spaces}
+        scopes = await KnowledgeSpaceScopeDao.aget_by_space_ids(space_ids)
+        level_by_id = {int(scope.space_id): scope.level for scope in scopes}
+
+        result: list[dict] = []
+        for space_id in space_ids:
+            space = space_by_id.get(int(space_id))
+            if space is None:
+                continue  # Space deleted; the stale link is harmless to skip here.
+            result.append(
+                {
+                    "id": int(space.id),
+                    "name": space.name,
+                    "level": level_by_id.get(int(space.id)),
+                }
+            )
+        return result
+
+    async def add_bound_knowledges(self, library_id: int, knowledge_ids: list[int]) -> list[int]:
+        await self._require_public_library(library_id)
+        return await KnowledgeTagLibraryLinkDao.aadd_links(
+            library_id=library_id,
+            knowledge_ids=knowledge_ids,
+            tenant_id=getattr(self.login_user, "tenant_id", None),
+        )
+
+    async def remove_bound_knowledge(self, library_id: int, knowledge_id: int) -> None:
+        await self._require_public_library(library_id)
+        await KnowledgeTagLibraryLinkDao.aremove_link(library_id=library_id, knowledge_id=knowledge_id)
 
     async def get_library_usage(self, library_id: int) -> int:
         library = await KnowledgeSpaceTagLibraryDao.aget(library_id)

@@ -1549,7 +1549,16 @@
       "selectKnowledge": "Select a knowledge base",
       "tabPending": "Pending",
       "tabReviewed": "Reviewed",
-      "emptyReviewed": "No reviewed tags"
+      "emptyReviewed": "No reviewed tags",
+      "boundKnowledges": "Linked knowledge bases",
+      "addKnowledge": "Add knowledge base",
+      "searchKnowledge": "Search knowledge bases",
+      "noKnowledge": "No knowledge base",
+      "alreadyBound": "Linked",
+      "publicSpaces": "Public knowledge bases",
+      "departmentSpaces": "Department knowledge bases",
+      "teamSpaces": "Team / unit knowledge bases",
+      "personalSpaces": "Personal knowledge bases"
     }
   },
   "bench": {

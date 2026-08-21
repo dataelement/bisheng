@@ -1012,11 +1012,6 @@ class TagLibraryTagService:
         library_ids = KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(space_id)
         if library_ids:
             return library_ids[0]
-        from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-
-        knowledge = KnowledgeDao.query_by_id(space_id)
-        if knowledge and knowledge.auto_tag_library_id:
-            return int(knowledge.auto_tag_library_id)
         return 1
 
     @classmethod
