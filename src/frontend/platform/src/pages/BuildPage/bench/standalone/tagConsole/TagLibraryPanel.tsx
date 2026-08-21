@@ -85,12 +85,15 @@ export function TagLibraryPanel({
     // send would place the library somewhere the user did not aim for.
     const isFiltering = keyword.trim().length > 0
 
-    const handleDragEnd = async (result: DropResult) => {
+    // Synchronous by contract: the library reorders the list from what this
+    // returns, so the request is fired detached rather than awaited here.
+    const handleDragEnd = (result: DropResult) => {
         const { source, destination } = result
         if (!destination || destination.index === source.index) return
 
         const next = [...libraries]
         const [moved] = next.splice(source.index, 1)
+        if (!moved) return
         next.splice(destination.index, 0, moved)
 
         // Optimistic: the list settles under the cursor instead of snapping back
@@ -99,16 +102,18 @@ export function TagLibraryPanel({
         setLibraries(next)
         onLibrariesChanged(next)
 
-        const res = await captureAndAlertRequestErrorHoc(
-            reorderKnowledgeSpaceTagLibraryApi(moved.id, {
-                prev_library_id: next[destination.index - 1]?.id ?? null,
-                next_library_id: next[destination.index + 1]?.id ?? null,
-            }),
-        )
-        if (!res) {
-            setLibraries(previous)
-            onLibrariesChanged(previous)
-        }
+        void (async () => {
+            const res = await captureAndAlertRequestErrorHoc(
+                reorderKnowledgeSpaceTagLibraryApi(moved.id, {
+                    prev_library_id: next[destination.index - 1]?.id ?? null,
+                    next_library_id: next[destination.index + 1]?.id ?? null,
+                }),
+            )
+            if (!res) {
+                setLibraries(previous)
+                onLibrariesChanged(previous)
+            }
+        })()
     }
 
     const handleCreate = () => {
@@ -198,6 +203,7 @@ export function TagLibraryPanel({
                         {t("build.tagConsole.noLibrary", "暂无标签库")}
                     </p>
                 ) : (
+                    <TooltipProvider delayDuration={200}>
                     <DragDropContext onDragEnd={handleDragEnd}>
                         <Droppable droppableId="tagLibraries">
                             {(droppable) => (
@@ -216,9 +222,16 @@ export function TagLibraryPanel({
                                                     <div
                                                         ref={draggable.innerRef}
                                                         {...draggable.draggableProps}
-                                                        onClick={() => onSelectLibrary(library.id)}
+                                                        onClick={() => {
+                                                            if (snapshot.isDragging) return
+                                                            onSelectLibrary(library.id)
+                                                        }}
                                                         className={cname(
-                                                            "group flex cursor-pointer items-center justify-between border-l-[3px] px-4 py-2.5 text-sm transition-colors",
+                                                            "group flex cursor-pointer items-center justify-between border-l-[3px] px-4 py-2.5 text-sm",
+                                                            // The library animates transform on drop and watches for that
+                                                            // transition to end. A transition of our own on the same
+                                                            // element is one more thing that can fire first.
+                                                            !snapshot.isDragging && "transition-colors",
                                                             selected
                                                                 ? "border-l-primary bg-primary/10 font-medium text-primary"
                                                                 : "border-l-transparent hover:bg-[#F2F3F5]",
@@ -238,25 +251,23 @@ export function TagLibraryPanel({
                                                         >
                                                             <GripVertical className="size-3.5" />
                                                         </span>
-                                                        <TooltipProvider delayDuration={200}>
-                                                            <Tooltip>
-                                                                <TooltipTrigger asChild>
-                                                                    <span className="min-w-0 flex-1 truncate">
-                                                                        {library.name} ({library.tag_count})
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <span className="min-w-0 flex-1 truncate">
+                                                                    {library.name} ({library.tag_count})
                                                                     </span>
                                                                 </TooltipTrigger>
-                                                                <TooltipContent side="right" className="max-w-72">
-                                                                    <p className="whitespace-normal break-all text-left">
-                                                                        {library.bound_space_names?.length
-                                                                            ? library.bound_space_names.join("、")
-                                                                            : t(
-                                                                                  "build.tagConsole.noBoundSpace",
-                                                                                  "暂无关联知识空间",
-                                                                              )}
-                                                                    </p>
-                                                                </TooltipContent>
-                                                            </Tooltip>
-                                                        </TooltipProvider>
+                                                            <TooltipContent side="right" className="max-w-72">
+                                                                <p className="whitespace-normal break-all text-left">
+                                                                    {library.bound_space_names?.length
+                                                                        ? library.bound_space_names.join("、")
+                                                                        : t(
+                                                                              "build.tagConsole.noBoundSpace",
+                                                                              "暂无关联知识空间",
+                                                                          )}
+                                                                </p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
                                                         <span className="ml-2 hidden shrink-0 items-center gap-1 group-hover:flex">
                                                             <button
                                                                 type="button"
@@ -281,6 +292,7 @@ export function TagLibraryPanel({
                             )}
                         </Droppable>
                     </DragDropContext>
+                    </TooltipProvider>
                 )}
             </div>
 
