@@ -456,8 +456,10 @@ def build_shared_es_index_body(conf=None) -> dict[str, Any]:
     """Index body for ``idx_space_shared_{tenant_id}``: text field plus the
     full shared metadata mapping (``metadata.knowledge_ids`` multi-value
     long and every field of spec 3.3)."""
+    conf = conf or get_shared_storage_conf()
     metadata_mappings = generate_metadata_mappings(SHARED_SPACE_CONTENT_METADATA_SCHEMA)
     return {
+        "settings": {"number_of_shards": int(conf.es_number_of_shards)},
         "mappings": {
             "properties": {
                 SHARED_MILVUS_TEXT_FIELD: {"type": "text"},

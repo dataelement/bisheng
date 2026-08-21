@@ -66,6 +66,21 @@ class TestNaming:
         assert shared_index_name(42, conf) == "idx_x_42"
 
 
+class TestSharedEsIndexSettings:
+    def test_default_primary_shard_count_is_three(self):
+        body = sss.build_shared_es_index_body(_conf())
+        assert body["settings"]["number_of_shards"] == 3
+
+    def test_configured_primary_shard_count_is_used(self):
+        body = sss.build_shared_es_index_body(_conf(es_number_of_shards=6))
+        assert body["settings"]["number_of_shards"] == 6
+
+    @pytest.mark.parametrize("value", [0, 65])
+    def test_primary_shard_count_outside_supported_range_is_rejected(self, value):
+        with pytest.raises(ValueError):
+            _conf(es_number_of_shards=value)
+
+
 class TestResolveRouting:
     def test_switch_off_returns_none(self):
         provider = lambda tenant_id: _snapshot()  # noqa: E731

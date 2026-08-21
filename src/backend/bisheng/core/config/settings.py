@@ -749,6 +749,15 @@ class KnowledgeSpaceSharedStorageConf(BaseModel):
         default="idx_space_shared",
         description="租户共享 ES index 前缀，实际名称为 {prefix}_{tenant_id}",
     )
+    es_number_of_shards: int = Field(
+        default=3,
+        ge=1,
+        le=64,
+        description=(
+            "租户共享 ES index 的主分片数，仅在创建新索引时生效；修改后需自行在 ES "
+            "中维护已有索引的 shard 数量"
+        ),
+    )
     tenant_embedding_model_id: int | None = Field(
         default=None,
         description="租户统一目标 embedding 模型 ID；修改视为全租户重建（方案 §6.2）",
