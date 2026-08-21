@@ -29,6 +29,9 @@ from bisheng.database.models.role_access import AccessType
 from bisheng.mcp_manage.constant import McpClientType
 from bisheng.mcp_manage.manager import ClientManager
 from bisheng.permission.domain.services.tool_permission_service import ToolPermissionService
+from bisheng.permission.domain.tool_permission_template import (
+    relation_for_tool_permission_id,
+)
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.linsight_knowledge import SearchKnowledgeBase
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType, GptsToolsTypeRead
@@ -90,23 +93,49 @@ class ToolServices(BaseModel):
             access_resources = await self.login_user.aget_user_access_resource_ids([AccessType.GPTS_TOOL_READ])
             if access_resources:
                 permission_prefilter_start = perf_counter()
-                filtered_ids = await ToolPermissionService.filter_tool_ids_by_permission_async(
-                    self.login_user,
-                    [int(access) for access in access_resources],
-                    permission_id,
-                )
-                tool_type_ids_extra = [int(access) for access in filtered_ids]
-                logger.info(
-                    "[perf][tool.list.prefilter] user_id={} tenant_id={} is_preset={} permission_id={} "
-                    "access_resources={} filtered_ids={} took_ms={:.2f}",
-                    self.login_user.user_id,
-                    current_tid,
-                    is_preset,
-                    permission_id,
-                    len(access_resources),
-                    len(tool_type_ids_extra),
-                    (perf_counter() - permission_prefilter_start) * 1000,
-                )
+                # Fast path: when the requested permission id maps to the same
+                # relation (can_read) used by AccessType.GPTS_TOOL_READ, the
+                # FGA list above already returned exactly the set the caller
+                # is asking for. Re-running filter_tool_ids_by_permission_async
+                # would issue N FGA batch_check calls + N DB lookups for tools
+                # the caller has no reason to re-evaluate; for normal users
+                # with many custom/MCP tools that single round turned into
+                # multi-second latency on /api/v1/tool?is_preset=0|2 (IKABRE).
+                # We only fall back to the per-tool check when the requested
+                # permission id needs a stricter relation the coarse list did
+                # not already cover.
+                requested_relation = relation_for_tool_permission_id(permission_id)
+                if requested_relation == "can_read":
+                    tool_type_ids_extra = [int(access) for access in access_resources]
+                    logger.info(
+                        "[perf][tool.list.prefilter] user_id={} tenant_id={} is_preset={} permission_id={} "
+                        "access_resources={} filtered_ids={} took_ms={:.2f} mode=coarse_skip",
+                        self.login_user.user_id,
+                        current_tid,
+                        is_preset,
+                        permission_id,
+                        len(access_resources),
+                        len(tool_type_ids_extra),
+                        (perf_counter() - permission_prefilter_start) * 1000,
+                    )
+                else:
+                    filtered_ids = await ToolPermissionService.filter_tool_ids_by_permission_async(
+                        self.login_user,
+                        [int(access) for access in access_resources],
+                        permission_id,
+                    )
+                    tool_type_ids_extra = [int(access) for access in filtered_ids]
+                    logger.info(
+                        "[perf][tool.list.prefilter] user_id={} tenant_id={} is_preset={} permission_id={} "
+                        "access_resources={} filtered_ids={} took_ms={:.2f} mode=strict",
+                        self.login_user.user_id,
+                        current_tid,
+                        is_preset,
+                        permission_id,
+                        len(access_resources),
+                        len(tool_type_ids_extra),
+                        (perf_counter() - permission_prefilter_start) * 1000,
+                    )
         if is_preset is None:
             # Get a list of all tools visible to the user
             all_tool_type = await GptsToolsDao.aget_user_tool_type(self.login_user.user_id, tool_type_ids_extra)

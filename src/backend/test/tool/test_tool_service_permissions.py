@@ -22,6 +22,7 @@ def _load_tool_service_module():
         'bisheng.mcp_manage.constant',
         'bisheng.mcp_manage.manager',
         'bisheng.permission.domain.services.tool_permission_service',
+        "bisheng.permission.domain.tool_permission_template",
         'bisheng.tool.domain.const',
         'bisheng.tool.domain.langchain.linsight_knowledge',
         'bisheng.tool.domain.models.gpts_tools',
@@ -108,6 +109,12 @@ def _load_tool_service_module():
         tool_permission_module.ToolPermissionService = _DummyToolPermissionService
         sys.modules['bisheng.permission.domain.services.tool_permission_service'] = tool_permission_module
 
+        tool_permission_template_module = ModuleType("bisheng.permission.domain.tool_permission_template")
+        tool_permission_template_module.relation_for_tool_permission_id = (
+            lambda permission_id: "can_read" if permission_id in ("view_tool", "use_tool") else None
+        )
+        sys.modules["bisheng.permission.domain.tool_permission_template"] = tool_permission_template_module
+
         tool_const_module = ModuleType('bisheng.tool.domain.const')
         tool_const_module.ToolPresetType = SimpleNamespace(
             PRESET=SimpleNamespace(value=1),
@@ -173,7 +180,11 @@ def _load_tool_service_module():
 
 
 @pytest.mark.asyncio
-async def test_get_tool_list_filters_by_use_tool_and_sets_write_from_edit_tool():
+async def test_get_tool_list_skips_redundant_filter_for_can_read_permission():
+    """Default ``use_tool`` permission maps to ``can_read`` — the same relation
+    AccessType.GPTS_TOOL_READ used by the coarse FGA list. Skipping the
+    per-tool re-filter is what makes /api/v1/tool?is_preset=0|2 fast for
+    normal users; the call must NOT happen at all (IKABRE)."""
     tool_module = _load_tool_service_module()
     ToolServices = tool_module.ToolServices
 
@@ -192,8 +203,15 @@ async def test_get_tool_list_filters_by_use_tool_and_sets_write_from_edit_tool()
         tool_module.ToolPermissionService,
         'filter_tool_ids_by_permission_async',
         new_callable=AsyncMock,
-        side_effect=[['2'], ['2'], ['2']],
+        side_effect=AssertionError(
+            "use_tool (can_read) re-filter must be skipped when AccessType.GPTS_TOOL_READ already returned the set"
+        ),
     ) as mock_filter_ids, patch.object(
+        tool_module.ToolPermissionService,
+        'get_tool_permission_map_async',
+        new_callable=AsyncMock,
+        return_value={'1': set(), '2': {'edit_tool', 'delete_tool'}},
+    ), patch.object(
         tool_module.GptsToolsDao,
         'aget_user_tool_type',
         new_callable=AsyncMock,
@@ -206,16 +224,82 @@ async def test_get_tool_list_filters_by_use_tool_and_sets_write_from_edit_tool()
     ):
         result = await tool_service.get_tool_list()
 
+    # Both visible tools should still be returned (no second filter, so the
+    # coarse list passes through).
     assert [one.id for one in result] == [1, 2]
+    # Creator-of-tool #2 gets edit/delete via the in-code shortcut;
+    # tool #1 has neither, so write/delete must be False.
     assert getattr(result[0], 'write', False) is False
     assert result[1].write is True
     assert getattr(result[0], 'delete', False) is False
     assert result[1].delete is True
-    assert mock_filter_ids.call_args_list[0].args[2] == 'use_tool'
-    assert mock_filter_ids.call_args_list[1].args[2] == 'edit_tool'
-    assert mock_filter_ids.call_args_list[1].args[1] == [1, 2]
-    assert mock_filter_ids.call_args_list[2].args[2] == 'delete_tool'
-    assert mock_filter_ids.call_args_list[2].args[1] == [1, 2]
+    # The redundant filter must not run; only the action-level map is consulted.
+    assert mock_filter_ids.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_get_tool_list_still_filters_for_strict_permission():
+    """For permission ids that do NOT map to the coarse ``can_read`` list
+    (e.g. legacy callers passing a custom id), the strict per-tool filter
+    must still run so we don't accidentally over-grant visibility."""
+    tool_module = _load_tool_service_module()
+    ToolServices = tool_module.ToolServices
+
+    login_user = SimpleNamespace(
+        user_id=7,
+        is_admin=lambda: False,
+        aget_user_access_resource_ids=AsyncMock(return_value=['1', '2']),
+        rebac_list_accessible=AsyncMock(side_effect=AssertionError('coarse relation list should not be used')),
+    )
+    tool_service = ToolServices(request=None, login_user=login_user)
+
+    tool_type_one = SimpleNamespace(id=1, user_id=9, children=[], mask_sensitive_data=lambda: None)
+    tool_type_two = SimpleNamespace(id=2, user_id=10, children=[], mask_sensitive_data=lambda: None)
+
+    with patch.object(
+        tool_module.ToolPermissionService,
+        'filter_tool_ids_by_permission_async',
+        new_callable=AsyncMock,
+        return_value=['2'],
+    ) as mock_filter_ids, patch.object(
+        tool_module.GptsToolsDao,
+        'aget_user_tool_type',
+        new_callable=AsyncMock,
+        return_value=[tool_type_one, tool_type_two],
+    ), patch.object(
+        tool_module.GptsToolsDao,
+        'aget_list_by_type',
+        new_callable=AsyncMock,
+        return_value=[],
+    ):
+        result = await tool_service.get_tool_list(permission_id='manage_tool_owner')
+
+    assert [one.id for one in result] == [2]
+    # The strict path is taken — single call with the full input set.
+    assert mock_filter_ids.call_count == 1
+    assert mock_filter_ids.call_args_list[0].args[1] == [1, 2]
+    assert mock_filter_ids.call_args_list[0].args[2] == 'manage_tool_owner'
+
+
+def test_relation_for_tool_permission_id_maps_known_ids():
+    """Tool permission ids must round-trip to their OpenFGA relation. This
+    drives the fast-path branch in ToolServices.get_tool_list — if a new
+    can_read id is added to the template the lookup must follow it."""
+    from bisheng.permission.domain.tool_permission_template import (
+        relation_for_tool_permission_id,
+    )
+
+    assert relation_for_tool_permission_id('view_tool') == 'can_read'
+    assert relation_for_tool_permission_id('use_tool') == 'can_read'
+    assert relation_for_tool_permission_id('edit_tool') == 'can_edit'
+    assert relation_for_tool_permission_id('delete_tool') == 'can_delete'
+    assert relation_for_tool_permission_id('manage_tool_owner') == 'can_manage'
+    # Unknown id — must not silently resolve to can_read and over-grant.
+    assert relation_for_tool_permission_id('not_a_real_id') is None
+    # Empty / None must not raise; fast-path callers always treat None as
+    # "fall back to the strict filter".
+    assert relation_for_tool_permission_id('') is None
+    assert relation_for_tool_permission_id(None) is None
 
 
 @pytest.mark.asyncio
