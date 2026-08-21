@@ -9,7 +9,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from loguru import logger
-from sqlalchemy import func, update
+from sqlalchemy import and_, func, or_, update
 from sqlmodel import select
 
 from bisheng.common.errcode.permission import (
@@ -445,6 +445,36 @@ class SqlProjectionScopeGuard:
             row_id = (await session.execute(statement)).scalar_one_or_none()
         return row_id is not None
 
+    async def is_failed_closed_recovery_scope(
+        self,
+        plan: ProjectionPlan,
+        operation_id: int,
+    ) -> bool:
+        if plan.scope_type != "resource":
+            return False
+        resource_type, separator, resource_id = plan.scope_key.partition(":")
+        if not separator:
+            return False
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode.id).where(
+                ResourcePermissionMode.tenant_id == plan.tenant_id,
+                ResourcePermissionMode.resource_type == resource_type,
+                ResourcePermissionMode.resource_id == resource_id,
+                ResourcePermissionMode.operation_id == operation_id,
+                or_(
+                    and_(
+                        ResourcePermissionMode.version == plan.expected_version,
+                        ResourcePermissionMode.projection_state == "FAILED_CLOSED",
+                    ),
+                    and_(
+                        ResourcePermissionMode.version == plan.target_version,
+                        ResourcePermissionMode.projection_state == "CURRENT",
+                    ),
+                ),
+            )
+            row_id = (await session.execute(statement)).scalar_one_or_none()
+        return row_id is not None
+
     async def fail_closed(
         self,
         plan: ProjectionPlan,
@@ -588,8 +618,13 @@ class SqlProjectionFinalizer:
                     )
                 if mode_row.version == plan.target_version and mode_row.projection_state == "CURRENT":
                     return
-                if mode_row.version != plan.expected_version or mode_row.projection_state != "PROJECTING":
+                if mode_row.version != plan.expected_version or mode_row.projection_state not in {
+                    "PROJECTING",
+                    "FAILED_CLOSED",
+                }:
                     raise PermissionPublishNotReadyError(msg=("Permission scope changed before projection finalize"))
+
+                source_projection_state = mode_row.projection_state
 
                 grant_ids = tuple(
                     (
@@ -733,7 +768,7 @@ class SqlProjectionFinalizer:
                         ResourcePermissionMode.id == mode_row.id,
                         ResourcePermissionMode.operation_id == operation_id,
                         ResourcePermissionMode.version == plan.expected_version,
-                        ResourcePermissionMode.projection_state == "PROJECTING",
+                        ResourcePermissionMode.projection_state == source_projection_state,
                     )
                     .values(**mode_values)
                 )

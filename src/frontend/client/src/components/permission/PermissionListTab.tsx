@@ -27,10 +27,8 @@ import type {
 } from "~/api/permission";
 import { Button } from "~/components/ui";
 import { useLocalize } from "~/hooks";
-import { useAuthContext } from "~/hooks/AuthContext";
 import { useConfirm } from "~/Providers";
 import { SourceBadge } from "./SourceBadge";
-import { canManageLevel, viewerIsCreator } from "./topTierGuard";
 
 interface PermissionListTabProps {
   resourceType: ResourceType;
@@ -58,16 +56,13 @@ function createMutationIdempotencyKey(): string {
 function canEditAssignee(
   assignee: PermissionGrantAssignee,
   context: ResourcePermissionContext,
-  isCreator: boolean,
 ): boolean {
   return (
     context.mode === "CUSTOM" &&
     context.can_manage_permission &&
     assignee.scope === "LOCAL" &&
     assignee.editable &&
-    !assignee.protected &&
-    // Top-tier grants stay with the creator; an owner does not manage owners.
-    canManageLevel(assignee.model.level, isCreator)
+    !assignee.protected
   );
 }
 
@@ -101,7 +96,6 @@ interface RosterRowProps {
   context: ResourcePermissionContext;
   models: GrantablePermissionModel[];
   pending: boolean;
-  isCreator: boolean;
   onMove: (assignee: PermissionGrantAssignee, modelKey: string) => void;
   onRemove: (assignee: PermissionGrantAssignee) => void;
 }
@@ -111,13 +105,12 @@ function RosterRow({
   context,
   models,
   pending,
-  isCreator,
   onMove,
   onRemove,
 }: RosterRowProps) {
   const localize = useLocalize();
   const SubjectIcon = SUBJECT_ICONS[assignee.subject.type];
-  const editable = canEditAssignee(assignee, context, isCreator);
+  const editable = canEditAssignee(assignee, context);
   const displayName =
     assignee.subject.name ||
     `${assignee.subject.type}:${assignee.subject.id}`;
@@ -254,7 +247,6 @@ export function PermissionListTab({
 }: PermissionListTabProps) {
   const localize = useLocalize();
   const confirm = useConfirm();
-  const { user } = useAuthContext();
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([]);
   const [models, setModels] = useState<GrantablePermissionModel[]>([]);
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null);
@@ -357,11 +349,6 @@ export function PermissionListTab({
     resourceId,
     resourceType,
   ]);
-
-  const isCreator = useMemo(
-    () => viewerIsCreator(assignees, user?.id),
-    [assignees, user?.id],
-  );
 
   const visibleAssignees = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -496,7 +483,6 @@ export function PermissionListTab({
               context={context}
               models={models}
               pending={pendingAssigneeId === assignee.assignee_id}
-              isCreator={isCreator}
               onMove={(item, modelKey) =>
                 void mutateAssignee(item, {
                   op: "MOVE",

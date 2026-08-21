@@ -9,12 +9,6 @@ import type {
 } from "~/api/permission";
 import { PermissionGrantTab } from "./PermissionGrantTab";
 
-jest.mock("~/hooks/AuthContext", () => ({
-  // Not the creator of anything in these fixtures: the top-tier guard reads the
-  // viewer from the roster, and none of them carry a CREATOR row.
-  useAuthContext: () => ({ user: { id: "auth-user" } }),
-}));
-
 jest.mock("~/api/permission", () => ({
   getGrantablePermissionModels: jest.fn(),
   mutateResourceGrants: jest.fn(),
@@ -114,6 +108,7 @@ describe("F048 Client PermissionGrantTab", () => {
     mockedGetModels.mockResolvedValue([
       { key: "viewer", name: "Viewer", level: 1, active: true },
       { key: "editor", name: "Editor", level: 2, active: true },
+      { key: "owner", name: "Owner", level: 4, active: true },
       { key: "inactive", name: "Inactive", level: 3, active: false },
     ]);
     mockedMutate.mockResolvedValue({ resource_version: 8, items: [] });
@@ -179,6 +174,9 @@ describe("F048 Client PermissionGrantTab", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.queryByText("Inactive")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("f048_permission.grant.add_model")).toHaveTextContent(
+      "Owner",
+    );
 
     fireEvent.change(
       screen.getByLabelText("f048_permission.grant.model.1"),

@@ -148,6 +148,55 @@ is safe: already `FINALIZED` operations are verified and skipped. Catalog
 publish should only be retried when the final `remaining_active` report is
 empty.
 
+### `recover_f048_failed_closed_projection.py`
+
+Forward-recover one explicitly selected F048 resource operation that has
+already entered `FAILED_CLOSED`. This is separate from ordinary reconcile: it
+uses the operation ledger's frozen AFTER state, reads the exact live tuples
+with higher consistency, and proposes only the missing writes and surplus
+deletes. It never derives authorization intent from staged SQL rows and never
+updates SQL or OpenFGA directly.
+
+Run a dry-run first from `src/backend/` with the same `config` as the service:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/recover_f048_failed_closed_projection.py \
+  --tenant-id 1 \
+  --resource-type knowledge_space \
+  --resource-id 4166
+```
+
+The dry-run prints the live Store/model pins and a
+`recovery_confirmation_checksum` bound to the exact correction proposal. Copy
+those three values into the apply command:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/recover_f048_failed_closed_projection.py \
+  --tenant-id 1 \
+  --resource-type knowledge_space \
+  --resource-id 4166 \
+  --apply \
+  --confirm-store-id '<dry-run store_id>' \
+  --confirm-model-id '<dry-run model_id>' \
+  --confirm-recovery-checksum '<dry-run recovery_confirmation_checksum>'
+```
+
+The script resolves the active operation from the resource mode row; operators
+do not need to discover or enter an operation ID. The resolved ID remains in
+the dry-run output for audit. Apply is refused when tenant, resource scope,
+operation ownership, expected
+version, CURRENT Catalog Store/model pin, durable ledger checksum, or the live
+tuple proposal changed after dry-run. The correction must fit one atomic
+OpenFGA write (at most 90 tuples). Only resource scopes are supported; external
+business-owned scopes such as department remain manual-analysis cases. A
+successful run higher-consistency verifies the full AFTER state, finalizes the
+staged SQL rows, advances the resource version, and ends at
+`operation=FINALIZED` plus `resource projection_state=CURRENT`. Re-running a
+finalized operation only verifies and skips it.
+
 ### `migrate_f048_permission_data.py`
 
 Formal, forward-only migration from the legacy relation-model Config and

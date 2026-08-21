@@ -77,6 +77,7 @@ describe("F048 PermissionGrantTab", () => {
     vi.mocked(getGrantablePermissionModelsApi).mockResolvedValue([
       { key: "viewer", name: "Viewer", level: 1, active: true },
       { key: "editor", name: "Editor", level: 2, active: true },
+      { key: "owner", name: "Owner", level: 4, active: true },
     ])
     vi.mocked(mutateResourceGrantsApi).mockResolvedValue({
       resource_version: 9,
@@ -136,7 +137,7 @@ describe("F048 PermissionGrantTab", () => {
     )
 
     expect(await screen.findByText("Editor")).toBeInTheDocument()
-    expect(screen.queryByText("Owner")).toBeNull()
+    expect(screen.getByText("Owner")).toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "select-alice" }))
     fireEvent.change(screen.getByLabelText("grant.addModel"), {
       target: { value: "editor" },
