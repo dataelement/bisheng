@@ -140,15 +140,22 @@ export function ChannelSettingsPage() {
   }
   if (settings.loadError) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-body text-text-2">
-        <span>{settings.localize("com_load_error")}</span>
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-body text-text-2">
+        <div className="space-y-1">
+          <h1 className="text-h4 text-text-1">
+            {settings.localize("com_subscription.channel_settings_load_failed")}
+          </h1>
+          <p className="text-body-sm text-text-3">
+            {settings.localize("com_subscription.channel_settings_load_failed_desc")}
+          </p>
+        </div>
         <Button
           color="default"
           variant="outlined"
           size="small"
           onClick={settings.cancel}
         >
-          {settings.localize("com_unified_permission.cancel")}
+          {settings.localize("com_subscription.back_to_channel_list")}
         </Button>
       </div>
     );

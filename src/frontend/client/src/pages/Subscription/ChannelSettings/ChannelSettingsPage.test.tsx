@@ -35,4 +35,11 @@ describe("F050 channel full-page UI contract", () => {
     expect(source).toContain("settings.showPermissionSection");
     expect(source).not.toContain("permission_ids");
   });
+
+  it("uses localized copy for the load error state", () => {
+    expect(source).toContain("com_subscription.channel_settings_load_failed");
+    expect(source).toContain("com_subscription.channel_settings_load_failed_desc");
+    expect(source).toContain("com_subscription.back_to_channel_list");
+    expect(source).not.toContain("com_load_error");
+  });
 });
