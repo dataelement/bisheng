@@ -1,5 +1,5 @@
 import { Button } from "@/components/bs-ui/button"
-import { Checkbox } from "@/components/bs-ui/checkbox"
+import { Checkbox } from "@/components/bs-ui/checkBox"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/bs-ui/dialog"
 import { SearchInput } from "@/components/bs-ui/input"
 import { cname } from "@/components/bs-ui/utils"
