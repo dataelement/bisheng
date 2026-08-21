@@ -146,7 +146,7 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
                                     <div className="mt-3">
                                         <Textarea
                                             value={formData.systemPrompt}
-                                            placeholder={t('chatConfig.knowledgeSpacePrompt')}
+                                            placeholder={buildDefaultSystemPrompt(t)}
                                             className="min-h-48"
                                             maxLength={30000}
                                             onChange={(e) => {
@@ -306,6 +306,27 @@ export default function KnowledgeSpace({ scopeVersion = 0 }: { scopeVersion?: nu
     );
 }
 
+/**
+ * Default system prompt for the knowledge-space QA form: the shared assistant
+ * template plus the citation-rule block.
+ *
+ * Saving this form pins system_prompt in the DB, and from then on the backend
+ * uses it verbatim instead of its own knowledge_space.yaml rag_prompt. That
+ * yaml carries the citation rules; aiPrompt alone does not. Seeding the
+ * textarea with aiPrompt therefore meant that opening this page and pressing
+ * save — even with no edit — pinned a citation-free prompt: the model never
+ * emitted the U+E200 source markers the client renders as footnotes, and raw
+ * <chunk_id> tags leaked into the answer instead.
+ *
+ * Appended rather than replaced so the assistant persona stays the one shared
+ * with the subscription form; only the part this surface actually needs is
+ * added. The subscription form keeps plain aiPrompt — it feeds whole articles
+ * with no chunk ids and no citation registry, so teaching it the markers would
+ * only invite fabricated ones.
+ */
+const buildDefaultSystemPrompt = (t: (key: string) => string) =>
+    `${t('chatConfig.aiPrompt')}\n\n${t('chatConfig.citationRules')}`;
+
 // 只负责加载/保存系统提示词、用户提示词、max_chunk_size 的 hook
 const useKnowledgeConfig = (scopeVersion = 0) => {
     const { t } = useTranslation();
@@ -341,19 +362,11 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
             const menuDisplayNameFromRes = cfg?.menu_display_name ?? cfg?.menuDisplayName;
             // When backend returns no saved value, seed the textarea with the
             // localized default template so it is editable as a real value.
-            // knowledgeSpacePrompt (NOT the shared aiPrompt): saving this form
-            // pins system_prompt in the DB, and from then on the backend uses it
-            // verbatim instead of its own knowledge_space.yaml rag_prompt. If the
-            // seeded text omits the citation rules, the model never emits the
-            // \ue200 source markers the client turns into footnotes, and raw
-            // <chunk_id> tags leak into the answer. This key mirrors that yaml
-            // template; the subscription form keeps aiPrompt, whose surface has
-            // no citation registry at all.
             const resolvedSystemPrompt = resolveConfigString(systemPromptFromRes, '');
             const resolvedUserPrompt = resolveConfigString(userPromptFromRes, '');
             setFormData((prev) => ({
                 ...prev,
-                systemPrompt: resolvedSystemPrompt || t('chatConfig.knowledgeSpacePrompt'),
+                systemPrompt: resolvedSystemPrompt || buildDefaultSystemPrompt(t),
                 userPrompt: resolvedUserPrompt || t('chatConfig.retrievedAndQuestion'),
                 maxChunkSize: typeof maxChunkSizeFromRes === 'number' ? maxChunkSizeFromRes : prev.maxChunkSize,
                 autoTagVisible: Boolean(autoTagVisibleFromRes),
@@ -371,7 +384,7 @@ const useKnowledgeConfig = (scopeVersion = 0) => {
     const handleSave = async () => {
         // Refill blank prompts with the i18n default template so the empty input
         // never reaches the server; reflect the refill in formData for the UI too.
-        const finalSystemPrompt = (formData.systemPrompt || '').trim() || t('chatConfig.knowledgeSpacePrompt');
+        const finalSystemPrompt = (formData.systemPrompt || '').trim() || buildDefaultSystemPrompt(t);
         const finalUserPrompt = (formData.userPrompt || '').trim() || t('chatConfig.retrievedAndQuestion');
         if (finalSystemPrompt !== formData.systemPrompt || finalUserPrompt !== formData.userPrompt) {
             setFormData((prev) => ({
