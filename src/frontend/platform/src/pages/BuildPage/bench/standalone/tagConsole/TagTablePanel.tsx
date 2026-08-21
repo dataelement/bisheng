@@ -20,7 +20,7 @@ import { AddTagDialog } from "./AddTagDialog"
 import { SourceFileLinks } from "./SourceFileLinks"
 import { BatchResultDialog, LibraryPickerDialog } from "./TagBatchDialogs"
 import { TagFilterBar } from "./TagFilterBar"
-import { TagSourceIcon, tagSourceLabel } from "./TagSourceIcon"
+import { TagSourceIcon } from "./TagSourceIcon"
 import {
     buildSearchParams,
     EMPTY_FILTERS,
@@ -177,12 +177,11 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                             <th className="w-14 px-3 py-3 font-medium">{t("build.tagConsole.index", "序号")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.libraryName", "标签库名")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagName", "标签名称")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.markedCount", "已标识知识数")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.submitter", "提报者")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewer", "审核者")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.tagType", "标签类型")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceLibrary", "标签来源库")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceKnowledge", "标签来源知识")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.submitter", "提报者")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewer", "审核者")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.markedCount", "已标识知识数")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.createDate", "创建日期")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewTime", "审核时间")}</th>
                             <th className="w-16 px-3 py-3 font-medium">{t("build.operation", "操作")}</th>
@@ -191,13 +190,13 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan={13} className="px-3 py-10 text-center text-muted-foreground">
+                                <td colSpan={12} className="px-3 py-10 text-center text-muted-foreground">
                                     {t("loading")}
                                 </td>
                             </tr>
                         ) : !rows.length ? (
                             <tr>
-                                <td colSpan={13} className="px-3 py-10 text-center text-muted-foreground">
+                                <td colSpan={12} className="px-3 py-10 text-center text-muted-foreground">
                                     {t("build.tagConsole.empty", "暂无标签")}
                                 </td>
                             </tr>
@@ -222,16 +221,15 @@ export function TagTablePanel({ selectedLibraryIds, libraries, onLibraryContentC
                                         <TagSourceIcon resourceType={row.resource_type} />
                                         {row.name}
                                     </td>
-                                    <td className="px-3 py-3">{row.marked_knowledge_count}</td>
-                                    <td className="px-3 py-3">{row.submitter_name || "-"}</td>
-                                    <td className="px-3 py-3">{row.reviewer_name || "-"}</td>
-                                    <td className="px-3 py-3">{tagSourceLabel(row.resource_type, t)}</td>
                                     <td className="max-w-48 px-3 py-3">
                                         {sourceLibraryNames(row.source_files).join("、") || "-"}
                                     </td>
                                     <td className="max-w-64 px-3 py-3">
                                         <SourceFileLinks files={row.source_files} />
                                     </td>
+                                    <td className="px-3 py-3">{row.submitter_name || "-"}</td>
+                                    <td className="px-3 py-3">{row.reviewer_name || "-"}</td>
+                                    <td className="px-3 py-3">{row.marked_knowledge_count}</td>
                                     <td className="px-3 py-3 text-muted-foreground">{formatDateTime(row.create_time)}</td>
                                     <td className="px-3 py-3 text-muted-foreground">{formatDateTime(row.review_time)}</td>
                                     <td className="px-3 py-3">
