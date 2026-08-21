@@ -157,3 +157,43 @@ class UploadFileEmptyError(BaseErrorCode):
 class UploadFileExtError(BaseErrorCode):
     Code: int = 10041
     Msg: str = 'The upload file format is not supported, please upload a file in the correct format'
+
+
+class ApiRateLimitedError(BaseErrorCode):
+    Code: int = 10042
+    Msg: str = '请求过于频繁，请稍后重试'  # noqa: RUF001
+    HttpStatus: int = 429
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus
+
+
+class ApiRateLimitConfigSyncError(BaseErrorCode):
+    Code: int = 10043
+    Msg: str = '接口限流配置同步失败，请稍后重试'  # noqa: RUF001
+    HttpStatus: int = 503
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus
+
+
+class ApiRateLimitConfigConflictError(BaseErrorCode):
+    Code: int = 10044
+    Msg: str = '接口限流配置已被其他管理员更新，请刷新后重试'  # noqa: RUF001
+    HttpStatus: int = 409
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus
+
+
+class ApiRateLimitForbiddenError(BaseErrorCode):
+    Code: int = 10045
+    Msg: str = '仅全局超级管理员可管理接口限流配置'
+    HttpStatus: int = 403
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus

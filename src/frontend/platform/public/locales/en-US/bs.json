@@ -153,6 +153,72 @@
     "noAdminConsoleAccess": "You do not have access to the admin console."
   },
   "system": {
+    "apiRateLimit": {
+      "title": "API Rate Limits",
+      "globalTitle": "Global limits",
+      "globalHelp": "Used when no route rule matches. Blank or 0 disables that window.",
+      "routesTitle": "Route-specific limits",
+      "routesHelp": "A matching route rule fully overrides the global limits. All blank means unlimited.",
+      "addRoute": "Add route",
+      "createRoute": "Add route configuration",
+      "editRoute": "Edit",
+      "deleteRoute": "Delete",
+      "deleteConfirm": "Delete the rate limit configuration for {{path}}?",
+      "removeRoute": "Remove route",
+      "emptyRoutes": "No route-specific rules. All endpoints use the global limits.",
+      "noSearchResults": "No matching route configuration found.",
+      "searchPlaceholder": "Search path, method, match type, or message",
+      "query": "Search",
+      "reset": "Reset",
+      "pathPlaceholder": "Example: /api/v1/knowledge/{knowledge_id}",
+      "routeCatalog": {
+        "selectRoute": "Select API route",
+        "selectPlaceholder": "Browse and select a route by category",
+        "searchPlaceholder": "Search path, method, category, or endpoint name",
+        "categoryFilter": "Route category",
+        "methodFilter": "HTTP method filter",
+        "allCategories": "All categories",
+        "allMethods": "All methods",
+        "uncategorized": "Uncategorized",
+        "loading": "Loading routes…",
+        "loadFailed": "The route catalog could not be loaded. You can continue with manual input.",
+        "empty": "No matching API routes found.",
+        "manualInput": "Enter path manually",
+        "useCatalog": "Use route catalog",
+        "loadMore": "Load more",
+        "total": "{{total}} routes"
+      },
+      "anyMethod": "Any method",
+      "useGlobalMessage": "Use global message",
+      "message": "Rate limit message",
+      "routeMessagePlaceholder": "Leave blank to use the global message",
+      "unlimited": "Unlimited",
+      "limitInvalid": "A limit must be an integer from 1 to 10000000, or blank for unlimited.",
+      "ruleInvalid": "Route rule {{index}} is invalid or duplicated.",
+      "save": "Save configuration",
+      "saving": "Saving…",
+      "saved": "API rate limits were saved and activated.",
+      "defaultMessage": "Too many requests. Please try again later.",
+      "columns": {
+        "matchType": "Match type",
+        "method": "HTTP method",
+        "path": "Route path",
+        "limits": "Rate limits",
+        "message": "Message",
+        "actions": "Actions"
+      },
+      "dimensions": {
+        "second": "Requests per second",
+        "minute": "Requests per minute",
+        "hour": "Requests per hour",
+        "day": "Requests per day"
+      },
+      "matchTypes": {
+        "METHOD_PATH": "Method + path",
+        "PATH": "Exact path",
+        "PREFIX": "Path prefix"
+      }
+    },
     "userManagement": "User Management",
     "developerToken": {
       "title": "Developer Tokens",

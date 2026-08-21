@@ -56,6 +56,7 @@
 | INV-13 | `department.org_level` 全租户（或约定作用域）至多一个 `company` 节点；级联打标不得改写 `parent_id`/`path`/用户挂载；组织标签与知识空间 level 不得强绑 | Department.org_level, KnowledgeSpace | F070 |
 | INV-14 | 积分规则配置、全站调分与说明文案仅平台超级管理员可写；公共库管理员不得改规则；站内不做申诉流程；积分站内信文案为代码常量不可运营配置 | PointRule, PointCopy, UserPointLog | F070 |
 | INV-15 | 首钢门户范围内的动态部门展示统一为 `trim(short_name) or name`，部门路径逐级应用同一规则，搜索同时匹配正式名称和简称，展示排序按展示名称稳定排序；既有 `name` / `department_name` 继续表达正式名称，部门 ID、权限、同步匹配及历史审批快照不得被简称替代或批量改写。该不变量不适用于 Platform 组织架构、首页无部门 ID 的硬编码积分榜、Filelib/同步/遥测事实字段。 | Department, User, Knowledge, Permission, Approval, QAExpert | F083 |
+| INV-16 | `POST /api/v2/filelib/retrieve` 仅可为已通过 Developer Token 校验、且已按 F069 业务用户上下文通过文件 `view_file` 可见性过滤的检索结果签发原文件预签名 URL；签发不再要求 `download_file`，也不进入门户下载额度、审计、水印或分发限制链路。URL 是签发后 7 天内无需 Developer Token 的 Bearer 凭证，必须只指向原文件对象、不得记录完整签名；无权文件不得进入响应，文件记录或原对象缺失时对应 URL 必须为空。 | DeveloperToken, KnowledgeFile, Permission, MinIO | F084 |
 
 **规则**：
 - 新增不变量：先在此表追加，再写 AC
@@ -78,6 +79,7 @@
 | F066-token-configured-filelib-sync | F044, F047, F060 | 扩展开发者 Token 配置，收口 F047 的 11 个固定规则接口，复用 F060 动态空间解析器、Knowledge 目录只读契约与 PermissionService；不复制门户业务域配置或授权事实 |
 | F079-tag-management-console | F013 | 依赖多租户权限隔离基线；复用 workstation 现有审核标签可见空间解析与 knowledge 标签库服务；只为 `tag` / `review_tag` 追加审核留痕字段，不新增领域对象、不改 Link A/Link B 打标解析行为 |
 | F069-filelib-external-user-context | F004, F044 | 复用统一 PermissionService 与 Developer Token 认证；不新增身份或授权事实，只为四个 Filelib 查询接口组合调用资格与可选业务用户上下文；仅允许在未启用租户功能的部署发布 |
+| F084-filelib-retrieve-original-links | F069, F017 | 复用 F069 的 Token/业务用户权限上下文及知识检索可见性过滤，读取 KnowledgeFile 原对象并通过现有 MinIO 能力签发 7 天 URL；不修改门户下载、水印、额度或审计链路，沿用 F069 的无租户部署边界 |
 | F070-points-system | F002, F004, F009, F012, F025（发布审批结果只读）, 现有 knowledge/qa_expert/message/telemetry | 新建积分域；扩展 Department.org_level；挂钩只读/调用知识上传发布、收藏、采纳、日活与站内信，不取得其写所有权；外部协同办公同步不阻塞 MVP |
 | F082-department-short-name | F002, F009, F014/F015 | 扩展 F002 的 Department 字段与既有创建/详情/更新链路；简称由本地维护，F009/F014/F015 组织同步不得覆盖 |
 | F083-portal-department-display-name | F082, F025, F060, F064, F065 | 只读 F082 的 `Department.short_name`，统一首钢门户、嵌入式知识门户、成员管理、审批、专家和水印展示；保留正式名称、历史快照、权限与同步契约，不新增领域对象或数据迁移 |
@@ -119,3 +121,4 @@
 | 2026-08-06 | 登记 F070 积分系统：领域对象、Department.org_level 扩展、INV-11~14、模块编码 182；外部同步不阻塞 MVP | F070, F002, Department, Knowledge, Message |
 | 2026-08-10 | 登记 F082 部门简称：为 `Department.short_name` 建立字段扩展所有权，明确可空 64 字符、本地维护、同步不覆盖及不改变组织树/搜索/权限边界 | F082, F002, F009, F014, F015 |
 | 2026-08-10 | 登记 F083 门户部门简称统一展示：新增 INV-11 与 F082/F025/F060/F064/F065 依赖；门户动态展示、搜索、排序和路径使用简称回退，正式名称字段、历史快照、部门 ID、权限及同步事实保持不变 | F083, F082, User, Knowledge, Permission, Approval, QAExpert |
+| 2026-08-21 | 登记 F084 Filelib 检索原文件链接：新增 INV-16 与 F069/F017 依赖，明确 `view_file` 可见结果可获得 7 天原文件 Bearer URL，并显式绕过 `download_file`、门户下载额度、审计、水印和分发限制；无权或原对象缺失时不得签发 | F084, F069, F017, DeveloperToken, KnowledgeFile, Permission, MinIO |
