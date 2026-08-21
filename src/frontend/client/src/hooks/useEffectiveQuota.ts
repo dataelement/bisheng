@@ -16,21 +16,6 @@ export const EFFECTIVE_QUOTA_QUERY_KEY = ["effective-quota"] as const;
 
 /** Invalidate the shared quota cache after anything that changes usage or limits. */
 export function useRefreshEffectiveQuota() {
-  const queryClient = useQueryClient();
-  return useCallback(
-    () => queryClient.invalidateQueries({ queryKey: EFFECTIVE_QUOTA_QUERY_KEY }),
-    [queryClient],
-  );
-}
-
-/**
- * Shared cache key: the personal storage card and the upload guards must read
- * the same server result, so every consumer goes through this one query.
- */
-export const EFFECTIVE_QUOTA_QUERY_KEY = ["effective-quota"] as const;
-
-/** Invalidate the shared quota cache after anything that changes usage or limits. */
-export function useRefreshEffectiveQuota() {
     const queryClient = useQueryClient();
     return useCallback(
         () => queryClient.invalidateQueries({ queryKey: EFFECTIVE_QUOTA_QUERY_KEY }),
