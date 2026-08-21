@@ -16,11 +16,9 @@ import type {
 } from "~/api/permission";
 import { Button, Checkbox } from "~/components/ui";
 import { useLocalize } from "~/hooks";
-import { useAuthContext } from "~/hooks/AuthContext";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
-import { canManageLevel, viewerIsCreator } from "./topTierGuard";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
 
@@ -92,12 +90,6 @@ export function PermissionGrantTab({
   const handleIncludeChildrenChange =
     onIncludeChildrenChange ?? setInternalIncludeChildren;
 
-  const { user } = useAuthContext();
-  const isCreator = useMemo(
-    () => viewerIsCreator(assignees, user?.id),
-    [assignees, user?.id],
-  );
-
   useEffect(() => {
     let cancelled = false;
     setModelsLoading(true);
@@ -105,11 +97,7 @@ export function PermissionGrantTab({
     void getGrantablePermissionModels(resourceType, resourceId)
       .then((result) => {
         if (cancelled) return;
-        // Hiding the edit control on existing owner rows would be pointless if
-        // the same viewer could still grant a fresh one here.
-        const activeModels = result.filter(
-          (model) => model.active && canManageLevel(model.level, isCreator),
-        );
+        const activeModels = result.filter((model) => model.active);
         setModels(activeModels);
         setSelectedModelKey((current) =>
           activeModels.some((model) => model.key === current)
@@ -127,7 +115,7 @@ export function PermissionGrantTab({
     return () => {
       cancelled = true;
     };
-  }, [resourceId, resourceType, isCreator]);
+  }, [resourceId, resourceType]);
 
   useEffect(() => {
     setTargetModels({});
