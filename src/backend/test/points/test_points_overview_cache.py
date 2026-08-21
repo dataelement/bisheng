@@ -19,8 +19,7 @@ def _repo() -> SimpleNamespace:
     """返回带计数的假仓储，用于断言是否真的查了库。"""
     return SimpleNamespace(
         sum_total_issued=AsyncMock(return_value=100),
-        sum_total_balance=AsyncMock(return_value=70),
-        sum_violation_deducted=AsyncMock(return_value=-30),
+        sum_violation_deducted=AsyncMock(return_value=30),
         sum_tenant_earn=AsyncMock(return_value=42),
     )
 
@@ -47,12 +46,11 @@ async def test_overview_caches_and_serves_second_call_from_cache():
 
     assert first.total_issued == 100
     assert first.total_balance == 70
-    assert first.total_violation_deducted == -30
+    assert first.total_violation_deducted == 30
     assert first.total_issued_mom == 42
     assert second == first
-    # 第二次必须来自缓存：四个聚合各自只被调用一次。
+    # 第二次必须来自缓存：三个聚合各自只被调用一次。
     assert repo.sum_total_issued.await_count == 1
-    assert repo.sum_total_balance.await_count == 1
     assert repo.sum_violation_deducted.await_count == 1
     assert repo.sum_tenant_earn.await_count == 1
     assert store[f"{mod.OVERVIEW_CACHE_PREFIX}1"]["total_issued"] == 100
@@ -87,15 +85,20 @@ async def test_overview_cache_is_scoped_per_tenant():
 @pytest.mark.asyncio
 async def test_overview_falls_back_to_db_when_redis_unavailable(caplog):
     """Redis 不可用时概览仍可返回，不向上抛错。"""
+    import importlib
+
+    redis_manager_module = importlib.import_module("bisheng.core.cache.redis_manager")
+
     repo = _repo()
     service = PointsQueryService(session=None, repository=repo, ledger=None)
     client = AsyncMock(side_effect=RuntimeError("redis down"))
 
-    with patch("bisheng.core.cache.redis_manager.get_redis_client", client):
+    with patch.object(redis_manager_module, "get_redis_client", client):
         with caplog.at_level("WARNING", logger=mod.__name__):
             out = await service.overview(1, ADMIN)
 
     assert out.total_issued == 100
+    assert out.total_balance == 70
     assert out.total_issued_mom == 42
     assert repo.sum_total_issued.await_count == 1
     assert repo.sum_tenant_earn.await_count == 1
