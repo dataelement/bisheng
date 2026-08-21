@@ -87,7 +87,9 @@ async def reorder_tag_library(
         prev_library_id=prev_library_id,
         next_library_id=next_library_id,
     )
-    return resp_200()
+    # Truthy on purpose: the response interceptor hands callers the `data` field,
+    # so an empty body reaches them as null and reads as a failed request.
+    return resp_200(True)
 
 
 @router.get("/{library_id}/knowledges")
@@ -117,7 +119,7 @@ async def remove_tag_library_knowledge(
     svc: KnowledgeSpaceTagLibraryService = Depends(get_service),
 ) -> Any:
     await svc.remove_bound_knowledge(library_id, knowledge_id)
-    return resp_200()
+    return resp_200(True)
 
 
 @router.get("/{library_id}")
