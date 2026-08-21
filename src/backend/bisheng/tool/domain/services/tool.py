@@ -1,5 +1,6 @@
 import asyncio
 import json
+from dataclasses import replace
 from hashlib import sha256
 from time import perf_counter
 
@@ -12,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode import BaseErrorCode
 from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.errcode.tool import (
     ToolMcpSchemaError,
     ToolMcpStdioError,
@@ -28,7 +30,7 @@ from bisheng.common.services.config_service import settings
 from bisheng.core.context.tenant import DEFAULT_TENANT_ID, get_current_tenant_id
 from bisheng.mcp_manage.constant import McpClientType
 from bisheng.mcp_manage.manager import ClientManager
-from bisheng.permission.application.access import get_f048_resource_adapter
+from bisheng.permission.application.access import get_f048_resource_adapter, get_f048_runtime
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     require_business_action,
@@ -42,6 +44,8 @@ from bisheng.utils import get_request_ip, md5_hash
 from bisheng.utils.mask_data import JsonFieldMasker
 
 from .f048_tool_permission import ToolPermissionRecord
+
+_TOOL_VISIBLE_MAX_RESULTS = 5_000
 
 
 class ToolResourceAuthorizationPort:
@@ -81,18 +85,77 @@ class ToolServices(BaseModel):
         total_start = perf_counter()
         current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
         preset_filter = ToolPresetType(is_preset) if is_preset is not None else None
-        all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
+        permission_elapsed_ms = 0.0
+        type_db_elapsed_ms = 0.0
+        if action == "visible":
+            permission_start = perf_counter()
+            actor = await resolve_permission_actor(self.login_user)
+            if actor.current_tenant_id != current_tid:
+                actor = replace(actor, current_tenant_id=current_tid)
+            visible = await (await get_f048_runtime()).list_visible_objects(
+                actor,
+                resource_type="tool",
+                max_results=_TOOL_VISIBLE_MAX_RESULTS,
+            )
+            try:
+                candidate_ids = [int(resource_id) for resource_id in visible.object_ids]
+            except (TypeError, ValueError) as exc:
+                raise PermissionEnumerationIncompleteError(
+                    msg="Tool visibility enumeration returned a non-numeric resource ID",
+                ) from exc
+            permission_elapsed_ms = (perf_counter() - permission_start) * 1000
+            candidate_count = len(candidate_ids)
+            type_db_start = perf_counter()
+            all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
+                current_tid,
+                include_preset=is_preset is None,
+                is_preset=preset_filter,
+                tool_type_ids=candidate_ids,
+            )
+            type_db_elapsed_ms = (perf_counter() - type_db_start) * 1000
+            permission_strategy = "visible_ids_first"
+        else:
+            type_db_start = perf_counter()
+            all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
+                current_tid,
+                include_preset=is_preset is None,
+                is_preset=preset_filter,
+            )
+            type_db_elapsed_ms = (perf_counter() - type_db_start) * 1000
+            candidate_count = len(all_tool_type)
+            permission_start = perf_counter()
+            action_map = await batch_check_business_actions(
+                self.login_user,
+                resource_type="tool",
+                resource_ids=(one.id for one in all_tool_type),
+                actions=(action,),
+            )
+            all_tool_type = [one for one in all_tool_type if action in action_map.get(str(one.id), frozenset())]
+            permission_elapsed_ms = (perf_counter() - permission_start) * 1000
+            permission_strategy = "candidate_action_check"
+        logger.info(
+            "[perf][tool.list.permission] user_id={} tenant_id={} is_preset={} action={} strategy={} "
+            "candidates={} kept={} took_ms={:.2f}",
+            self.login_user.user_id,
             current_tid,
-            include_preset=is_preset is None,
-            is_preset=preset_filter,
+            is_preset,
+            action,
+            permission_strategy,
+            candidate_count,
+            len(all_tool_type),
+            permission_elapsed_ms,
         )
-        action_map = await batch_check_business_actions(
-            self.login_user,
-            resource_type="tool",
-            resource_ids=(one.id for one in all_tool_type),
-            actions=(action, "edit", "delete"),
+        logger.info(
+            "[perf][tool.list.dao] user_id={} tenant_id={} is_preset={} action={} phase=tool_types "
+            "candidates={} rows={} took_ms={:.2f}",
+            self.login_user.user_id,
+            current_tid,
+            is_preset,
+            action,
+            candidate_count,
+            len(all_tool_type),
+            type_db_elapsed_ms,
         )
-        all_tool_type = [one for one in all_tool_type if action in action_map.get(str(one.id), frozenset())]
         tool_type_id = [one.id for one in all_tool_type]
         res: list[GptsToolsTypeRead] = []
         tool_type_children = {}
@@ -101,28 +164,46 @@ class ToolServices(BaseModel):
             res.append(GptsToolsTypeRead.model_validate(one))
 
         # Get the list of tools under the corresponding category
+        children_db_start = perf_counter()
         tool_list = await GptsToolsDao.aget_list_by_type(tool_type_id)
+        children_db_elapsed_ms = (perf_counter() - children_db_start) * 1000
         for one in tool_list:
             tool_type_children[one.type].append(one)
 
+        enrich_start = perf_counter()
         for one in res:
-            action_codes = action_map.get(str(one.id), frozenset())
-            one.write = "edit" in action_codes
-            one.delete = "delete" in action_codes
             one.children = tool_type_children.get(one.id, [])
 
             # Data desensitization
             one.mask_sensitive_data()
+        enrich_elapsed_ms = (perf_counter() - enrich_start) * 1000
+
+        logger.info(
+            "[perf][tool.list.dao] user_id={} tenant_id={} is_preset={} action={} phase=children "
+            "parent_ids={} rows={} took_ms={:.2f}",
+            self.login_user.user_id,
+            current_tid,
+            is_preset,
+            action,
+            len(tool_type_id),
+            len(tool_list),
+            children_db_elapsed_ms,
+        )
 
         logger.info(
             "[perf][tool.list.total] user_id={} tenant_id={} is_preset={} action={} tool_types={} "
-            "children={} took_ms={:.2f}",
+            "children={} permission_ms={:.2f} type_db_ms={:.2f} children_db_ms={:.2f} "
+            "enrich_ms={:.2f} took_ms={:.2f}",
             self.login_user.user_id,
             current_tid,
             is_preset,
             action,
             len(res),
             len(tool_list),
+            permission_elapsed_ms,
+            type_db_elapsed_ms,
+            children_db_elapsed_ms,
+            enrich_elapsed_ms,
             (perf_counter() - total_start) * 1000,
         )
         return res
@@ -180,20 +261,13 @@ class ToolServices(BaseModel):
         return True
 
     async def update_tool_config(self, tool_type_id: int, extra: dict) -> bool:
+        if not self.login_user.is_global_super:
+            raise UnAuthorizedError()
+
         # Get Tool Categories
         tool_type = await GptsToolsDao.aget_one_tool_type(tool_type_id)
         if not tool_type or tool_type.is_preset != ToolPresetType.PRESET.value:
             raise NotFoundError()
-
-        current_tid = get_current_tenant_id() or DEFAULT_TENANT_ID
-        from bisheng.permission.application import is_tenant_admin
-
-        tenant_admin = current_tid != DEFAULT_TENANT_ID and await is_tenant_admin(
-            self.login_user.user_id,
-            current_tid,
-        )
-        if not (self.login_user.is_admin() or tenant_admin):
-            raise UnAuthorizedError()
 
         if tool_type.extra is None:
             tool_type.extra = "{}"

@@ -365,6 +365,7 @@ class GptsToolsDao(GptsToolsBase):
         tenant_id: int,
         include_preset: bool = True,
         is_preset: ToolPresetType = None,
+        tool_type_ids: list[int] | None = None,
     ) -> list[GptsToolsType]:
         """Get all tool categories under the current tenant.
 
@@ -376,6 +377,10 @@ class GptsToolsDao(GptsToolsBase):
             GptsToolsType.is_delete == 0,
             GptsToolsType.tenant_id == tenant_id,
         )
+        if tool_type_ids is not None:
+            if not tool_type_ids:
+                return []
+            statement = statement.where(col(GptsToolsType.id).in_(tool_type_ids))
         if is_preset is not None:
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         elif not include_preset:
