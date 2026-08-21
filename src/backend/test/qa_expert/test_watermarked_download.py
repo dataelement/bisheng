@@ -12,6 +12,11 @@ def test_parse_permanent_qa_object_and_tmp_uuid():
         default_bucket="bisheng",
         tmp_bucket="tmp-dir",
     )[0] == "tmp-dir"
+    assert parse_qa_asset_location(
+        "/tmp-dir/abcd1234ef567890abcd1234ef567890",
+        default_bucket="bisheng",
+        tmp_bucket="tmp-dir",
+    ) == ("tmp-dir", "abcd1234ef567890abcd1234ef567890")
 
 
 def test_parse_rejects_unrelated_paths():
