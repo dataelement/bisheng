@@ -91,11 +91,36 @@ class TestDao:
         assert bool(row.frontend_hidden) is False
         assert bool(row.enabled) is True  # AC-04
 
-    async def test_hidden_skill_can_still_be_disabled(self, dao):
+    async def test_disabling_a_hidden_skill_also_unhides_it(self, dao):
+        """AC-03 (revised): disabling is still allowed, and it clears hiding too.
+
+        The original rule let the pair rest at 隐藏=on / 状态=off and leaned on
+        "disable wins" downstream. In the console that reads as a bug — the
+        switches say "runs on every task" while the row dispatches nowhere — so
+        the state is now unreachable from either switch rather than merely
+        harmless. AC-09 stays as the defence-in-depth guard for rows already
+        written that way.
+        """
         await dao.create(_skill("docx", enabled=True, frontend_hidden=True))
         assert await dao.set_enabled("docx", False) is True
         row = await dao.get_by_name("docx")
-        assert bool(row.enabled) is False and bool(row.frontend_hidden) is True  # AC-03
+        assert bool(row.enabled) is False
+        assert bool(row.frontend_hidden) is False
+
+    async def test_enabling_does_not_touch_hiding(self, dao):
+        """Only the disabling direction is coupled. Re-enabling a skill must not
+        resurrect a hidden flag the operator turned off."""
+        await dao.create(_skill("docx", enabled=False, frontend_hidden=False))
+        assert await dao.set_enabled("docx", True) is True
+        row = await dao.get_by_name("docx")
+        assert bool(row.enabled) is True
+        assert bool(row.frontend_hidden) is False
+
+    async def test_disabling_a_visible_skill_leaves_hiding_off(self, dao):
+        await dao.create(_skill("docx", enabled=True, frontend_hidden=False))
+        assert await dao.set_enabled("docx", False) is True
+        row = await dao.get_by_name("docx")
+        assert bool(row.enabled) is False and bool(row.frontend_hidden) is False
 
     async def test_hidden_write_is_tenant_scoped(self, dao):
         # Insert the other tenant's row under ITS context (a leaked global

@@ -195,17 +195,31 @@ class LinsightSkillDao:
 
     @classmethod
     async def set_enabled(cls, name: str, enabled: bool) -> bool:
+        """Flip the enabled flag; disabling also clears ``frontend_hidden``.
+
+        The two flags carry one invariant: hidden ⇒ enabled. Hiding means "the
+        user never picks this, the server always dispatches it", which a disabled
+        skill cannot honour — it dispatches nowhere. The pair was allowed to sit
+        in that contradictory state before, and it read as a bug in the console:
+        a row with hidden=on / enabled=off does nothing at all, while the switch
+        positions say it runs on every task. Clearing it here makes the console
+        state describe the runtime again, and keeps the two directions symmetric
+        with ``set_frontend_hidden``, which enables in the same way.
+        """
         # Bulk UPDATE is not intercepted by the do_orm_execute tenant filter
         # (it only rewrites SELECTs), so scope the write to the current tenant
         # explicitly — otherwise toggling a name shared with Root (or any
         # same-named skill in another tenant) would flip every tenant's row.
         tid = get_current_tenant_id() or DEFAULT_TENANT_ID
+        values: dict = {"enabled": enabled, "update_time": datetime.now()}
+        if not enabled:
+            values["frontend_hidden"] = False
         async with get_async_db_session() as session:
             statement = (
                 update(LinsightSkill)
                 .where(col(LinsightSkill.name) == name)
                 .where(col(LinsightSkill.tenant_id) == tid)
-                .values(enabled=enabled, update_time=datetime.now())
+                .values(**values)
             )
             result = await session.exec(statement)
             await session.commit()
@@ -218,6 +232,10 @@ class LinsightSkillDao:
         Turning hiding ON also enables the skill in the SAME statement (AC-02:
         one atomic save — a hidden-but-disabled row can never be observed from
         this transition). Turning it OFF leaves ``enabled`` untouched (AC-04).
+
+        The mirror of this rule lives in :meth:`set_enabled`, which clears hiding
+        when a skill is disabled; together they hold the invariant hidden ⇒
+        enabled from whichever switch the operator reaches for.
         """
         tid = get_current_tenant_id() or DEFAULT_TENANT_ID
         values: dict = {"frontend_hidden": frontend_hidden, "update_time": datetime.now()}

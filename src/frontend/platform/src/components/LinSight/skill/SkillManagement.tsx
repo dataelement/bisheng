@@ -99,12 +99,21 @@ export function SkillManagement({ scopeVersion = 0, entryEnabled = false, onEntr
 
     const handleToggle = (skill: SkillBrief, enabled: boolean) => {
         // Optimistic flip: takes effect immediately in the end-user picker (FR-5.9).
-        setSkills(prev => prev.map(s => s.name === skill.name ? { ...s, enabled } : s));
+        // Disabling clears the frontend-hidden flag with it — hiding means "the
+        // user never picks this, the server always dispatches it", which a
+        // disabled skill cannot honour. The server does both in one UPDATE, so
+        // mirror it here or the row keeps showing a hidden flag that no longer
+        // exists until the next reload.
+        setSkills(prev => prev.map(s => s.name === skill.name
+            ? { ...s, enabled, frontend_hidden: enabled ? s.frontend_hidden : false }
+            : s));
         captureAndAlertRequestErrorHoc(skillApi.setSkillStatus(skill.name, enabled)).then(res => {
             if (res) {
                 toast({ variant: 'success', description: enabled ? t('skillManage.enabledToast') : t('skillManage.disabledToast') });
             } else {
-                setSkills(prev => prev.map(s => s.name === skill.name ? { ...s, enabled: !enabled } : s));
+                setSkills(prev => prev.map(s => s.name === skill.name
+                    ? { ...s, enabled: skill.enabled, frontend_hidden: skill.frontend_hidden }
+                    : s));
             }
         });
     };
