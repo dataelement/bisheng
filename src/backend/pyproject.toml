@@ -162,6 +162,9 @@ known-first-party = ["bisheng", "bisheng_langchain"]
 # ambiguous-unicode checks. Scoped to these files only.
 "bisheng/knowledge/domain/services/portal_hot_search_*.py" = ["RUF001", "RUF002", "RUF003"]
 "test/knowledge/test_portal_hot_search_*.py" = ["RUF001", "RUF002", "RUF003"]
+# PDF watermark copy and layout comments use Chinese punctuation.
+"bisheng/knowledge/pdf/watermark.py" = ["RUF001", "RUF002", "RUF003"]
+"test/knowledge/pdf/test_pdf_watermark.py" = ["RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.format]
 quote-style = "double"
