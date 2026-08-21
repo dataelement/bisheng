@@ -60,16 +60,23 @@ const TRIGGER_BASE =
     'flex shrink-0 items-center justify-center transition-colors focus-visible:outline-none ' +
     'focus-visible:ring-2 focus-visible:ring-blue-500/40 disabled:cursor-not-allowed disabled:opacity-50';
 
+// `data-[state=open]` mirrors each hover rule: once the menu is up the pointer
+// has left the trigger for the floating panel, and a button that snaps back to
+// its resting grey while its own menu is open reads as "nothing is happening".
 const TRIGGER_VARIANT: Record<SaveAsVariant, string> = {
     // Design 12221-40681: 14px glyph + 12px label, 8px/2px padding, 8px radius.
     // No hover background — the pointer is answered by the text itself going
     // from a resting grey to near-black, so the button never stacks a second
     // fill on top of the row's own hover grey.
-    labeled: 'gap-1 rounded-lg px-2 py-0.5 text-xs leading-5 text-[#8C8C8C] hover:text-[#212121]',
+    labeled:
+        'gap-1 rounded-lg px-2 py-0.5 text-xs leading-5 text-[#8C8C8C] hover:text-[#212121] ' +
+        'data-[state=open]:text-[#212121]',
     // A quiet grey glyph that turns brand on its own hover — color only, no
     // hover fill (same rule as 'labeled').
-    inline: 'size-6 rounded-md text-[#8C8C8C] hover:text-blue-500',
-    toolbar: 'size-7 rounded-lg text-[#8C8C8C] hover:bg-gray-100 hover:text-blue-500',
+    inline: 'size-6 rounded-md text-[#8C8C8C] hover:text-blue-500 data-[state=open]:text-blue-500',
+    toolbar:
+        'size-7 rounded-lg text-[#8C8C8C] hover:bg-gray-100 hover:text-blue-500 ' +
+        'data-[state=open]:bg-gray-100 data-[state=open]:text-blue-500',
 };
 
 // Glyph size per placement: 14px beside the "另存为" label and for the bare

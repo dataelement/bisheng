@@ -54,7 +54,9 @@ export function WorkspacePanel({
             key={file.file_id || file.file_url}
             role="button"
             tabIndex={0}
-            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-2 pl-1 pr-1 hover:bg-[#F7F7F7]"
+            /* has-[[data-state=open]]: hold the hover look while this row's own
+               "另存为" menu is open — the pointer is on the panel by then. */
+            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-2 pl-1 pr-1 hover:bg-[#F7F7F7] has-[[data-state=open]]:bg-[#F7F7F7]"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
@@ -62,7 +64,7 @@ export function WorkspacePanel({
             { }
             {/* <FileIcon type={getFileExtension(file.file_name) as any} className="size-5 min-w-5" /> */}
             <span className="flex min-w-0 items-center gap-1.5">
-                <span className="min-w-0 truncate text-sm text-[#212121] group-hover/row:text-blue-500">
+                <span className="min-w-0 truncate text-sm text-[#212121] group-hover/row:text-blue-500 group-has-[[data-state=open]]/row:text-blue-500">
                     {file.file_name}
                 </span>
                 <NewTabHint file={file} />

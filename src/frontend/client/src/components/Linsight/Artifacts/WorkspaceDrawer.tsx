@@ -32,7 +32,9 @@ export function WorkspaceDrawer({ open, onOpenChange, files, versionId, onPrevie
             key={file.file_id || file.file_url}
             role="button"
             tabIndex={0}
-            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-2.5 pl-2 pr-1 hover:bg-gray-50"
+            /* has-[[data-state=open]]: hold the hover look while this row's own
+               "另存为" menu is open — the pointer is on the panel by then. */
+            className="group/row flex cursor-pointer items-center justify-between gap-2 rounded-lg py-2.5 pl-2 pr-1 hover:bg-gray-50 has-[[data-state=open]]:bg-gray-50"
             onClick={() => onPreview(file)}
             onKeyDown={(e) => e.key === 'Enter' && onPreview(file)}
         >
