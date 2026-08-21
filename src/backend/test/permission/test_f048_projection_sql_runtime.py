@@ -126,7 +126,11 @@ def _plan() -> ProjectionPlan:
     )
 
 
-async def _seed_projecting_state(session_factory) -> int:
+async def _seed_projecting_state(
+    session_factory,
+    *,
+    projection_state: str = "PROJECTING",
+) -> int:
     with bypass_tenant_filter():
         async with session_factory() as session:
             async with session.begin():
@@ -154,7 +158,7 @@ async def _seed_projecting_state(session_factory) -> int:
                     resource_id="42",
                     mode="CUSTOM",
                     version=3,
-                    projection_state="PROJECTING",
+                    projection_state=projection_state,
                     operation_id=int(operation.id),
                 )
                 grant = PermissionGrant(
@@ -293,6 +297,31 @@ async def test_resource_finalizer_atomically_converges_and_replays(
         ("INACTIVE", 5),
     ]
     assert [row.state for row in visible_sources] == ["ACTIVE", "RETIRED"]
+
+
+@pytest.mark.asyncio
+async def test_resource_finalizer_forward_recovers_failed_closed_mirror(
+    session_factory,
+) -> None:
+    operation_id = await _seed_projecting_state(
+        session_factory,
+        projection_state="FAILED_CLOSED",
+    )
+    guard = SqlProjectionScopeGuard()
+
+    assert await guard.is_failed_closed_recovery_scope(_plan(), operation_id) is True
+    await SqlProjectionFinalizer().finalize(_plan(), operation_id)
+
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            mode = (await session.execute(select(ResourcePermissionMode))).scalars().one()
+            grant = (await session.execute(select(PermissionGrant))).scalars().one()
+    assert (mode.version, mode.projection_state, mode.mode) == (
+        4,
+        "CURRENT",
+        "INHERIT",
+    )
+    assert (grant.state, grant.projection_state) == ("ACTIVE", "CURRENT")
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+import json
+from dataclasses import dataclass, replace
+from hashlib import sha256
 from typing import Protocol
 
 from loguru import logger
@@ -54,6 +56,12 @@ class ProjectionScopeGuardPort(Protocol):
         operation_id: int,
     ) -> bool: ...
 
+    async def is_failed_closed_recovery_scope(
+        self,
+        plan: ProjectionPlan,
+        operation_id: int,
+    ) -> bool: ...
+
     async def fail_closed(self, plan: ProjectionPlan, reason: str) -> None: ...
 
 
@@ -97,6 +105,28 @@ class _NullFinalizer:
 class _NullEvents:
     async def emit(self, name: str, fields: dict) -> None:
         return None
+
+
+@dataclass(frozen=True, slots=True)
+class FailedClosedRecoveryPreview:
+    """Exact terminal-state correction proposed for one fenced resource."""
+
+    operation_id: int
+    tenant_id: int
+    operation_type: str
+    scope_type: str
+    scope_key: str
+    expected_version: int
+    target_version: int
+    store_id: str
+    model_id: str
+    operation_status: str
+    request_checksum: str
+    after_checksum: str
+    observed_state: str
+    target_tuple_count: int
+    correction_deltas: tuple[ProjectionTupleDelta, ...]
+    confirmation_checksum: str
 
 
 def restore_projection_plan(
@@ -268,6 +298,153 @@ class ProjectionService:
         )
         plan = restore_projection_plan(operation, tuple_rows)
         return await self.reconcile(plan)
+
+    async def inspect_failed_closed_recovery(
+        self,
+        operation_id: int,
+    ) -> FailedClosedRecoveryPreview:
+        """Build a read-only, checksum-bound forward recovery proposal."""
+
+        operation, plan = await self._load_operation_plan(operation_id)
+        status = str(operation.status)
+        if status not in {
+            ProjectionOperationStatus.FAILED_CLOSED.value,
+            ProjectionOperationStatus.COMMITTED.value,
+        }:
+            raise PermissionPublishNotReadyError(
+                msg=f"Projection operation is not recoverable from status {status}",
+            )
+        if plan.scope_type != "resource":
+            raise PermissionPublishNotReadyError(
+                msg="FAILED_CLOSED forward recovery only supports resource scopes",
+            )
+
+        correction = await self._terminal_correction(plan.deltas)
+        observed_state = "AFTER" if not correction else await self._classify(plan.deltas)
+        confirmation_checksum = self._recovery_confirmation_checksum(
+            operation=operation,
+            correction=correction,
+        )
+        return FailedClosedRecoveryPreview(
+            operation_id=int(operation.id),
+            tenant_id=plan.tenant_id,
+            operation_type=plan.operation_type,
+            scope_type=plan.scope_type,
+            scope_key=plan.scope_key,
+            expected_version=plan.expected_version,
+            target_version=plan.target_version,
+            store_id=plan.store_id,
+            model_id=plan.model_id,
+            operation_status=status,
+            request_checksum=operation.request_checksum,
+            after_checksum=operation.after_checksum,
+            observed_state=observed_state,
+            target_tuple_count=len(
+                projection_state_expectations(plan.deltas, after=True),
+            ),
+            correction_deltas=correction,
+            confirmation_checksum=confirmation_checksum,
+        )
+
+    async def recover_failed_closed_operation(
+        self,
+        operation_id: int,
+        *,
+        confirmation_checksum: str,
+    ) -> ProjectionOutcome:
+        """Forward-complete one fenced resource to its frozen AFTER state."""
+
+        operation, plan = await self._load_operation_plan(operation_id)
+        request_checksum = projection_request_checksum(plan)
+        status = str(operation.status)
+        if status == ProjectionOperationStatus.FINALIZED.value:
+            return self._outcome(
+                plan,
+                operation,
+                request_checksum=request_checksum,
+                idempotent=True,
+                reconciled=True,
+            )
+
+        preview = await self.inspect_failed_closed_recovery(operation_id)
+        if preview.confirmation_checksum != confirmation_checksum:
+            raise PermissionVersionConflictError(
+                msg="FAILED_CLOSED recovery confirmation checksum changed",
+            )
+        if len(preview.correction_deltas) > MAX_ATOMIC_TUPLES:
+            raise PermissionPublishNotReadyError(
+                msg=(
+                    "FAILED_CLOSED recovery requires more than "
+                    f"{MAX_ATOMIC_TUPLES} atomic tuple corrections"
+                ),
+            )
+        if not await self._scope_guard.is_failed_closed_recovery_scope(
+            plan,
+            int(operation.id),
+        ):
+            raise PermissionPublishNotReadyError(
+                msg="FAILED_CLOSED resource scope no longer owns the operation fence",
+            )
+
+        if status == ProjectionOperationStatus.COMMITTED.value:
+            if preview.correction_deltas:
+                raise PermissionProjectionFailedError(
+                    msg="Committed recovery operation no longer has its full AFTER state",
+                )
+            return await self._finalize(
+                plan,
+                operation,
+                request_checksum=request_checksum,
+                reconciled=True,
+            )
+
+        if not await self._marker.is_ready():
+            raise PermissionPublishNotReadyError(
+                msg="Permission recent-change marker sentinel is not ready",
+            )
+        try:
+            await self._marker.arm(plan)
+            commit_checksum = (
+                await self._write(preview.correction_deltas)
+                if preview.correction_deltas
+                else operation.after_checksum
+            )
+        except Exception as exc:
+            if not await self._is_after(plan.deltas):
+                await self._emit(plan, operation, "FAILED_CLOSED_RECOVERY_FAILED", exc)
+                raise PermissionProjectionFailedError(exception=exc) from exc
+            commit_checksum = operation.after_checksum
+
+        if not await self._is_after(plan.deltas):
+            error = PermissionProjectionFailedError(
+                msg="FAILED_CLOSED recovery did not reach the frozen AFTER state",
+            )
+            await self._emit(plan, operation, "FAILED_CLOSED_RECOVERY_FAILED", error)
+            raise error
+        await self._transition(
+            operation,
+            expected=ProjectionOperationStatus.FAILED_CLOSED.value,
+            target=ProjectionOperationStatus.COMMITTED.value,
+            commit_checksum=commit_checksum,
+        )
+        return await self._finalize(
+            plan,
+            operation,
+            request_checksum=request_checksum,
+            reconciled=True,
+        )
+
+    async def _load_operation_plan(
+        self,
+        operation_id: int,
+    ) -> tuple[PermissionProjectionOperation, ProjectionPlan]:
+        operation = await self._repository.aget_operation(operation_id)
+        if operation is None:
+            raise PermissionPublishNotReadyError(
+                msg="Projection operation does not exist",
+            )
+        tuple_rows = await self._repository.aget_operation_tuples(operation_id)
+        return operation, restore_projection_plan(operation, tuple_rows)
 
     async def _run_prepared(
         self,
@@ -494,6 +671,63 @@ class ProjectionService:
             consistency=HIGHER_CONSISTENCY,
         )
         return tuple(delta for delta in deltas if (delta.key in present) != (delta.action == "WRITE"))
+
+    async def _terminal_correction(
+        self,
+        deltas: tuple[ProjectionTupleDelta, ...],
+    ) -> tuple[ProjectionTupleDelta, ...]:
+        """Return one exact mutation for every tuple not at terminal AFTER."""
+
+        expected = projection_state_expectations(deltas, after=True)
+        representatives: dict[tuple[str, str, str], ProjectionTupleDelta] = {}
+        for delta in deltas:
+            representatives[delta.key] = delta
+        present = await self._fga.read_present(
+            tuple(representatives[key] for key in sorted(representatives)),
+            consistency=HIGHER_CONSISTENCY,
+        )
+        correction: list[ProjectionTupleDelta] = []
+        for sequence, (key, should_exist) in enumerate(sorted(expected.items())):
+            if (key in present) == should_exist:
+                continue
+            correction.append(
+                replace(
+                    representatives[key],
+                    phase="COMMIT",
+                    sequence=sequence,
+                    action="WRITE" if should_exist else "DELETE",
+                )
+            )
+        return tuple(correction)
+
+    @staticmethod
+    def _recovery_confirmation_checksum(
+        *,
+        operation: PermissionProjectionOperation,
+        correction: tuple[ProjectionTupleDelta, ...],
+    ) -> str:
+        payload = {
+            "after_checksum": operation.after_checksum,
+            "correction": [
+                {
+                    "action": delta.action,
+                    "object": delta.object,
+                    "relation": delta.relation,
+                    "user": delta.user,
+                }
+                for delta in correction
+            ],
+            "operation_id": int(operation.id),
+            "operation_status": str(operation.status),
+            "request_checksum": operation.request_checksum,
+        }
+        canonical = json.dumps(
+            payload,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return sha256(canonical.encode("utf-8")).hexdigest()
 
     async def _classify(
         self,

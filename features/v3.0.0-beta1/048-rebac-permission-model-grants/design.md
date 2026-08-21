@@ -1057,8 +1057,15 @@ higher consistency。Grant/mode/lifecycle command 仍只允许从 `CURRENT` clai
 `scripts/reconcile_f048_projection_operations.py --tenant-id <tenant> <operation...>`；默认
 dry-run 必须先核对 ledger、CURRENT Catalog 的 Store/model pin 与 scope fence，只有显式
 `--apply` 才逐 operation 调用领域 `reconcile_operation()`。脚本不得直接 UPDATE operation
-状态、资源镜像或增删 OpenFGA tuple；`FAILED_CLOSED`、pin/scope 不匹配或 ledger 不完整时
-保持阻断并转人工分析。重复传入 `FINALIZED` operation 只验证并跳过。
+状态、资源镜像或增删 OpenFGA tuple；普通 reconcile 对 `FAILED_CLOSED`、pin/scope 不匹配或
+ledger 不完整继续保持阻断。`FAILED_CLOSED` resource operation 经人工确认其冻结请求仍是目标后，
+改用 `recover_f048_failed_closed_projection.py`：先 dry-run 用 higher consistency 读取 exact tuple，
+操作者只输入 tenant/resource type/resource ID，脚本从资源 mode row 的 operation fence 解析 ledger；
+按 ledger AFTER 集计算单次原子前向修正并输出绑定 live correction 的确认 checksum。apply 必须同时
+确认 Store、model 和该 checksum，任一资源绑定或 tuple 事实漂移即拒绝。领域恢复入口只补缺失 WRITE/多余
+DELETE，不重放已满足的 visible/action tuple；完整 AFTER verify 后才执行原 SQL finalizer，并以
+`FINALIZED + CURRENT(target_version)` 收口。超过 90 个 terminal correction、外部业务 scope、
+scope/version/operation 不匹配继续转人工分析。重复传入 `FINALIZED` operation 只验证并跳过。
 
 #### Mode switch
 

@@ -116,6 +116,7 @@ class FakeScopeGuard:
     def __init__(self) -> None:
         self.current = True
         self.fenced = False
+        self.recoverable = True
         self.reserve_error: Exception | None = None
         self.reservations: list[tuple[str, int]] = []
 
@@ -135,6 +136,15 @@ class FakeScopeGuard:
     ) -> bool:
         assert operation_id > 0
         return self.current
+
+    async def is_failed_closed_recovery_scope(
+        self,
+        plan: ProjectionPlan,
+        operation_id: int,
+    ) -> bool:
+        assert plan.scope_type == "resource"
+        assert operation_id > 0
+        return self.recoverable
 
     async def fail_closed(self, plan: ProjectionPlan, reason: str) -> None:
         assert reason
@@ -533,6 +543,90 @@ async def test_mixed_commit_result_is_failed_closed() -> None:
         await service.execute(plan)
     assert repository.operation.status == ProjectionOperationStatus.FAILED_CLOSED
     assert scope.fenced is True
+
+
+@pytest.mark.asyncio
+async def test_failed_closed_recovery_writes_only_terminal_difference() -> None:
+    new_manager = ProjectionTupleDelta(
+        phase="COMMIT",
+        sequence=0,
+        action="WRITE",
+        user="user:841",
+        relation="ordinary_assignee",
+        object="permission_grant:g-manager",
+    )
+    old_editor = ProjectionTupleDelta(
+        phase="COMMIT",
+        sequence=1,
+        action="DELETE",
+        user="user:841",
+        relation="ordinary_assignee",
+        object="permission_grant:g-editor",
+    )
+    existing_visible = ProjectionTupleDelta(
+        phase="COMMIT",
+        sequence=2,
+        action="WRITE",
+        user="user:841",
+        relation="visible",
+        object="knowledge_space:4166",
+    )
+    plan = _plan(
+        new_manager,
+        old_editor,
+        existing_visible,
+        idempotency_key="recover-4166",
+        change_item_count=1,
+    )
+    service, repository, _, _, fga, finalizer, _ = _service(plan)
+    fga.present.add(_key(existing_visible))
+    fga.timeout_mode = "before"
+
+    with pytest.raises(PermissionProjectionFailedError):
+        await service.execute(plan)
+    assert repository.operation.status == ProjectionOperationStatus.FAILED_CLOSED
+
+    preview = await service.inspect_failed_closed_recovery(int(repository.operation.id))
+    assert preview.scope_key == "workflow:42"
+    assert preview.observed_state == "MIXED"
+    assert {_key(row) for row in preview.correction_deltas} == {
+        _key(new_manager),
+        _key(old_editor),
+    }
+
+    fga.reject_existing_writes = True
+    outcome = await service.recover_failed_closed_operation(
+        int(repository.operation.id),
+        confirmation_checksum=preview.confirmation_checksum,
+    )
+
+    assert outcome.status == ProjectionOperationStatus.FINALIZED
+    assert repository.operation.status == ProjectionOperationStatus.FINALIZED
+    writes, deletes = fga.calls[-1]
+    assert tuple(_key(row) for row in writes) == (_key(new_manager),)
+    assert tuple(_key(row) for row in deletes) == (_key(old_editor),)
+    assert _key(existing_visible) in fga.present
+    assert finalizer.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_failed_closed_recovery_rejects_stale_confirmation() -> None:
+    plan = _plan(_delta(1), _delta(2))
+    service, repository, _, _, fga, _, _ = _service(plan)
+    fga.timeout_mode = "mixed"
+    with pytest.raises(PermissionProjectionFailedError):
+        await service.execute(plan)
+
+    preview = await service.inspect_failed_closed_recovery(int(repository.operation.id))
+    fga.present.add(_key(_delta(2)))
+
+    with pytest.raises(PermissionVersionConflictError, match="confirmation checksum"):
+        await service.recover_failed_closed_operation(
+            int(repository.operation.id),
+            confirmation_checksum=preview.confirmation_checksum,
+        )
+
+    assert repository.operation.status == ProjectionOperationStatus.FAILED_CLOSED
 
 
 @pytest.mark.asyncio
