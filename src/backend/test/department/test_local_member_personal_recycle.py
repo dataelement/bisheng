@@ -53,8 +53,6 @@ async def test_recycle_moves_content_and_soft_deletes_batch():
 
     space_service = SimpleNamespace(
         find_or_create_folder_for_file_sync=AsyncMock(return_value=user_folder),
-        move_folder=AsyncMock(),
-        move_file_folder=AsyncMock(),
     )
     recycle_service = SimpleNamespace(
         soft_delete_member_personal_batch=AsyncMock(return_value="batch-1"),
@@ -68,6 +66,8 @@ async def test_recycle_moves_content_and_soft_deletes_batch():
         return [moved_folder, moved_file]
 
     sync_metadata = AsyncMock()
+    move_folder = AsyncMock()
+    move_file = AsyncMock()
     with (
         patch(
             "bisheng.department.domain.services.local_member_personal_recycle._pick_host_space_id",
@@ -102,6 +102,14 @@ async def test_recycle_moves_content_and_soft_deletes_batch():
             return_value=recycle_service,
         ),
         patch(
+            "bisheng.department.domain.services.local_member_personal_recycle._move_root_folder_for_personal_recycle",
+            move_folder,
+        ),
+        patch(
+            "bisheng.department.domain.services.local_member_personal_recycle._move_root_file_for_personal_recycle",
+            move_file,
+        ),
+        patch(
             "bisheng.department.domain.services.local_member_personal_recycle.bypass_tenant_filter",
             nullcontext,
         ),
@@ -113,8 +121,20 @@ async def test_recycle_moves_content_and_soft_deletes_batch():
             operator=SimpleNamespace(user_id=1),
         )
 
-    space_service.move_folder.assert_awaited_once_with(10, 902, 900)
-    space_service.move_file_folder.assert_awaited_once_with(10, 901, 900)
+    move_folder.assert_awaited_once()
+    assert move_folder.await_args.kwargs == {
+        "space_id": 10,
+        "folder_id": 902,
+        "target_folder_id": 900,
+        "login_user": move_folder.await_args.kwargs["login_user"],
+    }
+    move_file.assert_awaited_once()
+    assert move_file.await_args.kwargs == {
+        "space_id": 10,
+        "file_id": 901,
+        "target_folder_id": 900,
+        "login_user": move_file.await_args.kwargs["login_user"],
+    }
     sync_metadata.assert_awaited_once()
     recycle_service.soft_delete_member_personal_batch.assert_awaited_once_with(
         recycle_root_id=900,
@@ -152,3 +172,52 @@ async def test_pick_host_space_prefers_non_favorite_with_more_files():
         host_id = await _pick_host_space_id([10, 20])
 
     assert host_id == 20
+
+
+@pytest.mark.asyncio
+async def test_move_root_file_for_personal_recycle_updates_path_without_entry_resolver():
+    from bisheng.common.dependencies.user_deps import UserPayload
+    from bisheng.department.domain.services.local_member_personal_recycle import (
+        _move_root_file_for_personal_recycle,
+    )
+
+    login_user = UserPayload(user_id=1, user_name="admin", tenant_id=5)
+    file_record = SimpleNamespace(
+        id=901,
+        knowledge_id=10,
+        file_type=1,
+        file_level_path="",
+        level=0,
+        reference_document_id=777,
+        updater_id=None,
+        updater_name=None,
+    )
+    target_folder = SimpleNamespace(
+        id=900,
+        knowledge_id=10,
+        file_type=0,
+        file_level_path="",
+        level=0,
+    )
+    updated = AsyncMock()
+
+    with (
+        patch(
+            "bisheng.department.domain.services.local_member_personal_recycle.KnowledgeFileDao.query_by_id",
+            AsyncMock(side_effect=[file_record, target_folder]),
+        ),
+        patch(
+            "bisheng.department.domain.services.local_member_personal_recycle.KnowledgeFileDao.async_update",
+            updated,
+        ),
+    ):
+        await _move_root_file_for_personal_recycle(
+            space_id=10,
+            file_id=901,
+            target_folder_id=900,
+            login_user=login_user,
+        )
+
+    assert file_record.file_level_path == "/900"
+    assert file_record.level == 1
+    updated.assert_awaited_once_with(file_record)

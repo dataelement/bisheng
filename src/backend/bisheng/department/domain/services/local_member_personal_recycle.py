@@ -14,7 +14,7 @@ from bisheng.core.database import get_async_db_session
 from bisheng.database.constants import AdminRole
 from bisheng.department.domain.services.local_member_asset_transfer import _resolve_transfer_operator
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
-from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile, KnowledgeFileDao
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
 from bisheng.knowledge.domain.services.knowledge_recycle_service import KnowledgeRecycleService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
@@ -152,6 +152,91 @@ async def _sync_recycled_file_metadata(
             await session.commit()
 
 
+async def _move_root_folder_for_personal_recycle(
+    *,
+    space_id: int,
+    folder_id: int,
+    target_folder_id: int,
+    login_user: UserPayload,
+) -> None:
+    """Move a folder subtree by path only; skips document-entry resolution."""
+    folder = await KnowledgeFileDao.query_by_id(folder_id)
+    if (
+        folder is None
+        or int(folder.knowledge_id) != int(space_id)
+        or int(folder.file_type) != FileType.DIR.value
+    ):
+        return
+
+    target = await KnowledgeFileDao.query_by_id(target_folder_id)
+    if (
+        target is None
+        or int(target.knowledge_id) != int(space_id)
+        or int(target.file_type) != FileType.DIR.value
+    ):
+        return
+
+    old_folder_path = folder.file_level_path or ""
+    old_level = int(folder.level or 0)
+    old_prefix = f"{old_folder_path}/{folder_id}" if old_folder_path else f"/{folder_id}"
+
+    target_path = target.file_level_path or ""
+    if target_path == old_prefix or target_path.startswith(f"{old_prefix}/"):
+        return
+
+    new_parent_path = f"{target_path}/{target_folder_id}" if target_path else f"/{target_folder_id}"
+    new_level = int(target.level or 0) + 1
+    new_prefix = f"{new_parent_path}/{folder_id}" if new_parent_path else f"/{folder_id}"
+    level_diff = new_level - old_level
+
+    folder.file_level_path = new_parent_path
+    folder.level = new_level
+    folder.updater_id = int(login_user.user_id)
+    folder.updater_name = str(login_user.user_name or login_user.user_id)
+    await SpaceFileDao.update_descendants_path(
+        space_id=int(space_id),
+        old_prefix=old_prefix,
+        new_prefix=new_prefix,
+        level_diff=level_diff,
+        folder=folder,
+    )
+
+
+async def _move_root_file_for_personal_recycle(
+    *,
+    space_id: int,
+    file_id: int,
+    target_folder_id: int,
+    login_user: UserPayload,
+) -> None:
+    """Move a root file by path only; skips document-entry resolution."""
+    file_record = await KnowledgeFileDao.query_by_id(file_id)
+    if (
+        file_record is None
+        or int(file_record.knowledge_id) != int(space_id)
+        or int(file_record.file_type) == FileType.DIR.value
+    ):
+        return
+
+    target_folder = await KnowledgeFileDao.query_by_id(target_folder_id)
+    if (
+        target_folder is None
+        or int(target_folder.knowledge_id) != int(space_id)
+        or int(target_folder.file_type) != FileType.DIR.value
+    ):
+        return
+
+    target_path = target_folder.file_level_path or ""
+    next_file_level_path = (
+        f"{target_path}/{target_folder_id}" if target_path else f"/{target_folder_id}"
+    )
+    file_record.file_level_path = next_file_level_path
+    file_record.level = int(target_folder.level or 0) + 1
+    file_record.updater_id = int(login_user.user_id)
+    file_record.updater_name = str(login_user.user_name or login_user.user_id)
+    await KnowledgeFileDao.async_update(file_record)
+
+
 async def _collect_recycle_ids(user_folder: KnowledgeFile) -> tuple[list[int], list[int]]:
     space_id = int(user_folder.knowledge_id)
     prefix = (
@@ -210,9 +295,19 @@ async def recycle_local_member_personal_knowledge_spaces(
                 if item_id == int(user_folder.id):
                     continue
                 if int(item.file_type) == FileType.DIR.value:
-                    await space_service.move_folder(space_id, item_id, int(user_folder.id))
+                    await _move_root_folder_for_personal_recycle(
+                        space_id=int(space_id),
+                        folder_id=item_id,
+                        target_folder_id=int(user_folder.id),
+                        login_user=login_user,
+                    )
                 else:
-                    await space_service.move_file_folder(space_id, item_id, int(user_folder.id))
+                    await _move_root_file_for_personal_recycle(
+                        space_id=int(space_id),
+                        file_id=item_id,
+                        target_folder_id=int(user_folder.id),
+                        login_user=login_user,
+                    )
 
             file_ids, folder_ids = await _collect_recycle_ids(user_folder)
             all_file_ids.extend(file_ids)
