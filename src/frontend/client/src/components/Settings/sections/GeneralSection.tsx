@@ -77,7 +77,7 @@ interface SettingSegmentedProps<T extends string> {
  */
 function SettingSegmented<T extends string>({ value, options, onValueChange, ariaLabel }: SettingSegmentedProps<T>) {
     return (
-        <div role="radiogroup" aria-label={ariaLabel} className="flex h-8 items-center gap-0.5 rounded-md border border-[#ECECEC] bg-white p-0.5">
+        <div role="radiogroup" aria-label={ariaLabel} className="flex h-8 min-w-[160px] items-center gap-0.5 rounded-md border border-[#ECECEC] bg-white p-0.5">
             {options.map((option) => {
                 const active = option.value === value;
                 return (
@@ -88,7 +88,7 @@ function SettingSegmented<T extends string>({ value, options, onValueChange, ari
                         aria-checked={active}
                         onClick={() => onValueChange(option.value)}
                         className={cn(
-                            "h-full flex-1 rounded px-3 text-sm font-normal transition-colors",
+                            "h-full flex-1 whitespace-nowrap rounded px-2 text-sm font-normal transition-colors",
                             active ? "bg-blue-500/[0.07] text-blue-500" : "text-gray-800 hover:bg-btn-fill-1",
                         )}
                     >
@@ -153,7 +153,7 @@ export function GeneralSection() {
             {fontSizeAvailable && (
                 <div className="flex items-center justify-between gap-4">
                     <span className="text-[14px] text-[#1d2129]">{localize("com_nav_page_font_size")}</span>
-                    <div className="w-[160px] shrink-0">
+                    <div className="shrink-0">
                         <SettingSegmented
                             value={fontSizeLevel}
                             options={fontSizeOptions}
