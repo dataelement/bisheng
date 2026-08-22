@@ -16,7 +16,7 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { SearchParams } from "../SpaceDetail/CompoundSearchInput";
 import { useLocalize } from "~/hooks";
-import { isKnowledgeItemPending } from "../knowledgeUtils";
+import { isKnowledgeItemPending, isKnowledgeItemUnderReview } from "../knowledgeUtils";
 
 interface UseFileManagerOptions {
     activeSpace: KnowledgeSpace | null;
@@ -336,8 +336,15 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
 
     useEffect(() => {
         if (!enabled) return;
+        // Poll while the list contains any row that could still change without
+        // user action: processing/uploading rows (isKnowledgeItemPending) OR
+        // rows locked by a pending file-change approval — rename / delete /
+        // move — whose decision arrives out of band (isKnowledgeItemUnderReview
+        // covers fileChangeApproval.status === "pending"). Without the second
+        // predicate, an approved rename/delete keeps the "待审核" badge until
+        // the user manually reloads.
         const hasPending = files.some(
-            (f) => isKnowledgeItemPending(f)
+            (f) => isKnowledgeItemPending(f) || isKnowledgeItemUnderReview(f)
         );
         if (!hasPending) return;
 

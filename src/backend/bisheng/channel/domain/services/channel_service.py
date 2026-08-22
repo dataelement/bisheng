@@ -2760,16 +2760,26 @@ class ChannelService:
         if role not in _WRITE_ROLES:
             raise SpacePermissionDeniedError()
 
-        # 3. Upload articles to minio
-        minio_client = await get_minio_storage()
-        md_file_paths = []
-        preview_map: dict[int, str] = {}  # md_object_name -> preview_object_name
+        # 3. Upload each article's markdown to minio and keep an article-id-keyed
+        #    map so we can pair the returned KnowledgeFile back to its source
+        #    article without relying on list order. KnowledgeSpaceService.add_file
+        #    returns `failed_files + process_files` (successes and failures
+        #    reordered relative to input), and its FAILED entries can even be an
+        #    existing duplicate file — not this article's — so a positional
+        #    index was unsafe and produced title/preview mismatches when a
+        #    batch contained any duplicate.
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
+        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 
-        for index, article in enumerate(articles):
+        minio_client = await get_minio_storage()
+        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
+
+        # article_id -> {"article": ArticleDetail, "share_link": str}
+        article_context_by_id: dict[str, dict] = {}
+        upload_order: list[str] = []
+        for article in articles:
             file_name = self._sanitize_file_name(article.title)
             unique_id = generate_uuid()
-
-            # Upload content as .md
             md_object_name = f"channel_articles/{unique_id}/{file_name}.md"
             md_content = article.content or ""
             await minio_client.put_object_tmp(
@@ -2777,41 +2787,62 @@ class ChannelService:
                 file=md_content.encode("utf-8"),
                 content_type="text/markdown",
             )
-            md_file_paths.append(
-                await minio_client.get_share_link(md_object_name, bucket=minio_client.tmp_bucket, clear_host=False)
+            share_link = await minio_client.get_share_link(
+                md_object_name, bucket=minio_client.tmp_bucket, clear_host=False
             )
+            article_context_by_id[article.doc_id] = {
+                "article": article,
+                "share_link": share_link,
+            }
+            upload_order.append(article.doc_id)
 
-            preview_map[index] = article.content_html
-
-        # 4. Call KnowledgeSpaceService.add_file
-        from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
-
-        space_service = KnowledgeSpaceService(request=request, login_user=login_user)
-        knowledge_files = await space_service.add_file(
-            knowledge_id=req.knowledge_id,
-            file_path=md_file_paths,
-            parent_id=req.parent_id,
-            file_source=FileSource.CHANNEL,
-        )
-
-        # 5. Update preview_file_object_name for successful files
-        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFileDao, KnowledgeFileStatus
-
-        result = []
-        failed = False
-        for index, kf in enumerate(knowledge_files):
-            if kf.status != KnowledgeFileStatus.FAILED.value:
-                html_content = preview_map[index]
-                preview_object_name = f"preview/{kf.id}.html"
-                await minio_client.put_object(
-                    object_name=preview_object_name, file=html_content.encode("utf-8"), content_type="text/html"
+        # 4. Import each article via KnowledgeSpaceService.add_file one at a time so
+        #    the returned KnowledgeFile maps 1:1 to the article we're iterating on.
+        result: list = []
+        any_failed = False
+        for article_id in upload_order:
+            ctx = article_context_by_id[article_id]
+            article = ctx["article"]
+            share_link = ctx["share_link"]
+            try:
+                knowledge_files = await space_service.add_file(
+                    knowledge_id=req.knowledge_id,
+                    file_path=[share_link],
+                    parent_id=req.parent_id,
+                    file_source=FileSource.CHANNEL,
                 )
-                kf.preview_file_object_name = preview_object_name
-                result.append(kf)
-            else:
-                failed = True
-        await KnowledgeFileDao.async_update_batch(result)
-        if failed and not req.skip_missing_and_duplicates:
+            except Exception as exc:
+                # Best-effort background sync: log and continue so one bad article
+                # never blocks the rest of the batch.
+                logger.exception(
+                    "add_articles_to_knowledge_space: add_file failed for article %s: %s",
+                    article_id,
+                    exc,
+                )
+                any_failed = True
+                if req.skip_missing_and_duplicates:
+                    continue
+                raise
+            if not knowledge_files:
+                any_failed = True
+                continue
+            kf = knowledge_files[0]
+            if kf.status == KnowledgeFileStatus.FAILED.value:
+                any_failed = True
+                continue
+            # 5. Write the article's HTML preview keyed to THIS knowledge file id.
+            preview_object_name = f"preview/{kf.id}.html"
+            await minio_client.put_object(
+                object_name=preview_object_name,
+                file=(article.content_html or "").encode("utf-8"),
+                content_type="text/html",
+            )
+            kf.preview_file_object_name = preview_object_name
+            result.append(kf)
+
+        if result:
+            await KnowledgeFileDao.async_update_batch(result)
+        if any_failed and not req.skip_missing_and_duplicates:
             raise SpaceFileNameDuplicateError()
 
         return result

@@ -322,12 +322,12 @@ export function AddSourceDropdown({
                 </div>
             )}
 
-            {/* 添加时：输入框+Tab+列表 同一整体，高 z-index 浮动，实时搜索 */}
+            {/* Keep the source panel below the global confirmation layer (z-110). */}
             {expanded && (
                 <div
                     ref={expandedPanelRef}
                     className={cn(
-                        "absolute left-0 right-0 top-0 z-[220] flex flex-col overflow-hidden rounded-lg border border-border-base bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]",
+                        "absolute left-0 right-0 top-0 z-[100] flex flex-col overflow-hidden rounded-lg border border-border-base bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]",
                         "h-[440px] min-w-[400px]",
                         isH5 && "h-[min(70dvh,560px)] min-w-0 max-w-full rounded-lg"
                     )}
@@ -545,7 +545,7 @@ export function AddSourceDropdown({
                         )}
                     </div>
                     {mgr.viewMode === "list" && (
-                        <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-border-base bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
+                        <div className="relative z-[1] flex shrink-0 items-center justify-between border-t border-border-base bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
                             <span className="text-[12px] text-text-3">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2 touch-mobile:w-full">

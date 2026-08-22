@@ -72,6 +72,9 @@ export function useKnowledgeFileMutations({
                 : await renameFileApi(activeSpace.id, fileId, newName);
             if (result.decision === "pending") {
                 dispatchFileChangeApprovalRefresh(activeSpace.id);
+                // Also refresh the file listing so the just-renamed row gets its
+                // "待审核" pending-change badge without requiring a manual reload.
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
                 return;
             }
             if (result.decision === "invalid") {
@@ -109,6 +112,9 @@ export function useKnowledgeFileMutations({
                 : await deleteFileApi(activeSpace.id, fileId);
             if (result.decision === "pending") {
                 dispatchFileChangeApprovalRefresh(activeSpace.id);
+                // Also refresh the file listing so the row gets its pending-
+                // change badge without requiring a manual reload.
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
                 return;
             }
             if (result.decision === "invalid") {
@@ -151,7 +157,11 @@ export function useKnowledgeFileMutations({
             if (result.completed.some((item) => item.type === "folder")) {
                 dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             }
-            if (result.pending.length > 0) dispatchFileChangeApprovalRefresh(activeSpace.id);
+            if (result.pending.length > 0) {
+                dispatchFileChangeApprovalRefresh(activeSpace.id);
+                // Refresh the file listing so pending rows get their badge.
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            }
             showInvalidItems(result, "com_knowledge.batch_delete_failed", localize, showToast);
             return result.completed.length > 0 || result.pending.length > 0;
         } catch {
@@ -180,7 +190,11 @@ export function useKnowledgeFileMutations({
             if (result.completed.some((item) => item.type === "folder")) {
                 dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
             }
-            if (result.pending.length > 0) dispatchFileChangeApprovalRefresh(activeSpace.id);
+            if (result.pending.length > 0) {
+                dispatchFileChangeApprovalRefresh(activeSpace.id);
+                // Refresh the file listing so pending rows get their badge.
+                dispatchKnowledgeSpaceFilesRefresh(activeSpace.id);
+            }
             showInvalidItems(result, "com_knowledge.rename_failed", localize, showToast);
             return result.completed.length > 0 || result.pending.length > 0;
         } catch {

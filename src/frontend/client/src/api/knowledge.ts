@@ -227,7 +227,7 @@ export interface KnowledgeFile {
     isCreating?: boolean;
     /**
      * The unmapped server row, kept only for duplicate entries (status 3) so the
-     * retry API can echo it back verbatim. Set by the list mappers below; nothing
+     * retry API can echo it back verbatim. Set by the mappers below; nothing
      * reads its fields, so it travels as the raw shape it arrived in.
      */
     _raw?: RawSpaceChild;
@@ -1733,7 +1733,7 @@ export async function uploadFileToServerApi(
 function mapFileMutationItem(raw: RawFileMutationItemResult, spaceId: string): FileMutationItemResult {
     const resource = raw.resource ? mapChild(raw.resource, spaceId) : undefined;
     if (resource && raw.resource?.status === 3) {
-        (resource as KnowledgeFile & { _raw?: RawSpaceChild })._raw = raw.resource;
+        resource._raw = raw.resource;
     }
     return {
         inputId: raw.input_id,
