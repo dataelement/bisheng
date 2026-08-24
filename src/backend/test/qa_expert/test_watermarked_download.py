@@ -3,6 +3,7 @@ from io import BytesIO
 from PIL import Image
 
 from bisheng.qa_expert.domain.watermarked_download import (
+    QaWatermarkDownloadError,
     _bytes_to_pdf,
     parse_qa_asset_location,
     resolve_conversion_filename,
@@ -65,3 +66,45 @@ def test_bytes_to_pdf_converts_webp_via_pillow_fallback():
     # 详情页标题无后缀时，靠 sniff + Pillow
     pdf2 = _bytes_to_pdf(webp, "问题图片 1")
     assert pdf2[:5] == b"%PDF-"
+
+
+def test_bytes_to_pdf_converts_markdown_without_docx_converter(monkeypatch):
+    """`.md` 不得再误走 convert_docx_to_pdf（其只接受 doc/docx，会返回 False 并 500）。"""
+    calls: list[str] = []
+
+    def _forbid_docx(*_args, **_kwargs):
+        calls.append("docx")
+        raise AssertionError("must not call convert_docx_to_pdf for markdown")
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter.convert_docx_to_pdf",
+        _forbid_docx,
+        raising=False,
+    )
+
+    # 强制走纯文本回退，避免单测依赖本机 Playwright/Chromium
+    def _fail_registry(*_args, **_kwargs):
+
+        raise QaWatermarkDownloadError("playwright unavailable in unit test")
+
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.watermarked_download._convert_via_pdf_registry",
+        _fail_registry,
+    )
+
+    md = "# 标题\n\n工作流与智能体功能清单\n".encode()
+    pdf = _bytes_to_pdf(md, "工作流与智能体功能清单-实现方案.md")
+    assert pdf[:5] == b"%PDF-"
+    assert calls == []
+
+
+def test_bytes_to_pdf_converts_plain_text_via_fallback(monkeypatch):
+    def _fail_registry(*_args, **_kwargs):
+        raise QaWatermarkDownloadError("no chromium")
+
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.watermarked_download._convert_via_pdf_registry",
+        _fail_registry,
+    )
+    pdf = _bytes_to_pdf("hello\n第二行".encode(), "note.txt")
+    assert pdf[:5] == b"%PDF-"
