@@ -82,7 +82,7 @@ async def test_resolve_qa_scope_file_ids_expands_folders_and_dedupes(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_resolve_qa_scope_file_ids_rejects_more_than_twenty_files(monkeypatch):
+async def test_resolve_qa_scope_file_ids_rejects_when_max_files_exceeded(monkeypatch):
     service = object.__new__(svc_mod.KnowledgeSpaceService)
     service.login_user = SimpleNamespace(user_id=7, user_name="tester")
     service.version_repo = None
@@ -107,6 +107,35 @@ async def test_resolve_qa_scope_file_ids_rejects_more_than_twenty_files(monkeypa
             file_refs=[],
             max_files=20,
         )
+
+
+@pytest.mark.asyncio
+async def test_resolve_qa_scope_file_ids_allows_more_than_twenty_without_cap(monkeypatch):
+    """门户问答取消硬限后，max_files=None 应允许展开超过 20 个文件。"""
+    service = object.__new__(svc_mod.KnowledgeSpaceService)
+    service.login_user = SimpleNamespace(user_id=7, user_name="tester")
+    service.version_repo = None
+    folder = _file(3001, folder=True, path="")
+    files = [_file(9100 + idx, path="/3001") for idx in range(21)]
+
+    async def _query_by_id(file_id):
+        return folder if file_id == 3001 else None
+
+    async def _children_by_prefix(_space_id, _prefix, file_status=None):
+        return files
+
+    monkeypatch.setattr(service, "_require_read_permission", AsyncMock())
+    monkeypatch.setattr(service, "_require_permission_id", AsyncMock())
+    monkeypatch.setattr(service, "_filter_visible_child_items", AsyncMock(side_effect=lambda items, **_kwargs: items))
+    monkeypatch.setattr(svc_mod.KnowledgeFileDao, "query_by_id", _query_by_id)
+    monkeypatch.setattr(svc_mod.SpaceFileDao, "get_children_by_prefix", _children_by_prefix)
+
+    result = await service.resolve_qa_scope_file_ids(
+        folder_refs=[SimpleNamespace(knowledge_space_id=7101, folder_id=3001)],
+        file_refs=[],
+        max_files=None,
+    )
+    assert len(result[7101]) == 21
 
 
 @pytest.mark.asyncio

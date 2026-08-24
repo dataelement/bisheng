@@ -7026,8 +7026,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         knowledge_space_ids: list[int],
         folder_refs: list,
         file_refs: list,
-        max_files: int = 20,
+        max_files: int | None = None,
     ) -> dict[int, list[int]]:
+        """解析门户问答知识范围。
+
+        max_files 为 None 时不限制文件数（门户已改为软提示）；传入正整数时仍做上限校验。
+        """
         resolved: dict[int, list[int]] = {}
         seen: set[tuple[int, int]] = set()
         readable_spaces: dict[int, bool] = {}
@@ -7176,8 +7180,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     add_file(space_id, int(file.id))
 
         deduped_count = len(seen)
-        if mode == "files" and deduped_count > max_files:
-            raise ValueError("一次最多可选择20个文件进行问答。")
+        if mode == "files" and max_files is not None and deduped_count > max_files:
+            raise ValueError(f"一次最多可选择{max_files}个文件进行问答。")
         if denied_resource_count:
             logger.info(
                 f"Portal QA filtered resources outside workbench scope denied_resource_count={denied_resource_count}"
@@ -14624,8 +14628,12 @@ class KnowledgeSpaceService(KnowledgeUtils):
         *,
         folder_refs: list,
         file_refs: list,
-        max_files: int = 20,
+        max_files: int | None = None,
     ) -> dict[int, list[int]]:
+        """解析工作台问答文件范围。
+
+        max_files 为 None 时不限制文件数；传入正整数时在展开过程中做上限校验。
+        """
         resolved: dict[int, list[int]] = {}
         seen: set[tuple[int, int]] = set()
 
@@ -14635,8 +14643,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 return
             seen.add(key)
             resolved.setdefault(space_id, []).append(file_id)
-            if len(seen) > max_files:
-                raise ValueError("一次最多可选择20个文件进行问答。")
+            if max_files is not None and len(seen) > max_files:
+                raise ValueError(f"一次最多可选择{max_files}个文件进行问答。")
 
         for ref in file_refs or []:
             space_id = self._scope_ref_int(ref, "knowledge_space_id")
