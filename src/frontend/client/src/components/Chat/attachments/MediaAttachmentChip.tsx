@@ -12,7 +12,6 @@ import {
     getMediaKind,
     isMediaAttachmentFile,
     resolveMediaCoverUrl,
-    tracePoster,
     resolveMediaPlaybackUrl,
     type MediaParsingState,
 } from '~/utils/mediaAttachmentUtils';
@@ -79,16 +78,6 @@ export function MediaAttachmentChip({
         setCoverFailed(false);
     }, [resolvedCoverUrl]);
     const coverUrl = coverFailed ? undefined : resolvedCoverUrl;
-    if (kind === 'video') {
-        tracePoster('chip:render', {
-            name: fileName,
-            variant,
-            raw: rawCoverUrl?.slice(0, 24),
-            cover: coverUrl?.slice(0, 24),
-            coverFilepath: (file.cover_filepath ?? '').slice(0, 40),
-            failed: coverFailed,
-        });
-    }
     const mediaFilepath = extractMediaFilepath(file);
     const canPlay = !!playbackUrl && !isUploading;
     const parsingLabel = localize('com_chat.media_parsing');
@@ -147,10 +136,7 @@ export function MediaAttachmentChip({
                             src={coverUrl}
                             alt=""
                             className="size-full object-cover"
-                            onError={() => {
-                                tracePoster('img:error', { name: fileName, cover: coverUrl?.slice(0, 60) });
-                                setCoverFailed(true);
-                            }}
+                            onError={() => setCoverFailed(true)}
                         />
                     ) : (
                         <>

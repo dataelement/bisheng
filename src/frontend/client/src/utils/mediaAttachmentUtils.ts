@@ -72,20 +72,6 @@ export function readMediaDurationFromFile(file: File): Promise<number | undefine
     });
 }
 
-/** TEMPORARY diagnostic for the composer video poster (remove once the
- *  disappearing-thumbnail report is closed). Production builds strip console.*,
- *  so events land in a ring buffer instead: read `window.__posterTrace`. */
-export function tracePoster(event: string, data?: Record<string, unknown>): void {
-    try {
-        const holder = window as unknown as { __posterTrace?: Record<string, unknown>[] };
-        if (!holder.__posterTrace) holder.__posterTrace = [];
-        holder.__posterTrace.push({ at: new Date().toISOString(), event, ...(data ?? {}) });
-        if (holder.__posterTrace.length > 300) holder.__posterTrace.shift();
-    } catch {
-        // Diagnostics must never break the upload flow.
-    }
-}
-
 /** How long to wait for the browser to decode a first frame before giving up.
  *  A codec it cannot handle usually errors out at once, but some containers just
  *  never fire an event — without this the promise would hang and leak the URL. */
@@ -101,19 +87,11 @@ export function captureVideoPosterFromFile(file: File): Promise<string | undefin
         video.playsInline = true;
         video.preload = 'auto';
 
-        const startedAt = Date.now();
-        tracePoster('capture:start', { name: file.name, size: file.size, type: file.type });
         let settled = false;
-        const settle = (poster?: string, reason?: string) => {
+        const settle = (poster?: string) => {
             if (settled) return;
             settled = true;
             window.clearTimeout(timeoutId);
-            tracePoster('capture:end', {
-                name: file.name,
-                ok: !!poster,
-                reason,
-                ms: Date.now() - startedAt,
-            });
             resolve(poster);
         };
 
@@ -125,11 +103,10 @@ export function captureVideoPosterFromFile(file: File): Promise<string | undefin
 
         const timeoutId = window.setTimeout(() => {
             cleanup();
-            settle(undefined, 'timeout');
+            settle(undefined);
         }, VIDEO_POSTER_TIMEOUT_MS);
 
         video.onloadeddata = () => {
-            tracePoster('capture:loadeddata', { name: file.name });
             video.currentTime = 0.001;
         };
         video.onseeked = () => {
@@ -138,7 +115,7 @@ export function captureVideoPosterFromFile(file: File): Promise<string | undefin
                 const height = video.videoHeight;
                 if (!width || !height) {
                     cleanup();
-                    settle(undefined, 'no-dimensions');
+                    settle(undefined);
                     return;
                 }
                 const canvas = document.createElement('canvas');
@@ -147,7 +124,7 @@ export function captureVideoPosterFromFile(file: File): Promise<string | undefin
                 const ctx = canvas.getContext('2d');
                 if (!ctx) {
                     cleanup();
-                    settle(undefined, 'no-2d-context');
+                    settle(undefined);
                     return;
                 }
                 ctx.drawImage(video, 0, 0, width, height);
@@ -159,14 +136,14 @@ export function captureVideoPosterFromFile(file: File): Promise<string | undefin
                     'image/jpeg',
                     0.85,
                 );
-            } catch (err) {
+            } catch {
                 cleanup();
-                settle(undefined, `draw-threw:${String(err)}`);
+                settle(undefined);
             }
         };
         video.onerror = () => {
             cleanup();
-            settle(undefined, 'video-error');
+            settle(undefined);
         };
         video.src = url;
     });
