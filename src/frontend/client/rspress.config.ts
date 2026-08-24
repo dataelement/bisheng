@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import * as fs from 'fs';
 import * as path from 'path';
 import { defineConfig } from 'rspress/config';
 import { pluginPreview } from '@rspress/plugin-preview';
@@ -35,6 +36,32 @@ const docsBuild = {
   sha: git('git rev-parse --short HEAD'),
   branch: git('git rev-parse --abbrev-ref HEAD'),
 };
+
+/**
+ * Which components @bisheng/ui publicly exports, read from its entry at build time.
+ *
+ * The 组件总览 「已迁库」 badge derives itself from this list: a demo page declares
+ * WHICH component it documents (`component:` front matter) and the table decides
+ * whether that component is in the library. Identity is stable, status is not —
+ * so the badge can neither claim a migration the library does not back, nor go
+ * missing because someone forgot to edit front matter after moving a component.
+ *
+ * Read at config load, so a component moving in/out of the library needs a dev
+ * server restart to show up — same as the sidebar it sits next to.
+ */
+const uiComponents = (() => {
+  try {
+    const entry = fs.readFileSync(path.join(__dirname, '../packages/ui/src/index.ts'), 'utf8');
+    // Both export forms point at the component dir: `from './components/Toast'`
+    // and `from './components/Button/Button'`.
+    const names = [...entry.matchAll(/from '\.\/components\/([A-Za-z0-9]+)/g)].map((m) => m[1]);
+    return [...new Set(names)].sort();
+  } catch {
+    // Never break the docs build over a badge; the table just stops claiming
+    // anything is migrated.
+    return [];
+  }
+})();
 
 export default defineConfig({
   // Docs live with the component library: src/frontend/packages/ui/docs
@@ -157,6 +184,9 @@ export default defineConfig({
           items: [
             { text: '按钮 Button', link: '/组件-Button按钮' },
             { text: '输入框 Input', link: '/组件-Input输入框' },
+            { text: '复选框 Checkbox', link: '/组件-Checkbox复选框' },
+            { text: '单选框 Radio', link: '/组件-Radio单选框' },
+            { text: '开关 Switch', link: '/组件-Switch开关' },
             { text: '文字提示 Tooltip', link: '/组件-Tooltip文字提示' },
             { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
             { text: '面包屑 Breadcrumb', link: '/组件-Breadcrumb面包屑' },
@@ -183,6 +213,7 @@ export default defineConfig({
       ],
       define: {
         __DOCS_BUILD__: JSON.stringify(docsBuild),
+        __UI_COMPONENTS__: JSON.stringify(uiComponents),
         // vite injects these globals (vite.config define); app code reached via
         // the `~/utils` barrel reads them at module scope — must exist here too.
         __APP_ENV__: JSON.stringify({ BASE_URL: '/workspace', BISHENG_HOST: '/admin' }),

@@ -5,17 +5,26 @@
  *   - `siteData.pages`               -> the demo pages that actually exist (title, route, toc, frontmatter)
  *   - `siteData.themeConfig.sidebar` -> which group each page belongs to, and drift in both directions
  *
+ * plus `__UI_COMPONENTS__` (rspress.config.ts) -> what @bisheng/ui actually exports,
+ * which is what the 「已迁库」 badge reads. A page states WHICH component it documents
+ * (`component:` front matter) and the library states whether that component is in it,
+ * so nobody has to remember to flip a badge on migration day. Identities are stable;
+ * statuses are what drift.
+ *
  * So adding a demo page = create the mdx + a `status` front matter line + a sidebar
  * entry; the row grows by itself. Nothing here can go stale, because there is no
  * copy of the truth to forget to update. Drift that IS possible (page without a
- * sidebar entry, sidebar entry without a page) is rendered as a warning row
- * instead of silently disappearing.
+ * sidebar entry, sidebar entry without a page, a `component:` the library does not
+ * export) is rendered as a warning row instead of silently disappearing.
  */
 import React from 'react';
 import { usePageData } from 'rspress/runtime';
 
 /** Build stamp injected by rspress.config.ts — surfaced as a data attribute, not as page copy. */
 declare const __DOCS_BUILD__: { time: string; sha: string; branch: string };
+
+/** What @bisheng/ui exports, injected by rspress.config.ts — drives the 已迁库 badge. */
+declare const __UI_COMPONENTS__: string[];
 
 const SECTION = '/components/';
 
@@ -40,8 +49,10 @@ interface Row {
   route: string;
   group: string;
   status: string;
+  /** True when the component this page documents is exported by @bisheng/ui. */
+  migrated: boolean;
   note: string;
-  /** Drift marker; empty when the page and the sidebar agree. */
+  /** Drift marker; empty when the page, the sidebar and the library agree. */
   warning: string;
 }
 
@@ -80,17 +91,28 @@ export function ComponentIndex() {
     });
   });
 
+  // Pages name the component they document; the library decides whether it is in.
+  const inLibrary = new Set(typeof __UI_COMPONENTS__ === 'undefined' ? [] : __UI_COMPONENTS__);
+
   const rows: Row[] = pages.map((page) => {
     const route = normalizeRoute(page.routePath);
     const fm = page.frontmatter ?? {};
     const status = typeof fm.status === 'string' ? fm.status : '';
+    const component = typeof fm.component === 'string' ? fm.component : '';
+    const warnings = [
+      groupOf.has(route) ? '' : '页面存在，但没挂进侧边栏',
+      // Declared an identity the library does not back: the component was renamed,
+      // dropped from src/index.ts, or the front matter has a typo.
+      component && !inLibrary.has(component) ? `front matter 声明的 ${component} 不在 @bisheng/ui 的导出里` : '',
+    ].filter(Boolean);
     return {
       title: page.title || route.replace(SECTION, ''),
       route,
       group: groupOf.get(route) ?? '',
       status: STATUS_LABEL[status] ?? (status || '⬜ 未标注'),
+      migrated: component !== '' && inLibrary.has(component),
       note: typeof fm.statusNote === 'string' ? fm.statusNote : '',
-      warning: groupOf.has(route) ? '' : '页面存在，但没挂进侧边栏',
+      warning: warnings.join('；'),
     };
   });
 
@@ -133,6 +155,7 @@ export function ComponentIndex() {
               <td style={{ ...cell, ...dim }}>{row.group || '—'}</td>
               <td style={cell}>
                 {row.status}
+                {row.migrated && <span style={dim}> · 已迁库</span>}
                 {row.note && <span style={dim}> · {row.note}</span>}
               </td>
             </tr>
