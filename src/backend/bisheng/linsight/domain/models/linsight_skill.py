@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, update
+from sqlalchemy import Integer, func, update
 from sqlmodel import Column, DateTime, Field, String, Text, UniqueConstraint, col, or_, select, text
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -121,6 +121,11 @@ class LinsightSkillDao:
     @classmethod
     async def create(cls, skill: LinsightSkill) -> LinsightSkill:
         async with get_async_db_session() as session:
+            # A never-edited skill still needs a modified time: the management
+            # list sorts on it, and NULL sinks a freshly imported skill to the
+            # last page (MySQL orders NULL last under DESC).
+            if skill.update_time is None:
+                skill.update_time = skill.create_time
             session.add(skill)
             await session.commit()
             await session.refresh(skill)
@@ -162,6 +167,11 @@ class LinsightSkillDao:
             pattern = f"%{keyword}%"
             statement = statement.where(
                 or_(
+                    # `name` is searchable so the list can find what the
+                    # duplicate check (name + display_name) already rejects;
+                    # otherwise a Chinese display name makes its ASCII skill id
+                    # unsearchable.
+                    col(LinsightSkill.name).ilike(pattern),
                     col(LinsightSkill.display_name).ilike(pattern),
                     col(LinsightSkill.description).ilike(pattern),
                 )
@@ -171,8 +181,16 @@ class LinsightSkillDao:
         with strict_tenant_filter():
             async with get_async_db_session() as session:
                 total = await async_get_count(session, statement)
+                # COALESCE keeps legacy rows with a NULL update_time in
+                # creation order instead of sinking them; the id tiebreaker makes
+                # OFFSET paging deterministic — skills seeded in one batch share
+                # an update_time to the second, and without it the same row can
+                # repeat on two pages while another is never listed at all.
                 statement = (
-                    statement.order_by(col(LinsightSkill.update_time).desc())
+                    statement.order_by(
+                        func.coalesce(col(LinsightSkill.update_time), col(LinsightSkill.create_time)).desc(),
+                        col(LinsightSkill.id).desc(),
+                    )
                     .offset((page - 1) * page_size)
                     .limit(page_size)
                 )
