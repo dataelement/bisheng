@@ -203,7 +203,10 @@ export function MoveFolderDialog({
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onCancel(); }}>
-            <DialogContent className="max-w-md w-full">
+            <DialogContent
+                className="max-w-md w-full"
+                overlayClassName="backdrop-blur-none"
+            >
                 <DialogHeader>
                     <DialogTitle>
                         {movingItemCount && movingItemCount > 1
