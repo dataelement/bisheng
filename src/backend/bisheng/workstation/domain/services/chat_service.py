@@ -1037,13 +1037,6 @@ async def _resolve_user_kb_file_filters(
     if portal_context and scope_mode not in {'files', 'knowledge_space'}:
         return None
 
-    unique_file_refs = {
-        (int(ref.knowledge_space_id), int(ref.file_id))
-        for ref in file_refs
-        if int(ref.knowledge_space_id or 0) > 0 and int(ref.file_id or 0) > 0
-    }
-    if len(unique_file_refs) > 20:
-        raise ValueError('一次最多可选择20个文件进行问答。')
     if not folder_refs and not file_refs:
         if not portal_context or scope_mode == 'files':
             raise ValueError('请选择可用于问答的文件。')
@@ -1066,12 +1059,12 @@ async def _resolve_user_kb_file_filters(
             knowledge_space_ids=selected_space_ids,
             folder_refs=folder_refs,
             file_refs=file_refs,
-            max_files=20,
+            max_files=None,
         )
     return await service.resolve_qa_scope_file_ids(
         folder_refs=folder_refs,
         file_refs=file_refs,
-        max_files=20,
+        max_files=None,
     )
 
 
