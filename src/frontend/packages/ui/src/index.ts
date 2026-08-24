@@ -23,3 +23,12 @@ export * from './components/Input';
 // State page shell — illustration + copy + buttons for an area with no normal
 // content (组件-State状态页.md). Every string comes from the caller.
 export * from './components/StateView';
+// Tooltip — one line of plain text explaining a control
+// (组件-Tooltip文字提示.md). The dark surface, the 100ms delay with its skip
+// window, the disabled-trigger hot zone and the top overlay tier are baked in;
+// the copy is a prop. `TooltipProvider` is optional (app root, shared skip).
+export * from './components/Tooltip';
+// Breadcrumb — where the current page sits in the structure
+// (组件-Breadcrumb面包屑.md). The collapse rules, the 96px name cap and the
+// ellipsis menu are baked in; the page passes the full chain and the copy.
+export * from './components/Breadcrumb';

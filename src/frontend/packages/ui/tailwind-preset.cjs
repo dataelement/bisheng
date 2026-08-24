@@ -147,6 +147,17 @@ module.exports = {
         tooltip: 'var(--z-tooltip)',
       },
       keyframes: {
+        // Tooltip motion (组件-Tooltip文字提示.md 落地 §7): 150ms fade in,
+        // 100ms fade out. Fade only — a tooltip that also moves reads as a
+        // panel sliding in rather than a label appearing.
+        'tooltip-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'tooltip-out': {
+          from: { opacity: '1' },
+          to: { opacity: '0' },
+        },
         'modal-overlay-in': {
           from: { opacity: '0' },
           to: { opacity: '1' },
@@ -168,6 +179,8 @@ module.exports = {
         },
       },
       animation: {
+        'tooltip-in': 'tooltip-in 150ms cubic-bezier(0.2, 0, 0, 1)',
+        'tooltip-out': 'tooltip-out 100ms cubic-bezier(0.2, 0, 0, 1)',
         // Modal / dialog motion (组件-Modal弹窗.md §6): 200ms in (fade + 96%→100%),
         // 160ms out (fade ONLY — shrinking on exit reads as "it went back
         // somewhere"). Same curve both ways.

@@ -24,6 +24,8 @@ Full design specs live in `docs/` (site: `pnpm dev:ui`); this file is the enforc
 ## Definition of Done for a new/migrated component
 
 1. Component under `src/components/<Name>/` + export in `src/index.ts`.
-2. Docs page `docs/components/<name>.mdx` — demos import from `'@bisheng/ui'` (never `~/…` app paths); scenario-per-demo, simplest first.
+2. Docs page `docs/components/<name>.mdx` — demos import from `'@bisheng/ui'` (never `~/…` app paths); scenario-per-demo, simplest first. Two lines make it show up correctly, and both are checked by the site itself:
+   - front matter `status: done | draft | todo` (+ optional `statusNote:`) — the only hand-written cell in the 组件总览 table (everything else is derived from the page; never edit that table by hand);
+   - a sidebar entry in `client/rspress.config.ts` → `themeConfig.sidebar['/components/']`. Miss it and 组件总览 renders a red 「没挂进侧边栏」 row for the page.
 3. Consuming app keeps a re-export shim at its old path (e.g. client `~/components/ui/Button.tsx`) so call sites stay unchanged.
 4. `docs/组件-*.md` spec updated if behavior/API changed (spec and code must not drift).

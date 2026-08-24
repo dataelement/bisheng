@@ -52,7 +52,7 @@
 | 内边距 | 上下 6px、左右 12px | 单行总高 34px，与 32px 控件近似同高，挨着控件出现不突兀 |
 | 圆角 | 6px | 与同高度的控件档一致，见 [基础-圆角与阴影规范.mdx](基础-圆角与阴影规范.mdx) |
 | 最大宽度 | 250px | 约一行 17 个汉字，超过自动换行 |
-| 箭头 | 默认带，指向触发元素 | 一排图标挤在一起时，箭头说明提示属于谁 |
+| 箭头 | **恒定带**，指向触发元素 | 一排图标挤在一起时，箭头说明提示属于谁；不设无箭头档——tooltip 只有一种长相，哪里都认得出 |
 | 与触发元素间距 | 4px | 带箭头时以箭头尖计 |
 | 投影 / 描边 | 浮层投影档；不描边 | 投影档见《圆角与阴影规范》；1px 描边是给白底浮层与页面拉开用的，深底自身反差已足够，免除 |
 
@@ -107,7 +107,7 @@
 ## 落地（给实现窗口）
 
 1. 基座用 Radix Tooltip 原语（client 依赖里已有 @radix-ui/react-tooltip，具体封装路径开工时核实）：`delayDuration=100`、`skipDelayDuration=300`、`disableHoverableContent` 保持 `false`（关掉即违反 WCAG 1.4.13 Hoverable）。ESC 关闭、focus 即时出现为 Radix 内置行为，核实即可。
-2. 样式 token：底色 gray-10 的 90% 不透明度（写 `rgb(var(--gray-10) / 0.9)` 一类带 alpha 的 token 引用，禁止写死 rgba 裸值；不加 backdrop-blur）、文字 `#fff`、圆角 6px、内边距 `6px 12px`、`text-sm`（14/22）、`max-w-[250px]`、浮层投影档（阴影规范落 token 后接线）、无边框；箭头 8×8 旋转方块同底色同透明度（箭头与气泡重叠处不得出现深色叠加缝，必要时箭头用同一元素裁切实现）。组件内不留裸 hex，等灰阶 token 接线。
+2. 样式 token（落地回写两处读法）：**文字取灰阶最浅档 `rgb(var(--arco-gray-1))` 而不是字面 `#fff`**——灰阶两端在 `.dark` 下一起翻转，气泡自动变浅底深字；写死白字会在深色模式下压在近白底上。**箭头用 Radix 的 `Tooltip.Arrow`（SVG，11×6，即 8px 方块旋转 45° 后的可见三角）**，它贴在气泡外侧而不与之重叠，所以两个半透明面不会叠出深色缝，无需裁切实现；`sideOffset` 记为 `4 + 箭头高`，让 4px 落在箭头尖而不是气泡边。原文如下：底色 gray-10 的 90% 不透明度（写 `rgb(var(--gray-10) / 0.9)` 一类带 alpha 的 token 引用，禁止写死 rgba 裸值；不加 backdrop-blur）、文字 `#fff`、圆角 6px、内边距 `6px 12px`、`text-sm`（14/22）、`max-w-[250px]`、浮层投影档（阴影规范落 token 后接线）、无边框；箭头 8×8 旋转方块同底色同透明度（箭头与气泡重叠处不得出现深色叠加缝，必要时箭头用同一元素裁切实现）。组件内不留裸 hex，等灰阶 token 接线。
 3. 触屏不显示：Radix Tooltip 原生不响应 touch，保持默认；**禁止业务页用 onTouchStart 自造长按提示**。
 4. 禁用控件的提示：封装组件属性，内部对 disabled 触发元素包一层可聚焦热区（`span` + `tabIndex=0`）；禁止业务页各自手包。
 5. 单 icon 按钮的 `aria-label` 与 tooltip 文案同源：IconButton 封装用同一个 `label` 属性同时喂给两者。
@@ -119,6 +119,8 @@
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
+| 2026-08-24 | 拍板：**取消无箭头档**——箭头由「默认带」改为「恒定带」，组件的 `arrow` prop 移除，面包屑（截断补全、`…` 展开、当前页）四处 `arrow={false}` 一并改回带箭头。理由：tooltip 只保留一种长相，用户在哪里见到都认得出，不为「小字旁边省点墨」分叉。§3 表格与 `components/tooltip.mdx`（删「没有箭头的场合」一节 + API 行）、面包屑文档同步 | 待 committer 窗口提交 |
+| 2026-08-24 | **组件落地** `packages/ui/src/components/Tooltip/`，导出 `Tooltip` + 可选 `TooltipProvider`；落地 §1–§7 全部接线（`delayDuration=100` / `skipDelayDuration=300` / `disableHoverableContent` 留 `false`、`z-tooltip`=1300、150ms 淡入 100ms 淡出接成 `animate-tooltip-in/out` token、disabled 触发元素内部包 `span+tabIndex=0` 热区）。两处落地读法回写进落地 §2（文字色取灰阶最浅档而非字面 `#fff`；箭头用 Radix SVG 不用旋转方块）。`TooltipProvider` 设计成**可选**：共享 provider 才有 300ms 跳过窗口，没挂时每个 `Tooltip` 自带兜底 provider（不能在每个 tooltip 里都塞 provider——会遮蔽应用根上那个，跳过窗口就没了）。demo 页 `components/tooltip.mdx` 从手拼 Radix 原语改为真组件，状态 `todo`→`done`。落地 §8 的现状扫描仍待做 | 待 committer 窗口提交 |
 | 2026-08-20 | 层级随 [组件-Modal弹窗.md](组件-Modal弹窗.md) v1 定稿的四档层级表回填：Tooltip 取 `1300`，即最高浮层档；原「归 [01-设计规范.md](01-设计规范.md) §5 定稿」的指针改为具体数值。本文其余规则未增未减未改 | 待 committer 窗口提交 |
 | 2026-07-30 | 建档 v1：调研 antd 5 / Arco / TDesign / Apple HIG / Material 3 / Fluent 2 / Radix / WAI-ARIA / WCAG 1.4.13 / NN/g / Primer → 设计师拍板（深底白字、出现延时 100ms、触屏不依赖 tooltip）→ 成文。与 Popover 的判定归本文 §2，姊妹篇引用不抄写；「不做 rich tooltip」写入 §2 | 待 committer 窗口提交 |
 | 2026-07-30 | 拍板：底色由实色改为**带透明度的深底**——灰阶第 10 档 90% 不透明度（90% 为初值，透过度待设计师目检微调）；不加毛玻璃模糊。§3 与落地 §2 同步更新 | 待 committer 窗口提交 |

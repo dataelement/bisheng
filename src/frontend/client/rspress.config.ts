@@ -1,3 +1,4 @@
+import { execSync } from 'child_process';
 import * as path from 'path';
 import { defineConfig } from 'rspress/config';
 import { pluginPreview } from '@rspress/plugin-preview';
@@ -15,6 +16,25 @@ import autoprefixer from 'autoprefixer';
  * Run: `npm run dev:docs` (cwd: src/frontend/client).
  */
 const clientSrc = path.join(__dirname, 'src');
+
+/**
+ * Build stamp — the site is a static artifact (deploy-docs.sh rsyncs doc_build/ to
+ * the dev server), so we need a way to tell how old a deploy is. Surfaced by the
+ * component-index widget as a data attribute (devtools only, never page copy);
+ * never assume a page on :3000 is live.
+ */
+const git = (cmd: string) => {
+  try {
+    return execSync(cmd, { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'unknown';
+  }
+};
+const docsBuild = {
+  time: new Date().toLocaleString('zh-CN', { hour12: false }),
+  sha: git('git rev-parse --short HEAD'),
+  branch: git('git rev-parse --abbrev-ref HEAD'),
+};
 
 export default defineConfig({
   // Docs live with the component library: src/frontend/packages/ui/docs
@@ -55,8 +75,10 @@ export default defineConfig({
     nav: [
       // activeMatch drives the selected state: 组件 owns /components/*,
       // 文档 owns every other doc route (home included).
-      { text: '文档', link: '/基础-字体规范', activeMatch: '^/(?!components/)' },
-      { text: '组件', link: '/components/button', activeMatch: '^/components/' },
+      // Each tab lands on its own section home, never on a particular page:
+      // 文档 -> the site home (docs/index.md), 组件 -> 组件总览 (components/index.mdx).
+      { text: '文档', link: '/', activeMatch: '^/(?!components/)' },
+      { text: '组件', link: '/components/', activeMatch: '^/components/' },
     ],
     sidebar: {
       // 组件 section — component demos
@@ -77,6 +99,12 @@ export default defineConfig({
           text: '通用 General',
           items: [
             { text: '按钮 Button', link: '/components/button' },
+          ],
+        },
+        {
+          text: '导航 Navigation',
+          items: [
+            { text: '面包屑 Breadcrumb', link: '/components/breadcrumb' },
           ],
         },
         {
@@ -154,6 +182,7 @@ export default defineConfig({
         path.join(__dirname, 'stubs/rspress-overrides.css'),
       ],
       define: {
+        __DOCS_BUILD__: JSON.stringify(docsBuild),
         // vite injects these globals (vite.config define); app code reached via
         // the `~/utils` barrel reads them at module scope — must exist here too.
         __APP_ENV__: JSON.stringify({ BASE_URL: '/workspace', BISHENG_HOST: '/admin' }),
@@ -173,6 +202,9 @@ export default defineConfig({
       alias: {
         '~': clientSrc,
         '@': clientSrc,
+        // Docs-site-only React widgets (not app code, not shipped in the app
+        // bundle) — e.g. the generated component index on /components/.
+        '@docs-site': path.join(__dirname, 'docs-site'),
         // Spec pages (packages/ui/docs/*.mdx) live outside this project, so a
         // bare `bisheng-icons` import resolves from the docs dir and misses the
         // package installed here. Alias it to the local install so spec mdx can
