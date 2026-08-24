@@ -4,15 +4,16 @@ Tests the five-level permission check chain, authorize with department expansion
 batch_write_tuples, and FailedTuple compensation.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from test.fixtures.mock_openfga import InMemoryOpenFGAClient
+import pytest
+
 from bisheng.permission.domain.schemas.permission_schema import (
     AuthorizeGrantItem,
     AuthorizeRevokeItem,
 )
 from bisheng.permission.domain.schemas.tuple_operation import TupleOperation
+from test.fixtures.mock_openfga import InMemoryOpenFGAClient
 
 
 @pytest.fixture
@@ -231,6 +232,8 @@ class TestPermissionServiceListAccessible:
                           new_callable=AsyncMock, return_value=['wf-owned']), \
              patch.object(PermissionService, '_resource_ids_child_tenant_admin_scope',
                           new_callable=AsyncMock, return_value=[]), \
+             patch.object(PermissionService, '_implicit_department_bound_space_ids',
+                          new_callable=AsyncMock, return_value=[]), \
              patch.object(PermissionService, '_filter_ids_by_tenant_gate',
                           new_callable=AsyncMock, return_value=['wf-owned']), \
              patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_list_objects',
@@ -243,6 +246,70 @@ class TestPermissionServiceListAccessible:
             )
 
         assert result == ['wf-owned']
+
+    @pytest.mark.asyncio
+    async def test_list_includes_spaces_granted_to_user_department(
+        self, mock_fga, mock_login_user_normal,
+    ):
+        """Department grants must appear even without user→department FGA membership."""
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        await mock_fga.write_tuples(writes=[
+            {'user': 'department:5#member', 'relation': 'can_read', 'object': 'knowledge_space:101'},
+        ])
+
+        with patch.object(PermissionService, '_get_fga', return_value=mock_fga), \
+             patch.object(PermissionService, '_membership_list_subjects',
+                          new_callable=AsyncMock, return_value=['department:5#member']), \
+             patch.object(PermissionService, '_finalize_accessible_ids',
+                          new_callable=AsyncMock, side_effect=lambda ids, *_args, **_kwargs: ids), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.get_list_objects',
+                   new_callable=AsyncMock, return_value=None), \
+             patch('bisheng.permission.domain.services.permission_cache.PermissionCache.set_list_objects',
+                   new_callable=AsyncMock):
+            result = await PermissionService.list_accessible_ids(
+                user_id=2, relation='can_read', object_type='knowledge_space',
+                login_user=mock_login_user_normal,
+            )
+
+        assert result == ['101']
+
+    @pytest.mark.asyncio
+    async def test_finalize_adds_implicit_department_bound_spaces(self, mock_login_user_normal):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, '_resource_ids_by_creator_user_ids',
+                          new_callable=AsyncMock, return_value=[]), \
+             patch.object(PermissionService, '_resource_ids_child_tenant_admin_scope',
+                          new_callable=AsyncMock, return_value=[]), \
+             patch.object(PermissionService, '_implicit_department_bound_space_ids',
+                          new_callable=AsyncMock, return_value=['202']), \
+             patch.object(PermissionService, '_filter_ids_by_tenant_gate',
+                          new_callable=AsyncMock, side_effect=lambda _uid, _type, object_ids, _user=None: object_ids):
+            result = await PermissionService._finalize_accessible_ids(
+                [], 2, 'knowledge_space', login_user=mock_login_user_normal, relation='can_read',
+            )
+
+        assert result == ['202']
+
+    @pytest.mark.asyncio
+    async def test_finalize_skips_implicit_department_spaces_for_manage(self, mock_login_user_normal):
+        from bisheng.permission.domain.services.permission_service import PermissionService
+
+        with patch.object(PermissionService, '_resource_ids_by_creator_user_ids',
+                          new_callable=AsyncMock, return_value=[]), \
+             patch.object(PermissionService, '_resource_ids_child_tenant_admin_scope',
+                          new_callable=AsyncMock, return_value=[]), \
+             patch.object(PermissionService, '_implicit_department_bound_space_ids',
+                          new_callable=AsyncMock, return_value=['202']) as implicit, \
+             patch.object(PermissionService, '_filter_ids_by_tenant_gate',
+                          new_callable=AsyncMock, side_effect=lambda _uid, _type, object_ids, _user=None: object_ids):
+            result = await PermissionService._finalize_accessible_ids(
+                [], 2, 'knowledge_space', login_user=mock_login_user_normal, relation='can_manage',
+            )
+
+        assert result == []
+        implicit.assert_not_awaited()
 
 
 class TestPermissionServiceAuthorize:

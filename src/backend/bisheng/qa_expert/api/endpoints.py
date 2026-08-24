@@ -746,7 +746,15 @@ async def mark_notification_read(
 # ==================== 公共方法 ====================
 
 
-async def _build_watermarked_download_response(source: str, title: str, user: UserPayload) -> Response:
+@router.get("/assets/watermarked-download")
+async def download_watermarked_asset(
+    source: str = Query(..., description="问答图片或附件地址"),
+    title: str = Query("", description="原始文件名"),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """将专家问答上传的图片/附件转为带水印 PDF 后下载。"""
+    from urllib.parse import quote
+
     from bisheng.core.context.tenant import get_current_tenant_id
     from bisheng.qa_expert.domain.watermarked_download import (
         QaWatermarkDownloadError,
@@ -771,11 +779,13 @@ async def _build_watermarked_download_response(source: str, title: str, user: Us
         logger.exception("QA watermarked download failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="水印下载失败") from exc
 
+    # HTTP 头须 latin-1；中文文件名走 RFC 5987 filename*
+    encoded_filename = quote(filename, safe="")
     return Response(
         content=payload,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": (f"attachment; filename=\"qa-asset.pdf\"; filename*=UTF-8''{encoded_filename}"),
         },
     )
 
@@ -797,7 +807,6 @@ async def download_watermarked_asset_post(
 ):
     """POST 下载：避免预签名 URL 放进 query 导致网关卡住。"""
     return await _build_watermarked_download_response(body.source, body.title, user)
-
 
 
 @router.post("/upload")

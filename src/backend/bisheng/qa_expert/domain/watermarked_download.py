@@ -5,12 +5,14 @@ from __future__ import annotations
 import re
 import tempfile
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 from zoneinfo import ZoneInfo
 
 import fitz
 from loguru import logger
+from PIL import Image, UnidentifiedImageError
 
 from bisheng.knowledge.pdf.watermark import PdfWatermarkError, PdfWatermarkSpec, apply_pdf_watermark
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
@@ -26,6 +28,7 @@ _PROXY_PREFIXES = (
     "bisheng/",
     "skm-bisheng/",
     "workspace/bisheng/",
+    "workspace/skm-bisheng/",
 )
 _UUID_OBJECT = re.compile(r"^[0-9a-fA-F-]{8,}(?:\.[A-Za-z0-9]{1,8})?$")
 _IMAGE_TYPES = {
@@ -36,6 +39,7 @@ _IMAGE_TYPES = {
     ".png": "png",
     ".webp": "webp",
 }
+_IMAGE_SUFFIXES = set(_IMAGE_TYPES)
 
 
 class QaWatermarkDownloadError(ValueError):
@@ -68,27 +72,71 @@ def parse_qa_asset_location(source: str, *, default_bucket: str, tmp_bucket: str
     raise QaWatermarkDownloadError("asset source is not a QA upload")
 
 
+def resolve_conversion_filename(title: str, object_name: str) -> str:
+    """标题无后缀时回退对象名，避免详情页「问题图片 1」丢失扩展名导致转 PDF 失败。"""
+    titled = (title or "").strip()
+    object_base = object_name.rsplit("/", 1)[-1] if object_name else ""
+    if titled and Path(titled).suffix:
+        return titled
+    if object_base and Path(object_base).suffix:
+        if titled:
+            return f"{titled}{Path(object_base).suffix.lower()}"
+        return object_base
+    return titled or object_base or "qa-asset"
+
+
+def _sniff_image_type(data: bytes) -> str | None:
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:6] in {b"GIF87a", b"GIF89a"}:
+        return "gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    if data[:2] == b"BM":
+        return "bmp"
+    return None
+
+
+def _image_bytes_to_pdf(data: bytes, image_type: str | None) -> bytes:
+    """优先用 PyMuPDF；WEBP 等当前版本打不开时经 Pillow 转 PNG 再嵌入。"""
+    if image_type and image_type != "webp":
+        try:
+            src = fitz.open(stream=data, filetype=image_type)
+            try:
+                return src.convert_to_pdf()
+            finally:
+                src.close()
+        except Exception:
+            logger.debug("fitz open image failed type={}, fallback to Pillow", image_type)
+
+    try:
+        with Image.open(BytesIO(data)) as image:
+            image.load()
+            if image.mode not in {"RGB", "L"}:
+                image = image.convert("RGB")
+            png_buf = BytesIO()
+            image.save(png_buf, format="PNG")
+            png_bytes = png_buf.getvalue()
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        raise QaWatermarkDownloadError("unsupported attachment type for watermarked download") from exc
+
+    src = fitz.open(stream=png_bytes, filetype="png")
+    try:
+        return src.convert_to_pdf()
+    finally:
+        src.close()
+
+
 def _bytes_to_pdf(data: bytes, filename: str) -> bytes:
     suffix = Path(filename).suffix.lower()
     if data[:5] == b"%PDF-" or suffix == ".pdf":
         return data
-    image_type = _IMAGE_TYPES.get(suffix)
-    if image_type is None and data[:3] == b"\xff\xd8\xff":
-        image_type = "jpeg"
-    if image_type is None and data[:8] == b"\x89PNG\r\n\x1a\n":
-        image_type = "png"
-    if image_type is None and data[:6] in {b"GIF87a", b"GIF89a"}:
-        image_type = "gif"
-    if image_type is None and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        image_type = "webp"
-    if image_type is None and data[:2] == b"BM":
-        image_type = "bmp"
-    if image_type:
-        src = fitz.open(stream=data, filetype=image_type)
-        try:
-            return src.convert_to_pdf()
-        finally:
-            src.close()
+
+    image_type = _IMAGE_TYPES.get(suffix) or _sniff_image_type(data)
+    if image_type or suffix in _IMAGE_SUFFIXES:
+        return _image_bytes_to_pdf(data, image_type)
 
     office_suffixes = {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".et", ".wps", ".dps"}
     if suffix in office_suffixes or suffix in {".txt", ".md", ".csv", ".html", ".htm"}:
@@ -137,7 +185,7 @@ async def build_watermarked_qa_pdf(
     data = await storage.get_object(bucket_name=bucket, object_name=object_name)
     if not data:
         raise QaWatermarkDownloadError("asset not found")
-    filename = title or object_name.rsplit("/", 1)[-1]
+    filename = resolve_conversion_filename(title, object_name)
     pdf_bytes = _bytes_to_pdf(data, filename)
     identity = f"{department_name}-{user_name}" if department_name else user_name
     date_text = datetime.now(SHANGHAI).strftime("%Y/%m/%d")
