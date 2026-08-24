@@ -545,6 +545,51 @@ class WorkStationService(BaseService):
         return [app_id for app_id in recommended_apps if app_id in keep]
 
     @classmethod
+    async def afilter_tools_by_use_permission(
+        cls,
+        tools: list[dict] | None,
+        login_user: UserPayload,
+    ) -> list[dict]:
+        """Drop the tool groups this user is not allowed to use.
+
+        The workbench tool list is curated by an admin, but a tool still carries
+        its own resource permission (and often its own credentials), so a user
+        should not be offered one they cannot run: ``ToolExecutor`` refuses the
+        call at request time, which without this filter shows up as a tool that
+        is selectable but silently fails.
+
+        Groups are checked by their tool-type id, the same resource the tool
+        management page checks. A group with no id cannot be verified, so it is
+        dropped rather than offered — the projection always carries one, and a
+        shape that does not is worth seeing in the log.
+        """
+        from bisheng.permission.application.business_authorization import batch_check_business_actions
+
+        if not tools:
+            return []
+
+        identified = [group for group in tools if group.get("id") is not None]
+        if len(identified) != len(tools):
+            logger.warning(
+                "[workstation.tools] dropped {} tool group(s) without an id while filtering by use permission",
+                len(tools) - len(identified),
+            )
+        if not identified:
+            return []
+
+        action_map = await batch_check_business_actions(
+            login_user,
+            resource_type="tool",
+            resource_ids=[group["id"] for group in identified],
+            actions=("use",),
+        )
+        return [
+            group
+            for group in identified
+            if "use" in action_map.get(str(group["id"]), frozenset())
+        ]
+
+    @classmethod
     async def _aproject_daily_config_for_current_tenant(
         cls,
         config: WorkstationConfig | None,
