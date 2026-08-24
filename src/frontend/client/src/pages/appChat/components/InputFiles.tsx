@@ -161,11 +161,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 : undefined,
         previewUrl: f.previewUrl,
         mediaPreviewUrl: f.mediaPreviewUrl,
-        // The composer poster is a local blob that is revoked the moment the
-        // message is sent. Handing it to the message would pin a dead URL that
-        // also outranks the server cover once that arrives, leaving the bubble
-        // with no thumbnail at all.
-        mediaCoverUrl: f.mediaCoverUrl?.startsWith('blob:') ? undefined : f.mediaCoverUrl,
+        // Keep the local poster here: in daily chat this payload is what the
+        // composer renders once an upload completes. A `blob:` cover is ignored
+        // by the message-side chip, so it cannot leak into a sent bubble.
+        mediaCoverUrl: f.mediaCoverUrl,
         cover_filepath: f.cover_filepath,
         mediaDurationSec: f.mediaDurationSec,
     }));

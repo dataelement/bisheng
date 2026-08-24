@@ -63,7 +63,13 @@ export function MediaAttachmentChip({
     const isUploading = !!file.isUploading;
     const isParsing = file.parsingState === 'parsing';
     const playbackUrl = resolveMediaPlaybackUrl(file);
-    const resolvedCoverUrl = kind === 'video' ? resolveMediaCoverUrl(file) : undefined;
+    const rawCoverUrl = kind === 'video' ? resolveMediaCoverUrl(file) : undefined;
+    // A `blob:` cover is the composer's local first frame, captured off the picked
+    // file and revoked the moment the message is sent. The composer shows it; a
+    // sent bubble must not, or it would pin a dead URL that also outranks the
+    // server cover once parsing produces one.
+    const resolvedCoverUrl =
+        variant === 'message' && rawCoverUrl?.startsWith('blob:') ? undefined : rawCoverUrl;
     // A composer poster is a local blob that is revoked once the message is sent;
     // the sent bubble then holds a dead URL until the server cover arrives. Fall
     // back to the icon instead of rendering a broken image.
