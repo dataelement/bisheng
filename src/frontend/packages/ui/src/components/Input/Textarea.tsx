@@ -25,7 +25,11 @@ export interface TextareaProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'cols'> {
   /** §5.2 — same validation states as the single-line field. */
   status?: InputStatus;
-  /** §4.4 — "current / limit", parked in the bottom-right corner INSIDE the box. */
+  /**
+   * §4.4 — "current / limit", parked in the bottom-right corner INSIDE the box.
+   * The limit is SOFT, same as the single-line field: typing past it is allowed
+   * and the counter turns red; rejecting the value is the form's job.
+   */
   showCount?: boolean;
   /** Classes for the shell (width / min-height live here). */
   className?: string;
@@ -68,7 +72,8 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(fun
   };
 
   const countVisible = showCount && maxLength !== undefined;
-  const atLimit = maxLength !== undefined && text.length >= maxLength;
+  // Over, not at: "50 / 50" is still a valid value, "51 / 50" is not.
+  const overLimit = maxLength !== undefined && text.length > maxLength;
 
   return (
     <div
@@ -83,9 +88,16 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(fun
         ref={setRefs}
         rows={rows}
         className={cn(
-          'input-no-zoom w-full resize-y border-0 bg-transparent px-3 py-2 text-inherit outline-none placeholder:text-text-3 disabled:cursor-not-allowed disabled:text-btn-disabled-text disabled:placeholder:text-btn-disabled-text',
-          // Room for the counter so the last line never runs under it.
-          countVisible && 'pb-7',
+          // The floor for the user's own drag is the 32px medium-control height
+          // (§3), and at that floor one line has to sit CENTERED and whole:
+          // 1px border + 4 + 22 (line) + 4 + 1px border = 32. That is what fixes
+          // the vertical padding at 4px — 8px would need a 40px box, and a
+          // dragged-flat field would show a line cut off at both ends.
+          'input-no-zoom min-h-[30px] w-full resize-y border-0 bg-transparent px-3 py-1 text-inherit outline-none placeholder:text-text-3 disabled:cursor-not-allowed disabled:text-btn-disabled-text disabled:placeholder:text-btn-disabled-text',
+          // Room for the counter so the last line never runs under it — and the
+          // floor grows by the same amount (4 + 22 + 28), or dragging flat would
+          // bury the line behind the counter.
+          countVisible && 'min-h-[54px] pb-7',
           textareaClassName,
         )}
         disabled={disabled}
@@ -93,8 +105,8 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(fun
         value={value}
         defaultValue={defaultValue}
         onChange={handleChange}
-        maxLength={maxLength}
-        aria-invalid={status === 'error' || undefined}
+        // Not forwarded to the DOM on purpose — see Input.tsx / §4.4.
+        aria-invalid={status === 'error' || overLimit || undefined}
         {...props}
       />
       {countVisible && (
@@ -103,7 +115,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(fun
           className={cn(
             COUNT_BASE,
             'pointer-events-none absolute bottom-1.5 right-3 rounded bg-inherit px-1',
-            atLimit ? 'text-danger' : 'text-text-3',
+            overLimit ? 'text-danger' : 'text-text-3',
           )}
         >
           {text.length} / {maxLength}

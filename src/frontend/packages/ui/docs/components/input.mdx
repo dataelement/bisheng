@@ -149,7 +149,7 @@ export default () => (
 
 ## 多行文本域
 
-`Textarea` 默认三行高，只允许纵向拉伸、禁止横向——横着长出去会把表单的栏宽撑破。自动长高没有内建：规范要求它必须有上限，等真有场景再定。
+`Textarea` 默认三行高，只允许纵向拉伸、禁止横向——横着长出去会把表单的栏宽撑破。往下拉到 **32px 就到底**（与 medium 控件同高，那行字在这里完整且居中；开了字数统计是 56px，要给计数留位置），再矮就不像一个能写字的框了。自动长高没有内建：规范要求它必须有上限，等真有场景再定。
 
 ```tsx
 import { Textarea } from '@bisheng/ui';
@@ -163,7 +163,7 @@ export default () => (
 
 ## 字数统计
 
-**需要限长才显示**，格式「当前 / 上限」：单行放后缀区，多行放框内右下角。达到上限停止录入、计数转危险色。上限宽裕、几乎碰不到的字段不要开——满屏计数只制造焦虑。
+**需要限长才显示**，格式「当前 / 上限」：单行放后缀区，多行放框内右下角。**上限是软的**——超出照样能打，计数转危险色，拦截交给表单校验；到上限就吃掉按键，用户只会以为键盘坏了（粘贴一段话进去只进半截，更是连原因都看不到）。上限宽裕、几乎碰不到的字段不要开——满屏计数只制造焦虑。
 
 ```tsx
 import { Input, Textarea } from '@bisheng/ui';
@@ -171,7 +171,7 @@ import { Input, Textarea } from '@bisheng/ui';
 export default () => (
   <div style={{ display: 'grid', gap: 12, maxWidth: 380 }}>
     <Input showCount maxLength={20} placeholder="知识库名称" />
-    <Textarea showCount maxLength={50} defaultValue="试着一直打字，看计数到上限时变红并停止录入" />
+    <Textarea showCount maxLength={50} defaultValue="试着一直打字，超过 50 字看计数变红——但字照样能打进去" />
   </div>
 );
 ```
@@ -191,7 +191,7 @@ export default () => (
 | `allowClear` | `boolean` | `false` | 悬停 / 聚焦且有内容时出现 |
 | `clearLabel` | `string` | — | 清除按钮的无障碍名称（文案由调用方给） |
 | `onClear` | `() => void` | — | 清空后触发；空值的 `onChange` 也会照常触发 |
-| `showCount` | `boolean` | `false` | 需配 `maxLength`，否则不渲染 |
+| `showCount` | `boolean` | `false` | 需配 `maxLength`，否则不渲染。`maxLength` 只用来算计数、不透传给 DOM：超出能继续打，计数转红并置 `aria-invalid`，拦截归表单校验 |
 | `className` / `inputClassName` | `string` | — | 前者落在外壳（宽度写这里），后者落在 `<input>` |
 
 ### PasswordInput

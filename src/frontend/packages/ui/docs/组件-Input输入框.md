@@ -39,7 +39,7 @@
 | `large` | 40px | 16 / 24 | 8px | 12px | 登录页、大表单 |
 
 - 字号跟《字体规范》、圆角跟《圆角与阴影规范》控件档，随档取值不单独定义。
-- **Textarea 不分档**：字号 14 / 22、圆角 6px、内边距上下 8px 左右 12px。
+- **Textarea 不分档**：字号 14 / 22、圆角 6px、内边距上下 4px 左右 12px；**手动拉伸的下限是 32px**（与 medium 控件同高）——再矮就不像一个能写字的框，像一条拉坏的行。上下 4px 是被这个下限倒推出来的：32 − 2（描边）− 22（行高）= 10，两边各 4px 多一点，那行字才能在拉到底时**完整且垂直居中**；若取 8px，一行字要 40px 的框才装得下，拉到底就成了上下都被切一刀的半行。（4px 也是 antd 5px / Arco 4px 的那一档。）开了字数统计的下限是 56px——得把计数那一格的位置留出来。
 - **宽度不定档，跟随布局**：同一表单里同级字段等宽；只有内容长度天然固定的字段（验证码、端口号）才用短框暗示长度。
 
 | ✅ 推荐 | ❌ 不推荐 | 原因 |
@@ -68,7 +68,7 @@
 ### 4.4 字数统计
 
 - 需要限长才显示，格式「当前 / 上限」：单行放后缀区，多行放框内右下角。
-- 达到上限后停止录入，计数转危险色提醒。
+- **超出上限不拦键盘**：字照打、计数照走，超出后计数转危险色，拦截交给表单校验（提交时报错，说清「最多 50 字，现在 53 字」）。到上限就吃掉按键，用户第一反应是键盘坏了或者输入框卡了——尤其粘贴一段话进去，只进去半截还不告诉他为什么。计数刚好等于上限（50 / 50）是合法值，不转红。
 - 上限宽裕、几乎不会触到的字段不开计数——计数本身就是一种输入压力。
 
 | ✅ 推荐 | ❌ 不推荐 | 原因 |
@@ -129,14 +129,14 @@
 1. ✅ cva `variants: { size, status, state }`（24 / 32 / 40，圆角 4 / 6 / 8，水平内边距含 1px 边框的 7 / 11 / 11），`status: error` 同步置 `aria-invalid`。Password / Search / addon 是同一基座填不同插槽的组合形态，没有另一套 API：`PasswordInput` / `SearchInput` 都只是 `Input` 的薄包装。**边框、填充、圆角、聚焦环全画在外壳 `div` 上，`<input>` 自身透明无边框**——这正是前后缀与 addon 能共用一条描边的原因。
 2. ✅ 颜色全走 token，组件内无裸 hex：常态描边 `border-border-base`；disabled 复用按钮三 token；错误 / 警告取功能色 main 档，聚焦环取对应 tint。
 3. ✅ **聚焦取值**：hover / 聚焦描边 `border-border-deep`；聚焦环为 Tailwind 类 `shadow-focus`（`tailwind-preset.cjs` + client `tailwind.config.cjs`，SSOT 记在 `design-token.cjs` 的 `FOCUS_RING`，**刻意不并进两档 SHADOW**：它是聚焦指示不是高度，按《圆角与阴影规范》§4 例外条款）。**只有环的颜色是变量 `--shadow-focus-ring`（默认 `--fill-2`），2px 的几何写在类里**——原本想落成一个 `--shadow-focus: 0 0 0 2px rgb(var(--shadow-focus-ring))` 变量，实测不成立：自定义属性里的 `var()` 在**声明它的那一层**就被替换掉，写在 `:root` 就等于把环色钉死在 `:root` 的取值上，错误 / 警告态再怎么覆盖 `--shadow-focus-ring` 都换不动（落地当天踩到并改掉）。现在错误 / 警告态只覆盖 `--shadow-focus-ring` 为 danger-tint / warning-tint，环色在元素上解析。⬜ 归并 `ExpandableSearchField` 的两个裸 hex 与它的 `rounded-lg` 仍待迁移窗口。
-4. ✅ placeholder 走 `text-text-3`（hint 档）；字数统计常态 hint、达上限转危险色，单行在后缀区、多行在框内右下角（`bg-inherit` 垫底，滚动的正文从它下面过）。`showCount` 必须配 `maxLength`，缺了就不渲染。
+4. ✅ placeholder 走 `text-text-3`（hint 档）；字数统计常态 hint、**超出**上限转危险色，单行在后缀区、多行在框内右下角（`bg-inherit` 垫底，滚动的正文从它下面过）。`showCount` 必须配 `maxLength`，缺了就不渲染。**`maxLength` 刻意不透传给 DOM**——原生属性会静默吞掉按键；超限时组件另置 `aria-invalid`，读屏用户看不见计数变红，得有个等价信号。
 5. ✅ iOS 防缩放：`.input-no-zoom` 在 `@media (max-width: 768px), (hover: none) and (pointer: coarse)` 内把 input / textarea 提到 16px / 24，用 `input.input-no-zoom` 元素+类选择器写，确保压得住档位自己的 `text-[length:…]`。另补 `.input-touch-hit`：**上下各一条透明热区**把可点区域撑到 ≥44px，而不是像按钮那样盖一整块——盖在框上的覆盖层会吃掉「点到第几个字」的那一下，光标只能落到末尾。清除 / 明暗切换按钮仍用按钮那套 `btn-touch-hit`。
 6. ⬜ 现状扫描未做：client 内现存输入框体系（`components/ui/Input`、原生 `<input>` 手拼等）的用量与迁移映射，待迁移窗口扫描后补附录。组件落地不动任何存量调用点。
 
 ## 待决策清单
 
 - 聚焦阴影环 gray-2 为不透明色，放在非白底（如 fill-subtle 浅灰底卡片内）上会露一圈浅边；若后续出现灰底表单场景，再议是否改半透明等效值（现按白底表单为主定稿）。
-- 字数统计超限策略现按「截断录入」写；antd 另有「允许超出、计数标红、提交时拦」路线，若表单校验需要再议。
+- ~~字数统计超限策略现按「截断录入」写；antd 另有「允许超出、计数标红、提交时拦」路线，若表单校验需要再议。~~ **2026-08-20 结案：走「允许超出」路线**，见 §4.4。
 - **`bisheng-icons` 没有 eye 图标**，而组件库契约不许自己画图标，所以 `PasswordInput` 的明暗切换两个图标（`revealIcon` / `hideIcon`）暂由调用方传入。图标包补上之后收成默认值，prop 保留给需要换图标的场景。
 - Textarea 自动长高未内建：§2 要求它必须设上限，而目前没有调用场景来定这个上限，等真有场景再定 `autoSize` 的 API 形状。
 - Form 表单项（label、必填标记、错误文字字号与间距）未建档，错误提示的排版细节届时归口 Form 规范，本文只定「框下方 + 危险色 + 说清怎么改」。
@@ -149,3 +149,5 @@
 | 2026-08-20 | **聚焦取值定稿**：设计师拍板全取现有 token——hover / 聚焦描边 border-deep（gray-4），聚焦加 2px gray-2 阴影环，错误 / 警告环换对应 tint 档；归并自 ExpandableSearchField 现值（#DDDDDD→gray-4 按意图、#F1F5F9→gray-2 肉眼无差），口径见落地区第 3 条；待决策清单勾销聚焦两项，新记「灰底场景环色再议」 | 待 committer 窗口提交 |
 | 2026-08-20 | 站点接线（元规范 §5 上线清单）：`rspress.config.ts` 侧栏「组件规范」注册入口、00-总纲 §四 进度看板由「⬜ 待办 / 待建」改写为 v1 规范行、01-设计规范 §0 索引加行。**文档内容未改**；`components/input.mdx` demo 页未建——`Input.tsx` 尚未落地，照 Tooltip / Popover / Drawer 的先例规范先行，组件落地后再补 | 待 committer 窗口提交 |
 | 2026-08-20 | **组件 v1 落地**：`packages/ui/src/components/Input/`（`Input` / `Textarea` / `PasswordInput` / `SearchInput`），三档尺寸、四态外壳、前后缀 / addon / 清除 / 字数、聚焦灰环全部按本文实现；新增环色 token `--shadow-focus-ring` + Tailwind 类 `shadow-focus`（`design-token.cjs` `FOCUS_RING`、两处 tailwind 配置、tokens.css 与 client style.css 双份同步；环的几何刻意留在类里，原因见落地区第 3 条）与两条 CSS 规则 `.input-no-zoom` / `.input-touch-hit`；demo 页 `components/input.mdx` 上线并注册侧栏「数据录入 Data Entry」。文档内容随实况回填落地区，新增两项待决策（eye 图标缺位、Textarea 自动长高） | 待 committer 窗口提交 |
+| 2026-08-20 | Textarea 补下限：§3 明确手动拉伸不得低于 32px（与 medium 控件同高），组件落 `min-h-[30px]`（+ 外壳 1px 上下描边 = 32px 可见高）；为让那行字在下限处完整居中，**上下内边距由 8px 改为 4px**（8px 需要 40px 的框，拉到底会把一行字上下各切一刀），常态三行高随之 84→76px；开字数统计的下限另算 56px | 待 committer 窗口提交 |
+| 2026-08-20 | **超限策略改为「允许超出」**（勾销待决策清单同名项）：§4.4 由「达到上限停止录入」改写为「字照打、计数照走、超出转危险色、拦截交给表单校验」，转红阈值由「达到」改为「超出」（50 / 50 是合法值）；组件不再把 `maxLength` 透传给 DOM，超限时另置 `aria-invalid` 给读屏 | 待 committer 窗口提交 |
