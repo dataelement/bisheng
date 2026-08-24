@@ -138,7 +138,7 @@ async def test_resolve_user_kb_file_filters_uses_knowledge_space_service(monkeyp
         async def resolve_qa_scope_file_ids(self, *, folder_refs, file_refs, max_files):
             assert folder_refs[0].folder_id == 3001
             assert file_refs[0].file_id == 9001
-            assert max_files == 20
+            assert max_files is None
             return {7101: [9001, 9002]}
 
     monkeypatch.setattr(chat_service, 'KnowledgeSpaceService', _FakeKnowledgeSpaceService, raising=False)
@@ -196,7 +196,7 @@ async def test_portal_context_uses_portal_authorized_scope_resolver(
             assert knowledge_space_ids == [7103]
             assert file_refs[0].file_id == 9301
             assert folder_refs == []
-            assert max_files == 20
+            assert max_files is None
             return {7103: [9301]}
 
     monkeypatch.setattr(

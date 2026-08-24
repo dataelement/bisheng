@@ -125,7 +125,7 @@ async def test_file_or_ancestor_custom_binding_is_not_shared_pool_eligible():
     ]
     projection = _ProjectionRepository()
     service = PortalRecommendationProjectionService(
-        source_repository=_SourceRepository(_source()),
+        source_repository=_SourceRepository(_source(space_level="department")),
         projection_repository=projection,
         binding_loader=lambda: bindings,
     )
@@ -139,10 +139,29 @@ async def test_file_or_ancestor_custom_binding_is_not_shared_pool_eligible():
 
 
 @pytest.mark.asyncio
-async def test_space_level_custom_binding_excludes_all_owned_files():
+async def test_public_custom_acl_remains_shared_pool_eligible():
     projection = _ProjectionRepository()
     service = PortalRecommendationProjectionService(
         source_repository=_SourceRepository(_source()),
+        projection_repository=projection,
+        binding_loader=lambda: [
+            {"resource_type": "knowledge_space", "resource_id": "7"},
+        ],
+    )
+
+    await service.refresh_file(41, projection_version=103)
+
+    saved = projection.upserts[-1]
+    assert saved.permission_scope == "custom"
+    assert saved.recommendable is True
+    assert saved.reason_code == "eligible"
+
+
+@pytest.mark.asyncio
+async def test_space_level_custom_binding_excludes_all_owned_files():
+    projection = _ProjectionRepository()
+    service = PortalRecommendationProjectionService(
+        source_repository=_SourceRepository(_source(space_level="department")),
         projection_repository=projection,
         binding_loader=lambda: [
             {"resource_type": "knowledge_space", "resource_id": "7"},

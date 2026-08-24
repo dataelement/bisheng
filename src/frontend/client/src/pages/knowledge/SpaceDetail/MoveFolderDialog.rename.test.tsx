@@ -124,6 +124,12 @@ describe("MoveFolderDialog inline folder rename", () => {
         expect(confirmBtn).toBeDisabled();
     });
 
+    it("移动弹窗单独关闭背景虚化", async () => {
+        renderDialog();
+        await screen.findByText("旧名字");
+        expect(document.querySelector(".backdrop-blur-none")).toBeInTheDocument();
+    });
+
     it("重命名与新建互斥：开始新建会关闭重命名", async () => {
         renderDialog();
         expect(await screen.findByText("旧名字")).toBeInTheDocument();

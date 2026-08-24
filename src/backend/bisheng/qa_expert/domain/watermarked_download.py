@@ -129,6 +129,107 @@ def _image_bytes_to_pdf(data: bytes, image_type: str | None) -> bytes:
         src.close()
 
 
+def _decode_attachment_text(data: bytes) -> str:
+    """解码问答附件文本；无法严格解码时用 replace，避免整条下载失败。"""
+    for encoding in ("utf-8-sig", "utf-16", "utf-8"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
+def _plain_text_to_pdf(data: bytes) -> bytes:
+    """不依赖 LibreOffice/Playwright：用 CJK 字体把纯文本按 A4 分页写入 PDF。
+
+    `.md` / `.html` 按原文落 PDF（不做富文本排版）；保证水印下载链路始终可用。
+    """
+    from bisheng.knowledge.pdf.watermark import PdfWatermarkError, _resolve_cjk_font
+
+    text = _decode_attachment_text(data).replace("\r\n", "\n").replace("\r", "\n")
+    if not text.strip():
+        text = " "
+    try:
+        font_sel = _resolve_cjk_font()
+    except PdfWatermarkError as exc:
+        raise QaWatermarkDownloadError("CJK font unavailable for text watermarked download") from exc
+
+    font = fitz.Font(fontfile=font_sel.font_file, fontname=font_sel.font_name)
+    page_width, page_height = 595.0, 842.0
+    margin = 48.0
+    fontsize = 11.0
+    line_height = fontsize * 1.45
+    max_width = page_width - margin * 2
+
+    def iter_wrapped_lines() -> list[str]:
+        lines: list[str] = []
+        for paragraph in text.split("\n"):
+            if not paragraph:
+                lines.append("")
+                continue
+            buf = ""
+            for ch in paragraph:
+                trial = buf + ch
+                if font.text_length(trial, fontsize=fontsize) <= max_width:
+                    buf = trial
+                    continue
+                if buf:
+                    lines.append(buf)
+                buf = ch
+            lines.append(buf)
+        return lines
+
+    wrapped = iter_wrapped_lines()
+    doc = fitz.open()
+    try:
+        y = margin
+        page = doc.new_page(width=page_width, height=page_height)
+        for line in wrapped:
+            if y + line_height > page_height - margin:
+                page = doc.new_page(width=page_width, height=page_height)
+                y = margin
+            page.insert_text(
+                (margin, y + fontsize),
+                line or " ",
+                fontsize=fontsize,
+                fontfile=font_sel.font_file,
+                fontname=font_sel.font_name,
+            )
+            y += line_height
+        return doc.tobytes()
+    finally:
+        doc.close()
+
+
+def _convert_via_pdf_registry(data: bytes, suffix: str) -> bytes:
+    """走知识库统一转换器（Office→LibreOffice，md/txt/html→Playwright）。"""
+    from bisheng.knowledge.pdf.converter import (
+        ConversionContext,
+        PdfConversionError,
+        PdfConverterRegistry,
+    )
+
+    normalized = ".html" if suffix == ".htm" else suffix
+    with tempfile.TemporaryDirectory(prefix="qa-wm-") as tmp:
+        tmp_path = Path(tmp)
+        src_path = tmp_path / f"source{normalized or '.bin'}"
+        src_path.write_bytes(data)
+        try:
+            result = PdfConverterRegistry().convert(
+                src_path,
+                tmp_path / "out",
+                ConversionContext(timeout_seconds=120),
+            )
+        except PdfConversionError as exc:
+            raise QaWatermarkDownloadError("attachment cannot be converted for watermarked download") from exc
+        if result.converter == "original-pdf":
+            return data
+        pdf_path = Path(result.pdf_path)
+        if not pdf_path.is_file() or pdf_path.stat().st_size <= 0:
+            raise QaWatermarkDownloadError("attachment cannot be converted for watermarked download")
+        return pdf_path.read_bytes()
+
+
 def _bytes_to_pdf(data: bytes, filename: str) -> bytes:
     suffix = Path(filename).suffix.lower()
     if data[:5] == b"%PDF-" or suffix == ".pdf":
@@ -138,24 +239,41 @@ def _bytes_to_pdf(data: bytes, filename: str) -> bytes:
     if image_type or suffix in _IMAGE_SUFFIXES:
         return _image_bytes_to_pdf(data, image_type)
 
-    office_suffixes = {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".et", ".wps", ".dps"}
-    if suffix in office_suffixes or suffix in {".txt", ".md", ".csv", ".html", ".htm"}:
-        from bisheng.knowledge.rag.pipeline.loader.utils.libreoffice_converter import (
-            convert_docx_to_pdf,
-            convert_ppt_to_pdf,
+    # 文本类：优先 Chromium 排版；失败则退回 fitz 纯文本（修复误用 convert_docx_to_pdf 导致 .md 500）
+    text_suffixes = {".txt", ".md", ".html", ".htm"}
+    if suffix in text_suffixes:
+        try:
+            return _convert_via_pdf_registry(data, suffix)
+        except QaWatermarkDownloadError as exc:
+            logger.info("QA text/web PDF converter unavailable, fallback to plain text: {}", exc)
+            return _plain_text_to_pdf(data)
+
+    office_suffixes = {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv"}
+    if suffix in office_suffixes:
+        return _convert_via_pdf_registry(data, suffix)
+
+    # 国产 Office 后缀：LibreOffice 常可转，但不在 PdfConverterRegistry 白名单内
+    legacy_office_suffixes = {".et", ".wps", ".dps"}
+    if suffix in legacy_office_suffixes:
+        from bisheng.knowledge.pdf.converter import (
+            ConversionContext,
+            OfficePdfConverter,
+            PdfConversionError,
         )
 
         with tempfile.TemporaryDirectory(prefix="qa-wm-") as tmp:
-            src_path = Path(tmp) / f"source{suffix or '.bin'}"
+            tmp_path = Path(tmp)
+            src_path = tmp_path / f"source{suffix}"
             src_path.write_bytes(data)
             try:
-                if suffix in {".ppt", ".pptx", ".dps"}:
-                    pdf_path = convert_ppt_to_pdf(str(src_path), tmp)
-                else:
-                    pdf_path = convert_docx_to_pdf(str(src_path), tmp)
-            except Exception as exc:
+                result = OfficePdfConverter().convert(
+                    src_path,
+                    tmp_path / "out",
+                    ConversionContext(timeout_seconds=120),
+                )
+            except PdfConversionError as exc:
                 raise QaWatermarkDownloadError("attachment cannot be converted for watermarked download") from exc
-            return Path(pdf_path).read_bytes()
+            return Path(result.pdf_path).read_bytes()
 
     raise QaWatermarkDownloadError("unsupported attachment type for watermarked download")
 
