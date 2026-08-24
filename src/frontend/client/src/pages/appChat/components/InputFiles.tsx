@@ -28,6 +28,7 @@ import {
 import {
     captureVideoPosterFromFile,
     getMediaKind,
+    tracePoster,
     readMediaDurationFromFile,
     isMediaAttachmentFile,
 } from "~/utils/mediaAttachmentUtils";
@@ -84,6 +85,7 @@ const applyParseStatusToFile = (file: any, entry: { parsing_status?: string; cov
         ...(coverFilepath ? { cover_filepath: coverFilepath } : {}),
     };
     if (coverFilepath && file.mediaCoverUrl?.startsWith('blob:')) {
+        tracePoster('revoke:parse-status', { id: file.id, coverFilepath });
         URL.revokeObjectURL(file.mediaCoverUrl);
         next.mediaCoverUrl = undefined;
     }
@@ -309,9 +311,15 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 const target = filesRef.current.find((f) => f.id === id);
                 // Removed while decoding, or the server poster won the race.
                 if (!target || target.cover_filepath) {
+                    tracePoster('apply:dropped', {
+                        id,
+                        reason: target ? 'server-cover' : 'file-gone',
+                        ids: filesRef.current.map((f) => f.id),
+                    });
                     URL.revokeObjectURL(mediaCoverUrl);
                     return;
                 }
+                tracePoster('apply:ok', { id, name: target.name });
                 const updated = filesRef.current.map((f) =>
                     f.id === id ? { ...f, mediaCoverUrl } : f,
                 );
@@ -392,6 +400,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                             ...(coverFilepath ? { cover_filepath: coverFilepath } : {}),
                         };
                         if (coverFilepath && f.mediaCoverUrl?.startsWith('blob:')) {
+                            tracePoster('revoke:upload-response', { id, coverFilepath });
                             URL.revokeObjectURL(f.mediaCoverUrl);
                             next.mediaCoverUrl = undefined;
                         }
@@ -535,6 +544,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         },
         supportsFolderUpload,
         clear: () => {
+            tracePoster('clear', { ids: filesRef.current.map((f) => f.id) });
             filesRef.current.forEach(f => {
                 if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
                 if (f.mediaPreviewUrl) URL.revokeObjectURL(f.mediaPreviewUrl);
@@ -550,6 +560,7 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
     // Release any live object URLs when the component unmounts so pinned image
     // previews don't leak blobs.
     useEffect(() => () => {
+        tracePoster('unmount', { ids: filesRef.current.map((f) => f.id) });
         filesRef.current.forEach(f => {
             if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
             if (f.mediaPreviewUrl) URL.revokeObjectURL(f.mediaPreviewUrl);
@@ -639,7 +650,10 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
         }
         if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
         if (removed?.mediaPreviewUrl) URL.revokeObjectURL(removed.mediaPreviewUrl);
-        if (removed?.mediaCoverUrl?.startsWith('blob:')) URL.revokeObjectURL(removed.mediaCoverUrl);
+        if (removed?.mediaCoverUrl?.startsWith('blob:')) {
+            tracePoster('revoke:remove', { id: removed.id });
+            URL.revokeObjectURL(removed.mediaCoverUrl);
+        }
         const res = filesRef.current.filter(file => String(file.id) !== String(clientId));
         filesRef.current = res
         setFiles(res);
