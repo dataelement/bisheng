@@ -14,17 +14,7 @@ statusNote: 基准壳标准未定稿
 `title` + 正文 + `footer`。`trigger` 里的元素会自动接上打开事件，也可以不给 `trigger`，改用 `open` / `onOpenChange` 自己控。底部按钮主按钮最右，`ModalClose` 包住的按钮点了就关。
 
 ```tsx
-import { Button, Modal, ModalClose } from '@bisheng/ui';
-
-const field = {
-  width: '100%',
-  height: 32,
-  padding: '0 12px',
-  borderRadius: 6,
-  border: '1px solid rgb(var(--border-base))',
-  background: 'rgb(var(--bg-page))',
-  color: 'rgb(var(--text-1))',
-};
+import { Button, Input, Modal, ModalClose } from '@bisheng/ui';
 
 export default () => (
   <Modal
@@ -35,12 +25,14 @@ export default () => (
         <ModalClose asChild>
           <Button color="default" variant="outlined">取消</Button>
         </ModalClose>
-        <Button>保存</Button>
+        <ModalClose asChild>
+          <Button>保存</Button>
+        </ModalClose>
       </>
     }
   >
     <label style={{ display: 'block', marginBottom: 8, color: 'rgb(var(--text-2))' }}>名称</label>
-    <input style={field} defaultValue="产品手册" />
+    <Input defaultValue="产品手册" />
   </Modal>
 );
 ```
@@ -81,7 +73,9 @@ export default () => {
               <ModalClose asChild>
                 <Button color="default" variant="outlined">取消</Button>
               </ModalClose>
-              <Button>确定</Button>
+              <ModalClose asChild>
+                <Button>确定</Button>
+              </ModalClose>
             </>
           }
         >
@@ -111,7 +105,9 @@ export default () => (
         <ModalClose asChild>
           <Button color="default" variant="outlined">暂不同意</Button>
         </ModalClose>
-        <Button>同意</Button>
+        <ModalClose asChild>
+          <Button>同意</Button>
+        </ModalClose>
       </>
     }
   >
@@ -126,7 +122,7 @@ export default () => (
 
 ## 三条关闭路径
 
-普通弹窗给三条关闭路径，**一条都不能少**：头部的关闭按钮、点击遮罩、按 Esc。关闭「×」按**有没有取消按钮**决定：表单类弹窗必须有（那是它唯一的出口），带取消按钮的确认类用 `closable={false}` 去掉——两个出口说的是同一件事，反而让人犹豫该点哪个。
+普通弹窗给三条关闭路径，**一条都不能少**：头部的关闭按钮、点击遮罩、按 Esc。关闭「×」按**弹窗类型**决定：**表单类「×」和取消都给**——取消挨着主按钮，是看完整张表后就地放弃的出口，「×」是随手关掉浮层的常规位置；**确认类**用 `closable={false}` 去掉「×」，只留底部两个按钮——问题已经摆在按钮上，右上角再开一个出口只会让人犹豫该点哪个。
 
 ```tsx
 import { Button, Modal, ModalClose } from '@bisheng/ui';
@@ -134,11 +130,20 @@ import { Button, Modal, ModalClose } from '@bisheng/ui';
 export default () => (
   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
     <Modal
-      trigger={<Button color="default" variant="outlined">表单类：有「×」</Button>}
+      trigger={<Button color="default" variant="outlined">表单类：「×」+ 取消</Button>}
       title="新建频道"
-      footer={<Button>创建</Button>}
+      footer={
+        <>
+          <ModalClose asChild>
+            <Button color="default" variant="outlined">取消</Button>
+          </ModalClose>
+          <ModalClose asChild>
+            <Button>创建</Button>
+          </ModalClose>
+        </>
+      }
     >
-      表单弹窗的唯一出口就是右上角这个「×」，必须留着。
+      表单类：右上角的「×」和底部的取消都留着——两个出口视线落点不同，缺哪个都会有人找不到。
     </Modal>
     <Modal
       closable={false}
@@ -149,7 +154,9 @@ export default () => (
           <ModalClose asChild>
             <Button color="default" variant="outlined">继续编辑</Button>
           </ModalClose>
-          <Button color="danger">放弃</Button>
+          <ModalClose asChild>
+            <Button color="danger">放弃</Button>
+          </ModalClose>
         </>
       }
     >
@@ -161,16 +168,17 @@ export default () => (
 
 ## 有未保存内容 / 提交进行中
 
-填了十分钟的表单，不能因为手滑点到遮罩就没了：`beforeClose` 返回 `false` 就把弹窗留住，业务页自己弹二次确认。提交进行中传 `submitting`，**三条路径全部禁用**，直到接口返回——接口还没回就关掉，用户不知道这一步到底成没成。
+填了十分钟的表单，不能因为手滑点到遮罩就没了：`beforeClose` 返回 `false` 就把弹窗留住，业务页自己弹二次确认——**打几个字再去点遮罩或按 Esc**，弹窗不会走，跳出来的是「要放弃这次编辑吗」。二次确认带着自己的遮罩叠上去，把下面那个弹窗一起压暗——不叠的话它和下面弹窗的白底连成一片，看着像嵌在表单里的一块（规范 §5）。提交进行中传 `submitting`，**三条路径全部禁用**，直到接口返回——接口还没回就关掉，用户不知道这一步到底成没成。
 
 ```tsx
 import { useState } from 'react';
-import { Button, Modal, ModalClose } from '@bisheng/ui';
+import { Button, Modal, ModalClose, Textarea } from '@bisheng/ui';
 
 export default () => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
   const [hint, setHint] = useState('');
 
   return (
@@ -184,9 +192,9 @@ export default () => {
         onOpenChange={setOpen}
         title="填写反馈"
         submitting={submitting}
-        beforeClose={(source) => {
+        beforeClose={() => {
           if (!draft) return true;
-          setHint(`已拦截一次「${source}」关闭：内容还没保存`);
+          setDiscarding(true);
           return false;
         }}
         footer={
@@ -198,7 +206,6 @@ export default () => {
               disabled={submitting}
               onClick={() => {
                 setSubmitting(true);
-                setHint('提交中，三条出口都锁住了');
                 window.setTimeout(() => { setSubmitting(false); setOpen(false); setHint('已提交'); }, 2000);
               }}
             >
@@ -207,20 +214,36 @@ export default () => {
           </>
         }
       >
-        <textarea
+        <Textarea
+          rows={4}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder="随便打几个字，再去点遮罩或按 Esc 试试"
-          style={{
-            width: '100%',
-            minHeight: 96,
-            padding: 12,
-            borderRadius: 6,
-            border: '1px solid rgb(var(--border-base))',
-            background: 'rgb(var(--bg-page))',
-            color: 'rgb(var(--text-1))',
-          }}
         />
+      </Modal>
+
+      {/* 拦下来之后弹的二次确认：自带遮罩叠在上面，把下面那个弹窗一起压暗 */}
+      <Modal
+        size="small"
+        open={discarding}
+        onOpenChange={setDiscarding}
+        closable={false}
+        title="要放弃这次编辑吗"
+        footer={
+          <>
+            <ModalClose asChild>
+              <Button color="default" variant="outlined">继续编辑</Button>
+            </ModalClose>
+            <Button
+              color="danger"
+              onClick={() => { setDiscarding(false); setDraft(''); setOpen(false); setHint('已放弃'); }}
+            >
+              放弃
+            </Button>
+          </>
+        }
+      >
+        已经写了 {draft.length} 个字，关掉就没了。
       </Modal>
     </div>
   );
@@ -245,7 +268,7 @@ export default () => {
 | `maskClosable` / `escClosable` | `boolean` | `true` | 关掉其中一条关闭路径 |
 | `submitting` | `boolean` | `false` | 提交中：三条路径全部禁用 |
 | `beforeClose` | `(source) => boolean \| void` | — | 返回 `false` 留住弹窗；`source` 为 `'close-button' \| 'overlay' \| 'esc'` |
-| `className` / `bodyClassName` / `footerClassName` / `overlayClassName` | `string` | — | 局部覆盖；`overlayClassName` 用于叠在别的浮层上时把遮罩置空 |
+| `className` / `bodyClassName` / `footerClassName` / `overlayClassName` | `string` | — | 局部覆盖；`overlayClassName` 是遮罩的特例口子（如单独调浅某一层），嵌套时不需要动它 |
 | `container` | `HTMLElement` | `document.body` | portal 挂载点 |
 
 ## 不要用弹窗的场合
@@ -257,4 +280,4 @@ export default () => {
 - 内容有自己的地址、要能分享 → 独立页面。
 - 纯「确认 / 取消」的破坏性操作 → 二次确认（见「组件 → Confirm 二次确认」），不要用 `Modal` 手拼。
 
-**一次只开一个弹窗**：弹窗里不能再开弹窗，两层浮层叠着，用户数不清关几次才回得去。弹窗里可以开二次确认，那是一问一答，不算一层——那种情况给它的遮罩传 `overlayClassName="bg-transparent"`，同一时间只压暗一次页面。
+**一次只开一个弹窗**：弹窗里不能再开弹窗，两层浮层叠着，用户数不清关几次才回得去。弹窗里可以开二次确认，那是一问一答，不算一层——它自带遮罩叠在弹窗之上，把下面那层也压暗。
