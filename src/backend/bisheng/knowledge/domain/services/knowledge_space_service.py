@@ -191,6 +191,7 @@ from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema imp
 )
 from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
     KnowledgeFulltextAdvancedSearchQuery,
+    KnowledgeFulltextSearchSort,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchAliasActionResult,
@@ -5646,6 +5647,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "discovery_snapshot": discovery.snapshot if discovery else "",
             }
 
+        if (
+            req.query_type == "browse"
+            and self._normalize_shougang_document_type_code(req.document_type)
+        ):
+            # 与列表一致：document_type 浏览走 ES 全文，不能用 MySQL file_encoding LIKE 计数。
+            browse_payload = req.model_dump(
+                exclude={
+                    "query_type",
+                    "q",
+                    "conditions",
+                    "filter_tag",
+                    "all_keywords",
+                    "exact_phrase",
+                    "any_keywords",
+                    "exclude_keywords",
+                    "search_field",
+                    "original_uploader_id",
+                    "original_knowledge_id",
+                    "preview_count_min",
+                    "preview_count_max",
+                    "download_count_min",
+                    "download_count_max",
+                    "updated_from",
+                    "updated_to",
+                },
+                exclude_unset=True,
+            )
+            browse_payload["limit"] = 100
+            browse_payload["cursor"] = None
+            total = 0
+            seen_cursors: set[str] = set()
+            while True:
+                result = await self.browse_shougang_portal_files(
+                    ShougangPortalFileBrowseReq.model_validate(browse_payload)
+                )
+                total += len(result.get("data") or [])
+                next_cursor = str(result.get("next_cursor") or "")
+                if not result.get("has_more") or not next_cursor:
+                    break
+                if next_cursor in seen_cursors:
+                    logger.warning(
+                        "portal document_type browse count stopped on repeated cursor"
+                    )
+                    break
+                seen_cursors.add(next_cursor)
+                browse_payload["cursor"] = next_cursor
+            discovery = getattr(self, "_portal_discovery_result", None)
+            return {
+                "total": total,
+                "discovery_snapshot": discovery.snapshot if discovery else "",
+            }
+
         effective_discovery_scope = (
             req.discovery_scope
             if req.discovery_scope in {"portal_public", "portal_configured"}
@@ -8946,6 +8999,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_file_ids: list[int] | None,
         trusted_public_scope: bool = False,
     ) -> dict:
+        # 有一级文件分类时走 ES keyword 等值过滤，避免 MySQL file_encoding LIKE。
+        # 无回退：全文服务不可用时直接失败，避免与 LIKE/标签结果集不一致。
+        if self._normalize_shougang_document_type_code(req.document_type):
+            return await self._list_shougang_portal_files_via_fulltext_document_type(req)
+
         from bisheng.common.cursor import CursorDecodeError, decode_cursor
 
         space_ids = [int(space.id) for space in spaces]
@@ -9041,6 +9099,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if has_more and page_files:
             next_cursor = self._encode_shougang_portal_file_cursor(page_files[-1], cursor_context)
         return self._build_shougang_portal_cursor_response(page_items, has_more, next_cursor)
+
+    async def _list_shougang_portal_files_via_fulltext_document_type(
+        self,
+        req: ShougangPortalFileBrowseReq,
+    ) -> dict:
+        """无关键词浏览在带 document_type 时复用高级全文检索（ES term 过滤）。"""
+        sort = self._map_browse_sort_to_fulltext_sort(req.sort)
+        payload = req.model_dump()
+        payload["sort"] = sort
+        payload["document_type"] = self._normalize_shougang_document_type_code(req.document_type)
+        advanced_req = ShougangPortalAdvancedFileSearchReq.model_validate(payload)
+        return await self.advanced_search_shougang_portal_files(advanced_req)
+
+    @staticmethod
+    def _map_browse_sort_to_fulltext_sort(sort: str | None) -> str:
+        """将 browse 排序映射为全文检索可接受的 sort 字面量。"""
+        normalized = (sort or "updated_at_desc").strip().lower()
+        if normalized == "updated_at_asc":
+            return KnowledgeFulltextSearchSort.UPDATED_AT_ASC.value
+        if normalized in {
+            KnowledgeFulltextSearchSort.PREVIEW_COUNT_DESC.value,
+            KnowledgeFulltextSearchSort.PREVIEW_COUNT_ASC.value,
+            KnowledgeFulltextSearchSort.DOWNLOAD_COUNT_DESC.value,
+            KnowledgeFulltextSearchSort.DOWNLOAD_COUNT_ASC.value,
+            KnowledgeFulltextSearchSort.UPDATED_AT_DESC.value,
+            KnowledgeFulltextSearchSort.UPDATED_AT_ASC.value,
+        }:
+            return normalized
+        # browse 默认与历史 updated_at 别名统一为时间倒序
+        return KnowledgeFulltextSearchSort.UPDATED_AT_DESC.value
 
     async def _semantic_search_shougang_portal_files(
         self,
