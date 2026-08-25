@@ -12,7 +12,8 @@ import { useRecoilState } from "recoil";
 import { Switch } from "~/components/ui";
 import ApiAppIcon from "~/components/ui/icon/ApiApp";
 import { Select, SelectContent, SelectTrigger } from "~/components/ui/Select";
-import { useLocalize } from "~/hooks";
+import { useAuthContext, useLocalize } from "~/hooks";
+import { markAgentToolsTouched } from "~/components/Chat/Input/agentToolsMemory";
 import store from "~/store";
 import { cn } from "~/utils";
 
@@ -52,6 +53,7 @@ function iconForGroup(group: AvailableToolGroup) {
 
 export default function AgentToolSelector({ availableTools, disabled, compact = false }: Props) {
   const localize = useLocalize();
+  const { user } = useAuthContext();
   const [selected, setSelected] = useRecoilState(store.selectedAgentTools);
   const [initialized, setInitialized] = useRecoilState(store.agentToolsInitialized);
 
@@ -91,6 +93,11 @@ export default function AgentToolSelector({ availableTools, disabled, compact = 
 
   const isChecked = (id: number) => selected.some((g) => g.id === id);
   const toggle = (group: AvailableToolGroup) => {
+    // The one place a real choice is made. Everything else that writes this
+    // selection (admin defaults, pruning a removed group) is derived state, and
+    // persisting that is what froze users on whatever the config said the day
+    // they first opened the workbench — see agentToolsMemory.
+    markAgentToolsTouched(user?.id);
     if (isChecked(group.id)) {
       setSelected(selected.filter((g) => g.id !== group.id));
     } else {

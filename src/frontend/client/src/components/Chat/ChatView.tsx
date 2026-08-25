@@ -4,10 +4,11 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useUnactivate } from 'react-activation';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useRecoilState } from 'recoil';
+import { useRecoilState, useSetRecoilState } from 'recoil';
 import { getRecommendedAppsApi } from '~/api/apps';
 import { writeAppChatOrigin, writeAppChatReturnTo } from '~/pages/appChat/appChatOrigin';
 import AiChatInput from '~/components/Chat/AiChatInput';
+import { persistAgentTools, restoreAgentTools } from '~/components/Chat/Input/agentToolsMemory';
 import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
 import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
@@ -87,7 +88,7 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   const [chatModel, setChatModel] = useRecoilState(store.chatModel);
   const [selectedOrgKbs, setSelectedOrgKbs] = useRecoilState(store.selectedOrgKbs);
   const [selectedAgentTools, setSelectedAgentTools] = useRecoilState(store.selectedAgentTools);
-  const [agentToolsInitialized, setAgentToolsInitialized] = useRecoilState(store.agentToolsInitialized);
+  const setAgentToolsInitialized = useSetRecoilState(store.agentToolsInitialized);
   const [searchType, setSearchType] = useRecoilState(store.searchType);
   // Landing-only: the input box reports whether its attachment bar is showing
   // so the welcome subtitle can hide without shifting the title / input box.
@@ -141,26 +142,18 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
       }
     } catch { /* ignore */ }
 
-    // Agent tool groups (parent-level). Same priority rule: any localStorage
-    // entry (including empty) is treated as the user's choice; admin
-    // default_checked only seeds the first session via AgentToolSelector
-    // when no key exists yet.
-    try {
-      const raw = localStorage.getItem(`${prefix}selectedAgentTools`);
-      let saved: any[] | null = null;
-      if (raw !== null) {
-        try {
-          const v = JSON.parse(raw);
-          if (Array.isArray(v)) saved = v;
-        } catch { /* ignore parse errors */ }
-      }
-      if (saved !== null) {
-        setSelectedAgentTools(saved);
-        setAgentToolsInitialized(true);
-      }
-      // else: key absent → leave initialized=false so AgentToolSelector
-      // applies admin defaults on first session.
-    } catch { /* ignore */ }
+    // Agent tool groups (parent-level). Unlike the KB list above, a stored
+    // selection only outranks the admin config once the user has actually used
+    // the picker (see readStoredAgentTools). A user who never opened it keeps
+    // following bsConfig.tools[].default_checked, INCLUDING changes the admin
+    // makes after that user's first visit.
+    const savedAgentTools = restoreAgentTools(user.id);
+    if (savedAgentTools !== null) {
+      setSelectedAgentTools(savedAgentTools as any[]);
+      setAgentToolsInitialized(true);
+    }
+    // else: nothing the user chose → leave initialized=false so
+    // AgentToolSelector applies the current admin defaults.
 
     // Web search toggle. ChatForm clears searchType on conversation change,
     // but its effect runs before this one (children commit first), so the
@@ -180,10 +173,13 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
     localStorage.setItem(`bs:${user.id}:selectedOrgKbs`, JSON.stringify(selectedOrgKbs));
   }, [selectedOrgKbs, user?.id]);
 
+  // Only a real choice is written. Persisting derived state (admin defaults, a
+  // prune of a removed group) is what turned "never touched it" into a stored
+  // preference the admin could no longer reach.
   useEffect(() => {
-    if (!memoReadyRef.current || !user?.id || !agentToolsInitialized) return;
-    localStorage.setItem(`bs:${user.id}:selectedAgentTools`, JSON.stringify(selectedAgentTools));
-  }, [selectedAgentTools, user?.id, agentToolsInitialized]);
+    if (!memoReadyRef.current) return;
+    persistAgentTools(user?.id, selectedAgentTools);
+  }, [selectedAgentTools, user?.id]);
 
   useEffect(() => {
     if (!memoReadyRef.current || !user?.id) return;
