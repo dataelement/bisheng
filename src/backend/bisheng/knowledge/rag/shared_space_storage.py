@@ -420,6 +420,11 @@ def bootstrap_shared_collection(
         if utility.has_collection(name, using=alias):
             existing = Collection(name, using=alias)
             verify_shared_collection_schema(existing, fingerprint, tenant_id=tenant_id)
+            try:
+                existing.load()
+            except Exception:
+                logger.exception("load shared collection %s failed", name)
+                raise
             return SharedCollectionBootstrapResult(name, fingerprint, created=False)
         schema = CollectionSchema(
             build_shared_field_schemas(spec), description=description
@@ -443,6 +448,11 @@ def bootstrap_shared_collection(
         collection.create_index(SHARED_MILVUS_VECTOR_FIELD, index_body)
     except Exception:  # pragma: no cover - already indexed
         logger.warning("create_index on shared collection %s failed (may exist)", name)
+    try:
+        collection.load()
+    except Exception:
+        logger.exception("load shared collection %s failed", name)
+        raise
 
     return SharedCollectionBootstrapResult(name, fingerprint, created=True)
 

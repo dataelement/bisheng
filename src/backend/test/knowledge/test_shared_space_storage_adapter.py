@@ -322,6 +322,60 @@ class TestSchemaFingerprint:
         assert sss.SharedStoreSchemaSpec(**base).fingerprint() != other.fingerprint()
 
 
+class TestSharedCollectionBootstrap:
+    def test_created_collection_is_loaded_before_copy_queries(self):
+        spec = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=1024,
+            knowledge_ids_max_capacity=4096,
+        )
+        calls = []
+
+        class FakeCollection:
+            description = spec.description_payload()
+
+            def set_properties(self, properties):
+                calls.append(("set_properties", properties))
+
+            def create_index(self, field_name, index_body):
+                calls.append(("create_index", field_name, index_body))
+
+            def load(self):
+                calls.append(("load",))
+
+        result = sss.bootstrap_shared_collection(
+            spec,
+            tenant_id=1,
+            collection_factory=lambda name, schema, description, alias: FakeCollection(),
+        )
+
+        assert result.created is True
+        assert ("load",) in calls
+
+    def test_existing_collection_is_loaded_before_copy_queries(self):
+        spec = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=1024,
+            knowledge_ids_max_capacity=4096,
+        )
+        calls = []
+        collection = SimpleNamespace(
+            name="col_space_shared_1",
+            description=spec.description_payload(),
+            load=lambda: calls.append(("load",)),
+        )
+
+        with (
+            patch.object(sss, "_ensure_shared_milvus_connection", return_value="alias"),
+            patch.object(sss.utility, "has_collection", return_value=True),
+            patch.object(sss, "Collection", return_value=collection),
+        ):
+            result = sss.bootstrap_shared_collection(spec, tenant_id=1)
+
+        assert result.created is False
+        assert calls == [("load",)]
+
+
 class TestCreateDeleteRoutingGuards:
     def test_create_space_uses_shared_names_when_routed(self):
         from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
