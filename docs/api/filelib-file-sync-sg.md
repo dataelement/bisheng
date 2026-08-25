@@ -91,6 +91,7 @@ POST /api/v2/filelib/file/sync
 | `file_name` | 文件名称 | string | 是 | - | 同步文件的名称。 |
 | `department_id` | 主责单位 ID | integer / string | 否 | 接口调用人所属部门 ID | 文件所属部门的 ID，不传时默认填入接口调用人所属部门。 |
 | `responsible_person_id` | 责任人 ID | integer / string | 否 | 接口调用人 ID | 责任人的 ID（`user.external_id`），不传时默认填入接口调用人。 |
+| `tags` | 标签 | string[] | 否 | `[]` | 同步到知识库文件上的标签名称列表。trim 后去空、保序去重。目标知识库已绑定标签库时：库中已有同名标签则复用并挂到文件；没有则写入该知识库绑定的第一个标签库再挂到文件。目标知识库未绑定标签库时**忽略 tags，文件仍入库**。解析完成后仍可追加 AI 自动标签。数量不限制。 |
 
 `params` 示例：
 
@@ -99,7 +100,8 @@ POST /api/v2/filelib/file/sync
   "external_file_id": "SG-DOC-0001",
   "file_name": "安全管理制度.pdf",
   "department_id": "1024",
-  "responsible_person_id": "EMP001"
+  "responsible_person_id": "EMP001",
+  "tags": ["安全生产", "管理制度"]
 }
 ```
 
@@ -112,7 +114,7 @@ POST /api/v2/filelib/file/sync
 | 文件名 | 文件名称 | | | | | | | | | | |
 | 文件分类 | 政策制度-管理政策 | 技术规程与诊断-精益项目 | 技术规程与诊断-快速改善 | 技术规程与诊断-管理参数 | 技术规程与诊断-合理化建议 | 报告-经营管理成果 | 政策制度-管理政策 | 报告-经营管理成果 | 标准规范-产品成果 | 案例-故障诊断/协作案例 | 政策制度-国家/行业法规 |
 | 业务口分类 | 各责任人所在科室对应的业务口 | 各责任人所在科室对应的业务口 | 各责任人所在科室对应的业务口 | 各责任人所在科室对应的业务口 | 各责任人所在科室对应的业务口 | 信息 | 信息 | 采购 | 营销 | 营销 | 安全 |
-| 标签 | 跟随知识库的 AI 标签生成规则 | | | | | | | | | | |
+| 标签 | 入参 `tags` 写入目标库绑定的标签库并挂到文件；未绑定标签库时忽略。解析完成后仍可追加 AI 标签 | | | | | | | | | | |
 | 上传人 | | | | | | | | | | | |
 | 文件编码 | SG+文件分类+业务口 | | | | | | | | | | |
 | 更新时间 | 入库时间 | | | | | | | | | | |
@@ -124,7 +126,7 @@ POST /api/v2/filelib/file/sync
 curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync' \
   -H 'X-Developer-Token: bst_xxx' \
   -F 'file=@./安全管理制度.pdf' \
-  -F 'params={"external_file_id":"SG-DOC-0001","file_name":"安全管理制度.pdf","department_id":"1024","responsible_person_id":"EMP001"}'
+  -F 'params={"external_file_id":"SG-DOC-0001","file_name":"安全管理制度.pdf","department_id":"1024","responsible_person_id":"EMP001","tags":["安全生产","管理制度"]}'
 ```
 
 ### 2.8 响应示例
@@ -141,7 +143,8 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync' \
     "file_encoding": "SGGF-QM-AQ-20260700000001",
     "knowledge_id": 118,
     "knowledge_name": "安全环保部-部门库",
-    "status": 5
+    "status": 5,
+    "tags": ["安全生产", "管理制度"]
   }
 }
 ```
@@ -156,6 +159,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync' \
 | `data.knowledge_id` | integer | 文件落库的目标知识资源 ID。 |
 | `data.knowledge_name` | string | 文件落库的目标知识资源名称。 |
 | `data.status` | integer | 文件处理状态。同步刚提交时通常为 `5`（排队中）。取值见下表。 |
+| `data.tags` | string[] | 实际挂到文件上的标签名称。目标库未绑定标签库、或全部被忽略时为空数组。 |
 
 `status` 枚举：
 
@@ -180,6 +184,7 @@ curl -X POST 'http://127.0.0.1:7860/api/v2/filelib/file/sync' \
 | `400` | `params must be valid JSON` | `params` 不是合法 JSON 字符串。 |
 | `400` | `external_file_id must not be empty` | `params.external_file_id` 缺失或为空。 |
 | `400` | `file_name must not be empty` | `params.file_name` 缺失或为空。 |
+| `400` | `params fields are invalid` | `params.tags` 不是字符串数组。 |
 | `403` | - | 无目标知识资源写入权限。 |
 | `409` | `duplicate external_file_id` | `external_file_id` 已同步过，唯一性校验未通过。 |
 | `422` | - | multipart 表单校验失败（缺少 `file` 或 `params`）。 |
