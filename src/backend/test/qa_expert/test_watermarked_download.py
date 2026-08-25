@@ -5,8 +5,10 @@ from PIL import Image
 from bisheng.qa_expert.domain.watermarked_download import (
     QaWatermarkDownloadError,
     _bytes_to_pdf,
+    is_qa_video_asset,
     parse_qa_asset_location,
     resolve_conversion_filename,
+    resolve_qa_video_suffix,
 )
 
 
@@ -108,3 +110,25 @@ def test_bytes_to_pdf_converts_plain_text_via_fallback(monkeypatch):
     )
     pdf = _bytes_to_pdf("hello\n第二行".encode(), "note.txt")
     assert pdf[:5] == b"%PDF-"
+
+
+def test_resolve_qa_video_suffix_from_filename():
+    assert resolve_qa_video_suffix("demo.mp4", b"") == ".mp4"
+    assert resolve_qa_video_suffix("clip.mov", b"") == ".mov"
+    assert resolve_qa_video_suffix("screen.webm", b"") == ".webm"
+    assert resolve_qa_video_suffix("report.docx", b"PK") is None
+
+
+def test_resolve_qa_video_suffix_sniffs_ftyp_when_title_has_no_extension():
+    mp4_header = b"\x00" * 4 + b"ftyp" + b"isom" + b"\x00" * 4
+    assert resolve_qa_video_suffix("现场录像", mp4_header) == ".mp4"
+    assert is_qa_video_asset("现场录像", mp4_header) is True
+
+
+def test_bytes_to_pdf_rejects_mp4():
+    mp4_header = b"\x00" * 4 + b"ftyp" + b"isom" + b"\x00" * 4
+    try:
+        _bytes_to_pdf(mp4_header, "demo.mp4")
+        raise AssertionError("expected error")
+    except QaWatermarkDownloadError:
+        pass
