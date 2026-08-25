@@ -12,7 +12,9 @@ Full design specs live in `docs/` (site: `pnpm dev:ui`); this file is the enforc
 
 ## Design Tokens (SSOT discipline)
 
-- `design-token.cjs` is the single source of truth for token NAMES + documented values (client re-exports it). `src/styles/tokens.css` + `tailwind-preset.cjs` are its runtime carriers and MUST stay value-identical with `client/src/style.css` until client fully migrates onto the preset.
+- `design-token.cjs` is the single source of truth for token NAMES + documented values (client re-exports it). `src/styles/tokens.css` + `tailwind-preset.cjs` are its runtime carriers.
+- **`tailwind-preset.cjs` is the shared Tailwind theme** — client consumes it via `presets: [require('@bisheng/ui/tailwind-preset')]` and no longer declares the type scale / semantic colors / radius / shadow / z tiers / motion keyframes itself. A cross-app theme key belongs HERE, not in an app config; adding it to one app re-forks what this preset exists to unify. (platform has not adopted it yet.)
+- **`src/styles/tokens.css` is the single definition of the runtime CSS custom properties.** client loads it from `main.jsx` (its `style.css` keeps only client-only vars) and the docs site from `rspress.config.ts` `preEntry`; there is no second copy to keep in sync. Override order is fixed INSIDE the file — `:root` first, then `.dark` / the ≤768px remap / `.theme-green` / `.illus-grey`, which tie with `:root` on specificity and win only by coming later. Do not reorder those blocks.
 - Components consume the **semantic layer only** (`text-text-1…4`, `bg-fill-1…4`, `border-border-base`, `blue-*` = brand, `btn-*`, `success/warning/danger`). Primitives (`--arco-gray-N`) are intentionally not wired — never hardcode hex or reach around the semantic names.
 
 ## Interaction Rules (from 多端适配原则 / 组件-Button按钮 §5.5)

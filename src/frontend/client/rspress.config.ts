@@ -209,6 +209,10 @@ export default defineConfig({
       // (restores document flow so the sticky nav works — see file header).
       preEntry: [
         'regenerator-runtime/runtime',
+        // globalStyles below loads the app's style.css, which no longer carries the
+        // design tokens — they live in @bisheng/ui now. Load them here too, or every
+        // color / type custom property on the docs site resolves to nothing.
+        path.join(__dirname, '../packages/ui/src/styles/tokens.css'),
         path.join(__dirname, 'stubs/rspress-overrides.css'),
       ],
       define: {

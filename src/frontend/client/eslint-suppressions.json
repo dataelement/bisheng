@@ -3695,11 +3695,6 @@
       "count": 2
     }
   },
-  "tailwind.config.cjs": {
-    "@typescript-eslint/no-require-imports": {
-      "count": 3
-    }
-  },
   "tailwind.docs.config.cjs": {
     "@typescript-eslint/no-require-imports": {
       "count": 2
