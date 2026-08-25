@@ -15,6 +15,7 @@ from bisheng.common.models.config import Config, ConfigDao, ConfigKeyEnum
 from bisheng.common.services.config_service import settings as bisheng_settings
 from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.cache.utils import save_uploaded_file, upload_file_to_minio
+from bisheng.core.config.settings import KnowledgeChunkingConf
 from bisheng.utils import generate_uuid
 from bisheng.utils import get_request_ip
 
@@ -114,6 +115,12 @@ def save_config(data: dict, admin_user: UserPayload = Depends(UserPayload.get_ad
     try:
         # Check for complianceyamlFormat
         config = yaml.safe_load(data.get('data'))
+        if not isinstance(config, dict):
+            raise ValueError('system config must be a mapping')
+        knowledge_config = config.get('knowledges', {})
+        if not isinstance(knowledge_config, dict):
+            raise ValueError('knowledges config must be a mapping')
+        KnowledgeChunkingConf(**knowledge_config.get('chunking', {}))
 
         # Judging linsight_invitation_code Right?boolean
         if isinstance(config, dict) and 'linsight_invitation_code' in config.keys():

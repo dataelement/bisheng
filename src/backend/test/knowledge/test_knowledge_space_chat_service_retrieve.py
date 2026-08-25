@@ -7,6 +7,7 @@ filter validation, tag-name resolution, KB-not-found, multi-KB merge and
 top_k truncation, and the per-chunk knowledge_id annotation.
 """
 
+from contextlib import asynccontextmanager
 from datetime import datetime
 from inspect import signature
 from types import SimpleNamespace
@@ -25,12 +26,15 @@ from bisheng.open_endpoints.api.dependencies import (
     get_filelib_knowledge_document_repository,
     get_filelib_knowledge_document_version_repository,
     get_filelib_request_user,
+    get_filelib_retrieve_source_service,
     get_filelib_user_context_service,
 )
 from bisheng.open_endpoints.api.endpoints import filelib as filelib_mod
 from bisheng.open_endpoints.api.endpoints.filelib import (
-    _build_portal_source_urls,
     _parse_document_type_code,
+)
+from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
+    RetrieveSourceLink,
 )
 
 
@@ -71,15 +75,67 @@ def _doc(content: str, *, document_id: int, document_name: str, chunk_index: int
     )
 
 
-def test_build_portal_source_urls_encodes_portal_deep_link():
-    source_url, source_full_url = _build_portal_source_urls(
-        portal_base_url="https://portal.example.com/knowledge-spaces",
-        knowledge_id=7,
-        document_id=9,
+async def test_retrieve_chunks_maps_original_links_without_changing_chunk_order(
+    monkeypatch,
+):
+    request_user = MagicMock()
+
+    @asynccontextmanager
+    async def use_user(principal, external_id):
+        yield request_user
+
+    results = [
+        (7, _doc("first", document_id=9, document_name="report.pdf", chunk_index=3)),
+        (7, _doc("second", document_id=9, document_name="report.pdf", chunk_index=4)),
+        (8, _doc("missing", document_id=10, document_name="missing.docx", chunk_index=1)),
+    ]
+    chat_service = SimpleNamespace(aretrieve_chunks=AsyncMock(return_value=results))
+    monkeypatch.setattr(
+        filelib_mod,
+        "build_knowledge_space_chat_service_for_openapi",
+        MagicMock(return_value=chat_service),
+    )
+    source_service = SimpleNamespace(
+        resolve_links=AsyncMock(
+            return_value={
+                9: RetrieveSourceLink(
+                    source_url="/public/original/9.pdf?X-Amz-Signature=REDACTED",
+                    source_full_url=(
+                        "https://files.example.com/public/original/9.pdf"
+                        "?X-Amz-Signature=REDACTED"
+                    ),
+                )
+            }
+        )
     )
 
-    assert source_url == "/knowledge-spaces?spaceId=7&fileId=9"
-    assert source_full_url == "https://portal.example.com/knowledge-spaces?spaceId=7&fileId=9"
+    response = await filelib_mod.retrieve_chunks(
+        request=MagicMock(),
+        req=filelib_mod.RetrieveReq(query="q", knowledge_base_ids=[7, 8]),
+        principal=MagicMock(),
+        user_context_service=SimpleNamespace(use_user=use_user),
+        version_repo=MagicMock(),
+        doc_repo=MagicMock(),
+        source_service=source_service,
+    )
+
+    source_service.resolve_links.assert_awaited_once_with([9, 10])
+    assert response.data.total == 3
+    assert [chunk.content for chunk in response.data.chunks] == [
+        "first",
+        "second",
+        "missing",
+    ]
+    assert [chunk.chunk_index for chunk in response.data.chunks] == [3, 4, 1]
+    assert response.data.chunks[0].source_url == (
+        "/public/original/9.pdf?X-Amz-Signature=REDACTED"
+    )
+    assert response.data.chunks[1].source_url == response.data.chunks[0].source_url
+    assert response.data.chunks[0].source_full_url.startswith(
+        "https://files.example.com/public/original/9.pdf"
+    )
+    assert response.data.chunks[2].source_url == ""
+    assert response.data.chunks[2].source_full_url == ""
 
 
 def test_openapi_chat_service_builder_uses_resolved_request_user():
@@ -125,6 +181,7 @@ def test_openapi_retrieve_depends_on_token_and_user_context_service():
     assert params["user_context_service"].default.dependency is get_filelib_user_context_service
     assert params["version_repo"].default.dependency is get_filelib_knowledge_document_version_repository
     assert params["doc_repo"].default.dependency is get_filelib_knowledge_document_repository
+    assert params["source_service"].default.dependency is get_filelib_retrieve_source_service
 
 
 def test_parse_document_type_code_from_file_encoding():
@@ -633,6 +690,45 @@ async def test_filter_projection_documents_rejects_stale_generation(monkeypatch)
     )
 
     assert [document.page_content for document in result] == ["valid"]
+
+
+@pytest.mark.parametrize("allowed", [True, False], ids=["view-file", "denied"])
+async def test_retrieve_visibility_is_decided_by_view_file_permission(
+    monkeypatch,
+    allowed: bool,
+):
+    svc = _make_service()
+    monkeypatch.setattr(svc_mod, "NotFoundError", _StubNotFoundError)
+    file_record = SimpleNamespace(
+        id=10,
+        knowledge_id=1,
+        file_type=svc_mod.FileType.FILE.value,
+        status=svc_mod.KnowledgeFileStatus.SUCCESS.value,
+        reference_document_id=None,
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeFileDao,
+        "aget_file_by_ids",
+        AsyncMock(return_value=[file_record]),
+    )
+    permission_check = AsyncMock()
+    if not allowed:
+        permission_check.side_effect = SpacePermissionDeniedError()
+    svc._require_file_view_permission = permission_check
+    document = _doc(
+        "visible" if allowed else "hidden",
+        document_id=10,
+        document_name="report.pdf",
+        chunk_index=0,
+    )
+
+    result = await svc._filter_visible_projection_documents(
+        [document],
+        knowledge_id=1,
+    )
+
+    permission_check.assert_awaited_once_with(1, 10)
+    assert [item.page_content for item in result] == (["visible"] if allowed else [])
 
 
 async def test_aretrieve_chunks_dedupes_same_canonical_chunk_across_spaces():

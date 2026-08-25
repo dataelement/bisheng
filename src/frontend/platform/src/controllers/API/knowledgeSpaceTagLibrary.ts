@@ -151,6 +151,49 @@ export async function getKnowledgeSpaceTagLibraryUsageApi(id: number): Promise<{
   return await axios.get(`/api/v1/knowledge/space/tag-libraries/${id}/usage`)
 }
 
+/** One knowledge space attached to a tag library. */
+export interface TagLibraryBoundKnowledge {
+  id: number
+  name: string
+  /** public | department | team | team_ks | personal; null for spaces with no scope row. */
+  level?: string | null
+}
+
+/**
+ * Move a library between the two it was dropped between.
+ *
+ * Neighbour ids rather than an index, so the server writes only the moved row.
+ * Pass null at the ends of the list.
+ */
+export async function reorderKnowledgeSpaceTagLibraryApi(
+  id: number,
+  neighbours: { prev_library_id: number | null; next_library_id: number | null },
+): Promise<boolean> {
+  return await axios.post(`/api/v1/knowledge/space/tag-libraries/${id}/sort`, neighbours)
+}
+
+export async function getKnowledgeSpaceTagLibraryKnowledgesApi(
+  id: number,
+): Promise<TagLibraryBoundKnowledge[]> {
+  return await axios.get(`/api/v1/knowledge/space/tag-libraries/${id}/knowledges`)
+}
+
+export async function addKnowledgeSpaceTagLibraryKnowledgesApi(
+  id: number,
+  knowledgeIds: number[],
+): Promise<{ added: number[] }> {
+  return await axios.post(`/api/v1/knowledge/space/tag-libraries/${id}/knowledges`, {
+    knowledge_ids: knowledgeIds,
+  })
+}
+
+export async function removeKnowledgeSpaceTagLibraryKnowledgeApi(
+  id: number,
+  knowledgeId: number,
+): Promise<boolean> {
+  return await axios.delete(`/api/v1/knowledge/space/tag-libraries/${id}/knowledges/${knowledgeId}`)
+}
+
 // Review tag APIs
 export interface ReviewTagResourceItem {
   file_source?: string

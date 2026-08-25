@@ -174,6 +174,10 @@ class PortalRecommendationProjectionService:
         if source.space_level is None:
             return False, "space_scope_unknown"
         if permission_scope == "custom":
+            # Public spaces stay in the shared pool even after extra grants.
+            # Request-time authorization still skips the public fast-path.
+            if source.space_level == KnowledgeSpaceLevelEnum.PUBLIC.value:
+                return True, "eligible"
             return False, "custom_acl"
         if permission_scope != "inherited":
             return False, "acl_unknown"

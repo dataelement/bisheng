@@ -35,6 +35,11 @@ def generate_metadata_mappings(metadata_schemas: Optional[List[RagMetadataFieldS
             metadata_mappings[schema.field_name] = {'type': 'float'}
         elif schema.field_type == 'double':
             metadata_mappings[schema.field_name] = {'type': 'double'}
+        elif schema.field_type == 'array_int64':
+            # Multi-value long field (shared SPACE knowledge_ids); ES natively
+            # supports arrays of the base type, so plain 'long' is correct and
+            # terms queries match any array element.
+            metadata_mappings[schema.field_name] = {'type': 'long'}
         elif schema.field_type == 'json':
             metadata_mappings[schema.field_name] = {'type': 'flattened'}
 

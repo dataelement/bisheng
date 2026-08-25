@@ -118,6 +118,13 @@ class RemoveShareEntryResult:
 
 
 @dataclass(frozen=True)
+class RemovePublishEntryResult:
+    document_id: int
+    publish_entry_id: int
+    idempotent: bool
+
+
+@dataclass(frozen=True)
 class DeleteManagerResult:
     document_id: int
     manager_file_id: int
@@ -1830,6 +1837,147 @@ class KnowledgeDocumentDistributionService:
             idempotent=False,
         )
 
+    @staticmethod
+    def _active_publish_predecessor(
+        document: KnowledgeDocument,
+        entries: Sequence[KnowledgeFile],
+    ) -> KnowledgeFile | None:
+        publish_entries = {
+            int(entry.id): entry
+            for entry in entries
+            if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value
+        }
+        if any(
+            int(entry.tenant_id or 0) != int(document.tenant_id or 0)
+            or int(entry.reference_document_id or 0) != int(document.id)
+            for entry in publish_entries.values()
+        ):
+            raise KnowledgeDocumentDistributionError("publish predecessor chain crosses its document boundary")
+        predecessor_id = document.predecessor_logic_file_id
+        visited: set[int] = set()
+        candidate: KnowledgeFile | None = None
+        while predecessor_id is not None:
+            current_id = int(predecessor_id)
+            if current_id in visited:
+                raise KnowledgeDocumentDistributionError("publish predecessor chain contains a cycle")
+            visited.add(current_id)
+            predecessor = publish_entries.get(current_id)
+            if predecessor is None:
+                raise KnowledgeDocumentDistributionError("publish predecessor chain is incomplete")
+            if predecessor.entry_status == KnowledgeFileEntryStatus.ACTIVE.value:
+                if candidate is None:
+                    candidate = predecessor
+            elif predecessor.entry_status not in {
+                KnowledgeFileEntryStatus.DELETING.value,
+                KnowledgeFileEntryStatus.INVALID.value,
+            }:
+                raise KnowledgeDocumentDistributionError("publish predecessor chain is not stable")
+            predecessor_id = predecessor.predecessor_logic_file_id
+        active_ids = {
+            entry_id
+            for entry_id, entry in publish_entries.items()
+            if entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        }
+        if active_ids - visited:
+            raise KnowledgeDocumentDistributionError("active publish entry is detached from predecessor chain")
+        return candidate
+
+    @staticmethod
+    def _rewire_publish_entry(
+        document: KnowledgeDocument,
+        entries: Sequence[KnowledgeFile],
+        publish: KnowledgeFile,
+        *,
+        apply: bool = True,
+    ) -> None:
+        KnowledgeDocumentDistributionService._active_publish_predecessor(
+            document,
+            entries,
+        )
+        successors = [
+            entry
+            for entry in entries
+            if int(entry.id) != int(publish.id)
+            and entry.entry_type == KnowledgeFileEntryType.PUBLISH.value
+            and entry.entry_status
+            in {
+                KnowledgeFileEntryStatus.ACTIVE.value,
+                KnowledgeFileEntryStatus.PREPARING.value,
+            }
+            and int(entry.predecessor_logic_file_id or 0) == int(publish.id)
+        ]
+        document_points_to_publish = int(document.predecessor_logic_file_id or 0) == int(publish.id)
+        if len(successors) + int(document_points_to_publish) != 1:
+            raise KnowledgeDocumentDistributionError("publish predecessor chain is ambiguous")
+        if not apply:
+            return
+        if successors:
+            successors[0].predecessor_logic_file_id = publish.predecessor_logic_file_id
+        else:
+            document.predecessor_logic_file_id = publish.predecessor_logic_file_id
+
+    async def remove_publish_entry(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        publish_entry_id: int,
+    ) -> RemovePublishEntryResult:
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            for_update=True,
+        )
+        entry_map = {int(entry.id): entry for entry in entries}
+        publish = entry_map.get(publish_entry_id)
+        if document is None or publish is None:
+            raise KnowledgeDocumentDistributionError("publish removal state no longer exists")
+        if (
+            int(document.tenant_id or 0) != tenant_id
+            or int(publish.tenant_id or 0) != tenant_id
+            or int(publish.reference_document_id or 0) != document_id
+            or publish.entry_type != KnowledgeFileEntryType.PUBLISH.value
+        ):
+            raise KnowledgeDocumentDistributionError("target entry is not a publish")
+        if publish.entry_status == KnowledgeFileEntryStatus.DELETING.value:
+            return RemovePublishEntryResult(
+                document_id=document_id,
+                publish_entry_id=publish_entry_id,
+                idempotent=True,
+            )
+        if (
+            document.lifecycle_status != KnowledgeDocumentLifecycleStatus.ACTIVE.value
+            or publish.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            raise KnowledgeDocumentDistributionError("publish entry is not active")
+
+        self._rewire_publish_entry(document, entries, publish)
+        self._mark_entry_for_manager_delete(
+            publish,
+            KnowledgeFileEntryStatus.DELETING,
+        )
+        self.session.add(document)
+        self.session.add_all(entries)
+        await self._commit()
+
+        try:
+            explicit_snapshot = list(await self.permission_snapshot_loader(publish_entry_id))
+            await self.permission_activation_service.revoke_deleting_entry(
+                entry_id=publish_entry_id,
+                explicit_operations=explicit_snapshot,
+            )
+        except Exception:
+            logger.exception(
+                "F059 publish permission revoke deferred: entry_id=%s",
+                publish_entry_id,
+            )
+
+        return RemovePublishEntryResult(
+            document_id=document_id,
+            publish_entry_id=publish_entry_id,
+            idempotent=False,
+        )
+
     async def remove_invalid_entry(
         self,
         *,
@@ -1930,12 +2078,23 @@ class KnowledgeDocumentDistributionService:
         ):
             raise KnowledgeDocumentDistributionError("delete target state changed")
         if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value:
-            raise KnowledgeDocumentDistributionError("publish entries cannot be deleted")
+            entries = await self.file_repository.find_distribution_entries_by_document_id(
+                document_id,
+            )
+            self._rewire_publish_entry(document, entries, entry, apply=False)
+            return "remove_publish"
         if entry.entry_type == KnowledgeFileEntryType.SHARE.value:
             return "remove_share"
         if entry.entry_type != KnowledgeFileEntryType.MANAGER.value:
             raise KnowledgeDocumentDistributionError("entry type does not support explicit delete")
-        return "final_delete"
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+        )
+        return (
+            "rollback"
+            if self._active_publish_predecessor(document, entries) is not None
+            else "final_delete"
+        )
 
     @staticmethod
     def _mark_entry_for_manager_delete(
@@ -1960,14 +2119,19 @@ class KnowledgeDocumentDistributionService:
         if manager_snapshot is None:
             raise KnowledgeDocumentDistributionError("manager delete state no longer exists")
         manager_space_id = int(manager_snapshot.knowledge_id)
-        await self.session.execute(
-            select(Knowledge)
-            .where(
-                Knowledge.id == manager_space_id,
-                Knowledge.tenant_id == tenant_id,
-            )
-            .with_for_update()
-            .execution_options(populate_existing=True)
+        entry_snapshots = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+        )
+        await self._lock_published_spaces(
+            {
+                manager_space_id,
+                *{
+                    int(entry.knowledge_id)
+                    for entry in entry_snapshots
+                    if entry.entry_type == KnowledgeFileEntryType.PUBLISH.value
+                    and entry.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+                },
+            }
         )
 
         document = await self.document_repository.find_by_id_for_update(document_id)
@@ -2005,6 +2169,33 @@ class KnowledgeDocumentDistributionService:
             document_id,
             for_update=True,
         )
+        rollback_in_progress = (
+            manager.entry_status == KnowledgeFileEntryStatus.PREPARING.value
+            and manager.approval_instance_id is None
+            and any(
+                entry.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
+                and entry.entry_status == KnowledgeFileEntryStatus.PREPARING.value
+                and int(entry.projection_previous_file_id or 0) == manager_file_id
+                for entry in entries
+            )
+        )
+        if (
+            document.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value
+            and (
+                manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+                or rollback_in_progress
+            )
+        ):
+            predecessor = self._active_publish_predecessor(document, entries)
+            if predecessor is not None:
+                document.predecessor_logic_file_id = int(predecessor.id)
+                self.session.add(document)
+                return await self._rollback_manager(
+                    tenant_id=tenant_id,
+                    document=document,
+                    manager=manager,
+                    predecessor_id=int(predecessor.id),
+                )
         document.lifecycle_status = KnowledgeDocumentLifecycleStatus.DELETING.value
         for entry in entries:
             if int(entry.id) == manager_file_id:
@@ -2091,8 +2282,11 @@ class KnowledgeDocumentDistributionService:
         self.session.add(manager)
         await self._commit()
 
+        permission_prewrite_operations: list[TupleOperation] = []
+        manager_permissions: list[TupleOperation] = []
         try:
             predecessor_permissions = list(await self.permission_snapshot_loader(int(predecessor.id)))
+            manager_permissions = list(await self.permission_snapshot_loader(int(manager.id)))
             manager_target_parent = self.permission_activation_service.build_parent_operation(
                 predecessor,
                 action="write",
@@ -2103,35 +2297,68 @@ class KnowledgeDocumentDistributionService:
                 relation=manager_target_parent.relation,
                 object=f"knowledge_file:{int(manager.id)}",
             )
+            permission_prewrite_operations = [
+                manager_target_parent,
+                *self._retarget_explicit_operations(
+                    predecessor_permissions,
+                    target_file_id=int(manager.id),
+                    action="write",
+                ),
+            ]
             await self.permission_activation_service.tuple_writer(
-                [
-                    manager_target_parent,
-                    *self._retarget_explicit_operations(
-                        predecessor_permissions,
-                        target_file_id=int(manager.id),
-                        action="write",
-                    ),
-                ]
+                permission_prewrite_operations
             )
         except Exception as exc:
+            await self._cleanup_rollback_permission_prewrite(
+                operations=permission_prewrite_operations,
+                document_id=int(document.id),
+            )
             raise KnowledgeDocumentDistributionError("rollback permission prewrite failed") from exc
 
-        document = await self.document_repository.find_by_id_for_update(int(document.id))
-        locked = await self.file_repository.find_by_ids_for_update([int(manager.id), predecessor_id, int(tombstone.id)])
-        file_map = {int(item.id): item for item in locked}
-        manager = file_map.get(int(manager.id))
-        predecessor = file_map.get(predecessor_id)
-        tombstone = file_map.get(int(tombstone.id))
+        try:
+            await self._lock_published_spaces(
+                {int(manager.knowledge_id), int(predecessor.knowledge_id)}
+            )
+            document = await self.document_repository.find_by_id_for_update(int(document.id))
+            entries = await self.file_repository.find_distribution_entries_by_document_id(
+                int(document.id),
+                for_update=True,
+            ) if document is not None else []
+            file_map = {int(item.id): item for item in entries}
+            manager = file_map.get(int(manager.id))
+            predecessor = file_map.get(predecessor_id)
+            tombstone = file_map.get(int(tombstone.id))
+            active_predecessor = (
+                self._active_publish_predecessor(document, entries)
+                if document is not None
+                else None
+            )
+        except Exception as exc:
+            await self.session.rollback()
+            await self._cleanup_rollback_permission_prewrite(
+                operations=permission_prewrite_operations,
+                document_id=int(document.id) if document is not None else 0,
+            )
+            if isinstance(exc, KnowledgeDocumentDistributionError):
+                raise
+            raise KnowledgeDocumentDistributionError("rollback state reload failed") from exc
         if (
             document is None
             or manager is None
             or predecessor is None
             or tombstone is None
-            or int(document.predecessor_logic_file_id or 0) != predecessor_id
+            or active_predecessor is None
+            or int(active_predecessor.id) != predecessor_id
             or manager.entry_status != KnowledgeFileEntryStatus.PREPARING.value
             or predecessor.entry_status != KnowledgeFileEntryStatus.ACTIVE.value
             or tombstone.entry_status != KnowledgeFileEntryStatus.PREPARING.value
         ):
+            document_id = int(document.id) if document is not None else 0
+            await self.session.rollback()
+            await self._cleanup_rollback_permission_prewrite(
+                operations=permission_prewrite_operations,
+                document_id=document_id,
+            )
             raise KnowledgeDocumentDistributionError("rollback state changed concurrently")
 
         versions = await self.version_repository.find_by_document_id(int(document.id))
@@ -2176,8 +2403,25 @@ class KnowledgeDocumentDistributionService:
         await self.session.flush()
         await self._commit()
 
+        desired_explicit_keys = {
+            (operation.user, operation.relation, operation.object)
+            for operation in permission_prewrite_operations
+            if operation.relation != "parent"
+        }
+        old_explicit_cleanup = [
+            operation
+            for operation in self._retarget_explicit_operations(
+                manager_permissions,
+                target_file_id=int(manager.id),
+                action="delete",
+            )
+            if (operation.user, operation.relation, operation.object)
+            not in desired_explicit_keys
+        ]
         try:
-            await self.permission_activation_service.tuple_writer([old_parent_delete])
+            await self.permission_activation_service.tuple_writer(
+                [old_parent_delete, *old_explicit_cleanup]
+            )
         except Exception:
             logger.exception(
                 "F059 rollback old manager permission cleanup deferred: document_id=%s",
@@ -2190,3 +2434,28 @@ class KnowledgeDocumentDistributionService:
             action="rollback",
             tombstone_entry_id=int(tombstone.id),
         )
+
+    async def _cleanup_rollback_permission_prewrite(
+        self,
+        *,
+        operations: Sequence[TupleOperation],
+        document_id: int,
+    ) -> None:
+        if not operations:
+            return
+        cleanup_operations = [
+            TupleOperation(
+                action="delete",
+                user=operation.user,
+                relation=operation.relation,
+                object=operation.object,
+            )
+            for operation in operations
+        ]
+        try:
+            await self.permission_activation_service.tuple_writer(cleanup_operations)
+        except Exception:
+            logger.exception(
+                "F059 stale rollback permission cleanup deferred: document_id=%s",
+                document_id,
+            )

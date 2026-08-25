@@ -1,4 +1,3 @@
-import math
 import os
 from typing import List
 from uuid import uuid4
@@ -165,6 +164,14 @@ def generate_markdown_table_string(
     return "\n".join(md_lines)
 
 
+def split_text_by_char_limit(text: str, max_chunk_chars: int) -> list[str]:
+    """按字符硬上限切分无法继续按表格行拆分的内容。"""
+    return [
+        text[start:start + max_chunk_chars]
+        for start in range(0, len(text), max_chunk_chars)
+    ] or [""]
+
+
 def process_dataframe_to_markdown_files(
         df,
         sheet_index: str,
@@ -172,6 +179,7 @@ def process_dataframe_to_markdown_files(
         rows_per_markdown,
         output_dir,
         append_header=True,
+        max_chunk_chars=10000,
 ):
     """
     - append_header=True: Tekan num_header_rows Separate the header and data.
@@ -222,54 +230,69 @@ def process_dataframe_to_markdown_files(
         header_rows_as_lists = []
         data_block_df = df.reset_index(drop=True)
 
-    # --- Subsequent pagination logic ---
+    # --- 同时按数据行数目标和字符硬上限分页 ---
     if data_block_df.empty:
         if append_header and not header_block_df.empty:
             markdown_content = generate_markdown_table_string(
                 header_rows_as_lists, [], num_columns
             )
-            # BUG FIX: Use zfill for proper padding. This is file '000' for the sheet.
-            file_name = f"{str(sheet_index).zfill(2)}000.md"
-            file_path = os.path.join(output_dir, file_name)
-            try:
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(markdown_content)
-                logger.debug(f"  Header-only files saved:'{file_path}'")
-            except Exception as e:
-                logger.debug(f"  Save file '{file_path}' Error during: {e}")
-        return
+            markdown_chunks = split_text_by_char_limit(markdown_content, max_chunk_chars)
+        else:
+            markdown_chunks = []
+    else:
+        data_rows_as_lists = data_block_df.values.tolist()
+        markdown_chunks = []
+        current_rows = []
 
-    num_data_rows_total = len(data_block_df)
-    num_files_to_create = math.ceil(num_data_rows_total / rows_per_markdown) if rows_per_markdown > 0 else (
-        1 if num_data_rows_total > 0 else 0)
+        def render_chunk(rows_in_chunk):
+            final_header_for_chunk = header_rows_as_lists
+            final_data_for_chunk = rows_in_chunk
+            if not append_header and rows_in_chunk:
+                final_header_for_chunk = [rows_in_chunk[0]]
+                final_data_for_chunk = rows_in_chunk[1:]
+            return generate_markdown_table_string(
+                final_header_for_chunk,
+                final_data_for_chunk,
+                num_columns,
+            )
 
-    for i in range(num_files_to_create):
-        start_idx = i * rows_per_markdown
-        end_idx = min(start_idx + rows_per_markdown, num_data_rows_total)
-        current_data_chunk_as_lists = data_block_df.iloc[start_idx:end_idx].values.tolist()
+        for row in data_rows_as_lists:
+            candidate_rows = [*current_rows, row]
+            candidate_content = render_chunk(candidate_rows)
+            exceeds_row_target = rows_per_markdown > 0 and len(candidate_rows) > rows_per_markdown
+            exceeds_char_limit = len(candidate_content) > max_chunk_chars
 
-        final_header_for_chunk = header_rows_as_lists
-        final_data_for_chunk = current_data_chunk_as_lists
+            if current_rows and (exceeds_row_target or exceeds_char_limit):
+                markdown_chunks.extend(
+                    split_text_by_char_limit(render_chunk(current_rows), max_chunk_chars)
+                )
+                current_rows = [row]
+                single_row_content = render_chunk(current_rows)
+                if len(single_row_content) > max_chunk_chars:
+                    markdown_chunks.extend(
+                        split_text_by_char_limit(single_row_content, max_chunk_chars)
+                    )
+                    current_rows = []
+            elif exceeds_char_limit:
+                markdown_chunks.extend(
+                    split_text_by_char_limit(candidate_content, max_chunk_chars)
+                )
+                current_rows = []
+            else:
+                current_rows = candidate_rows
 
-        # If no real header is attached and the current data block is not empty, the first row of data is used as the “pseudo header” to generate the delimiter
-        if not append_header and current_data_chunk_as_lists:
-            final_header_for_chunk = [current_data_chunk_as_lists[0]]
-            final_data_for_chunk = current_data_chunk_as_lists[1:]
+        if current_rows:
+            markdown_chunks.extend(
+                split_text_by_char_limit(render_chunk(current_rows), max_chunk_chars)
+            )
 
-        markdown_content = generate_markdown_table_string(
-            final_header_for_chunk, final_data_for_chunk, num_columns
-        )
-
-        # BUG FIX: Use zfill for proper 2-digit sheet and 3-digit file padding.
-        file_name = f"{str(sheet_index).zfill(2)}{str(i).zfill(3)}.md"
+    for chunk_index, markdown_content in enumerate(markdown_chunks):
+        file_name = f"{str(sheet_index).zfill(2)}{str(chunk_index).zfill(3)}.md"
         file_path = os.path.join(output_dir, file_name)
-
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
-            logger.debug(
-                f"  Sudah disimpan'{file_path}' (incl.  {len(current_data_chunk_as_lists)} Row Raw Data)"
-            )
+            logger.debug(f"  Markdown chunk saved: '{file_path}'")
         except Exception as e:
             logger.debug(f"  Save file '{file_path}' Error during: {e}")
 
@@ -287,7 +310,8 @@ def is_list_of_lists_empty(data_list):
 
 
 def excel_file_to_markdown(
-        excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True
+        excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True,
+        max_chunk_chars=10000,
 ):
     logger.debug(f"\nStart ProcessingExcelDocumentation:'{excel_path}'")
     try:
@@ -321,6 +345,7 @@ def excel_file_to_markdown(
             rows_per_markdown,
             output_dir,
             append_header=append_header,
+            max_chunk_chars=max_chunk_chars,
         )
         sheet_index += 1
 
@@ -337,6 +362,7 @@ def csv_file_to_markdown(
         csv_encoding="utf-8",
         csv_delimiter=",",
         append_header=True,
+        max_chunk_chars=10000,
 ):
     logger.debug(f"\nStart ProcessingCSVDocumentation:'{csv_path}'")
     try:
@@ -371,6 +397,7 @@ def csv_file_to_markdown(
         rows_per_markdown,
         output_dir,
         append_header,
+        max_chunk_chars,
     )
     logger.debug(f"\nCSVDoc. '{csv_path}' Process Completed.")
 
@@ -383,6 +410,7 @@ def convert_file_to_markdown(
         csv_encoding="utf-8",
         csv_delimiter=",",
         append_header=True,
+        max_chunk_chars=10000,
 ):
     """
     will be Excel OR CSV Convert files to multiple Markdown files.
@@ -407,6 +435,7 @@ def convert_file_to_markdown(
             rows_per_markdown,
             base_output_dir,
             append_header,
+            max_chunk_chars,
         )
     elif file_extension == ".csv":
         csv_file_to_markdown(
@@ -417,6 +446,7 @@ def convert_file_to_markdown(
             csv_encoding,
             csv_delimiter,
             append_header,
+            max_chunk_chars,
         )
     else:
         logger.debug(

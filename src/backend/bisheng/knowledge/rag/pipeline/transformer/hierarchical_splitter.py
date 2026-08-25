@@ -34,6 +34,7 @@ class HierarchicalSplitterTransformer(BaseDocumentTransformer):
             separator_rule=fallback_separator_rule,
             chunk_size=fallback_chunk_size,
             chunk_overlap=fallback_chunk_overlap,
+            max_chunk_limit=max_chunk_limit,
         )
 
     def _split_long_text(self, text: str) -> List[str]:

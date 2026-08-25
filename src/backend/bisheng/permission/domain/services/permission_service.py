@@ -167,7 +167,7 @@ class PermissionService:
             cached = await PermissionCache.get_list_objects(user_id, relation, object_type)
             if cached is not None:
                 return await cls._finalize_accessible_ids(
-                    cached, user_id, object_type, login_user=login_user,
+                    cached, user_id, object_type, login_user=login_user, relation=relation,
                 )
 
         try:
@@ -175,41 +175,31 @@ class PermissionService:
             if fga is None:
                 logger.warning('FGAClient not available for list_objects, using fallback scopes only')
                 ids = await cls._finalize_accessible_ids(
-                    [], user_id, object_type, login_user=login_user,
+                    [], user_id, object_type, login_user=login_user, relation=relation,
                 )
                 if relation not in UNCACHEABLE_RELATIONS:
                     await PermissionCache.set_list_objects(user_id, relation, object_type, ids)
                 return ids
 
             # OpenFGA returns ["workflow:abc", "workflow:def"]
-            raw_objects = await fga.list_objects(
+            ids = await cls._extract_list_object_ids(
+                fga,
                 user=f'user:{user_id}',
                 relation=relation,
-                type=object_type,
+                object_type=object_type,
+            )
+            ids.extend(
+                await cls._list_objects_for_membership_subjects(
+                    fga,
+                    user_id=user_id,
+                    relation=relation,
+                    object_type=object_type,
+                    login_user=login_user,
+                )
             )
 
-            # Extract IDs: "workflow:abc" → "abc"
-            ids = []
-            for obj in raw_objects:
-                parts = obj.split(':', 1)
-                if len(parts) == 2:
-                    ids.append(parts[1])
-
-            for legacy_type in await cls._legacy_alias_object_types(object_type):
-                legacy_objects = await fga.list_objects(
-                    user=f'user:{user_id}',
-                    relation=relation,
-                    type=legacy_type,
-                )
-                legacy_ids = []
-                for obj in legacy_objects:
-                    parts = obj.split(':', 1)
-                    if len(parts) == 2:
-                        legacy_ids.append(parts[1])
-                ids.extend(await cls._filter_legacy_alias_ids(object_type, legacy_ids))
-
             ids = await cls._finalize_accessible_ids(
-                ids, user_id, object_type, login_user=login_user,
+                ids, user_id, object_type, login_user=login_user, relation=relation,
             )
 
             # Cache result (skip for UNCACHEABLE_RELATIONS)
@@ -221,7 +211,7 @@ class PermissionService:
         except FGAConnectionError as e:
             logger.error('OpenFGA unreachable during list_objects: %s', e)
             ids = await cls._finalize_accessible_ids(
-                [], user_id, object_type, login_user=login_user,
+                [], user_id, object_type, login_user=login_user, relation=relation,
             )
             return ids
         except Exception as e:
@@ -1521,12 +1511,157 @@ class PermissionService:
         ]
 
     @classmethod
+    async def _extract_list_object_ids(
+        cls,
+        fga,
+        *,
+        user: str,
+        relation: str,
+        object_type: str,
+    ) -> List[str]:
+        raw_objects = await fga.list_objects(
+            user=user,
+            relation=relation,
+            type=object_type,
+        )
+        ids: List[str] = []
+        for obj in raw_objects:
+            parts = obj.split(':', 1)
+            if len(parts) == 2:
+                ids.append(parts[1])
+
+        for legacy_type in await cls._legacy_alias_object_types(object_type):
+            legacy_objects = await fga.list_objects(
+                user=user,
+                relation=relation,
+                type=legacy_type,
+            )
+            legacy_ids = []
+            for obj in legacy_objects:
+                parts = obj.split(':', 1)
+                if len(parts) == 2:
+                    legacy_ids.append(parts[1])
+            ids.extend(await cls._filter_legacy_alias_ids(object_type, legacy_ids))
+        return ids
+
+    @classmethod
+    async def _membership_list_subjects(cls, user_id: int, login_user=None) -> List[str]:
+        """Department / user-group subjects that should share the user's list_objects.
+
+        OpenFGA list_objects(user:X) only expands through stored
+        user:X member department:Y tuples. Org/SSO rows can exist in MySQL
+        without that tuple, so department grants would otherwise vanish from
+        knowledge-space listings even though check() still allows them.
+        """
+        subjects: List[str] = []
+        try:
+            from bisheng.core.context.tenant import bypass_tenant_filter
+            from bisheng.database.models.department import UserDepartmentDao
+
+            with bypass_tenant_filter():
+                user_departments = await UserDepartmentDao.aget_user_departments(user_id)
+            subjects.extend(
+                f'department:{int(row.department_id)}#member'
+                for row in user_departments
+                if getattr(row, 'department_id', None) is not None
+            )
+        except Exception as e:
+            logger.debug('Could not resolve department subjects for list_objects: %s', e)
+
+        get_user_group_ids = getattr(login_user, 'get_user_group_ids', None)
+        if callable(get_user_group_ids):
+            try:
+                group_ids = await get_user_group_ids(user_id)
+            except TypeError:
+                try:
+                    group_ids = await get_user_group_ids()
+                except Exception as e:
+                    logger.debug('Could not resolve user-group subjects for list_objects: %s', e)
+                    group_ids = []
+            except Exception as e:
+                logger.debug('Could not resolve user-group subjects for list_objects: %s', e)
+                group_ids = []
+            subjects.extend(f'user_group:{int(group_id)}#member' for group_id in group_ids or [])
+
+        try:
+            from bisheng.database.models.user_group import UserGroupDao
+
+            admin_groups = await UserGroupDao.aget_user_admin_group(user_id)
+            for group in admin_groups or []:
+                group_id = getattr(group, 'group_id', None)
+                if group_id is None:
+                    continue
+                subjects.append(f'user_group:{int(group_id)}#admin')
+                subjects.append(f'user_group:{int(group_id)}#member')
+        except Exception as e:
+            logger.debug('Could not resolve admin-group subjects for list_objects: %s', e)
+
+        return list(dict.fromkeys(subjects))
+
+    @classmethod
+    async def _list_objects_for_membership_subjects(
+        cls,
+        fga,
+        *,
+        user_id: int,
+        relation: str,
+        object_type: str,
+        login_user=None,
+    ) -> List[str]:
+        subjects = await cls._membership_list_subjects(user_id, login_user)
+        if not subjects:
+            return []
+        listed = await asyncio.gather(*[
+            cls._extract_list_object_ids(
+                fga,
+                user=subject,
+                relation=relation,
+                object_type=object_type,
+            )
+            for subject in subjects
+        ])
+        ids: List[str] = []
+        for chunk in listed:
+            ids.extend(chunk)
+        return ids
+
+    @classmethod
+    async def _implicit_department_bound_space_ids(cls, user_id: int) -> List[str]:
+        """Spaces bound to the user's departments, even without an FGA viewer tuple."""
+        try:
+            from bisheng.core.context.tenant import bypass_tenant_filter
+            from bisheng.database.models.department import UserDepartmentDao
+            from bisheng.knowledge.domain.models.department_knowledge_space import (
+                DepartmentKnowledgeSpaceDao,
+            )
+
+            with bypass_tenant_filter():
+                user_departments = await UserDepartmentDao.aget_user_departments(user_id)
+                department_ids = [
+                    int(row.department_id)
+                    for row in user_departments
+                    if getattr(row, 'department_id', None) is not None
+                ]
+                if not department_ids:
+                    return []
+                bindings = await DepartmentKnowledgeSpaceDao.aget_by_department_ids(department_ids)
+            return [
+                str(binding.space_id)
+                for binding in bindings
+                if getattr(binding, 'space_id', None) is not None
+            ]
+        except Exception as e:
+            logger.debug('Could not resolve implicit department-bound spaces: %s', e)
+            return []
+
+    @classmethod
     async def _finalize_accessible_ids(
         cls,
         ids: List[str],
         user_id: int,
         object_type: str,
         login_user=None,
+        relation: str | None = None,
     ) -> List[str]:
         ordered_ids = list(dict.fromkeys(str(one) for one in (ids or [])))
 
@@ -1547,6 +1682,14 @@ class PermissionService:
                 *ordered_ids,
                 *(str(one) for one in tenant_admin_scope_ids),
             ]))
+
+        if object_type == 'knowledge_space' and relation in ('can_read', 'viewer'):
+            implicit_ids = await cls._implicit_department_bound_space_ids(user_id)
+            if implicit_ids:
+                ordered_ids = list(dict.fromkeys([
+                    *ordered_ids,
+                    *implicit_ids,
+                ]))
 
         return await cls._filter_ids_by_tenant_gate(
             user_id, object_type, ordered_ids, login_user,

@@ -20,6 +20,7 @@ class SplitterTransformer(BaseDocumentTransformer):
         separator_rule: list[str] | None = None,
         chunk_size: int = 1000,
         chunk_overlap: int = 100,
+        max_chunk_limit: int = 10000,
         **kwargs,
     ) -> None:
         self.text_splitter = ElemCharacterTextSplitter(
@@ -30,7 +31,7 @@ class SplitterTransformer(BaseDocumentTransformer):
             is_separator_regex=True,
             **kwargs,
         )
-        self.max_chunk_limit = 10000
+        self.max_chunk_limit = max_chunk_limit
 
     def transform_documents(self, documents: Sequence[Document], **kwargs: Any) -> Sequence[Document]:
         documents = self.text_splitter.split_documents(documents)

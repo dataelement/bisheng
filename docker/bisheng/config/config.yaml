@@ -110,6 +110,11 @@ vector_stores:
     url: !env ${BS_ELASTICSEARCH_URL}
     ssl_verify: !env ${BS_ELASTICSEARCH_SSL_VERIFY}
 
+# 知识空间共享存储配置
+knowledge_space_shared_storage:
+  # 仅在创建新共享索引时生效；修改后需自行在 ES 中维护已有索引的 shard 数量
+  es_number_of_shards: 3
+
 
 # 对象存储， 目前只支持minio
 object_storage:

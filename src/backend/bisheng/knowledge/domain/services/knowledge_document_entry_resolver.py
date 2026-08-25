@@ -130,8 +130,8 @@ class KnowledgeDocumentEntryResolver:
                 can_download="download_file" in permission_ids,
                 can_edit_content=False,
                 can_publish=False,
-                can_share="share_file" in permission_ids,
-                can_delete=False,
+                can_share=False,
+                can_delete="delete_file" in permission_ids,
             )
         if entry_type == KnowledgeFileEntryType.SHARE.value:
             return KnowledgeDocumentEntryCapabilities(

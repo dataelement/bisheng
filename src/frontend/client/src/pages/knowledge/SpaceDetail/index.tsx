@@ -478,7 +478,7 @@ export function KnowledgeSpaceContent({
                 }
                 if (
                     capability === "canDelete"
-                    && file.entryType === "share"
+                    && isReadonlyDistributionEntry
                     && !isAdmin
                     && requestedFilePermIds.has(file.id)
                 ) {

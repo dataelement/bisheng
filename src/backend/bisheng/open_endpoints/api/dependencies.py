@@ -9,6 +9,7 @@ from bisheng.common.dependencies.core_deps import get_db_session
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.developer_token import DeveloperTokenInvalidFileSyncRuleError
 from bisheng.common.errcode.filelib_sync import FilelibSyncRuleNotConfiguredError
+from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.developer_token.api.dependencies import (
     get_developer_token_principal,
 )
@@ -42,12 +43,15 @@ from bisheng.open_endpoints.domain.repositories.implementations.filelib_sync_rep
 from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_repository import (
     FilelibSyncRepository,
 )
+from bisheng.open_endpoints.domain.services.filelib_retrieve_source_service import (
+    FilelibRetrieveSourceService,
+)
 from bisheng.open_endpoints.domain.services.filelib_sync_service import FilelibSyncService
-from bisheng.open_endpoints.domain.services.inspection_standard_sync_service import InspectionStandardSyncService
 from bisheng.open_endpoints.domain.services.filelib_user_context_service import (
     EXTERNAL_USER_ID_MAX_LENGTH,
     FilelibUserContextService,
 )
+from bisheng.open_endpoints.domain.services.inspection_standard_sync_service import InspectionStandardSyncService
 from bisheng.user.domain.repositories.implementations.user_repository_impl import UserRepositoryImpl
 from bisheng.user.domain.repositories.interfaces.user_repository import UserRepository
 
@@ -121,6 +125,15 @@ async def get_filelib_user_context_service(
     return FilelibUserContextService(user_repository)
 
 
+async def get_filelib_retrieve_source_service(
+    file_repository: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
+) -> FilelibRetrieveSourceService:
+    return FilelibRetrieveSourceService(
+        file_repository=file_repository,
+        storage=await get_minio_storage(),
+    )
+
+
 async def get_filelib_developer_token_principal(
     principal: DeveloperTokenPrincipal = Depends(get_developer_token_principal),
 ) -> DeveloperTokenPrincipal:
@@ -160,6 +173,7 @@ def build_knowledge_space_chat_service_for_openapi(
     request_user: UserPayload,
     version_repo: KnowledgeDocumentVersionRepository,
     doc_repo: KnowledgeDocumentRepository,
+    file_repo: KnowledgeFileRepository | None = None,
 ) -> "KnowledgeSpaceChatService":
     """Build the retrieval service inside the resolved Filelib user context."""
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
@@ -167,6 +181,7 @@ def build_knowledge_space_chat_service_for_openapi(
     service = KnowledgeSpaceChatService(request=request, login_user=request_user)
     service.version_repo = version_repo
     service.doc_repo = doc_repo
+    service.file_repo = file_repo
     return service
 
 

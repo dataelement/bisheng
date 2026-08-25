@@ -64,12 +64,18 @@ router = APIRouter(prefix="/qa_experts", tags=["Expert QA"])
 
 
 class QaWatermarkDownloadBody(BaseModel):
+<<<<<<< HEAD
     """带水印下载 POST 体：避免预签名 URL 塞进 query。"""
 
     source: str = Field(..., min_length=1, description="问答图片或附件地址")
     title: str = ""
 
 
+=======
+    source: str = Field(..., min_length=1, description="问答图片或附件地址")
+    title: str = ""
+
+>>>>>>> origin/feat/2.5.0-sg
 # ==================== 统计 Endpoints ====================
 
 

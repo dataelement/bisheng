@@ -242,7 +242,7 @@ async def test_manager_resolution_uses_primary_version_as_authority(
 
 
 @pytest.mark.asyncio
-async def test_publish_and_share_hard_constraints_override_granted_permissions(
+async def test_publish_and_share_hard_constraints_preserve_allowed_delete_permission(
     async_db_session: AsyncSession,
 ):
     await _seed_distribution(async_db_session)
@@ -252,9 +252,9 @@ async def test_publish_and_share_hard_constraints_override_granted_permissions(
     share = await resolver.resolve(tenant_id=7, space_id=30, file_id=102)
 
     assert publish.capabilities.can_edit_content is False
-    assert publish.capabilities.can_delete is False
+    assert publish.capabilities.can_delete is True
     assert publish.capabilities.can_publish is False
-    assert publish.capabilities.can_share is True
+    assert publish.capabilities.can_share is False
 
     assert share.capabilities.can_edit_content is False
     assert share.capabilities.can_publish is False
@@ -262,6 +262,26 @@ async def test_publish_and_share_hard_constraints_override_granted_permissions(
     assert share.capabilities.can_download is False
     assert share.capabilities.can_delete is True
     assert share.projection_ready is False
+
+
+@pytest.mark.asyncio
+async def test_publish_delete_capability_fails_closed_without_live_permission(
+    async_db_session: AsyncSession,
+):
+    await _seed_distribution(async_db_session)
+
+    async def permissions_without_delete(
+        _file_id: int,
+        _space_id: int,
+    ) -> set[str]:
+        return ALL_PERMISSIONS - {"delete_file"}
+
+    publish = await _resolver(
+        async_db_session,
+        permission_loader=permissions_without_delete,
+    ).resolve(tenant_id=7, space_id=10, file_id=101)
+
+    assert publish.capabilities.can_delete is False
 
 
 @pytest.mark.asyncio

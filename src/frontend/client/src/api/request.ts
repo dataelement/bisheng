@@ -3,6 +3,10 @@ import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import i18next from "i18next";
 import { setTokenHeader } from '~/api/chat/headers-helpers';
 import { notifyPortalAuthRequired } from '~/api/portalAuthBridge';
+import {
+  API_RATE_LIMIT_CODE,
+  notifyPortalRateLimit,
+} from '~/api/portalRateLimitBridge';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
 import * as endpoints from '~/api/chat/api-endpoints';
 import type * as t from '~/types/chat/types';
@@ -136,8 +140,30 @@ export const formatApiErrorMessage = (data: any): string => {
   return `${headline}：${detailMessage}`;
 };
 
+const handleRateLimitResponse = (data: any): void => {
+  const message = (formatApiErrorMessage(data) || '请求过于频繁，请稍后重试')
+    .trim()
+    .slice(0, 500);
+  const rawCode = Number(data?.status_code);
+  const code = Number.isInteger(rawCode) && rawCode >= 10000 && rawCode <= 99999
+    ? rawCode
+    : API_RATE_LIMIT_CODE;
+
+  if (notifyPortalRateLimit({ code, message })) return;
+  window.showToast?.({ message, status: 'error' });
+};
+
 customAxios.interceptors.response.use(
   (response) => {
+    if (response.data?.status_code === API_RATE_LIMIT_CODE) {
+      handleRateLimitResponse(response.data);
+      const error: any = new Error(formatApiErrorMessage(response.data));
+      error.status_code = API_RATE_LIMIT_CODE;
+      error.status_message = response.data.status_message;
+      error.response = response;
+      return Promise.reject(error);
+    }
+
     // Legacy 403 default: redirect to /c/new?error=11403 unless the caller
     // explicitly opts out via skip403Redirect.
     if (response.data.status_code === 403 && !response.config.skip403Redirect) {
@@ -176,6 +202,14 @@ customAxios.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     if (!error.response) {
+      return Promise.reject(error);
+    }
+
+    if (
+      error.response.status === 429
+      || error.response.data?.status_code === API_RATE_LIMIT_CODE
+    ) {
+      handleRateLimitResponse(error.response.data);
       return Promise.reject(error);
     }
 

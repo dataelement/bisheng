@@ -39,6 +39,40 @@ PYTHONPATH=./ .venv/bin/python scripts/execute_sql.py \
   --config config_3002.yaml --sql "SELECT * FROM user" --max-rows 0
 ```
 
+### `backfill_department_short_names.py`
+
+根据直接父部门全称回填历史活动部门的简称。脚本扫描所有租户和所有部门来源，只处理
+`short_name` 为 `NULL`、空字符串或纯空白的部门；当子部门全称以同租户直接父部门全称为
+完整前缀时，截掉该前缀并将去除首尾空白后的 1～64 字符结果写入简称。
+
+根部门、归档部门、已有有效简称、父部门缺失或跨租户、父名称不是前缀、截取结果为空或
+超过 64 字符的部门均跳过并分类报告。脚本不会遍历祖先链，不会从同步载荷读取简称，也不会
+覆盖人工维护值。
+
+默认模式严格只读，只输出 JSON 审计结果：
+
+```bash
+cd src/backend
+PYTHONPATH=./ .venv/bin/python scripts/backfill_department_short_names.py \
+  > /tmp/department-short-name-dry-run.json
+```
+
+只有审核完整 dry-run 输出、完成数据库备份并取得独立执行确认后，才能显式写入：
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backfill_department_short_names.py \
+  --batch-size 200 --sample-limit 100 --apply \
+  > /tmp/department-short-name-apply.json
+```
+
+执行后必须再次运行 dry-run。正常情况下 `would_update` 应为 `0`，或只剩已审核确认的异常
+跳过项；应分别抽样不同租户、`sg` 和其他 `source`，确认简称只来自直接父部门名称前缀。
+
+脚本按部门 ID 进行 keyset 分批，并在写入前重新校验名称、父级、租户、状态和现有简称。
+扫描后发生变化的行按 `changed_before_update` 跳过。数据库或事务错误会使当前批次回滚并以
+非零状态退出；已提交批次可通过幂等重跑继续处理。脚本不提供自动回滚，误填恢复必须依赖
+执行前数据库备份或经过审核的更新记录，禁止盲目批量清空简称。
+
 ## Knowledge Space Scripts
 
 ### `rebuild_knowledge_space_content_stat.py`

@@ -3198,7 +3198,9 @@ describe("PortalKnowledgeWorkbench", () => {
         const shareButtons = within(shareRow).getAllByRole("button");
         fireEvent.click(shareButtons[shareButtons.length - 1]);
         fireEvent.click(await screen.findByText(/删除|delete|com_knowledge\.delete/i));
-        expect(handleDeleteFile).toHaveBeenCalledWith("310");
+        await waitFor(() => {
+            expect(handleDeleteFile).toHaveBeenCalledWith("310");
+        });
     });
 
     test("失效分发文件灰显且只保留本地删除动作", async () => {
@@ -3349,8 +3351,10 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(screen.queryByText(/删除|delete|com_knowledge\.delete/i)).not.toBeInTheDocument();
     });
 
-    test("does not unlock publish deletion from a live delete permission", async () => {
+    test("uses the live delete permission when a publish capability snapshot is stale", async () => {
         const favoriteSpace = makeDefaultFavoriteSpace();
+        const handleDeleteFile = jest.fn();
+        mockUseFileUpload.mockReturnValue(createMockFileUpload({ handleDeleteFile }));
         const departmentSpace = makeSpace("department-delete-publish", "接收知识库", {
             role: SpaceRole.MEMBER,
             spaceLevel: SpaceLevel.DEPARTMENT,
@@ -3397,7 +3401,10 @@ describe("PortalKnowledgeWorkbench", () => {
         });
         const publishButtons = within(publishRow).getAllByRole("button");
         fireEvent.click(publishButtons[publishButtons.length - 1]);
-        expect(screen.queryByText(/删除|delete|com_knowledge\.delete/i)).not.toBeInTheDocument();
+        fireEvent.click(await screen.findByText(/删除|delete|com_knowledge\.delete/i));
+        await waitFor(() => {
+            expect(handleDeleteFile).toHaveBeenCalledWith("311");
+        });
     });
 
     test("hides publish action without knowledge space publish permission", async () => {

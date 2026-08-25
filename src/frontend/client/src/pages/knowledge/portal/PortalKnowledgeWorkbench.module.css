@@ -2296,6 +2296,15 @@
   font-size: 13px;
 }
 
+/* Excel 取消合并单元格提示：与格式说明区分，略偏强调色 */
+.uploadExcelTip {
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  max-width: 90%;
+}
+
 .uploadPickActions {
   display: flex;
   align-items: center;

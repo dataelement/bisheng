@@ -1,6 +1,7 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import axios from "axios";
 import i18next from "i18next";
+import { API_RATE_LIMIT_CODE, shouldShowApiRateLimitNotice } from "./apiRateLimitNotice";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
     baseURL: import.meta.env.BASE_URL
@@ -111,6 +112,17 @@ function isEnvelope(data: any): boolean {
     return data && typeof data === "object" && typeof data.status_code === "number"
 }
 
+function showRateLimitNotice(envelope: any): void {
+    const message = coerceErrorMessage(envelope?.status_message)
+        || i18next.t("system.apiRateLimit.defaultMessage")
+    if (!shouldShowApiRateLimitNotice(API_RATE_LIMIT_CODE, message)) return
+    toast({
+        title: `${i18next.t('prompt')}`,
+        variant: 'error',
+        description: message,
+    })
+}
+
 customAxios.interceptors.response.use(function (response) {
     if (response.data instanceof Blob) return response.data;
     if (response.data.status_code === 200) {
@@ -119,11 +131,16 @@ customAxios.interceptors.response.use(function (response) {
     if (response.data.status_code === 11010) {
         return response.data;
     }
+    const statusCode = response.data.status_code
+    if (statusCode === API_RATE_LIMIT_CODE) {
+        const errorMessage = decodeEnvelopeMessage(response.data)
+        showRateLimitNotice(response.data)
+        return Promise.reject({ code: API_RATE_LIMIT_CODE, message: errorMessage, response });
+    }
     // Silent mode: skip all global error handling, let the caller handle it
     if (response.config.silent) {
         return Promise.reject(response.data);
     }
-    const statusCode = response.data.status_code
     const errorMessage = decodeEnvelopeMessage(response.data)
 
     // 密码过期，标记后透传给业务层处理
@@ -180,13 +197,20 @@ customAxios.interceptors.response.use(function (response) {
         return Promise.reject('登录过期,请重新登录');
     }
     if (error.code === "ERR_CANCELED") return Promise.reject(error);
+    const envelope = error.response?.data
+    if (
+        isEnvelope(envelope)
+        && (error.response?.status === 429 || envelope.status_code === API_RATE_LIMIT_CODE)
+    ) {
+        showRateLimitNotice(envelope)
+        return Promise.reject(error)
+    }
     // Silent mode: skip toast, let the caller handle it
     if (error.config?.silent) return Promise.reject(error);
     // Backend may return our unified envelope on HTTP 4xx/5xx (e.g. F011
     // tenant mount maps TenantTreeNestingForbiddenError → HTTP 400 with a
     // structured body). Decode the envelope before falling back to the raw
     // axios message so users see a friendly i18n string.
-    const envelope = error.response?.data
     if (isEnvelope(envelope)) {
         const errorMessage = decodeEnvelopeMessage(envelope)
         toast({

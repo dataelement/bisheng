@@ -15,6 +15,9 @@ from loguru import logger
 from PIL import Image, UnidentifiedImageError
 
 from bisheng.knowledge.pdf.watermark import PdfWatermarkError, PdfWatermarkSpec, apply_pdf_watermark
+from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
+    resolve_portal_watermark_horizontal_text,
+)
 from bisheng.shougang_portal_config.domain.services.portal_config_service import (
     ShougangPortalConfigService,
 )
@@ -27,7 +30,7 @@ _PROXY_PREFIXES = (
     "workspace/bisheng/",
     "workspace/skm-bisheng/",
 )
-_UUID_OBJECT = re.compile(r"^[0-9a-fA-F-]{8,}\.[A-Za-z0-9]{1,8}$")
+_UUID_OBJECT = re.compile(r"^[0-9a-fA-F-]{8,}(?:\.[A-Za-z0-9]{1,8})?$")
 _IMAGE_TYPES = {
     ".bmp": "bmp",
     ".gif": "gif",
@@ -305,6 +308,8 @@ async def build_watermarked_qa_pdf(
     identity = f"{department_name}-{user_name}" if department_name else user_name
     date_text = datetime.now(SHANGHAI).strftime("%Y/%m/%d")
     horizontal = await ShougangPortalConfigService.get_watermark_horizontal_text(tenant_id=tenant_id)
+    if not str(horizontal or "").strip():
+        horizontal = resolve_portal_watermark_horizontal_text(None)
     spec = PdfWatermarkSpec(lines=(f"{identity}-{account}-{date_text}", horizontal))
     with tempfile.TemporaryDirectory(prefix="qa-wm-out-") as tmp:
         input_path = Path(tmp) / "in.pdf"

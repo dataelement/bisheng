@@ -132,6 +132,24 @@ def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
     """Delete vector data andesDATA"""
     if not file_ids:
         return True
+    # F1.7: legacy per-file expr deletes (document_id in [...]) target the
+    # per-space collection. For a tenant-routed SPACE knowledge base the
+    # collection is the shared store keyed by canonical identity - legacy
+    # expr deletes are skipped there; shared content cleanup goes through the
+    # document projection tombstone flow (writer.delete_content).
+    from bisheng.core.context.tenant import DEFAULT_TENANT_ID
+    from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+
+    if resolve_space_shared_routing(
+        int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID), knowledge.type
+    ) is not None:
+        logger.info(
+            "act=skip_legacy_vector_delete file_ids=%s knowledge_id=%s "
+            "(tenant-routed shared store; projection cleanup applies)",
+            file_ids,
+            knowledge.id,
+        )
+        return True
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
     logger.info("start init Milvus")
     vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(

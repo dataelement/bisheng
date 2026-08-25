@@ -120,7 +120,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 knowledge_file=self.db_file,
             ))
         if self.should_use_ppt_page_split():
-            abstract_transformers.append(DirectChunkTransformer())
+            abstract_transformers.append(DirectChunkTransformer(max_chunk_limit=self.max_chunk_chars))
         elif self.should_use_hierarchical_split():
             abstract_transformers.append(HierarchicalSplitterTransformer(
                 hierarchy_level=self.file_split_rule.hierarchy_level,
@@ -130,6 +130,7 @@ class KnowledgeFilePipeline(BaseFilePipeline):
                 fallback_separator_rule=self.file_split_rule.separator_rule,
                 fallback_chunk_size=self.file_split_rule.chunk_size,
                 fallback_chunk_overlap=self.get_splitter_kwargs()["chunk_overlap"],
+                max_chunk_limit=self.max_chunk_chars,
             ))
         else:
             abstract_transformers.append(SplitterTransformer(**self.get_splitter_kwargs()))
