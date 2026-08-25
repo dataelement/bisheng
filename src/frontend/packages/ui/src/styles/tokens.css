@@ -1,8 +1,11 @@
 /* ============================================================
  * @bisheng/ui design tokens — v0 契约
  * 双层结构:primitive(原始数值源)+ semantic(组件唯一可消费层)。
- * 值与 client/src/style.css 完全一致(种子来源);client 迁移完成前
- * 两份并存且必须保持同步,platform 接入时直接 @import 本文件。
+ * 本文件是这些 token 的唯一定义处:client 通过 main.jsx 的
+ * `import '@bisheng/ui/tokens.css'` 加载(其 style.css 只保留 client 自有变量),
+ * 文档站通过 rspress.config.ts 的 preEntry 加载;platform 接入时同样引本文件。
+ * 覆盖顺序在本文件内部即已排定::root 在前,.dark / ≤768px / .theme-green /
+ * .illus-grey 在后——它们与 :root 特异性相同,靠这个先后决胜,不要重排。
  * 覆盖范围 v0:字体阶梯 / Arco 中性色 / 功能色 / 品牌色 / Button 语义 token。
  * ============================================================ */
 
@@ -72,9 +75,13 @@
   --danger: 245 63 63;          /* #F53F3F (= --btn-danger) */
   --danger-hover: 214 55 58;    /* #D6373A */
   --danger-active: 208 47 51;   /* #D02F33 */
-  --danger-tint: 255 236 232;   /* #FFECE8 — TAG bg only */
+  --danger-tint: 255 236 232;  /* #FFECE8 (Arco red-1) — TAG bg only; buttons
+                                  use alpha over the main red (bg-danger/10 …) */
 
-  /* ---------- Brand palette (blue default; .theme-green overrides) ---------- */
+  /* ---------- Brand palette — default = design-system brand blue (Arco-style
+   * ramp, primary-6 #165DFF / pressed #024DE3). RGB channels so Tailwind's
+   * `blue-*` utilities support `/<alpha>`. 500 = main accent, 600 = button /
+   * strong. Overridden by .theme-green. ---------- */
   --brand-50: 232 243 255;   /* #E8F3FF — light tint / selection bg */
   --brand-100: 190 218 255;  /* #BEDAFF */
   --brand-200: 148 191 255;  /* #94BFFF */
@@ -97,7 +104,10 @@
   --illus-300: 106 161 255;  /* #6AA1FF */
   --illus-500: 22 93 255;    /* #165DFF */
 
-  /* ---------- Button semantic tokens (组件-Button按钮.md §5.1) ---------- */
+  /* ---------- Button semantic tokens (组件-Button按钮.md §5.1). Neutral grays
+   * follow the Arco ramp; danger red is FIXED — never themed. RGB channels so
+   * the Tailwind `btn-*` colors keep `/<alpha>` working. Light-mode values only
+   * for now (dark mode inherits them — known debt). ---------- */
   --btn-gray-text: 82 88 101;      /* #525865 — default-color button text */
   --btn-gray-solid-bg: 82 88 101;  /* #525865 — default SOLID fill (+white text) */
   --btn-gray-border: 229 230 233;  /* #E5E6E9 — default-color button border */
@@ -111,6 +121,14 @@
   --btn-disabled-border: 217 217 217; /* #D9D9D9 — bordered variants, disabled */
   --btn-disabled-bg: 245 245 245;     /* #F5F5F5 — disabled fill */
   --btn-disabled-text: 191 191 191;   /* #BFBFBF — disabled text */
+
+  /* ---------- Switch semantic tokens (组件-Switch开关.md §4) — the OFF track.
+   * The spec pins the off track to gray-4 with a gray-5 hover; the fill ramp
+   * has no gray-5 slot (fill-4 tops out at gray-4), so the switch gets its own
+   * semantic pair per 色彩规范 convention instead of eating primitives raw.
+   * Lazy var() resolution flips both on the dark gray ramp automatically. */
+  --switch-off-bg: var(--arco-gray-4);
+  --switch-off-bg-hover: var(--arco-gray-5);
 
   /* ---------- Radius scale (shadcn-compatible: lg=8 / md=6 / sm=4) ---------- */
   --radius: 0.5rem;
@@ -146,9 +164,12 @@
   --z-tooltip: 1300;
 }
 
-/* Dark mode — neutral + semantic layers auto-flip (custom props resolve lazily
- * at use time). Brand and functional dark ramps still pending (keep light
- * values — known debt, mirrors client/src/style.css). */
+/* Dark mode — the Arco gray ramp, dark variant (official @arco-design/color
+ * gray.dark). Lightness INVERTS (gray-1 darkest, gray-10 lightest), so the
+ * semantic text / fill / border tokens defined in :root as var(--arco-gray-N)
+ * auto-flip here without being redeclared — custom properties resolve lazily at
+ * use time. Neutral + semantic only; brand and functional dark ramps are still
+ * pending (they keep their light values in dark — known debt). */
 .dark {
   --arco-gray-1: 23 23 26;      /* #17171A */
   --arco-gray-2: 46 46 48;      /* #2E2E30 */
@@ -162,14 +183,17 @@
   --arco-gray-10: 246 246 246;  /* #F6F6F6 */
   --bg-page: 18 18 18;          /* #121212 — page surface, dark */
 
-  /* Disabled button, dark: subtle raised inert fill + muted (not invisible)
-     text/border. */
+  /* Disabled button, dark: a subtle raised inert fill + muted (not invisible)
+     text/border. Light used black overlays on white; dark mirrors that with a
+     lightened neutral, so disabled reads as greyed-out on #121212, not gone. */
   --btn-disabled-bg: 42 42 42;      /* #2A2A2A */
   --btn-disabled-text: 120 120 122; /* gray-5 dark — muted but legible */
   --btn-disabled-border: 95 95 96;  /* gray-4 dark — visible edge */
 
-  /* Button neutral, dark: text flips light; border + fill ramp follow the dark
-     gray ramp so filled/hover/active lighten (correct elevation on #121212). */
+  /* Button neutral (default color), dark: text flips light, border + the fill
+     ramp follow the dark gray ramp so filled/hover/active LIGHTEN (the correct
+     elevation direction on #121212). Danger stays as-is (red is dark-safe);
+     brand tints are handled per-variant in Button.tsx. */
   --btn-gray-text: 197 197 197;    /* gray-8 dark #C5C5C5 — light text */
   --btn-gray-solid-bg: 95 95 96;   /* gray-4 dark #5F5F60 — solid fill */
   --btn-gray-border: 72 72 73;     /* gray-3 dark #484849 */
@@ -194,7 +218,13 @@
   }
 }
 
-/* Green brand theme — toggled via `theme-green` class on <html>. */
+/* Green brand theme — toggled via `theme-green` class on <html>. Frontend-only.
+ * Ramp re-derived 2026-07-15 anchored on the FIXED primary #169C47 (the old steps
+ * sat at hue ~157° teal while 500 is 142° green, so 500 jumped out of its own
+ * ramp): the light side keeps the OLD ramp's saturation/brightness envelope (the
+ * Arco-algorithm version hit v=100 and read neon; the designer nixed it) with only
+ * the hue rotated onto the 500 family (−2°/step, the same drift as the blue
+ * lights); the dark side mirrors the blue ramp's dark-side HSV geometry. */
 .theme-green {
   --brand-50: 228 241 231;   /* #E4F1E7 */
   --brand-100: 204 228 210;  /* #CCE4D2 */

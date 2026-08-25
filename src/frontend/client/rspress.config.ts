@@ -138,6 +138,9 @@ export default defineConfig({
           text: '数据录入 Data Entry',
           items: [
             { text: '输入框 Input', link: '/components/input' },
+            { text: '复选框 Checkbox', link: '/components/checkbox' },
+            { text: '单选框 Radio', link: '/components/radio' },
+            { text: '开关 Switch', link: '/components/switch' },
           ],
         },
         {

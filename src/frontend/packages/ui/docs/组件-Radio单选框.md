@@ -81,13 +81,14 @@
 <!-- site-hide -->
 ## 落地（给实现窗口）
 
-组件未落地。落地时按下面来：
+**2026-08-25 已落地**：`@bisheng/ui` 导出 `RadioGroup` / `Radio` / `RadioCard`（`src/components/Radio/`，按钮组即 `RadioGroup variant="button"`，卡壳与 Checkbox 共用 `src/components/Selection/shared.ts`），demo 页 `docs/components/radio.mdx`，侧栏已注册。client 现状迁移仍待迁移窗口。下面是当时给实现窗口的口径，已按此实现：
 
 1. cva `variants: { size }`（圆圈 14 / 16 / 18、内点 6 / 8 / 10，文字 14 / 14 / 16）；`Radio` / `RadioGroup` 一套基座，按钮组作为 `RadioGroup` 的 `variant="button"`（高度、内边距、圆角直接引按钮三档取值），卡片式与复选框卡片共用壳。
 2. 颜色全走 token，禁裸 hex：描边 `border-border-base` / hover `border-border-deep`；选中实心 `bg-blue-500`（`--brand-*`）、内点白；按钮组选中项 `text-blue-500` + 统一选中浅底 `bg-blue-500/[0.07]`，未选项 hover 浅灰底与文字按钮同 token；disabled 复用按钮三 token；聚焦环复用 `shadow-focus` + `:focus-visible`。
 3. a11y：`role="radiogroup"` + 方向键在组内移动、Tab 只进出组一次（roving tabindex）；按钮组同规则，别做成一排独立 button。
 4. 触屏热区同复选框：整行 label 撑高到 44px。
-5. 现状扫描未做：client 内现存 radio 实现与「一排按钮手拼互斥选中」的写法，待迁移窗口扫描后补附录。
+5. 卡片式现状参考（2026-08-24 设计师点名，knowledge/create 页）：`client/src/components/permission/UnifiedPermissionControls.tsx` 的 `AccessModeSelector`——卡壳画法已定稿进 [组件-Checkbox复选框.md](组件-Checkbox复选框.md) §2 与其落地区。其中**圆点本身**与本规范的归并差异：现状 16px、未选即 2px `border-deep` 粗描边、内点 4px 且取 `bg-fill-1`；规范为未选 1px `border-base`、hover 才 `border-deep`、选中品牌实心 + 纯白内点（直径 = 外圈 − 8，16px 档即 8px）。落地时圆点统一走本规范，卡壳照 Checkbox 文档。
+6. 现状扫描未做：client 内其余 radio 实现与「一排按钮手拼互斥选中」的写法，待迁移窗口扫描后补附录。
 
 ## 待决策清单
 
@@ -100,3 +101,5 @@
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
 | 2026-08-24 | 建档 v1：适用判定（2～7 个摊开、选中不反选、空选加「无」项）；类型四种（基础 / Group / 按钮组 / 卡片式引复选框）；圆圈尺寸引复选框三档、内点 = 外圈 − 8，按钮组走按钮高度阶梯；选中态「品牌色实心 + 白点」定稿；按钮组选中项浅底不做实心；移动端不做横向滚动按钮组。rspress 侧栏注册与 demo 页待实现窗口 | 待 committer 窗口提交 |
+| 2026-08-25 | **组件落地**：`@bisheng/ui` 新增 `RadioGroup` / `Radio` / `RadioCard`（radix radio-group 基座，roving tabindex 免费拿到；按钮组 = `variant="button"`），demo 页 `components/radio.mdx` + 侧栏注册。全按本文实现，展示层规则未增未减未改 | 本次窗口 |
+| 2026-08-24 | 落地区回填卡片式现状参考（设计师点名 knowledge/create 页 `AccessModeSelector`）：卡壳归口 Checkbox 文档 §2（该文档同日定稿），本文记圆点画法的归并差异（现状 2px 粗边 / 4px 灰内点 → 规范 1px 边 / 纯白内点 = 外圈 − 8）。展示层规则未增未减未改 | 待 committer 窗口提交 |

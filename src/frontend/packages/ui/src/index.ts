@@ -28,6 +28,14 @@ export * from './components/StateView';
 // window, the disabled-trigger hot zone and the top overlay tier are baked in;
 // the copy is a prop. `TooltipProvider` is optional (app root, shared skip).
 export * from './components/Tooltip';
+// Selection family — Checkbox (pick several, travels with the form), Radio
+// (pick one from a visible set) and Switch (standalone setting, applies
+// immediately) per 组件-Checkbox复选框.md §1's分工判定表. Sizes, the gray→brand
+// state chain, the card shells and the touch rules are baked in; every string
+// is a prop.
+export * from './components/Checkbox';
+export * from './components/Radio';
+export * from './components/Switch';
 // Breadcrumb — where the current page sits in the structure
 // (组件-Breadcrumb面包屑.md). The collapse rules, the 96px name cap and the
 // ellipsis menu are baked in; the page passes the full chain and the copy.

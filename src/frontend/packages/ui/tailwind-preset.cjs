@@ -7,9 +7,14 @@ const plugin = require('tailwindcss/plugin');
  *   presets: [require('@bisheng/ui/tailwind-preset')],
  *   content: [..., '../packages/ui/src/** / *.{ts,tsx}']
  *
- * Values are seeded verbatim from client/tailwind.config.cjs so adopting the
- * preset changes nothing visually. Keep the two in sync until client fully
- * migrates onto the preset (then delete the duplicated keys there).
+ * client adopted this preset and deleted its duplicated theme keys — verified by
+ * diffing the fully-resolved theme AND the compiled CSS before/after (identical
+ * but for the order of the two pointer variants, which the preset now owns).
+ * platform has not adopted it yet and still has no semantic layer at all.
+ *
+ * The CSS custom properties this file points at have a single definition too —
+ * src/styles/tokens.css, which client loads from its entry. Change a token value
+ * there and both the app and the docs site follow; there is no second copy.
  *
  * @type {Partial<import('tailwindcss').Config>}
  */
@@ -86,6 +91,9 @@ module.exports = {
         'btn-disabled-border': 'rgb(var(--btn-disabled-border) / <alpha-value>)',
         'btn-disabled-bg': 'rgb(var(--btn-disabled-bg) / <alpha-value>)',
         'btn-disabled-text': 'rgb(var(--btn-disabled-text) / <alpha-value>)',
+        // Switch semantic tokens (组件-Switch开关.md §4) — OFF track + its hover.
+        'switch-off': 'rgb(var(--switch-off-bg) / <alpha-value>)',
+        'switch-off-hover': 'rgb(var(--switch-off-bg-hover) / <alpha-value>)',
         // Arco semantic layer (基础-色彩规范.md §2/§3/§7) — primitives are
         // intentionally NOT wired so components can't bypass semantic names.
         'text-1': 'rgb(var(--text-1) / <alpha-value>)',
