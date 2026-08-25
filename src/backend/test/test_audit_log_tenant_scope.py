@@ -165,13 +165,14 @@ def patch_dao_session(monkeypatch, session):
 # ---------------------------------------------------------------------------
 
 def _insert_audit(session, *, action, tenant_id, operator_tenant_id,
-                  operator_id=None, operator_name=None):
+                  operator_id=None, operator_name=None, system_id=None):
     entry = AuditLog(
         operator_id=operator_id if operator_id is not None else (operator_tenant_id or 0) * 10,
         operator_name=operator_name or f't{operator_tenant_id}-user',
         tenant_id=tenant_id,
         operator_tenant_id=operator_tenant_id,
         action=action,
+        system_id=system_id,
     )
     session.add(entry)
     session.commit()
@@ -843,11 +844,13 @@ class TestGetAllOperatorsServiceEndToEnd:
             session, action='r.only',
             tenant_id=1, operator_tenant_id=1,
             operator_id=100, operator_name='root-only-admin',
+            system_id='system',
         )
         _insert_audit(
             session, action='c.only',
             tenant_id=2, operator_tenant_id=2,
             operator_id=200, operator_name='child2-bob',
+            system_id='system',
         )
 
         child_admin = MagicMock()
@@ -861,12 +864,61 @@ class TestGetAllOperatorsServiceEndToEnd:
         ), patch(
             'bisheng.api.services.audit_log.get_current_tenant_id',
             return_value=2,
+        ), patch(
+            'bisheng.api.services.audit_log.UserDao.aget_user_by_ids',
+            new=AsyncMock(return_value=[]),
         ):
             ops = await AuditLogService.get_all_operators(child_admin)
 
         names = {o['user_name'] for o in ops}
         assert names == {'child2-bob'}
         assert 'root-only-admin' not in names
+
+    async def test_operator_dropdown_label_includes_external_id(
+        self, patch_dao_session, session,
+    ):
+        _insert_audit(
+            session, action='c.only',
+            tenant_id=2, operator_tenant_id=2,
+            operator_id=200, operator_name='张伟',
+            system_id='system',
+        )
+
+        child_admin = MagicMock()
+        child_admin.user_id = 77
+        child_admin.is_admin.return_value = True
+        child_admin.is_global_super = False
+        user = MagicMock(user_id=200, user_name='张伟', external_id='hand0075')
+
+        with patch(
+            'bisheng.api.services.audit_log.get_admin_scope_tenant_id',
+            return_value=None,
+        ), patch(
+            'bisheng.api.services.audit_log.get_current_tenant_id',
+            return_value=2,
+        ), patch(
+            'bisheng.api.services.audit_log.UserDao.aget_user_by_ids',
+            new=AsyncMock(return_value=[user]),
+        ):
+            ops = await AuditLogService.get_all_operators(child_admin)
+
+        assert ops == [{
+            'user_id': 200,
+            'user_name': '张伟',
+            'external_id': 'hand0075',
+            'label': '张伟 (hand0075)',
+        }]
+
+
+class TestOperatorDropdownLabel:
+    def test_name_and_external_id(self):
+        assert AuditLogService._operator_dropdown_label('张伟', 'hand0075') == '张伟 (hand0075)'
+
+    def test_same_name_and_external_id(self):
+        assert AuditLogService._operator_dropdown_label('admin', 'admin') == 'admin'
+
+    def test_missing_external_id(self):
+        assert AuditLogService._operator_dropdown_label('admin', None) == 'admin'
 
 
 # ===========================================================================
