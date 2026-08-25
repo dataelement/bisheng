@@ -99,6 +99,11 @@ router.add_api_route(
     endpoints.download_watermarked_asset,
     methods=["GET"],
 )
+router.add_api_route(
+    "/assets/watermarked-download",
+    endpoints.download_watermarked_asset_post,
+    methods=["POST"],
+)
 
 # 图片上传
 router.add_api_route("/upload", endpoints.upload_file, methods=["POST"])
