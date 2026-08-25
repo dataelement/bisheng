@@ -752,19 +752,19 @@ async def download_watermarked_asset(
     title: str = Query("", description="原始文件名"),
     user: UserPayload = Depends(UserPayload.get_login_user),
 ):
-    """将专家问答上传的图片/附件转为带水印 PDF 后下载。"""
+    """问答附件下载：视频原文件直下，其余转带水印 PDF。"""
     from urllib.parse import quote
 
     from bisheng.core.context.tenant import get_current_tenant_id
     from bisheng.qa_expert.domain.watermarked_download import (
         QaWatermarkDownloadError,
-        build_watermarked_qa_pdf,
+        build_qa_asset_download,
     )
 
     storage = await get_minio_storage()
     user_name = str(getattr(user, "user_name", "") or user.user_id)
     try:
-        payload, filename = await build_watermarked_qa_pdf(
+        payload, filename, media_type = await build_qa_asset_download(
             source=source,
             title=title,
             user_name=user_name,
@@ -776,16 +776,19 @@ async def download_watermarked_asset(
     except QaWatermarkDownloadError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("QA watermarked download failed")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="水印下载失败") from exc
+        logger.exception("QA asset download failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="下载失败") from exc
 
     # HTTP 头须 latin-1；中文文件名走 RFC 5987 filename*
     encoded_filename = quote(filename, safe="")
+    fallback_name = "qa-asset.pdf" if media_type == "application/pdf" else "qa-asset.bin"
     return Response(
         content=payload,
-        media_type="application/pdf",
+        media_type=media_type,
         headers={
-            "Content-Disposition": (f"attachment; filename=\"qa-asset.pdf\"; filename*=UTF-8''{encoded_filename}"),
+            "Content-Disposition": (
+                f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded_filename}"
+            ),
         },
     )
 

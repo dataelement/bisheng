@@ -37,6 +37,13 @@ _IMAGE_TYPES = {
     ".webp": "webp",
 }
 _IMAGE_SUFFIXES = set(_IMAGE_TYPES)
+# 问答附件视频：无法转 PDF 打水印，允许原文件直下（mp4/mov/webm）
+_VIDEO_SUFFIXES = {".mp4", ".mov", ".webm"}
+_VIDEO_MEDIA_TYPES = {
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+}
 
 
 class QaWatermarkDownloadError(ValueError):
@@ -67,6 +74,31 @@ def parse_qa_asset_location(source: str, *, default_bucket: str, tmp_bucket: str
     if _UUID_OBJECT.fullmatch(file_name) and "/" not in object_name:
         return bucket, object_name
     raise QaWatermarkDownloadError("asset source is not a QA upload")
+
+
+def _sniff_video_suffix(data: bytes) -> str | None:
+    """根据文件头识别 mp4/mov/webm，供展示名无后缀时仍能直下原视频。"""
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        brand = data[8:12]
+        if brand in {b"qt  ", b"moov", b"wide"}:
+            return ".mov"
+        return ".mp4"
+    if len(data) >= 4 and data[:4] == b"\x1aE\xdf\xa3":
+        return ".webm"
+    return None
+
+
+def resolve_qa_video_suffix(filename: str, data: bytes) -> str | None:
+    """若附件为支持直下的视频格式则返回小写后缀，否则 None。"""
+    suffix = Path(filename).suffix.lower()
+    if suffix in _VIDEO_SUFFIXES:
+        return suffix
+    return _sniff_video_suffix(data)
+
+
+def is_qa_video_asset(filename: str, data: bytes) -> bool:
+    """判断问答上传附件是否应按原视频文件下载（不打水印）。"""
+    return resolve_qa_video_suffix(filename, data) is not None
 
 
 def resolve_conversion_filename(title: str, object_name: str) -> str:
@@ -281,17 +313,16 @@ def _safe_pdf_filename(title: str) -> str:
     return f"{cleaned.strip('.') or 'qa-asset'}.pdf"
 
 
-async def build_watermarked_qa_pdf(
-    *,
-    source: str,
-    title: str,
-    user_name: str,
-    account: str,
-    department_name: str,
-    tenant_id: int | None,
-    storage,
-) -> tuple[bytes, str]:
-    """拉取问答对象、转 PDF、打水印。"""
+def _safe_attachment_filename(title: str, suffix: str) -> str:
+    """保留原扩展名的安全下载文件名（视频等非 PDF 附件）。"""
+    stem = Path((title or "qa-asset").strip()).stem or "qa-asset"
+    cleaned = re.sub(r'[\\/<>:"|?*\x00-\x1f]', "_", stem)
+    normalized = suffix if suffix.startswith(".") else f".{suffix}"
+    return f"{cleaned.strip('.') or 'qa-asset'}{normalized.lower()}"
+
+
+async def _load_qa_asset(source: str, title: str, storage) -> tuple[bytes, str]:
+    """从 MinIO 读取问答上传对象，并解析用于类型识别的文件名。"""
     bucket, object_name = parse_qa_asset_location(
         source,
         default_bucket=storage.bucket,
@@ -301,7 +332,19 @@ async def build_watermarked_qa_pdf(
     if not data:
         raise QaWatermarkDownloadError("asset not found")
     filename = resolve_conversion_filename(title, object_name)
-    pdf_bytes = _bytes_to_pdf(data, filename)
+    return data, filename
+
+
+async def _apply_qa_pdf_watermark(
+    pdf_bytes: bytes,
+    *,
+    filename: str,
+    user_name: str,
+    account: str,
+    department_name: str,
+    tenant_id: int | None,
+) -> tuple[bytes, str]:
+    """对已是 PDF 的字节叠门户水印，返回 (payload, 下载文件名)。"""
     identity = f"{department_name}-{user_name}" if department_name else user_name
     date_text = datetime.now(SHANGHAI).strftime("%Y/%m/%d")
     horizontal = await ShougangPortalConfigService.get_watermark_horizontal_text(tenant_id=tenant_id)
@@ -316,3 +359,56 @@ async def build_watermarked_qa_pdf(
             logger.warning("QA watermark failed: {}", exc)
             raise QaWatermarkDownloadError("watermark generation failed") from exc
         return output_path.read_bytes(), _safe_pdf_filename(filename)
+
+
+async def build_qa_asset_download(
+    *,
+    source: str,
+    title: str,
+    user_name: str,
+    account: str,
+    department_name: str,
+    tenant_id: int | None,
+    storage,
+) -> tuple[bytes, str, str]:
+    """拉取问答附件：视频原文件直下，其余转带水印 PDF。返回 (内容, 文件名, media_type)。"""
+    data, filename = await _load_qa_asset(source, title, storage)
+    video_suffix = resolve_qa_video_suffix(filename, data)
+    if video_suffix:
+        safe_name = _safe_attachment_filename(filename, video_suffix)
+        media_type = _VIDEO_MEDIA_TYPES.get(video_suffix, "application/octet-stream")
+        return data, safe_name, media_type
+
+    pdf_bytes = _bytes_to_pdf(data, filename)
+    payload, pdf_name = await _apply_qa_pdf_watermark(
+        pdf_bytes,
+        filename=filename,
+        user_name=user_name,
+        account=account,
+        department_name=department_name,
+        tenant_id=tenant_id,
+    )
+    return payload, pdf_name, "application/pdf"
+
+
+async def build_watermarked_qa_pdf(
+    *,
+    source: str,
+    title: str,
+    user_name: str,
+    account: str,
+    department_name: str,
+    tenant_id: int | None,
+    storage,
+) -> tuple[bytes, str]:
+    """拉取问答对象、转 PDF、打水印。"""
+    data, filename = await _load_qa_asset(source, title, storage)
+    pdf_bytes = _bytes_to_pdf(data, filename)
+    return await _apply_qa_pdf_watermark(
+        pdf_bytes,
+        filename=filename,
+        user_name=user_name,
+        account=account,
+        department_name=department_name,
+        tenant_id=tenant_id,
+    )
