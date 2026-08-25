@@ -1,7 +1,9 @@
 """Tests for TagLibraryTagService.append_file_library_tags_sync."""
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagResourceTypeEnum
@@ -131,3 +133,77 @@ def test_append_file_library_tags_skips_unknown_when_space_has_no_library(mock_l
     session.add.assert_not_called()
     request_fulltext_sync.assert_not_called()
     session.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ensure_and_append_file_tags_skips_when_space_unbound():
+    with patch(
+        "bisheng.knowledge.domain.services.tag_library_tag_service.KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
+        new=AsyncMock(return_value=[]),
+    ) as list_libs:
+        applied = await TagLibraryTagService.ensure_and_append_file_tags(
+            space_id=137,
+            file_id=42,
+            tag_names=["孤立标签"],
+            user_id=1,
+            tenant_id=1,
+        )
+
+    assert applied == []
+    list_libs.assert_awaited_once_with(137)
+
+
+@pytest.mark.asyncio
+async def test_ensure_and_append_file_tags_reuses_existing_and_creates_missing():
+    existing = SimpleNamespace(id=55, name="已有标签")
+    created = SimpleNamespace(id=100, name="新标签")
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.tag_library_tag_service.KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge",
+            new=AsyncMock(return_value=[10]),
+        ),
+        patch.object(TagLibraryTagService, "count_tags", new=AsyncMock(return_value=2)),
+        patch.object(
+            TagLibraryTagService,
+            "find_library_tag_by_name",
+            new=AsyncMock(side_effect=[existing, None]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.tag_library_tag_service.TagDao.ainsert_tag",
+            new=AsyncMock(return_value=created),
+        ) as insert_tag,
+        patch(
+            "bisheng.knowledge.domain.services.tag_library_tag_service.TagDao.add_tags",
+            new=AsyncMock(return_value=True),
+        ) as add_links,
+        patch(
+            "bisheng.knowledge.domain.services.tag_library_tag_service.get_async_db_session",
+        ) as session_ctx,
+        patch(
+            "bisheng.knowledge.domain.services.tag_library_tag_service.request_file_sync_intents",
+            new=AsyncMock(),
+        ),
+        patch.object(TagLibraryTagService, "sync_library_name_lists", new=AsyncMock()) as sync_names,
+        patch.object(
+            TagLibraryTagService,
+            "invalidate_link_b_tenant_catalog_cache_async",
+            new=AsyncMock(),
+        ),
+    ):
+        session_ctx.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+        session_ctx.return_value.__aexit__ = AsyncMock(return_value=None)
+        applied = await TagLibraryTagService.ensure_and_append_file_tags(
+            space_id=137,
+            file_id=42,
+            tag_names=["已有标签", "新标签"],
+            user_id=1,
+            tenant_id=1,
+        )
+
+    assert applied == ["已有标签", "新标签"]
+    insert_tag.assert_awaited_once()
+    assert insert_tag.await_args.args[0].business_id == "10"
+    add_links.assert_awaited_once()
+    assert add_links.await_args.args[0] == [55, 100]
+    sync_names.assert_awaited_once_with(10)
