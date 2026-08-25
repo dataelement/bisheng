@@ -17,12 +17,10 @@
  * Legacy / older payload shapes (`event: on_*_delta` and plain `text`) are
  * still accepted so old chat flows keep working.
  */
-import { useEffect, useRef } from "react";
 import { SSE } from "sse.js";
 import type { AgentEvent, ChatMessage, ContentPart } from "~/api/chatApi";
 import { getSSEUrl } from "~/api/chatApi";
 import { translateApiErrorMessage } from "~/api/request";
-import { useLocalize } from "~/hooks";
 
 /**
  * Structured update emitted as agent SSE events stream in. Consumers merge
@@ -77,375 +75,382 @@ export interface SSESubmission {
     onTaskHandoff?: (data: { session_version_id: string; chat_id: string }) => void;
 }
 
-export default function useAiChatSSE(submission: SSESubmission | null) {
-    const sseRef = useRef<any>(null);
-    const localize = useLocalize();
+/** Handle over one live SSE chat stream. */
+export interface ChatStreamHandle {
+    /** Tear the stream down. Safe to call after it already finished. */
+    close: () => void;
+}
 
-    useEffect(() => {
-        if (!submission) return;
+/**
+ * Open one SSE chat stream.
+ *
+ * Deliberately NOT a hook. The backend runs the whole agent turn *inside* this
+ * response generator, so tearing the connection down mid-turn kills the
+ * generation server-side (it persists whatever it had, flagged as an error).
+ * When the stream lived in a component effect, switching to another
+ * conversation unmounted it and did exactly that. Callers now own the handle
+ * and decide when a turn ends.
+ */
+export function openChatStream(
+    submission: SSESubmission,
+    localize: (key: string, options?: any) => string,
+): ChatStreamHandle {
+    const {
+        payload,
+        userMessage,
+        onCreated,
+        onMessage,
+        onAgentUpdate,
+        onFinal,
+        onError,
+        onStart,
+        onEnd,
+        onTaskHandoff,
+    } = submission;
 
-        const {
-            payload,
-            userMessage,
-            onCreated,
-            onMessage,
-            onAgentUpdate,
-            onFinal,
-            onError,
-            onStart,
-            onEnd,
-            onTaskHandoff,
-        } = submission;
 
-        // ---- Agent-mode accumulators ---------------------------------------
-        const events: AgentEvent[] = [];
-        let currentThinkingIdx: number | null = null;
-        const toolCallIdx = new Map<string, number>();
-        let responseText = "";
-        let currentMessageId = "";
+    // ---- Agent-mode accumulators ---------------------------------------
+    const events: AgentEvent[] = [];
+    let currentThinkingIdx: number | null = null;
+    const toolCallIdx = new Map<string, number>();
+    let responseText = "";
+    let currentMessageId = "";
 
-        /** Concatenate every thinking event's content (for the legacy envelope). */
-        const thinkingText = () =>
-            events
-                .filter((e): e is Extract<AgentEvent, { type: "thinking" }> =>
-                    e.type === "thinking",
-                )
-                .map((e) => e.content)
-                .join("\n\n");
+    /** Concatenate every thinking event's content (for the legacy envelope). */
+    const thinkingText = () =>
+        events
+            .filter((e): e is Extract<AgentEvent, { type: "thinking" }> =>
+                e.type === "thinking",
+            )
+            .map((e) => e.content)
+            .join("\n\n");
 
-        const legacyEnvelope = () => {
-            const tt = thinkingText();
-            return tt ? `:::thinking\n${tt}\n:::\n${responseText}` : responseText;
-        };
-        const emitLegacy = () =>
-            onMessage(legacyEnvelope(), currentMessageId);
-        const emitAgent = (patch: AgentPatch) => {
-            if (!onAgentUpdate) return;
-            onAgentUpdate({
-                messageId: currentMessageId || undefined,
-                ...patch,
-            });
-        };
-        const snapshot = (): AgentEvent[] => events.map((e) => ({ ...e }));
-
-        const sseUrl = submission.sseUrl || getSSEUrl();
-        const sse = new SSE(sseUrl, {
-            payload: JSON.stringify(payload),
-            headers: { "Content-Type": "application/json" },
+    const legacyEnvelope = () => {
+        const tt = thinkingText();
+        return tt ? `:::thinking\n${tt}\n:::\n${responseText}` : responseText;
+    };
+    const emitLegacy = () =>
+        onMessage(legacyEnvelope(), currentMessageId);
+    const emitAgent = (patch: AgentPatch) => {
+        if (!onAgentUpdate) return;
+        onAgentUpdate({
+            messageId: currentMessageId || undefined,
+            ...patch,
         });
-        sseRef.current = sse;
+    };
+    const snapshot = (): AgentEvent[] => events.map((e) => ({ ...e }));
 
-        // Watchdog: if SSE closes (server done / network drop) without firing
-        // our explicit `final`/`error`/`cancel` paths, the send button would
-        // stay stuck in "stop" state. Guarantee a single onEnd().
-        let endCalled = false;
-        const safeEnd = () => {
-            if (endCalled) return;
-            endCalled = true;
-            onEnd();
-        };
+    const sseUrl = submission.sseUrl || getSSEUrl();
+    const sse = new SSE(sseUrl, {
+        payload: JSON.stringify(payload),
+        headers: { "Content-Type": "application/json" },
+    });
 
-        sse.addEventListener("open", () => onStart());
+    // Watchdog: if SSE closes (server done / network drop) without firing
+    // our explicit `final`/`error`/`cancel` paths, the send button would
+    // stay stuck in "stop" state. Guarantee a single onEnd().
+    let endCalled = false;
+    const safeEnd = () => {
+        if (endCalled) return;
+        endCalled = true;
+        onEnd();
+    };
 
-        sse.addEventListener("readystatechange", (e: any) => {
-            // sse.js exposes readyState: 0=connecting, 1=open, 2=closed.
-            if (e?.readyState === 2) safeEnd();
-        });
+    sse.addEventListener("open", () => onStart());
 
-        sse.addEventListener("message", (e: MessageEvent) => {
-            try {
-                const data = JSON.parse(e.data);
-                console.log("[SSE] raw event:", data);
+    sse.addEventListener("readystatechange", (e: any) => {
+        // sse.js exposes readyState: 0=connecting, 1=open, 2=closed.
+        if (e?.readyState === 2) safeEnd();
+    });
 
-                // --- F035 Track J (TJ-6): task-mode handoff ---
-                // Unified entry replies with a single handoff event then closes;
-                // hand the SV/chat ids to the caller and let the readystatechange
-                // watchdog fire onEnd when the stream drops.
-                if (data.event === "linsight_task_handoff") {
-                    const handoff = data.data || {};
-                    onTaskHandoff?.({
-                        session_version_id: String(handoff.session_version_id ?? ""),
-                        chat_id: String(handoff.chat_id ?? ""),
-                    });
+    sse.addEventListener("message", (e: MessageEvent) => {
+        try {
+            const data = JSON.parse(e.data);
+            console.log("[SSE] raw event:", data);
+
+            // --- F035 Track J (TJ-6): task-mode handoff ---
+            // Unified entry replies with a single handoff event then closes;
+            // hand the SV/chat ids to the caller and let the readystatechange
+            // watchdog fire onEnd when the stream drops.
+            if (data.event === "linsight_task_handoff") {
+                const handoff = data.data || {};
+                onTaskHandoff?.({
+                    session_version_id: String(handoff.session_version_id ?? ""),
+                    chat_id: String(handoff.chat_id ?? ""),
+                });
+                return;
+            }
+
+            // --- final: stream complete ---
+            if (data.final != null) {
+                onFinal(data);
+                safeEnd();
+                return;
+            }
+
+            // --- created: conversation init ---
+            if (data.created != null) {
+                const mergedUser = { ...userMessage, ...data.message };
+                onCreated(
+                    data.message?.conversationId || userMessage.conversationId,
+                    mergedUser,
+                );
+                return;
+            }
+
+            // --- v2.5 Agent-mode SSE ---
+            if (data.category != null) {
+                const { category, type, message, message_id } = data;
+
+                if (category === "agent_thinking" && type === "stream") {
+                    const delta: string = message?.content ?? "";
+                    if (!delta) return;
+                    if (currentThinkingIdx == null) {
+                        events.push({
+                            type: "thinking",
+                            content: "",
+                            started_at: Date.now(),
+                        });
+                        currentThinkingIdx = events.length - 1;
+                    }
+                    const ev = events[currentThinkingIdx] as Extract<
+                        AgentEvent,
+                        { type: "thinking" }
+                    >;
+                    ev.content += delta;
+                    emitLegacy();
+                    emitAgent({ events: snapshot() });
                     return;
                 }
 
-                // --- final: stream complete ---
-                if (data.final != null) {
-                    onFinal(data);
-                    safeEnd();
-                    return;
-                }
-
-                // --- created: conversation init ---
-                if (data.created != null) {
-                    const mergedUser = { ...userMessage, ...data.message };
-                    onCreated(
-                        data.message?.conversationId || userMessage.conversationId,
-                        mergedUser,
-                    );
-                    return;
-                }
-
-                // --- v2.5 Agent-mode SSE ---
-                if (data.category != null) {
-                    const { category, type, message, message_id } = data;
-
-                    if (category === "agent_thinking" && type === "stream") {
-                        const delta: string = message?.content ?? "";
-                        if (!delta) return;
-                        if (currentThinkingIdx == null) {
-                            events.push({
-                                type: "thinking",
-                                content: "",
-                                started_at: Date.now(),
-                            });
-                            currentThinkingIdx = events.length - 1;
-                        }
+                if (category === "agent_thinking" && type === "end") {
+                    const durationMs = Number(message?.duration_ms) || 0;
+                    if (currentThinkingIdx != null) {
                         const ev = events[currentThinkingIdx] as Extract<
                             AgentEvent,
                             { type: "thinking" }
                         >;
-                        ev.content += delta;
-                        emitLegacy();
-                        emitAgent({ events: snapshot() });
-                        return;
+                        ev.duration_ms = durationMs;
+                        ev.ended_at = Date.now();
+                        currentThinkingIdx = null;
                     }
+                    emitAgent({ events: snapshot() });
+                    return;
+                }
 
-                    if (category === "agent_thinking" && type === "end") {
-                        const durationMs = Number(message?.duration_ms) || 0;
-                        if (currentThinkingIdx != null) {
-                            const ev = events[currentThinkingIdx] as Extract<
+                if (category === "agent_tool_call") {
+                    const tcId: string =
+                        message?.tool_call_id || `tc_${events.length}`;
+
+                    if (type === "start") {
+                        // Starting a tool implicitly closes any in-flight
+                        // thinking event (backend emits an explicit /end
+                        // too, but belt-and-braces).
+                        currentThinkingIdx = null;
+                        const entry: AgentEvent = {
+                            type: "tool_call",
+                            tool_call_id: tcId,
+                            tool_name: message?.tool_name || "",
+                            display_name: message?.display_name,
+                            tool_type: message?.tool_type,
+                            args: message?.args,
+                            inflight: true,
+                            started_at: Date.now(),
+                        };
+                        events.push(entry);
+                        toolCallIdx.set(tcId, events.length - 1);
+                        responseText += `\n\n> ⏳ 正在调用工具：${entry.display_name || entry.tool_name
+                            }\n\n`;
+                    } else if (type === "end") {
+                        const idx = toolCallIdx.get(tcId);
+                        if (idx != null) {
+                            const prev = events[idx] as Extract<
                                 AgentEvent,
-                                { type: "thinking" }
+                                { type: "tool_call" }
                             >;
-                            ev.duration_ms = durationMs;
-                            ev.ended_at = Date.now();
-                            currentThinkingIdx = null;
-                        }
-                        emitAgent({ events: snapshot() });
-                        return;
-                    }
-
-                    if (category === "agent_tool_call") {
-                        const tcId: string =
-                            message?.tool_call_id || `tc_${events.length}`;
-
-                        if (type === "start") {
-                            // Starting a tool implicitly closes any in-flight
-                            // thinking event (backend emits an explicit /end
-                            // too, but belt-and-braces).
-                            currentThinkingIdx = null;
-                            const entry: AgentEvent = {
-                                type: "tool_call",
-                                tool_call_id: tcId,
-                                tool_name: message?.tool_name || "",
-                                display_name: message?.display_name,
-                                tool_type: message?.tool_type,
-                                args: message?.args,
-                                inflight: true,
-                                started_at: Date.now(),
+                            const endedAt = Date.now();
+                            events[idx] = {
+                                ...prev,
+                                display_name:
+                                    message?.display_name || prev.display_name,
+                                tool_type: message?.tool_type || prev.tool_type,
+                                args: message?.args ?? prev.args,
+                                results: message?.results,
+                                error: message?.error ?? null,
+                                inflight: false,
+                                ended_at: endedAt,
+                                duration_ms:
+                                    prev.started_at != null
+                                        ? endedAt - prev.started_at
+                                        : prev.duration_ms,
                             };
-                            events.push(entry);
-                            toolCallIdx.set(tcId, events.length - 1);
-                            responseText += `\n\n> ⏳ 正在调用工具：${entry.display_name || entry.tool_name
-                                }\n\n`;
-                        } else if (type === "end") {
-                            const idx = toolCallIdx.get(tcId);
-                            if (idx != null) {
-                                const prev = events[idx] as Extract<
+                        }
+                        const tn =
+                            message?.display_name || message?.tool_name || "tool";
+                        responseText += message?.error
+                            ? `> ⚠️ ${tn} 失败：${message.error}\n\n`
+                            : `> ✅ ${tn} 完成\n\n`;
+                    }
+                    emitLegacy();
+                    emitAgent({ events: snapshot() });
+                    return;
+                }
+
+                if (category === "agent_answer") {
+                    if (type === "stream") {
+                        const delta = message?.msg;
+                        if (delta) {
+                            responseText += delta;
+                            const last = events[events.length - 1];
+                            if (last && last.type === "text") {
+                                last.content += delta;
+                            } else {
+                                events.push({ type: "text", content: delta });
+                            }
+                        }
+                    } else if (type === "end") {
+                        if (message_id) currentMessageId = String(message_id);
+                        // `message.msg` on the end event is the final full
+                        // string; prefer it to accumulated deltas.
+                        if (typeof message?.msg === "string") {
+                            responseText = message.msg;
+                        }
+                        // Backend may send a fresh `events` snapshot on
+                        // end — trust it if present so truncation or
+                        // retries can't desync.
+                        if (Array.isArray(message?.events)) {
+                            events.length = 0;
+                            for (const ev of message.events) events.push(ev);
+                        }
+                        emitAgent({
+                            text: responseText,
+                            events: snapshot(),
+                            category: "agent_answer",
+                            finalised: true,
+                        });
+                        emitLegacy();
+                        return;
+                    }
+                    emitLegacy();
+                    emitAgent({ text: responseText, events: snapshot() });
+                    return;
+                }
+
+                if (category === "processing" || category === "question") {
+                    // Noise events — nothing to render here.
+                    return;
+                }
+
+                console.log("[SSE] unknown category:", category);
+                return;
+            }
+
+            // --- legacy event-based delta streaming (pre-v2.5 flows) ---
+            if (data.event != null) {
+                const eventType = data.event;
+
+                if (eventType === "on_run_step") {
+                    const msgId =
+                        data.data?.stepDetails?.message_creation?.message_id || "";
+                    if (msgId) currentMessageId = msgId;
+                    return;
+                }
+
+                if (eventType === "on_reasoning_delta") {
+                    const deltaContent = data.data?.delta?.content;
+                    if (Array.isArray(deltaContent)) {
+                        for (const part of deltaContent as ContentPart[]) {
+                            if (part.type === "think" && part.think) {
+                                if (currentThinkingIdx == null) {
+                                    events.push({ type: "thinking", content: "" });
+                                    currentThinkingIdx = events.length - 1;
+                                }
+                                const ev = events[currentThinkingIdx] as Extract<
                                     AgentEvent,
-                                    { type: "tool_call" }
+                                    { type: "thinking" }
                                 >;
-                                const endedAt = Date.now();
-                                events[idx] = {
-                                    ...prev,
-                                    display_name:
-                                        message?.display_name || prev.display_name,
-                                    tool_type: message?.tool_type || prev.tool_type,
-                                    args: message?.args ?? prev.args,
-                                    results: message?.results,
-                                    error: message?.error ?? null,
-                                    inflight: false,
-                                    ended_at: endedAt,
-                                    duration_ms:
-                                        prev.started_at != null
-                                            ? endedAt - prev.started_at
-                                            : prev.duration_ms,
-                                };
+                                ev.content += part.think;
                             }
-                            const tn =
-                                message?.display_name || message?.tool_name || "tool";
-                            responseText += message?.error
-                                ? `> ⚠️ ${tn} 失败：${message.error}\n\n`
-                                : `> ✅ ${tn} 完成\n\n`;
                         }
-                        emitLegacy();
-                        emitAgent({ events: snapshot() });
-                        return;
                     }
-
-                    if (category === "agent_answer") {
-                        if (type === "stream") {
-                            const delta = message?.msg;
-                            if (delta) {
-                                responseText += delta;
-                                const last = events[events.length - 1];
-                                if (last && last.type === "text") {
-                                    last.content += delta;
-                                } else {
-                                    events.push({ type: "text", content: delta });
-                                }
-                            }
-                        } else if (type === "end") {
-                            if (message_id) currentMessageId = String(message_id);
-                            // `message.msg` on the end event is the final full
-                            // string; prefer it to accumulated deltas.
-                            if (typeof message?.msg === "string") {
-                                responseText = message.msg;
-                            }
-                            // Backend may send a fresh `events` snapshot on
-                            // end — trust it if present so truncation or
-                            // retries can't desync.
-                            if (Array.isArray(message?.events)) {
-                                events.length = 0;
-                                for (const ev of message.events) events.push(ev);
-                            }
-                            emitAgent({
-                                text: responseText,
-                                events: snapshot(),
-                                category: "agent_answer",
-                                finalised: true,
-                            });
-                            emitLegacy();
-                            return;
-                        }
-                        emitLegacy();
-                        emitAgent({ text: responseText, events: snapshot() });
-                        return;
-                    }
-
-                    if (category === "processing" || category === "question") {
-                        // Noise events — nothing to render here.
-                        return;
-                    }
-
-                    console.log("[SSE] unknown category:", category);
+                    onMessage(
+                        `:::thinking\n${thinkingText()}\n:::`,
+                        currentMessageId,
+                    );
                     return;
                 }
 
-                // --- legacy event-based delta streaming (pre-v2.5 flows) ---
-                if (data.event != null) {
-                    const eventType = data.event;
-
-                    if (eventType === "on_run_step") {
-                        const msgId =
-                            data.data?.stepDetails?.message_creation?.message_id || "";
-                        if (msgId) currentMessageId = msgId;
-                        return;
-                    }
-
-                    if (eventType === "on_reasoning_delta") {
-                        const deltaContent = data.data?.delta?.content;
-                        if (Array.isArray(deltaContent)) {
-                            for (const part of deltaContent as ContentPart[]) {
-                                if (part.type === "think" && part.think) {
-                                    if (currentThinkingIdx == null) {
-                                        events.push({ type: "thinking", content: "" });
-                                        currentThinkingIdx = events.length - 1;
-                                    }
-                                    const ev = events[currentThinkingIdx] as Extract<
-                                        AgentEvent,
-                                        { type: "thinking" }
-                                    >;
-                                    ev.content += part.think;
-                                }
+                if (eventType === "on_message_delta") {
+                    const deltaContent = data.data?.delta?.content;
+                    if (Array.isArray(deltaContent)) {
+                        for (const part of deltaContent as ContentPart[]) {
+                            if (part.type === "text" && part.text) {
+                                responseText += part.text;
                             }
                         }
-                        onMessage(
-                            `:::thinking\n${thinkingText()}\n:::`,
-                            currentMessageId,
-                        );
-                        return;
                     }
-
-                    if (eventType === "on_message_delta") {
-                        const deltaContent = data.data?.delta?.content;
-                        if (Array.isArray(deltaContent)) {
-                            for (const part of deltaContent as ContentPart[]) {
-                                if (part.type === "text" && part.text) {
-                                    responseText += part.text;
-                                }
-                            }
-                        }
-                        onMessage(legacyEnvelope(), currentMessageId);
-                        return;
-                    }
-
-                    console.log("[SSE] unknown event:", eventType);
+                    onMessage(legacyEnvelope(), currentMessageId);
                     return;
                 }
 
-                // --- fallback: simple text streaming (legacy format) ---
-                if (data.text != null || data.response != null || data.message != null) {
-                    const text = data.text ?? data.response ?? "";
-                    const messageId = data.messageId ?? "";
-                    if (text) onMessage(text, messageId);
-                }
-            } catch (err) {
-                console.error("[SSE] Failed to parse message:", err);
+                console.log("[SSE] unknown event:", eventType);
+                return;
             }
-        });
 
-        sse.addEventListener("error", (e: MessageEvent) => {
-            try {
-                const data = JSON.parse(e.data);
-                // Resolve the SSE error envelope ({ status_code, status_message,
-                // data }) through the shared api_errors.<code> i18n logic, falling
-                // back to legacy plain-text shapes, then a generic message.
-                const resolved = translateApiErrorMessage(data);
-                const code = typeof data?.status_code === "number" ? data.status_code : undefined;
-                // `data.data` carries the backend's classification alongside the
-                // localized copy: without it the bubble could only ever say
-                // "服务器错误" and the upstream reason (which file, which service,
-                // what it actually said) was dropped on the floor.
-                const payload = data?.data ?? {};
-                onError(resolved || data?.text || data?.message || localize("workstation.chat.connection_lost"), code, {
-                    errorType: typeof payload.error_type === "string" ? payload.error_type : undefined,
-                    errorDetail:
-                        typeof payload.detail === "string"
-                            ? payload.detail
-                            : typeof payload.exception === "string"
-                                ? payload.exception
-                                : undefined,
-                });
-            } catch {
-                // Non-JSON payload — the stream dropped rather than the backend
-                // reporting a typed failure (gateway/proxy timeout, worker restart).
-                onError(localize("workstation.chat.connection_lost"));
+            // --- fallback: simple text streaming (legacy format) ---
+            if (data.text != null || data.response != null || data.message != null) {
+                const text = data.text ?? data.response ?? "";
+                const messageId = data.messageId ?? "";
+                if (text) onMessage(text, messageId);
             }
-            safeEnd();
-        });
+        } catch (err) {
+            console.error("[SSE] Failed to parse message:", err);
+        }
+    });
 
-        sse.addEventListener("cancel", () => safeEnd());
+    sse.addEventListener("error", (e: MessageEvent) => {
+        try {
+            const data = JSON.parse(e.data);
+            // Resolve the SSE error envelope ({ status_code, status_message,
+            // data }) through the shared api_errors.<code> i18n logic, falling
+            // back to legacy plain-text shapes, then a generic message.
+            const resolved = translateApiErrorMessage(data);
+            const code = typeof data?.status_code === "number" ? data.status_code : undefined;
+            // `data.data` carries the backend's classification alongside the
+            // localized copy: without it the bubble could only ever say
+            // "服务器错误" and the upstream reason (which file, which service,
+            // what it actually said) was dropped on the floor.
+            const payload = data?.data ?? {};
+            onError(resolved || data?.text || data?.message || localize("workstation.chat.connection_lost"), code, {
+                errorType: typeof payload.error_type === "string" ? payload.error_type : undefined,
+                errorDetail:
+                    typeof payload.detail === "string"
+                        ? payload.detail
+                        : typeof payload.exception === "string"
+                            ? payload.exception
+                            : undefined,
+            });
+        } catch {
+            // Non-JSON payload — the stream dropped rather than the backend
+            // reporting a typed failure (gateway/proxy timeout, worker restart).
+            onError(localize("workstation.chat.connection_lost"));
+        }
+        safeEnd();
+    });
 
-        sse.stream();
+    sse.addEventListener("cancel", () => safeEnd());
 
-        return () => {
+    sse.stream();
+
+    return {
+        close: () => {
+            // readyState <= 1 means connecting/open — we are aborting a LIVE
+            // turn rather than tidying up a finished one. Dispatching `cancel`
+            // routes it through the same single-shot watchdog as a natural end,
+            // so the caller's streaming flag can never get stuck on.
             const isCancelled = sse.readyState <= 1;
             sse.close();
             if (isCancelled) sse.dispatchEvent(new Event("cancel"));
-            sseRef.current = null;
-        };
-    }, [submission]);
-
-    /** Abort the current SSE stream */
-    const abort = () => {
-        if (sseRef.current) {
-            sseRef.current.close();
-            sseRef.current = null;
-        }
+        },
     };
-
-    return { abort };
 }
