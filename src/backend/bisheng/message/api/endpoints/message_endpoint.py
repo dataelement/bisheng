@@ -7,33 +7,34 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200, resp_500
 from bisheng.message.api.dependencies import get_message_service
 from bisheng.message.domain.schemas.message_schema import (
-    TabTypeEnum,
-    MarkReadRequest,
     ApprovalActionRequest,
+    MarkReadRequest,
+    ReadStateEnum,
+    TabTypeEnum,
 )
 from bisheng.message.domain.services.message_service import MessageService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix='', tags=['Message'])
+router = APIRouter(prefix="", tags=["Message"])
 
 
 @router.get("/list")
 async def get_message_list(
-        tab: TabTypeEnum = Query(TabTypeEnum.ALL, description='Tab type: all or request'),
-        only_unread: bool = Query(False, description='Show only unread messages'),
-        keyword: Optional[str] = Query(None, description='Search keyword'),
-        page: int = Query(1, ge=1, description='Page number'),
-        page_size: int = Query(20, ge=1, le=100, description='Page size'),
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        message_service: MessageService = Depends(get_message_service),
+    tab: TabTypeEnum = Query(TabTypeEnum.ALL, description="Tab type: all, request or notify"),
+    read_state: ReadStateEnum = Query(ReadStateEnum.ALL, description="Read state filter: all, unread or read"),
+    keyword: Optional[str] = Query(None, description="Search keyword"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Page size"),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Get paginated message list with optional filters."""
 
     result = await message_service.get_message_list(
         login_user=login_user,
         tab=tab,
-        only_unread=only_unread,
+        read_state=read_state,
         keyword=keyword,
         page=page,
         page_size=page_size,
@@ -43,8 +44,8 @@ async def get_message_list(
 
 @router.get("/unread_count")
 async def get_unread_count(
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        message_service: MessageService = Depends(get_message_service),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Get unread message counts grouped by message type."""
     try:
@@ -57,9 +58,9 @@ async def get_unread_count(
 
 @router.post("/mark_read")
 async def mark_messages_read(
-        req: MarkReadRequest,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        message_service: MessageService = Depends(get_message_service),
+    req: MarkReadRequest,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Mark specific messages as read."""
     try:
@@ -72,8 +73,8 @@ async def mark_messages_read(
 
 @router.post("/mark_all_read")
 async def mark_all_messages_read(
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        message_service: MessageService = Depends(get_message_service),
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Mark all messages as read for the current user."""
     try:
@@ -86,9 +87,9 @@ async def mark_all_messages_read(
 
 @router.post("/approve")
 async def approve_message(
-        req: ApprovalActionRequest,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        message_service: MessageService = Depends(get_message_service),
+    req: ApprovalActionRequest,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Process approval action (agree/reject) on an approval message."""
     try:
@@ -105,9 +106,9 @@ async def approve_message(
 
 @router.delete("/{message_id}")
 async def delete_message(
-        message_id: int,
-        login_user: UserPayload = Depends(UserPayload.get_login_user),
-        message_service: MessageService = Depends(get_message_service),
+    message_id: int,
+    login_user: UserPayload = Depends(UserPayload.get_login_user),
+    message_service: MessageService = Depends(get_message_service),
 ):
     """Delete a message."""
     await message_service.delete_message(message_id, login_user)

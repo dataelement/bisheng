@@ -8,7 +8,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.schemas.api import resp_200
 from bisheng.utils import get_request_ip
 
-router = APIRouter(prefix='/approval', tags=['approval'])
+router = APIRouter(prefix="/approval", tags=["approval"])
 
 
 class ApprovalTaskDecisionReq(BaseModel):
@@ -30,7 +30,7 @@ class MenuAccessApplyReq(BaseModel):
     reason: str | None = Field(default=None, max_length=2000)
 
 
-@router.get('/my-tasks')
+@router.get("/my-tasks")
 async def list_my_tasks(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     data = await ApprovalCenterService.list_my_tasks(
         tenant_id=login_user.tenant_id,
@@ -39,13 +39,23 @@ async def list_my_tasks(login_user: UserPayload = Depends(UserPayload.get_login_
     return resp_200(data)
 
 
-@router.get('/my-tasks/{task_id}')
+@router.get("/my-tasks/pending-count")
+async def count_my_pending_tasks(login_user: UserPayload = Depends(UserPayload.get_login_user)):
+    """Pending-task badge count. Declared before /my-tasks/{task_id} so it is not shadowed."""
+    count = await ApprovalCenterService.count_pending_tasks(
+        tenant_id=login_user.tenant_id,
+        approver_user_id=login_user.user_id,
+    )
+    return resp_200(data={"count": count})
+
+
+@router.get("/my-tasks/{task_id}")
 async def get_my_task_detail(task_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     data = await ApprovalCenterService.get_task_detail(task_id=task_id, login_user=login_user)
     return resp_200(data)
 
 
-@router.post('/tasks/{task_id}/decision')
+@router.post("/tasks/{task_id}/decision")
 async def decide_task(
     task_id: int,
     req: ApprovalTaskDecisionReq,
@@ -65,7 +75,7 @@ async def decide_task(
     return resp_200(data)
 
 
-@router.get('/my-requests')
+@router.get("/my-requests")
 async def list_my_requests(login_user: UserPayload = Depends(UserPayload.get_login_user)):
     data = await ApprovalCenterService.list_my_requests(
         tenant_id=login_user.tenant_id,
@@ -74,13 +84,13 @@ async def list_my_requests(login_user: UserPayload = Depends(UserPayload.get_log
     return resp_200(data)
 
 
-@router.get('/instances/{instance_id}')
+@router.get("/instances/{instance_id}")
 async def get_instance_detail(instance_id: int, login_user: UserPayload = Depends(UserPayload.get_login_user)):
     data = await ApprovalCenterService.get_instance_detail(instance_id=instance_id, login_user=login_user)
     return resp_200(data)
 
 
-@router.post('/instances/{instance_id}/withdraw')
+@router.post("/instances/{instance_id}/withdraw")
 async def withdraw_instance(
     instance_id: int,
     req: ApprovalResubmitReq,
@@ -97,27 +107,30 @@ async def withdraw_instance(
     return resp_200(data)
 
 
-@router.get('/menu-access/pending-check')
+@router.get("/menu-access/pending-check")
 async def check_menu_access_pending(
     menu_key: str,
     login_user: UserPayload = Depends(UserPayload.get_login_user),
 ):
     from bisheng.approval.domain.repositories.approval_instance_repository import ApprovalInstanceRepository
-    business_key = f'menu:{menu_key}:user:{login_user.user_id}'
+
+    business_key = f"menu:{menu_key}:user:{login_user.user_id}"
     duplicate = await ApprovalInstanceRepository.find_duplicate_active_instance(
         tenant_id=login_user.tenant_id,
-        scenario_code='menu_access_request',
+        scenario_code="menu_access_request",
         business_key=business_key,
         applicant_user_id=login_user.user_id,
     )
-    return resp_200({
-        'has_pending': duplicate is not None,
-        'instance_id': duplicate.id if duplicate else None,
-        'status': duplicate.status if duplicate else None,
-    })
+    return resp_200(
+        {
+            "has_pending": duplicate is not None,
+            "instance_id": duplicate.id if duplicate else None,
+            "status": duplicate.status if duplicate else None,
+        }
+    )
 
 
-@router.post('/menu-access/apply')
+@router.post("/menu-access/apply")
 async def apply_menu_access(
     req: MenuAccessApplyReq,
     request: Request,
@@ -133,7 +146,7 @@ async def apply_menu_access(
     return resp_200(data)
 
 
-@router.post('/menu-access/{instance_id}/revoke-grant')
+@router.post("/menu-access/{instance_id}/revoke-grant")
 async def revoke_menu_grant(
     instance_id: int,
     req: ApprovalRevokeReq,
