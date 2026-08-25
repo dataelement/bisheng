@@ -88,32 +88,44 @@ class ToolServices(BaseModel):
         permission_elapsed_ms = 0.0
         type_db_elapsed_ms = 0.0
         if action == "visible":
-            permission_start = perf_counter()
-            actor = await resolve_permission_actor(self.login_user)
-            if actor.current_tenant_id != current_tid:
-                actor = replace(actor, current_tenant_id=current_tid)
-            visible = await (await get_f048_runtime()).list_visible_objects(
-                actor,
-                resource_type="tool",
-                max_results=_TOOL_VISIBLE_MAX_RESULTS,
-            )
-            try:
-                candidate_ids = [int(resource_id) for resource_id in visible.object_ids]
-            except (TypeError, ValueError) as exc:
-                raise PermissionEnumerationIncompleteError(
-                    msg="Tool visibility enumeration returned a non-numeric resource ID",
-                ) from exc
-            permission_elapsed_ms = (perf_counter() - permission_start) * 1000
-            candidate_count = len(candidate_ids)
-            type_db_start = perf_counter()
-            all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
-                current_tid,
-                include_preset=is_preset is None,
-                is_preset=preset_filter,
-                tool_type_ids=candidate_ids,
-            )
-            type_db_elapsed_ms = (perf_counter() - type_db_start) * 1000
-            permission_strategy = "visible_ids_first"
+            if preset_filter == ToolPresetType.PRESET:
+                candidate_count = 0
+                type_db_start = perf_counter()
+                all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
+                    current_tid,
+                    include_preset=True,
+                    is_preset=preset_filter,
+                )
+                type_db_elapsed_ms = (perf_counter() - type_db_start) * 1000
+                permission_strategy = "preset_visible_all"
+            else:
+                permission_start = perf_counter()
+                actor = await resolve_permission_actor(self.login_user)
+                if actor.current_tenant_id != current_tid:
+                    actor = replace(actor, current_tenant_id=current_tid)
+                visible = await (await get_f048_runtime()).list_visible_objects(
+                    actor,
+                    resource_type="tool",
+                    max_results=_TOOL_VISIBLE_MAX_RESULTS,
+                )
+                try:
+                    candidate_ids = [int(resource_id) for resource_id in visible.object_ids]
+                except (TypeError, ValueError) as exc:
+                    raise PermissionEnumerationIncompleteError(
+                        msg="Tool visibility enumeration returned a non-numeric resource ID",
+                    ) from exc
+                permission_elapsed_ms = (perf_counter() - permission_start) * 1000
+                candidate_count = len(candidate_ids)
+                type_db_start = perf_counter()
+                all_tool_type = await GptsToolsDao.aget_tenant_tool_type(
+                    current_tid,
+                    include_preset=is_preset is None,
+                    is_preset=preset_filter,
+                    tool_type_ids=candidate_ids,
+                    include_preset_without_id_filter=is_preset is None,
+                )
+                type_db_elapsed_ms = (perf_counter() - type_db_start) * 1000
+                permission_strategy = "visible_ids_first"
         else:
             type_db_start = perf_counter()
             all_tool_type = await GptsToolsDao.aget_tenant_tool_type(

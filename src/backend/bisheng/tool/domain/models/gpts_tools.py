@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 
 from pydantic import model_validator
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint, func, text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, UniqueConstraint, false, func, text
 from sqlmodel import Field, Text, col, or_, select, update
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -28,7 +28,7 @@ class GptsToolsBase(SQLModelSerializable):
     api_params: list[dict] | None = Field(
         default=None, sa_column=Column(JsonType), description="Used to storeapiParameter and other information"
     )
-    user_id: int | None = Field(default=None, index=True, description="Create UserID， nullIndicates system creation")
+    user_id: int | None = Field(default=None, index=True, description="Create UserID, nullIndicates system creation")
     tenant_id: int | None = Field(
         default=None,
         sa_column=Column(Integer, nullable=False, server_default=text("1"), index=True, comment="Tenant ID"),
@@ -66,7 +66,7 @@ class GptsToolsTypeBase(SQLModelSerializable):
         default=ToolPresetType.API.value,
         description="The category of the tool, the historical reason field is not renamed",
     )
-    user_id: int | None = Field(default=None, index=True, description="Create UserID， nullIndicates system creation")
+    user_id: int | None = Field(default=None, index=True, description="Create UserID, nullIndicates system creation")
     is_delete: int = Field(default=0, description="1 Indicates logical deletion")
     is_shared: bool = Field(
         default=False,
@@ -305,7 +305,7 @@ class GptsToolsDao(GptsToolsBase):
     def _get_user_tool_type_statement(
         cls,
         user_id: int,
-        extra_tool_type_ids: list[int] = None,
+        extra_tool_type_ids: list[int] | None = None,
         include_preset: bool = True,
         is_preset: ToolPresetType = None,
     ):
@@ -332,7 +332,7 @@ class GptsToolsDao(GptsToolsBase):
     def get_user_tool_type(
         cls,
         user_id: int,
-        extra_tool_type_ids: list[int] = None,
+        extra_tool_type_ids: list[int] | None = None,
         include_preset: bool = True,
         is_preset: ToolPresetType = None,
     ) -> list[GptsToolsType]:
@@ -347,7 +347,7 @@ class GptsToolsDao(GptsToolsBase):
     async def aget_user_tool_type(
         cls,
         user_id: int,
-        extra_tool_type_ids: list[int] = None,
+        extra_tool_type_ids: list[int] | None = None,
         include_preset: bool = True,
         is_preset: ToolPresetType = None,
     ) -> list[GptsToolsType]:
@@ -366,6 +366,7 @@ class GptsToolsDao(GptsToolsBase):
         include_preset: bool = True,
         is_preset: ToolPresetType = None,
         tool_type_ids: list[int] | None = None,
+        include_preset_without_id_filter: bool = False,
     ) -> list[GptsToolsType]:
         """Get all tool categories under the current tenant.
 
@@ -378,9 +379,13 @@ class GptsToolsDao(GptsToolsBase):
             GptsToolsType.tenant_id == tenant_id,
         )
         if tool_type_ids is not None:
-            if not tool_type_ids:
+            id_condition = col(GptsToolsType.id).in_(tool_type_ids) if tool_type_ids else false()
+            if include_preset_without_id_filter:
+                statement = statement.where(or_(GptsToolsType.is_preset == ToolPresetType.PRESET.value, id_condition))
+            elif not tool_type_ids:
                 return []
-            statement = statement.where(col(GptsToolsType.id).in_(tool_type_ids))
+            else:
+                statement = statement.where(id_condition)
         if is_preset is not None:
             statement = statement.where(GptsToolsType.is_preset == is_preset.value)
         elif not include_preset:

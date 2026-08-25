@@ -288,6 +288,13 @@ async def test_refresh_mcp_requires_exact_edit_action(monkeypatch) -> None:
 async def test_visible_tool_list_enumerates_ids_before_database_query(
     monkeypatch,
 ) -> None:
+    preset_tool_type = GptsToolsType(
+        id=20,
+        tenant_id=1,
+        user_id=None,
+        name="Preset",
+        is_preset=1,
+    )
     tool_type = GptsToolsType(
         id=10,
         tenant_id=1,
@@ -297,7 +304,7 @@ async def test_visible_tool_list_enumerates_ids_before_database_query(
     )
     list_visible = AsyncMock(return_value=SimpleNamespace(object_ids=("10",)))
     runtime = SimpleNamespace(list_visible_objects=list_visible)
-    load_types = AsyncMock(return_value=[tool_type])
+    load_types = AsyncMock(return_value=[preset_tool_type, tool_type])
     monkeypatch.setattr(
         "bisheng.tool.domain.services.tool.GptsToolsDao.aget_tenant_tool_type",
         load_types,
@@ -322,11 +329,47 @@ async def test_visible_tool_list_enumerates_ids_before_database_query(
 
     result = await ToolServices(login_user=login_user).get_tool_list(action="visible")
 
-    assert [item.id for item in result] == [10]
+    assert [item.id for item in result] == [20, 10]
     assert result[0].write is False
     assert result[0].delete is False
     list_visible.assert_awaited_once()
     assert load_types.await_args.kwargs["tool_type_ids"] == [10]
+    assert load_types.await_args.kwargs["include_preset_without_id_filter"] is True
+
+
+@pytest.mark.asyncio
+async def test_visible_preset_tool_list_is_visible_to_regular_users(monkeypatch) -> None:
+    preset_tool_type = GptsToolsType(
+        id=20,
+        tenant_id=1,
+        user_id=None,
+        name="Preset",
+        is_preset=1,
+    )
+    list_visible = AsyncMock()
+    runtime = SimpleNamespace(list_visible_objects=list_visible)
+    load_types = AsyncMock(return_value=[preset_tool_type])
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_tenant_tool_type",
+        load_types,
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_list_by_type",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.get_f048_runtime",
+        AsyncMock(return_value=runtime),
+    )
+    login_user = UserPayload(user_id=7, tenant_id=1, user_role=[])
+
+    result = await ToolServices(login_user=login_user).get_tool_list(is_preset=1, action="visible")
+
+    assert [item.id for item in result] == [20]
+    assert result[0].write is False
+    assert result[0].delete is False
+    list_visible.assert_not_awaited()
+    assert load_types.await_args.kwargs["is_preset"].value == 1
 
 
 @pytest.mark.asyncio
