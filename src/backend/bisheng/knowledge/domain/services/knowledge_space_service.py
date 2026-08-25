@@ -276,6 +276,7 @@ from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import 
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_pin_service import KnowledgeSpacePinService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
+    DEFAULT_TAG_LIBRARY_NAME,
     KnowledgeSpaceTagLibraryService,
 )
 from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
@@ -413,10 +414,6 @@ _SPACE_MEMBER_RELATION_LEVEL = {
 }
 
 _logger = logging.getLogger(__name__)
-
-# Tag library auto-bound to newly created personal spaces, matched by name with a
-# fallback to the earliest builtin library.
-DEFAULT_TAG_LIBRARY_NAME = "默认标签库"
 
 _PERMISSION_LEVEL_TO_RELATION = {
     "owner": "owner",
