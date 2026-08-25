@@ -3054,7 +3054,7 @@
   },
   "src/pages/appChat/useChatHelpers.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
+      "count": 11
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
