@@ -5,7 +5,8 @@ test_f040_app_square_bounded_scan.py only pin the source shape):
 
 - the keyset scan resumes strictly after the cursor (no re-scan of prior pages,
   no overlap, no gaps) while filtering out non-visible rows across batches;
-- the uncategorized envelope round-trips its own ``next_cursor``;
+- the uncategorized envelope round-trips its own ``next_cursor`` without
+  eagerly resolving edit/share actions;
 - the ranked online envelope strips the internal ``_used_rank``/``_sort_time``
   helper columns before serving and derives ``can_share`` from the action map.
 """
@@ -138,13 +139,14 @@ async def test_uncategorized_envelope_roundtrips_its_own_next_cursor():
         tenant_admin_tenant_ids=frozenset(),
     )
     collect_visible = AsyncMock(return_value=sorted(_VISIBLE_IDS))
+    action_map = AsyncMock(side_effect=_fake_action_map)
 
     with (
         patch.object(wf.FlowDao, "aget_all_apps", new=fake.aget_all_apps),
         patch.object(wf, "_APP_COMPAT_PAGE_SCAN_BATCH_SIZE", 3),
         patch.object(wf, "resolve_permission_actor", new=AsyncMock(return_value=actor)),
         patch.object(WorkFlowService, "_collect_visible_app_ids", new=collect_visible),
-        patch.object(WorkFlowService, "_application_action_map", new=AsyncMock(side_effect=_fake_action_map)),
+        patch.object(WorkFlowService, "_application_action_map", new=action_map),
         patch.object(wf.TagDao, "asearch_tags", new=AsyncMock(return_value=[])),
         patch.object(WorkFlowService, "get_logo_share_link", side_effect=lambda logo: logo),
     ):
@@ -152,13 +154,14 @@ async def test_uncategorized_envelope_roundtrips_its_own_next_cursor():
         assert [d["id"] for d in env1.data] == ["1", "2", "4"]
         assert env1.has_more is True
         assert env1.next_cursor
-        # can_share derived from the (visible/edit/share) action map.
-        assert all(d["can_share"] is True for d in env1.data)
+        assert all("can_share" not in item for item in env1.data)
 
         env2 = await WorkFlowService.get_uncategorized_flows_envelope(user, cursor=env1.next_cursor, page_size=3)
         assert [d["id"] for d in env2.data] == ["5", "7", "8"]
 
     collect_visible.assert_has_awaits([call(actor, flow_type=None), call(actor, flow_type=None)])
+    assert action_map.await_count
+    assert all(args.args[2] == ("visible",) for args in action_map.await_args_list)
     assert fake.id_lists
     assert all(id_list == sorted(_VISIBLE_IDS) for id_list in fake.id_lists)
 
@@ -210,6 +213,7 @@ async def test_uncategorized_admin_skips_visible_id_enumeration():
 
     collect_visible.assert_not_awaited()
     assert scan.await_args.kwargs["id_list"] is None
+    assert scan.await_args.kwargs["additional_actions"] == ()
 
 
 @pytest.mark.asyncio
