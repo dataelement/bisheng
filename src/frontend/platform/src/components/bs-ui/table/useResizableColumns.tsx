@@ -60,7 +60,8 @@ export function useResizableColumns(defs: ResizableColumnDef[]): UseResizableCol
     const colDefs = defsRef.current[d.col]
     if (!colDefs) return
     const dx = e.clientX - d.startX
-    const next = Math.max(colDefs.minWidth, Math.round(d.startW + dx))
+    const cap = typeof window !== "undefined" ? Math.max(400, window.innerWidth - 80) : 2000
+    const next = Math.min(cap, Math.max(colDefs.minWidth, Math.round(d.startW + dx)))
     setWidths((prev) => {
       if (prev[d.col] === next) return prev
       const copy = [...prev]
@@ -79,7 +80,7 @@ export function useResizableColumns(defs: ResizableColumnDef[]): UseResizableCol
     (colIndex: number) => (e: ReactMouseEvent<HTMLSpanElement>) => {
       e.preventDefault()
       e.stopPropagation()
-      if (colIndex < 0 || colIndex >= widthsRef.current.length - 1) return
+      if (colIndex < 0 || colIndex >= widthsRef.current.length) return
       dragRef.current = {
         col: colIndex,
         startX: e.clientX,
@@ -96,34 +97,32 @@ export function useResizableColumns(defs: ResizableColumnDef[]): UseResizableCol
   const getThProps = useCallback(
     (columnIndex: number): ThHTMLAttributes<HTMLTableCellElement> => {
       const w = widths[columnIndex]
-      const m = defs[columnIndex]?.minWidth ?? 80
       return {
         className: "relative",
         style: {
           width: w,
-          minWidth: m,
+          minWidth: w,
           maxWidth: w,
           boxSizing: "border-box",
         },
       }
     },
-    [defs, widths]
+    [widths]
   )
 
   const getTdProps = useCallback(
     (columnIndex: number): TdHTMLAttributes<HTMLTableCellElement> => {
       const w = widths[columnIndex]
-      const m = defs[columnIndex]?.minWidth ?? 80
       return {
         style: {
           width: w,
-          minWidth: m,
+          minWidth: w,
           maxWidth: w,
           boxSizing: "border-box",
         },
       }
     },
-    [defs, widths]
+    [widths]
   )
 
   return {
@@ -135,7 +134,7 @@ export function useResizableColumns(defs: ResizableColumnDef[]): UseResizableCol
   }
 }
 
-/** 放在表头单元格右侧边缘，用于拖拽左侧列宽（最后一列不要渲染） */
+/** 放在表头单元格右侧边缘，拖拽以调整当前列宽。操作列可传 lastColumn 隐藏把手。 */
 export function ColumnResizeHandle({
   columnIndex,
   lastColumn,
@@ -150,23 +149,20 @@ export function ColumnResizeHandle({
   return (
     <span
       title={t("system.columnResizeHint")}
-      className="group/col-resize absolute right-0 top-0 z-20 flex h-full w-4 min-w-[14px] -translate-x-1/2 cursor-col-resize select-none items-center justify-center rounded-sm transition-colors hover:bg-muted/50 active:bg-muted/75"
+      className="group/col-resize absolute right-0 top-0 z-20 flex h-full w-4 min-w-[14px] -translate-x-1/2 cursor-col-resize select-none items-center justify-center"
       onMouseDown={startResize(columnIndex)}
       role="separator"
       aria-orientation="vertical"
       aria-label={t("system.columnResizeHint")}
     >
       {/*
-        使用命名子组 group/col-resize，避免与 TableRow 上的 `group` 串线，
-        否则整行悬停时所有列的细线会一起出现。
+        The handle itself is the visible column split. Header border-l stays off
+        so the two lines do not stack.
       */}
       <span
-        className="pointer-events-none flex h-[42%] min-h-[12px] max-h-[1.125rem] items-stretch gap-[2px] opacity-0 transition-[opacity,gap,color] duration-150 group-hover/col-resize:gap-[3px] group-hover/col-resize:opacity-100 group-hover/col-resize:text-primary/75 dark:group-hover/col-resize:text-primary/80"
+        className="pointer-events-none h-full w-px bg-[#C9CDD4] transition-[width,background-color] duration-150 group-hover/col-resize:w-0.5 group-hover/col-resize:bg-[#165dff] dark:bg-zinc-500 dark:group-hover/col-resize:bg-[#165dff]"
         aria-hidden
-      >
-        <span className="w-px shrink-0 rounded-full bg-muted-foreground/70 group-hover/col-resize:bg-current dark:bg-zinc-400/80" />
-        <span className="w-px shrink-0 rounded-full bg-muted-foreground/50 group-hover/col-resize:bg-current group-hover/col-resize:opacity-80 dark:bg-zinc-400/60" />
-      </span>
+      />
     </span>
   )
 }
