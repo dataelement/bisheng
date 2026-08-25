@@ -1,5 +1,6 @@
 import { useLocalize } from "~/hooks";
 import { PermissionLevelMenu } from "./PermissionLevelMenu";
+import { canMutatePermissionDraftRow } from "./permissionDraftPolicy";
 import type { RelationModelOption } from "./RelationSelect";
 import {
   getPermissionDraftRowKey,
@@ -27,7 +28,13 @@ export function PermissionDraftEditor({
   const localize = useLocalize();
 
   const handleRelationChange = (row: PermissionDraftRow, modelId: string) => {
-    if (row.protected || row.editable === false || !capabilities.canChangeRelation) return;
+    if (
+      !canMutatePermissionDraftRow(
+        row,
+        capabilities.canChangeRelation,
+        capabilities.relationModels,
+      )
+    ) return;
     const model = capabilities.relationModels.find((candidate) => candidate.id === modelId);
     if (!model) return;
 
@@ -40,7 +47,13 @@ export function PermissionDraftEditor({
   };
 
   const handleRemove = (row: PermissionDraftRow) => {
-    if (row.protected || row.editable === false || !capabilities.canRemove) return;
+    if (
+      !canMutatePermissionDraftRow(
+        row,
+        capabilities.canRemove,
+        capabilities.relationModels,
+      )
+    ) return;
     const rowKey = getPermissionDraftRowKey(row);
     onChange(value.filter((candidate) => getPermissionDraftRowKey(candidate) !== rowKey));
   };
@@ -50,10 +63,16 @@ export function PermissionDraftEditor({
       {value.map((row) => {
         const rowKey = getPermissionDraftRowKey(row);
         const relationModels = capabilities.relationModels;
-        const canChangeRelation = !row.protected && row.editable !== false
-          && capabilities.canChangeRelation
-          && relationModels.length > 0;
-        const canRemove = !row.protected && row.editable !== false && capabilities.canRemove;
+        const canChangeRelation = canMutatePermissionDraftRow(
+          row,
+          capabilities.canChangeRelation,
+          relationModels,
+        );
+        const canRemove = canMutatePermissionDraftRow(
+          row,
+          capabilities.canRemove,
+          relationModels,
+        );
         const activeModelId = row.modelKey;
         const relationLabel =
           capabilities.relationModels.find((model) => model.id === activeModelId)?.name

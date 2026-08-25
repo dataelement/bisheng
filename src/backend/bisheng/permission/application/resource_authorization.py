@@ -52,6 +52,9 @@ class ResourceAuthorizationRegistry:
             raise ValueError(f"resource authorization port already registered: {normalized}")
         self._ports[normalized] = port
 
+    def port_for(self, resource_type: str) -> ResourceAuthorizationPort | None:
+        return self._ports.get(resource_type.strip().lower())
+
     async def resolve(
         self,
         *,

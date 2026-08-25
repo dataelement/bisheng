@@ -36,6 +36,40 @@ class _Resources:
         )
 
 
+class _ToolPort:
+    async def resolve_permission_target(self, *, resource_id, actor, action):
+        del actor, action
+        return VerifiedPermissionTarget.from_business_service(
+            tenant_id=9,
+            resource_type="tool",
+            resource_id=resource_id,
+            resource_version=3,
+            context_version=f"tool:{resource_id}:v3",
+        )
+
+    async def load_permission_record(self, *, resource_id):
+        return SimpleNamespace(
+            resource_id=resource_id,
+            preset=True,
+            system_allowlisted=True,
+        )
+
+
+class _ToolResources:
+    def __init__(self) -> None:
+        self.port = _ToolPort()
+
+    async def resolve(self, **kwargs):
+        return await self.port.resolve_permission_target(
+            resource_id=kwargs["resource_id"],
+            actor=kwargs["actor"],
+            action=kwargs["action"],
+        )
+
+    def port_for(self, resource_type):
+        return self.port if resource_type == "tool" else None
+
+
 class _Runtime:
     def __init__(self) -> None:
         self.changes = ()
@@ -320,6 +354,49 @@ async def test_super_admin_my_permissions_returns_full_effective_actions() -> No
     assert result["actions"] == ["use", "edit", "delete", "manage_permission"]
     assert result["sources"] == []
     assert result["projection_degraded"] is False
+    assert runtime.visible_checks == 0
+
+
+@pytest.mark.asyncio
+async def test_ordinary_user_my_permissions_for_preset_tool_returns_empty_actions() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_ToolResources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=9)
+
+    result = await api.get_my_permissions(
+        resource_type="tool",
+        resource_id="20",
+        actor=actor,
+    )
+
+    assert result["actions"] == []
+    assert result["sources"] == []
+    assert result["projection_degraded"] is False
+    assert runtime.visible_checks == 0
+
+
+@pytest.mark.asyncio
+async def test_super_admin_my_permissions_for_preset_tool_returns_full_actions() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_ToolResources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=5, super_admin=True)
+
+    result = await api.get_my_permissions(
+        resource_type="tool",
+        resource_id="20",
+        actor=actor,
+    )
+
+    assert result["actions"] == ["use", "edit", "delete", "manage_permission"]
+    assert result["sources"] == []
     assert runtime.visible_checks == 0
 
 
