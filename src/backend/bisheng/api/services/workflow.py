@@ -21,16 +21,16 @@ from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.flow import WorkFlowInitError
 from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
 from bisheng.common.services import telemetry_service
 from bisheng.common.services.base import BaseService
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.core.logger import trace_id_var
 from bisheng.database.models.flow import Flow, FlowDao, FlowStatus, FlowType, UserLinkType
 from bisheng.database.models.flow_version import FlowVersionDao
 from bisheng.database.models.group_resource import ResourceTypeEnum
 from bisheng.database.models.tag import TagBusinessTypeEnum, TagDao
 from bisheng.database.models.user_link import UserLinkDao
-from bisheng.common.errcode.permission import PermissionEnumerationIncompleteError
-from bisheng.common.services.metric_log import emit_metric
 from bisheng.permission.application.access import get_f048_runtime
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
@@ -166,9 +166,7 @@ class WorkFlowService(BaseService):
             "assistant": [],
         }
         for item in cls.filter_supported_apps(data):
-            resource_type = cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(
-                int(item.get("flow_type") or 0)
-            )
+            resource_type = cls._FLOW_TYPE_TO_RESOURCE_TYPE.get(int(item.get("flow_type") or 0))
             if resource_type is not None:
                 grouped[resource_type].append(str(item.get("id")))
 
@@ -260,17 +258,8 @@ class WorkFlowService(BaseService):
                 data,
                 tuple(dict.fromkeys((required_action, "edit"))),
             )
-            data = [
-                one
-                for one in data
-                if required_action
-                in permission_map.get(str(one.get("id")), frozenset())
-            ]
-            writeable_ids = {
-                str(app_id)
-                for app_id, action_codes in permission_map.items()
-                if "edit" in action_codes
-            }
+            data = [one for one in data if required_action in permission_map.get(str(one.get("id")), frozenset())]
+            writeable_ids = {str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes}
             logger.info(
                 "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} writeable={} "
                 "action={} took_ms={:.2f}",
@@ -385,16 +374,9 @@ class WorkFlowService(BaseService):
                     batch,
                     tuple(dict.fromkeys((required_action, "edit"))),
                 )
-                kept = [
-                    one
-                    for one in batch
-                    if required_action
-                    in permission_map.get(str(one.get("id")), frozenset())
-                ]
+                kept = [one for one in batch if required_action in permission_map.get(str(one.get("id")), frozenset())]
                 writeable_ids |= {
-                    str(app_id)
-                    for app_id, action_codes in permission_map.items()
-                    if "edit" in action_codes
+                    str(app_id) for app_id, action_codes in permission_map.items() if "edit" in action_codes
                 }
                 logger.info(
                     "[perf][workflow.list.permission_map] user_id={} flow_type={} rows={} kept={} "
@@ -600,11 +582,7 @@ class WorkFlowService(BaseService):
             item.pop("_used_rank", None)
             item.pop("_sort_time", None)
 
-        writeable_ids = {
-            app_id
-            for app_id, action_codes in action_map.items()
-            if "edit" in action_codes
-        }
+        writeable_ids = {app_id for app_id, action_codes in action_map.items() if "edit" in action_codes}
         data = cls.add_extra_field(user, page_items, writeable_ids=writeable_ids)
         data = cls._apply_page_can_share(user, data, action_map)
         return PageInfiniteCursorData(
@@ -642,10 +620,7 @@ class WorkFlowService(BaseService):
 
         total_start = perf_counter()
         required_action = "edit" if managed else action
-        context = (
-            f"flow|sort=update_time|action={required_action}|"
-            f"managed={int(managed)}"
-        )
+        context = f"flow|sort=update_time|action={required_action}|managed={int(managed)}"
         try:
             decoded = decode_cursor(
                 cursor,
@@ -784,11 +759,7 @@ class WorkFlowService(BaseService):
                 fga_elapsed_ms=fga_elapsed_ms,
                 total_elapsed_ms=(perf_counter() - total_start) * 1000,
                 returned_count=len(data),
-                alert=(
-                    "capacity_80_percent"
-                    if visible_id_count >= _APP_VISIBLE_MAX_RESULTS * 0.8
-                    else None
-                ),
+                alert=("capacity_80_percent" if visible_id_count >= _APP_VISIBLE_MAX_RESULTS * 0.8 else None),
             )
 
         next_cursor: str | None = None
@@ -865,11 +836,7 @@ class WorkFlowService(BaseService):
             data,
             (action,),
         )
-        return [
-            one
-            for one in data
-            if action in action_map.get(str(one.get("id")), frozenset())
-        ]
+        return [one for one in data if action in action_map.get(str(one.get("id")), frozenset())]
 
     @classmethod
     async def aget_writeable_app_ids(cls, user: UserPayload, data: list[dict]) -> set[str]:
@@ -882,11 +849,7 @@ class WorkFlowService(BaseService):
         the F048 rework replaced.
         """
         action_map = await cls._application_action_map(user, data, ("edit",))
-        return {
-            app_id
-            for app_id, action_codes in action_map.items()
-            if "edit" in action_codes
-        }
+        return {app_id for app_id, action_codes in action_map.items() if "edit" in action_codes}
 
     @classmethod
     async def run_once(
@@ -967,11 +930,7 @@ class WorkFlowService(BaseService):
         db_flow = await FlowDao.aget_flow_by_id(flow_id)
         if not db_flow:
             raise NotFoundError()
-        required_action = (
-            "publish"
-            if status == FlowStatus.ONLINE.value
-            else "unpublish"
-        )
+        required_action = "publish" if status == FlowStatus.ONLINE.value else "unpublish"
         await require_business_action(
             login_user,
             resource_type="workflow",
@@ -1175,10 +1134,12 @@ class WorkFlowService(BaseService):
     ) -> "PageInfiniteCursorData":
         """Unsorted (untagged) online apps as an F027 cursor envelope.
 
-        Candidate = online apps NOT bound to any APPLICATION tag. Scans forward
-        from the cursor and permission-filters by ``visible``; per-page cost is
-        bounded by ``page_size`` regardless of scroll depth (the offset version
-        re-scanned pages 1..N and degraded on deep pages).
+        Regular-user candidates are first bounded by OpenFGA's visible-object
+        enumeration, then narrowed to online apps NOT bound to any APPLICATION
+        tag. The final per-batch ``visible`` check remains authoritative for
+        business validity while ``edit`` / ``share`` populate page actions.
+        Privileged actors keep the direct business-DB scan so they do not hit
+        the visible-object enumeration capacity ceiling.
         """
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.flow import AppInvalidCursorError
@@ -1189,6 +1150,19 @@ class WorkFlowService(BaseService):
             decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
         except CursorDecodeError as exc:
             raise AppInvalidCursorError(exception=exc)
+
+        actor = await resolve_permission_actor(user)
+        is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
+        visible_id_list: list[str] | None = None
+        if not is_admin:
+            visible_id_list = await cls._collect_visible_app_ids(actor, flow_type=None)
+            if not visible_id_list:
+                return PageInfiniteCursorData(
+                    data=[],
+                    page_size=page_size,
+                    has_more=False,
+                    next_cursor=None,
+                )
 
         all_tags = await TagDao.asearch_tags(
             None,
@@ -1211,6 +1185,7 @@ class WorkFlowService(BaseService):
             page_size=page_size,
             name=keyword,
             status=FlowStatus.ONLINE.value,
+            id_list=visible_id_list,
             id_list_not_in=flow_ids_not_in,
             action="visible",
             cursor=decoded,

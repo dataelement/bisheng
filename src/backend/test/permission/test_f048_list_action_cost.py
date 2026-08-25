@@ -167,6 +167,25 @@ async def test_ordinary_user_single_check_still_resolves(monkeypatch, counted) -
     assert counted.resolutions == 1
 
 
+async def test_single_check_accepts_pre_resolved_actor(monkeypatch, counted) -> None:
+    async def unexpected_resolve(_login_user):
+        raise AssertionError("provided actor must bypass identity resolution")
+
+    monkeypatch.setattr(business_authorization, "resolve_permission_actor", unexpected_resolve)
+    actor = PermissionActor(user_id=7, current_tenant_id=1)
+
+    allowed = await business_authorization.check_business_action(
+        object(),
+        resource_type="dashboard",
+        resource_id="156",
+        action="visible",
+        actor=actor,
+    )
+
+    assert allowed is True
+    assert counted.resolutions == 1
+
+
 @pytest.mark.parametrize(
     "actor",
     [
@@ -185,6 +204,24 @@ async def test_visible_batch_never_expands_admin_identity(
         object(),
         resource_type="knowledge_file",
         resource_ids=["1", "2", "3"],
+    )
+
+    assert counted.resolutions == 3
+    assert granted == {"1": True, "2": True, "3": True}
+
+
+async def test_visible_batch_accepts_pre_resolved_actor(monkeypatch, counted) -> None:
+    async def unexpected_resolve(_login_user):
+        raise AssertionError("provided actor must bypass identity resolution")
+
+    monkeypatch.setattr(business_authorization, "resolve_permission_actor", unexpected_resolve)
+    actor = PermissionActor(user_id=7, current_tenant_id=1)
+
+    granted = await business_authorization.batch_check_business_visible(
+        object(),
+        resource_type="knowledge_file",
+        resource_ids=["1", "2", "3"],
+        actor=actor,
     )
 
     assert counted.resolutions == 3

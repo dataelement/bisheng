@@ -133,6 +133,7 @@ from bisheng.permission.application.initial_grant import (
     InitialGrantRequest,
 )
 from bisheng.permission.application.prospective_grant import ProspectiveGrantApplication
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
 from bisheng.role.domain.services.quota_service import QuotaResourceType, QuotaService
 from bisheng.user.domain.models.user import UserDao
 from bisheng.utils import generate_uuid, get_request_ip
@@ -239,6 +240,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         # cascade during file deletion to clear the logical-document anchor
         # whenever the whole chain (or its primary) gets removed.
         self.doc_repo: KnowledgeDocumentRepository | None = None
+        # One service instance is request-scoped. Reuse the resolved actor so a
+        # list request does not repeat the tenant-admin OpenFGA check for every
+        # single/batch authorization facade call.
+        self._permission_actor_cache: PermissionActor | None = None
+        self._permission_actor_resolve_count = 0
+        self._permission_actor_cache_hits = 0
+        self._permission_actor_resolve_elapsed_ms = 0.0
 
     async def resolve_permission_target(
         self,
@@ -258,8 +266,17 @@ class KnowledgeSpaceService(KnowledgeUtils):
             action=action,
         )
 
-    async def _permission_actor(self):
-        return await resolve_permission_actor(self.login_user)
+    async def _permission_actor(self) -> PermissionActor:
+        if self._permission_actor_cache is not None:
+            self._permission_actor_cache_hits += 1
+            return self._permission_actor_cache
+
+        started_at = perf_counter()
+        actor = await resolve_permission_actor(self.login_user)
+        self._permission_actor_resolve_elapsed_ms += (perf_counter() - started_at) * 1000
+        self._permission_actor_resolve_count += 1
+        self._permission_actor_cache = actor
+        return actor
 
     @staticmethod
     async def _resource_adapter(resource_type: str):
@@ -271,11 +288,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         resource_id: int | str,
         action: str,
     ) -> bool:
+        actor = await self._permission_actor()
         return await check_business_action(
             self.login_user,
             resource_type=resource_type,
             resource_id=resource_id,
             action=action,
+            actor=actor,
         )
 
     async def _require_action(
@@ -2425,6 +2444,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "folder": [item.id for item in items if item.file_type == FileType.DIR.value],
             "knowledge_file": [item.id for item in items if item.file_type != FileType.DIR.value],
         }
+        actor = await self._permission_actor()
         for resource_type, resource_ids in by_type.items():
             if not resource_ids:
                 continue
@@ -2432,11 +2452,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 self.login_user,
                 resource_type=resource_type,
                 resource_ids=resource_ids,
+                actor=actor,
             )
             for resource_id in resource_ids:
                 permissions[(resource_type, str(resource_id))] = (
                     {"visible"} if visible_map.get(str(resource_id), False) else set()
                 )
+        visible_keys = {key for key, value in permissions.items() if value}
         return [
             item
             for item in items
@@ -2444,7 +2466,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 ("folder" if item.file_type == FileType.DIR.value else "knowledge_file"),
                 str(item.id),
             )
-            in {key for key, value in permissions.items() if value}
+            in visible_keys
         ]
 
     async def _scan_visible_child_items(
@@ -2473,10 +2495,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.knowledge.domain.models.knowledge_space_file import _compute_ext_rank_python
 
         visible_page_items: list[KnowledgeFile] = []
+        scan_started_at = perf_counter()
         permission_context = None if system_scope else await self._build_child_permission_context(space_id)
         batch_cursor: list | None = list(cursor) if cursor else None
         resume_cursor: list | None = None
         scanned_candidates = 0
+        batch_count = 0
+        db_elapsed_ms = 0.0
+        permission_elapsed_ms = 0.0
+
+        def emit_scan_metric(*, has_more: bool) -> None:
+            amplification = scanned_candidates / max(len(visible_page_items), 1)
+            emit_metric(
+                "permission_visible_list",
+                resource_type="space_child",
+                strategy="candidate_first_batch_check",
+                candidate_count=scanned_candidates,
+                visible_count=len(visible_page_items),
+                scanned_candidates=scanned_candidates,
+                returned_items=len(visible_page_items),
+                scanned_count=scanned_candidates,
+                scan_amplification=amplification,
+                stream_completed=True,
+                has_more=has_more,
+                alert="scan_amplification" if amplification > 10 else None,
+                batch_count=batch_count,
+                system_scope=system_scope,
+                db_elapsed_ms=db_elapsed_ms,
+                permission_elapsed_ms=permission_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - scan_started_at) * 1000,
+            )
 
         def candidate_cursor(item: KnowledgeFile) -> list:
             return [
@@ -2487,6 +2535,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             ]
 
         while True:
+            batch_count += 1
+            db_started_at = perf_counter()
             batch_items = await SpaceFileDao.async_list_children(
                 space_id,
                 parent_id,
@@ -2500,35 +2550,24 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 exclude_file_ids=exclude_file_ids,
                 cursor=batch_cursor,
             )
+            db_elapsed_ms += (perf_counter() - db_started_at) * 1000
             if not batch_items:
                 break
 
             visible_batch = batch_items
             if not system_scope:
+                permission_started_at = perf_counter()
                 visible_batch = await self._filter_visible_child_items(
                     batch_items,
                     space_id=space_id,
                     context=permission_context,
                 )
+                permission_elapsed_ms += (perf_counter() - permission_started_at) * 1000
             visible_ids = {item.id for item in visible_batch}
             for item in batch_items:
                 if item.id in visible_ids:
                     if len(visible_page_items) == page_size:
-                        amplification = scanned_candidates / max(len(visible_page_items), 1)
-                        emit_metric(
-                            "permission_visible_list",
-                            resource_type="space_child",
-                            strategy="candidate_first_batch_check",
-                            candidate_count=scanned_candidates,
-                            visible_count=len(visible_page_items),
-                            scanned_candidates=scanned_candidates,
-                            returned_items=len(visible_page_items),
-                            scanned_count=scanned_candidates,
-                            scan_amplification=amplification,
-                            stream_completed=True,
-                            has_more=True,
-                            alert="scan_amplification" if amplification > 10 else None,
-                        )
+                        emit_scan_metric(has_more=True)
                         return visible_page_items, True, resume_cursor
                     visible_page_items.append(item)
                 scanned_candidates += 1
@@ -2544,21 +2583,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if len(batch_items) < _CHILD_PERMISSION_SCAN_BATCH_SIZE:
                 break
 
-        amplification = scanned_candidates / max(len(visible_page_items), 1)
-        emit_metric(
-            "permission_visible_list",
-            resource_type="space_child",
-            strategy="candidate_first_batch_check",
-            candidate_count=scanned_candidates,
-            visible_count=len(visible_page_items),
-            scanned_candidates=scanned_candidates,
-            returned_items=len(visible_page_items),
-            scanned_count=scanned_candidates,
-            scan_amplification=amplification,
-            stream_completed=True,
-            has_more=False,
-            alert="scan_amplification" if amplification > 10 else None,
-        )
+        emit_scan_metric(has_more=False)
         return visible_page_items, False, None
 
     async def _scan_visible_search_items(
@@ -2638,7 +2663,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         file_ids: list[int] | None = None,
         order_field: str = "file_type",
         order_sort: str = "asc",
-        file_status: list[int] = None,
+        file_status: list[int] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
         file_type: int | None = None,
@@ -2654,63 +2679,140 @@ class KnowledgeSpaceService(KnowledgeUtils):
         from bisheng.common.schemas.api import PageInfiniteCursorData
 
         system_scope = bool(self.login_user.is_global_super)
-        if system_scope:
-            await self._load_space_listing_scope(space_id, parent_id)
-        else:
-            await self._require_read_permission(space_id)
-            if parent_id:
-                await self._require_folder_action(
-                    space_id,
-                    parent_id,
-                    "visible",
-                )
-            else:
-                await self._require_action("knowledge_space", space_id, "visible")
+        request_started_at = perf_counter()
+        stage = "authorize"
+        stage_elapsed_ms = {
+            "auth_elapsed_ms": 0.0,
+            "cursor_elapsed_ms": 0.0,
+            "version_filter_elapsed_ms": 0.0,
+            "scan_elapsed_ms": 0.0,
+            "version_enrich_elapsed_ms": 0.0,
+            "extra_info_elapsed_ms": 0.0,
+        }
 
-        context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
-        try:
-            decoded = decode_cursor(
-                cursor,
-                expected_key_len=4,
-                expected_context=context,
+        def emit_children_metric(
+            *,
+            status: str,
+            returned_count: int | None = None,
+            has_more: bool | None = None,
+            failed_stage: str | None = None,
+            error_type: str | None = None,
+        ) -> None:
+            emit_metric(
+                "knowledge_space_children",
+                status=status,
+                failed_stage=failed_stage,
+                error_type=error_type,
+                space_id=space_id,
+                parent_scope="folder" if parent_id else "root",
+                page_size=page_size,
+                system_scope=system_scope,
+                returned_count=returned_count,
+                has_more=has_more,
+                actor_resolve_count=self._permission_actor_resolve_count,
+                actor_cache_hits=self._permission_actor_cache_hits,
+                actor_resolve_elapsed_ms=self._permission_actor_resolve_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - request_started_at) * 1000,
+                **stage_elapsed_ms,
             )
-        except CursorDecodeError as exc:
-            raise KnowledgeSpaceInvalidCursorError(exception=exc)
 
-        # Exclude non-primary version files so only the current primary revision is visible.
-        exclude_file_ids: list[int] | None = None
-        if self.version_repo is not None:
-            exclude_file_ids = await self.version_repo.find_non_primary_file_ids() or None
+        try:
+            stage_started_at = perf_counter()
+            if system_scope:
+                await self._load_space_listing_scope(space_id, parent_id)
+            else:
+                # _require_read_permission already performs the space-visible
+                # decision. For a folder, only add the folder business-scope
+                # validation and final visible decision; do not repeat the
+                # knowledge-space check through _require_folder_action.
+                await self._require_read_permission(space_id)
+                if parent_id:
+                    parent_folder = await self._get_folder_for_action(space_id, parent_id)
+                    await self._require_resource_action(
+                        "visible",
+                        "folder",
+                        parent_folder.id,
+                    )
+            stage_elapsed_ms["auth_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
-        visible_page_items, has_more, scan_cursor = await self._scan_visible_child_items(
-            space_id=space_id,
-            parent_id=parent_id,
-            file_ids=file_ids,
-            order_field=order_field,
-            order_sort=order_sort,
-            file_status=file_status,
-            file_type=file_type,
-            page_size=page_size,
-            cursor=decoded,
-            exclude_file_ids=exclude_file_ids,
-            system_scope=system_scope,
-        )
+            stage = "decode_cursor"
+            stage_started_at = perf_counter()
+            context = f"space_children|order={order_field}_{(order_sort or 'asc').lower()}"
+            try:
+                decoded = decode_cursor(
+                    cursor,
+                    expected_key_len=4,
+                    expected_context=context,
+                )
+            except CursorDecodeError as exc:
+                raise KnowledgeSpaceInvalidCursorError(exception=exc) from exc
+            stage_elapsed_ms["cursor_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
-        # Enrich page items with version fields (version_no, is_multi_version, has_similar).
-        await self._enrich_with_version_info(visible_page_items)
+            # Exclude only this space's non-primary revisions. The previous
+            # unscoped query scanned version rows for every knowledge space.
+            stage = "version_filter"
+            stage_started_at = perf_counter()
+            exclude_file_ids: list[int] | None = None
+            if self.version_repo is not None:
+                exclude_file_ids = (
+                    await self.version_repo.find_non_primary_file_ids_by_knowledge_ids([space_id]) or None
+                )
+            stage_elapsed_ms["version_filter_elapsed_ms"] = (
+                perf_counter() - stage_started_at
+            ) * 1000
 
-        data = await self._handle_file_folder_extra_info(visible_page_items)
+            stage = "scan_visible"
+            stage_started_at = perf_counter()
+            visible_page_items, has_more, scan_cursor = await self._scan_visible_child_items(
+                space_id=space_id,
+                parent_id=parent_id,
+                file_ids=file_ids,
+                order_field=order_field,
+                order_sort=order_sort,
+                file_status=file_status,
+                file_type=file_type,
+                page_size=page_size,
+                cursor=decoded,
+                exclude_file_ids=exclude_file_ids,
+                system_scope=system_scope,
+            )
+            stage_elapsed_ms["scan_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
-        next_cursor: str | None = None
-        if has_more and scan_cursor:
-            next_cursor = encode_cursor(scan_cursor, context=context)
+            stage = "version_enrich"
+            stage_started_at = perf_counter()
+            await self._enrich_with_version_info(visible_page_items)
+            stage_elapsed_ms["version_enrich_elapsed_ms"] = (
+                perf_counter() - stage_started_at
+            ) * 1000
 
-        return PageInfiniteCursorData(
-            data=data,
-            page_size=page_size,
-            has_more=has_more,
-            next_cursor=next_cursor,
-        )
+            stage = "extra_info"
+            stage_started_at = perf_counter()
+            data = await self._handle_file_folder_extra_info(visible_page_items)
+            stage_elapsed_ms["extra_info_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
+
+            next_cursor: str | None = None
+            if has_more and scan_cursor:
+                next_cursor = encode_cursor(scan_cursor, context=context)
+
+            result = PageInfiniteCursorData(
+                data=data,
+                page_size=page_size,
+                has_more=has_more,
+                next_cursor=next_cursor,
+            )
+            emit_children_metric(
+                status="success",
+                returned_count=len(data),
+                has_more=has_more,
+            )
+            return result
+        except Exception as exc:
+            emit_children_metric(
+                status="error",
+                failed_stage=stage,
+                error_type=type(exc).__name__,
+            )
+            raise
 
     async def search_space_children(
         self,

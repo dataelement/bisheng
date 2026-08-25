@@ -34,6 +34,9 @@ def test_chat_online_default_path_delegates_to_cursor_service():
 
 def test_uncategorized_path_is_cursor_waterfall_without_sync_fetch_all():
     source = _function_source("bisheng/api/services/workflow.py", "get_uncategorized_flows_envelope")
+    assert "resolve_permission_actor" in source
+    assert "_collect_visible_app_ids" in source
+    assert "id_list=visible_id_list" in source
     assert "TagDao.asearch_tags" in source
     assert "TagDao.aget_resources_by_tags" in source
     assert "FlowDao.get_all_apps" not in source
