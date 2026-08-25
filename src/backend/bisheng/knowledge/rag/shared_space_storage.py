@@ -1014,9 +1014,11 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
                 "membership_generation": int(request.membership_generation),
             },
         }
+        es_index = self._es_index(snapshot)
+        await asyncio.to_thread(self.es_client.indices.refresh, index=es_index)
         await self._run_es(
             "update_by_query",
-            index=self._es_index(snapshot),
+            index=es_index,
             query=self._es_doc_query(
                 tenant_id=request.tenant_id,
                 canonical_document_id=request.canonical_document_id,
