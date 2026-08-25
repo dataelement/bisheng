@@ -1,8 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { NotificationsDialog } from "~/components/NotificationsDialog";
-import { ApprovalCenterDialog } from "~/components/approval/ApprovalCenterDialog";
+import { MessageApprovalDialog, type MessageApprovalTarget } from "~/components/messageApproval/MessageApprovalDialog";
 import { SettingsDialog } from "~/components/Settings/SettingsDialog";
 import { useSettingsDialog } from "~/components/Settings/useSettingsDialog";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
@@ -20,13 +19,7 @@ export interface UserPopMenuProps {
     variant?: UserPopMenuVariant;
 }
 
-type ApprovalCenterTarget = {
-    tab: "my_tasks" | "my_requests";
-    taskId?: number | null;
-    instanceId?: number | null;
-};
-
-type MenuAction = "settings" | "approval" | "notifications" | "logout";
+type MenuAction = "settings" | "message_approval" | "logout";
 
 interface MenuRowProps {
     icon: ReactNode;
@@ -58,14 +51,19 @@ function MenuRow({ icon, label, danger, badge, onClick }: MenuRowProps) {
 interface MenuBodyProps {
     avatarInner: ReactNode;
     displayName: string;
+    /** Approval tasks waiting on this user — shown as a number. */
+    pendingApprovalCount: number;
+    /** Unread notifications — only downgrades the badge to a dot when there is nothing to handle. */
     unreadCount: number;
     onAction: (action: MenuAction) => void;
 }
 
 /** Menu content shared verbatim by the rail dropdown and the drawer inline panel. */
-function MenuBody({ avatarInner, displayName, unreadCount, onAction }: MenuBodyProps) {
+function MenuBody({ avatarInner, displayName, pendingApprovalCount, unreadCount, onAction }: MenuBodyProps) {
     const localize = useLocalize();
-    const displayUnreadCount = unreadCount > 99 ? "99+" : String(unreadCount);
+    // Pending approvals are the actionable count, so they win the numeric badge. Unread
+    // notifications alone only earn a dot — the two are never summed into one total.
+    const displayPendingCount = pendingApprovalCount > 99 ? "99+" : String(pendingApprovalCount);
 
     return (
         <>
@@ -81,21 +79,17 @@ function MenuBody({ avatarInner, displayName, unreadCount, onAction }: MenuBodyP
 
             <MenuRow
                 icon={<Outlined.Seal />}
-                label={localize("com_approval_center_title")}
-                onClick={() => onAction("approval")}
-            />
-
-            <MenuRow
-                icon={<Outlined.Bell />}
-                label={localize("com_notifications_title")}
+                label={localize("com_message_approval_title")}
                 badge={
-                    unreadCount > 0 ? (
+                    pendingApprovalCount > 0 ? (
                         <span className="flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-[#f53f3f] px-1.5 text-[12px] leading-none text-white tabular-nums">
-                            {displayUnreadCount}
+                            {displayPendingCount}
                         </span>
+                    ) : unreadCount > 0 ? (
+                        <span className="size-2 shrink-0 rounded-full bg-[#f53f3f]" />
                     ) : undefined
                 }
-                onClick={() => onAction("notifications")}
+                onClick={() => onAction("message_approval")}
             />
 
             <MenuRow
@@ -128,35 +122,30 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
     const suppressMenuItemClicksRef = useRef(false);
 
     const { user, logout } = useAuthContext();
-    const { unreadCount, refreshCount } = useNotificationCount();
+    const { unreadCount, pendingApprovalCount, refreshCount } = useNotificationCount();
     const displayName = user?.username || "admin";
     const [avatarUrl, setAvatarUrl] = useState<string>(user?.avatar || "");
 
     const settings = useSettingsDialog();
-    const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
-    const [approvalDialogTarget, setApprovalDialogTarget] = useState<ApprovalCenterTarget>({ tab: "my_tasks" });
-    const {
-        open: notificationsDialogOpen,
-        setOpen: setNotificationsDialogOpen,
-        focusedMessageId,
-    } = useNotificationsFromUrl();
+    const [messageApprovalTarget, setMessageApprovalTarget] = useState<MessageApprovalTarget | undefined>(undefined);
+    // `?open-notifications=1` deep links land on the notification section of the merged dialog.
+    const { open: dialogOpen, setOpen: setDialogOpen } = useNotificationsFromUrl();
+    // The hook seeds `open` from the URL at mount, so an initially-open dialog came from a
+    // ?open-notifications deep link — which always means the notification inbox.
+    const openedFromUrlRef = useRef(dialogOpen);
+    useEffect(() => {
+        if (openedFromUrlRef.current) setMessageApprovalTarget({ section: "notifications" });
+    }, []);
 
     const closeMenu = () => {
         setMenuOpen(false);
         setDropdownOpen(false);
     };
 
-    const openApprovalCenter = (target: ApprovalCenterTarget) => {
-        setApprovalDialogTarget(target);
-        setApprovalDialogOpen(true);
-        setNotificationsDialogOpen(false);
-        closeMenu();
-    };
-
-    const handleNotificationsClose = (open: boolean) => {
-        setNotificationsDialogOpen(open);
+    const handleDialogOpenChange = (open: boolean) => {
+        setDialogOpen(open);
         if (!open) {
-            refreshCount();
+            void refreshCount();
         }
     };
 
@@ -167,11 +156,10 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
             case "settings":
                 settings.openSettings("account");
                 break;
-            case "approval":
-                openApprovalCenter({ tab: "my_tasks" });
-                break;
-            case "notifications":
-                setNotificationsDialogOpen(true);
+            case "message_approval":
+                // Let the dialog pick its landing section from the pending count.
+                setMessageApprovalTarget(undefined);
+                setDialogOpen(true);
                 break;
             case "logout":
                 logout();
@@ -243,7 +231,7 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
         <AvatarName name={user?.username} />
     );
 
-    const unreadDot = unreadCount > 0 && (
+    const unreadDot = (unreadCount > 0 || pendingApprovalCount > 0) && (
         <div className="absolute -top-0.5 -right-0.5 z-20 size-2.5 bg-[#f53f3f] rounded-full ring-2 ring-white pointer-events-none" />
     );
 
@@ -251,6 +239,7 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
         <MenuBody
             avatarInner={avatarInner}
             displayName={displayName}
+            pendingApprovalCount={pendingApprovalCount}
             unreadCount={unreadCount}
             onAction={handleAction}
         />
@@ -268,17 +257,13 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
                 onAvatarUpdated={(url) => setAvatarUrl(url)}
             />
 
-            <NotificationsDialog
-                open={notificationsDialogOpen}
-                onOpenChange={handleNotificationsClose}
-                focusedMessageId={focusedMessageId}
-                onOpenApprovalCenter={openApprovalCenter}
-            />
-
-            <ApprovalCenterDialog
-                open={approvalDialogOpen}
-                onOpenChange={setApprovalDialogOpen}
-                target={approvalDialogTarget}
+            <MessageApprovalDialog
+                open={dialogOpen}
+                onOpenChange={handleDialogOpenChange}
+                target={messageApprovalTarget}
+                pendingApprovalCount={pendingApprovalCount}
+                unreadNotificationCount={unreadCount}
+                onCountsMaybeChanged={refreshCount}
             />
         </>
     );

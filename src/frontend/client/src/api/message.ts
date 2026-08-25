@@ -1,6 +1,9 @@
 import request from "./request";
 
-export type MessageTab = "all" | "request";
+export type MessageTab = "all" | "request" | "notify";
+
+/** Server-side read filter for the notification list — never emulate this client-side. */
+export type MessageReadState = "all" | "unread" | "read";
 
 export interface MessageContentPart {
   type: string;
@@ -29,7 +32,7 @@ export interface MessageListResponse {
 
 export async function getMessageListApi(params?: {
   tab?: MessageTab;
-  only_unread?: boolean;
+  read_state?: MessageReadState;
   keyword?: string;
   page?: number;
   page_size?: number;
