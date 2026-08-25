@@ -259,7 +259,12 @@ export function usePermissionIds(
 
       setPermissions(result.permissions)
       setLoading(false)
-      if (result.hasError) {
+      // Only toast when every probe failed AND nothing resolved — i.e. FGA is
+      // genuinely down for this user. A first-time / non-admin user legitimately
+      // has zero `manage_tool_*` permissions and the probe coming back as
+      // `allowed: false` for every tool is not a failure worth surfacing; the
+      // page just renders the list without the "权限管理" shield. (gitee IKB0O4)
+      if (result.hasError && Object.keys(result.permissions).length === 0) {
         toast({
           title: '提示',
           variant: 'error',
