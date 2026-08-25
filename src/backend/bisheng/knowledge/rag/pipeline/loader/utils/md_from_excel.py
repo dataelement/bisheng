@@ -7,6 +7,9 @@ import openpyxl
 import pandas as pd
 from loguru import logger
 
+from bisheng.common.errcode.knowledge import KnowledgeFileDamagedError
+from bisheng.knowledge.rag.pipeline.loader.utils.xlsx_repair import repair_xlsx_styles
+
 
 def xls_to_xlsx(xls_path):
     if not xls_path.lower().endswith(".xls"):
@@ -42,7 +45,7 @@ def xls_to_xlsx(xls_path):
         return xlsx_path
 
     except Exception as e:
-        logger.exception(f'xls_to_xlsx error: ')
+        logger.exception(f"xls_to_xlsx error: ")
         return None
 
 
@@ -82,7 +85,7 @@ def unmerge_and_read_sheet(sheet_obj):
         row_empty = True
 
         for c_idx, cell in enumerate(row):
-            value = merged_map.get((r_idx+1, c_idx+1), cell.value)
+            value = merged_map.get((r_idx + 1, c_idx + 1), cell.value)
             row_data.append(value)
 
             if value is not None and str(value).strip() != "":
@@ -113,10 +116,10 @@ def unmerge_and_read_sheet(sheet_obj):
 
 
 def generate_markdown_table_string(
-        header_rows_list_of_lists,
-        data_rows_list_of_lists,
-        num_columns,
-        separator_placement_index=1,
+    header_rows_list_of_lists,
+    data_rows_list_of_lists,
+    num_columns,
+    separator_placement_index=1,
 ):
     """
     Generate from new rulesMarkdownTable String
@@ -129,12 +132,7 @@ def generate_markdown_table_string(
         pre_separator_header = header_rows_list_of_lists[:separator_placement_index]
         for row_values in pre_separator_header:
             md_lines.append(
-                "| "
-                + " | ".join(
-                    remove_characters(str(v)) if v is not None else ""
-                    for v in row_values
-                )
-                + " |"
+                "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
             )
 
         # Insert below the header in the first rowMarkdownSeparator
@@ -144,34 +142,25 @@ def generate_markdown_table_string(
         post_separator_header = header_rows_list_of_lists[separator_placement_index:]
         for row_values in post_separator_header:
             md_lines.append(
-                "| "
-                + " | ".join(
-                    remove_characters(str(v)) if v is not None else ""
-                    for v in row_values
-                )
-                + " |"
+                "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
             )
 
     # Always process data rows
     for row_values in data_rows_list_of_lists:
         md_lines.append(
-            "| "
-            + " | ".join(
-                remove_characters(str(v)) if v is not None else "" for v in row_values
-            )
-            + " |"
+            "| " + " | ".join(remove_characters(str(v)) if v is not None else "" for v in row_values) + " |"
         )
 
     return "\n".join(md_lines)
 
 
 def process_dataframe_to_markdown_files(
-        df,
-        sheet_index: str,
-        num_header_rows,
-        rows_per_markdown,
-        output_dir,
-        append_header=True,
+    df,
+    sheet_index: str,
+    num_header_rows,
+    rows_per_markdown,
+    output_dir,
+    append_header=True,
 ):
     """
     - append_header=True: Tekan num_header_rows Separate the header and data.
@@ -197,16 +186,20 @@ def process_dataframe_to_markdown_files(
         # Handle header index outliers based on user rules
         if start_header_idx >= rows:
             logger.warning(
-                f"Table Header Start Row {start_header_idx} Total lines exceeded {rows}. The first row will be used as the table header.")
+                f"Table Header Start Row {start_header_idx} Total lines exceeded {rows}. The first row will be used as the table header."
+            )
             start_header_idx, end_header_idx = 0, 0
         elif end_header_idx >= rows:
             logger.warning(
-                f"Table Header End Row {end_header_idx} Total lines exceeded {rows}. will be truncated to the last line.")
+                f"Table Header End Row {end_header_idx} Total lines exceeded {rows}. will be truncated to the last line."
+            )
             end_header_idx = rows - 1
 
         # Make sure the index is legitimate
-        if start_header_idx < 0: start_header_idx = 0
-        if end_header_idx < start_header_idx: end_header_idx = start_header_idx
+        if start_header_idx < 0:
+            start_header_idx = 0
+        if end_header_idx < start_header_idx:
+            end_header_idx = start_header_idx
 
         try:
             header_slice = slice(start_header_idx, end_header_idx + 1)
@@ -215,7 +208,8 @@ def process_dataframe_to_markdown_files(
             header_rows_as_lists = header_block_df.values.tolist()
         except Exception as e:
             logger.error(
-                f"  At Source '{sheet_index}' Index by header in [{start_header_idx}, {end_header_idx}] Error Splitting Data: {e}Skip")
+                f"  At Source '{sheet_index}' Index by header in [{start_header_idx}, {end_header_idx}] Error Splitting Data: {e}Skip"
+            )
             return
     else:
         # when append_header are False , everything is treated as data and the header list is empty
@@ -225,9 +219,7 @@ def process_dataframe_to_markdown_files(
     # --- Subsequent pagination logic ---
     if data_block_df.empty:
         if append_header and not header_block_df.empty:
-            markdown_content = generate_markdown_table_string(
-                header_rows_as_lists, [], num_columns
-            )
+            markdown_content = generate_markdown_table_string(header_rows_as_lists, [], num_columns)
             # BUG FIX: Use zfill for proper padding. This is file '000' for the sheet.
             file_name = f"{str(sheet_index).zfill(2)}000.md"
             file_path = os.path.join(output_dir, file_name)
@@ -240,8 +232,11 @@ def process_dataframe_to_markdown_files(
         return
 
     num_data_rows_total = len(data_block_df)
-    num_files_to_create = math.ceil(num_data_rows_total / rows_per_markdown) if rows_per_markdown > 0 else (
-        1 if num_data_rows_total > 0 else 0)
+    num_files_to_create = (
+        math.ceil(num_data_rows_total / rows_per_markdown)
+        if rows_per_markdown > 0
+        else (1 if num_data_rows_total > 0 else 0)
+    )
 
     for i in range(num_files_to_create):
         start_idx = i * rows_per_markdown
@@ -256,9 +251,7 @@ def process_dataframe_to_markdown_files(
             final_header_for_chunk = [current_data_chunk_as_lists[0]]
             final_data_for_chunk = current_data_chunk_as_lists[1:]
 
-        markdown_content = generate_markdown_table_string(
-            final_header_for_chunk, final_data_for_chunk, num_columns
-        )
+        markdown_content = generate_markdown_table_string(final_header_for_chunk, final_data_for_chunk, num_columns)
 
         # BUG FIX: Use zfill for proper 2-digit sheet and 3-digit file padding.
         file_name = f"{str(sheet_index).zfill(2)}{str(i).zfill(3)}.md"
@@ -267,9 +260,7 @@ def process_dataframe_to_markdown_files(
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
-            logger.debug(
-                f"  Sudah disimpan'{file_path}' (incl.  {len(current_data_chunk_as_lists)} Row Raw Data)"
-            )
+            logger.debug(f"  Sudah disimpan'{file_path}' (incl.  {len(current_data_chunk_as_lists)} Row Raw Data)")
         except Exception as e:
             logger.debug(f"  Save file '{file_path}' Error during: {e}")
 
@@ -283,18 +274,51 @@ def is_list_of_lists_empty(data_list):
     # Use any() and generator expressions for efficient judgment
     # any(row) Check for non-empty lines
     # any(cell is not None and cell != '' for cell in row) Check if there are non-empty cells in the row
-    return not any(any(cell is not None and str(cell).strip() != '' for cell in row) for row in data_list)
+    return not any(any(cell is not None and str(cell).strip() != "" for cell in row) for row in data_list)
 
 
-def excel_file_to_markdown(
-        excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True
-):
+def _load_workbook_with_style_repair(excel_path: str):
+    """Open a workbook, retrying once on a repaired copy when styles are the blocker.
+
+    openpyxl rejects a handful of style constructs Excel and WPS write happily
+    (see ``xlsx_repair``), and refuses the whole workbook over them — a 28 MB
+    customer file with 18 populated sheets was unreadable for three empty
+    ``<fill/>`` elements. The retry only ever runs after a real failure, and only
+    when the repair actually changed something, so a workbook that opens today
+    takes exactly the path it takes today.
+    """
+    try:
+        return openpyxl.load_workbook(excel_path, data_only=True, read_only=False)
+    except Exception as first_error:
+        repaired_path = repair_xlsx_styles(excel_path)
+        if repaired_path is None:
+            raise
+        logger.warning(
+            "excel load failed ({}), retrying on a style-repaired copy of {}",
+            first_error,
+            os.path.basename(excel_path),
+        )
+        try:
+            return openpyxl.load_workbook(repaired_path, data_only=True, read_only=False)
+        except Exception:
+            # Report the ORIGINAL failure: the repaired copy is our artefact, and
+            # its error would send whoever reads the log after the wrong file.
+            logger.opt(exception=True).warning("style-repaired copy still unreadable")
+            raise first_error from None
+
+
+def excel_file_to_markdown(excel_path, num_header_rows, rows_per_markdown, output_dir, append_header=True):
     logger.debug(f"\nStart ProcessingExcelDocumentation:'{excel_path}'")
     try:
-        workbook = openpyxl.load_workbook(excel_path, data_only=True, read_only=False)
+        workbook = _load_workbook_with_style_repair(excel_path)
     except Exception as e:
-        logger.debug(f"Error: Unable to loadExcelDoc. '{excel_path}'Reason: {e}")
-        return
+        # Was `logger.debug(...); return`, which made an unopenable workbook look
+        # like a workbook with no content: the loader returned zero documents, the
+        # caller marked the file parsed successfully, and nothing was ever
+        # indexed. The debug level meant the reason never even reached the log
+        # file. A file we cannot open is a parse failure and must say so.
+        logger.exception(f"Unable to load Excel doc '{excel_path}'")
+        raise KnowledgeFileDamagedError(exception=e)
 
     sheet_index = 0
     for sheet_name in workbook.sheetnames:
@@ -330,13 +354,13 @@ def excel_file_to_markdown(
 
 
 def csv_file_to_markdown(
-        csv_path,
-        num_header_rows,
-        rows_per_markdown,
-        output_dir,
-        csv_encoding="utf-8",
-        csv_delimiter=",",
-        append_header=True,
+    csv_path,
+    num_header_rows,
+    rows_per_markdown,
+    output_dir,
+    csv_encoding="utf-8",
+    csv_delimiter=",",
+    append_header=True,
 ):
     logger.debug(f"\nStart ProcessingCSVDocumentation:'{csv_path}'")
     try:
@@ -376,13 +400,13 @@ def csv_file_to_markdown(
 
 
 def convert_file_to_markdown(
-        input_file_path,
-        num_header_rows,
-        rows_per_markdown,
-        base_output_dir="output_markdown_files",
-        csv_encoding="utf-8",
-        csv_delimiter=",",
-        append_header=True,
+    input_file_path,
+    num_header_rows,
+    rows_per_markdown,
+    base_output_dir="output_markdown_files",
+    csv_encoding="utf-8",
+    csv_delimiter=",",
+    append_header=True,
 ):
     """
     will be Excel OR CSV Convert files to multiple Markdown files.
@@ -425,11 +449,11 @@ def convert_file_to_markdown(
 
 
 def handler(
-        cache_dir,
-        file_name: str,
-        header_rows: List[int] = [0, 1],
-        data_rows: int = 12,
-        append_header=True,
+    cache_dir,
+    file_name: str,
+    header_rows: List[int] = [0, 1],
+    data_rows: int = 12,
+    append_header=True,
 ):
     """
     The main function that handles file conversions.
