@@ -8,6 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile, status
 from fastapi.responses import Response
 from loguru import logger
+from pydantic import BaseModel, Field
 
 from bisheng.api.v1.schemas import UploadFileResponse
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -60,6 +61,14 @@ from bisheng.sensitive_word.domain.services.sensitive_word_policy_service import
 )
 
 router = APIRouter(prefix="/qa_experts", tags=["Expert QA"])
+
+
+class QaWatermarkDownloadBody(BaseModel):
+    """带水印下载 POST 体：避免预签名 URL 塞进 query。"""
+
+    source: str = Field(..., min_length=1, description="问答图片或附件地址")
+    title: str = ""
+
 
 # ==================== 统计 Endpoints ====================
 
@@ -746,13 +755,8 @@ async def mark_notification_read(
 # ==================== 公共方法 ====================
 
 
-@router.get("/assets/watermarked-download")
-async def download_watermarked_asset(
-    source: str = Query(..., description="问答图片或附件地址"),
-    title: str = Query("", description="原始文件名"),
-    user: UserPayload = Depends(UserPayload.get_login_user),
-):
-    """将专家问答上传的图片/附件转为带水印 PDF 后下载。"""
+async def _build_watermarked_download_response(source: str, title: str, user: UserPayload) -> Response:
+    """拉取对象、转 PDF、打水印并返回下载响应。"""
     from urllib.parse import quote
 
     from bisheng.core.context.tenant import get_current_tenant_id
@@ -788,6 +792,25 @@ async def download_watermarked_asset(
             "Content-Disposition": (f"attachment; filename=\"qa-asset.pdf\"; filename*=UTF-8''{encoded_filename}"),
         },
     )
+
+
+@router.get("/assets/watermarked-download")
+async def download_watermarked_asset(
+    source: str = Query(..., description="问答图片或附件地址"),
+    title: str = Query("", description="原始文件名"),
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """将专家问答上传的图片/附件转为带水印 PDF 后下载。"""
+    return await _build_watermarked_download_response(source, title, user)
+
+
+@router.post("/assets/watermarked-download")
+async def download_watermarked_asset_post(
+    body: QaWatermarkDownloadBody,
+    user: UserPayload = Depends(UserPayload.get_login_user),
+):
+    """POST 下载：避免预签名 URL 放进 query 导致网关卡住。"""
+    return await _build_watermarked_download_response(body.source, body.title, user)
 
 
 @router.post("/upload")
