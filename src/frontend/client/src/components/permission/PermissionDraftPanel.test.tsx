@@ -17,6 +17,7 @@ describe("F050 permission draft presentation contract", () => {
     expect(editor).toContain("PermissionLevelMenu");
     expect(editor).toContain("row.protected");
     expect(editor).toContain("row.editable === false");
+    expect(editor).toContain("canMutatePermissionDraftRow");
     expect(editor).toContain("row.modelKey");
     expect(editor).not.toContain("row.relation");
   });
