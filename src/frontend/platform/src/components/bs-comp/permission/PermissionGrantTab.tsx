@@ -13,6 +13,7 @@ import {
 import { LockKeyhole } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { SourceBadge } from "./SourceBadge"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
 import { SubjectSearchUser } from "./SubjectSearchUser"
@@ -64,12 +65,7 @@ function ExistingAssigneeRow({
 }: ExistingAssigneeRowProps) {
   const { t } = useTranslation("permission")
   const [targetModelKey, setTargetModelKey] = useState(assignee.model.key)
-  const editable =
-    context.mode === "CUSTOM" &&
-    context.can_manage_permission &&
-    assignee.scope === "LOCAL" &&
-    assignee.editable &&
-    !assignee.protected
+  const editable = canMutatePermissionAssignee(assignee, context, models)
   const currentIsGrantable = models.some(
     (model) => model.key === assignee.model.key,
   )
