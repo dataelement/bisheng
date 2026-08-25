@@ -8,7 +8,7 @@ test_f040_app_square_bounded_scan.py only pin the source shape):
 - the uncategorized envelope round-trips its own ``next_cursor`` without
   eagerly resolving edit/share actions;
 - the ranked online envelope strips the internal ``_used_rank``/``_sort_time``
-  helper columns before serving and derives ``can_share`` from the action map.
+  helper columns without eagerly resolving edit/share actions.
 """
 
 from __future__ import annotations
@@ -217,22 +217,24 @@ async def test_uncategorized_admin_skips_visible_id_enumeration():
 
 
 @pytest.mark.asyncio
-async def test_online_cursor_strips_ranking_columns_and_sets_can_share():
+async def test_online_cursor_strips_ranking_columns_without_eager_edit_or_share():
     page_items = [
         {"id": "1", "flow_type": 10, "logo": "", "user_id": 1, "_used_rank": 0, "_sort_time": datetime(2026, 1, 1)},
         {"id": "2", "flow_type": 10, "logo": "", "user_id": 1, "_used_rank": 1, "_sort_time": datetime(2026, 1, 1)},
     ]
-    action_map = {"1": frozenset({"use", "edit", "share"}), "2": frozenset({"use"})}
+    action_map = {"1": frozenset({"use"}), "2": frozenset({"use"})}
 
     async def _fake_scan(**kwargs):
         return page_items, True, action_map
 
     user = MagicMock()
     user.user_id = 7
+    scan = AsyncMock(side_effect=_fake_scan)
+    enrich = MagicMock(side_effect=lambda _u, data, **kw: data)
 
     with (
-        patch.object(WorkFlowService, "_scan_visible_apps_cursor", new=AsyncMock(side_effect=_fake_scan)),
-        patch.object(WorkFlowService, "add_extra_field", side_effect=lambda _u, data, **kw: data),
+        patch.object(WorkFlowService, "_scan_visible_apps_cursor", new=scan),
+        patch.object(WorkFlowService, "add_extra_field", new=enrich),
         patch.object(WorkFlowService, "get_logo_share_link", side_effect=lambda logo: logo),
     ):
         env = await WorkFlowService.get_online_flows_cursor(
@@ -244,5 +246,6 @@ async def test_online_cursor_strips_ranking_columns_and_sets_can_share():
     for item in env.data:
         assert "_used_rank" not in item
         assert "_sort_time" not in item
-    assert env.data[0]["can_share"] is True
-    assert env.data[1]["can_share"] is False
+        assert "can_share" not in item
+    assert scan.await_args.kwargs["additional_actions"] == ()
+    assert enrich.call_args.kwargs["writeable_ids"] == set()

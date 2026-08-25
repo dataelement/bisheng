@@ -557,7 +557,7 @@ class WorkFlowService(BaseService):
             if not tagged_ids:
                 return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
 
-        page_items, has_more, action_map = await cls._scan_visible_apps_cursor(
+        page_items, has_more, _ = await cls._scan_visible_apps_cursor(
             user=user,
             page_size=page_size,
             name=name,
@@ -566,6 +566,7 @@ class WorkFlowService(BaseService):
             flow_type=flow_type,
             search_description=search_description,
             action=action,
+            additional_actions=(),
             ranking_user_id=user.user_id,
             cursor=decoded,
         )
@@ -583,9 +584,7 @@ class WorkFlowService(BaseService):
             item.pop("_used_rank", None)
             item.pop("_sort_time", None)
 
-        writeable_ids = {app_id for app_id, action_codes in action_map.items() if "edit" in action_codes}
-        data = cls.add_extra_field(user, page_items, writeable_ids=writeable_ids)
-        data = cls._apply_page_can_share(user, data, action_map)
+        data = cls.add_extra_field(user, page_items, writeable_ids=set())
         return PageInfiniteCursorData(
             data=data,
             page_size=page_size,
