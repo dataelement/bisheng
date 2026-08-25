@@ -108,12 +108,15 @@ describe("F048 Client PermissionListTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("allows an editable ordinary owner row to be managed", async () => {
+  it("keeps an owner row read-only when owner is not grantable", async () => {
     mockedGetGrants.mockResolvedValueOnce({
       data: [
         assignee("9", "DIRECT", {
           subject: { type: "user", id: "8", name: "Bob" },
           model: { key: "standard-owner", name: "Owner", level: 4, active: true },
+        }),
+        assignee("10", "DIRECT", {
+          subject: { type: "user", id: "10", name: "Carol" },
         }),
       ],
       page_size: 50,
@@ -130,7 +133,16 @@ describe("F048 Client PermissionListTab", () => {
     );
 
     const ownerRow = await screen.findByTestId("permission-assignee-9");
-    expect(ownerRow).toHaveAttribute("data-editable", "true");
+    const viewerRow = await screen.findByTestId("permission-assignee-10");
+    await waitFor(() => {
+      expect(viewerRow).toHaveAttribute("data-editable", "true");
+      expect(ownerRow).toHaveAttribute("data-editable", "false");
+    });
+    expect(screen.queryByLabelText("grant.model.9")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("f048_permission.grant.remove.9"),
+    ).not.toBeInTheDocument();
+    expect(ownerRow).toHaveTextContent("Owner");
   });
 
   it("renders protected and inherited grants as read-only and paginates by cursor", async () => {

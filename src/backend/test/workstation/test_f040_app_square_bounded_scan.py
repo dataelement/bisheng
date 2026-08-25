@@ -31,6 +31,11 @@ def test_chat_online_default_path_delegates_to_cursor_service():
     # The offset page helper must be gone from the default path.
     assert "get_online_flows_page" not in source
 
+    cursor_source = _function_source("bisheng/api/services/workflow.py", "get_online_flows_cursor")
+    assert "additional_actions=()" in cursor_source
+    assert "writeable_ids=set()" in cursor_source
+    assert "_apply_page_can_share" not in cursor_source
+
 
 def test_uncategorized_path_is_cursor_waterfall_without_sync_fetch_all():
     source = _function_source("bisheng/api/services/workflow.py", "get_uncategorized_flows_envelope")
