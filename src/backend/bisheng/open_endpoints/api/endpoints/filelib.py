@@ -40,6 +40,9 @@ from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_reposit
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_document_version_repository import (
     KnowledgeDocumentVersionRepository,
 )
+from bisheng.knowledge.domain.repositories.interfaces.knowledge_file_repository import (
+    KnowledgeFileRepository,
+)
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.open_endpoints.api.dependencies import (
     build_knowledge_space_chat_service_for_openapi,
@@ -49,6 +52,7 @@ from bisheng.open_endpoints.api.dependencies import (
     get_filelib_request_user,
     get_filelib_retrieve_source_service,
     get_filelib_user_context_service,
+    get_knowledge_file_repository,
 )
 from bisheng.open_endpoints.domain.schemas.filelib import (
     APIAddQAParam,
@@ -687,6 +691,7 @@ async def retrieve_chunks(
         source_service: FilelibRetrieveSourceService = Depends(
             get_filelib_retrieve_source_service
         ),
+        file_repo: KnowledgeFileRepository = Depends(get_knowledge_file_repository),
 ):
     """Retrieve top-k chunks across one or more knowledge bases (no LLM generation).
 
@@ -699,6 +704,7 @@ async def retrieve_chunks(
             request_user=login_user,
             version_repo=version_repo,
             doc_repo=doc_repo,
+            file_repo=file_repo,
         )
         kb_filters = None
         if req.filters and req.filters.knowledge_base_filters:

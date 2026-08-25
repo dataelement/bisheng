@@ -200,6 +200,37 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def find_active_entries_for_documents(
+        self,
+        *,
+        tenant_id: int,
+        document_ids: list[int],
+        knowledge_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        normalized_document_ids = sorted({int(d) for d in document_ids if int(d) > 0})
+        normalized_knowledge_ids = sorted({int(k) for k in knowledge_ids if int(k) > 0})
+        if not normalized_document_ids or not normalized_knowledge_ids:
+            return []
+        stmt = (
+            select(KnowledgeFile)
+            .where(
+                KnowledgeFile.tenant_id == int(tenant_id),
+                col(KnowledgeFile.reference_document_id).in_(normalized_document_ids),
+                KnowledgeFile.knowledge_id.in_(normalized_knowledge_ids),
+                KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
+                col(KnowledgeFile.entry_type).in_(
+                    [
+                        KnowledgeFileEntryType.MANAGER.value,
+                        KnowledgeFileEntryType.PUBLISH.value,
+                        KnowledgeFileEntryType.SHARE.value,
+                    ]
+                ),
+            )
+            .order_by(KnowledgeFile.reference_document_id.asc(), KnowledgeFile.id.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def find_entry_in_space_for_update(
         self,
         document_id: int,

@@ -63,12 +63,20 @@ def retrieve_knowledge_space_documents_sync(
     from bisheng.knowledge.domain.repositories.implementations.knowledge_document_version_repository_impl import (
         KnowledgeDocumentVersionRepositoryImpl,
     )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_document_repository_impl import (
+        KnowledgeDocumentRepositoryImpl,
+    )
+    from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
+        KnowledgeFileRepositoryImpl,
+    )
     from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
     from bisheng.worker._asyncio_utils import run_async_task
 
     async def _retrieve() -> list[tuple[int, Document]]:
         async with get_async_db_session() as session:
             service = KnowledgeSpaceChatService(request, ensure_knowledge_space_login_user(login_user))
+            service.file_repo = KnowledgeFileRepositoryImpl(session)
+            service.doc_repo = KnowledgeDocumentRepositoryImpl(session)
             service.version_repo = KnowledgeDocumentVersionRepositoryImpl(session)
             return await service.aretrieve_chunks(
                 query=query,
@@ -84,6 +92,47 @@ def retrieve_knowledge_space_documents_sync(
     except RuntimeError:
         return run_async_task(_retrieve)
     raise RuntimeError("knowledge space retrieval does not support running inside an active event loop")
+
+
+def is_shared_storage_active_for_knowledge_ids(
+    knowledge_base_ids: list[int],
+) -> bool:
+    """B2: Check whether the given knowledge bases are routed to shared storage.
+
+    Returns True when ALL requested bases are SPACE-type and the tenant has
+    ``shared_enabled=True``. This is a sync helper for workflow nodes that
+    need to decide between legacy per-space retrieval and shared-store paths.
+
+    If the check cannot be performed (e.g. no event loop), returns False.
+    """
+    if not knowledge_base_ids:
+        return False
+    import asyncio
+
+    from bisheng.core.database import get_async_db_session
+    from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
+    from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+
+    async def _check() -> bool:
+        async with get_async_db_session() as session:
+            for kb_id in knowledge_base_ids:
+                space = await KnowledgeDao.aquery_by_id(kb_id)
+                if space is None:
+                    return False
+                snapshot = resolve_space_shared_routing(
+                    int(getattr(space, 'tenant_id', None) or 1),
+                    getattr(space, 'type', None),
+                )
+                if snapshot is None or not snapshot.shared_enabled:
+                    return False
+            return True
+
+    try:
+        asyncio.get_running_loop()
+        return False
+    except RuntimeError:
+        from bisheng.worker._asyncio_utils import run_async_task
+        return run_async_task(_check)
 
 
 class ConditionOne(BaseModel):
