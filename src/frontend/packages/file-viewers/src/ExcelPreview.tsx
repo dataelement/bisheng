@@ -212,6 +212,31 @@ async function extractImagesWithPositions(workbook: Workbook): Promise<{
   return { images, imagePositions };
 }
 
+/**
+ * One download per URL while it is in flight. A preview that gets remounted (a
+ * re-rendering parent, a suspended boundary) would otherwise fire a fresh request
+ * for the same signed URL on every mount, which reads as a request storm against
+ * object storage.
+ */
+const inFlightDownloads = new Map<string, Promise<ArrayBuffer>>();
+
+function downloadOnce(url: string, onNotOk: (status: number) => Error): Promise<ArrayBuffer> {
+  const pending = inFlightDownloads.get(url);
+  if (pending) return pending;
+
+  const request = fetch(url)
+    .then((response) => {
+      if (!response.ok) throw onNotOk(response.status);
+      return response.arrayBuffer();
+    })
+    .finally(() => {
+      inFlightDownloads.delete(url);
+    });
+
+  inFlightDownloads.set(url, request);
+  return request;
+}
+
 function DefaultSpinner() {
   return (
     <svg className="size-20 animate-spin text-blue-500" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -222,7 +247,15 @@ function DefaultSpinner() {
 }
 
 export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: ExcelPreviewProps) {
-  const { t } = useTranslation('shared', { keyPrefix: 'knowledge.excelPreview' });
+  // useSuspense: false — a suspending viewer gets torn down and remounted by the
+  // nearest boundary while the namespace settles, and every remount refetches the
+  // file. These labels are error text only, so resolving them a frame late is fine.
+  const { t } = useTranslation('shared', { keyPrefix: 'knowledge.excelPreview', useSuspense: false });
+  // The parse effect must not depend on `t`: react-i18next returns a new `t`
+  // whenever the namespace or language settles, and that identity change alone
+  // re-downloaded and re-parsed the whole workbook.
+  const tRef = useRef(t);
+  tRef.current = t;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -271,15 +304,15 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
         setSheets([]);
         setActiveSheet('');
 
-        if (!filePath) throw new Error(t('filePathEmpty'));
+        if (!filePath) throw new Error(tRef.current('filePathEmpty'));
 
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`${t('fileLoadFailed')}: ${response.status}`);
-
-        const arrayBuffer = await response.arrayBuffer();
+        const arrayBuffer = await downloadOnce(
+          filePath,
+          (status) => new Error(`${tRef.current('fileLoadFailed')}: ${status}`),
+        );
 
         if (isCSV) {
-          if (arrayBuffer.byteLength === 0) throw new Error(t('fileContentEmpty'));
+          if (arrayBuffer.byteLength === 0) throw new Error(tRef.current('fileContentEmpty'));
 
           const uint8Array = new Uint8Array(arrayBuffer);
           let decodedStr = '';
@@ -308,7 +341,7 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
             wb = XLSX.read(arrayBuffer, { type: 'array' });
           } catch (e) {
             console.error('SheetJS parsing failed:', e);
-            throw new Error(t('excelParseFailed'));
+            throw new Error(tRef.current('excelParseFailed'));
           }
 
           const sheetNames = wb.SheetNames;
@@ -337,13 +370,13 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
             }
           }
         } else {
-          throw new Error(t('unsupportedType', { type: fileExt }));
+          throw new Error(tRef.current('unsupportedType', { type: fileExt }));
         }
 
         setError(null);
       } catch (err) {
         console.error('File parsing failed:', err);
-        setError(err instanceof Error ? err.message : t('unknownError'));
+        setError(err instanceof Error ? err.message : tRef.current('unknownError'));
       } finally {
         setLoading(false);
       }
@@ -353,9 +386,9 @@ export function ExcelPreview({ filePath, fileExt: fileExtProp, loadingIcon }: Ex
       fetchAndParseFile();
     } else {
       setLoading(false);
-      setError(t('filePathEmpty'));
+      setError(tRef.current('filePathEmpty'));
     }
-  }, [filePath, fileExt, isCSV, isXLSX, t]);
+  }, [filePath, fileExt, isCSV, isXLSX]);
 
   const renderContent = () => {
     const sheetData = excelData[activeSheet];
