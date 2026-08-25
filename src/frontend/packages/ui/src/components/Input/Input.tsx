@@ -43,6 +43,12 @@ export interface InputProps
   size?: InputSize;
   /** §5.2 — `error` blocks submit and turns the border red; `warning` is "look again". */
   status?: InputStatus;
+  /**
+   * For a field embedded in a container that draws its own chrome (a panel
+   * header, a composed control): border, hover step and focus ring all off —
+   * the container owns the states, the caret is the focus indicator.
+   */
+  borderless?: boolean;
   /** §4.2 — says WHAT the box is (magnifier, link icon). */
   prefix?: React.ReactNode;
   /** §4.2 — a unit, a counter, or an action; at most two action icons. */
@@ -73,6 +79,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   {
     size = 'medium',
     status = 'default',
+    borderless = false,
     prefix,
     suffix,
     addonBefore,
@@ -124,7 +131,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
 
   return (
     <div
-      className={cn(shellStyles({ size, status, state }), className)}
+      className={cn(shellStyles({ size, status, state, borderless }), className)}
       onPointerDown={(event) => {
         if (!disabled) focusFieldFromShell(event, fieldRef.current);
       }}

@@ -147,6 +147,23 @@ export default () => (
 );
 ```
 
+## 无边框 borderless
+
+嵌在**自带描边的容器**里（面板头部、拼装的组合控件），框的描边、悬停、聚焦环整套交给容器，`borderless` 一个 prop 关掉——不要用 `border-none` 类名去压，聚焦环是阴影画的，压不干净。尺寸和带边形态完全一致（1px 透明边留着）。
+
+```tsx
+import { SearchInput } from '@bisheng/ui';
+
+export default () => (
+  <div style={{ maxWidth: 380, border: '1px solid rgb(var(--border-base))', borderRadius: 8 }}>
+    <div style={{ borderBottom: '1px solid rgb(var(--border-base))', padding: 4 }}>
+      <SearchInput borderless placeholder="容器自己画边，聚焦不再出灰环" clearLabel="清空" />
+    </div>
+    <div style={{ padding: 12, color: 'rgb(var(--text-3))', fontSize: 13 }}>面板内容区……</div>
+  </div>
+);
+```
+
 ## 多行文本域
 
 `Textarea` 默认三行高，只允许纵向拉伸、禁止横向——横着长出去会把表单的栏宽撑破。往下拉到 **32px 就到底**（与 medium 控件同高，那行字在这里完整且居中；开了字数统计是 56px，要给计数留位置），再矮就不像一个能写字的框了。自动长高没有内建：规范要求它必须有上限，等真有场景再定。
@@ -192,6 +209,7 @@ export default () => (
 | `clearLabel` | `string` | — | 清除按钮的无障碍名称（文案由调用方给） |
 | `onClear` | `() => void` | — | 清空后触发；空值的 `onChange` 也会照常触发 |
 | `showCount` | `boolean` | `false` | 需配 `maxLength`，否则不渲染。`maxLength` 只用来算计数、不透传给 DOM：超出能继续打，计数转红并置 `aria-invalid`，拦截归表单校验 |
+| `borderless` | `boolean` | `false` | 嵌在自带描边的容器里用：描边 / 悬停 / 聚焦环整套关掉，态归容器 |
 | `className` / `inputClassName` | `string` | — | 前者落在外壳（宽度写这里），后者落在 `<input>` |
 
 ### PasswordInput

@@ -25,6 +25,8 @@ export interface TextareaProps
   extends Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, 'cols'> {
   /** §5.2 — same validation states as the single-line field. */
   status?: InputStatus;
+  /** Same contract as the single-line field: the container owns the chrome. */
+  borderless?: boolean;
   /**
    * §4.4 — "current / limit", parked in the bottom-right corner INSIDE the box.
    * The limit is SOFT, same as the single-line field: typing past it is allowed
@@ -40,6 +42,7 @@ export interface TextareaProps
 export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(function Textarea(
   {
     status = 'default',
+    borderless = false,
     showCount = false,
     className,
     textareaClassName,
@@ -79,7 +82,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(fun
     <div
       // `h-auto` drops the single-line height: the row count decides how tall
       // this is, and the user may drag it taller.
-      className={cn(shellStyles({ size: 'medium', status, state }), 'h-auto', className)}
+      className={cn(shellStyles({ size: 'medium', status, state, borderless }), 'h-auto', className)}
       onPointerDown={(event) => {
         if (!disabled) focusFieldFromShell(event, fieldRef.current);
       }}

@@ -59,6 +59,15 @@ export const shellStyles = cva(
         disabled:
           'cursor-not-allowed border-btn-disabled-border bg-btn-disabled-bg text-btn-disabled-text',
       },
+      // A field embedded in a container that draws its own chrome (a panel
+      // header, a composed control): the shell's border, hover step and focus
+      // ring all switch off — the CONTAINER owns the states, the caret is the
+      // focus indicator. The 1px border stays, transparent, so metrics match
+      // the bordered form. Validation colors are container business too.
+      borderless: {
+        true: 'border-transparent bg-transparent',
+        false: '',
+      },
     },
     compoundVariants: [
       // Only an editable field reacts to the pointer. `hover:` is compiled
@@ -67,6 +76,7 @@ export const shellStyles = cva(
       {
         state: 'editable',
         status: 'default',
+        borderless: false,
         class:
           'border-border-base hover:border-border-deep focus-within:border-border-deep focus-within:shadow-focus',
       },
@@ -75,16 +85,18 @@ export const shellStyles = cva(
       {
         state: 'editable',
         status: 'error',
+        borderless: false,
         class: 'hover:border-danger focus-within:border-danger focus-within:shadow-focus',
       },
       {
         state: 'editable',
         status: 'warning',
+        borderless: false,
         class: 'hover:border-warning focus-within:border-warning focus-within:shadow-focus',
       },
-      { state: 'readonly', status: 'default', class: 'border-border-base' },
+      { state: 'readonly', status: 'default', borderless: false, class: 'border-border-base' },
     ],
-    defaultVariants: { size: 'medium', status: 'default', state: 'editable' },
+    defaultVariants: { size: 'medium', status: 'default', state: 'editable', borderless: false },
   },
 );
 

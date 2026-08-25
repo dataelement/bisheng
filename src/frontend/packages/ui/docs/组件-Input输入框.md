@@ -102,6 +102,7 @@
 - **错误提示文字放输入框下方**，用危险色，说清「怎么改」而不是只说「错了」；文案跟《文案规范》。
 - **错误阻断提交，警告不阻断**——警告是「能提交，但值得再看一眼」（如弱密码）。
 - **内容有效、只是不让改，用只读；整个字段当前无意义，才用禁用**——禁用的内容读屏读不到、也复制不走。
+- **嵌在自带描边容器里的输入框用 `borderless` 形态**（面板头部的搜索框、拼装出来的组合控件）：壳的描边、悬停加深、聚焦环整套关掉——态由容器表达，聚焦看光标本身。保留 1px 透明描边，和带边形态尺寸完全一致。校验色同理归容器管。定档来源：创建频道「添加信息源」面板的搜索框（2026-08-25 设计师拍板 active 不要 border 和 shadow），归档聊天搜索同款。
 
 | ✅ 推荐 | ❌ 不推荐 | 原因 |
 |---|---|---|
@@ -128,10 +129,22 @@
 
 1. ✅ cva `variants: { size, status, state }`（24 / 32 / 40，圆角 4 / 6 / 8，水平内边距含 1px 边框的 7 / 11 / 11），`status: error` 同步置 `aria-invalid`。Password / Search / addon 是同一基座填不同插槽的组合形态，没有另一套 API：`PasswordInput` / `SearchInput` 都只是 `Input` 的薄包装。**边框、填充、圆角、聚焦环全画在外壳 `div` 上，`<input>` 自身透明无边框**——这正是前后缀与 addon 能共用一条描边的原因。
 2. ✅ 颜色全走 token，组件内无裸 hex：常态描边 `border-border-base`；disabled 复用按钮三 token；错误 / 警告取功能色 main 档，聚焦环取对应 tint。
-3. ✅ **聚焦取值**：hover / 聚焦描边 `border-border-deep`；聚焦环为 Tailwind 类 `shadow-focus`（`tailwind-preset.cjs` + client `tailwind.config.cjs`，SSOT 记在 `design-token.cjs` 的 `FOCUS_RING`，**刻意不并进两档 SHADOW**：它是聚焦指示不是高度，按《圆角与阴影规范》§4 例外条款）。**只有环的颜色是变量 `--shadow-focus-ring`（默认 `--fill-2`），2px 的几何写在类里**——原本想落成一个 `--shadow-focus: 0 0 0 2px rgb(var(--shadow-focus-ring))` 变量，实测不成立：自定义属性里的 `var()` 在**声明它的那一层**就被替换掉，写在 `:root` 就等于把环色钉死在 `:root` 的取值上，错误 / 警告态再怎么覆盖 `--shadow-focus-ring` 都换不动（落地当天踩到并改掉）。现在错误 / 警告态只覆盖 `--shadow-focus-ring` 为 danger-tint / warning-tint，环色在元素上解析。⬜ 归并 `ExpandableSearchField` 的两个裸 hex 与它的 `rounded-lg` 仍待迁移窗口。
+3. ✅ **聚焦取值**：hover / 聚焦描边 `border-border-deep`；聚焦环为 Tailwind 类 `shadow-focus`（`tailwind-preset.cjs` + client `tailwind.config.cjs`，SSOT 记在 `design-token.cjs` 的 `FOCUS_RING`，**刻意不并进两档 SHADOW**：它是聚焦指示不是高度，按《圆角与阴影规范》§4 例外条款）。**只有环的颜色是变量 `--shadow-focus-ring`（默认 `--fill-2`），2px 的几何写在类里**——原本想落成一个 `--shadow-focus: 0 0 0 2px rgb(var(--shadow-focus-ring))` 变量，实测不成立：自定义属性里的 `var()` 在**声明它的那一层**就被替换掉，写在 `:root` 就等于把环色钉死在 `:root` 的取值上，错误 / 警告态再怎么覆盖 `--shadow-focus-ring` 都换不动（落地当天踩到并改掉）。现在错误 / 警告态只覆盖 `--shadow-focus-ring` 为 danger-tint / warning-tint，环色在元素上解析。✅ `ExpandableSearchField` 的两个裸 hex 与 `rounded-lg` 已随 client 首批归并（2026-08-25，见落地区 6）。
 4. ✅ placeholder 走 `text-text-3`（hint 档）；字数统计常态 hint、**超出**上限转危险色，单行在后缀区、多行在框内右下角（`bg-inherit` 垫底，滚动的正文从它下面过）。`showCount` 必须配 `maxLength`，缺了就不渲染。**`maxLength` 刻意不透传给 DOM**——原生属性会静默吞掉按键；超限时组件另置 `aria-invalid`，读屏用户看不见计数变红，得有个等价信号。
 5. ✅ iOS 防缩放：`.input-no-zoom` 在 `@media (max-width: 768px), (hover: none) and (pointer: coarse)` 内把 input / textarea 提到 16px / 24，用 `input.input-no-zoom` 元素+类选择器写，确保压得住档位自己的 `text-[length:…]`。另补 `.input-touch-hit`：**上下各一条透明热区**把可点区域撑到 ≥44px，而不是像按钮那样盖一整块——盖在框上的覆盖层会吃掉「点到第几个字」的那一下，光标只能落到末尾。清除 / 明暗切换按钮仍用按钮那套 `btn-touch-hit`。
-6. ⬜ 现状扫描未做：client 内现存输入框体系（`components/ui/Input`、原生 `<input>` 手拼等）的用量与迁移映射，待迁移窗口扫描后补附录。组件落地不动任何存量调用点。
+6. 🟨 存量迁移进行中（2026-08-25 扫描 + 首批）：
+   - **扫描口径**（client/src，grep 文本计数）：旧 `~/components/ui/Input` 的 `<Input>` 57 处 / 52 文件、`<SearchInput>` 3 处；手拼原生 `<input>` 77 处；`<textarea>` 13 处；裸 hex 聚焦对 `#DDDDDD` + `#F1F5F9` 17 处 / 16 文件。
+   - **首批已落**（2026-08-25）：① 17 处裸 hex 聚焦对全部归并为 `border-border-deep` + `shadow-focus`（含规范点名的 `ExpandableSearchField`——其 32px 高配的 `rounded-lg` 同步归 md 档 6px、「蓝框」过时注释改写；文件重命名 rename 框 FileCard / FileListRow 三处属常亮环，静态类同步归并）；② 六个手拼搜索框换成 `@bisheng/ui` 的 `SearchInput`：ChannelSquare、KnowledgeSquare、ChannelMemberDialog、ChannelMemberManagementPanel、KnowledgeListPanel、SkillSelector——后两个在 Radix 菜单里，stopPropagation 从 `<input>` 上移到包一层的 wrapper（点放大镜、内边距、清除按钮也不能漏给菜单的 type-ahead / 关闭逻辑）；归并同时把 12px 字号收到档位 14px、28px 高收到 medium 32px；③ 旧 `components/ui/Input.tsx` 挂 `@deprecated` 指针（默认高 40 vs 32、className 落 input vs 落外壳两处语义差写明，不能盲替）。
+   - **第二批（2026-08-25，`<Input>` 收官）**：剩余 45 文件 / 50 处旧 `<Input>` 全部迁完。映射决策（用户拍板）：47 处 40px 默认高**全部归 medium**（32px，字号 14 不变）——分布盘点显示它们全是弹窗 / 侧栏表单字段与表格筛选框，正是 medium 档点名的场景，没有真正的登录大表单（LoginForm / ResetPassword 不用旧 Input）。做法：
+     - 调用点逐个把 className 从「落在 `<input>`」翻成「落在外壳」：宽度类保留、老壳的 h-10 / border / placeholder 色 / focus 描边全删（壳已内建）；文字样式挪 `inputClassName`（QRPhase 的 mono、PromptName 的 2xl bold 等）。
+     - 旧 `components/ui/Input.tsx` 翻成 **re-export**（Button 迁移同款，替换首批的 @deprecated 指针）：45 个文件的 import 一行未动，barrel 照常。
+     - 又收编五个手拼搜索框进 `SearchInput`：KnowledgeSpaceSelect（dropdown 内，stopPropagation 包 wrapper）、AddToKnowledgeModal（手拼 X 清除删掉）、ArchivedChatsTable（保留 border-none 形态）、AddSourceDropdown（`onClear` 同步重置搜索态、回车 `onSearch` 提交）、MultiSelect（旧 SearchInput API → 新，`allowClear={false}` 保持原行为）。
+     - PasswordForm 换 `PasswordInput`：父级三个明暗 flag 删除（状态归组件），新增 i18n key `com_ui_show_password` / `com_ui_hide_password`（三语同 PR）。
+     - ChannelBusinessSettings 的全角计数从绝对定位 overlay 挪进 `suffix` 插槽（计数口径是全角单位，不用组件 showCount）。
+     - 例外两处：CreatePromptForm / PromptName 的 2xl 标题字配 `size="large"`（24px 字塞不进 32px 框）；Advanced 的 image-detail 只读徽章保留其非常规外观（`size="small"` + 透明无边）。CrawlPreviewDialog 由 disabled+readOnly 改纯 readonly（§5.2：可复制内容不该禁用）。
+     - 迁移带来的行为差：高度 40→32；原生 `maxLength` 不再截断（EditEncodingModal 64、InviteCode 50 改为软上限，拦截归表单校验）。
+   - **Textarea 首迁（2026-08-25）**：表单形态的旧 `ui/Textarea` 三处换规范 `Textarea`——创建频道/频道设置的**频道简介**（设计点名）、知识空间设置的描述与自定义标签文本（后者 `rows={5}` 对齐原 112px 高）；旧壳的 min-h / shadow / placeholder 覆写全删（已内建）。旧 `ui/Textarea` 剩 4 个消费者全是**聊天 composer**（appChat ChatInput、MessageBsChoose、灵思 ClarifyCard 两处）——那是自动长高的对话输入形态，不属于表单文本域，不迁，等 composer 自己的规范。
+   - **剩余**：原生 `<input>`（77 处）/ `<textarea>` 手拼逐批换壳；聊天 composer 4 处等 composer 规范；`_gallery` 清理后删除旧 `ui/Input.tsx` re-export。
 
 ## 待决策清单
 
@@ -151,3 +164,7 @@
 | 2026-08-20 | **组件 v1 落地**：`packages/ui/src/components/Input/`（`Input` / `Textarea` / `PasswordInput` / `SearchInput`），三档尺寸、四态外壳、前后缀 / addon / 清除 / 字数、聚焦灰环全部按本文实现；新增环色 token `--shadow-focus-ring` + Tailwind 类 `shadow-focus`（`design-token.cjs` `FOCUS_RING`、两处 tailwind 配置、tokens.css 与 client style.css 双份同步；环的几何刻意留在类里，原因见落地区第 3 条）与两条 CSS 规则 `.input-no-zoom` / `.input-touch-hit`；demo 页 `components/input.mdx` 上线并注册侧栏「数据录入 Data Entry」。文档内容随实况回填落地区，新增两项待决策（eye 图标缺位、Textarea 自动长高） | 待 committer 窗口提交 |
 | 2026-08-20 | Textarea 补下限：§3 明确手动拉伸不得低于 32px（与 medium 控件同高），组件落 `min-h-[30px]`（+ 外壳 1px 上下描边 = 32px 可见高）；为让那行字在下限处完整居中，**上下内边距由 8px 改为 4px**（8px 需要 40px 的框，拉到底会把一行字上下各切一刀），常态三行高随之 84→76px；开字数统计的下限另算 56px | 待 committer 窗口提交 |
 | 2026-08-20 | **超限策略改为「允许超出」**（勾销待决策清单同名项）：§4.4 由「达到上限停止录入」改写为「字照打、计数照走、超出转危险色、拦截交给表单校验」，转红阈值由「达到」改为「超出」（50 / 50 是合法值）；组件不再把 `maxLength` 透传给 DOM，超限时另置 `aria-invalid` 给读屏 | 待 committer 窗口提交 |
+| 2026-08-25 | **client 落地首批**：存量扫描（57 处旧 `<Input>` / 77 处原生 `<input>` / 17 处裸 hex 聚焦对，口径见落地区 6）；17 处裸 hex 全部归并 token（ExpandableSearchField 的 rounded-lg→md、蓝框注释一并修正，勾销落地区 3 的遗留项）；六个手拼搜索框迁 `SearchInput`；旧 `ui/Input.tsx` 挂弃用指针 | 待 committer 窗口提交 |
+| 2026-08-25 | **client 第二批（`<Input>` 收官）**：剩余 45 文件 / 50 处旧 `<Input>` 全部迁至 `@bisheng/ui`（40px 默认高全部归 medium，用户拍板）；再收编五个手拼搜索框（KnowledgeSpaceSelect / AddToKnowledgeModal / ArchivedChatsTable / AddSourceDropdown / MultiSelect，累计 11 个）；PasswordForm 换 `PasswordInput` 并删父级明暗 flag（新增三语 key `com_ui_show_password` / `com_ui_hide_password`）；旧 `ui/Input.tsx` 翻成 re-export，import 零改动；例外与行为差见落地区 6 | 待 committer 窗口提交 |
+| 2026-08-25 | 新增 **`borderless` 形态**（Input / Textarea，Search / Password 透传）：嵌在自带描边容器里的字段整套关掉描边+悬停+聚焦环，1px 透明边保尺寸；此前用 `border-none` 类名压不干净聚焦环（`shadow-focus` 单独就画出一圈）。AddSourceDropdown、ArchivedChatsTable 两处改用该 prop；定档来源为创建频道添加信息源面板的设计反馈 | 待 committer 窗口提交 |
+| 2026-08-25 | **Textarea 首迁**：频道简介（创建频道/频道设置，设计点名）+ 知识空间设置两处文本域换规范 `Textarea`；旧 `ui/Textarea` 剩余 4 个消费者均为聊天 composer 形态，划出表单文本域范围不迁 | 待 committer 窗口提交 |
