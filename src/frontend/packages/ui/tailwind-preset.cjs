@@ -91,6 +91,9 @@ module.exports = {
         'btn-disabled-border': 'rgb(var(--btn-disabled-border) / <alpha-value>)',
         'btn-disabled-bg': 'rgb(var(--btn-disabled-bg) / <alpha-value>)',
         'btn-disabled-text': 'rgb(var(--btn-disabled-text) / <alpha-value>)',
+        // Tooltip surface (组件-Tooltip文字提示.md §3) — solid, dark in BOTH
+        // color modes (see tokens.css for why it is not the gray ramp).
+        tooltip: 'rgb(var(--tooltip-bg) / <alpha-value>)',
         // Switch semantic tokens (组件-Switch开关.md §4) — OFF track + its hover.
         'switch-off': 'rgb(var(--switch-off-bg) / <alpha-value>)',
         'switch-off-hover': 'rgb(var(--switch-off-bg-hover) / <alpha-value>)',

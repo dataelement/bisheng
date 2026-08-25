@@ -5,7 +5,7 @@ import cn from '../../utils/cn';
 /**
  * Tooltip — one line of plain text explaining a control (组件-Tooltip文字提示.md v1).
  *
- * What the component pins down and a page cannot restate: the translucent dark
+ * What the component pins down and a page cannot restate: the solid dark
  * surface (§3), the 100ms hover delay with its 300ms skip window (§6), the
  * top-centre default with auto-flip (§5), the focusable hot zone a disabled
  * trigger needs to be hoverable at all (§7), and the top overlay tier so a
@@ -30,9 +30,9 @@ const SKIP_DELAY_DURATION = 300;
  * §3 — every tooltip carries an arrow; there is no arrow-less variant, so a
  * bubble always reads as belonging to one specific control. It is an 8px
  * square rotated 45°, so what shows is a triangle 8√2 ≈ 11px wide and half
- * that tall. Radix draws it as an SVG placed against the bubble instead of a
- * rotated box overlapping it, so the two never stack their alpha into a
- * darker seam.
+ * that tall. Radix draws it as an SVG placed against the bubble rather than a
+ * rotated box overlapping it, so the join stays seamless — the reason the
+ * surface can be one flat color with no overlap to reconcile.
  */
 const ARROW_WIDTH = 11;
 const ARROW_HEIGHT = 6;
@@ -41,14 +41,21 @@ const ARROW_HEIGHT = 6;
 const TRIGGER_GAP = 4;
 
 /**
- * §3 — deepest grey at 90%, and the lightest grey for the text rather than a
- * literal `#fff`: both ends of the ramp flip under `.dark`, so the pair stays
- * legible there instead of leaving white text on a near-white panel. No
- * backdrop blur (root AGENTS.md), no bare hex.
+ * §3 (2026-08-25) — solid dark surface, white text, in BOTH color modes.
+ *
+ * The surface is `--tooltip-bg`, not the grey ramp: the ramp inverts under
+ * `.dark` and would leave white text on a near-white bubble. That token is dark
+ * in both modes and merely lightens a step in dark, and its dark value lives at
+ * the token definition — the component holds no hex.
+ *
+ * No alpha, deliberately: a translucent bubble seams where the arrow meets it,
+ * makes contrast unverifiable against a backdrop nobody can predict, and turns
+ * off subpixel antialiasing on 14px text. No backdrop blur either (root
+ * AGENTS.md). `text-white` is literal on purpose — a flipping text token would
+ * put dark text on this permanently dark surface.
  */
-const SURFACE = 'rgb(var(--arco-gray-10) / 0.9)';
-const BUBBLE_STYLE: React.CSSProperties = { background: SURFACE, color: 'rgb(var(--arco-gray-1))' };
-const ARROW_STYLE: React.CSSProperties = { fill: SURFACE };
+const SURFACE_CLASS = 'bg-tooltip text-white';
+const ARROW_STYLE: React.CSSProperties = { fill: 'rgb(var(--tooltip-bg))' };
 
 /**
  * §3 — 14/22 body type, 6/12 padding (34px tall on one line, near enough to a
@@ -58,7 +65,7 @@ const ARROW_STYLE: React.CSSProperties = { fill: SURFACE };
  * Text stays selectable: §6 lets the pointer move into the bubble to copy it.
  */
 const BUBBLE_CLASS =
-  'z-tooltip max-w-[250px] break-words rounded-md px-3 py-1.5 text-body shadow-popup ' +
+  `${SURFACE_CLASS} z-tooltip max-w-[250px] break-words rounded-md px-3 py-1.5 text-body shadow-popup ` +
   'data-[state=delayed-open]:animate-tooltip-in data-[state=instant-open]:animate-tooltip-in ' +
   'data-[state=closed]:animate-tooltip-out motion-reduce:animate-none';
 
@@ -167,7 +174,6 @@ export function Tooltip({
             // Radix measures to the bubble, so the arrow's own height has to be
             // added for the 4px of §3 to land at the arrow TIP.
             sideOffset={TRIGGER_GAP + ARROW_HEIGHT}
-            style={BUBBLE_STYLE}
             className={cn(BUBBLE_CLASS, contentClassName)}
           >
             {content}

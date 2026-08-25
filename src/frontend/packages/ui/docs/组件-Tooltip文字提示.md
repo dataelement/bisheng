@@ -2,7 +2,7 @@
 
 > 设计系统 · Tooltip 部分 v1 · 2026-07-30 建档
 > 与 [00-总纲.md](00-总纲.md)、[01-设计规范.md](01-设计规范.md) 配套；颜色见 [基础-色彩规范.mdx](基础-色彩规范.mdx)、字号见 [基础-字体规范.mdx](基础-字体规范.mdx)、圆角与投影见 [基础-圆角与阴影规范.mdx](基础-圆角与阴影规范.mdx)、文案通则见 [基础-文案规范.md](基础-文案规范.md)、移动端通则见 [基础-多端适配原则.md](基础-多端适配原则.md)；姊妹篇 [组件-Popover气泡卡片.md](组件-Popover气泡卡片.md)（与 Popover 的判定归本文 §2，Popover 文档引用不抄写）。
-> 调研来源（同行致意，不进正文）：antd 5、Arco Design、TDesign、Apple HIG（help tag / Offering help）、Material 3（plain/rich tooltip）、Fluent 2、Radix Tooltip、WAI-ARIA APG Tooltip Pattern、WCAG 2.1 §1.4.13、NN/g Tooltip Guidelines、GitHub Primer。设计师拍板（2026-07-30）：深底白字、出现延时 100ms、触屏不依赖 tooltip。
+> 调研来源（同行致意，不进正文）：antd 5、Arco Design、TDesign、Apple HIG（help tag / Offering help）、Material 3（plain/rich tooltip）、Fluent 2、Radix Tooltip、WAI-ARIA APG Tooltip Pattern、WCAG 2.1 §1.4.13、NN/g Tooltip Guidelines、GitHub Primer。设计师拍板（2026-07-30）：深底白字、出现延时 100ms、触屏不依赖 tooltip；2026-08-25 增补：实色不透明、深色模式恒深底（暗色亮一档）、恒定带箭头。
 
 ## 1. 什么时候用
 
@@ -43,16 +43,16 @@
 
 ## 3. 长相与尺寸
 
-半透明深灰底 + 白字——与白色页面反差大，一眼认出「这是提示，不是页面内容」；带一点透明让提示更轻、不像一块实心补丁。两种品牌主题（蓝 ⇄ 绿）下长相相同，不换肤。
+深灰实色底 + 白字——与页面反差最大，一眼认出「这是提示，不是页面内容」。两种品牌主题（蓝 ⇄ 绿）下长相相同，不换肤；深色模式下仍是深底白字，只把底色换亮一档与页面拉开（见表）。
 
 | 项 | 值 | 说明 |
 |---|---|---|
-| 底色 / 文字 | `gray-10` 90% 不透明度 + 纯白字 | `gray-10` 即《色彩规范》灰阶最深档；90% 不透明度（拍板带透明的深底；90% 为初值，透过度待目检微调），见 [基础-色彩规范.mdx](基础-色彩规范.mdx)；不随主题换肤 |
+| 底色 / 文字 | 浅色模式 `gray-10` 实色；深色模式**暗色灰阶第 2 档 `gray-2`**（`#2E2E30`）；文字两种模式都是纯白 | `gray-10` 即《色彩规范》灰阶最深档，见 [基础-色彩规范.mdx](基础-色彩规范.mdx)。**实色、不带透明度**——半透明会造成箭头叠加缝、文字反锯齿降级、对比度不可判定（决策依据见改动记录）。深色模式**不取翻转后的 `gray-10`**（灰阶暗色翻转后它会变浅，和白字冲突），tooltip 两种模式恒为深底白字；初值 `#373739` 已按暗色灰阶归档到最接近的 `gray-2`（ΔL\* 4.1，次近的 gray-3 为 7.5），组件与 token 均不再留暗色专用裸值。不随蓝 ⇄ 绿换肤 |
 | 字号 / 行高 | 14 / 22（正文档） | 跟《字体规范》正文档，见 [基础-字体规范.mdx](基础-字体规范.mdx) |
 | 内边距 | 上下 6px、左右 12px | 单行总高 34px，与 32px 控件近似同高，挨着控件出现不突兀 |
 | 圆角 | 6px | 与同高度的控件档一致，见 [基础-圆角与阴影规范.mdx](基础-圆角与阴影规范.mdx) |
 | 最大宽度 | 250px | 约一行 17 个汉字，超过自动换行 |
-| 箭头 | **恒定带**，指向触发元素 | 一排图标挤在一起时，箭头说明提示属于谁；不设无箭头档——tooltip 只有一种长相，哪里都认得出 |
+| 箭头 | **恒定带**，指向触发元素 | 一排图标挤在一起时，箭头说明提示属于谁；不设无箭头档——tooltip 只有一种长相，哪里都认得出；图表中跟随鼠标的数值浮层不属于本组件，归图表库自管 |
 | 与触发元素间距 | 4px | 带箭头时以箭头尖计 |
 | 投影 / 描边 | 浮层投影档；不描边 | 投影档见《圆角与阴影规范》；1px 描边是给白底浮层与页面拉开用的，深底自身反差已足够，免除 |
 
@@ -107,7 +107,7 @@
 ## 落地（给实现窗口）
 
 1. 基座用 Radix Tooltip 原语（client 依赖里已有 @radix-ui/react-tooltip，具体封装路径开工时核实）：`delayDuration=100`、`skipDelayDuration=300`、`disableHoverableContent` 保持 `false`（关掉即违反 WCAG 1.4.13 Hoverable）。ESC 关闭、focus 即时出现为 Radix 内置行为，核实即可。
-2. 样式 token（落地回写两处读法）：**文字取灰阶最浅档 `rgb(var(--arco-gray-1))` 而不是字面 `#fff`**——灰阶两端在 `.dark` 下一起翻转，气泡自动变浅底深字；写死白字会在深色模式下压在近白底上。**箭头用 Radix 的 `Tooltip.Arrow`（SVG，11×6，即 8px 方块旋转 45° 后的可见三角）**，它贴在气泡外侧而不与之重叠，所以两个半透明面不会叠出深色缝，无需裁切实现；`sideOffset` 记为 `4 + 箭头高`，让 4px 落在箭头尖而不是气泡边。原文如下：底色 gray-10 的 90% 不透明度（写 `rgb(var(--gray-10) / 0.9)` 一类带 alpha 的 token 引用，禁止写死 rgba 裸值；不加 backdrop-blur）、文字 `#fff`、圆角 6px、内边距 `6px 12px`、`text-sm`（14/22）、`max-w-[250px]`、浮层投影档（阴影规范落 token 后接线）、无边框；箭头 8×8 旋转方块同底色同透明度（箭头与气泡重叠处不得出现深色叠加缝，必要时箭头用同一元素裁切实现）。组件内不留裸 hex，等灰阶 token 接线。
+2. 样式 token（2026-08-25 定稿，组件已于同日回改到位：`--tooltip-bg` 建在 `packages/ui/src/styles/tokens.css`，暗色档已归到 `gray-2`，气泡类名 `bg-tooltip text-white`）：底色**实色无 alpha**——建 `--tooltip-bg` 语义变量：浅色 = `rgb(var(--gray-10))`，`.dark` 下覆写为 `var(--arco-gray-2)`（= 暗色 `#2E2E30`，由初值 `#373739` 按 L\* 归到最近档，全链路无裸值）。**底色不要直接引用会翻转的 `--gray-10`**（暗色下变浅）；**文字写死白（`#fff`），不再取会翻转的 `rgb(var(--arco-gray-1))`**——深色模式定为恒深底后，翻转文字色会变成深字压深底。其余不变：无 backdrop-blur、圆角 6px、内边距 `6px 12px`、`text-sm`（14/22）、`max-w-[250px]`、浮层投影档（阴影规范落 token 后接线）、无边框。**箭头沿用 Radix 的 `Tooltip.Arrow`（SVG，11×6）**，贴在气泡外侧不与之重叠；`sideOffset` 记为 `4 + 箭头高`，让 4px 落在箭头尖而不是气泡边。组件内除 token 定义外不留裸 hex。
 3. 触屏不显示：Radix Tooltip 原生不响应 touch，保持默认；**禁止业务页用 onTouchStart 自造长按提示**。
 4. 禁用控件的提示：封装组件属性，内部对 disabled 触发元素包一层可聚焦热区（`span` + `tabIndex=0`）；禁止业务页各自手包。
 5. 单 icon 按钮的 `aria-label` 与 tooltip 文案同源：IconButton 封装用同一个 `label` 属性同时喂给两者。
@@ -119,6 +119,8 @@
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
+| 2026-08-25 | **组件回改到位**（跟随同日三项定稿）：新建 `--tooltip-bg` 语义变量（`packages/ui/src/styles/tokens.css`，浅色 = `var(--arco-gray-10)`、`.dark` 覆写为 `var(--arco-gray-2)`），preset 挂出 `bg-tooltip` / `fill-tooltip`；组件由 `rgb(var(--arco-gray-10)/0.9)` 内联样式改为类名 `bg-tooltip text-white`，箭头 fill 走同一变量；文字由会翻转的 `--arco-gray-1` 改为恒白。**暗色初值 `#373739` 同步按 L\* 归档到最近的 `gray-2`（`#2E2E30`，ΔL\* 4.1；gray-3 为 7.5）**——白字对比度 13.55:1，与 `#121212` 页面相隔 ΔL\* 13.5，全链路不再有暗色专用裸值。§3 表格、落地 §2、demo 页 `components/tooltip.mdx` 的「长相」段同步 | 待 committer 窗口提交 |
+| 2026-08-25 | **三项定稿**：① 底色回**实色**（推翻 07-30 的 90%）——实机目检 90% 与实色无差；调研：业内真半透明仅 antd 一家（黑底 85%），且半透明有三重工程代价——多层 alpha 叠出箭头接缝（antd #35358/#17740 实证）、背景不可知使对比度不可判定且自动化检查失效（WCAG「specified background」/ axe-core incomplete）、非不透明图层关闭 subpixel 抗锯齿致小字发虚（Chromium `kBackgroundColorNotOpaque`）。② 深色模式**恒深底、不反转**：暗色底用亮一档深灰 `#373739`（初值，待对照暗色灰阶归档），文字恒白——同派 antd/Arco/Windows；反转派（M3/Carbon/Bootstrap/Chakra/Mantine/Radix Themes 六家）不取。顺带修正「gray-10 暗色翻转变浅 × 白字」的矛盾：底色改走不翻转的 `--tooltip-bg` 语义变量。（已落地组件当时用了翻转的 gray-1 文字，暗色下呈反转效果；已随本条回改为恒白。）③ 箭头**恒定带**：确认 08-24 拍板并补依据——业内仅 TDesign 给出区分依据「指向性」；本规范 §7 已限定 tooltip 只挂具体控件，无指向性场景不存在；图表跟随浮层归图表库。§3 / 落地 §2 / meta 拍板行同步 | 待 committer 窗口提交 |
 | 2026-08-24 | 拍板：**取消无箭头档**——箭头由「默认带」改为「恒定带」，组件的 `arrow` prop 移除，面包屑（截断补全、`…` 展开、当前页）四处 `arrow={false}` 一并改回带箭头。理由：tooltip 只保留一种长相，用户在哪里见到都认得出，不为「小字旁边省点墨」分叉。§3 表格与 `components/tooltip.mdx`（删「没有箭头的场合」一节 + API 行）、面包屑文档同步 | 待 committer 窗口提交 |
 | 2026-08-24 | **组件落地** `packages/ui/src/components/Tooltip/`，导出 `Tooltip` + 可选 `TooltipProvider`；落地 §1–§7 全部接线（`delayDuration=100` / `skipDelayDuration=300` / `disableHoverableContent` 留 `false`、`z-tooltip`=1300、150ms 淡入 100ms 淡出接成 `animate-tooltip-in/out` token、disabled 触发元素内部包 `span+tabIndex=0` 热区）。两处落地读法回写进落地 §2（文字色取灰阶最浅档而非字面 `#fff`；箭头用 Radix SVG 不用旋转方块）。`TooltipProvider` 设计成**可选**：共享 provider 才有 300ms 跳过窗口，没挂时每个 `Tooltip` 自带兜底 provider（不能在每个 tooltip 里都塞 provider——会遮蔽应用根上那个，跳过窗口就没了）。demo 页 `components/tooltip.mdx` 从手拼 Radix 原语改为真组件，状态 `todo`→`done`。落地 §8 的现状扫描仍待做 | 待 committer 窗口提交 |
 | 2026-08-20 | 层级随 [组件-Modal弹窗.md](组件-Modal弹窗.md) v1 定稿的四档层级表回填：Tooltip 取 `1300`，即最高浮层档；原「归 [01-设计规范.md](01-设计规范.md) §5 定稿」的指针改为具体数值。本文其余规则未增未减未改 | 待 committer 窗口提交 |

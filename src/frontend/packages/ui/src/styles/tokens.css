@@ -130,6 +130,17 @@
   --switch-off-bg: var(--arco-gray-4);
   --switch-off-bg-hover: var(--arco-gray-5);
 
+  /* ---------- Tooltip surface (组件-Tooltip文字提示.md §3 + 落地 §2) ----------
+   * Deliberately NOT `var(--arco-gray-10)` read directly by the component: the
+   * gray ramp inverts under `.dark`, which would turn the bubble light while
+   * its text stays white. A tooltip is dark in BOTH modes (2026-08-25 拍板) —
+   * dark mode only lightens the surface one step so it separates from the
+   * #121212 page. Solid, never an alpha: translucency seams the arrow against
+   * the bubble, leaves contrast unverifiable against an unknown backdrop, and
+   * drops subpixel antialiasing on 14px text. Its text is plain white in both
+   * modes, for the same reason the surface does not flip. */
+  --tooltip-bg: var(--arco-gray-10);
+
   /* ---------- Radius scale (shadcn-compatible: lg=8 / md=6 / sm=4) ---------- */
   --radius: 0.5rem;
 
@@ -182,6 +193,14 @@
   --arco-gray-9: 223 223 223;   /* #DFDFDF */
   --arco-gray-10: 246 246 246;  /* #F6F6F6 */
   --bg-page: 18 18 18;          /* #121212 — page surface, dark */
+
+  /* Tooltip stays a DARK bubble in dark mode (it does not follow the ramp
+     inversion) — a step lighter than the light-mode surface so it reads as a
+     layer above the #121212 page. The spec's provisional #373739 is snapped to
+     the nearest step of the dark ramp: gray-2 #2E2E30, ΔL* 4.1 (gray-3 was 7.5)
+     — so the bubble is a ramp value like every other surface, with no hex of
+     its own. White on it is 13.55:1, and it clears the page by ΔL* 13.5. */
+  --tooltip-bg: var(--arco-gray-2);
 
   /* Disabled button, dark: a subtle raised inert fill + muted (not invisible)
      text/border. Light used black overlays on white; dark mirrors that with a
