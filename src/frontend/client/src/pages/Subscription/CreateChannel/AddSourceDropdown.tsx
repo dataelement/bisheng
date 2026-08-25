@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 // the app's base path and fingerprints it — no env-var lookup at render time.
 import wechatCopyLinkGuide from "./wechat-copy-link-guide.png";
 
-const MAX_SOURCES = 50;
+const MAX_SOURCES = 200;
 const MAX_NAME_DISPLAY = 20;
 
 /**
