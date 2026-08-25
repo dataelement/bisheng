@@ -261,6 +261,48 @@ class QuestionInviteRepository:
             session.add_all(invites)
             await session.commit()
 
+    async def list_by_question_id(self, question_id: int) -> list[QuestionInvite]:
+        """读取一题的全部邀请行。"""
+        async with get_async_db_session() as session:
+            stmt = select(QuestionInvite).where(QuestionInvite.question_id == question_id)
+            result = await session.exec(stmt)
+            return list(result.all())
+
+    async def replace_for_question(
+        self,
+        *,
+        question_id: int,
+        tenant_id: int,
+        experts: list,
+    ) -> list:
+        """
+        按目标专家列表全量对齐邀请表（删多余、补新增）。
+        返回本次新增的专家对象列表，供站内信通知。
+        """
+        desired = list(experts or [])
+        desired_ids = {int(expert.id) for expert in desired}
+        async with get_async_db_session() as session:
+            session.expire_on_commit = False
+            stmt = select(QuestionInvite).where(QuestionInvite.question_id == question_id)
+            result = await session.exec(stmt)
+            existing = list(result.all())
+            existing_ids = {int(row.expert_id) for row in existing}
+            for row in existing:
+                if int(row.expert_id) not in desired_ids:
+                    await session.delete(row)
+            added_experts = [expert for expert in desired if int(expert.id) not in existing_ids]
+            for expert in added_experts:
+                session.add(
+                    QuestionInvite(
+                        tenant_id=tenant_id,
+                        question_id=question_id,
+                        expert_id=int(expert.id),
+                        user_id=int(expert.user_id),
+                    )
+                )
+            await session.commit()
+        return added_experts
+
     async def list_user_ids_by_question_ids(self, question_ids: list[int]) -> dict[int, set[int]]:
         """question_id -> 受邀专家 user_id 集合。"""
         mapping: dict[int, set[int]] = {}

@@ -354,7 +354,13 @@ async def update_question(
             f"{request.title or ''}\n{question_description_to_plain_text(request.description)}",
         )
 
-    question = await service.update_question(question_id, request, tenant_id=user.tenant_id)
+    question = await service.update_question(
+        question_id,
+        request,
+        tenant_id=user.tenant_id,
+        user_id=user.user_id,
+        user_name=getattr(user, "user_name", None) or "",
+    )
     return resp_200(data=question_detail_payload(question))
 
 
