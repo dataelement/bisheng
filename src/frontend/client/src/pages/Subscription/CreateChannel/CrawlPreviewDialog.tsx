@@ -55,12 +55,9 @@ function PreviewBody({ url, status, previewData, errorCode, noHoverDevice }: Pre
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 sm:px-6">
             <div>
-                <Input
-                    value={url}
-                    readOnly
-                    disabled
-                    className="h-8 text-[14px] bg-fill-1 text-text-3 border-border-base"
-                />
+                {/* readonly, not disabled (组件-Input输入框.md §5.2): the URL is valid
+                    content the user may select and copy. */}
+                <Input value={url} readOnly />
             </div>
 
             {status === "loading" && (

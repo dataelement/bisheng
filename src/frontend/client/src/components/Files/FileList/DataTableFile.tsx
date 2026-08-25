@@ -150,7 +150,7 @@ export default function DataTableFile<TData, TValue>({
               placeholder={localize('com_files_filter')}
               value={(table.getColumn('filename')?.getFilterValue() as string | undefined) ?? ''}
               onChange={(event) => table.getColumn('filename')?.setFilterValue(event.target.value)}
-              className="max-w-sm border-border-medium placeholder:text-text-secondary"
+              className="max-w-sm"
             />
             <UploadFileButton onClick={() => console.log('click')} />
           </div>

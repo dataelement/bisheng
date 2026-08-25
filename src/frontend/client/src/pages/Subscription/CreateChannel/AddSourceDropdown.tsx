@@ -2,7 +2,7 @@ import { Outlined } from "bisheng-icons";
 import { useState, useEffect, useRef, type MouseEvent } from "react";
 import { Button } from "~/components/ui/Button";
 import { Checkbox } from "~/components/ui/Checkbox";
-import { Input } from "~/components/ui/Input";
+import { SearchInput } from "@bisheng/ui";
 import { truncateName, type InformationSource } from "~/api/channels";
 import { cn } from "~/utils";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
@@ -333,35 +333,23 @@ export function AddSourceDropdown({
                     )}
                 >
                     <div className="flex shrink-0 items-center gap-2 border-b border-border-base pb-0 mb-2">
-                        <div className="relative flex-1 rounded-lg m-1">
-                            <Outlined.Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-text-3" />
-                            <Input
-                                value={inputValue}
-                                onChange={(e) => setInputValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                        // Submit, not just "set the keyword": pressing Enter
-                                        // again on an unchanged link has to retry it.
-                                        mgr.submitSearch(inputValue.trim());
-                                    }
-                                }}
-                                placeholder={localize("com_subscription.enter_official_account")}
-                                className="pl-9 pr-9 h-10 text-[14px] border-none bg-white w-full  rounded-none"
-                                autoFocus
-                            />
-                            {inputValue && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setInputValue("");
-                                        mgr.handleClearSearch();
-                                    }}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-3 hover:text-text-2"
-                                >
-                                    <Outlined.Close className="size-4" />
-                                </button>
-                            )}
-                        </div>
+                        {/* Spec SearchInput in `borderless` form — the panel draws the
+                            chrome, so the field shows no border and no focus ring (design
+                            call, 2026-08-25). onClear also resets the manager's search
+                            state, which the built-in clear alone would not do. Enter
+                            submits (not just sets the keyword) so an unchanged link can
+                            be retried. */}
+                        <SearchInput
+                            borderless
+                            className="m-1 flex-1"
+                            value={inputValue}
+                            onChange={(e) => setInputValue(e.target.value)}
+                            onSearch={() => mgr.submitSearch(inputValue.trim())}
+                            placeholder={localize("com_subscription.enter_official_account")}
+                            clearLabel={localize("com_ui_clear")}
+                            onClear={() => mgr.handleClearSearch()}
+                            autoFocus
+                        />
                     </div>
                     {/* 仅非搜索时显示 Tab；搜索时混合展示，类型在名称后 */}
                     {!mgr.isSearchMode && (

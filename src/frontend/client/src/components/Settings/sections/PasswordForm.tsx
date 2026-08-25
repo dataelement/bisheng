@@ -4,7 +4,7 @@ import { JSEncrypt } from "jsencrypt";
 import { getPublicKeyApi, updatePasswordApi } from "~/api/user";
 import { NotificationSeverity } from "~/common";
 import { Button } from "~/components/ui/Button";
-import { Input } from "~/components/ui/Input";
+import { PasswordInput } from "@bisheng/ui";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
@@ -37,42 +37,34 @@ const WRONG_OLD_PASSWORD_PATTERNS = [
 ];
 /* eslint-enable no-restricted-syntax */
 
-const inputClassName =
-    "h-9 rounded-md border border-[#ECECEC] bg-white pr-10 text-[14px] text-[#1d2129] placeholder:text-[#c9cdd4] focus-visible:border-[#DDDDDD] focus-visible:ring-2 focus-visible:ring-[#F1F5F9]";
-
 interface PasswordFieldProps {
     id: string;
     label: string;
     value: string;
     placeholder: string;
-    visible: boolean;
-    onToggleVisible: () => void;
     onChange: (value: string) => void;
 }
 
-function PasswordField({ id, label, value, placeholder, visible, onToggleVisible, onChange }: PasswordFieldProps) {
+function PasswordField({ id, label, value, placeholder, onChange }: PasswordFieldProps) {
+    const localize = useLocalize();
     return (
         <div>
             <label className="mb-1 block text-[14px] text-[#4e5969]" htmlFor={id}>
                 {label}
             </label>
-            <div className="relative">
-                <Input
-                    id={id}
-                    type={visible ? "text" : "password"}
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    placeholder={placeholder}
-                    className={inputClassName}
-                />
-                <button
-                    type="button"
-                    onClick={onToggleVisible}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#86909c] hover:text-[#4e5969]"
-                >
-                    {visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
-                </button>
-            </div>
+            {/* Spec PasswordInput — the reveal toggle lives in the suffix and
+                OWNS the visibility state (the parent used to track three
+                show/hide flags purely to pass them down; gone with the shell). */}
+            <PasswordInput
+                id={id}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                revealIcon={<Eye />}
+                hideIcon={<EyeOff />}
+                revealLabel={localize("com_ui_show_password")}
+                hideLabel={localize("com_ui_hide_password")}
+            />
         </div>
     );
 }
@@ -90,9 +82,6 @@ export function PasswordForm({ onCancel, onSuccess }: PasswordFormProps) {
     const [oldPassword, setOldPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    const [showOldPassword, setShowOldPassword] = useState(false);
-    const [showNewPassword, setShowNewPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [passwordStrength, setPasswordStrength] = useState<PasswordStrength>({
         minLength: false,
         hasAllRequired: false,
@@ -225,8 +214,6 @@ export function PasswordForm({ onCancel, onSuccess }: PasswordFormProps) {
                 label={localize("com_account_info_old_password")}
                 value={oldPassword}
                 placeholder={localize("com_account_info_placeholder_old_password")}
-                visible={showOldPassword}
-                onToggleVisible={() => setShowOldPassword((v) => !v)}
                 onChange={setOldPassword}
             />
 
@@ -236,8 +223,6 @@ export function PasswordForm({ onCancel, onSuccess }: PasswordFormProps) {
                     label={localize("com_account_info_new_password")}
                     value={newPassword}
                     placeholder={localize("com_account_info_placeholder_new_password")}
-                    visible={showNewPassword}
-                    onToggleVisible={() => setShowNewPassword((v) => !v)}
                     onChange={handleNewPasswordChange}
                 />
                 <div className="mt-2 flex flex-col gap-1.5">
@@ -256,8 +241,6 @@ export function PasswordForm({ onCancel, onSuccess }: PasswordFormProps) {
                 label={localize("com_auth_password_confirm")}
                 value={confirmPassword}
                 placeholder={localize("com_account_info_placeholder_confirm_password")}
-                visible={showConfirmPassword}
-                onToggleVisible={() => setShowConfirmPassword((v) => !v)}
                 onChange={setConfirmPassword}
             />
 

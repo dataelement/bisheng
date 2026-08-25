@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useCreatePresetMutation } from '~/hooks/queries';
 import type { TEditPresetProps } from '~/common';
-import { cn, removeFocusOutlines, cleanupPreset, defaultTextProps } from '~/utils/';
+import { cleanupPreset } from '~/utils/';
 import OGDialogTemplate from '~/components/ui/OGDialogTemplate';
 import { OGDialog, Input, Label } from '~/components/ui/';
 import { NotificationSeverity } from '~/common';
@@ -74,11 +74,7 @@ const SaveAsPresetDialog = ({ open, onOpenChange, preset }: TEditPresetProps) =>
                 onKeyDown={handleKeyDown}
                 placeholder={localize('com_endpoint_preset_custom_name_placeholder')}
                 aria-label={localize('com_endpoint_preset_name')}
-                className={cn(
-                  defaultTextProps,
-                  'flex h-10 max-h-10 w-full resize-none border-border-medium px-3 py-2 ',
-                  removeFocusOutlines,
-                )}
+                className="w-full"
               />
             </div>
           </div>
