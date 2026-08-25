@@ -292,8 +292,8 @@ class SharedStorageMigrationCoordinator:
         collection_name = snapshot.collection_name or shared_collection_name(tenant_id)
         index_name = snapshot.index_name or shared_index_name(tenant_id)
 
-        from bisheng.llm.domain import LLMService
         from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
+        from bisheng.llm.domain import LLMService
 
         embeddings = LLMService.get_knowledge_default_embedding(
             0, tenant_id=tenant_id,
@@ -973,7 +973,7 @@ class SharedStorageMigrationCoordinator:
                         canonical_document_id=CanonicalDocumentId(int(document.id)),
                         knowledge_ids=memberships,
                         membership_generation=max(
-                            int(entry.entry_generation)
+                            int(entry.desired_entry_generation)
                             for entry in entries_by_document[int(document.id)]
                         ),
                         content_generation=int(document.content_generation),
@@ -981,7 +981,7 @@ class SharedStorageMigrationCoordinator:
                 )
                 for entry in entries_by_document.get(int(document.id), []):
                     entry.applied_content_generation = int(document.content_generation)
-                    entry.applied_entry_generation = int(entry.entry_generation)
+                    entry.applied_entry_generation = int(entry.desired_entry_generation)
                     entry.projection_status = KnowledgeFileProjectionStatus.READY.value
                     entry.projection_last_error = None
                     session.add(entry)
