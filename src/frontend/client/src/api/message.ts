@@ -103,9 +103,4 @@ export async function approveMessageApi(body: { message_id: number; action: "agr
   return await request.post(`/api/v1/message/approve`, body);
 }
 
-export async function deleteMessageApi(message_id: number): Promise<boolean> {
-  const resp: any = await request.delete(`/api/v1/message/${message_id}`);
-  const root = resp?.data ?? resp ?? {};
-  return Boolean(root?.data ?? root);
-}
 

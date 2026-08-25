@@ -63,6 +63,8 @@
   "com_app_start_chat": "チャットを開始",
   "com_app_chat_sidebar_title": "アプリでの会話",
   "com_settings_general": "一般",
+  "com_settings_group_messages": "メッセージ",
+  "com_settings_group_personal": "個人",
   "com_settings_lang_en": "English",
   "com_settings_lang_ja": "日本語",
   "com_settings_lang_zh": "中文",

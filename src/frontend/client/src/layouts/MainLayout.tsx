@@ -4,7 +4,7 @@ import { Filled, Outlined } from 'bisheng-icons';
 import { X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import KeepAlive from 'react-activation';
-import { matchPath, NavLink, useLocation, useOutlet } from 'react-router-dom';
+import { matchPath, Navigate, NavLink, useLocation, useOutlet } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
@@ -299,7 +299,7 @@ function Sidebar({
 }
 
 export default function MainLayout() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const outlet = useOutlet();
   const { user, logout, isUserLoading } = useAuthContext();
   const localize = useLocalize();
@@ -320,6 +320,7 @@ export default function MainLayout() {
   );
   const isAppChatRoute = /^\/app(\/|$)/.test(pathname);
   const isChannelRoute = /^\/channel(\/|$)/.test(pathname);
+  const isSettingsRoute = /^\/settings(\/|$)/.test(pathname);
   const isKnowledgeSettingsRoute = Boolean(
     matchPath({ path: '/knowledge/create', end: true }, pathForMatch) ||
     matchPath({ path: '/knowledge/space/:spaceId/settings', end: true }, pathForMatch),
@@ -330,6 +331,7 @@ export default function MainLayout() {
     isChannelRoute ||
     isKnowledgeSettingsRoute ||
     isAppChatRoute ||
+    isSettingsRoute ||
     (isAppsArea && !isAppsExploreRoute);
   const isKnowledgeRoute = /^\/knowledge(\/|$)/.test(pathname);
   const isChatHomeRoute = /^\/(c|linsight)(\/|$)/.test(pathname);
@@ -338,7 +340,7 @@ export default function MainLayout() {
   const [systemMenuOpen, setSystemMenuOpen] = useRecoilState(store.mobileSystemMenuOpenState);
   // 移动端：所有主功能页(应用会话 / apps / channel / knowledge / 主站会话 / 无权限占位页)都隐藏
   // MainLayout 左栏,点页面内菜单按钮触发系统主菜单整页右滑露出。
-  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute);
+  const shouldHideSidebarOnMobileAppsArea = isMobile && (isAppChatRoute || isAppsArea || isChannelRoute || isKnowledgeRoute || isChatHomeRoute || isMenuUnavailableRoute || isSettingsRoute);
   /** H5: 系统主菜单露出 — 子页面顶栏菜单触发,内容向右滑出 w-16,点击页面其它位置或导航即关闭 */
   const systemMenuRevealing = systemMenuOpen && isMobile && shouldHideSidebarOnMobileAppsArea;
 
@@ -414,6 +416,20 @@ export default function MainLayout() {
     return null;
   }
 
+  // Legacy dialog deep links now land on the settings page. External notification cards
+  // still point at `/?open-notifications=1&message-id=X` (backend _payload.py), and older
+  // flows used `?open-settings=<section>` — both redirect instead of opening dialogs.
+  if (!isSettingsRoute) {
+    const legacyParams = new URLSearchParams(search);
+    if (legacyParams.get('open-notifications') === '1') {
+      return <Navigate to="/settings/notifications" replace />;
+    }
+    const legacySettingsSection = legacyParams.get('open-settings');
+    if (legacySettingsSection) {
+      return <Navigate to={`/settings/${legacySettingsSection === 'general' ? 'general' : 'account'}`} replace />;
+    }
+  }
+
   // Track last visited path per sidebar section.
   // Runs synchronously before Sidebar renders in the same cycle.
   if (/^\/(c|linsight)(\/|$)/.test(pathname)) lastSectionPaths.home = pathname;
@@ -432,6 +448,7 @@ export default function MainLayout() {
     if (/^\/(apps|app)(\/|$)/.test(pathname)) return 'apps_tab';
     if (/^\/channel(\/|$)/.test(pathname)) return 'channel_tab';
     if (pathname.startsWith('/knowledge')) return 'knowledge_tab';
+    if (isSettingsRoute) return 'settings_tab';
     return 'other';
   })();
 

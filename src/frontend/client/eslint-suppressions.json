@@ -102,7 +102,7 @@
   },
   "src/api/message.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 6
     }
   },
   "src/api/messageExport.ts": {
@@ -1419,20 +1419,6 @@
       "count": 1
     }
   },
-  "src/components/NotificationsDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 23
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    },
-    "no-console": {
-      "count": 8
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
-    }
-  },
   "src/components/PreviewFile/DocxFileViewer.tsx": {
     "no-useless-escape": {
       "count": 1
@@ -1685,17 +1671,6 @@
   "src/components/Voice/textToSpeechStore.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/approval/ApprovalCenterDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 16
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
     }
   },
   "src/components/icons/DocxIcon.tsx": {
