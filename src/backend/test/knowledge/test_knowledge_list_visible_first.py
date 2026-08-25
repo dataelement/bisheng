@@ -7,9 +7,9 @@ These tests cover the three branches added to
     its result is threaded into ``KnowledgeDao.aget_all_knowledge`` as
     ``id_in``; for ``action != "visible"`` the per-batch BatchCheck still
     narrows the result;
-  * super admin / tenant admin → the F048 runtime is not touched, ``id_in`` is
-    ``None`` (unfiltered), and every returned row carries the full
-    ``_KNOWLEDGE_LIST_ACTIONS`` set;
+  * super admin / tenant admin → the F048 runtime is not touched and ``id_in``
+    is ``None`` (unfiltered);
+  * every returned row carries only the already-proven ``visible`` marker;
   * empty visible set → an empty page is returned without hitting the DB.
 
 Plus a handler-level check that ``type=3`` (SPACE) is rejected with the new
@@ -31,10 +31,7 @@ from bisheng.knowledge.domain.models.knowledge import (
     KnowledgeTypeEnum,
 )
 from bisheng.knowledge.domain.services import knowledge_service as ks_mod
-from bisheng.knowledge.domain.services.knowledge_service import (
-    _KNOWLEDGE_LIST_ACTIONS,
-    KnowledgeService,
-)
+from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.permission.domain.schemas import (
     VisibilityEnumerationStatus,
     VisibleObjectEnumerationResult,
@@ -143,15 +140,48 @@ async def test_regular_user_threads_visible_ids_into_dao_and_runs_use_check(
     assert dao_calls, "DAO must be called for a non-empty visible set"
     assert dao_calls[0]["id_in"] == [100, 101, 102]
 
-    # Two action_map calls: the per-batch ``use`` check, then the surviving-row
-    # enrichment fetch that pulls the full ``_KNOWLEDGE_LIST_ACTIONS`` set.
-    assert action_map_calls == [["use"], _KNOWLEDGE_LIST_ACTIONS]
+    # Only the requested ``use`` filter is checked. The surviving page is not
+    # decorated with unrelated actions.
+    assert action_map_calls == [["use"]]
 
     # Only id=100 survived the ``use`` check; the row is decorated from the
-    # full action map.
+    # already-proven visible marker.
     assert [row.id for row in page.data] == [100]
-    assert page.data[0].actions == sorted({"use", "visible"})
+    assert page.data[0].actions == ["visible"]
     assert page.has_more is False
+
+
+@pytest.mark.asyncio
+async def test_regular_visible_list_does_not_load_page_action_map(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_enrichment(monkeypatch)
+
+    runtime = SimpleNamespace(list_visible_objects=AsyncMock(return_value=_visible("100")))
+    monkeypatch.setattr(ks_mod, "get_f048_runtime", AsyncMock(return_value=runtime))
+    monkeypatch.setattr(ks_mod, "resolve_permission_actor", AsyncMock(return_value=_actor()))
+    monkeypatch.setattr(
+        ks_mod.KnowledgeDao,
+        "aget_all_knowledge",
+        AsyncMock(return_value=[_knowledge(100)]),
+    )
+
+    with patch.object(
+        KnowledgeService.permission_service,
+        "get_knowledge_action_map_async",
+        new=AsyncMock(),
+    ) as action_map:
+        page = await KnowledgeService.get_knowledge(
+            request=None,
+            login_user=_User(),
+            knowledge_type=KnowledgeTypeEnum.NORMAL,
+            page_size=10,
+            action="visible",
+        )
+
+    action_map.assert_not_awaited()
+    assert [row.id for row in page.data] == [100]
+    assert page.data[0].actions == ["visible"]
 
 
 @pytest.mark.asyncio
@@ -196,7 +226,7 @@ async def test_regular_user_empty_visible_set_short_circuits_before_dao(
 
 @pytest.mark.parametrize("identity_kind", ["super_admin", "tenant_admin"])
 @pytest.mark.asyncio
-async def test_admin_bypass_skips_permission_runtime_and_grants_all_actions(
+async def test_admin_bypass_skips_permission_runtime_and_returns_visible_only(
     monkeypatch: pytest.MonkeyPatch,
     identity_kind: str,
 ) -> None:
@@ -245,10 +275,10 @@ async def test_admin_bypass_skips_permission_runtime_and_grants_all_actions(
     assert dao_calls, "DAO must still be scanned for the admin path"
     assert dao_calls[0]["id_in"] is None
 
-    # Every row carries the full action set.
+    # Admin list rows use the same minimal response shape as ordinary users.
     assert {row.id for row in page.data} == {200, 201}
     for row in page.data:
-        assert set(row.actions) == set(_KNOWLEDGE_LIST_ACTIONS)
+        assert row.actions == ["visible"]
 
 
 @pytest.mark.asyncio

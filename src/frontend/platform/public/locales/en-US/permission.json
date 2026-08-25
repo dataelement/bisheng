@@ -35,6 +35,10 @@
   },
   "comingSoon": "Coming Soon",
   "managePermission": "Permissions",
+  "knowledgeRowActions": {
+    "loading": "Loading available actions…",
+    "empty": "No available actions"
+  },
   "error": {
     "permissionDenied": "Permission denied",
     "checkFailed": "Permission check failed. Try again later.",

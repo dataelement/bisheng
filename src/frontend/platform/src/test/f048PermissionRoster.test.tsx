@@ -180,6 +180,49 @@ describe("F048 PermissionListTab", () => {
     expect(row).not.toHaveTextContent("folder:94661")
   })
 
+  it("keeps assignees outside the current user's grantable models read-only", async () => {
+    vi.mocked(getGrantablePermissionModelsApi).mockResolvedValue([
+      {
+        key: "editor",
+        name: "Editor",
+        level: 2,
+        active: true,
+      },
+    ])
+    vi.mocked(getResourcePermissionGrantsApi).mockResolvedValue({
+      data: [
+        {
+          ...departmentAssignee,
+          model: {
+            key: "owner",
+            name: "Owner",
+            level: 4,
+            active: true,
+          },
+        },
+      ],
+      page_size: 50,
+      has_more: false,
+      next_cursor: null,
+    })
+
+    render(
+      <PermissionListTab
+        resourceType="knowledge_file"
+        resourceId="file-1"
+        context={customContext}
+      />,
+    )
+
+    const ownerRow = await screen.findByTestId("permission-assignee-102")
+    await waitFor(() => {
+      expect(ownerRow).toHaveAttribute("data-editable", "false")
+    })
+    expect(screen.queryByLabelText("grant.model.102")).toBeNull()
+    expect(screen.queryByLabelText("grant.remove.102")).toBeNull()
+    expect(ownerRow).toHaveTextContent("Owner")
+  })
+
   it("requests only the current-user summary without roster permission", async () => {
     render(
       <PermissionListTab
