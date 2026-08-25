@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from bisheng.permission.application import business_authorization
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 
@@ -226,3 +227,38 @@ async def test_visible_batch_accepts_pre_resolved_actor(monkeypatch, counted) ->
 
     assert counted.resolutions == 3
     assert granted == {"1": True, "2": True, "3": True}
+
+
+async def test_verified_visible_batch_never_reenters_resource_registry(
+    monkeypatch,
+    counted,
+) -> None:
+    async def unexpected_registry():
+        raise AssertionError("verified targets must not reenter resource resolution")
+
+    monkeypatch.setattr(business_authorization, "get_f048_resource_registry", unexpected_registry)
+    actor = PermissionActor(user_id=7, current_tenant_id=1)
+    targets = tuple(
+        VerifiedPermissionTarget.from_business_service(
+            tenant_id=1,
+            resource_type="knowledge_file",
+            resource_id=str(resource_id),
+            resource_version=1,
+            context_version=f"file-{resource_id}-v1",
+            parent_type="knowledge_space",
+            parent_id="9",
+        )
+        for resource_id in (1, 2, 3)
+    )
+
+    granted = await business_authorization.batch_check_verified_business_visible(
+        actor=actor,
+        targets=targets,
+    )
+
+    assert counted.resolutions == 0
+    assert granted == {
+        ("knowledge_file", "1"): True,
+        ("knowledge_file", "2"): True,
+        ("knowledge_file", "3"): True,
+    }

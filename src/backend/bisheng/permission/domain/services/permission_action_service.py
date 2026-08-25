@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Protocol
@@ -58,6 +59,11 @@ class PermissionScopeFencePort(Protocol):
         self,
         target: VerifiedPermissionTarget,
     ) -> bool: ...
+
+    async def ensure_readable_batch(
+        self,
+        targets: tuple[VerifiedPermissionTarget, ...],
+    ) -> tuple[bool | PermissionPublishNotReadyError, ...]: ...
 
 
 class PermissionConsistencyMarkerPort(Protocol):
@@ -305,24 +311,104 @@ class F048PermissionService:
     ) -> tuple[bool, ...]:
         if len(targets) > MAX_BATCH_CHECKS:
             raise ValueError(f"BatchCheck accepts at most {MAX_BATCH_CHECKS} targets")
+        started_at = perf_counter()
+        catalog_elapsed_ms = 0.0
+        scope_fence_elapsed_ms = 0.0
+        consistency_elapsed_ms = 0.0
+        fga_elapsed_ms = 0.0
+        stale_target_count = 0
         results: list[bool | None] = [None] * len(targets)
         unresolved: list[tuple[int, VerifiedPermissionTarget]] = []
         consistency = None
+        tenant_targets = tuple(
+            (index, target)
+            for index, target in enumerate(targets)
+            if target.tenant_id == actor.current_tenant_id
+        )
         for index, target in enumerate(targets):
             if target.tenant_id != actor.current_tenant_id:
                 results[index] = False
-                continue
-            await self._catalog.ensure_runtime_ready()
-            try:
-                force_higher_consistency = bool(await self._scope_fence.ensure_readable(target))
-            except PermissionPublishNotReadyError as exc:
-                results[index] = False
-                self._handle_stale_projection(target, exc)
-                continue
-            target_consistency = await self._consistency(
-                target,
-                force_higher_consistency=force_higher_consistency,
+
+        def emit_batch_metric(status: str, *, allowed_count: int = 0) -> None:
+            emit_metric(
+                "permission",
+                event="batch_check_visible",
+                tenant_id=actor.current_tenant_id,
+                target_count=len(targets),
+                tenant_target_count=len(tenant_targets),
+                tenant_mismatch_count=len(targets) - len(tenant_targets),
+                stale_target_count=stale_target_count,
+                openfga_check_count=len(unresolved),
+                allowed_count=allowed_count,
+                higher_consistency=consistency == HIGHER_CONSISTENCY,
+                catalog_elapsed_ms=catalog_elapsed_ms,
+                scope_fence_elapsed_ms=scope_fence_elapsed_ms,
+                consistency_elapsed_ms=consistency_elapsed_ms,
+                fga_elapsed_ms=fga_elapsed_ms,
+                total_elapsed_ms=(perf_counter() - started_at) * 1000,
+                status=status,
             )
+
+        if tenant_targets:
+            catalog_started_at = perf_counter()
+            try:
+                await self._catalog.ensure_runtime_ready()
+            except Exception:
+                catalog_elapsed_ms = (perf_counter() - catalog_started_at) * 1000
+                emit_batch_metric("catalog_error")
+                raise
+            catalog_elapsed_ms = (perf_counter() - catalog_started_at) * 1000
+        fence_batch = getattr(type(self._scope_fence), "ensure_readable_batch", None)
+        fence_started_at = perf_counter()
+        try:
+            if tenant_targets and callable(fence_batch):
+                fence_results = await self._scope_fence.ensure_readable_batch(
+                    tuple(target for _, target in tenant_targets)
+                )
+            else:
+                fence_results = await asyncio.gather(
+                    *(self._scope_fence.ensure_readable(target) for _, target in tenant_targets),
+                    return_exceptions=True,
+                )
+        except Exception:
+            scope_fence_elapsed_ms = (perf_counter() - fence_started_at) * 1000
+            emit_batch_metric("scope_fence_error")
+            raise
+        scope_fence_elapsed_ms = (perf_counter() - fence_started_at) * 1000
+
+        consistency_inputs: list[tuple[int, VerifiedPermissionTarget, bool]] = []
+        for (index, target), fence_result in zip(tenant_targets, fence_results, strict=True):
+            if isinstance(fence_result, PermissionPublishNotReadyError):
+                results[index] = False
+                stale_target_count += 1
+                self._handle_stale_projection(target, fence_result)
+                continue
+            if isinstance(fence_result, BaseException):
+                emit_batch_metric("scope_fence_error")
+                raise fence_result
+            consistency_inputs.append((index, target, bool(fence_result)))
+
+        consistency_started_at = perf_counter()
+        try:
+            consistency_results = await asyncio.gather(
+                *(
+                    self._consistency(
+                        target,
+                        force_higher_consistency=force_higher_consistency,
+                    )
+                    for _, target, force_higher_consistency in consistency_inputs
+                )
+            )
+        except Exception:
+            consistency_elapsed_ms = (perf_counter() - consistency_started_at) * 1000
+            emit_batch_metric("consistency_error")
+            raise
+        consistency_elapsed_ms = (perf_counter() - consistency_started_at) * 1000
+        for (index, target, _), target_consistency in zip(
+            consistency_inputs,
+            consistency_results,
+            strict=True,
+        ):
             if target_consistency == HIGHER_CONSISTENCY:
                 consistency = HIGHER_CONSISTENCY
             unresolved.append((index, target))
@@ -336,14 +422,19 @@ class F048PermissionService:
                 }
                 for _, target in unresolved
             ]
+            fga_started_at = perf_counter()
             try:
                 resolved = await self._fga.batch_check(
                     checks,
                     consistency=consistency,
                 )
             except Exception as exc:
+                fga_elapsed_ms = (perf_counter() - fga_started_at) * 1000
+                emit_batch_metric("openfga_error")
                 raise PermissionFGAUnavailableError(exception=exc) from exc
+            fga_elapsed_ms = (perf_counter() - fga_started_at) * 1000
             if len(resolved) != len(unresolved):
+                emit_batch_metric("openfga_incomplete")
                 raise PermissionProjectionFailedError(msg="OpenFGA BatchCheck returned an incomplete result")
             for (index, _), allowed in zip(
                 unresolved,
@@ -351,7 +442,9 @@ class F048PermissionService:
                 strict=True,
             ):
                 results[index] = bool(allowed)
-        return tuple(bool(value) for value in results)
+        final_results = tuple(bool(value) for value in results)
+        emit_batch_metric("success", allowed_count=sum(final_results))
+        return final_results
 
     async def list_visible_objects(
         self,

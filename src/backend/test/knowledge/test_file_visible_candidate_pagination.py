@@ -11,6 +11,7 @@ from bisheng.common.cursor import decode_cursor
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 _SERVICE = "bisheng.knowledge.domain.services.knowledge_space_service"
@@ -98,6 +99,71 @@ async def test_service_reuses_permission_actor_across_single_checks() -> None:
     assert service._permission_actor_resolve_count == 1
     assert service._permission_actor_cache_hits == 1
     assert service._permission_actor_resolve_elapsed_ms >= 0
+
+
+async def test_candidate_batch_builds_verified_targets_from_existing_rows() -> None:
+    service = KnowledgeSpaceService(request=None, login_user=_User())
+    folder = _item(1, file_type=FileType.DIR.value)
+    file_row = _item(2)
+    actor = PermissionActor(user_id=41, current_tenant_id=7)
+    targets = (
+        VerifiedPermissionTarget.from_business_service(
+            tenant_id=7,
+            resource_type="folder",
+            resource_id="1",
+            resource_version=1,
+            context_version="folder-1-v1",
+            parent_type="knowledge_space",
+            parent_id="9",
+        ),
+        VerifiedPermissionTarget.from_business_service(
+            tenant_id=7,
+            resource_type="knowledge_file",
+            resource_id="2",
+            resource_version=1,
+            context_version="file-2-v1",
+            parent_type="knowledge_space",
+            parent_id="9",
+        ),
+    )
+    adapter = MagicMock()
+    adapter.resolve_permission_targets_from_rows = AsyncMock(return_value=targets)
+    verified_visible = AsyncMock(
+        return_value={
+            ("folder", "1"): False,
+            ("knowledge_file", "2"): True,
+        }
+    )
+    legacy_visible = AsyncMock(side_effect=AssertionError("verified rows must not resolve ids again"))
+    context = {
+        "permissions": {},
+        "verified_space": MagicMock(id=9, tenant_id=7),
+    }
+
+    with (
+        patch.object(service, "_permission_actor", new=AsyncMock(return_value=actor)),
+        patch.object(service, "_resource_adapter", new=AsyncMock(return_value=adapter)),
+        patch(f"{_SERVICE}.batch_check_verified_business_visible", new=verified_visible),
+        patch(f"{_SERVICE}.batch_check_business_visible", new=legacy_visible),
+    ):
+        result = await service._filter_visible_child_items(
+            [folder, file_row],
+            space_id=9,
+            context=context,
+        )
+
+    assert [row.id for row in result] == [2]
+    adapter.resolve_permission_targets_from_rows.assert_awaited_once_with(
+        rows=[folder, file_row],
+        knowledge=context["verified_space"],
+        actor=actor,
+        action="visible",
+    )
+    verified_visible.assert_awaited_once_with(actor=actor, targets=targets)
+    legacy_visible.assert_not_awaited()
+    assert context["performance"]["verified_target_count"] == 2
+    assert context["performance"]["target_build_elapsed_ms"] >= 0
+    assert context["performance"]["decision_elapsed_ms"] >= 0
 
 
 @pytest.mark.parametrize(

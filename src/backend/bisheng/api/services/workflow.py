@@ -419,6 +419,7 @@ class WorkFlowService(BaseService):
         flow_type: int | None = None,
         search_description: bool = False,
         action: str = "visible",
+        additional_actions: Sequence[str] = ("edit", "share"),
         ranking_user_id: int | None = None,
         cursor: Sequence | None = None,
     ) -> tuple[list[dict], bool, dict[str, frozenset[str]]]:
@@ -435,7 +436,7 @@ class WorkFlowService(BaseService):
         caller MUST strip them before serving the response.
         """
         normalized_page_size = max(int(page_size or 1), 1)
-        requested_actions = tuple(dict.fromkeys((action, "edit", "share")))
+        requested_actions = tuple(dict.fromkeys((action, *additional_actions)))
 
         visible: list[dict] = []
         visible_actions: dict[str, frozenset[str]] = {}
@@ -1137,7 +1138,8 @@ class WorkFlowService(BaseService):
         Regular-user candidates are first bounded by OpenFGA's visible-object
         enumeration, then narrowed to online apps NOT bound to any APPLICATION
         tag. The final per-batch ``visible`` check remains authoritative for
-        business validity while ``edit`` / ``share`` populate page actions.
+        business validity. Per-resource actions are resolved lazily by the
+        client instead of delaying the whole list response.
         Privileged actors keep the direct business-DB scan so they do not hit
         the visible-object enumeration capacity ceiling.
         """
@@ -1180,7 +1182,7 @@ class WorkFlowService(BaseService):
             )
             flow_ids_not_in = list({row.resource_id for rows in tagged_rows for row in rows})
 
-        page_items, has_more, permission_map = await cls._scan_visible_apps_cursor(
+        page_items, has_more, _ = await cls._scan_visible_apps_cursor(
             user=user,
             page_size=page_size,
             name=keyword,
@@ -1188,6 +1190,7 @@ class WorkFlowService(BaseService):
             id_list=visible_id_list,
             id_list_not_in=flow_ids_not_in,
             action="visible",
+            additional_actions=(),
             cursor=decoded,
         )
 
@@ -1198,7 +1201,6 @@ class WorkFlowService(BaseService):
 
         for one in page_items:
             one["logo"] = cls.get_logo_share_link(one["logo"])
-        cls._apply_page_can_share(user, page_items, permission_map)
 
         return PageInfiniteCursorData(
             data=page_items,

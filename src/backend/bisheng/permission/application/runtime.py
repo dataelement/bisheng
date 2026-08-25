@@ -17,6 +17,7 @@ from bisheng.common.errcode.permission import (
 )
 from bisheng.core.openfga.client import FGAClient
 from bisheng.permission.application.control_state import (
+    PermissionResourceSnapshot,
     RuntimeCatalogSnapshot,
     RuntimeModelSnapshot,
     SqlGrantMutationState,
@@ -240,6 +241,12 @@ class F048PermissionRuntime:
             resource_type=resource_type,
             resource_id=resource_id,
         )
+
+    async def get_permission_snapshots(
+        self,
+        resources: tuple[tuple[int, str, str], ...],
+    ) -> dict[tuple[int, str, str], PermissionResourceSnapshot]:
+        return await self._state.permission_snapshots(resources)
 
     async def authorize_created(
         self,

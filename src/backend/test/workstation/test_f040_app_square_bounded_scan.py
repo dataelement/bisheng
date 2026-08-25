@@ -43,6 +43,8 @@ def test_uncategorized_path_is_cursor_waterfall_without_sync_fetch_all():
     assert "return [], 0" not in source
     # Cursor scan, not the retired offset page scan.
     assert "_scan_visible_apps_cursor" in source
+    assert "additional_actions=()" in source
+    assert "_apply_page_can_share" not in source
     assert "decode_cursor" in source
     assert "encode_cursor" in source
     assert "PageInfiniteCursorData" in source
@@ -55,6 +57,7 @@ def test_cursor_scan_uses_keyset_batches_and_page_size_bounded_probe():
     assert "cursor=batch_cursor" in source
     assert "has_more = len(visible) > normalized_page_size" in source
     assert "requested_actions" in source
+    assert "additional_actions" in source
     assert "_application_action_map" in source
     assert '"edit"' in source
     assert '"share"' in source

@@ -165,7 +165,7 @@ async def _load_mode(
                 ResourcePermissionMode.resource_type == resource_type,
                 ResourcePermissionMode.resource_id == resource_id,
             )
-            return (await session.execute(statement)).scalars().first()
+            return (await session.exec(statement)).first()
 
 
 def _mode_payload(mode: ResourcePermissionMode) -> dict[str, Any]:
