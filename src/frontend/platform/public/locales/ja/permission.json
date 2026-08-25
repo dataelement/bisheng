@@ -35,6 +35,10 @@
   },
   "comingSoon": "近日公開",
   "managePermission": "権限管理",
+  "knowledgeRowActions": {
+    "loading": "利用可能な操作を読み込み中…",
+    "empty": "利用可能な操作はありません"
+  },
   "error": {
     "permissionDenied": "権限が不足しています",
     "checkFailed": "権限チェックに失敗しました。後でもう一度お試しください。",

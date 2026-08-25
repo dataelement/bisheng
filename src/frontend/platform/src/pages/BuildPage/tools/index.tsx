@@ -48,13 +48,11 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     // Permission management state
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
-    const toolIds = allData.map((el: any) => String(el.id));
-    const { actions } = useResourceActions('tool', toolIds, ['manage_permission']);
-    // Built-in tools have no per-resource permissions to manage: the server only
-    // recognises `visible` and `use` for them and rejects anything else. The
-    // actions hook waves admins through without asking, so the entry appeared and
-    // the dialog then failed on `grantable-models`.
     const isBuiltinTool = type === "";
+    const toolIds = isBuiltinTool ? [] : allData.map((el: any) => String(el.id));
+    const { actions } = useResourceActions('tool', toolIds, ['edit', 'delete', 'manage_permission']);
+    // Built-in tools expose no resource-level management actions. Their separate
+    // configuration entry is restricted to the global super admin below.
     const canManageTool = (id: string | number) =>
         !isBuiltinTool && hasResourceAction(actions, id, 'manage_permission');
 
@@ -88,14 +86,17 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                 return el.name + el.desc + param
             }).join("-") || ''}`
             return targetStr.toLowerCase().includes(keyword.trim().toLowerCase());
-        });
-    }, [keyword, type, allData]);
+        }).map((el) => ({
+            ...el,
+            write: isBuiltinTool
+                ? Boolean(user?.is_global_super)
+                : hasResourceAction(actions, el.id, 'edit'),
+            delete: !isBuiltinTool && hasResourceAction(actions, el.id, 'delete'),
+        }));
+    }, [actions, allData, isBuiltinTool, keyword, type, user?.is_global_super]);
 
     const hasSet = (name) => {
-        const canManageBuiltinTools = Boolean(
-            user?.is_global_super || user?.role === 'admin' || user?.is_child_admin
-        );
-        if (!canManageBuiltinTools) return false
+        if (!user?.is_global_super) return false
         return MANAGED_TOOLS.includes(name)
     }
 

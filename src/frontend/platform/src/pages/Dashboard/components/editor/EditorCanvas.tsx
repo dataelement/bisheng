@@ -48,11 +48,13 @@ export function EditorCanvas({ isLoading, isPreviewMode }: EditorCanvasProps) {
         queryFn: getDashboards,
         // enabled: isHovered // Only fetch when hovered
     })
-    const { permissions: dashboardPermissions } = useDashboardPermissions(
+    const { permissions: dashboardPermissions, privileged } = useDashboardPermissions(
         dashboards.map((dashboard) => String(dashboard.id)),
     )
-    const editableDashboards = dashboards.filter((dashboard) =>
-        dashboardPermissions[String(dashboard.id)]?.includes("edit"),
+    // Same rule as the editor gate: an admin is privileged with an empty map, so
+    // filtering on the map alone left the "copy to" menu empty for admins.
+    const editableDashboards = dashboards.filter(
+        (dashboard) => privileged || dashboardPermissions[String(dashboard.id)]?.includes("edit"),
     )
 
     const theme = currentDashboard?.style_config?.theme

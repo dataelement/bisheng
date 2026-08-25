@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { SourceBadge } from "./SourceBadge"
 import type { SubjectType } from "./types"
 
@@ -47,19 +48,6 @@ const SUBJECT_ICONS = {
 
 function createMutationIdempotencyKey(): string {
   return `grant-mutate-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function assigneeEditable(
-  assignee: PermissionGrantAssignee,
-  context: ResourcePermissionContext,
-): boolean {
-  return (
-    context.mode === "CUSTOM" &&
-    context.can_manage_permission &&
-    assignee.scope === "LOCAL" &&
-    assignee.editable &&
-    !assignee.protected
-  )
 }
 
 function getAvatarLabel(assignee: PermissionGrantAssignee): string {
@@ -104,7 +92,7 @@ function RosterRow({
 }: RosterRowProps) {
   const { t } = useTranslation("permission")
   const SubjectIcon = SUBJECT_ICONS[assignee.subject.type]
-  const editable = assigneeEditable(assignee, context)
+  const editable = canMutatePermissionAssignee(assignee, context, models)
   const displayName =
     assignee.subject.name ||
     `${assignee.subject.type}:${assignee.subject.id}`

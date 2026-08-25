@@ -306,6 +306,63 @@ class SqlMigrationRunStore:
                     )
         return await self._require_run(run_id)
 
+    async def arequest_source_reset(
+        self,
+        *,
+        run_id: int,
+        expected_version: int,
+    ) -> MigrationRunState:
+        """Discard a frozen pre-target source so the next migrate rescans it."""
+
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                async with session.begin():
+                    target_count = int(
+                        (
+                            await session.execute(
+                                select(func.count())
+                                .select_from(PermissionMigrationItem)
+                                .where(
+                                    PermissionMigrationItem.run_id == run_id,
+                                    PermissionMigrationItem.source_kind == "TARGET_TUPLE",
+                                )
+                            )
+                        ).scalar_one()
+                    )
+                    if target_count:
+                        raise PermissionMigrationBlockedError(msg="SOURCE_RESET_FOUND_TARGET_TUPLES")
+                    result = await session.execute(
+                        update(PermissionMigrationRun)
+                        .where(
+                            PermissionMigrationRun.id == run_id,
+                            PermissionMigrationRun.version == expected_version,
+                            PermissionMigrationRun.phase == "SOURCE_VALIDATING",
+                            PermissionMigrationRun.target_model_id.is_(None),
+                        )
+                        .values(
+                            status="BLOCKED",
+                            checkpoint="source-reset-requested",
+                            source_checksum=None,
+                            target_checksum=None,
+                            blocker_count=0,
+                            lock_token=None,
+                            lock_expires_at=None,
+                            version=expected_version + 1,
+                            update_time=func.now(),
+                        )
+                    )
+                    if not result.rowcount:
+                        raise PermissionMigrationBlockedError(
+                            msg="SOURCE_RESET_REQUIRES_PRE_TARGET_RUN",
+                        )
+                    await session.execute(
+                        delete(PermissionMigrationItem).where(
+                            PermissionMigrationItem.run_id == run_id,
+                            PermissionMigrationItem.source_kind != "TARGET_TUPLE",
+                        )
+                    )
+        return await self._require_run(run_id)
+
     async def aadvance(
         self,
         *,

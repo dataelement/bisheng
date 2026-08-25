@@ -106,6 +106,19 @@ class FakeCoordinator:
             },
         )()
 
+    async def reset_source(self, **kwargs):
+        self.calls.append(kwargs)
+        return type(
+            "Run",
+            (),
+            {
+                "id": 7,
+                "phase": "SOURCE_VALIDATING",
+                "status": "BLOCKED",
+                "checkpoint": "source-reset-requested",
+            },
+        )()
+
 
 class FakeVerifier:
     def __init__(self):
@@ -213,7 +226,7 @@ async def test_verify_only_reads_existing_formal_run_and_always_closes():
     args = cli.parse_args(["verify", "--run-id", "7"])
     exit_code = await cli.execute(
         args,
-        runtime_factory=lambda **kwargs: (runtime_run_ids.append(kwargs["run_id"]) or runtime),
+        runtime_factory=lambda **kwargs: runtime_run_ids.append(kwargs["run_id"]) or runtime,
         initialize_context=initialize_context,
         close_context=close_context,
         live_settings="live-settings",
@@ -258,6 +271,51 @@ async def test_migrate_resume_passes_the_existing_run_id():
     )
 
     assert coordinator.calls[0]["run_id"] == 9
+
+
+async def test_reset_source_requires_apply_and_calls_pre_target_reset():
+    with pytest.raises(SystemExit) as exc_info:
+        cli.parse_args(["reset-source", "--run-id", "7"])
+    assert exc_info.value.code == 2
+
+    coordinator = FakeCoordinator()
+
+    async def initialize_context(*, config):
+        return None
+
+    async def close_context():
+        return None
+
+    args = cli.parse_args(
+        [
+            "reset-source",
+            "--run-id",
+            "7",
+            "--lock-token",
+            "operator-reset",
+            "--apply",
+        ]
+    )
+    exit_code = await cli.execute(
+        args,
+        runtime_factory=lambda **_: FakeRuntime(
+            coordinator,
+            FakeVerifier(),
+            type("SourceClient", (), {"store_id": "store-live"})(),
+        ),
+        initialize_context=initialize_context,
+        close_context=close_context,
+        live_settings="live-settings",
+    )
+
+    assert exit_code == cli.EXIT_OK
+    assert coordinator.calls == [
+        {
+            "expected_store_id": "store-live",
+            "lock_token": "operator-reset",
+            "run_id": 7,
+        }
+    ]
 
 
 def test_runtime_resume_pins_durable_store_and_source_model():

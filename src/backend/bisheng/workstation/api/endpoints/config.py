@@ -27,6 +27,13 @@ async def get_config(request: Request, login_user=LoginUserDep):
     # follows whichever loader_provider is actually selected and configured.
     knowledge_conf = await bisheng_settings.async_get_knowledge()
     ret = ret.model_dump(exclude_unset=True) if ret else {}
+    # The admin curates this tool list, but each tool keeps its own resource
+    # permission, so only offer the ones this user may actually run. Task mode
+    # binds the same daily selection (see `_build_linsight_submit_payload`), so
+    # filtering here covers both modes. The admin-facing `/config/daily` is
+    # deliberately left unfiltered — that endpoint edits the curated list.
+    if ret.get("tools"):
+        ret["tools"] = await WorkStationService.afilter_tools_by_use_permission(ret["tools"], login_user)
     ret["linsightConfig"] = linsight_config.model_dump() if linsight_config else {}
     ret["enable_etl4lm"] = knowledge_conf.image_parser_enabled
     linsight_invitation_code = (await bisheng_settings.aget_all_config()).get("linsight_invitation_code", None)

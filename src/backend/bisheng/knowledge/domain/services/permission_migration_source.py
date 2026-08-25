@@ -19,6 +19,7 @@ from bisheng.common.models.space_channel_member import (
 from bisheng.core.context.tenant import bypass_tenant_filter
 from bisheng.core.database import get_async_db_session
 from bisheng.knowledge.domain.models.knowledge import (
+    AuthTypeEnum,
     Knowledge,
     KnowledgeState,
     KnowledgeTypeEnum,
@@ -53,6 +54,7 @@ class KnowledgeMigrationRow:
     parent_type: str | None = None
     parent_id: str | None = None
     creator_user_ids: tuple[int, ...] = ()
+    migrate_ordinary_grants: bool = True
     source_version: str = "1"
     migratable: bool = True
     skip_reason: str | None = None
@@ -204,6 +206,9 @@ class SqlKnowledgeMigrationRepository:
                 status=_enum_status(KnowledgeState, row.state),
                 owner_user_id=row.user_id,
                 creator_user_ids=tuple(sorted(creators.get(str(row.id), ()))),
+                migrate_ordinary_grants=(
+                    row.type != KnowledgeTypeEnum.SPACE.value or row.auth_type != AuthTypeEnum.PRIVATE
+                ),
                 source_version=_version(row.update_time),
             )
             for row in selected
@@ -301,6 +306,7 @@ class KnowledgePermissionMigrationSource:
                     parent_type=row.parent_type,
                     parent_id=row.parent_id,
                     creator_user_ids=row.creator_user_ids,
+                    migrate_ordinary_grants=row.migrate_ordinary_grants,
                     source_version=row.source_version,
                     migratable=row.migratable,
                     skip_reason=row.skip_reason,

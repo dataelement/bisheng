@@ -341,7 +341,13 @@ def map_legacy_tuples(
     retired: list[str] = []
     differences: list[TupleMappingDifference] = []
     seen_tuple_keys: set[str] = set()
-    matched_binding_keys: set[str] = set()
+    resource_by_key = {resource.key: resource for resource in resources}
+    private_resource_keys = {resource.key for resource in resources if not resource.migrate_ordinary_grants}
+    matched_binding_keys: set[str] = {
+        binding.binding_key
+        for binding in bindings
+        if f"{binding.resource_type}:{binding.resource_id}" in private_resource_keys
+    }
     deduplicated_count = 0
     try:
         department_parent_by_child = _department_parent_by_child(tuples)
@@ -367,6 +373,18 @@ def map_legacy_tuples(
             deduplicated_count += 1
             continue
         seen_tuple_keys.add(source.key)
+        resource = resource_by_key.get(source.object)
+        if resource is not None and not resource.migrate_ordinary_grants:
+            retired.append(source.key)
+            differences.append(
+                TupleMappingDifference(
+                    tuple_key=source.key,
+                    difference_type="PRIVATE_RESOURCE_GRANT_RETIRED",
+                    message="private resource keeps only its protected creator grant",
+                    severity="INFO",
+                )
+            )
+            continue
         if source.relation in PRESERVED_RELATIONS:
             preserved.append(source)
             continue
@@ -548,7 +566,12 @@ def map_legacy_tuples(
         )
 
         business_owner_id = resource.owner_user_id
-        if business_owner_id is not None and business_owner_id > 0 and business_owner_id != protected_user_id:
+        if (
+            resource.migrate_ordinary_grants
+            and business_owner_id is not None
+            and business_owner_id > 0
+            and business_owner_id != protected_user_id
+        ):
             ordinary_payload = {
                 "include_children": False,
                 "protected": False,

@@ -35,6 +35,10 @@
   },
   "comingSoon": "即将推出",
   "managePermission": "权限管理",
+  "knowledgeRowActions": {
+    "loading": "正在加载可用操作…",
+    "empty": "暂无可用操作"
+  },
   "error": {
     "permissionDenied": "权限不足，无法执行此操作",
     "checkFailed": "权限校验失败，请稍后重试",

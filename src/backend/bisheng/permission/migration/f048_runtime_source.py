@@ -8,7 +8,7 @@ from hashlib import sha256
 from typing import Any, Protocol
 
 from loguru import logger
-from sqlalchemy import func, inspect
+from sqlalchemy import and_, func, inspect, or_
 from sqlmodel import col, select
 
 from bisheng.common.models.config import Config
@@ -33,6 +33,7 @@ LEGACY_CONFIG_KEYS = (
     "permission_relation_models_v1",
     "permission_relation_model_bindings_v1",
 )
+FAILED_TUPLE_CANDIDATE_BATCH_SIZE = 100
 
 
 def _canonical_checksum(value: object) -> str:
@@ -85,30 +86,16 @@ class LiveMigrationSourceProvider:
         *,
         expected_store_id: str,
     ) -> SourceInventorySnapshot:
-        schema_ready = await self._schema_ready()
-        active_heartbeats = await self._active_heartbeats()
-        services_stopped = active_heartbeats == 0
+        environment = await self.aload_environment(expected_store_id=expected_store_id)
         preconditions_ready = (
-            schema_ready
-            and services_stopped
+            environment.schema_ready
+            and environment.services_stopped
             and bool(expected_store_id)
             and expected_store_id == self._actual_store_id
             and bool(self._source_model_id)
         )
         if not preconditions_ready:
-            marker = "not-scanned"
-            return SourceInventorySnapshot(
-                environment=MigrationEnvironmentFacts(
-                    schema_ready=schema_ready,
-                    services_stopped=services_stopped,
-                    active_heartbeats=active_heartbeats,
-                    expected_store_id=expected_store_id,
-                    actual_store_id=self._actual_store_id,
-                    source_model_id=self._source_model_id,
-                    source_watermark=marker,
-                    observed_watermark=marker,
-                )
-            )
+            return SourceInventorySnapshot(environment=environment)
 
         await self._dashboard_repository.abackfill_custom_dashboard_tenants()
         first = await self._load_sources()
@@ -131,6 +118,27 @@ class LiveMigrationSourceProvider:
             resources=first["resources"],
             tuples=first["tuples"],
             failed_tuples=first["failed_tuples"],
+        )
+
+    async def aload_environment(
+        self,
+        *,
+        expected_store_id: str,
+    ) -> MigrationEnvironmentFacts:
+        """Check resume gates without rescanning a source frozen in SQL."""
+
+        schema_ready = await self._schema_ready()
+        active_heartbeats = await self._active_heartbeats()
+        marker = "source-not-rescanned"
+        return MigrationEnvironmentFacts(
+            schema_ready=schema_ready,
+            services_stopped=active_heartbeats == 0,
+            active_heartbeats=active_heartbeats,
+            expected_store_id=expected_store_id,
+            actual_store_id=self._actual_store_id,
+            source_model_id=self._source_model_id,
+            source_watermark=marker,
+            observed_watermark=marker,
         )
 
     async def _schema_ready(self) -> bool:
@@ -179,15 +187,11 @@ class LiveMigrationSourceProvider:
 
         configs = await self._load_configs()
         tuples = await self._load_tuples(tuple(resources))
-        failed_tuples = await self._load_failed_tuples(
-            resources=tuple(resources),
-            tuples=tuples,
-        )
         return {
             "configs": configs,
             "resources": tuple(resources),
             "tuples": tuples,
-            "failed_tuples": failed_tuples,
+            "failed_tuples": (),
         }
 
     @staticmethod
@@ -248,6 +252,7 @@ class LiveMigrationSourceProvider:
         canonical_state: bool | None,
         resource_keys: set[str],
         store_tuples: set[tuple[str, str, str]],
+        binding_candidate: bool = False,
     ) -> str | None:
         if status.casefold() == "succeeded":
             return "SUCCEEDED"
@@ -267,6 +272,14 @@ class LiveMigrationSourceProvider:
             return "CANONICAL_IDENTITY_STATE"
         if error_category == "MODEL_VALIDATION_REJECTED":
             return "SOURCE_MODEL_REJECTED"
+        if (
+            binding_candidate
+            and normalized_action == "write"
+            and separator
+            and object_type in MIGRATED_RESOURCE_TYPES
+            and object_key in resource_keys
+        ):
+            return "BINDING_WRITE_INTENT"
         if separator and object_type in MIGRATED_RESOURCE_TYPES and object_key in resource_keys:
             return "RESOURCE_STATE_REBUILT"
         return None
@@ -280,44 +293,101 @@ class LiveMigrationSourceProvider:
         identities = tuple(sorted({(row.fga_user, row.relation, row.object) for row in rows}))
         return await self._identity_state_source.aresolve_expected_states(identities)
 
-    async def _load_failed_tuples(
+    async def aload_failed_tuples(
         self,
         *,
+        candidates: tuple[LegacyTupleSource, ...],
         resources: tuple[PermissionMigrationResourceDTO, ...],
         tuples: tuple[LegacyTupleSource, ...],
     ) -> tuple[LegacyFailedTupleSource, ...]:
-        with bypass_tenant_filter():
-            async with get_async_db_session() as session:
-                statement = select(FailedTuple).order_by(FailedTuple.id)
-                rows = list((await session.execute(statement)).scalars().all())
-        canonical_states = await self._canonical_identity_states(rows)
+        candidate_identities = tuple(sorted({(row.user, row.relation, row.object) for row in candidates}))
+        if not candidate_identities:
+            return ()
         resource_keys = {resource.key for resource in resources}
         store_tuples = {(row.user, row.relation, row.object) for row in tuples}
-        result: list[LegacyFailedTupleSource] = []
-        for row in rows:
-            tuple_identity = (row.fga_user, row.relation, row.object)
+        latest_by_identity: dict[tuple[str, str, str], FailedTuple] = {}
+        scanned_count = 0
+        resolved_count = 0
+        with bypass_tenant_filter():
+            async with get_async_db_session() as session:
+                for index in range(0, len(candidate_identities), FAILED_TUPLE_CANDIDATE_BATCH_SIZE):
+                    batch = candidate_identities[index : index + FAILED_TUPLE_CANDIDATE_BATCH_SIZE]
+                    candidate_filter = or_(
+                        *(
+                            and_(
+                                FailedTuple.fga_user == user,
+                                FailedTuple.relation == relation,
+                                FailedTuple.object == object_key,
+                            )
+                            for user, relation, object_key in batch
+                        )
+                    )
+                    latest_ids = (
+                        select(func.max(FailedTuple.id))
+                        .where(
+                            col(FailedTuple.status).in_(("pending", "dead")),
+                            candidate_filter,
+                        )
+                        .group_by(
+                            FailedTuple.fga_user,
+                            FailedTuple.relation,
+                            FailedTuple.object,
+                        )
+                    )
+                    statement = (
+                        select(FailedTuple)
+                        .where(col(FailedTuple.id).in_(latest_ids))
+                        .order_by(FailedTuple.id.desc())
+                    )
+                    rows = list((await session.execute(statement)).scalars().all())
+                    scanned_count += len(rows)
+                    for row in rows:
+                        tuple_identity = (row.fga_user, row.relation, row.object)
+                        latest_by_identity.setdefault(tuple_identity, row)
+
+        canonical_states = await self._canonical_identity_states(list(latest_by_identity.values()))
+        retained: list[LegacyFailedTupleSource] = []
+        for tuple_identity, row in sorted(latest_by_identity.items()):
             error_category = self._failed_tuple_error_category(row.error_message)
             canonical_state = canonical_states.get(tuple_identity)
-            result.append(
+            resolution = self._failed_tuple_resolution(
+                status=row.status,
+                action=row.action,
+                tuple_identity=tuple_identity,
+                error_category=error_category,
+                canonical_state=canonical_state,
+                resource_keys=resource_keys,
+                store_tuples=store_tuples,
+                binding_candidate=True,
+            )
+            if resolution not in {
+                None,
+                "BINDING_WRITE_INTENT",
+                "CANONICAL_IDENTITY_STATE",
+            }:
+                resolved_count += 1
+                continue
+            semantic_key = (*tuple_identity, row.action.casefold(), resolution, canonical_state)
+            locator_hash = _canonical_checksum(semantic_key)[:32]
+            retained.append(
                 LegacyFailedTupleSource(
-                    locator=f"failed_tuple:{row.id}",
+                    locator=f"failed_tuple:{locator_hash}",
                     status=row.status,
                     tuple_key="|".join(tuple_identity),
-                    resolution=self._failed_tuple_resolution(
-                        status=row.status,
-                        action=row.action,
-                        tuple_identity=tuple_identity,
-                        error_category=error_category,
-                        canonical_state=canonical_state,
-                        resource_keys=resource_keys,
-                        store_tuples=store_tuples,
-                    ),
+                    resolution=resolution,
                     action=row.action,
                     error_category=error_category,
                     canonical_state=canonical_state,
                 )
             )
-        return tuple(result)
+        logger.info(
+            "Loaded candidate failed_tuple migration facts: candidates={}, scanned={}, retained={}, resolved={}",
+            len(candidate_identities),
+            scanned_count,
+            len(retained),
+            resolved_count,
+        )
+        return tuple(retained)
 
     @staticmethod
     def _watermark(

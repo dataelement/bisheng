@@ -9,14 +9,15 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
   - name: clone
     image: alpine/git
     pull: if-not-exists
-    environment:
-      http_proxy:
-        from_secret: PROXY
-      https_proxy:
-        from_secret: PROXY
+    volumes:
+      - name: ssh-key
+        path: /root/.ssh
     commands:
+    # github.com:443 is being reset from this network, and the PROXY host lost
+    # its GitHub route as well, so clone over SSH (port 22) using the runner
+    # host's GitHub key instead of HTTPS.
     - git config --global core.compression 0
-    - git clone https://github.com/dataelement/bisheng.git .
+    - git clone git@github.com:dataelement/bisheng.git .
     - git checkout $DRONE_COMMIT
 
   - name: set poetry
@@ -171,6 +172,9 @@ volumes:
 - name: socket
   host:
     path: /var/run/docker.sock
+- name: ssh-key
+  host:
+    path: /root/.ssh
 
 
 ---
@@ -186,14 +190,15 @@ steps: # 定义流水线执行步骤，这些步骤将顺序执行
   - name: clone
     image: alpine/git
     pull: if-not-exists
-    environment:
-      http_proxy:
-        from_secret: PROXY
-      https_proxy:
-        from_secret: PROXY
+    volumes:
+      - name: ssh-key
+        path: /root/.ssh
     commands:
+    # github.com:443 is being reset from this network, and the PROXY host lost
+    # its GitHub route as well, so clone over SSH (port 22) using the runner
+    # host's GitHub key instead of HTTPS.
     - git config --global core.compression 0
-    - git clone https://github.com/dataelement/bisheng.git .
+    - git clone git@github.com:dataelement/bisheng.git .
     - git checkout $DRONE_COMMIT
 
   - name: set uv mirrors
@@ -314,6 +319,9 @@ volumes:
 - name: socket
   host:
     path: /var/run/docker.sock
+- name: ssh-key
+  host:
+    path: /root/.ssh
 - name: uv-cache
   host:
     path: /opt/drone/data/uv/

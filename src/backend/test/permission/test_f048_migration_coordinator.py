@@ -15,6 +15,7 @@ from bisheng.permission.migration.f048_coordinator import (
     F048MigrationCoordinator,
     MigrationRunRequest,
     MigrationRunState,
+    _failed_tuple_candidates,
     _legacy_models,
 )
 from bisheng.permission.migration.f048_source_inventory import (
@@ -106,15 +107,119 @@ def test_legacy_models_preserve_missing_permissions_explicit_semantics() -> None
     ]
 
 
+def test_failed_tuple_candidates_only_include_fully_specified_orphan_bindings() -> None:
+    base = _snapshot()
+    snapshot = replace(
+        base,
+        config_sources=(
+            LegacyConfigSource(
+                key="permission_relation_models_v1",
+                row_version="2",
+                raw_value=(
+                    '[{"id":"manager","name":"Manager","relation":"manager","permissions":[],"is_system":true}]'
+                ),
+            ),
+            LegacyConfigSource(
+                key="permission_relation_model_bindings_v1",
+                row_version="2",
+                raw_value=(
+                    '[{"binding_key":"missing-manager","tenant_id":7,'
+                    '"resource_type":"workflow","resource_id":"wf-1",'
+                    '"relation":"manager","model_id":"manager",'
+                    '"subject_type":"user","subject_id":"99"}]'
+                ),
+            ),
+        ),
+    )
+
+    assert _failed_tuple_candidates(snapshot) == (
+        LegacyTupleSource(
+            tenant_id=7,
+            user="user:99",
+            relation="manager",
+            object="workflow:wf-1",
+        ),
+    )
+
+
+async def test_candidate_failed_write_recovers_binding_without_scanning_unrelated_queue() -> None:
+    base = _snapshot()
+    snapshot = replace(
+        base,
+        config_sources=(
+            LegacyConfigSource(
+                key="permission_relation_models_v1",
+                row_version="2",
+                raw_value=(
+                    '[{"id":"manager","name":"Manager","relation":"manager","permissions":[],"is_system":true}]'
+                ),
+            ),
+            LegacyConfigSource(
+                key="permission_relation_model_bindings_v1",
+                row_version="2",
+                raw_value=(
+                    '[{"binding_key":"missing-manager","tenant_id":7,'
+                    '"resource_type":"workflow","resource_id":"wf-1",'
+                    '"relation":"manager","model_id":"manager",'
+                    '"subject_type":"user","subject_id":"99"}]'
+                ),
+            ),
+        ),
+        failed_tuples=(
+            LegacyFailedTupleSource(
+                locator="failed_tuple:binding-write",
+                status="dead",
+                tuple_key="user:99|manager|workflow:wf-1",
+                resolution="BINDING_WRITE_INTENT",
+                action="write",
+            ),
+        ),
+    )
+    provider = FakeSourceProvider(snapshot)
+    writer = FakeTargetWriter()
+    coordinator = F048MigrationCoordinator(
+        source_provider=provider,
+        run_store=FakeRunStore(),
+        model_publisher=FakeModelPublisher(),
+        target_writer=writer,
+    )
+
+    await coordinator.migrate(
+        expected_store_id="store-live",
+        lock_token="operator-binding-recovery",
+    )
+
+    assert provider.failed_tuple_candidates == (
+        LegacyTupleSource(
+            tenant_id=7,
+            user="user:99",
+            relation="manager",
+            object="workflow:wf-1",
+        ),
+    )
+    assert any(row["user"] == "user:99" and row["relation"] == "ordinary_assignee" for row in writer.written_tuples)
+
+
 class FakeSourceProvider:
     def __init__(self, snapshot):
         self.snapshot = snapshot
         self.calls = 0
+        self.environment_calls = 0
+
+    async def aload_environment(self, *, expected_store_id):
+        self.environment_calls += 1
+        assert expected_store_id == "store-live"
+        return self.snapshot.environment
 
     async def aload_snapshot(self, *, expected_store_id):
         self.calls += 1
         assert expected_store_id == "store-live"
         return self.snapshot
+
+    async def aload_failed_tuples(self, *, candidates, resources, tuples):
+        del resources, tuples
+        self.failed_tuple_candidates = candidates
+        return self.snapshot.failed_tuples
 
 
 class FakeRunStore:
@@ -134,6 +239,7 @@ class FakeRunStore:
         self.items = []
         self.advances = []
         self.source_resets = 0
+        self.explicit_source_resets = 0
 
     async def aget_run(self, run_id: int):
         assert run_id == 1
@@ -224,6 +330,25 @@ class FakeRunStore:
             checkpoint=None,
             source_watermark=source_watermark,
             source_checksum=None,
+            blocker_count=0,
+            version=self.run.version + 1,
+        )
+        return self.run
+
+    async def arequest_source_reset(self, *, run_id, expected_version):
+        assert run_id == 1
+        assert expected_version == self.run.version
+        assert self.run.phase == "SOURCE_VALIDATING"
+        assert self.run.target_model_id is None
+        self.items.clear()
+        self.explicit_source_resets += 1
+        self.run = replace(
+            self.run,
+            status="BLOCKED",
+            checkpoint="source-reset-requested",
+            source_checksum=None,
+            target_checksum=None,
+            lock_token=None,
             blocker_count=0,
             version=self.run.version + 1,
         )
@@ -351,7 +476,8 @@ async def test_formal_migration_compiles_one_single_slot_visible_aggregate() -> 
     visible = [
         row
         for row in writer.written_tuples
-        if row == {
+        if row
+        == {
             "user": "user:11",
             "relation": "visible",
             "object": "workflow:wf-1",
@@ -374,10 +500,7 @@ async def test_inactive_custom_binding_keeps_existing_visible_contribution() -> 
             LegacyConfigSource(
                 key="permission_relation_models_v1",
                 row_version="2",
-                raw_value=(
-                    '[{"id":"custom-inactive","name":"legacy",'
-                    '"permissions":["edit"],"active":false}]'
-                ),
+                raw_value=('[{"id":"custom-inactive","name":"legacy","permissions":["edit"],"active":false}]'),
             ),
             LegacyConfigSource(
                 key="permission_relation_model_bindings_v1",
@@ -390,7 +513,10 @@ async def test_inactive_custom_binding_keeps_existing_visible_contribution() -> 
                 ),
             ),
         ),
-        tuples=(*base.tuples, LegacyTupleSource(tenant_id=7, user="user:22", relation="editor", object="workflow:wf-1")),
+        tuples=(
+            *base.tuples,
+            LegacyTupleSource(tenant_id=7, user="user:22", relation="editor", object="workflow:wf-1"),
+        ),
     )
     writer = FakeTargetWriter()
     coordinator = F048MigrationCoordinator(
@@ -549,6 +675,60 @@ async def test_blocked_pre_target_run_refreshes_source_before_retry() -> None:
     assert store.source_resets == 1
 
 
+async def test_explicit_source_reset_is_limited_to_pre_target_source_phase() -> None:
+    store = FakeRunStore(phase="SOURCE_VALIDATING")
+    await store.aget_or_create(
+        MigrationRunRequest(
+            environment_fingerprint="environment",
+            store_id="store-live",
+            source_model_id="legacy-model",
+            source_watermark="wm-1",
+        )
+    )
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(_snapshot()),
+        run_store=store,
+        model_publisher=FakeModelPublisher(),
+        target_writer=FakeTargetWriter(),
+    )
+
+    reset = await coordinator.reset_source(
+        expected_store_id="store-live",
+        lock_token="operator-reset",
+        run_id=1,
+    )
+
+    assert reset.status == "BLOCKED"
+    assert reset.checkpoint == "source-reset-requested"
+    assert reset.source_checksum is None
+    assert store.explicit_source_resets == 1
+
+
+async def test_explicit_source_reset_rejects_a_published_target_model() -> None:
+    store = FakeRunStore(phase="MODEL_PUBLISHED")
+    await store.aget_or_create(
+        MigrationRunRequest(
+            environment_fingerprint="environment",
+            store_id="store-live",
+            source_model_id="legacy-model",
+            source_watermark="wm-1",
+        )
+    )
+    coordinator = F048MigrationCoordinator(
+        source_provider=FakeSourceProvider(_snapshot()),
+        run_store=store,
+        model_publisher=FakeModelPublisher(),
+        target_writer=FakeTargetWriter(),
+    )
+
+    with pytest.raises(PermissionMigrationBlockedError, match="SOURCE_RESET_REQUIRES_PRE_TARGET_RUN"):
+        await coordinator.reset_source(
+            expected_store_id="store-live",
+            lock_token="operator-reset",
+            run_id=1,
+        )
+
+
 async def test_source_blocker_stops_before_model_or_target_writes():
     publisher = FakeModelPublisher()
     writer = FakeTargetWriter()
@@ -701,8 +881,9 @@ async def test_resume_uses_frozen_source_after_partial_target_writes():
             source_watermark="wm-1",
         )
     )
+    provider = FakeSourceProvider(changed_live)
     coordinator = F048MigrationCoordinator(
-        source_provider=FakeSourceProvider(changed_live),
+        source_provider=provider,
         run_store=store,
         model_publisher=FakeModelPublisher(),
         target_writer=FakeTargetWriter(),
@@ -716,6 +897,8 @@ async def test_resume_uses_frozen_source_after_partial_target_writes():
 
     assert result.phase == "VERIFYING"
     assert any(event[0] == "write" for event in coordinator._target_writer.events)
+    assert provider.calls == 0
+    assert provider.environment_calls == 1
 
 
 async def test_concurrent_formal_run_fails_closed_on_sql_lease():

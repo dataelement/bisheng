@@ -453,6 +453,50 @@ def test_business_creator_becomes_protected_owner_and_divergent_owner_is_retaine
     )
 
 
+@pytest.mark.parametrize("resource_type", ["channel", "knowledge_space"])
+def test_private_resource_retires_legacy_grants_and_keeps_only_creator(resource_type):
+    resource = PermissionMigrationResourceDTO(
+        tenant_id=7,
+        resource_type=resource_type,
+        resource_id="private-1",
+        status="ACTIVE",
+        owner_user_id=12,
+        ownership_kind="USER",
+        source_locator=f"{resource_type}:private-1",
+        creator_user_ids=(11,),
+        migrate_ordinary_grants=False,
+    )
+    binding = LegacyGrantBinding(
+        binding_key="private-manager",
+        tenant_id=7,
+        resource_type=resource_type,
+        resource_id="private-1",
+        relation="manager",
+        model_source_key="manager",
+        subject_type="user",
+        subject_id="99",
+    )
+    source = _tuple(
+        user="user:99",
+        relation="manager",
+        object_key=f"{resource_type}:private-1",
+    )
+
+    result = map_legacy_tuples(
+        (source,),
+        (binding,),
+        model_key_by_source={"manager": "manager"},
+        resources=(resource,),
+    )
+
+    assert len(result.grants) == 1
+    assert result.grants[0].model_key == "owner"
+    assert [(row.subject_id, row.protected) for row in result.grants[0].assignees] == [("11", True)]
+    assert result.retired_tuple_keys == (source.key,)
+    assert result.blockers == ()
+    assert {row.difference_type for row in result.differences} == {"PRIVATE_RESOURCE_GRANT_RETIRED"}
+
+
 def test_non_f048_resource_tuple_remains_store_scoped_and_is_not_retired():
     source = LegacyTupleSource(
         tenant_id=None,
