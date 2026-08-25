@@ -13,11 +13,19 @@ interface AiModelSelectProps {
     options?: BsConfig["models"];
     value: number;
     disabled: boolean;
+    /** User-initiated selection (Select onValueChange). */
     onChange: (value: string) => void;
+    /**
+     * Programmatic value repairs from the effect below (invalid/ mismatched
+     * current value). Falls back to onChange when not provided. Parents that
+     * track "manual vs default" selections should pass this so auto-repairs
+     * are not mistaken for a user pick.
+     */
+    onAutoChange?: (value: string) => void;
 }
 
 const AiModelSelect = memo(
-    ({ options, value, disabled, onChange }: AiModelSelectProps) => {
+    ({ options, value, disabled, onChange, onAutoChange }: AiModelSelectProps) => {
         // Dedup by model id — multiple LLM servers can expose the same model,
         // which otherwise produces duplicate entries in the dropdown.
         const uniqueOptions = useMemo(() => {
@@ -47,15 +55,18 @@ const AiModelSelect = memo(
         // Auto-select first option when current value is invalid
         useEffect(() => {
             if (uniqueOptions.length === 0) return;
+            const repair = onAutoChange ?? onChange;
             const hasCurrent = uniqueOptions.find(
                 (opt) => String(opt.id) === String(value)
             );
             if (!hasCurrent) {
                 // Spec: default falls back to the "latest" configured model,
                 // which is the last entry in the admin-ordered list.
-                onChange(String(uniqueOptions[uniqueOptions.length - 1].id));
-            } else {
-                onChange(hasCurrent.id);
+                repair(String(uniqueOptions[uniqueOptions.length - 1].id));
+            } else if (String(hasCurrent.id) !== String(value)) {
+                // Type/normalization fix only — never fire for an exact match,
+                // otherwise a mere mount would look like a user selection.
+                repair(String(hasCurrent.id));
             }
         }, [uniqueOptions, value]);
 

@@ -260,7 +260,7 @@ export function FileAiDock({ spaceId, fileId }: FileAiDockProps) {
         disabled: !modelOptions?.length,
         onChange: (val) => {
             const m = modelOptions?.find((x) => x.id === val);
-            setChatModel({ id: Number(val), name: m?.displayName || "" });
+            setChatModel({ id: Number(val), name: m?.displayName || "", manual: true, mode: 'daily' });
         },
     };
 
