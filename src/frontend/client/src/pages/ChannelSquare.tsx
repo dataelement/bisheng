@@ -1,8 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState, type UIEvent } from "react";
-import { Search } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { Outlined } from "bisheng-icons";
-import { Input } from "~/components/ui/Input";
+import { SearchInput } from "@bisheng/ui";
 import { ChannelSquareCard } from "./ChannelSquareCard";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -316,21 +315,14 @@ function ChannelSquare({
         onScroll={handleListScroll}
       >
         <div className={cn("mx-auto mb-6 mt-6 w-full max-w-[480px]", isH5 && "px-4")}>
-          <div className="relative w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
-            <Input
-              type="text"
-              placeholder={tSearchPlaceholder}
-              value={searchQuery}
-              onChange={handleSearch}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  // 回车触发，当前为实时搜索，保留该交互语义
-                }
-              }}
-              className="pl-9 h-8 text-[12px] rounded-md bg-white border-border-base focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
-            />
-          </div>
+          {/* Spec search field (@bisheng/ui): magnifier prefix, Enter is a no-op
+              here because the filter is realtime via onChange. */}
+          <SearchInput
+            placeholder={tSearchPlaceholder}
+            value={searchQuery}
+            onChange={handleSearch}
+            clearLabel={localize("com_ui_clear")}
+          />
         </div>
         <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 pb-4 pt-0">
 

@@ -397,7 +397,7 @@ export function FileListRow({
                         onBlur={handleRenameSubmit}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="h-7 w-full rounded border border-[#DDDDDD] bg-white px-2 text-sm font-normal shadow-[0_0_0_2px_#F1F5F9] outline-none"
+                        className="h-7 w-full rounded border border-border-deep bg-white px-2 text-sm font-normal shadow-focus outline-none"
                     />
                 ) : (
                     <>

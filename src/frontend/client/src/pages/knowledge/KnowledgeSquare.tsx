@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CompositionEvent } from "react";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
-import { Input } from "~/components/ui/Input";
+import { SearchInput } from "@bisheng/ui";
 import { Button } from "~/components/ui/Button";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
@@ -281,21 +281,18 @@ export default function KnowledgeSquare({
                 // Without it, the global :not(.scrollbar-os) rule forces an always-present bar.
                 className="flex-1 flex flex-col overflow-y-auto scrollbar-os bg-white"
             >
-                {/* Outer holds width/centering + mobile side padding; inner `relative` anchors
-                    the search icon so it stays aligned with the input after the padding inset. */}
+                {/* Outer holds width/centering + mobile side padding. */}
                 <div className="mx-auto mb-1 mt-6 w-full max-w-[480px] max-[767px]:px-4">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#8B8FA8] pointer-events-none" />
-                        <Input
-                            type="text"
-                            placeholder={tSearchPlaceholder}
-                            value={searchQuery}
-                            onChange={handleSearch}
-                            onCompositionStart={handleSearchCompositionStart}
-                            onCompositionEnd={handleSearchCompositionEnd}
-                            className="pl-9 h-8 text-[12px] rounded-md bg-white border-border-base focus:border-[#DDDDDD] focus:ring-2 focus:ring-[#F1F5F9]"
-                        />
-                    </div>
+                    {/* Spec search field (@bisheng/ui) — realtime filter via
+                        onChange; composition handlers pass through untouched. */}
+                    <SearchInput
+                        placeholder={tSearchPlaceholder}
+                        value={searchQuery}
+                        onChange={handleSearch}
+                        onCompositionStart={handleSearchCompositionStart}
+                        onCompositionEnd={handleSearchCompositionEnd}
+                        clearLabel={localize("com_ui_clear")}
+                    />
                 </div>
 
                 <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 py-4">

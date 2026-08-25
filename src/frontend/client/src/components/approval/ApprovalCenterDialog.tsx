@@ -553,7 +553,7 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
                       onChange={(e) => setDecisionComment(e.target.value)}
                       placeholder={localize("com_approval_decision_comment_placeholder")}
                       rows={2}
-                      className="w-full resize-none rounded-lg border border-border-base px-3 py-2 text-[13px] text-text-primary placeholder:text-text-4 outline-none transition-[border-color,box-shadow] focus:border-[#DDDDDD] focus:shadow-[0_0_0_2px_#F1F5F9]"
+                      className="w-full resize-none rounded-lg border border-border-base px-3 py-2 text-[13px] text-text-primary placeholder:text-text-4 outline-none transition-[border-color,box-shadow] focus:border-border-deep focus:shadow-focus"
                     />
                   )}
                   <div className="flex items-center justify-end gap-3">

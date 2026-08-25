@@ -9,12 +9,11 @@
  *    title never renders without rows underneath it.
  */
 import { Loader2 } from "lucide-react";
-import { Outlined } from "bisheng-icons";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { DropdownMenuItem, Input } from "~/components/ui";
+import { DropdownMenuItem } from "~/components/ui";
 import { Checkbox } from "~/components/ui/Checkbox";
-import { StateView } from "@bisheng/ui";
-import { useScrollRevealRef } from "~/hooks";
+import { SearchInput, StateView } from "@bisheng/ui";
+import { useLocalize, useScrollRevealRef } from "~/hooks";
 import { cn } from "~/utils";
 import type { KnowledgeItem } from "./knowledgeTypes";
 
@@ -64,6 +63,7 @@ export const KnowledgeListPanel = ({
   emptyText,
   freezeHeightOnFilter = false,
 }: KnowledgeListPanelProps) => {
+  const localize = useLocalize();
   const listScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
   // Direct ref to the scroll container so we can read scroll metrics for the
   // edge-shadow indicators (useScrollRevealRef is callback-only and only
@@ -126,18 +126,20 @@ export const KnowledgeListPanel = ({
     // gap-2: 8px between the search box and the list below it, so the first row
     // doesn't crowd the input's bottom border (matches the skill panel).
     <div className="flex flex-col gap-2 min-h-0 flex-1">
-      {/* 搜索框 */}
-      <div className="relative shrink-0">
-        {/* top nudged 1px past centre: the magnifier's ring sits above the glyph's
-            own box, so a mathematically centred icon reads high next to the text. */}
-        <Outlined.Search size={14} className="absolute left-3 top-[calc(50%+1px)] -translate-y-1/2 text-slate-400" />
-        <Input
-          className="h-[28px] py-0 text-[12px] bg-white border border-border-base rounded-lg pl-8 placeholder:font-normal placeholder:text-slate-400 focus-visible:border-[#DDDDDD] focus-visible:shadow-[0_0_0_2px_#F1F5F9] focus-visible:ring-0"
+      {/* 搜索框 — spec SearchInput. stopPropagation lives on the wrapper so a
+          click ANYWHERE in the shell (magnifier, padding, clear) stays out of
+          the Radix menu's type-ahead / close logic, not just clicks on the
+          <input> itself. */}
+      <div
+        className="shrink-0"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <SearchInput
           placeholder={placeholder}
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
+          clearLabel={localize("com_ui_clear")}
         />
       </div>
 
