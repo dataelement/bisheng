@@ -64,6 +64,7 @@ export default function WorkbenchModel({ onBack }) {
     const [form, setForm] = useState<any>({
         sourceModelId: null,
         linsightDefaultModelId: null,
+        chatDefaultModelId: null,
         asrModelId: null,
         ttsModelId: null,
         knowledgeSpaceLlmId: null,
@@ -90,7 +91,7 @@ export default function WorkbenchModel({ onBack }) {
     };
 
     const submitConfig = async () => {
-        const { linsightDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
+        const { linsightDefaultModelId, chatDefaultModelId, sourceModelId, asrModelId, ttsModelId, chatTitleLlmId, models } = form;
         setSaveLoad(true);
         try {
             const data = {
@@ -100,6 +101,8 @@ export default function WorkbenchModel({ onBack }) {
                 embedding_model: { id: String(sourceModelId) },
                 // Linsight default executor model: one of the workbench chat models' id.
                 linsight_default_model_id: linsightDefaultModelId ? String(linsightDefaultModelId) : null,
+                // Daily-mode default model: independent sibling of the Linsight default.
+                chat_default_model_id: chatDefaultModelId ? String(chatDefaultModelId) : null,
                 asr_model: asrModelId ? { id: String(asrModelId) } : null, // 支持空值
                 tts_model: ttsModelId ? { id: String(ttsModelId) } : null, // 支持空值
                 // “应用会话标题生成模型”
@@ -115,6 +118,7 @@ export default function WorkbenchModel({ onBack }) {
             setForm({
                 sourceModelId: newConfig?.embedding_model?.id || null,
                 linsightDefaultModelId: newConfig?.linsight_default_model_id || null,
+                chatDefaultModelId: newConfig?.chat_default_model_id || null,
                 asrModelId: newConfig?.asr_model?.id || null,
                 ttsModelId: newConfig?.tts_model?.id || null,
                 chatTitleLlmId: newConfig?.chat_title_llm?.id || null,
@@ -125,6 +129,7 @@ export default function WorkbenchModel({ onBack }) {
             lastSaveFormDataRef.current = {
                 embedding_model: { id: newConfig?.embedding_model?.id },
                 linsight_default_model_id: newConfig?.linsight_default_model_id || null,
+                chat_default_model_id: newConfig?.chat_default_model_id || null,
                 abstract_prompt: newConfig?.abstract_prompt || defalutPrompt,
                 asr_model: { id: newConfig?.asr_model?.id },
                 tts_model: { id: newConfig?.tts_model?.id },
@@ -197,6 +202,7 @@ export default function WorkbenchModel({ onBack }) {
             setForm({
                 sourceModelId: linsightConfig.embedding_model?.id || null,
                 linsightDefaultModelId: linsightConfig.linsight_default_model_id || null,
+                chatDefaultModelId: linsightConfig.chat_default_model_id || null,
                 asrModelId: linsightConfig.asr_model?.id || null,
                 ttsModelId: linsightConfig.tts_model?.id || null,
                 chatTitleLlmId: linsightConfig.chat_title_llm?.id || null,
@@ -207,6 +213,7 @@ export default function WorkbenchModel({ onBack }) {
             lastSaveFormDataRef.current = {
                 embedding_model: { id: linsightConfig.embedding_model?.id },
                 linsight_default_model_id: linsightConfig.linsight_default_model_id || null,
+                chat_default_model_id: linsightConfig.chat_default_model_id || null,
                 abstract_prompt: linsightConfig.abstract_prompt || defalutPrompt,
                 asr_model: { id: linsightConfig.asr_model?.id },
                 tts_model: { id: linsightConfig.tts_model?.id },
@@ -227,7 +234,7 @@ export default function WorkbenchModel({ onBack }) {
     const inheritedFromRoot = !!linsightConfig?.inherited_from_root;
     const fallbackBlocked = !!linsightConfig?.fallback_blocked;
     return (
-        <div className="max-w-[720px] mx-auto gap-y-4 flex flex-col mt-16 relative">
+        <div className="max-w-[880px] mx-auto gap-y-4 flex flex-col mt-16 relative">
             <FallbackBlockedBanner visible={fallbackBlocked} />
             {inheritedFromRoot && (
                 <div className="-mb-2 text-xs text-muted-foreground flex items-center">
@@ -243,6 +250,8 @@ export default function WorkbenchModel({ onBack }) {
                     error={''}
                     linsightDefaultModelId={form.linsightDefaultModelId}
                     onLinsightDefaultChange={(id) => setForm((prev) => ({ ...prev, linsightDefaultModelId: id }))}
+                    chatDefaultModelId={form.chatDefaultModelId}
+                    onChatDefaultChange={(id) => setForm((prev) => ({ ...prev, chatDefaultModelId: id }))}
                     onAdd={() => setForm((prev) => ({
                         ...prev,
                         models: [...prev.models, { key: generateUUID(4), id: '', name: '', displayName: '', description: '', visual: false }],
@@ -253,10 +262,15 @@ export default function WorkbenchModel({ onBack }) {
                         const linsightDefaultModelId = removed?.id && removed.id === prev.linsightDefaultModelId
                             ? null
                             : prev.linsightDefaultModelId;
+                        // Same for the daily-mode default.
+                        const chatDefaultModelId = removed?.id && String(removed.id) === String(prev.chatDefaultModelId ?? '')
+                            ? null
+                            : prev.chatDefaultModelId;
                         return {
                             ...prev,
                             models: prev.models.filter((_, i) => i !== index),
                             linsightDefaultModelId,
+                            chatDefaultModelId,
                         };
                     })}
                     onModelChange={(index, id) => setForm((prev) => ({
@@ -340,6 +354,7 @@ export function useLinsightConfig() {
                 embedding_model: null,
                 abstract_prompt: defalutPrompt,
                 linsight_default_model_id: null,
+                chat_default_model_id: null,
                 asr_model: null,
                 tts_model: null,
                 knowledge_space_llm: null,
