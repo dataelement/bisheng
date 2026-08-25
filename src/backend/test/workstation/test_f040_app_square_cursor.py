@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import copy
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -49,6 +50,7 @@ class _FakeFlowDao:
     def __init__(self, rows: list[dict]):
         self.rows = rows
         self.cursors: list = []
+        self.id_lists: list[list[str] | None] = []
 
     async def aget_all_apps(
         self,
@@ -65,25 +67,29 @@ class _FakeFlowDao:
         ranking_user_id=None,
     ):
         self.cursors.append(cursor)
+        self.id_lists.append(id_list)
+        rows = [
+            row
+            for row in self.rows
+            if (not id_list or str(row["id"]) in {str(value) for value in id_list})
+            and (not id_list_not_in or str(row["id"]) not in {str(value) for value in id_list_not_in})
+        ]
         start = 0
         if cursor is not None:
             cut, cid = cursor[0], cursor[-1]
-            for i, row in enumerate(self.rows):
+            for i, row in enumerate(rows):
                 ut = row["update_time"]
                 ut_match = ut == cut or (hasattr(ut, "isoformat") and ut.isoformat() == cut)
                 if ut_match and str(row["id"]) == str(cid):
                     start = i + 1
                     break
-        window = self.rows[start : start + limit]
-        has_more = (start + limit) < len(self.rows)
+        window = rows[start : start + limit]
+        has_more = (start + limit) < len(rows)
         return [copy.deepcopy(row) for row in window], has_more
 
 
 async def _fake_action_map(user, data, actions):
-    return {
-        str(item["id"]): (frozenset(actions) if str(item["id"]) in _VISIBLE_IDS else frozenset())
-        for item in data
-    }
+    return {str(item["id"]): (frozenset(actions) if str(item["id"]) in _VISIBLE_IDS else frozenset()) for item in data}
 
 
 @pytest.mark.asyncio
@@ -126,10 +132,18 @@ async def test_cursor_scan_resumes_after_cursor_without_overlap_or_gaps():
 async def test_uncategorized_envelope_roundtrips_its_own_next_cursor():
     fake = _FakeFlowDao(_rows(10))
     user = MagicMock()
+    actor = SimpleNamespace(
+        super_admin=False,
+        current_tenant_id=25,
+        tenant_admin_tenant_ids=frozenset(),
+    )
+    collect_visible = AsyncMock(return_value=sorted(_VISIBLE_IDS))
 
     with (
         patch.object(wf.FlowDao, "aget_all_apps", new=fake.aget_all_apps),
         patch.object(wf, "_APP_COMPAT_PAGE_SCAN_BATCH_SIZE", 3),
+        patch.object(wf, "resolve_permission_actor", new=AsyncMock(return_value=actor)),
+        patch.object(WorkFlowService, "_collect_visible_app_ids", new=collect_visible),
         patch.object(WorkFlowService, "_application_action_map", new=AsyncMock(side_effect=_fake_action_map)),
         patch.object(wf.TagDao, "asearch_tags", new=AsyncMock(return_value=[])),
         patch.object(WorkFlowService, "get_logo_share_link", side_effect=lambda logo: logo),
@@ -141,10 +155,61 @@ async def test_uncategorized_envelope_roundtrips_its_own_next_cursor():
         # can_share derived from the (visible/edit/share) action map.
         assert all(d["can_share"] is True for d in env1.data)
 
-        env2 = await WorkFlowService.get_uncategorized_flows_envelope(
-            user, cursor=env1.next_cursor, page_size=3
-        )
+        env2 = await WorkFlowService.get_uncategorized_flows_envelope(user, cursor=env1.next_cursor, page_size=3)
         assert [d["id"] for d in env2.data] == ["5", "7", "8"]
+
+    collect_visible.assert_has_awaits([call(actor, flow_type=None), call(actor, flow_type=None)])
+    assert fake.id_lists
+    assert all(id_list == sorted(_VISIBLE_IDS) for id_list in fake.id_lists)
+
+
+@pytest.mark.asyncio
+async def test_uncategorized_empty_visible_ids_short_circuits_before_business_queries():
+    user = MagicMock()
+    actor = SimpleNamespace(
+        super_admin=False,
+        current_tenant_id=25,
+        tenant_admin_tenant_ids=frozenset(),
+    )
+    search_tags = AsyncMock()
+    scan = AsyncMock()
+
+    with (
+        patch.object(wf, "resolve_permission_actor", new=AsyncMock(return_value=actor)),
+        patch.object(WorkFlowService, "_collect_visible_app_ids", new=AsyncMock(return_value=[])),
+        patch.object(wf.TagDao, "asearch_tags", new=search_tags),
+        patch.object(WorkFlowService, "_scan_visible_apps_cursor", new=scan),
+    ):
+        result = await WorkFlowService.get_uncategorized_flows_envelope(user, page_size=20)
+
+    assert result.data == []
+    assert result.has_more is False
+    assert result.next_cursor is None
+    search_tags.assert_not_awaited()
+    scan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_uncategorized_admin_skips_visible_id_enumeration():
+    user = MagicMock()
+    actor = SimpleNamespace(
+        super_admin=True,
+        current_tenant_id=1,
+        tenant_admin_tenant_ids=frozenset(),
+    )
+    collect_visible = AsyncMock()
+    scan = AsyncMock(return_value=([], False, {}))
+
+    with (
+        patch.object(wf, "resolve_permission_actor", new=AsyncMock(return_value=actor)),
+        patch.object(WorkFlowService, "_collect_visible_app_ids", new=collect_visible),
+        patch.object(wf.TagDao, "asearch_tags", new=AsyncMock(return_value=[])),
+        patch.object(WorkFlowService, "_scan_visible_apps_cursor", new=scan),
+    ):
+        await WorkFlowService.get_uncategorized_flows_envelope(user, page_size=20)
+
+    collect_visible.assert_not_awaited()
+    assert scan.await_args.kwargs["id_list"] is None
 
 
 @pytest.mark.asyncio
