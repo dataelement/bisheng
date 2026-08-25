@@ -1,7 +1,7 @@
 import { toast } from "@/components/bs-ui/toast/use-toast"
 import { userContext } from "@/contexts/userContext"
 import { getMyResourcePermissionsApi } from "@/controllers/API/permission"
-import { useContext, useEffect, useRef, useState } from "react"
+import { useCallback, useContext, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { ResourceType } from "./types"
 
@@ -92,6 +92,117 @@ export function hasResourceAction(
   action: string,
 ): boolean {
   return actions[String(id)]?.includes(action) ?? false
+}
+
+interface LazyResourceActionLoadResult {
+  actions: string[]
+  hasError: boolean
+}
+
+interface LazyResourceActionsResult {
+  actions: Record<string, string[]>
+  errors: Record<string, boolean>
+  loading: Record<string, boolean>
+  load: (resourceId: string) => Promise<LazyResourceActionLoadResult>
+}
+
+interface LazyResourceActionsState {
+  scopeKey: string
+  actions: Record<string, string[]>
+  errors: Record<string, boolean>
+  loading: Record<string, boolean>
+}
+
+function emptyLazyResourceActionsState(scopeKey: string): LazyResourceActionsState {
+  return { scopeKey, actions: {}, errors: {}, loading: {} }
+}
+
+export function useLazyResourceActions(
+  resourceType: ResourceType,
+  requestedActions: readonly string[],
+): LazyResourceActionsResult {
+  const { user } = useContext(userContext)
+  const userId = user?.user_id == null ? "" : String(user.user_id)
+  const requestedActionsKey = requestedActions.join("\u0000")
+  const scopeKey = JSON.stringify([userId, resourceType, requestedActionsKey])
+  const [state, setState] = useState<LazyResourceActionsState>(() =>
+    emptyLazyResourceActionsState(scopeKey))
+  const scopeRef = useRef(scopeKey)
+  scopeRef.current = scopeKey
+
+  const load = useCallback(async (
+    resourceId: string,
+  ): Promise<LazyResourceActionLoadResult> => {
+    const requestScope = scopeKey
+    if (!userId || !resourceId) {
+      if (scopeRef.current === requestScope && resourceId) {
+        setState((current) => {
+          const scoped = current.scopeKey === requestScope
+            ? current
+            : emptyLazyResourceActionsState(requestScope)
+          return {
+            ...scoped,
+            errors: { ...scoped.errors, [resourceId]: true },
+          }
+        })
+      }
+      return { actions: [], hasError: true }
+    }
+
+    setState((current) => {
+      const scoped = current.scopeKey === requestScope
+        ? current
+        : emptyLazyResourceActionsState(requestScope)
+      return {
+        ...scoped,
+        errors: { ...scoped.errors, [resourceId]: false },
+        loading: { ...scoped.loading, [resourceId]: true },
+      }
+    })
+    try {
+      const actionFilter = new Set(
+        requestedActionsKey ? requestedActionsKey.split("\u0000") : [],
+      )
+      const allowed = (await getResourceActionSet(
+        userId,
+        resourceType,
+        resourceId,
+      )).filter((action) => actionFilter.has(action))
+      if (scopeRef.current === requestScope) {
+        setState((current) => current.scopeKey === requestScope ? {
+          ...current,
+          actions: { ...current.actions, [resourceId]: allowed },
+        } : current)
+      }
+      return { actions: allowed, hasError: false }
+    } catch {
+      if (scopeRef.current === requestScope) {
+        setState((current) => current.scopeKey === requestScope ? {
+          ...current,
+          actions: { ...current.actions, [resourceId]: [] },
+          errors: { ...current.errors, [resourceId]: true },
+        } : current)
+      }
+      return { actions: [], hasError: true }
+    } finally {
+      if (scopeRef.current === requestScope) {
+        setState((current) => current.scopeKey === requestScope ? {
+          ...current,
+          loading: { ...current.loading, [resourceId]: false },
+        } : current)
+      }
+    }
+  }, [requestedActionsKey, resourceType, scopeKey, userId])
+
+  if (state.scopeKey !== scopeKey) {
+    return { actions: {}, errors: {}, loading: {}, load }
+  }
+  return {
+    actions: state.actions,
+    errors: state.errors,
+    loading: state.loading,
+    load,
+  }
 }
 
 export function useResourceActions(

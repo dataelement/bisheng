@@ -2681,9 +2681,6 @@
     }
   },
   "src/pages/KnowledgePage/KnowledgeFile.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 11
-    },
     "@typescript-eslint/no-unused-expressions": {
       "count": 3
     },
@@ -2698,9 +2695,6 @@
     }
   },
   "src/pages/KnowledgePage/KnowledgeQa.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 11
-    },
     "@typescript-eslint/no-unused-expressions": {
       "count": 3
     },
