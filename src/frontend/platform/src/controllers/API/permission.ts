@@ -103,12 +103,20 @@ export async function checkPermission(
   relation: string,
   permissionId?: string,
 ): Promise<{ allowed: boolean }> {
+  // Run silent: the global response interceptor in @/controllers/request turns
+  // any non-200 envelope into a red toast. For a first-time / non-admin user the
+  // per-tool permission probe is supposed to come back with `{ allowed: false }`
+  // (status 200), and a transient FGA error during a probe is not user-actionable.
+  // Surfacing a "权限校验失败" toast in either case is what the first-time user
+  // entering the API/MCP tools page sees today (gitee IKB0O4). The caller
+  // (usePermissionIds) still records hasError / empty permissions and renders
+  // the tool list without the "权限管理" button.
   return await axios.post(`/api/v1/permissions/check`, {
     object_type: objectType,
     object_id: objectId,
     relation,
     permission_id: permissionId,
-  })
+  }, { silent: true } as any)
 }
 
 export async function getRelationModelsApi(): Promise<RelationModel[]> {

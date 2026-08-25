@@ -1172,7 +1172,7 @@
   },
   "src/controllers/API/permission.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 4
+      "count": 5
     }
   },
   "src/controllers/API/pro.ts": {
