@@ -173,6 +173,13 @@ function unwrapPaged<T>(response: any): { data: T[]; total: number } {
   };
 }
 
+/** Number of approval tasks still waiting on the current user. Drives the entry badge. */
+export async function getMyPendingApprovalCountApi(): Promise<number> {
+  const response = await request.get<ApiResponse<{ count: number }>>("/api/v1/approval/my-tasks/pending-count");
+  const payload = unwrapPayload<{ count: number }>(response);
+  return Number(payload?.count ?? 0);
+}
+
 export async function listMyApprovalTasksApi(): Promise<{ data: ApprovalTaskItem[]; total: number }> {
   const response = await request.get<ApiResponse<{ data: ApprovalTaskItem[]; total: number }>>(
     "/api/v1/approval/my-tasks",

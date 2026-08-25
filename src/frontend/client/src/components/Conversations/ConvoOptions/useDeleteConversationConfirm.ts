@@ -6,6 +6,7 @@ import { QueryKeys } from '~/types/chat';
 import { useDeleteConversationMutation } from '~/hooks/queries/data-provider';
 import { useConfirm } from '~/Providers';
 import { useLocalize, useNewConvo } from '~/hooks';
+import { closeChatStream } from '~/hooks/useAiChat';
 
 /**
  * Confirm-then-delete for a conversation, shared by the sidebar convo menu and
@@ -45,6 +46,11 @@ export function useDeleteConversationConfirm() {
       const messages = queryClient.getQueryData<TMessage[]>([QueryKeys.messages, conversationId]);
       const thread_id = messages?.[messages.length - 1]?.thread_id;
       const endpoint = messages?.[messages.length - 1]?.endpoint;
+
+      // A turn keeps streaming after you navigate away from its conversation,
+      // so deleting one has to stop it explicitly — otherwise the backend goes
+      // on generating an answer that now has nowhere to be stored.
+      closeChatStream(conversationId);
 
       deleteConvoMutation.mutate(
         { conversationId, thread_id, endpoint, source: 'button' },

@@ -77,6 +77,8 @@ interface AiChatInputProps {
      */
     elevated?: boolean;
     onModelChange?: (val: string) => void;
+    /** Programmatic model-value repairs from AiModelSelect (not user picks). */
+    onModelAutoChange?: (val: string) => void;
     placeholder?: string;
     /** files: uploaded file list [{path, name}], null means still uploading */
     onSend: (text: string, files?: any[] | null) => void;
@@ -124,6 +126,7 @@ const AiChatInput = memo(
         hasMessages,
         elevated = false,
         onModelChange,
+        onModelAutoChange,
         onSend,
         onStop,
         onScrollToBottom,
@@ -576,6 +579,7 @@ const AiChatInput = memo(
                                     value={modelValue}
                                     options={modelOptions}
                                     onChange={onModelChange!}
+                                    onAutoChange={onModelAutoChange}
                                 />
                             )}
                             {isStreaming || taskRunning ? (

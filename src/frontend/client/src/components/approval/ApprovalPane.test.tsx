@@ -7,10 +7,28 @@ import {
   type ApprovalTaskItem,
 } from "~/api/approval";
 
-import { ApprovalCenterDialog } from "./ApprovalCenterDialog";
+import { ApprovalPane } from "./ApprovalPane";
 import { FILE_CHANGE_APPROVAL_REFRESH_EVENT } from "~/events/fileChangeApprovalEvents";
 
 const mockShowToast = jest.fn();
+
+/**
+ * The F046 behaviour under test lives in ApprovalPane, not in the dialog shell
+ * that hosts it — rendering the pane directly keeps this test off the
+ * notifications side and its message APIs.
+ */
+function renderPane(target?: { taskId?: number | null; instanceId?: number | null }) {
+  return render(
+    <ApprovalPane
+      open
+      activeTab="my_tasks"
+      target={target}
+      compactView="list"
+      setCompactView={jest.fn()}
+    />,
+  );
+}
+
 
 jest.mock("~/Providers", () => ({
   useToastContext: () => ({ showToast: mockShowToast }),
@@ -54,7 +72,7 @@ function detail(item: ApprovalTaskItem): ApprovalTaskDetail {
   };
 }
 
-describe("ApprovalCenterDialog F046 interactions", () => {
+describe("ApprovalPane F046 interactions", () => {
   beforeEach(() => {
     mockedDecide.mockReset();
     mockedGetTask.mockReset();
@@ -70,7 +88,7 @@ describe("ApprovalCenterDialog F046 interactions", () => {
     mockedGetTask.mockImplementation(async (taskId) => detail(taskId === 1 ? first : next));
     mockedDecide.mockResolvedValue(detail({ ...first, status: "approved" }));
 
-    render(<ApprovalCenterDialog open onOpenChange={jest.fn()} />);
+    renderPane();
 
     expect((await screen.findAllByText("file-1.pdf")).length).toBeGreaterThan(0);
     fireEvent.click(await screen.findByText("com_approval_action_approve"));
@@ -92,7 +110,7 @@ describe("ApprovalCenterDialog F046 interactions", () => {
     const refresh = jest.fn();
     window.addEventListener(FILE_CHANGE_APPROVAL_REFRESH_EVENT, refresh);
 
-    render(<ApprovalCenterDialog open onOpenChange={jest.fn()} />);
+    renderPane();
     fireEvent.click(await screen.findByText("com_approval_action_approve"));
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
@@ -108,7 +126,7 @@ describe("ApprovalCenterDialog F046 interactions", () => {
     mockedGetTask.mockResolvedValue(detail(only));
     mockedDecide.mockResolvedValue(detail({ ...only, status: "approved" }));
 
-    render(<ApprovalCenterDialog open onOpenChange={jest.fn()} />);
+    renderPane();
     fireEvent.click(await screen.findByText("com_approval_action_approve"));
 
     await waitFor(() => expect(mockedDecide).toHaveBeenCalledWith(1, expect.any(Object)));
@@ -122,13 +140,7 @@ describe("ApprovalCenterDialog F046 interactions", () => {
     mockedListTasks.mockResolvedValue({ data: [visible], total: 1 });
     mockedGetTask.mockResolvedValue(detail(visible));
 
-    render(
-      <ApprovalCenterDialog
-        open
-        onOpenChange={jest.fn()}
-        target={{ tab: "my_tasks", taskId: 999 }}
-      />,
-    );
+    renderPane({ taskId: 999 });
 
     await waitFor(() => expect(mockedGetTask).toHaveBeenCalledWith(2));
     expect(mockedGetTask).not.toHaveBeenCalledWith(999);
@@ -152,7 +164,7 @@ describe("ApprovalCenterDialog F046 interactions", () => {
       },
     });
 
-    render(<ApprovalCenterDialog open onOpenChange={jest.fn()} />);
+    renderPane();
 
     expect(await screen.findByText("com_knowledge.file_change_action")).toBeTruthy();
     expect(screen.getByText("com_knowledge.file_change_action_upload")).toBeTruthy();
@@ -213,7 +225,7 @@ describe("ApprovalCenterDialog F046 interactions", () => {
         },
       } as unknown as ApprovalTaskDetail);
 
-      render(<ApprovalCenterDialog open onOpenChange={jest.fn()} />);
+      renderPane();
 
       expect(await screen.findByText("com_approval_task_badge_approved")).toBeTruthy();
       safeValues.forEach((value) => expect(screen.getAllByText(value).length).toBeGreaterThan(0));

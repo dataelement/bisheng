@@ -10,6 +10,7 @@
     "workVectorModel": "Workbench Vector Model",
     "workVectorModelTooltip": "Used for $t(bs:linsight) task execution scenarios",
     "linsightDefaultModel": "$t(bs:linsight) Default Model",
+    "dailyDefaultModel": "Daily Mode Default Model",
     "linsightDefaultModelTooltip": "This model is the default executor for $t(bs:linsight) tasks; users can switch to another model when starting a task",
     "workbenchVoiceModel": "Workbench Voice Model",
     "sessionTitleGenerationModel": "Session Title Generation Model",

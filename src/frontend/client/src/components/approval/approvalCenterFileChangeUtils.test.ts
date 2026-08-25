@@ -79,14 +79,7 @@ describe("approval center F046 decisions", () => {
     forbidden.forEach((token) => expect(utilitySource).not.toContain(token));
   });
 
-  it("does not route business-execution notifications as approval facts", () => {
-    const routingSource = readFileSync(
-      resolve(process.cwd(), "src/components/notificationApprovalRouting.ts"),
-      "utf8",
-    );
-
-    expect(routingSource).not.toContain("approval_execute_failed");
-    expect(routingSource).not.toContain("resource_user_invite_effective");
-    expect(routingSource).not.toContain("resource_user_invite_failed");
-  });
+  // The "business execution is not an approval fact" invariant moved to
+  // messageApproval/notificationContent.test.tsx: routing now lives there, and it
+  // is asserted on the exported action-code set instead of on file text.
 });

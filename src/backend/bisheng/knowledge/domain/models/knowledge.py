@@ -4,13 +4,18 @@ from enum import Enum
 from typing import Any, Optional, Union
 
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Boolean, Integer, String, collate
+from sqlalchemy import Boolean, Integer
 from sqlmodel import Column, DateTime, Field, case, delete, func, or_, select, text, update
 from sqlmodel.sql.expression import Select, SelectOfScalar, col
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.core.database.dialect_helpers import UPDATE_TIME_SERVER_DEFAULT, JsonType, name_sort_clauses
+from bisheng.core.database.dialect_helpers import (
+    UPDATE_TIME_SERVER_DEFAULT,
+    JsonType,
+    StrJoinKey,
+    name_sort_clauses,
+)
 from bisheng.core.database.manager import get_database_connection
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile, KnowledgeFileDao
 from bisheng.user.domain.models.user import UserDao
@@ -845,15 +850,12 @@ class KnowledgeDao(KnowledgeBase):
 
         rejection_cutoff = datetime.now() - REJECTED_STATUS_DISPLAY_WINDOW
 
-        # A CAST result carries the *connection* collation (utf8mb4_0900_ai_ci on MySQL 8),
-        # never the table's, so matching it against the utf8mb4_unicode_ci `business_id`
-        # column fails with "Illegal mix of collations" (1267) — table-level charset args
-        # cannot prevent that. Pin the cast to the schema collation on MySQL only: DM8 has
-        # no such collation name and rejects the COLLATE clause outright (-2007).
-        kid_str = col(Knowledge.id).cast(String)
-        db_conn = await get_database_connection()
-        if db_conn.async_engine.dialect.name == "mysql":
-            kid_str = collate(kid_str, "utf8mb4_unicode_ci")
+        # StrJoinKey, not a bare cast: on MySQL the CAST result would carry
+        # collation_connection (utf8mb4_0900_ai_ci by default) while
+        # space_channel_member.business_id carries the table collation
+        # (utf8mb4_unicode_ci) — comparing two differing IMPLICIT collations
+        # raises 1267 and turned this endpoint into a 500.
+        kid_str = StrJoinKey(col(Knowledge.id))
 
         # Subquery: count unique active subscribers per space
         subscriber_subq = (

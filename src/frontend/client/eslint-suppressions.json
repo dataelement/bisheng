@@ -65,7 +65,7 @@
   },
   "src/api/chatApi.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 19
+      "count": 15
     }
   },
   "src/api/index.ts": {
@@ -1411,20 +1411,6 @@
       "count": 1
     }
   },
-  "src/components/NotificationsDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 20
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    },
-    "no-console": {
-      "count": 8
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 2
-    }
-  },
   "src/components/PreviewFile/DocxFileViewer.tsx": {
     "no-useless-escape": {
       "count": 1
@@ -1677,17 +1663,6 @@
   "src/components/Voice/textToSpeechStore.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/approval/ApprovalCenterDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 16
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
     }
   },
   "src/components/icons/DocxIcon.tsx": {
@@ -2270,9 +2245,6 @@
     },
     "no-restricted-syntax": {
       "count": 3
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/hooks/useAutoScroll.ts": {
@@ -2423,7 +2395,7 @@
   },
   "src/pages/ChannelSquare.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 6
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
@@ -2437,7 +2409,7 @@
   },
   "src/pages/ChannelSquareCard.tsx": {
     "no-restricted-syntax": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/DevLogin/index.tsx": {
@@ -2562,9 +2534,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 1
     },
     "react-hooks/exhaustive-deps": {
       "count": 1
@@ -3091,9 +3060,6 @@
     "@typescript-eslint/no-unused-expressions": {
       "count": 1
     },
-    "no-case-declarations": {
-      "count": 8
-    },
     "no-console": {
       "count": 4
     },
@@ -3191,9 +3157,6 @@
     }
   },
   "src/pages/knowledge/FilePreview/index.tsx": {
-    "@typescript-eslint/ban-ts-comment": {
-      "count": 1
-    },
     "react-hooks/exhaustive-deps": {
       "count": 1
     }

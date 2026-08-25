@@ -117,11 +117,8 @@ class ApprovalCenterService:
 
     @classmethod
     async def count_pending_tasks(cls, *, tenant_id: int, approver_user_id: int) -> int:
-        result = await cls.list_my_tasks(
-            tenant_id=tenant_id,
-            approver_user_id=approver_user_id,
-        )
-        return sum(1 for row in result["data"] if row["status"] == ApprovalTaskStatus.PENDING)
+        """Count the current approver's pending tasks (badge for 我的审批-待我处理)."""
+        return await ApprovalQueryRepository.count_pending_tasks_by_approver(tenant_id, approver_user_id)
 
     @classmethod
     async def count_unread_tasks(cls, *, tenant_id: int, approver_user_id: int) -> int:

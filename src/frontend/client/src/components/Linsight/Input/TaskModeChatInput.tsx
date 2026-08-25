@@ -22,11 +22,13 @@
  * children), so we wire the user's actual selection straight into the linsight
  * submission (see handleSend) instead of the seeded `context.tools`.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useRecoilState, useRecoilValue } from 'recoil';
 import AiChatInput from '~/components/Chat/AiChatInput';
 import { useLocalize } from '~/hooks';
+import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
 import { useLinsightSessionManager } from '~/hooks/useLinsightManager';
 import store from '~/store';
 import {
@@ -47,7 +49,47 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
     const sessionKey = conversationId || 'new';
     const [context, setContext] = useRecoilState(taskModeContextState(sessionKey));
     const [skills] = useRecoilState(taskModeSkillsState(sessionKey));
-    const [model, setModel] = useState('');
+    // Shared with daily mode: a manual pick (manual: true) wins everywhere;
+    // otherwise task mode follows the admin's linsight_default_model_id.
+    const [chatModel, setChatModel] = useRecoilState(store.chatModel);
+    const model = String(chatModel.id || '');
+
+    // Task-mode model resolution: the mode's own manual memory
+    // (`bs:{uid}:taskModel`, separate from the daily record) wins; without a
+    // valid record the admin-configured linsight_default_model_id applies,
+    // falling back to the first option.
+    const { user } = useAuthContext();
+    const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
+    useEffect(() => {
+        const models = bsConfig?.models || [];
+        if (!models.length || !user?.id) return;
+        const key = `bs:${user.id}:taskModel`;
+        const savedId = localStorage.getItem(key);
+        let manual = true;
+        let target = savedId ? models.find((m) => String(m.id) === savedId) : undefined;
+        if (!target) {
+            manual = false;
+            // Stale record (model removed/disabled) — drop it for good.
+            if (savedId) localStorage.removeItem(key);
+            const raw = (workbenchCfg as Record<string, unknown> | undefined)?.linsight_default_model_id;
+            const adminDefaultId =
+                typeof raw === 'string' || typeof raw === 'number' ? String(raw) : null;
+            target =
+                (adminDefaultId ? models.find((m) => String(m.id) === adminDefaultId) : undefined) ??
+                models[0];
+        }
+        if (
+            target &&
+            (String(target.id) !== String(chatModel.id) || !!chatModel.manual !== manual || chatModel.mode !== 'task')
+        ) {
+            setChatModel({
+                id: Number(target.id),
+                name: target.displayName || target.name || '',
+                manual,
+                mode: 'task',
+            });
+        }
+    }, [chatModel.id, chatModel.manual, chatModel.mode, bsConfig, workbenchCfg, user?.id, setChatModel]);
 
     // Daily tools picker selection — same shared atom AgentToolSelector writes to.
     const selectedAgentTools = useRecoilValue(store.selectedAgentTools);
@@ -163,8 +205,28 @@ export function TaskModeChatInput({ conversationId = 'new' }: TaskModeChatInputP
             }}
             onScrollToBottom={() => { }}
             modelOptions={bsConfig?.models}
-            modelValue={model}
-            onModelChange={setModel}
+            modelValue={chatModel.id}
+            onModelChange={(val) => {
+                const picked = bsConfig?.models?.find((m) => String(m.id) === String(val));
+                setChatModel({
+                    id: Number(val),
+                    name: picked?.displayName || '',
+                    manual: true,
+                    mode: 'task',
+                });
+                // This page doesn't mount useChatModelMemo — persist the
+                // task-mode pick directly.
+                if (user?.id) localStorage.setItem(`bs:${user.id}:taskModel`, String(val));
+            }}
+            onModelAutoChange={(val) => {
+                const picked = bsConfig?.models?.find((m) => String(m.id) === String(val));
+                setChatModel((prev) => ({
+                    id: Number(val),
+                    name: picked?.displayName || prev.name || '',
+                    manual: prev.manual ?? false,
+                    mode: prev.mode,
+                }));
+            }}
             onSend={handleSend}
             onStop={() => { }}
             bsConfig={bsConfig}
