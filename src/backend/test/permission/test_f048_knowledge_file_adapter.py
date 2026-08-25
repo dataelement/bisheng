@@ -9,12 +9,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.common.errcode.permission import PermissionInvalidResourceError
+from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFileStatus
 from bisheng.knowledge.domain.services import knowledge_permission_service as permission_module
 from bisheng.knowledge.domain.services.knowledge_permission_service import (
     F048KnowledgeFilePermissionAdapter,
     KnowledgeFileDaoPermissionLoader,
     KnowledgeFilePermissionRecord,
 )
+from bisheng.permission.application.control_state import PermissionResourceSnapshot
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
 )
@@ -57,6 +60,7 @@ class _VersionPort:
     def __init__(self) -> None:
         self.version_calls: list[dict] = []
         self.mode_targets: list[object] = []
+        self.snapshot_calls: list[tuple[tuple[int, str, str], ...]] = []
 
     async def get_permission_version(self, **kwargs):
         self.version_calls.append(kwargs)
@@ -65,6 +69,23 @@ class _VersionPort:
     async def mode_for_target(self, target):
         self.mode_targets.append(target)
         return SimpleNamespace(mode="INHERIT")
+
+    async def get_permission_snapshots(self, resources):
+        self.snapshot_calls.append(resources)
+        return {
+            key: PermissionResourceSnapshot(
+                tenant_id=key[0],
+                resource_type=key[1],
+                resource_id=key[2],
+                version=4,
+                context_version="permission-context-v4",
+                mode="INHERIT",
+                parent_type="knowledge_space",
+                parent_id="11",
+                projection_state="CURRENT",
+            )
+            for key in resources
+        }
 
 
 def _actor(tenant_id: int = 5) -> PermissionActor:
@@ -145,6 +166,81 @@ async def test_file_loader_reads_version_and_mode_through_facade(
         "knowledge_library",
         "11",
     )
+
+
+@pytest.mark.asyncio
+async def test_batch_target_builder_reuses_business_rows_without_dao_reload(
+    monkeypatch,
+) -> None:
+    metrics: list[tuple[str, dict]] = []
+    rows = [
+        SimpleNamespace(
+            id=10,
+            file_type=FileType.DIR.value,
+            knowledge_id=11,
+            file_level_path="",
+            tenant_id=5,
+            status=KnowledgeFileStatus.SUCCESS.value,
+            update_time=None,
+            user_id=7,
+        ),
+        SimpleNamespace(
+            id=12,
+            file_type=FileType.FILE.value,
+            knowledge_id=11,
+            file_level_path="10",
+            tenant_id=5,
+            status=KnowledgeFileStatus.SUCCESS.value,
+            update_time=None,
+            user_id=8,
+        ),
+    ]
+    knowledge = SimpleNamespace(
+        id=11,
+        tenant_id=5,
+        type=KnowledgeTypeEnum.SPACE.value,
+    )
+    reload_file = AsyncMock(side_effect=AssertionError("candidate rows must not be reloaded"))
+    reload_knowledge = AsyncMock(side_effect=AssertionError("verified space must not be reloaded"))
+    monkeypatch.setattr(permission_module.KnowledgeFileDao, "query_by_id", reload_file)
+    monkeypatch.setattr(permission_module.KnowledgeDao, "aquery_by_id", reload_knowledge)
+    monkeypatch.setattr(
+        permission_module,
+        "emit_metric",
+        lambda domain, **fields: metrics.append((domain, fields)),
+    )
+    version_port = _VersionPort()
+    adapter = F048KnowledgeFilePermissionAdapter(
+        loader=KnowledgeFileDaoPermissionLoader(version_port),
+        permission=_Permission(),
+    )
+
+    targets = await adapter.resolve_permission_targets_from_rows(
+        rows=rows,
+        knowledge=knowledge,
+        actor=_actor(),
+        action="visible",
+    )
+
+    assert [(target.resource_type, target.resource_id) for target in targets] == [
+        ("folder", "10"),
+        ("knowledge_file", "12"),
+    ]
+    assert [(target.parent_type, target.parent_id) for target in targets] == [
+        ("knowledge_space", "11"),
+        ("folder", "10"),
+    ]
+    assert version_port.snapshot_calls == [
+        ((5, "folder", "10"), (5, "knowledge_file", "12"))
+    ]
+    reload_file.assert_not_awaited()
+    reload_knowledge.assert_not_awaited()
+    assert metrics[0][0] == "permission"
+    assert metrics[0][1]["event"] == "verified_target_build"
+    assert metrics[0][1]["candidate_count"] == 2
+    assert metrics[0][1]["snapshot_count"] == 2
+    assert metrics[0][1]["target_record_count"] == 2
+    assert metrics[0][1]["snapshot_elapsed_ms"] >= 0
 
 
 @pytest.mark.asyncio

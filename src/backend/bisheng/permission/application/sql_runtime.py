@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from loguru import logger
 from sqlalchemy import and_, func, or_, update
-from sqlmodel import select
+from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
@@ -177,24 +177,18 @@ class SqlCatalogDecisionState:
 class SqlPermissionScopeFence:
     """Validate decision identity while permission writes remain serialized."""
 
-    async def ensure_readable(
-        self,
+    @staticmethod
+    def _decision(
         target: VerifiedPermissionTarget,
-    ) -> bool:
-        async with get_async_db_session() as session:
-            statement = select(ResourcePermissionMode).where(
-                ResourcePermissionMode.tenant_id == target.tenant_id,
-                ResourcePermissionMode.resource_type == target.resource_type,
-                ResourcePermissionMode.resource_id == target.resource_id,
-            )
-            row = (await session.execute(statement)).scalars().first()
+        row: ResourcePermissionMode | None,
+    ) -> bool | PermissionPublishNotReadyError:
         if (
             row is None
             or row.projection_state not in DECIDABLE_PROJECTION_STATES
             or row.parent_type != target.parent_type
             or row.parent_id != target.parent_id
         ):
-            raise PermissionPublishNotReadyError(
+            return PermissionPublishNotReadyError(
                 msg="Resource permission projection is not current",
                 stored_parent_type=row.parent_type if row else None,
                 stored_parent_id=row.parent_id if row else None,
@@ -206,6 +200,52 @@ class SqlPermissionScopeFence:
                 expected_projection_state="CURRENT|PROJECTING|FAILED_CLOSED",
             )
         return row.projection_state != "CURRENT" or row.version != target.resource_version
+
+    async def ensure_readable(
+        self,
+        target: VerifiedPermissionTarget,
+    ) -> bool:
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode).where(
+                ResourcePermissionMode.tenant_id == target.tenant_id,
+                ResourcePermissionMode.resource_type == target.resource_type,
+                ResourcePermissionMode.resource_id == target.resource_id,
+            )
+            row = (await session.execute(statement)).scalars().first()
+        decision = self._decision(target, row)
+        if isinstance(decision, PermissionPublishNotReadyError):
+            raise decision
+        return decision
+
+    async def ensure_readable_batch(
+        self,
+        targets: tuple[VerifiedPermissionTarget, ...],
+    ) -> tuple[bool | PermissionPublishNotReadyError, ...]:
+        """Fence a decision batch with one permission-state query."""
+
+        if not targets:
+            return ()
+        tenant_ids = tuple(dict.fromkeys(target.tenant_id for target in targets))
+        resource_types = tuple(dict.fromkeys(target.resource_type for target in targets))
+        resource_ids = tuple(dict.fromkeys(target.resource_id for target in targets))
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode).where(
+                col(ResourcePermissionMode.tenant_id).in_(tenant_ids),
+                col(ResourcePermissionMode.resource_type).in_(resource_types),
+                col(ResourcePermissionMode.resource_id).in_(resource_ids),
+            )
+            rows = list((await session.execute(statement)).scalars().all())
+        row_map = {
+            (int(row.tenant_id), str(row.resource_type), str(row.resource_id)): row
+            for row in rows
+        }
+        return tuple(
+            self._decision(
+                target,
+                row_map.get((target.tenant_id, target.resource_type, target.resource_id)),
+            )
+            for target in targets
+        )
 
 
 class RedisConsistencyMarker:

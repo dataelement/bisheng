@@ -80,6 +80,21 @@ class RuntimeCatalogSnapshot:
     models: tuple[RuntimeModelSnapshot, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class PermissionResourceSnapshot:
+    """Permission-owned state needed by a business Service to verify a target."""
+
+    tenant_id: int
+    resource_type: str
+    resource_id: str
+    version: int
+    context_version: str
+    mode: str
+    parent_type: str | None
+    parent_id: str | None
+    projection_state: str
+
+
 class SqlPermissionControlState:
     """Own all permission-table reads/writes needed by online services."""
 
@@ -213,6 +228,54 @@ class SqlPermissionControlState:
             )
         )
         return row.version, context[:64]
+
+    async def permission_snapshots(
+        self,
+        resources: tuple[tuple[int, str, str], ...],
+    ) -> dict[tuple[int, str, str], PermissionResourceSnapshot]:
+        """Read a bounded set of permission targets in one dual-DB-safe query."""
+
+        normalized = tuple(dict.fromkeys(resources))
+        if not normalized:
+            return {}
+        tenant_ids = tuple(dict.fromkeys(tenant_id for tenant_id, _, _ in normalized))
+        resource_types = tuple(dict.fromkeys(resource_type for _, resource_type, _ in normalized))
+        resource_ids = tuple(dict.fromkeys(resource_id for _, _, resource_id in normalized))
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode).where(
+                col(ResourcePermissionMode.tenant_id).in_(tenant_ids),
+                col(ResourcePermissionMode.resource_type).in_(resource_types),
+                col(ResourcePermissionMode.resource_id).in_(resource_ids),
+            )
+            rows = list((await session.execute(statement)).scalars().all())
+
+        requested = set(normalized)
+        snapshots: dict[tuple[int, str, str], PermissionResourceSnapshot] = {}
+        for row in rows:
+            key = (int(row.tenant_id), str(row.resource_type), str(row.resource_id))
+            if key not in requested or row.projection_state not in DECIDABLE_PROJECTION_STATES:
+                continue
+            context = "|".join(
+                (
+                    str(row.version),
+                    row.mode,
+                    row.parent_type or "",
+                    row.parent_id or "",
+                    row.projection_state,
+                )
+            )[:64]
+            snapshots[key] = PermissionResourceSnapshot(
+                tenant_id=key[0],
+                resource_type=key[1],
+                resource_id=key[2],
+                version=row.version,
+                context_version=context,
+                mode=row.mode,
+                parent_type=row.parent_type,
+                parent_id=row.parent_id,
+                projection_state=row.projection_state,
+            )
+        return snapshots
 
     async def load_grants(
         self,

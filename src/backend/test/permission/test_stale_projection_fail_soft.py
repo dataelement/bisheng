@@ -197,6 +197,39 @@ async def test_ensure_readable_error_carries_diagnostic_fields():
     assert exc.kwargs.get("expected_projection_state") == "CURRENT|PROJECTING|FAILED_CLOSED"
 
 
+async def test_scope_fence_batch_reads_permission_state_once():
+    from unittest.mock import patch
+
+    good = _make_target(resource_id="1")
+    missing = _make_target(resource_id="2")
+    row = SimpleNamespace(
+        tenant_id=1,
+        resource_type="knowledge_file",
+        resource_id="1",
+        version=1,
+        parent_type="knowledge_space",
+        parent_id="100",
+        projection_state="CURRENT",
+    )
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [row]
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch(
+        "bisheng.permission.application.sql_runtime.get_async_db_session",
+        return_value=mock_ctx,
+    ):
+        decisions = await SqlPermissionScopeFence().ensure_readable_batch((good, missing))
+
+    assert decisions[0] is False
+    assert isinstance(decisions[1], PermissionPublishNotReadyError)
+    mock_session.execute.assert_awaited_once()
+
+
 @pytest.mark.parametrize(
     ("projection_state", "stored_version", "requires_higher_consistency"),
     (
@@ -295,6 +328,45 @@ async def test_permission_version_exposes_decidable_projection_state(projection_
 
     assert version == 7
     assert context.endswith(projection_state)
+
+
+async def test_permission_snapshots_read_resource_batch_once():
+    from unittest.mock import patch
+
+    row = SimpleNamespace(
+        tenant_id=1,
+        resource_type="knowledge_file",
+        resource_id="1",
+        version=7,
+        mode="INHERIT",
+        parent_type="knowledge_space",
+        parent_id="100",
+        projection_state="CURRENT",
+    )
+    mock_session = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [row]
+    mock_session.execute = AsyncMock(return_value=mock_result)
+    mock_ctx = AsyncMock()
+    mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    with patch.object(
+        control_state_module,
+        "get_async_db_session",
+        return_value=mock_ctx,
+    ):
+        snapshots = await SqlPermissionControlState().permission_snapshots(
+            (
+                (1, "knowledge_file", "1"),
+                (1, "knowledge_file", "2"),
+            )
+        )
+
+    assert set(snapshots) == {(1, "knowledge_file", "1")}
+    assert snapshots[(1, "knowledge_file", "1")].version == 7
+    assert snapshots[(1, "knowledge_file", "1")].mode == "INHERIT"
+    mock_session.execute.assert_awaited_once()
 
 
 async def test_non_current_decision_forces_higher_consistency():

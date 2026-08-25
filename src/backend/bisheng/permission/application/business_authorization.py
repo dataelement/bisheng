@@ -205,3 +205,36 @@ async def batch_check_business_visible(
         for resource_id, is_allowed in zip(batch_ids, allowed, strict=True):
             result[resource_id] = bool(is_allowed)
     return result
+
+
+async def batch_check_verified_business_visible(
+    *,
+    actor: PermissionActor,
+    targets: Iterable[VerifiedPermissionTarget],
+) -> dict[tuple[str, str], bool]:
+    """Decide business-verified targets without resolving their ids again."""
+
+    normalized_targets = tuple(
+        {
+            (target.resource_type, target.resource_id): target
+            for target in targets
+        }.values()
+    )
+    if not normalized_targets:
+        return {}
+
+    runtime = await get_f048_runtime()
+    result: dict[tuple[str, str], bool] = {
+        (target.resource_type, target.resource_id): False
+        for target in normalized_targets
+    }
+    for offset in range(0, len(normalized_targets), _MAX_BATCH_CHECKS):
+        batch_targets = normalized_targets[offset : offset + _MAX_BATCH_CHECKS]
+        allowed = await runtime.batch_check_actions(
+            actor,
+            batch_targets,
+            "visible",
+        )
+        for target, is_allowed in zip(batch_targets, allowed, strict=True):
+            result[(target.resource_type, target.resource_id)] = bool(is_allowed)
+    return result

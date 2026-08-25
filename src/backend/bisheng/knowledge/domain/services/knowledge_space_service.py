@@ -124,6 +124,7 @@ from bisheng.permission.application.access import (
 from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     batch_check_business_visible,
+    batch_check_verified_business_visible,
     check_business_action,
 )
 from bisheng.permission.application.identity import resolve_permission_actor
@@ -2435,7 +2436,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space_id: int,
         context: dict | None = None,
     ) -> list[KnowledgeFile]:
-        del space_id
         if not items:
             return []
         context = context or {"permissions": {}}
@@ -2445,19 +2445,58 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "knowledge_file": [item.id for item in items if item.file_type != FileType.DIR.value],
         }
         actor = await self._permission_actor()
-        for resource_type, resource_ids in by_type.items():
-            if not resource_ids:
-                continue
-            visible_map = await batch_check_business_visible(
-                self.login_user,
-                resource_type=resource_type,
-                resource_ids=resource_ids,
+        verified_space = context.get("verified_space")
+        performance = context.setdefault("performance", {})
+        if verified_space is not None:
+            target_started_at = perf_counter()
+            adapter = await self._resource_adapter("knowledge_file")
+            targets = await adapter.resolve_permission_targets_from_rows(
+                rows=items,
+                knowledge=verified_space,
                 actor=actor,
+                action="visible",
             )
-            for resource_id in resource_ids:
-                permissions[(resource_type, str(resource_id))] = (
-                    {"visible"} if visible_map.get(str(resource_id), False) else set()
+            performance["target_build_elapsed_ms"] = performance.get(
+                "target_build_elapsed_ms",
+                0.0,
+            ) + (perf_counter() - target_started_at) * 1000
+            performance["verified_target_count"] = performance.get(
+                "verified_target_count",
+                0,
+            ) + len(targets)
+
+            decision_started_at = perf_counter()
+            visible_map = await batch_check_verified_business_visible(
+                actor=actor,
+                targets=targets,
+            )
+            performance["decision_elapsed_ms"] = performance.get(
+                "decision_elapsed_ms",
+                0.0,
+            ) + (perf_counter() - decision_started_at) * 1000
+            for resource_type, resource_ids in by_type.items():
+                for resource_id in resource_ids:
+                    permissions[(resource_type, str(resource_id))] = (
+                        {"visible"}
+                        if visible_map.get((resource_type, str(resource_id)), False)
+                        else set()
+                    )
+        else:
+            # Compatibility path for callers that have only ids. The children
+            # endpoint supplies verified_space and never enters this branch.
+            for resource_type, resource_ids in by_type.items():
+                if not resource_ids:
+                    continue
+                visible_map = await batch_check_business_visible(
+                    self.login_user,
+                    resource_type=resource_type,
+                    resource_ids=resource_ids,
+                    actor=actor,
                 )
+                for resource_id in resource_ids:
+                    permissions[(resource_type, str(resource_id))] = (
+                        {"visible"} if visible_map.get(str(resource_id), False) else set()
+                    )
         visible_keys = {key for key, value in permissions.items() if value}
         return [
             item
@@ -2483,6 +2522,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         cursor: list | None = None,
         exclude_file_ids: list[int] | None = None,
         system_scope: bool = False,
+        verified_space: Knowledge | None = None,
     ) -> tuple[list[KnowledgeFile], bool, list | None]:
         """F027 cursor-paginated scan: keep fetching batches via keyset, fold
         through ReBAC filtering, stop once we've accumulated ``page_size + 1``
@@ -2497,6 +2537,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         visible_page_items: list[KnowledgeFile] = []
         scan_started_at = perf_counter()
         permission_context = None if system_scope else await self._build_child_permission_context(space_id)
+        if permission_context is not None and verified_space is not None:
+            permission_context["verified_space"] = verified_space
         batch_cursor: list | None = list(cursor) if cursor else None
         resume_cursor: list | None = None
         scanned_candidates = 0
@@ -2524,6 +2566,15 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 db_elapsed_ms=db_elapsed_ms,
                 permission_elapsed_ms=permission_elapsed_ms,
                 total_elapsed_ms=(perf_counter() - scan_started_at) * 1000,
+                target_build_elapsed_ms=(permission_context or {})
+                .get("performance", {})
+                .get("target_build_elapsed_ms", 0.0),
+                permission_decision_elapsed_ms=(permission_context or {})
+                .get("performance", {})
+                .get("decision_elapsed_ms", 0.0),
+                verified_target_count=(permission_context or {})
+                .get("performance", {})
+                .get("verified_target_count", 0),
             )
 
         def candidate_cursor(item: KnowledgeFile) -> list:
@@ -2719,13 +2770,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         try:
             stage_started_at = perf_counter()
             if system_scope:
-                await self._load_space_listing_scope(space_id, parent_id)
+                verified_space, _ = await self._load_space_listing_scope(space_id, parent_id)
             else:
                 # _require_read_permission already performs the space-visible
                 # decision. For a folder, only add the folder business-scope
                 # validation and final visible decision; do not repeat the
                 # knowledge-space check through _require_folder_action.
-                await self._require_read_permission(space_id)
+                verified_space = await self._require_read_permission(space_id)
                 if parent_id:
                     parent_folder = await self._get_folder_for_action(space_id, parent_id)
                     await self._require_resource_action(
@@ -2775,6 +2826,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 cursor=decoded,
                 exclude_file_ids=exclude_file_ids,
                 system_scope=system_scope,
+                verified_space=verified_space,
             )
             stage_elapsed_ms["scan_elapsed_ms"] = (perf_counter() - stage_started_at) * 1000
 
