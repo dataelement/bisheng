@@ -37,7 +37,10 @@ export default function EditorPage() {
     const canEdit = privileged || (permissions[dashboardId]?.includes("edit") ?? false)
 
     useEffect(() => {
-        if (dashboard && !permissionsLoading && !canEdit) navigate("404")
+        // Denied is not missing: a deep link into a board someone may view but not
+        // edit belongs on /403. The 编辑 button is hidden without `edit`, so this
+        // only fires for a hand-typed or shared URL.
+        if (dashboard && !permissionsLoading && !canEdit) navigate("/403")
     }, [canEdit, dashboard, navigate, permissionsLoading])
 
     useEffect(() => {

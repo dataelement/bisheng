@@ -63,7 +63,12 @@ export function useDashboardPermissions(resourceIds: string[]): {
     const userId = user?.user_id == null ? "" : String(user.user_id)
     const privileged = user?.role === "admin"
     const [permissions, setPermissions] = useState<DashboardPermissionMap>({})
-    const [loading, setLoading] = useState(false)
+    // Starts true whenever a request is coming: the effect below cannot run
+    // before the first render, and a consumer that reads an empty map while
+    // `loading` is false concludes "forbidden" from an answer that has not been
+    // asked for yet — which is how the editor bounced people to /404 on boards
+    // they were allowed to edit.
+    const [loading, setLoading] = useState(() => !privileged && normalizedIds.length > 0)
 
     useEffect(() => {
         if (privileged || !normalizedIds.length) {

@@ -7,6 +7,7 @@
  * to /404 the moment the board loaded.
  */
 import EditorPage from "@/pages/Dashboard/editor"
+import { userContext } from "@/contexts/userContext"
 import { render, screen, waitFor } from "@/test/test-utils"
 import { describe, expect, it, vi } from "vitest"
 
@@ -53,12 +54,36 @@ describe("dashboard editor permission gate", () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it("still bounces a user with no edit action", async () => {
+  it("sends a viewer without edit to /403, not /404", async () => {
     permissionsResult.privileged = false
     permissionsResult.permissions = { "7": ["view"] }
 
     render(<EditorPage />)
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith("404"))
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/403"))
+  })
+})
+
+describe("dashboard permission hook", () => {
+  it("is already loading on its first render, before the request can start", async () => {
+    const { useDashboardPermissions } = await vi.importActual<
+      typeof import("@/pages/Dashboard/hook")
+    >("@/pages/Dashboard/hook")
+
+    const seen: boolean[] = []
+    function Probe() {
+      seen.push(useDashboardPermissions(["7"]).loading)
+      return null
+    }
+
+    render(
+      <userContext.Provider value={{ user: { user_id: 840, role: "" } } as never}>
+        <Probe />
+      </userContext.Provider>,
+    )
+
+    // The first render is the one the editor gate reads: effects have not run,
+    // so a `false` here means an unasked question is answered "forbidden".
+    expect(seen[0]).toBe(true)
   })
 })
