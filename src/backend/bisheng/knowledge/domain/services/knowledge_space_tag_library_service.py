@@ -29,6 +29,8 @@ import json
 
 MAX_LIBRARY_TAGS = 999
 MAX_LIBRARY_NAME_LENGTH = 20
+# Seeded builtin library name; also the preferred bind target for new personal spaces.
+DEFAULT_TAG_LIBRARY_NAME = "通用标签库"
 
 
 class KnowledgeSpaceTagLibraryService:
@@ -60,6 +62,10 @@ class KnowledgeSpaceTagLibraryService:
         if len(normalized) > MAX_LIBRARY_NAME_LENGTH:
             raise KnowledgeSpaceTagLibraryInvalidError(msg=f"标签库名称不能超过{MAX_LIBRARY_NAME_LENGTH}个字符")
         return normalized
+
+    @staticmethod
+    def is_default_tag_library_name(name: str | None) -> bool:
+        return (name or "").strip() == DEFAULT_TAG_LIBRARY_NAME
 
     @staticmethod
     async def _ensure_public_name_available(name: str, *, exclude_library_id: int | None = None) -> None:
@@ -443,6 +449,8 @@ class KnowledgeSpaceTagLibraryService:
         updates = {}
         if name is not None:
             normalized_name = self.normalize_name(name)
+            if self.is_default_tag_library_name(library.name) and normalized_name != DEFAULT_TAG_LIBRARY_NAME:
+                raise KnowledgeSpaceTagLibraryInvalidError(msg="通用标签库不可修改名称")
             if library.owner_knowledge_id is None and normalized_name != library.name:
                 await self._ensure_public_name_available(normalized_name, exclude_library_id=library_id)
             updates["name"] = normalized_name

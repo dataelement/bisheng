@@ -146,8 +146,8 @@ export default function SystemLog() {
         )}
         <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-10">
             <div className="flex flex-wrap gap-4">
-                <div className="w-[200px] relative">
-                    <MultiSelect contentClassName="overflow-y-auto max-w-[200px]" multiple
+                <div className="w-[240px] relative">
+                    <MultiSelect contentClassName="overflow-y-auto max-w-[240px]" multiple
                         options={users}
                         value={keys.userIds}
                         placeholder={t('log.selectUser')}
@@ -283,7 +283,10 @@ const useUsers = () => {
 
     const loadUsers = () => {
         getOperatorsApi().then(res => {
-            const options = res.map((u: any) => ({ label: u.user_name, value: u.user_id }))
+            const options = (Array.isArray(res) ? res : []).map((u) => ({
+                label: u.label || u.user_name,
+                value: u.user_id,
+            }))
             userRef.current = options
             setUsers(options)
         })

@@ -852,6 +852,24 @@ class KnowledgeService(KnowledgeUtils):
         return await cls.acreate_knowledge_base(request, login_user, db_knowledge)
 
     @classmethod
+    def _space_shared_routing_for_create(cls, db_knowledge: Knowledge, tenant_id: int):
+        """F1.6: resolve shared routing for a SPACE knowledge base creation.
+
+        Returns the routing snapshot when the tenant's SPACE storage is routed
+        to the shared store, else None (old per-space behavior unchanged).
+        """
+        from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+
+        try:
+            return resolve_space_shared_routing(tenant_id, db_knowledge.type)
+        except Exception:
+            # Routing table unavailable must not break creation with the
+            # switch off; with the switch on a routing error would surface on
+            # first write anyway (fail-closed there).
+            logger.exception("act=resolve_space_shared_routing_error tenant=%s", tenant_id)
+            return None
+
+    @classmethod
     def create_knowledge_base(
         cls,
         request,
@@ -860,9 +878,23 @@ class KnowledgeService(KnowledgeUtils):
         skip_hook: bool = False,
         initialize_indices: bool = True,
     ) -> Knowledge:
-        # generate index_name and collection_name
-        db_knowledge.index_name = generate_knowledge_index_name()
-        db_knowledge.collection_name = db_knowledge.index_name
+        # F1.6: tenant-routed SPACE knowledge bases never create per-space
+        # collection/index - collection/index names are routing labels for the
+        # shared store; bootstrap happens on the admin path only.
+        shared_routing = cls._space_shared_routing_for_create(db_knowledge, login_user.tenant_id)
+        if shared_routing is not None:
+            from bisheng.knowledge.rag.shared_space_storage import (
+                shared_collection_name,
+                shared_index_name,
+            )
+
+            db_knowledge.index_name = shared_index_name(login_user.tenant_id)
+            db_knowledge.collection_name = shared_collection_name(login_user.tenant_id)
+            initialize_indices = False
+        else:
+            # generate index_name and collection_name
+            db_knowledge.index_name = generate_knowledge_index_name()
+            db_knowledge.collection_name = db_knowledge.index_name
 
         # Insert into Database
         db_knowledge.user_id = login_user.user_id
@@ -905,8 +937,20 @@ class KnowledgeService(KnowledgeUtils):
     ) -> Knowledge:
         from bisheng.permission.domain.services.owner_service import OwnerService
 
-        db_knowledge.index_name = generate_knowledge_index_name()
-        db_knowledge.collection_name = db_knowledge.index_name
+        # F1.6 (async variant): shared-routed SPACE skips per-space store creation.
+        shared_routing = cls._space_shared_routing_for_create(db_knowledge, login_user.tenant_id)
+        if shared_routing is not None:
+            from bisheng.knowledge.rag.shared_space_storage import (
+                shared_collection_name,
+                shared_index_name,
+            )
+
+            db_knowledge.index_name = shared_index_name(login_user.tenant_id)
+            db_knowledge.collection_name = shared_collection_name(login_user.tenant_id)
+            initialize_indices = False
+        else:
+            db_knowledge.index_name = generate_knowledge_index_name()
+            db_knowledge.collection_name = db_knowledge.index_name
         db_knowledge.user_id = login_user.user_id
         db_knowledge.tenant_id = login_user.tenant_id
         db_knowledge = await KnowledgeDao.async_insert_one(db_knowledge)
@@ -1029,6 +1073,23 @@ class KnowledgeService(KnowledgeUtils):
 
     @classmethod
     def delete_knowledge_file_in_vector(cls, knowledge: Knowledge, del_es: bool = True):
+        # F1.7: a tenant-routed SPACE knowledge base never owns its collection/
+        # index lifecycle - dropping the shared store from a space deletion is
+        # forbidden (R7); content-level cleanup happens through the document
+        # projection/delete flows instead.
+        from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+
+        if resolve_space_shared_routing(
+            int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID), knowledge.type
+        ) is not None:
+            logger.info(
+                "act=skip_shared_store_delete knowledge_id=%s collection=%s "
+                "(tenant-routed shared store; document-level cleanup applies)",
+                knowledge.id,
+                knowledge.collection_name,
+            )
+            return
+
         embeddings = FakeEmbeddings()
         vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
             invoke_user_id=0, knowledge=knowledge, embeddings=embeddings

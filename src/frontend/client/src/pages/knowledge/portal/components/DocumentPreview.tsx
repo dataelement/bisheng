@@ -110,15 +110,20 @@ export function DocumentPreview({
                     {selectedFile.summary ? (
                         <>
                             <div className={s.divider} />
-                            <button
-                                type="button"
+                            {/* 外层不用 button：浏览器默认禁止在 button 内选中文字，摘要需可复制 */}
+                            <div
                                 className={`${s.summaryBar} ${summaryExpanded ? s.summaryBarExpanded : ""}`}
-                                aria-label={summaryExpanded ? "收起文档摘要" : "查看文档摘要"}
-                                aria-expanded={summaryExpanded}
-                                aria-controls="portal-summary-content"
-                                onClick={onToggleSummary}
+                                data-testid="portal-summary-bar"
                             >
-                                <div className={s.summaryHeader} data-testid="portal-summary-header">
+                                <button
+                                    type="button"
+                                    className={s.summaryHeader}
+                                    data-testid="portal-summary-header"
+                                    aria-label={summaryExpanded ? "收起文档摘要" : "查看文档摘要"}
+                                    aria-expanded={summaryExpanded}
+                                    aria-controls="portal-summary-content"
+                                    onClick={onToggleSummary}
+                                >
                                     <span className={s.summaryIcon}>
                                         <FileText size={16} />
                                     </span>
@@ -128,11 +133,16 @@ export function DocumentPreview({
                                     <span className={s.summaryToggleIcon}>
                                         {summaryExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                     </span>
-                                </div>
-                                <div id="portal-summary-content" data-testid="portal-summary-content" className={s.summaryText}>
+                                </button>
+                                <div
+                                    id="portal-summary-content"
+                                    data-testid="portal-summary-content"
+                                    className={s.summaryText}
+                                    onClick={summaryExpanded ? undefined : onToggleSummary}
+                                >
                                     {selectedFile.summary}
                                 </div>
-                            </button>
+                            </div>
                         </>
                     ) : null}
                     <div className={s.previewHost}>

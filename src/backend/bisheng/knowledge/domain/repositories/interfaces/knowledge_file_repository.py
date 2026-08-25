@@ -57,6 +57,21 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """List F059 entries for a canonical document in stable ID order."""
         ...
 
+    async def find_active_entries_for_documents(
+        self,
+        *,
+        tenant_id: int,
+        document_ids: list[int],
+        knowledge_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        """Active manager/publish/share entries of canonical documents in given spaces.
+
+        One batched query for the F059 retrieval Top-K back-mapping (F3):
+        entries are limited to ``knowledge_ids`` (requested spaces) so the
+        cost stays O(len(document_ids)) instead of O(space file count).
+        """
+        ...
+
     async def find_entry_in_space_for_update(
         self,
         document_id: int,

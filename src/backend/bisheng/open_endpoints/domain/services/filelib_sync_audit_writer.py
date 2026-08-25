@@ -179,6 +179,7 @@ class FilelibSyncAuditWriter:
             "version_link_pending": bool(response.version_link_pending) if response is not None else None,
             "replaced_file_id": replaced_file_id,
             "trigger_type": trigger_type,
+            "tags": list(params.tags or []),
             "error_code": error_code,
             "error_message": error_message,
             "request_id": cls._request_id(request),
