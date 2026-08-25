@@ -2,7 +2,7 @@
 import { LoadIcon } from "@/components/bs-icons";
 import { LoadingIcon } from "@/components/bs-icons/loading";
 import { PermissionDialog } from "@/components/bs-comp/permission/PermissionDialog";
-import { hasResourceAction, useResourceActions } from "@/components/bs-comp/permission/useResourceActions";
+import { hasResourceAction, useLazyResourceActions } from "@/components/bs-comp/permission/useResourceActions";
 import { Accordion } from "@/components/bs-ui/accordion";
 import { Button } from "@/components/bs-ui/button";
 import { SearchInput } from "@/components/bs-ui/input";
@@ -12,7 +12,7 @@ import { refreshMcpApi } from "@/controllers/API/assistant";
 import { getToolsApi } from "@/controllers/API/tools";
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request";
 import { CpuIcon, Star, User } from "lucide-react";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import McpServerDialog from "./EditMcp";
@@ -49,12 +49,15 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
     const [permDialogOpen, setPermDialogOpen] = useState(false);
     const [permTarget, setPermTarget] = useState<{ id: string; name: string } | null>(null);
     const isBuiltinTool = type === "";
-    const toolIds = isBuiltinTool ? [] : allData.map((el: any) => String(el.id));
-    const { actions } = useResourceActions('tool', toolIds, ['edit', 'delete', 'manage_permission']);
+    const { actions, load: loadToolActions } = useLazyResourceActions('tool', ['edit', 'delete', 'manage_permission']);
     // Built-in tools expose no resource-level management actions. Their separate
     // configuration entry is restricted to the global super admin below.
     const canManageTool = (id: string | number) =>
         !isBuiltinTool && hasResourceAction(actions, id, 'manage_permission');
+    const handleHoverToolPermissions = useCallback((tool) => {
+        if (isBuiltinTool || !tool?.id) return;
+        void loadToolActions(String(tool.id));
+    }, [isBuiltinTool, loadToolActions]);
 
     const loadData = async (_type = "custom") => {
         await getToolsApi(_type, { action: 'visible' }).then((res) => {
@@ -199,6 +202,7 @@ const TabTools = ({ select = null, onSelect }: TabToolsProps) => {
                                         onPermission={canManageTool(el.id)
                                             ? (tool) => { setPermTarget({ id: String(tool.id), name: tool.name }); setPermDialogOpen(true); }
                                             : null}
+                                        onHoverPermissions={handleHoverToolPermissions}
                                     ></ToolItem>
                                 ))
                             ) : (

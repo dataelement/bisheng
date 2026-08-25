@@ -265,6 +265,18 @@ class F048ResourcePermissionApi:
             actor,
             "visible",
         )
+        if await self._public_preset_tool(resource_type, resource_id):
+            mode = await self._runtime.mode_for_target(target)
+            projection_degraded = mode.projection_state != "CURRENT" or mode.version != target.resource_version
+            actions = await self._runtime.effective_actions(resource_type) if actor.super_admin else ()
+            return {
+                "mode": mode.mode,
+                "actions": list(actions),
+                "sources": [],
+                "roster_complete": False,
+                "projection_state": mode.projection_state,
+                "projection_degraded": projection_degraded,
+            }
         await self._require_visible(actor, target)
         mode = await self._runtime.mode_for_target(target)
         projection_degraded = mode.projection_state != "CURRENT" or mode.version != target.resource_version
@@ -474,6 +486,19 @@ class F048ResourcePermissionApi:
             actor=actor,
             action=action,
         )
+
+    async def _public_preset_tool(self, resource_type: str, resource_id: str) -> bool:
+        if resource_type.strip().lower() != "tool":
+            return False
+        port_for = getattr(self._resources, "port_for", None)
+        if port_for is None:
+            return False
+        port = port_for(resource_type)
+        load_permission_record = getattr(port, "load_permission_record", None)
+        if load_permission_record is None:
+            return False
+        record = await load_permission_record(resource_id=resource_id)
+        return bool(record and getattr(record, "preset", False) and getattr(record, "system_allowlisted", False))
 
     async def _explanation(
         self,
