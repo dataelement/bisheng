@@ -471,7 +471,7 @@ export function ChannelMemberDialog({
                             {localize("com_subscription.cancel")}
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className={cn("bg-[#F53F3F] hover:bg-[#F76965]")}
+                            className="bg-danger hover:bg-danger-hover"
                             onClick={() => {
                                 if (removeTarget) handleRemove(removeTarget);
                                 setRemoveTarget(null);
