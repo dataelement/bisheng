@@ -10,6 +10,7 @@ from bisheng.core.cache.redis_manager import get_redis_client_sync
 from bisheng.core.config.settings import Settings, PasswordConf, SystemLoginMethod, \
     WorkflowConf, LinsightConf, KnowledgeConf, IntelligenceCenterConf, McpConf, \
     DailyChatConf, ShougangConf, CofcoForwardingConf, ShougangWeChatMessagePushConf
+from bisheng.core.config.openfga import OpenFgaGuardConf
 from bisheng.core.database import get_sync_db_session, get_async_db_session
 
 config_file = os.getenv('config', 'config.yaml')
@@ -195,6 +196,16 @@ class ConfigService(Settings):
         # Get password-related configuration items
         all_config = await self.aget_all_config()
         return PasswordConf(**all_config.get('password_conf', {}))
+
+    async def aget_openfga_guard(self) -> OpenFgaGuardConf:
+        """OpenFGA overload-protection settings, or defaults when unconfigured.
+
+        Existing deployments have no ``openfga_guard`` block in their saved
+        system config, so the model defaults are what actually runs until an
+        operator adds one.
+        """
+        all_config = await self.aget_all_config()
+        return OpenFgaGuardConf(**(all_config.get('openfga_guard') or {}))
 
     def get_system_login_method(self) -> SystemLoginMethod:
         # Get password-related configuration items

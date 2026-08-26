@@ -35,3 +35,33 @@ class OpenFGAConf(BaseModel):
         description='Previous authorization model id, used during gray period; '
                     'effective only when dual_model_mode=true',
     )
+
+
+class OpenFgaGuardConf(BaseModel):
+    """Overload protection for OpenFGA, editable from the system config page.
+
+    Lives in the DB-backed system config (``initdb_config``) rather than in
+    config.yaml so operators can retune the ceiling during an incident without
+    restarting the API. Defaults are deliberately generous: the guard exists to
+    turn a crash into a "try again shortly" notice, not to police normal usage.
+    """
+
+    enabled: bool = Field(default=True, description='Whether to shed load when OpenFGA is saturated')
+    max_in_flight: int = Field(
+        default=512,
+        ge=1,
+        description='Max concurrent OpenFGA requests per process. Cluster ceiling is this '
+                    'value times the number of API and Celery processes',
+    )
+    reject_ratio: float = Field(
+        default=0.9,
+        ge=0.05,
+        le=1.0,
+        description='Occupancy at which new requests are turned away; also the percentage '
+                    'shown in the user-facing notice',
+    )
+    acquire_timeout: float = Field(
+        default=20.0,
+        gt=0,
+        description='Seconds an outbound call may wait for a free slot before being rejected',
+    )
