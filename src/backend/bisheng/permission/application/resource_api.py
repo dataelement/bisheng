@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from collections.abc import Mapping
@@ -339,20 +340,50 @@ class F048ResourcePermissionApi:
             actor,
             "visible",
         )
+        if await self._public_preset_tool(resource_type, resource_id):
+            mode = await self._runtime.mode_for_target(target)
+            projection_degraded = mode.projection_state != "CURRENT" or mode.version != target.resource_version
+            actions = await self._runtime.effective_actions(resource_type) if actor.super_admin else ()
+            return {
+                "mode": mode.mode,
+                "actions": list(actions),
+                "sources": [],
+                "roster_complete": False,
+                "projection_state": mode.projection_state,
+                "projection_degraded": projection_degraded,
+            }
         await self._require_visible(actor, target)
+        mode = await self._runtime.mode_for_target(target)
+        projection_degraded = mode.projection_state != "CURRENT" or mode.version != target.resource_version
         if self._privileged(actor, target):
             # A super admin / tenant admin is authorized on identity and holds
             # no grant rows, so the grant-derived explanation would report an
             # empty action set — "visible but powerless", which is exactly what
             # made the client show them as having no permissions. Report the
             # full effective action set for the resource type instead.
-            mode = await self._runtime.current_mode(target)
             actions = await self._runtime.effective_actions(resource_type)
             return {
                 "mode": mode.mode,
                 "actions": list(actions),
                 "sources": [],
                 "roster_complete": False,
+                "projection_state": mode.projection_state,
+                "projection_degraded": projection_degraded,
+            }
+        if projection_degraded:
+            effective_actions = await self._runtime.effective_actions(resource_type)
+            allowed = await asyncio.gather(
+                *(self._runtime.check_action(actor, target, action) for action in effective_actions)
+            )
+            return {
+                "mode": mode.mode,
+                "actions": [
+                    action for action, is_allowed in zip(effective_actions, allowed, strict=True) if is_allowed
+                ],
+                "sources": [],
+                "roster_complete": False,
+                "projection_state": mode.projection_state,
+                "projection_degraded": True,
             }
         explanation = await self._explanation(
             actor,
@@ -370,6 +401,8 @@ class F048ResourcePermissionApi:
                 for row in explanation.sources
             ],
             "roster_complete": False,
+            "projection_state": mode.projection_state,
+            "projection_degraded": False,
         }
 
     async def mutate_grants(
@@ -588,6 +621,19 @@ class F048ResourcePermissionApi:
             action=action,
         )
 
+    async def _public_preset_tool(self, resource_type: str, resource_id: str) -> bool:
+        if resource_type.strip().lower() != "tool":
+            return False
+        port_for = getattr(self._resources, "port_for", None)
+        if port_for is None:
+            return False
+        port = port_for(resource_type)
+        load_permission_record = getattr(port, "load_permission_record", None)
+        if load_permission_record is None:
+            return False
+        record = await load_permission_record(resource_id=resource_id)
+        return bool(record and getattr(record, "preset", False) and getattr(record, "system_allowlisted", False))
+
     async def _explanation(
         self,
         actor,
@@ -616,10 +662,7 @@ class F048ResourcePermissionApi:
         """
         if actor.super_admin:
             return True
-        return (
-            target.tenant_id == actor.current_tenant_id
-            and target.tenant_id in actor.tenant_admin_tenant_ids
-        )
+        return target.tenant_id == actor.current_tenant_id and target.tenant_id in actor.tenant_admin_tenant_ids
 
     async def _require_visible(self, actor, target) -> None:
         if self._privileged(actor, target):

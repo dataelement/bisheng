@@ -7,7 +7,8 @@
 > F043～F046 来自 PRD《3.0.0-beta1 需求文档》§四 功能体验优化；
 > F047 为灵思任务模式引用溯源；F048 来自 PRD《3.0-beta1 ReBAC 逻辑优化》，
 > 是本版本的 P0 权限架构升级 Feature；F049 在遵守 C4 系统身份策略与 OpenFGA 最终可见性语义的前提下，
-> 优化知识空间目录与搜索读取的候选批次、冗余查询和可观测性。
+> 优化知识空间目录与搜索读取的候选批次、冗余查询和可观测性；F051 将知识库列表的非筛选动作
+> 改为打开单行操作菜单后按资源查询，保持 F048 最终动作判定与 F027 列表筛选契约。
 
 ---
 
@@ -38,6 +39,7 @@
 | PermissionVisibleSourceProjection | F048-rebac-permission-model-grants | 原 F048 正式迁移和后续运行时从 canonical Grant assignee 生成的展平可见派生索引；随同一 PermissionMigrationRun/Item 追溯；system/public/shared 继续由各 Owner 事实与 system tuple 追溯；均不可独立编辑或参与数据库 ALLOW |
 | —（无新增） | F049-knowledge-space-children-read-optimization | 只调整既有目录与搜索列表的读取、最终可见性批量判断、文件夹统计响应和性能观测；不新增领域对象、表、错误码、Grant、权限模式或 OpenFGA relation |
 | —（无新增） | F050-unified-permission-settings | 统一知识空间/频道新建与设置页面；复用既有 Knowledge、Channel、F048 Grant/Assignee 与 protected owner，不建立第二套权限领域对象 |
+| —（无新增） | F051-knowledge-list-action-lazy-load | 只调整文档/QA 知识库列表的动作权限读取时机与单行操作菜单体验；复用既有 Knowledge 与 F048 单资源权限读取，不新增领域对象、表、错误码、Grant、权限模式或 OpenFGA relation |
 
 **规则**：
 - 非 Owner Feature 的 AC 中不得出现其他对象的"创建/修改/删除"行为，只能"读取"或"调用" Owner 的 Service
@@ -63,7 +65,7 @@
 | INV-16 | 权限继承复用资源既有的直接 `parent` 语义，不建立第二套 `permission_parent` 层级；`CUSTOM` 只切断权限继承，不能改变业务结构父子关系 | ResourcePermissionMode | F048 |
 | INV-17 | 任一有效 Grant 可以产生资源列表/基础元数据可见性，但可见性不能替代下载、搜索、RAG 或业务变更动作的具体鉴权。文件预览不设置 PermissionAction；只有原件/打包下载必须检查 `download`，不得由“可预览”推导下载能力 | PermissionAction, PermissionGrant | F048 |
 | INV-18 | 权限升级采用应用自动阻断业务访问后的单向正式数据迁移：更新镜像并启动进程后，旧 model 只能进入 `MIGRATION_REQUIRED/NOT_READY` 运维态，不初始化 F048 权限运行时、不发布 ready heartbeat，HTTP/WS 迁移门禁除 `/health` 外统一拒绝访问，Celery/Linsight 暂停消费任务；schema upgrade 成功后，由 `src/backend/scripts/` 专用脚本沿用现有 Store 发布一个新 model ID，原地转换 tuple 并退役旧运行数据，校验通过后重启全部进程并自动恢复访问/任务消费。F048 不提供独立迁移预演、旧/新 model 影子运行、应用级回滚、新→旧转换、dual/legacy model client、长期双写、旧动作别名、Config 第二 PDP 或逐请求旧系统 ALLOW fallback；失败保持维护并前向修复 | PermissionMigrationRun | F048 |
-| INV-19 | 对需要进入资源 ReBAC 的请求，权限服务不可用、模型未生效、动作未分级、迁移记录不明确或授权状态不可判定时必须 fail closed | PermissionAction, PermissionModel, PermissionGrant | F048 |
+| INV-19 | 对需要进入资源 ReBAC 的请求，权限服务不可用、模型未生效、动作未分级、迁移记录不明确或 OpenFGA 具体决策不可获得时必须 fail closed；资源投影处于 PROJECTING/COMMIT_UNKNOWN/COMMITTED/FAILED_CLOSED 本身不等于具体决策不可判定，普通 action/visible 继续通过唯一 OpenFGA 执行面以 higher consistency 决策，但新的权限配置写持续冻结且 SQL Grant/待处理来源不得补充 ALLOW | PermissionAction, PermissionModel, PermissionGrant | F048 |
 | INV-20 | 动作、模型、模型动作、资源 Grant、Grant 主体和权限模式的运行时事实必须存于规范化关系表；`permission_relation_models_v1`、`permission_relation_model_bindings_v1` 及任何新的大 JSON 不得继续作为运行时真相 | PermissionAction, PermissionModel, PermissionGrant, ResourcePermissionMode | F048 |
 | INV-21 | 所有生产 OpenFGA Check、List 和 Write 必须显式指定经发布门禁确认的 Authorization Model ID；发布新模型不得依赖“自动使用最新模型”完成切换 | AuthorizationModelRelease | F048 |
 | INV-22 | 旧 `owner/manager/editor/viewer` 只迁移直接关系事实；由旧模型计算出的层级、父级或角色蕴含结果不得展开为新的 Grant assignee | PermissionGrant, PermissionGrantAssignee | F048 |
@@ -96,6 +98,7 @@
 | F048-rebac-permission-model-grants | F027, F036, F040 | 依赖既有候选枚举、继承评估和列表性能基线；实现时必须保证分页与性能契约不倒退，并移除对旧 binding 第二次求值的依赖 |
 | F049-knowledge-space-children-read-optimization | F027, F040, F048 | 沿用目录 cursor、搜索页码候选扫描与 F048 OpenFGA 唯一执行面；不得用 `INHERIT` 数据库模式绕过最终候选可见性判断 |
 | F050-unified-permission-settings | v2.6.0 F044, F048 | 只继承 F044 的完整页面与统一入口目标；权限上下文、候选、protected owner、Grant mutation、版本和投影全部以 F048 为准 |
+| F051-knowledge-list-action-lazy-load | F027, F048 | 保持知识库列表 cursor 与可见/可用筛选语义；列表不预取非筛选动作，单资源菜单能力继续以 F048 当前有效动作和执行时鉴权为准 |
 
 ---
 
@@ -110,6 +113,7 @@
 | F027/F036/F040 | cursor、批量候选和请求内性能约束继续有效；旧 Config binding / 第二 PDP 的优化路径在切换后退役 |
 | F013/F017 | `system`、`tenant`、`department`、`user_group`、`shared_with` 等系统关系继续保留；不得被误转为普通资源 Grant |
 | F027/F040/F048 | F049 优化知识空间 `children` / `search` 的候选批次、重复门禁、文件夹统计和耗时观测；平台超级管理员遵守 C4 系统身份策略，普通用户继续执行有界 OpenFGA BatchCheck、稳定目录游标、既有搜索页码契约和 fail-closed，不改变个人可见空间枚举语义 |
+| F027/F048 | F051 保持知识库列表可见/可用资源集合、cursor 与分页契约，只移除列表行非筛选动作的预计算；设置、删除和权限管理能力在单资源操作菜单打开后读取，最终业务操作仍由 F048 执行时鉴权 |
 | F018-resource-owner-transfer | 当前实现先提交资源 `user_id`、再删除旧/写入新 owner tuple，失败依赖 `failed_tuple` 补写；同时不更新 knowledge_space/channel CREATOR membership，且无已接入前端。OQ-07 已选择 A：F048 启服时退役其 API/Service 调用路径，本期不重构 owner transfer；历史差异按 preservation-first 迁移 |
 
 ---
@@ -144,3 +148,5 @@
 | 2026-08-13 | 明确模型停用/删除语义：停用只禁止新增或变更授权，已有 Grant 保持有效；删除必须先清零或替换全部绑定并完成残留投影对账。因停用不再触发批量撤权，F048 可见执行投影采用单槽浅层 `visible`，不引入 A/B 槽与运行时 switch | F048 |
 | 2026-08-14 | 登记 F049 知识空间目录与搜索读取优化：指定资源的超级管理员按 C4 系统身份策略放行、去重空间鉴权、页大小驱动的有界候选扫描、移除未展示的文件夹数量统计并保留失败存在性、增加分段性能观测；普通用户候选最终可见性继续统一使用 OpenFGA BatchCheck，不新增继承捷径 | F049、F027、F040、F048 |
 | 2026-08-14 | 登记 F050 统一权限设置入口：保留 v2.6.0 F044 页面目标，创建/编辑权限完全改接 F048，并增加创建后初始 Grant 部分失败与持久幂等约束 INV-28 | F050、F048 |
+| 2026-08-20 | 澄清 INV-19 的决策与写入边界：资源权限投影非 CURRENT 时冻结新的权限配置写，但不暂停普通资源鉴权；具体 action/visible 继续使用 higher-consistency OpenFGA，OpenFGA/Catalog/model/verified identity 不可用时仍 fail closed，SQL 不兜底 ALLOW | F048 |
+| 2026-08-25 | 登记 F051 知识库列表动作权限懒加载：文档/QA 列表只承担可见/可用筛选，不为列表行预计算设置、删除和权限管理动作；单资源菜单按需读取当前动作，保持执行时最终鉴权与失败关闭 | F051、F027、F048 |

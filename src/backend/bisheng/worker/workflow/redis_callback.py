@@ -15,6 +15,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_rag_citation_registry_items,
     save_message_citations_sync,
     select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
 )
 from bisheng.common.chat.utils import sync_judge_source, sync_process_source_document
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum, BaseTelemetryTypeEnum
@@ -541,6 +542,17 @@ class RedisCallback(BaseCallback):
         if chat_response.category == "question":
             promote_chat_attachments_sync(chat_response.files, self.user_id)
 
+        # Resolve citations BEFORE the insert: the stored answer must not keep a
+        # marker the registry cannot back, so the same item set decides both what
+        # is persisted and what survives in the text.
+        answer_text = self._extract_message_text(chat_response.message)
+        items = self._resolve_citation_items(
+            answer_text=answer_text,
+            source_documents=source_documents,
+            citation_registry_items=citation_registry_items,
+        )
+        chat_response.message = self._scrub_fabricated_citations(chat_response.message, items)
+
         message = ChatMessageDao.insert_one(
             ChatMessage(
                 user_id=self.user_id,
@@ -558,12 +570,6 @@ class RedisCallback(BaseCallback):
             )
         )
 
-        answer_text = self._extract_message_text(chat_response.message)
-        items = self._resolve_citation_items(
-            answer_text=answer_text,
-            source_documents=source_documents,
-            citation_registry_items=citation_registry_items,
-        )
         save_message_citations_sync(
             message_id=message.id,
             items=items,
@@ -617,6 +623,27 @@ class RedisCallback(BaseCallback):
             self.create_session = True
 
         return message.id
+
+    @staticmethod
+    def _scrub_fabricated_citations(message, items):
+        """Drop citation markers the registry cannot back, before the answer is stored.
+
+        The prompt forbids inventing a source id, but nothing enforced it: an
+        invented id still renders as a footnote whose detail endpoint 404s, so
+        the reader is told "溯源详情加载失败" for what is actually a hallucination.
+        Strip those markers where the answer is finalized instead of teaching
+        every reader to distrust the ones that remain.
+
+        Mirrors ``_extract_message_text``: a workflow answer arrives either as a
+        bare string or as a dict whose ``msg`` holds it.
+        """
+        if isinstance(message, str):
+            return strip_unregistered_citation_markers(message, items)
+        if isinstance(message, dict) and isinstance(message.get("msg"), str):
+            scrubbed = strip_unregistered_citation_markers(message["msg"], items)
+            if scrubbed != message["msg"]:
+                return {**message, "msg": scrubbed}
+        return message
 
     @staticmethod
     def _resolve_citation_items(

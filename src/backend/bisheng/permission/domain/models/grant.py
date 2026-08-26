@@ -37,6 +37,15 @@ class ProjectionState(StrEnum):
     FAILED_CLOSED = "FAILED_CLOSED"
 
 
+DECIDABLE_PROJECTION_STATES = frozenset(
+    {
+        ProjectionState.CURRENT.value,
+        ProjectionState.PROJECTING.value,
+        ProjectionState.FAILED_CLOSED.value,
+    }
+)
+
+
 class PermissionGrant(SQLModelSerializable, table=True):
     __tablename__ = "permission_grant"
     __table_args__ = (

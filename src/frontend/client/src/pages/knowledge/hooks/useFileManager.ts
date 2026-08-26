@@ -104,7 +104,10 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     // we maintain `nextSearchPage` internally to stitch successive batches.
     const loadFiles = useCallback(
         async (page: number = 1): Promise<KnowledgeFile[]> => {
-            if (!enabled || !activeSpace?.id) return [];
+            // A deep link first installs an id-only placeholder, then /info
+            // fills its role. Waiting for role prevents that transient state
+            // from issuing a duplicate children request with incomplete policy.
+            if (!enabled || !activeSpace?.id || !activeSpace.role) return [];
 
             const reqId = ++loadRequestIdRef.current;
             setLoading(true);
@@ -203,10 +206,11 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
     // Bumped on space switch to guarantee the filter effect fires even when
     // search state was already empty (no dep change otherwise).
     const [reloadToken, setReloadToken] = useState(0);
+    const isActiveSpaceReady = Boolean(enabled && activeSpace?.id && activeSpace.role);
 
     // Reload files whenever active space or deep-link folder changes
     useEffect(() => {
-        if (enabled && activeSpace) {
+        if (isActiveSpaceReady && activeSpace) {
             setCurrentPage(1);
             setSearchQuery("");
             setSearchTagIds([]);
@@ -239,25 +243,26 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
             } else {
                 setCurrentFolderId(undefined);
                 setCurrentPath([]);
-                // Bump token to trigger the filter effect on the NEXT render
-                // (when search state is already cleared), instead of calling
-                // loadFiles here with stale closure values.
-                setReloadToken(t => t + 1);
             }
+            // Space readiness, id, role, and deep-link folder changes all flow
+            // through this single trigger. The loader effect intentionally does
+            // not depend on those values directly, avoiding an immediate fetch
+            // plus a second fetch after the reset state is committed.
+            setReloadToken(t => t + 1);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run when space or deep-link folder changes
-    }, [enabled, activeSpace?.id, initialFolderId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- readiness/id/role changes are funneled through reloadToken
+    }, [isActiveSpaceReady, activeSpace?.id, activeSpace?.role, initialFolderId]);
 
     // Reload files when folder navigation, filters, or space (via reloadToken) change.
     // All state updates from the space effect are batched by React, so when this effect
     // runs on the re-render, searchQuery/searchTagIds are already cleared.
     useEffect(() => {
-        if (enabled && activeSpace) {
+        if (reloadToken > 0 && isActiveSpaceReady) {
             setCurrentPage(1);
             loadFiles(1);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFiles is stable via useCallback
-    }, [enabled, activeSpace?.role, searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, reloadToken]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- readiness/id/role changes are funneled through reloadToken
+    }, [searchQuery, searchTagIds, searchScope, statusFilter, sortBy, sortDirection, currentFolderId, reloadToken]);
 
     // ─── Auto-polling for pending files ─────────────────────────────────
     // F027 §AC-17-client-补做: in infinite-scroll mode we cannot re-fetch

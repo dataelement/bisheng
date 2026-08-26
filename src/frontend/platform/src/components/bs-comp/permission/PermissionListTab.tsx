@@ -23,11 +23,10 @@ import {
   User,
   Users,
 } from "lucide-react"
-import { userContext } from "@/contexts/userContext"
-import { useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { SourceBadge } from "./SourceBadge"
-import { canManageLevel, viewerIsCreator } from "./topTierGuard"
 import type { SubjectType } from "./types"
 
 interface PermissionListTabProps {
@@ -49,22 +48,6 @@ const SUBJECT_ICONS = {
 
 function createMutationIdempotencyKey(): string {
   return `grant-mutate-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-function assigneeEditable(
-  assignee: PermissionGrantAssignee,
-  context: ResourcePermissionContext,
-  isCreator: boolean,
-): boolean {
-  return (
-    context.mode === "CUSTOM" &&
-    context.can_manage_permission &&
-    assignee.scope === "LOCAL" &&
-    assignee.editable &&
-    !assignee.protected &&
-    // Top-tier grants stay with the creator; an owner does not manage owners.
-    canManageLevel(assignee.model.level, isCreator)
-  )
 }
 
 function getAvatarLabel(assignee: PermissionGrantAssignee): string {
@@ -95,7 +78,6 @@ interface RosterRowProps {
   context: ResourcePermissionContext
   models: GrantablePermissionModel[]
   pending: boolean
-  isCreator: boolean
   onMove: (assignee: PermissionGrantAssignee, modelKey: string) => void
   onRemove: (assignee: PermissionGrantAssignee) => void
 }
@@ -105,13 +87,12 @@ function RosterRow({
   context,
   models,
   pending,
-  isCreator,
   onMove,
   onRemove,
 }: RosterRowProps) {
   const { t } = useTranslation("permission")
   const SubjectIcon = SUBJECT_ICONS[assignee.subject.type]
-  const editable = assigneeEditable(assignee, context, isCreator)
+  const editable = canMutatePermissionAssignee(assignee, context, models)
   const displayName =
     assignee.subject.name ||
     `${assignee.subject.type}:${assignee.subject.id}`
@@ -231,7 +212,6 @@ export function PermissionListTab({
   onMutationSuccess,
 }: PermissionListTabProps) {
   const { t } = useTranslation("permission")
-  const { user } = useContext(userContext)
   const [assignees, setAssignees] = useState<PermissionGrantAssignee[]>([])
   const [models, setModels] = useState<GrantablePermissionModel[]>([])
   const [summary, setSummary] = useState<MyResourcePermissions | null>(null)
@@ -332,11 +312,6 @@ export function PermissionListTab({
     resourceId,
     resourceType,
   ])
-
-  const isCreator = useMemo(
-    () => viewerIsCreator(assignees, user?.user_id),
-    [assignees, user?.user_id],
-  )
 
   const visibleAssignees = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -468,7 +443,6 @@ export function PermissionListTab({
             context={context}
             models={models}
             pending={pendingAssigneeId === assignee.assignee_id}
-            isCreator={isCreator}
             onMove={(item, modelKey) =>
               void mutateAssignee(item, {
                 op: "MOVE",

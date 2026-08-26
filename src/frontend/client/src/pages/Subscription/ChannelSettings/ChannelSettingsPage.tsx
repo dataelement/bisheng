@@ -97,13 +97,15 @@ export function ChannelSettingsPage() {
   const creatorRow = useMemo<PermissionDraftRow | null>(() => {
     if (isEditMode || !user) return null;
     const numericUserId = Number(user.id);
-    const ownerModel = relationOptions.find((model) => model.level === 4);
+    const ownerModel =
+      relationOptions.find((model) => model.id === "owner") ??
+      relationOptions.find((model) => model.level === 4);
     return {
       subjectType: "user",
       subjectId: Number.isFinite(numericUserId) ? numericUserId : -1,
       subjectName: user.name || user.username || user.email,
       modelKey: ownerModel?.id ?? "owner",
-      modelName: localize("creator"),
+      modelName: ownerModel?.name ?? localize("com_permission.level_owner"),
       modelLevel: ownerModel?.level ?? 4,
       protected: true,
       editable: false,
@@ -140,15 +142,22 @@ export function ChannelSettingsPage() {
   }
   if (settings.loadError) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-body text-text-2">
-        <span>{settings.localize("com_load_error")}</span>
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-body text-text-2">
+        <div className="space-y-1">
+          <h1 className="text-h4 text-text-1">
+            {settings.localize("com_subscription.channel_settings_load_failed")}
+          </h1>
+          <p className="text-body-sm text-text-3">
+            {settings.localize("com_subscription.channel_settings_load_failed_desc")}
+          </p>
+        </div>
         <Button
           color="default"
           variant="outlined"
           size="small"
           onClick={settings.cancel}
         >
-          {settings.localize("com_unified_permission.cancel")}
+          {settings.localize("com_subscription.back_to_channel_list")}
         </Button>
       </div>
     );

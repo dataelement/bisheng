@@ -46,9 +46,21 @@ PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
 ```
 
 The JSON report includes canonical Grant/assignee source counts, persisted
-source differences, and the deduplicated expected tuple count/checksum. The
-script never scans or deletes existing visible tuples because system/public/
-shared visibility is not owned by the Grant source projection.
+source differences, and the deduplicated expected tuple count/checksum. Add an
+explicit Store scan to report missing and orphan direct `visible` tuple keys:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --audit-orphan-tuples \
+  --orphan-object folder:97394
+```
+
+The audit treats the union of canonical Grant sources and every ACTIVE SQL
+visible-source contribution as supported, so non-Grant system/resource sources
+are not classified as orphans. With `--orphan-object`, it uses an exact OpenFGA
+Read for those resources and prints the scoped anomaly set plus a stable cleanup
+checksum. Repeat the flag to select more than one reviewed resource. Omit it to
+scan the whole Store and select every audited orphan.
 
 For apply, stop ingress traffic and all API/Worker/Linsight processes, wait for
 their F048 heartbeat TTL to expire, and copy the dry-run `store_id` into the
@@ -73,9 +85,34 @@ with OpenFGA duplicate-ignore semantics, verifies them with higher consistency,
 then activates the rebuilt Grant source rows and publishes a no-op Catalog
 release bound to the new Authorization Model release. It does not create or modify a formal
 `permission_migration_run`. Re-running after an interruption is forward-only
-and idempotent. Restart all permission-using processes after success; they
-discover the latest model through the stable Store name and validate the new
-SQL CURRENT Catalog pin.
+and idempotent.
+
+To delete reviewed orphan tuple keys, keep the maintenance window in place and
+copy both `store_id` and `orphan_tuple_checksum` from the immediately preceding
+dry-run:
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py \
+  --apply \
+  --audit-orphan-tuples \
+  --orphan-object folder:97394 \
+  --cleanup-orphan-tuples \
+  --confirm-orphan-checksum <orphan-tuple-checksum> \
+  --confirm-store-id <store-id> \
+  --operator-id <operator-user-id>
+```
+
+Cleanup is an independent operation: it does not backfill or retire SQL source
+rows and does not publish an Authorization Model/Catalog release. It is refused
+if the selected orphan set changes. Each resource is fenced by its current
+permission version, each exact delete is recorded as a
+`VISIBLE_ORPHAN_CLEANUP` projection operation, and higher-consistency reads must
+confirm that no selected orphan direct tuple remains. Other unselected anomalies
+are untouched. Effective `visible` checks can still be true through an inherited
+parent; the audit verifies exact direct tuple presence instead.
+Restart all permission-using processes after success; they discover the latest
+model through the stable Store name and validate the new SQL CURRENT Catalog
+pin.
 
 ### `reconcile_f048_projection_operations.py`
 
@@ -110,6 +147,55 @@ Exit code `4` indicates an unexpected runtime/infrastructure failure. Re-run
 is safe: already `FINALIZED` operations are verified and skipped. Catalog
 publish should only be retried when the final `remaining_active` report is
 empty.
+
+### `recover_f048_failed_closed_projection.py`
+
+Forward-recover one explicitly selected F048 resource operation that has
+already entered `FAILED_CLOSED`. This is separate from ordinary reconcile: it
+uses the operation ledger's frozen AFTER state, reads the exact live tuples
+with higher consistency, and proposes only the missing writes and surplus
+deletes. It never derives authorization intent from staged SQL rows and never
+updates SQL or OpenFGA directly.
+
+Run a dry-run first from `src/backend/` with the same `config` as the service:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/recover_f048_failed_closed_projection.py \
+  --tenant-id 1 \
+  --resource-type knowledge_space \
+  --resource-id 4166
+```
+
+The dry-run prints the live Store/model pins and a
+`recovery_confirmation_checksum` bound to the exact correction proposal. Copy
+those three values into the apply command:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/recover_f048_failed_closed_projection.py \
+  --tenant-id 1 \
+  --resource-type knowledge_space \
+  --resource-id 4166 \
+  --apply \
+  --confirm-store-id '<dry-run store_id>' \
+  --confirm-model-id '<dry-run model_id>' \
+  --confirm-recovery-checksum '<dry-run recovery_confirmation_checksum>'
+```
+
+The script resolves the active operation from the resource mode row; operators
+do not need to discover or enter an operation ID. The resolved ID remains in
+the dry-run output for audit. Apply is refused when tenant, resource scope,
+operation ownership, expected
+version, CURRENT Catalog Store/model pin, durable ledger checksum, or the live
+tuple proposal changed after dry-run. The correction must fit one atomic
+OpenFGA write (at most 90 tuples). Only resource scopes are supported; external
+business-owned scopes such as department remain manual-analysis cases. A
+successful run higher-consistency verifies the full AFTER state, finalizes the
+staged SQL rows, advances the resource version, and ends at
+`operation=FINALIZED` plus `resource projection_state=CURRENT`. Re-running a
+finalized operation only verifies and skips it.
 
 ### `migrate_f048_permission_data.py`
 

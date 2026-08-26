@@ -1041,14 +1041,31 @@ HTTP 每次最多 50 个 change item；单槽 visible tuple 也计入编译后�
 FGA Write 超时属于 `COMMIT_UNKNOWN`：reconciler 用 higher consistency 对比 operation
 记录的 before/after tuple checksum。全为 after 则转 COMMITTED，全为 before 才可按原
 operation 重试；出现混合集或 scope version 已被外部改变时标 FAILED_CLOSED 并 fence
-该资源，不能盲目补写覆盖后来状态。
+该资源的后续权限配置写入，不能盲目补写覆盖后来状态。资源的具体 action/visible 决策不复用
+该写栅栏：`PROJECTING`、`COMMIT_UNKNOWN`、`COMMITTED` 和 `FAILED_CLOSED` 期间仍由唯一
+OpenFGA 执行面返回 ALLOW/DENY，并强制 higher consistency。OpenFGA 或 CURRENT Catalog/model
+不可用、verified identity/parent 不匹配时仍 fail closed；SQL Grant 与待处理来源不参与决策兜底。
+
+`ResourcePermissionMode.projection_state` 同时承担 operation 归属和版本提交记录，但不再作为
+普通业务鉴权的全局停服开关。decision fence 接受 `CURRENT/PROJECTING/FAILED_CLOSED` 三种资源
+镜像状态；后两者以及同一请求内观察到的 permission version 变化返回 degraded 标记并强制
+higher consistency。Grant/mode/lifecycle command 仍只允许从 `CURRENT` claim 新 operation，
+因此同一资源的权限写保持串行。`my-permissions` 在 degraded 状态只返回 OpenFGA 逐 action
+结果和投影状态，不读取 staged SQL source explanation。
 
 人工恢复统一从 backend 容器运行
 `scripts/reconcile_f048_projection_operations.py --tenant-id <tenant> <operation...>`；默认
 dry-run 必须先核对 ledger、CURRENT Catalog 的 Store/model pin 与 scope fence，只有显式
 `--apply` 才逐 operation 调用领域 `reconcile_operation()`。脚本不得直接 UPDATE operation
-状态、资源镜像或增删 OpenFGA tuple；`FAILED_CLOSED`、pin/scope 不匹配或 ledger 不完整时
-保持阻断并转人工分析。重复传入 `FINALIZED` operation 只验证并跳过。
+状态、资源镜像或增删 OpenFGA tuple；普通 reconcile 对 `FAILED_CLOSED`、pin/scope 不匹配或
+ledger 不完整继续保持阻断。`FAILED_CLOSED` resource operation 经人工确认其冻结请求仍是目标后，
+改用 `recover_f048_failed_closed_projection.py`：先 dry-run 用 higher consistency 读取 exact tuple，
+操作者只输入 tenant/resource type/resource ID，脚本从资源 mode row 的 operation fence 解析 ledger；
+按 ledger AFTER 集计算单次原子前向修正并输出绑定 live correction 的确认 checksum。apply 必须同时
+确认 Store、model 和该 checksum，任一资源绑定或 tuple 事实漂移即拒绝。领域恢复入口只补缺失 WRITE/多余
+DELETE，不重放已满足的 visible/action tuple；完整 AFTER verify 后才执行原 SQL finalizer，并以
+`FINALIZED + CURRENT(target_version)` 收口。超过 90 个 terminal correction、外部业务 scope、
+scope/version/operation 不匹配继续转人工分析。重复传入 `FINALIZED` operation 只验证并跳过。
 
 #### Mode switch
 
@@ -1872,7 +1889,7 @@ D5 必须同时满足：
 | D2 数据脚本 | 保持运维停流；修复源数据/映射或脚本后，以同一 run/checkpoint 续跑 `migrate --apply` |
 | D3～D4 | 保持运维停流；按 migration item 对 SQL/同一 Store 的新 tuple 与 legacy delete 做幂等前向修正，重跑完整 D4 |
 | D5 重启或 smoke | 立即保持/恢复运维停流并停止全部权限写；新 model 仍是唯一目标，修复配置/代码/投影后重跑 D4+D5 |
-| D6 运行中 | 由新业务 Service + `permission_projection_operation/tuple` 执行 forward-fix；`FAILED_CLOSED` 资源保持 fenced，修复并 higher-consistency 验证后再开放 |
+| D6 运行中 | 由新业务 Service + `permission_projection_operation/tuple` 执行 forward-fix；`FAILED_CLOSED` 资源冻结新的权限配置写入，但具体 action/visible 继续以 higher-consistency OpenFGA 决策；修复验证后恢复正常一致性与权限写入 |
 
 禁止重新 pin 旧 model、恢复 Config 第二 PDP、把新授权 down-convert 成四档 tuple、
 逐请求询问旧 model，或只回退应用代码。旧 model 无法从 OpenFGA 删除，保留它只是产品
@@ -1934,6 +1951,7 @@ D3 已完成全部旧运行数据退役，D6 没有延后的 cleanup 窗口。�
 |---|---|---|
 | 2026-08-13 | 对单槽浅层 visible、inactive 既有授权保持、删除零引用门禁、旧系统单次迁移、列表路径、契约/依赖/测试/可观测执行 24 项 Design 接手测试与 Constitution Check；复审 LGTM，停在 Design ★ | `/sdd-review ... design` |
 | 2026-08-13 | 将模型 `active` 收窄为“是否可用于新增/变更授权”：停用不影响已有 Grant；删除必须先撤销或替换全部绑定，并在引用/source projection/live tuple 清零后完成。可见执行关系改为单槽浅层 `visible`，移除 A/B 槽、switch、双写和 Catalog 4-tuple 切换；保留来源引用计数、ledger、reconcile 与旧系统单次迁移 | 用户确认界面语义“关闭后不能再用它授权，已有授权不受影响；删除必须先清理绑定关系” |
+| 2026-08-20 | 将资源权限投影状态从普通鉴权停服条件中解耦：非 CURRENT 期间继续执行 higher-consistency OpenFGA action/visible 决策，只冻结同资源新的权限配置写；`my-permissions` 降级为 OpenFGA 逐动作结果且不展示 staged SQL 来源 | 用户确认增加查看者等权限修改不得影响已有授权的正常鉴权 |
 | 2026-08-13 | 按 F048 未上线事实重新完成 24 项 Design 接手测试：旧系统单次迁移、A/B 可见投影、订阅/历史 membership 证据边界、D4 完整性门禁和 Release Contract 均一致；复审 LGTM，停在 Design ★ | `/sdd-review ... design` |
 | 2026-08-13 | 用户澄清 F048 尚未上线：删除“旧 F048 → successor model”二次迁移和独立 migration run/checkpoint，把 A/B 可见 source projection、switch 与完整性校验合并到原 `migrate_f048_permission_data.py` 从旧系统执行的唯一正式 run | 用户迁移拓扑纠正 |
 | 2026-08-13 | 首轮 24 项 Design 接手测试修正现状快照、跨模型同来源 fingerprint 冲突与完整枚举错误码缺口；迁移拓扑后续按上一行重新修订并复审 | `/sdd-review ... design` |

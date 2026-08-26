@@ -16,6 +16,7 @@ from bisheng.citation.domain.schemas.citation_schema import CitationRegistryItem
 from bisheng.citation.domain.services.citation_prompt_helper import (
     save_message_citations,
     select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
 )
 from bisheng.common.chat.types import WorkType
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum, ApplicationTypeEnum
@@ -373,12 +374,17 @@ class ChatClient:
                 if msg.get('type') == 'reasoning':
                     reasoning_content += msg.get('content')
 
-            res = await self.add_message('bot', reasoning_content, 'reasoning_answer')
-            res = await self.add_message('bot', answer, 'answer')
             citation_items = select_registry_items_for_persistence(
                 self.gpts_agent.collect_citation_registry_items(),
                 answer,
             )
+            # A marker the registry cannot back must not reach storage: it would
+            # render as a footnote whose detail lookup 404s, reading as a system
+            # failure rather than the model having invented the id.
+            answer = strip_unregistered_citation_markers(answer, citation_items)
+
+            res = await self.add_message('bot', reasoning_content, 'reasoning_answer')
+            res = await self.add_message('bot', answer, 'answer')
             if res:
                 await save_message_citations(
                     message_id=res.id,

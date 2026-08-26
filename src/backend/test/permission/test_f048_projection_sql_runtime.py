@@ -126,7 +126,11 @@ def _plan() -> ProjectionPlan:
     )
 
 
-async def _seed_projecting_state(session_factory) -> int:
+async def _seed_projecting_state(
+    session_factory,
+    *,
+    projection_state: str = "PROJECTING",
+) -> int:
     with bypass_tenant_filter():
         async with session_factory() as session:
             async with session.begin():
@@ -154,7 +158,7 @@ async def _seed_projecting_state(session_factory) -> int:
                     resource_id="42",
                     mode="CUSTOM",
                     version=3,
-                    projection_state="PROJECTING",
+                    projection_state=projection_state,
                     operation_id=int(operation.id),
                 )
                 grant = PermissionGrant(
@@ -182,7 +186,7 @@ async def _seed_projecting_state(session_factory) -> int:
                             id=101,
                             subject_id="11",
                             source_ref="user:11",
-                            source_locator="user:11",
+                            source_locator="direct:user:11",
                             source_fingerprint="d" * 64,
                             projected_subject="user:11",
                             state="PENDING",
@@ -193,7 +197,7 @@ async def _seed_projecting_state(session_factory) -> int:
                             id=102,
                             subject_id="12",
                             source_ref="user:12",
-                            source_locator="user:12",
+                            source_locator="direct:user:12",
                             source_fingerprint="e" * 64,
                             projected_subject="user:12",
                             state="PENDING_DELETE",
@@ -277,9 +281,7 @@ async def test_resource_finalizer_atomically_converges_and_replays(
             visible_sources = list(
                 (
                     await session.execute(
-                        select(PermissionVisibleSourceProjection).order_by(
-                            PermissionVisibleSourceProjection.id
-                        )
+                        select(PermissionVisibleSourceProjection).order_by(PermissionVisibleSourceProjection.id)
                     )
                 ).scalars()
             )
@@ -295,6 +297,182 @@ async def test_resource_finalizer_atomically_converges_and_replays(
         ("INACTIVE", 5),
     ]
     assert [row.state for row in visible_sources] == ["ACTIVE", "RETIRED"]
+
+
+@pytest.mark.asyncio
+async def test_resource_finalizer_forward_recovers_failed_closed_mirror(
+    session_factory,
+) -> None:
+    operation_id = await _seed_projecting_state(
+        session_factory,
+        projection_state="FAILED_CLOSED",
+    )
+    guard = SqlProjectionScopeGuard()
+
+    assert await guard.is_failed_closed_recovery_scope(_plan(), operation_id) is True
+    await SqlProjectionFinalizer().finalize(_plan(), operation_id)
+
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            mode = (await session.execute(select(ResourcePermissionMode))).scalars().one()
+            grant = (await session.execute(select(PermissionGrant))).scalars().one()
+    assert (mode.version, mode.projection_state, mode.mode) == (
+        4,
+        "CURRENT",
+        "INHERIT",
+    )
+    assert (grant.state, grant.projection_state) == ("ACTIVE", "CURRENT")
+
+
+@pytest.mark.asyncio
+async def test_resource_finalizer_retires_old_model_source_after_assignee_move(
+    session_factory,
+) -> None:
+    plan = ProjectionPlan(
+        tenant_id=7,
+        idempotency_key="move-visible-7",
+        operation_type="GRANT_MUTATION",
+        scope_type="resource",
+        scope_key="folder:42",
+        expected_version=3,
+        target_version=4,
+        store_id="store",
+        model_id="model",
+        operator_id=9,
+        change_item_count=1,
+        deltas=(
+            ProjectionTupleDelta(
+                phase="COMMIT",
+                sequence=0,
+                action="WRITE",
+                user="user:11",
+                relation="ordinary_assignee",
+                object="permission_grant:g-editor",
+            ),
+        ),
+    )
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            async with session.begin():
+                operation = PermissionProjectionOperation(
+                    tenant_id=7,
+                    idempotency_key=plan.idempotency_key,
+                    request_checksum="a" * 64,
+                    operation_type=plan.operation_type,
+                    scope_type=plan.scope_type,
+                    scope_key=plan.scope_key,
+                    expected_version=plan.expected_version,
+                    target_version=plan.target_version,
+                    store_id=plan.store_id,
+                    model_id=plan.model_id,
+                    status="COMMITTED",
+                    before_checksum="b" * 64,
+                    after_checksum="c" * 64,
+                    operator_id=plan.operator_id,
+                )
+                session.add(operation)
+                await session.flush()
+                mode = ResourcePermissionMode(
+                    tenant_id=7,
+                    resource_type="folder",
+                    resource_id="42",
+                    mode="CUSTOM",
+                    version=3,
+                    projection_state="PROJECTING",
+                    operation_id=int(operation.id),
+                )
+                old_grant = PermissionGrant(
+                    tenant_id=7,
+                    resource_type="folder",
+                    resource_id="42",
+                    model_key="viewer",
+                    state="ACTIVE",
+                    projection_state="PROJECTING",
+                )
+                target_grant = PermissionGrant(
+                    tenant_id=7,
+                    resource_type="folder",
+                    resource_id="42",
+                    model_key="editor",
+                    state="PENDING",
+                    projection_state="PROJECTING",
+                )
+                session.add_all((mode, old_grant, target_grant))
+                await session.flush()
+                session.add(
+                    PermissionGrantAssignee(
+                        id=201,
+                        tenant_id=7,
+                        grant_id=int(target_grant.id),
+                        subject_type="user",
+                        subject_id="11",
+                        userset_relation=None,
+                        include_children=False,
+                        source_type="DIRECT",
+                        source_ref="user:11",
+                        source_locator="direct:user:11",
+                        source_fingerprint="d" * 64,
+                        projected_subject="user:11",
+                        protected=False,
+                        state="PENDING",
+                        version=2,
+                    )
+                )
+                session.add_all(
+                    (
+                        PermissionVisibleSourceProjection(
+                            tenant_id=7,
+                            resource_type="folder",
+                            resource_id="42",
+                            visibility_class="ordinary",
+                            projected_subject="user:11",
+                            source_kind="GRANT_ASSIGNEE",
+                            source_owner_key="grant_assignee:201",
+                            source_locator="direct:user:11",
+                            source_fingerprint="d" * 64,
+                            contribution_fingerprint="5" * 64,
+                            model_key="viewer",
+                            source_version=1,
+                            tuple_fingerprint="7" * 64,
+                            state="PENDING",
+                            operation_id=int(operation.id),
+                        ),
+                        PermissionVisibleSourceProjection(
+                            tenant_id=7,
+                            resource_type="folder",
+                            resource_id="42",
+                            visibility_class="ordinary",
+                            projected_subject="user:11",
+                            source_kind="GRANT_ASSIGNEE",
+                            source_owner_key="grant_assignee:201",
+                            source_locator="direct:user:11",
+                            source_fingerprint="d" * 64,
+                            contribution_fingerprint="6" * 64,
+                            model_key="editor",
+                            source_version=2,
+                            tuple_fingerprint="7" * 64,
+                            state="PENDING",
+                            operation_id=int(operation.id),
+                        ),
+                    )
+                )
+                operation_id = int(operation.id)
+
+    await SqlProjectionFinalizer().finalize(plan, operation_id)
+
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            rows = list(
+                (
+                    await session.execute(
+                        select(PermissionVisibleSourceProjection).order_by(PermissionVisibleSourceProjection.model_key)
+                    )
+                ).scalars()
+            )
+    assert [(row.model_key, row.state) for row in rows] == [
+        ("editor", "ACTIVE"),
+        ("viewer", "RETIRED"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -359,6 +537,115 @@ async def test_assignee_move_preserves_identity_and_advances_version(
                 assert moved.id == 101
                 assert moved.grant_id == target_grant.id
                 assert moved.version == 2
+
+
+@pytest.mark.asyncio
+async def test_assignee_move_replaces_inactive_target_identity(
+    session_factory,
+) -> None:
+    source = GrantSourceService().canonicalize_source(
+        source_id=101,
+        subject_type="user",
+        subject_id="11",
+        source_type="DIRECT",
+    )
+    with bypass_tenant_filter():
+        async with session_factory() as session:
+            async with session.begin():
+                old_grant = PermissionGrant(
+                    tenant_id=7,
+                    resource_type="folder",
+                    resource_id="42",
+                    model_key="viewer",
+                    state="ACTIVE",
+                    projection_state="CURRENT",
+                )
+                target_grant = PermissionGrant(
+                    tenant_id=7,
+                    resource_type="folder",
+                    resource_id="42",
+                    model_key="editor",
+                    state="ACTIVE",
+                    projection_state="CURRENT",
+                )
+                session.add_all((old_grant, target_grant))
+                await session.flush()
+                session.add_all(
+                    (
+                        PermissionGrantAssignee(
+                            id=source.source_id,
+                            tenant_id=7,
+                            grant_id=int(old_grant.id),
+                            subject_type=source.subject_type,
+                            subject_id=source.subject_id,
+                            userset_relation=source.userset_relation,
+                            include_children=source.include_children,
+                            source_type=source.source_type,
+                            source_ref=source.source_ref,
+                            source_locator=source.source_locator,
+                            source_fingerprint=source.source_fingerprint,
+                            projected_subject=source.projected_subject,
+                            protected=source.protected,
+                            state="ACTIVE",
+                            version=1,
+                        ),
+                        PermissionGrantAssignee(
+                            id=202,
+                            tenant_id=7,
+                            grant_id=int(target_grant.id),
+                            subject_type=source.subject_type,
+                            subject_id=source.subject_id,
+                            userset_relation=source.userset_relation,
+                            include_children=source.include_children,
+                            source_type=source.source_type,
+                            source_ref=source.source_ref,
+                            source_locator=source.source_locator,
+                            source_fingerprint=source.source_fingerprint,
+                            projected_subject=source.projected_subject,
+                            protected=source.protected,
+                            state="INACTIVE",
+                            version=4,
+                        ),
+                        PermissionVisibleSourceProjection(
+                            tenant_id=7,
+                            resource_type="folder",
+                            resource_id="42",
+                            visibility_class="ordinary",
+                            projected_subject=source.projected_subject,
+                            source_kind="GRANT_ASSIGNEE",
+                            source_owner_key="grant_assignee:202",
+                            source_locator=source.source_locator,
+                            source_fingerprint=source.source_fingerprint,
+                            contribution_fingerprint="8" * 64,
+                            model_key="editor",
+                            source_version=4,
+                            tuple_fingerprint="9" * 64,
+                            state="RETIRED",
+                        ),
+                    )
+                )
+                await session.flush()
+
+                moved = await SqlPermissionControlState._upsert_assignee(
+                    session,
+                    grant_row=target_grant,
+                    source=replace(source, version=2),
+                    state="PENDING",
+                )
+
+                assert moved.id == 101
+                assert moved.grant_id == target_grant.id
+                assert moved.version == 2
+
+            rows = list(
+                (await session.execute(select(PermissionGrantAssignee).order_by(PermissionGrantAssignee.id)))
+                .scalars()
+                .all()
+            )
+
+    assert [(row.id, row.grant_id, row.state, row.version) for row in rows] == [
+        (101, target_grant.id, "PENDING", 2),
+    ]
 
 
 @pytest.mark.asyncio

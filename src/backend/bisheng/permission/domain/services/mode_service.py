@@ -18,12 +18,16 @@ from bisheng.permission.domain.models import (
     PermissionProjectionOperation,
     ProjectionOperationStatus,
 )
-from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.schemas import (
+    VerifiedPermissionTarget,
+    VisibleSourceProjectionDTO,
+)
 from bisheng.permission.domain.services.grant_source_service import (
     GrantSnapshot,
     GrantSourceRecord,
     GrantSourceService,
 )
+from bisheng.permission.domain.services.projection_plan import merge_projection_deltas
 from bisheng.permission.domain.services.projection_service import (
     ProjectionOutcome,
     ProjectionPlan,
@@ -37,6 +41,10 @@ from bisheng.permission.domain.services.resource_lifecycle_policy import (
     copy_permission_mode,
     default_permission_mode,
 )
+from bisheng.permission.domain.services.visibility_projection_service import (
+    VisibilityProjectionCompilation,
+    VisibilityProjectionCompiler,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +57,7 @@ class ModeContext:
     operator_id: int
     local_grants: tuple[GrantSnapshot, ...]
     inherited_grants: tuple[GrantSnapshot, ...]
+    existing_visible_sources: tuple[VisibleSourceProjectionDTO, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,6 +119,7 @@ class ModeStatePort(Protocol):
         context: ModeContext,
         draft: PermissionModeDraft,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation,
         *,
         idempotency_key: str,
         operation_id: int,
@@ -120,6 +130,7 @@ class ModeStatePort(Protocol):
         context: ModeContext,
         draft: PermissionModeDraft,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation,
         outcome: ProjectionOutcome,
     ) -> None: ...
 
@@ -153,11 +164,13 @@ class ModeService:
         projection: ModeProjectionPort,
         state: ModeStatePort,
         events: ModeEventPort | None = None,
+        visibility_compiler: VisibilityProjectionCompiler | None = None,
     ) -> None:
         self._sources = source_service
         self._projection = projection
         self._state = state
         self._events = events or _NullEvents()
+        self._visibility = visibility_compiler or VisibilityProjectionCompiler()
 
     default_mode = staticmethod(default_permission_mode)
     copy_mode = staticmethod(copy_permission_mode)
@@ -255,8 +268,20 @@ class ModeService:
                 sequence=1,
             ),
         )
-        deltas = tuple(
-            replace(delta, sequence=index) for index, delta in enumerate((*draft.staging_deltas, *commit_deltas))
+        visibility = self._visibility.compile(
+            tenant_id=context.target.tenant_id,
+            grants=draft.result_grants,
+            existing_sources=context.existing_visible_sources,
+        )
+        visibility_deltas = visibility.deltas
+        if draft.target_mode == "CUSTOM":
+            visibility_deltas = tuple(
+                replace(delta, phase="STAGE") if delta.action == "WRITE" else delta for delta in visibility_deltas
+            )
+        deltas = merge_projection_deltas(
+            draft.staging_deltas,
+            visibility_deltas,
+            commit_deltas,
         )
         plan = ProjectionPlan(
             tenant_id=context.target.tenant_id,
@@ -279,6 +304,7 @@ class ModeService:
                     context,
                     draft,
                     draft.result_grants,
+                    visibility,
                     idempotency_key=idempotency_key,
                     operation_id=int(operation.id),
                 )
@@ -290,6 +316,7 @@ class ModeService:
             context,
             draft,
             draft.result_grants,
+            visibility,
             outcome,
         )
         await self._emit(context, draft, outcome)

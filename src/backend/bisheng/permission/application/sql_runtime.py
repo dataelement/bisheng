@@ -9,8 +9,8 @@ from typing import Protocol
 from uuid import uuid4
 
 from loguru import logger
-from sqlalchemy import func, update
-from sqlmodel import select
+from sqlalchemy import and_, func, or_, update
+from sqlmodel import col, select
 
 from bisheng.common.errcode.permission import (
     PermissionPublishNotReadyError,
@@ -20,6 +20,7 @@ from bisheng.core.cache.redis_manager import get_redis_client
 from bisheng.core.database import get_async_db_session
 from bisheng.core.openfga.client import FGAClient
 from bisheng.permission.domain.models import (
+    DECIDABLE_PROJECTION_STATES,
     AuthorizationModelRelease,
     AuthorizationModelReleaseStatus,
     PermissionAction,
@@ -174,27 +175,20 @@ class SqlCatalogDecisionState:
 
 
 class SqlPermissionScopeFence:
-    """Trust only a CURRENT permission-owned mirror of a verified target."""
+    """Validate decision identity while permission writes remain serialized."""
 
-    async def ensure_readable(
-        self,
+    @staticmethod
+    def _decision(
         target: VerifiedPermissionTarget,
-    ) -> None:
-        async with get_async_db_session() as session:
-            statement = select(ResourcePermissionMode).where(
-                ResourcePermissionMode.tenant_id == target.tenant_id,
-                ResourcePermissionMode.resource_type == target.resource_type,
-                ResourcePermissionMode.resource_id == target.resource_id,
-            )
-            row = (await session.execute(statement)).scalars().first()
+        row: ResourcePermissionMode | None,
+    ) -> bool | PermissionPublishNotReadyError:
         if (
             row is None
-            or row.version != target.resource_version
-            or row.projection_state != "CURRENT"
+            or row.projection_state not in DECIDABLE_PROJECTION_STATES
             or row.parent_type != target.parent_type
             or row.parent_id != target.parent_id
         ):
-            raise PermissionPublishNotReadyError(
+            return PermissionPublishNotReadyError(
                 msg="Resource permission projection is not current",
                 stored_parent_type=row.parent_type if row else None,
                 stored_parent_id=row.parent_id if row else None,
@@ -203,8 +197,55 @@ class SqlPermissionScopeFence:
                 expected_parent_type=target.parent_type,
                 expected_parent_id=target.parent_id,
                 expected_version=target.resource_version,
-                expected_projection_state="CURRENT",
+                expected_projection_state="CURRENT|PROJECTING|FAILED_CLOSED",
             )
+        return row.projection_state != "CURRENT" or row.version != target.resource_version
+
+    async def ensure_readable(
+        self,
+        target: VerifiedPermissionTarget,
+    ) -> bool:
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode).where(
+                ResourcePermissionMode.tenant_id == target.tenant_id,
+                ResourcePermissionMode.resource_type == target.resource_type,
+                ResourcePermissionMode.resource_id == target.resource_id,
+            )
+            row = (await session.execute(statement)).scalars().first()
+        decision = self._decision(target, row)
+        if isinstance(decision, PermissionPublishNotReadyError):
+            raise decision
+        return decision
+
+    async def ensure_readable_batch(
+        self,
+        targets: tuple[VerifiedPermissionTarget, ...],
+    ) -> tuple[bool | PermissionPublishNotReadyError, ...]:
+        """Fence a decision batch with one permission-state query."""
+
+        if not targets:
+            return ()
+        tenant_ids = tuple(dict.fromkeys(target.tenant_id for target in targets))
+        resource_types = tuple(dict.fromkeys(target.resource_type for target in targets))
+        resource_ids = tuple(dict.fromkeys(target.resource_id for target in targets))
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode).where(
+                col(ResourcePermissionMode.tenant_id).in_(tenant_ids),
+                col(ResourcePermissionMode.resource_type).in_(resource_types),
+                col(ResourcePermissionMode.resource_id).in_(resource_ids),
+            )
+            rows = list((await session.execute(statement)).scalars().all())
+        row_map = {
+            (int(row.tenant_id), str(row.resource_type), str(row.resource_id)): row
+            for row in rows
+        }
+        return tuple(
+            self._decision(
+                target,
+                row_map.get((target.tenant_id, target.resource_type, target.resource_id)),
+            )
+            for target in targets
+        )
 
 
 class RedisConsistencyMarker:
@@ -444,6 +485,36 @@ class SqlProjectionScopeGuard:
             row_id = (await session.execute(statement)).scalar_one_or_none()
         return row_id is not None
 
+    async def is_failed_closed_recovery_scope(
+        self,
+        plan: ProjectionPlan,
+        operation_id: int,
+    ) -> bool:
+        if plan.scope_type != "resource":
+            return False
+        resource_type, separator, resource_id = plan.scope_key.partition(":")
+        if not separator:
+            return False
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode.id).where(
+                ResourcePermissionMode.tenant_id == plan.tenant_id,
+                ResourcePermissionMode.resource_type == resource_type,
+                ResourcePermissionMode.resource_id == resource_id,
+                ResourcePermissionMode.operation_id == operation_id,
+                or_(
+                    and_(
+                        ResourcePermissionMode.version == plan.expected_version,
+                        ResourcePermissionMode.projection_state == "FAILED_CLOSED",
+                    ),
+                    and_(
+                        ResourcePermissionMode.version == plan.target_version,
+                        ResourcePermissionMode.projection_state == "CURRENT",
+                    ),
+                ),
+            )
+            row_id = (await session.execute(statement)).scalar_one_or_none()
+        return row_id is not None
+
     async def fail_closed(
         self,
         plan: ProjectionPlan,
@@ -587,8 +658,13 @@ class SqlProjectionFinalizer:
                     )
                 if mode_row.version == plan.target_version and mode_row.projection_state == "CURRENT":
                     return
-                if mode_row.version != plan.expected_version or mode_row.projection_state != "PROJECTING":
+                if mode_row.version != plan.expected_version or mode_row.projection_state not in {
+                    "PROJECTING",
+                    "FAILED_CLOSED",
+                }:
                     raise PermissionPublishNotReadyError(msg=("Permission scope changed before projection finalize"))
+
+                source_projection_state = mode_row.projection_state
 
                 grant_ids = tuple(
                     (
@@ -671,19 +747,51 @@ class SqlProjectionFinalizer:
                         raise PermissionPublishNotReadyError(
                             msg="Visible source recovery owner identity is invalid",
                         ) from exc
-                    assignee_state = (
+                    canonical_owner = (
                         await session.execute(
-                            select(PermissionGrantAssignee.state).where(
+                            select(PermissionGrantAssignee, PermissionGrant)
+                            .join(
+                                PermissionGrant,
+                                PermissionGrant.id == PermissionGrantAssignee.grant_id,
+                            )
+                            .where(
                                 PermissionGrantAssignee.tenant_id == plan.tenant_id,
                                 PermissionGrantAssignee.id == assignee_id,
                             )
                         )
-                    ).scalar_one_or_none()
-                    if assignee_state not in {"ACTIVE", "INACTIVE"}:
+                    ).first()
+                    if canonical_owner is None:
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery canonical owner is missing",
+                        )
+                    assignee, grant = canonical_owner
+                    if assignee.state not in {"ACTIVE", "INACTIVE"} or grant.state not in {
+                        "ACTIVE",
+                        "INACTIVE",
+                    }:
                         raise PermissionPublishNotReadyError(
                             msg="Visible source recovery owner state is incomplete",
                         )
-                    source.state = "ACTIVE" if assignee_state == "ACTIVE" else "RETIRED"
+                    if grant.resource_type != source.resource_type or grant.resource_id != source.resource_id:
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery owner resource is inconsistent",
+                        )
+                    if assignee.state == "ACTIVE" and grant.state != "ACTIVE":
+                        raise PermissionPublishNotReadyError(
+                            msg="Visible source recovery active assignee has no active Grant",
+                        )
+                    visibility_class = "protected" if assignee.protected else "ordinary"
+                    is_current = (
+                        assignee.state == "ACTIVE"
+                        and grant.state == "ACTIVE"
+                        and grant.model_key == source.model_key
+                        and assignee.version == source.source_version
+                        and assignee.source_locator == source.source_locator
+                        and assignee.source_fingerprint == source.source_fingerprint
+                        and assignee.projected_subject == source.projected_subject
+                        and visibility_class == source.visibility_class
+                    )
+                    source.state = "ACTIVE" if is_current else "RETIRED"
                     session.add(source)
 
                 target_mode = self._target_mode(plan)
@@ -700,7 +808,7 @@ class SqlProjectionFinalizer:
                         ResourcePermissionMode.id == mode_row.id,
                         ResourcePermissionMode.operation_id == operation_id,
                         ResourcePermissionMode.version == plan.expected_version,
-                        ResourcePermissionMode.projection_state == "PROJECTING",
+                        ResourcePermissionMode.projection_state == source_projection_state,
                     )
                     .values(**mode_values)
                 )

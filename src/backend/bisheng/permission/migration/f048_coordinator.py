@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from hashlib import sha256
 from typing import Any, Protocol
 
@@ -38,7 +38,9 @@ from bisheng.permission.migration.f048_model_mapper import (
 )
 from bisheng.permission.migration.f048_source_inventory import (
     MIGRATED_RESOURCE_TYPES,
+    LegacyFailedTupleSource,
     LegacyTupleSource,
+    MigrationEnvironmentFacts,
     MigrationSourceItem,
     PermissionMigrationResourceDTO,
     SourceInventory,
@@ -117,11 +119,37 @@ class MigrationResult:
 
 
 class MigrationSourceProviderPort(Protocol):
+    async def aload_environment(
+        self,
+        *,
+        expected_store_id: str,
+    ) -> MigrationEnvironmentFacts: ...
+
     async def aload_snapshot(
         self,
         *,
         expected_store_id: str,
     ) -> SourceInventorySnapshot: ...
+
+    async def aload_failed_tuples(
+        self,
+        *,
+        candidates: tuple[LegacyTupleSource, ...],
+        resources: tuple[PermissionMigrationResourceDTO, ...],
+        tuples: tuple[LegacyTupleSource, ...],
+    ) -> tuple[LegacyFailedTupleSource, ...]: ...
+
+
+def _refreshes_blocked_source(run: MigrationRunState) -> bool:
+    return bool(run.phase == "SOURCE_VALIDATING" and run.status == "BLOCKED" and run.target_model_id is None)
+
+
+def _has_frozen_source(run: MigrationRunState) -> bool:
+    return bool(
+        not _refreshes_blocked_source(run)
+        and run.source_checksum
+        and _PHASE_RANK.get(run.phase, -1) >= _PHASE_RANK["SOURCE_VALIDATING"]
+    )
 
 
 class MigrationRunStorePort(Protocol):
@@ -170,6 +198,13 @@ class MigrationRunStorePort(Protocol):
         run_id: int,
         expected_version: int,
         source_watermark: str,
+    ) -> MigrationRunState: ...
+
+    async def arequest_source_reset(
+        self,
+        *,
+        run_id: int,
+        expected_version: int,
     ) -> MigrationRunState: ...
 
     async def aadvance(
@@ -363,6 +398,46 @@ def _legacy_bindings(
     )
 
 
+def _failed_tuple_candidates(
+    snapshot: SourceInventorySnapshot,
+) -> tuple[LegacyTupleSource, ...]:
+    resources = {resource.key: resource for resource in snapshot.resources if resource.migratable}
+    existing = {(row.user, row.relation, row.object) for row in snapshot.tuples}
+    candidates: dict[tuple[str, str, str], LegacyTupleSource] = {}
+    for binding in _legacy_bindings(snapshot):
+        object_key = f"{binding.resource_type}:{binding.resource_id}"
+        resource = resources.get(object_key)
+        if (
+            resource is None
+            or not resource.migrate_ordinary_grants
+            or not binding.relation
+            or not binding.subject_type
+            or not binding.subject_id
+        ):
+            continue
+        subject_type = binding.subject_type.casefold()
+        userset_relation = binding.userset_relation
+        if subject_type == "department":
+            userset_relation = "subtree_member" if binding.include_children else (userset_relation or "member")
+        elif subject_type == "user_group":
+            userset_relation = userset_relation or "member"
+        elif subject_type != "user":
+            continue
+        user = f"{subject_type}:{binding.subject_id}"
+        if userset_relation:
+            user = f"{user}#{userset_relation}"
+        identity = (user, binding.relation, object_key)
+        if identity in existing:
+            continue
+        candidates[identity] = LegacyTupleSource(
+            tenant_id=resource.tenant_id,
+            user=user,
+            relation=binding.relation,
+            object=object_key,
+        )
+    return tuple(candidates[key] for key in sorted(candidates))
+
+
 def _compile_target_tuples(
     model_mapping: LegacyModelMappingResult,
     tuple_mapping: TupleMappingResult,
@@ -430,9 +505,7 @@ def _compile_target_tuples(
                 grant_object,
             )
 
-    active_by_model = {
-        model.model_key: model.active for model in model_mapping.custom_models
-    }
+    active_by_model = {model.model_key: model.active for model in model_mapping.custom_models}
     grants_by_tenant: dict[int, list[GrantSnapshot]] = {}
     source_id = 0
     for grant in tuple_mapping.grants:
@@ -535,20 +608,31 @@ def _compile_plan(snapshot: SourceInventorySnapshot) -> _MigrationPlan:
         identity_tuple_deletes: set[str] = set()
         identity_tuple_writes: list[LegacyTupleSource] = []
         for failed in snapshot.failed_tuples:
-            if failed.resolution != "CANONICAL_IDENTITY_STATE" or failed.canonical_state is None:
+            if failed.resolution not in {
+                "BINDING_WRITE_INTENT",
+                "CANONICAL_IDENTITY_STATE",
+            }:
+                continue
+            if failed.resolution == "CANONICAL_IDENTITY_STATE" and failed.canonical_state is None:
                 continue
             parts = failed.tuple_key.split("|")
             if len(parts) != 3:
                 raise ValueError(f"invalid failed tuple identity: {failed.locator}")
             corrected = LegacyTupleSource(
-                tenant_id=None,
+                tenant_id=(
+                    next(
+                        (resource.tenant_id for resource in resources if resource.key == parts[2]),
+                        None,
+                    )
+                ),
                 user=parts[0],
                 relation=parts[1],
                 object=parts[2],
             )
-            if failed.canonical_state:
+            if failed.resolution == "BINDING_WRITE_INTENT" or failed.canonical_state:
                 active_tuple_by_key[corrected.key] = corrected
-                identity_tuple_writes.append(corrected)
+                if failed.resolution == "CANONICAL_IDENTITY_STATE":
+                    identity_tuple_writes.append(corrected)
             else:
                 active_tuple_by_key.pop(corrected.key, None)
                 identity_tuple_deletes.add(corrected.key)
@@ -679,6 +763,74 @@ class F048MigrationCoordinator:
             raise PermissionVersionConflictError(msg="F048 migration SQL lease was lost")
         return leased
 
+    async def _with_candidate_failed_tuples(
+        self,
+        snapshot: SourceInventorySnapshot,
+    ) -> SourceInventorySnapshot:
+        candidates = _failed_tuple_candidates(snapshot)
+        if not candidates:
+            return snapshot
+        first = await self._source_provider.aload_failed_tuples(
+            candidates=candidates,
+            resources=snapshot.resources,
+            tuples=snapshot.tuples,
+        )
+        second = await self._source_provider.aload_failed_tuples(
+            candidates=candidates,
+            resources=snapshot.resources,
+            tuples=snapshot.tuples,
+        )
+        if first != second:
+            raise PermissionMigrationBlockedError(msg="SOURCE_WATERMARK_CHANGED")
+        evidence_watermark = _checksum(
+            {
+                "base": snapshot.environment.source_watermark,
+                "failed_tuples": [asdict(row) for row in first],
+            }
+        )
+        return replace(
+            snapshot,
+            environment=replace(
+                snapshot.environment,
+                source_watermark=evidence_watermark,
+                observed_watermark=evidence_watermark,
+            ),
+            failed_tuples=first,
+        )
+
+    async def reset_source(
+        self,
+        *,
+        expected_store_id: str,
+        lock_token: str,
+        run_id: int,
+    ) -> MigrationRunState:
+        run = await self._run_store.aget_run(run_id)
+        if run is None:
+            raise PermissionMigrationBlockedError(msg=f"Migration run {run_id} does not exist")
+        environment = await self._source_provider.aload_environment(
+            expected_store_id=expected_store_id,
+        )
+        if not environment.schema_ready:
+            raise PermissionMigrationBlockedError(msg="SCHEMA_NOT_READY")
+        if not environment.services_stopped or environment.active_heartbeats:
+            raise PermissionMigrationBlockedError(msg="SERVICES_NOT_STOPPED")
+        if run.store_id != expected_store_id or run.source_model_id != environment.source_model_id:
+            raise PermissionVersionConflictError(msg="Formal migration run is bound to different source facts")
+        if run.phase != "SOURCE_VALIDATING" or run.target_model_id is not None:
+            raise PermissionMigrationBlockedError(msg="SOURCE_RESET_REQUIRES_PRE_TARGET_RUN")
+        leased = await self._run_store.aacquire_lease(
+            run_id=run.id,
+            expected_version=run.version,
+            lock_token=lock_token,
+        )
+        if leased is None:
+            raise PermissionVersionConflictError(msg="Another F048 migration process holds the SQL lease")
+        return await self._run_store.arequest_source_reset(
+            run_id=leased.id,
+            expected_version=leased.version,
+        )
+
     async def migrate(
         self,
         *,
@@ -688,11 +840,30 @@ class F048MigrationCoordinator:
     ) -> MigrationResult:
         """Run or resume the formal migration; there is no preview path."""
 
-        live_snapshot = await self._source_provider.aload_snapshot(
-            expected_store_id=expected_store_id,
-        )
-        live_inventory = build_source_inventory(live_snapshot)
-        environment = live_snapshot.environment
+        run = None
+        if run_id is not None:
+            run = await self._run_store.aget_run(run_id)
+            if run is None:
+                raise PermissionMigrationBlockedError(msg=f"Migration run {run_id} does not exist")
+            if run.phase not in _PHASE_RANK:
+                raise PermissionMigrationBlockedError(msg=f"Unknown migration phase: {run.phase}")
+
+        has_frozen_source = run is not None and _has_frozen_source(run)
+        if has_frozen_source:
+            environment = await self._source_provider.aload_environment(
+                expected_store_id=expected_store_id,
+            )
+            live_snapshot = None
+            live_inventory = build_source_inventory(SourceInventorySnapshot(environment=environment))
+        else:
+            live_snapshot = await self._source_provider.aload_snapshot(
+                expected_store_id=expected_store_id,
+            )
+            live_inventory = build_source_inventory(live_snapshot)
+            if not live_inventory.blockers:
+                live_snapshot = await self._with_candidate_failed_tuples(live_snapshot)
+                live_inventory = build_source_inventory(live_snapshot)
+            environment = live_snapshot.environment
         if not environment.source_model_id:
             raise PermissionMigrationBlockedError(msg="SOURCE_MODEL_ID_MISSING")
         environment_blockers = tuple(
@@ -723,20 +894,11 @@ class F048MigrationCoordinator:
                     source_watermark=environment.source_watermark,
                 )
             )
-        else:
-            run = await self._run_store.aget_run(run_id)
-            if run is None:
-                raise PermissionMigrationBlockedError(msg=f"Migration run {run_id} does not exist")
+        assert run is not None
         if run.store_id != expected_store_id or run.source_model_id != environment.source_model_id:
             raise PermissionVersionConflictError(msg="Formal migration run is bound to different source facts")
-        refresh_blocked_source = bool(
-            run.phase == "SOURCE_VALIDATING" and run.status == "BLOCKED" and run.target_model_id is None
-        )
-        has_frozen_source = bool(
-            not refresh_blocked_source
-            and run.source_checksum
-            and _PHASE_RANK.get(run.phase, -1) >= _PHASE_RANK["SOURCE_VALIDATING"]
-        )
+        refresh_blocked_source = _refreshes_blocked_source(run)
+        has_frozen_source = _has_frozen_source(run)
         if (
             not has_frozen_source
             and not refresh_blocked_source
@@ -766,6 +928,7 @@ class F048MigrationCoordinator:
             if plan.inventory.checksum != run.source_checksum:
                 raise PermissionVersionConflictError(msg="Frozen migration source checksum changed")
         else:
+            assert live_snapshot is not None
             snapshot = live_snapshot
             inventory = live_inventory
             for index in range(0, len(inventory.items), DB_BATCH_SIZE):

@@ -579,6 +579,7 @@ class WorkFlowService(BaseService):
         flow_type: int | None = None,
         search_description: bool = False,
         action: str = "visible",
+        additional_actions: Sequence[str] = ("edit", "share"),
         ranking_user_id: int | None = None,
         status_exempt_flow_types: set[int] | None = None,
         app_state_in: set[str] | None = None,
@@ -601,7 +602,7 @@ class WorkFlowService(BaseService):
         caller MUST strip them before serving the response.
         """
         normalized_page_size = max(int(page_size or 1), 1)
-        requested_actions = tuple(dict.fromkeys((action, "edit", "share")))
+        requested_actions = tuple(dict.fromkeys((action, *additional_actions)))
 
         visible: list[dict] = []
         visible_actions: dict[str, frozenset[str]] = {}
@@ -735,7 +736,7 @@ class WorkFlowService(BaseService):
             if not tagged_ids:
                 return PageInfiniteCursorData(data=[], page_size=page_size, has_more=False, next_cursor=None)
 
-        page_items, has_more, action_map = await cls._scan_visible_apps_cursor(
+        page_items, has_more, _ = await cls._scan_visible_apps_cursor(
             user=user,
             page_size=page_size,
             name=name,
@@ -744,6 +745,7 @@ class WorkFlowService(BaseService):
             flow_type=flow_type,
             search_description=search_description,
             action=action,
+            additional_actions=(),
             ranking_user_id=user.user_id,
             # Pinned here rather than accepted from HTTP: both halves of AC-03
             # ("stopped must still appear", "drafts must never appear") are
@@ -767,9 +769,7 @@ class WorkFlowService(BaseService):
             item.pop("_used_rank", None)
             item.pop("_sort_time", None)
 
-        writeable_ids = {app_id for app_id, action_codes in action_map.items() if "edit" in action_codes}
-        data = cls.add_extra_field(user, page_items, writeable_ids=writeable_ids)
-        data = cls._apply_page_can_share(user, data, action_map)
+        data = cls.add_extra_field(user, page_items, writeable_ids=set())
         return PageInfiniteCursorData(
             data=data,
             page_size=page_size,
@@ -1349,10 +1349,13 @@ class WorkFlowService(BaseService):
     ) -> "PageInfiniteCursorData":
         """Unsorted (untagged) online apps as an F027 cursor envelope.
 
-        Candidate = online apps NOT bound to any APPLICATION tag. Scans forward
-        from the cursor and permission-filters by ``visible``; per-page cost is
-        bounded by ``page_size`` regardless of scroll depth (the offset version
-        re-scanned pages 1..N and degraded on deep pages).
+        Regular-user candidates are first bounded by OpenFGA's visible-object
+        enumeration, then narrowed to online apps NOT bound to any APPLICATION
+        tag. The final per-batch ``visible`` check remains authoritative for
+        business validity. Per-resource actions are resolved lazily by the
+        client instead of delaying the whole list response.
+        Privileged actors keep the direct business-DB scan so they do not hit
+        the visible-object enumeration capacity ceiling.
         """
         from bisheng.common.cursor import CursorDecodeError, decode_cursor, encode_cursor
         from bisheng.common.errcode.flow import AppInvalidCursorError
@@ -1363,6 +1366,19 @@ class WorkFlowService(BaseService):
             decoded = decode_cursor(cursor, expected_key_len=2, expected_context=context)
         except CursorDecodeError as exc:
             raise AppInvalidCursorError(exception=exc)
+
+        actor = await resolve_permission_actor(user)
+        is_admin = actor.super_admin or actor.current_tenant_id in actor.tenant_admin_tenant_ids
+        visible_id_list: list[str] | None = None
+        if not is_admin:
+            visible_id_list = await cls._collect_visible_app_ids(actor, flow_type=None)
+            if not visible_id_list:
+                return PageInfiniteCursorData(
+                    data=[],
+                    page_size=page_size,
+                    has_more=False,
+                    next_cursor=None,
+                )
 
         all_tags = await TagDao.asearch_tags(
             None,
@@ -1382,13 +1398,15 @@ class WorkFlowService(BaseService):
             )
             flow_ids_not_in = list({row.resource_id for rows in tagged_rows for row in rows})
 
-        page_items, has_more, permission_map = await cls._scan_visible_apps_cursor(
+        page_items, has_more, _ = await cls._scan_visible_apps_cursor(
             user=user,
             page_size=page_size,
             name=keyword,
             status=FlowStatus.ONLINE.value,
+            id_list=visible_id_list,
             id_list_not_in=flow_ids_not_in,
             action="visible",
+            additional_actions=(),
             # Same pinning as the tagged-tab entry — miss it here and hosted
             # applications appear under a tag but not in "uncategorised".
             status_exempt_flow_types={FlowType.HOSTED_APP.value},
@@ -1403,7 +1421,6 @@ class WorkFlowService(BaseService):
 
         for one in page_items:
             one["logo"] = cls.get_logo_share_link(one["logo"])
-        cls._apply_page_can_share(user, page_items, permission_map)
 
         return PageInfiniteCursorData(
             data=page_items,

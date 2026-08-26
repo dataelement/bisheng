@@ -129,6 +129,24 @@ describe("F048 PermissionDialog", () => {
     ).toBeInTheDocument()
   })
 
+  it("does not focus the close button when opened", async () => {
+    render(
+      <PermissionDialog
+        open
+        onOpenChange={vi.fn()}
+        resourceType="knowledge_file"
+        resourceId="file-1"
+        resourceName="Report"
+      />,
+    )
+
+    expect(await screen.findByText("mode.custom")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toHaveFocus()
+    })
+    expect(screen.getByRole("button", { name: "Close" })).not.toHaveFocus()
+  })
+
   it("does not add a permission mode control for a resource without a parent", async () => {
     vi.mocked(getResourcePermissionContextApi).mockResolvedValue({
       ...customContext,

@@ -215,27 +215,28 @@ export const getPrivateRouter = (
   permissions: string[],
   opts?: { menuApprovalMode?: boolean },
 ) => {
-  const filterMenuItem = (_privateRouter) => {
-    const result = _privateRouter.reduce((res, cur) => {
-      // 递归
-      if (cur.children?.length) {
-        cur.children = filterMenuItem(cur.children)
-      }
+  // Builds a fresh route tree; `privateRouter` itself is never touched. It used
+  // to write the filtered children back into the shared table, and those copies
+  // had already lost their `permission` key — so from the second build on (the
+  // router is rebuilt whenever `user` changes) nested routes were no longer
+  // filtered at all, while top-level ones still were. That asymmetry let a user
+  // reach a list page they should not see and then hit /404 on its top-level
+  // editor route.
+  const filterMenuItem = (routes) =>
+    routes.reduce((res, cur) => {
+      const { permission, children, ...other } = cur
+      const next = children?.length ? { ...other, children: filterMenuItem(children) } : { ...other }
 
-      const { permission, ...other } = cur
       if (permission && !hasRoutePermission(permissions, permission)) {
         if (opts?.menuApprovalMode) {
-          res.push({ ...other, element: <MenuPermissionPlaceholder /> })
+          res.push({ ...next, element: <MenuPermissionPlaceholder /> })
         }
         return res
       }
 
-      res.push(other)
+      res.push(next)
       return res
     }, [])
-
-    return result
-  }
 
   return createBrowserRouter(permissions ? filterMenuItem(privateRouter) : [],
     baseConfig)

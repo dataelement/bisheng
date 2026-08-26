@@ -31,15 +31,25 @@ def test_chat_online_default_path_delegates_to_cursor_service():
     # The offset page helper must be gone from the default path.
     assert "get_online_flows_page" not in source
 
+    cursor_source = _function_source("bisheng/api/services/workflow.py", "get_online_flows_cursor")
+    assert "additional_actions=()" in cursor_source
+    assert "writeable_ids=set()" in cursor_source
+    assert "_apply_page_can_share" not in cursor_source
+
 
 def test_uncategorized_path_is_cursor_waterfall_without_sync_fetch_all():
     source = _function_source("bisheng/api/services/workflow.py", "get_uncategorized_flows_envelope")
+    assert "resolve_permission_actor" in source
+    assert "_collect_visible_app_ids" in source
+    assert "id_list=visible_id_list" in source
     assert "TagDao.asearch_tags" in source
     assert "TagDao.aget_resources_by_tags" in source
     assert "FlowDao.get_all_apps" not in source
     assert "return [], 0" not in source
     # Cursor scan, not the retired offset page scan.
     assert "_scan_visible_apps_cursor" in source
+    assert "additional_actions=()" in source
+    assert "_apply_page_can_share" not in source
     assert "decode_cursor" in source
     assert "encode_cursor" in source
     assert "PageInfiniteCursorData" in source
@@ -52,6 +62,7 @@ def test_cursor_scan_uses_keyset_batches_and_page_size_bounded_probe():
     assert "cursor=batch_cursor" in source
     assert "has_more = len(visible) > normalized_page_size" in source
     assert "requested_actions" in source
+    assert "additional_actions" in source
     assert "_application_action_map" in source
     assert '"edit"' in source
     assert '"share"' in source

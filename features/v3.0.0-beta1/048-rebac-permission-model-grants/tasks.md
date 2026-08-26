@@ -1631,6 +1631,58 @@
 
 ---
 
+---
+
+## Wave 15 — 投影写锁与普通鉴权解耦
+
+- [x] **T195：非 CURRENT 投影鉴权合同测试**
+  - **文件**：`src/backend/test/permission/test_stale_projection_fail_soft.py`,
+    `src/backend/test/permission/test_f048_resource_api.py`
+  - **测试**：覆盖 `CURRENT/PROJECTING/FAILED_CLOSED` decision fence、请求内 version 切换、
+    higher-consistency 强制、PENDING 拒绝、FAILED_CLOSED 新权限写拒绝，以及 degraded
+    `my-permissions` 不读取 staged source explanation。
+  - **覆盖 AC**：AC-178, AC-179, AC-180, AC-181
+
+- [x] **T196：解耦资源投影写锁与 OpenFGA 决策路径**
+  - **文件**：`src/backend/bisheng/permission/domain/models/grant.py`,
+    `src/backend/bisheng/permission/application/control_state.py`,
+    `src/backend/bisheng/permission/application/sql_runtime.py`,
+    `src/backend/bisheng/permission/domain/services/permission_action_service.py`,
+    `src/backend/bisheng/permission/application/resource_api.py`
+  - **逻辑**：允许现有资源在 `PROJECTING/FAILED_CLOSED` 镜像状态下生成 verified target 并执行
+    OpenFGA action/visible；非 CURRENT 或版本切换强制 higher consistency；Grant/mode/lifecycle
+    新 operation 仍只从 CURRENT claim；degraded `my-permissions` 返回实际 action 与投影状态，
+    不把 PENDING/PENDING_DELETE 来源作为最终事实。
+  - **验收**：T195、F048 permission service、projection SQL runtime 定向回归、Ruff、
+    arch-guard 与 diff-check 通过。
+  - **依赖**：T195
+
+---
+
+## Wave 16 — FAILED_CLOSED 资源受控前向恢复
+
+- [x] **T197：FAILED_CLOSED 前向恢复合同测试**
+  - **文件**：`src/backend/test/permission/test_f048_projection_service.py`,
+    `src/backend/test/permission/test_f048_projection_sql_runtime.py`,
+    `src/backend/test/permission/test_f048_failed_closed_recovery_cli.py`
+  - **测试**：覆盖 mixed live tuple 仅补 terminal difference、已存在 visible 不重复写、dry-run
+    checksum 漂移拒绝、FAILED_CLOSED SQL mirror 原子 finalize、CLI 按资源解析 operation、
+    Store/model/checksum 二次确认和默认不写。
+  - **覆盖 AC**：AC-166, AC-167, AC-170, AC-179
+  - **依赖**：T159, T196
+
+- [x] **T198：实现通用 resource FAILED_CLOSED 恢复脚本**
+  - **文件**：`src/backend/bisheng/permission/domain/services/projection_service.py`,
+    `src/backend/bisheng/permission/application/sql_runtime.py`,
+    `src/backend/scripts/recover_f048_failed_closed_projection.py`,
+    `src/backend/scripts/README.md`
+  - **逻辑**：只接受仍持有 expected version/operation fence 的 resource operation；以 durable
+    ledger AFTER 集和 higher-consistency exact reads 生成至多 90 条单次原子 correction，dry-run
+    checksum 绑定 live proposal，apply 后完整 verify 再复用 SQL finalizer 收口。普通 reconcile
+    继续拒绝 FAILED_CLOSED，department 等外部业务 scope 不自动恢复。
+  - **验收**：T197、F048 permission focused suite、Ruff、arch-guard 与 diff-check 通过。
+  - **依赖**：T197
+
 ## 实际偏差记录
 
 > 只记录一句话指针；设计原因和反直觉事实回写 [design.md](./design.md)。

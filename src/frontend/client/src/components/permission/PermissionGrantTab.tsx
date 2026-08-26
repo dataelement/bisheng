@@ -16,11 +16,10 @@ import type {
 } from "~/api/permission";
 import { Button, Checkbox } from "~/components/ui";
 import { useLocalize } from "~/hooks";
-import { useAuthContext } from "~/hooks/AuthContext";
+import { canMutatePermissionAssignee } from "./assigneePolicy";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
-import { canManageLevel, viewerIsCreator } from "./topTierGuard";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department", "user_group"];
 
@@ -42,19 +41,6 @@ function createIdempotencyKey(): string {
   return `grant-mutation-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 10)}`;
-}
-
-function isEditable(
-  assignee: PermissionGrantAssignee,
-  context: ResourcePermissionContext,
-): boolean {
-  return (
-    context.mode === "CUSTOM" &&
-    context.can_manage_permission &&
-    assignee.scope === "LOCAL" &&
-    assignee.editable &&
-    !assignee.protected
-  );
 }
 
 export function PermissionGrantTab({
@@ -92,12 +78,6 @@ export function PermissionGrantTab({
   const handleIncludeChildrenChange =
     onIncludeChildrenChange ?? setInternalIncludeChildren;
 
-  const { user } = useAuthContext();
-  const isCreator = useMemo(
-    () => viewerIsCreator(assignees, user?.id),
-    [assignees, user?.id],
-  );
-
   useEffect(() => {
     let cancelled = false;
     setModelsLoading(true);
@@ -105,11 +85,7 @@ export function PermissionGrantTab({
     void getGrantablePermissionModels(resourceType, resourceId)
       .then((result) => {
         if (cancelled) return;
-        // Hiding the edit control on existing owner rows would be pointless if
-        // the same viewer could still grant a fresh one here.
-        const activeModels = result.filter(
-          (model) => model.active && canManageLevel(model.level, isCreator),
-        );
+        const activeModels = result.filter((model) => model.active);
         setModels(activeModels);
         setSelectedModelKey((current) =>
           activeModels.some((model) => model.key === current)
@@ -127,7 +103,7 @@ export function PermissionGrantTab({
     return () => {
       cancelled = true;
     };
-  }, [resourceId, resourceType, isCreator]);
+  }, [resourceId, resourceType]);
 
   useEffect(() => {
     setTargetModels({});
@@ -187,7 +163,7 @@ export function PermissionGrantTab({
   const pendingChanges = useMemo<PermissionGrantMutationChange[]>(() => {
     const changes: PermissionGrantMutationChange[] = [];
     for (const assignee of assignees) {
-      if (!isEditable(assignee, context)) continue;
+      if (!canMutatePermissionAssignee(assignee, context, models)) continue;
       if (removedIds.has(assignee.assignee_id)) {
         changes.push({
           op: "REMOVE",
@@ -207,7 +183,7 @@ export function PermissionGrantTab({
       }
     }
     return [...changes, ...queuedAdds];
-  }, [assignees, context, queuedAdds, removedIds, targetModels]);
+  }, [assignees, context, models, queuedAdds, removedIds, targetModels]);
 
   const selectedAddChanges = useMemo<PermissionGrantMutationChange[]>(
     () =>
@@ -403,7 +379,11 @@ export function PermissionGrantTab({
             {localize("f048_permission.grant.existing")}
           </h3>
           {assignees.map((assignee) => {
-            const editable = isEditable(assignee, context);
+            const editable = canMutatePermissionAssignee(
+              assignee,
+              context,
+              models,
+            );
             const removed = removedIds.has(assignee.assignee_id);
             const currentIsGrantable = models.some(
               (model) => model.key === assignee.model.key,

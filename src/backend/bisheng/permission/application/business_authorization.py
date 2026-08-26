@@ -20,6 +20,7 @@ from bisheng.permission.application.identity import (
     resolve_permission_actor,
 )
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
+from bisheng.permission.domain.services.permission_action_service import PermissionActor
 
 _MAX_BATCH_CHECKS = 100
 
@@ -30,10 +31,11 @@ async def check_business_action(
     resource_type: str,
     resource_id: str | int,
     action: str,
+    actor: PermissionActor | None = None,
 ) -> bool:
     """Check one business-verified resource through the sole F048 facade."""
 
-    actor = await resolve_permission_actor(login_user)
+    actor = actor or await resolve_permission_actor(login_user)
     if actor.super_admin:
         # The decision layer allows a super admin unconditionally, but only after
         # the target is resolved. Resolution runs business data-validity guards
@@ -151,6 +153,7 @@ async def batch_check_business_visible(
     *,
     resource_type: str,
     resource_ids: Iterable[str | int],
+    actor: PermissionActor | None = None,
 ) -> dict[str, bool]:
     """Resolve bounded business candidates and check final visible without admin expansion."""
 
@@ -158,7 +161,7 @@ async def batch_check_business_visible(
     if not normalized_ids:
         return {}
 
-    actor = await resolve_permission_actor(login_user)
+    actor = actor or await resolve_permission_actor(login_user)
     registry = await get_f048_resource_registry()
     resolved = await asyncio.gather(
         *(
@@ -201,4 +204,37 @@ async def batch_check_business_visible(
         )
         for resource_id, is_allowed in zip(batch_ids, allowed, strict=True):
             result[resource_id] = bool(is_allowed)
+    return result
+
+
+async def batch_check_verified_business_visible(
+    *,
+    actor: PermissionActor,
+    targets: Iterable[VerifiedPermissionTarget],
+) -> dict[tuple[str, str], bool]:
+    """Decide business-verified targets without resolving their ids again."""
+
+    normalized_targets = tuple(
+        {
+            (target.resource_type, target.resource_id): target
+            for target in targets
+        }.values()
+    )
+    if not normalized_targets:
+        return {}
+
+    runtime = await get_f048_runtime()
+    result: dict[tuple[str, str], bool] = {
+        (target.resource_type, target.resource_id): False
+        for target in normalized_targets
+    }
+    for offset in range(0, len(normalized_targets), _MAX_BATCH_CHECKS):
+        batch_targets = normalized_targets[offset : offset + _MAX_BATCH_CHECKS]
+        allowed = await runtime.batch_check_actions(
+            actor,
+            batch_targets,
+            "visible",
+        )
+        for target, is_allowed in zip(batch_targets, allowed, strict=True):
+            result[(target.resource_type, target.resource_id)] = bool(is_allowed)
     return result

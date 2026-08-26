@@ -22,6 +22,7 @@ export default function ToolItem({
     onSelect,
     onSetClick = null,
     onPermission = null,
+    onHoverPermissions = null,
     permissionBadge = null,
 }) {
     const { t } = useTranslation('tool');
@@ -35,7 +36,10 @@ export default function ToolItem({
 
     return <AccordionItem key={data.id} value={data.id} className="data-[state=open]:border-2 data-[state=open]:border-primary/20 data-[state=open]:rounded-md">
         <AccordionTrigger className="min-w-0">
-            <div className="group flex gap-2 text-start relative pr-4 min-w-0">
+            <div
+                className="group flex gap-2 text-start relative pr-4 min-w-0"
+                onMouseEnter={() => onHoverPermissions?.(data)}
+            >
                 <TitleIconBg className="w-8 h-8 min-w-8" id={data.id} ><ToolIcon /></TitleIconBg>
                 <div className="flex-1 min-w-0">
                     <div className="w-full text-sm font-medium leading-none flex items-center gap-2 min-w-0">

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.common.dependencies.user_deps import UserPayload
+from bisheng.common.errcode.http_error import UnAuthorizedError
 from bisheng.common.errcode.permission import (
     InvalidCatalogActionError,
     PermissionFGAUnavailableError,
@@ -284,9 +285,16 @@ async def test_refresh_mcp_requires_exact_edit_action(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_tool_list_uses_requested_action_and_exact_button_actions(
+async def test_visible_tool_list_enumerates_ids_before_database_query(
     monkeypatch,
 ) -> None:
+    preset_tool_type = GptsToolsType(
+        id=20,
+        tenant_id=1,
+        user_id=None,
+        name="Preset",
+        is_preset=1,
+    )
     tool_type = GptsToolsType(
         id=10,
         tenant_id=1,
@@ -294,11 +302,86 @@ async def test_tool_list_uses_requested_action_and_exact_button_actions(
         name="API",
         is_preset=0,
     )
-    batch_actions = AsyncMock(
-        return_value={
-            "10": frozenset({"visible", "edit"}),
-        }
+    list_visible = AsyncMock(return_value=SimpleNamespace(object_ids=("10",)))
+    runtime = SimpleNamespace(list_visible_objects=list_visible)
+    load_types = AsyncMock(return_value=[preset_tool_type, tool_type])
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_tenant_tool_type",
+        load_types,
     )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_list_by_type",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.get_f048_runtime",
+        AsyncMock(return_value=runtime),
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.resolve_permission_actor",
+        AsyncMock(return_value=_actor(tenant_id=1)),
+    )
+    login_user = UserPayload(
+        user_id=7,
+        tenant_id=1,
+        user_role=[],
+    )
+
+    result = await ToolServices(login_user=login_user).get_tool_list(action="visible")
+
+    assert [item.id for item in result] == [20, 10]
+    assert result[0].write is False
+    assert result[0].delete is False
+    list_visible.assert_awaited_once()
+    assert load_types.await_args.kwargs["tool_type_ids"] == [10]
+    assert load_types.await_args.kwargs["include_preset_without_id_filter"] is True
+
+
+@pytest.mark.asyncio
+async def test_visible_preset_tool_list_is_visible_to_regular_users(monkeypatch) -> None:
+    preset_tool_type = GptsToolsType(
+        id=20,
+        tenant_id=1,
+        user_id=None,
+        name="Preset",
+        is_preset=1,
+    )
+    list_visible = AsyncMock()
+    runtime = SimpleNamespace(list_visible_objects=list_visible)
+    load_types = AsyncMock(return_value=[preset_tool_type])
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_tenant_tool_type",
+        load_types,
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_list_by_type",
+        AsyncMock(return_value=[]),
+    )
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.get_f048_runtime",
+        AsyncMock(return_value=runtime),
+    )
+    login_user = UserPayload(user_id=7, tenant_id=1, user_role=[])
+
+    result = await ToolServices(login_user=login_user).get_tool_list(is_preset=1, action="visible")
+
+    assert [item.id for item in result] == [20]
+    assert result[0].write is False
+    assert result[0].delete is False
+    list_visible.assert_not_awaited()
+    assert load_types.await_args.kwargs["is_preset"].value == 1
+
+
+@pytest.mark.asyncio
+async def test_use_tool_list_checks_only_requested_action(monkeypatch) -> None:
+    tool_type = GptsToolsType(
+        id=10,
+        tenant_id=1,
+        user_id=7,
+        name="API",
+        is_preset=0,
+    )
+    batch_actions = AsyncMock(return_value={"10": frozenset({"use"})})
     monkeypatch.setattr(
         "bisheng.tool.domain.services.tool.GptsToolsDao.aget_tenant_tool_type",
         AsyncMock(return_value=[tool_type]),
@@ -311,22 +394,27 @@ async def test_tool_list_uses_requested_action_and_exact_button_actions(
         "bisheng.tool.domain.services.tool.batch_check_business_actions",
         batch_actions,
     )
-    login_user = UserPayload(
-        user_id=7,
-        tenant_id=1,
-        user_role=[],
-    )
+    login_user = UserPayload(user_id=7, tenant_id=1, user_role=[])
 
-    result = await ToolServices(login_user=login_user).get_tool_list(action="visible")
+    result = await ToolServices(login_user=login_user).get_tool_list(action="use")
 
     assert [item.id for item in result] == [10]
-    assert result[0].write is True
-    assert result[0].delete is False
-    assert batch_actions.await_args.kwargs["actions"] == (
-        "visible",
-        "edit",
-        "delete",
+    assert batch_actions.await_args.kwargs["actions"] == ("use",)
+
+
+@pytest.mark.asyncio
+async def test_only_global_super_can_update_preset_tool_config(monkeypatch) -> None:
+    load_tool = AsyncMock()
+    monkeypatch.setattr(
+        "bisheng.tool.domain.services.tool.GptsToolsDao.aget_one_tool_type",
+        load_tool,
     )
+    login_user = UserPayload(user_id=7, tenant_id=1, user_role=[])
+
+    with pytest.raises(UnAuthorizedError):
+        await ToolServices(login_user=login_user).update_tool_config(10, {})
+
+    load_tool.assert_not_awaited()
 
 
 @pytest.mark.asyncio

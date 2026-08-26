@@ -36,6 +36,40 @@ class _Resources:
         )
 
 
+class _ToolPort:
+    async def resolve_permission_target(self, *, resource_id, actor, action):
+        del actor, action
+        return VerifiedPermissionTarget.from_business_service(
+            tenant_id=9,
+            resource_type="tool",
+            resource_id=resource_id,
+            resource_version=3,
+            context_version=f"tool:{resource_id}:v3",
+        )
+
+    async def load_permission_record(self, *, resource_id):
+        return SimpleNamespace(
+            resource_id=resource_id,
+            preset=True,
+            system_allowlisted=True,
+        )
+
+
+class _ToolResources:
+    def __init__(self) -> None:
+        self.port = _ToolPort()
+
+    async def resolve(self, **kwargs):
+        return await self.port.resolve_permission_target(
+            resource_id=kwargs["resource_id"],
+            actor=kwargs["actor"],
+            action=kwargs["action"],
+        )
+
+    def port_for(self, resource_type):
+        return self.port if resource_type == "tool" else None
+
+
 class _Runtime:
     def __init__(self) -> None:
         self.changes = ()
@@ -198,6 +232,14 @@ class _ContextRuntime(_Runtime):
         del target
         return SimpleNamespace(mode="CUSTOM", projection_state="READY")
 
+    async def mode_for_target(self, target):
+        del target
+        return SimpleNamespace(
+            mode="CUSTOM",
+            projection_state="CURRENT",
+            version=3,
+        )
+
     async def effective_actions(self, resource_type):
         del resource_type
         # 'visible' is a base relation, not a registered action, so it never
@@ -329,6 +371,50 @@ async def test_super_admin_my_permissions_returns_full_effective_actions() -> No
     # would be empty; the full effective action set is reported instead.
     assert result["actions"] == ["use", "edit", "delete", "manage_permission"]
     assert result["sources"] == []
+    assert result["projection_degraded"] is False
+    assert runtime.visible_checks == 0
+
+
+@pytest.mark.asyncio
+async def test_ordinary_user_my_permissions_for_preset_tool_returns_empty_actions() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_ToolResources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=9)
+
+    result = await api.get_my_permissions(
+        resource_type="tool",
+        resource_id="20",
+        actor=actor,
+    )
+
+    assert result["actions"] == []
+    assert result["sources"] == []
+    assert result["projection_degraded"] is False
+    assert runtime.visible_checks == 0
+
+
+@pytest.mark.asyncio
+async def test_super_admin_my_permissions_for_preset_tool_returns_full_actions() -> None:
+    runtime = _ContextRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_ToolResources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=5, super_admin=True)
+
+    result = await api.get_my_permissions(
+        resource_type="tool",
+        resource_id="20",
+        actor=actor,
+    )
+
+    assert result["actions"] == ["use", "edit", "delete", "manage_permission"]
+    assert result["sources"] == []
     assert runtime.visible_checks == 0
 
 
@@ -353,6 +439,60 @@ async def test_ordinary_user_my_permissions_stays_grant_derived() -> None:
     # grant-derived path (empty here), never handed the full effective set.
     assert runtime.visible_checks == 1
     assert result["actions"] == []
+
+
+class _DegradedPermissionRuntime(_ExplainRuntime):
+    def __init__(self) -> None:
+        super().__init__()
+        self.explain_calls = 0
+
+    async def mode_for_target(self, target):
+        del target
+        return SimpleNamespace(
+            mode="CUSTOM",
+            projection_state="FAILED_CLOSED",
+            version=3,
+        )
+
+    async def check_action(self, actor, target, action):
+        del actor, target
+        if action == "visible":
+            self.visible_checks += 1
+            return True
+        return action in {"use", "edit"}
+
+    async def explain_permissions(self, **kwargs):
+        del kwargs
+        self.explain_calls += 1
+        raise AssertionError("degraded projection must not read staged grant explanations")
+
+
+@pytest.mark.asyncio
+async def test_degraded_my_permissions_uses_openfga_actions_without_staged_sources() -> None:
+    runtime = _DegradedPermissionRuntime()
+    api = F048ResourcePermissionApi(
+        resources=_Resources(),
+        runtime=runtime,
+        subjects=_Subjects(),
+    )
+    actor = PermissionActor(user_id=7, current_tenant_id=9)
+
+    result = await api.get_my_permissions(
+        resource_type="workflow",
+        resource_id="wf-1",
+        actor=actor,
+    )
+
+    assert result == {
+        "mode": "CUSTOM",
+        "actions": ["use", "edit"],
+        "sources": [],
+        "roster_complete": False,
+        "projection_state": "FAILED_CLOSED",
+        "projection_degraded": True,
+    }
+    assert runtime.visible_checks == 1
+    assert runtime.explain_calls == 0
 
 
 @pytest.mark.asyncio

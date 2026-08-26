@@ -10,6 +10,7 @@ from .catalog import (
     PermissionModelAction,
 )
 from .grant import (
+    DECIDABLE_PROJECTION_STATES,
     GrantState,
     PermissionGrant,
     PermissionGrantAssignee,
@@ -34,6 +35,7 @@ from .projection import (
 )
 
 __all__ = [
+    "DECIDABLE_PROJECTION_STATES",
     "AuthorizationModelRelease",
     "AuthorizationModelReleaseStatus",
     "CatalogReleaseStatus",

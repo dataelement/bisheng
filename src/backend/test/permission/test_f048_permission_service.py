@@ -54,11 +54,18 @@ class FakeScopeFence:
     def __init__(self) -> None:
         self.readable = True
         self.calls = []
+        self.batch_calls = []
 
     async def ensure_readable(self, target: VerifiedPermissionTarget) -> None:
         self.calls.append(target.resource_id)
         if not self.readable:
             raise PermissionPublishNotReadyError()
+
+    async def ensure_readable_batch(self, targets):
+        self.batch_calls.append(tuple(target.resource_id for target in targets))
+        if not self.readable:
+            return tuple(PermissionPublishNotReadyError() for _ in targets)
+        return tuple(False for _ in targets)
 
 
 class FakeMarker:
@@ -312,8 +319,13 @@ async def test_batch_check_is_bounded_and_preserves_short_circuits() -> None:
 
 
 @pytest.mark.asyncio
-async def test_visible_batch_uses_one_openfga_batch_without_action_alias() -> None:
-    service, _, _, _, fga, _, _ = _service()
+async def test_visible_batch_uses_one_openfga_batch_without_action_alias(monkeypatch) -> None:
+    metrics: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "bisheng.permission.domain.services.permission_action_service.emit_metric",
+        lambda domain, **fields: metrics.append((domain, fields)),
+    )
+    service, catalog, fence, _, fga, _, _ = _service()
     results = await service.batch_check_visible(
         _actor(),
         (
@@ -327,6 +339,18 @@ async def test_visible_batch_uses_one_openfga_batch_without_action_alias() -> No
     checks, _ = fga.batches[0]
     assert len(checks) == 2
     assert all(row["relation"] == "visible" for row in checks)
+    assert catalog.calls.count("ready") == 1
+    assert fence.batch_calls == [("allow", "deny")]
+    assert fence.calls == []
+    batch_metric = next(fields for _, fields in metrics if fields.get("event") == "batch_check_visible")
+    assert batch_metric["status"] == "success"
+    assert batch_metric["target_count"] == 3
+    assert batch_metric["tenant_target_count"] == 2
+    assert batch_metric["tenant_mismatch_count"] == 1
+    assert batch_metric["openfga_check_count"] == 2
+    assert batch_metric["allowed_count"] == 1
+    assert batch_metric["scope_fence_elapsed_ms"] >= 0
+    assert batch_metric["fga_elapsed_ms"] >= 0
 
 
 @pytest.mark.asyncio

@@ -10,12 +10,6 @@ import type {
 } from "~/api/permission";
 import { PermissionListTab } from "./PermissionListTab";
 
-jest.mock("~/hooks/AuthContext", () => ({
-  // Not the creator of anything in these fixtures: the top-tier guard reads the
-  // viewer from the roster, and none of them carry a CREATOR row.
-  useAuthContext: () => ({ user: { id: "auth-user" } }),
-}));
-
 jest.mock("~/api/permission", () => ({
   getGrantablePermissionModels: jest.fn(),
   getMyResourcePermissions: jest.fn(),
@@ -114,14 +108,15 @@ describe("F048 Client PermissionListTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("locks owner rows for an owner who is not the creator", async () => {
-    // The creator's own row is already protected by the server; what this hides
-    // is one ordinary owner editing another — peers of the same trust tier.
+  it("keeps an owner row read-only when owner is not grantable", async () => {
     mockedGetGrants.mockResolvedValueOnce({
       data: [
         assignee("9", "DIRECT", {
           subject: { type: "user", id: "8", name: "Bob" },
           model: { key: "standard-owner", name: "Owner", level: 4, active: true },
+        }),
+        assignee("10", "DIRECT", {
+          subject: { type: "user", id: "10", name: "Carol" },
         }),
       ],
       page_size: 50,
@@ -138,7 +133,16 @@ describe("F048 Client PermissionListTab", () => {
     );
 
     const ownerRow = await screen.findByTestId("permission-assignee-9");
-    expect(ownerRow).toHaveAttribute("data-editable", "false");
+    const viewerRow = await screen.findByTestId("permission-assignee-10");
+    await waitFor(() => {
+      expect(viewerRow).toHaveAttribute("data-editable", "true");
+      expect(ownerRow).toHaveAttribute("data-editable", "false");
+    });
+    expect(screen.queryByLabelText("grant.model.9")).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText("f048_permission.grant.remove.9"),
+    ).not.toBeInTheDocument();
+    expect(ownerRow).toHaveTextContent("Owner");
   });
 
   it("renders protected and inherited grants as read-only and paginates by cursor", async () => {

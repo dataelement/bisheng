@@ -215,6 +215,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     save_message_citations,
     save_message_citations_sync,
     select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
@@ -1570,13 +1571,21 @@ async def _agent_stream_chat_completion(
             error_msg = error_msg or reason
             finalise_dangling_events()
             try:
-                resp = ChatMessageDao.insert_one(build_answer_row({"msg": final_msg, "events": events}))
+                citation_items = select_registry_items_for_persistence(
+                    citation_collector.list_items(),
+                    final_msg,
+                )
+                resp = ChatMessageDao.insert_one(
+                    build_answer_row(
+                        {
+                            "msg": strip_unregistered_citation_markers(final_msg, citation_items),
+                            "events": events,
+                        }
+                    )
+                )
                 save_message_citations_sync(
                     message_id=resp.id,
-                    items=select_registry_items_for_persistence(
-                        citation_collector.list_items(),
-                        final_msg,
-                    ),
+                    items=citation_items,
                     chat_id=conversation_id,
                     flow_id="",
                 )
@@ -2051,14 +2060,20 @@ async def _agent_stream_chat_completion(
         finalise_dangling_events()
 
         # Persist agent_answer — new unified shape is `{msg, events}`.
-        db_content: dict = {"msg": final_msg, "events": events}
-
-        persisted = True
-        resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
+        # Citations are resolved BEFORE the insert so a marker the registry
+        # cannot back never reaches storage: an invented id would still render
+        # as a footnote, and its detail lookup would 404 as "溯源详情加载失败".
         citation_items = select_registry_items_for_persistence(
             citation_collector.list_items(),
             final_msg,
         )
+        db_content: dict = {
+            "msg": strip_unregistered_citation_markers(final_msg, citation_items),
+            "events": events,
+        }
+
+        persisted = True
+        resp_msg = await ChatMessageDao.ainsert_one(build_answer_row(db_content))
         await save_message_citations(
             message_id=resp_msg.id,
             items=citation_items,

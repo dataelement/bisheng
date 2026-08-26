@@ -9,12 +9,6 @@ import type {
 } from "~/api/permission";
 import { PermissionGrantTab } from "./PermissionGrantTab";
 
-jest.mock("~/hooks/AuthContext", () => ({
-  // Not the creator of anything in these fixtures: the top-tier guard reads the
-  // viewer from the roster, and none of them carry a CREATOR row.
-  useAuthContext: () => ({ user: { id: "auth-user" } }),
-}));
-
 jest.mock("~/api/permission", () => ({
   getGrantablePermissionModels: jest.fn(),
   mutateResourceGrants: jest.fn(),
@@ -114,6 +108,7 @@ describe("F048 Client PermissionGrantTab", () => {
     mockedGetModels.mockResolvedValue([
       { key: "viewer", name: "Viewer", level: 1, active: true },
       { key: "editor", name: "Editor", level: 2, active: true },
+      { key: "owner", name: "Owner", level: 4, active: true },
       { key: "inactive", name: "Inactive", level: 3, active: false },
     ]);
     mockedMutate.mockResolvedValue({ resource_version: 8, items: [] });
@@ -179,6 +174,9 @@ describe("F048 Client PermissionGrantTab", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.queryByText("Inactive")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("f048_permission.grant.add_model")).toHaveTextContent(
+      "Owner",
+    );
 
     fireEvent.change(
       screen.getByLabelText("f048_permission.grant.model.1"),
@@ -258,7 +256,7 @@ describe("F048 Client PermissionGrantTab", () => {
     ).toBeDisabled();
   });
 
-  it("keeps an inactive existing row but excludes it from ADD and MOVE targets", async () => {
+  it("keeps an inactive existing row read-only when it is not grantable", async () => {
     render(
       <PermissionGrantTab
         resourceType="channel"
@@ -283,27 +281,46 @@ describe("F048 Client PermissionGrantTab", () => {
     );
     expect(rowModel).toHaveValue("inactive");
     expect(rowModel).toHaveTextContent("Inactive");
+    expect(rowModel).toBeDisabled();
     expect(
       screen.getByLabelText("f048_permission.grant.add_model"),
     ).not.toHaveTextContent("Inactive");
-
-    fireEvent.change(rowModel, { target: { value: "editor" } });
-    fireEvent.click(
-      screen.getByRole("button", { name: "f048_permission.grant.submit" }),
-    );
-    await waitFor(() => expect(mockedMutate).toHaveBeenCalledTimes(1));
-    expect(mockedMutate.mock.calls[0][2]).toEqual(
-      expect.objectContaining({
-        changes: [
-          {
-            op: "MOVE",
-            assignee_id: "8",
-            expected_assignee_version: 2,
-            target_model_key: "editor",
-          },
-        ],
+    expect(
+      screen.getByRole("button", {
+        name: "f048_permission.grant.remove.8",
       }),
+    ).toBeDisabled();
+    expect(mockedMutate).not.toHaveBeenCalled();
+  });
+
+  it("locks an owner row when owner is outside the grantable models", async () => {
+    mockedGetModels.mockResolvedValueOnce([
+      { key: "viewer", name: "Viewer", level: 1, active: true },
+      { key: "editor", name: "Editor", level: 2, active: true },
+    ]);
+
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        context={context}
+        assignees={[
+          existing("18", {
+            model: { key: "owner", name: "Owner", level: 4, active: true },
+          }),
+        ]}
+        onSuccess={jest.fn()}
+      />,
     );
+
+    expect(
+      await screen.findByLabelText("f048_permission.grant.model.18"),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", {
+        name: "f048_permission.grant.remove.18",
+      }),
+    ).toBeDisabled();
   });
 
   it("locks a subject who already holds a grant, whatever model is selected", async () => {

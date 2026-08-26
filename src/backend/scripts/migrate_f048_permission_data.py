@@ -7,10 +7,12 @@ started backend container while its automatic F048 migration gate is active:
       --apply
     python scripts/migrate_f048_permission_data.py migrate \
       --run-id <id> --apply
+    python scripts/migrate_f048_permission_data.py reset-source \
+      --run-id <id> --apply
     python scripts/migrate_f048_permission_data.py verify --run-id <id>
 
-``--apply`` confirms the formal migration write. There is no preview,
-inventory, cleanup, or rollback command.
+``--apply`` confirms a formal migration or pre-target source reset. There is no
+preview, cleanup, or rollback command.
 """
 
 from __future__ import annotations
@@ -65,6 +67,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help="Existing formal run ID used for crash-safe forward resume",
+    )
+
+    reset_source = subparsers.add_parser(
+        "reset-source",
+        help="Discard one pre-target frozen source before a fresh scan",
+    )
+    reset_source.add_argument("--run-id", type=int, required=True)
+    reset_source.add_argument(
+        "--apply",
+        action="store_true",
+        required=True,
+        help="Required confirmation for discarding the frozen source snapshot",
+    )
+    reset_source.add_argument(
+        "--lock-token",
+        default=None,
+        help="Operator/process token used by the durable SQL lease",
     )
 
     verify = subparsers.add_parser(
@@ -131,6 +150,18 @@ async def execute(
                 f"target_model={result.target_model_id} "
                 f"source_checksum={result.source_checksum} "
                 f"target_checksum={result.target_checksum}"
+            )
+            return EXIT_OK
+        if args.command == "reset-source":
+            run = await runtime.coordinator.reset_source(
+                expected_store_id=runtime.source_client.store_id,
+                lock_token=args.lock_token or uuid4().hex,
+                run_id=args.run_id,
+            )
+            print(
+                "F048 migration source reset "
+                f"run={run.id} phase={run.phase} status={run.status} "
+                f"checkpoint={run.checkpoint}"
             )
             return EXIT_OK
         if args.command == "verify":

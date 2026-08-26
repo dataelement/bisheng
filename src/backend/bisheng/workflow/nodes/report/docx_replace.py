@@ -6,6 +6,7 @@ from typing import IO, Any
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.table import _Cell
 from docx.text.paragraph import Paragraph
@@ -227,6 +228,28 @@ class DocxReplacer:
         parent = paragraph._element.getparent()
         return parent.index(paragraph._element)
 
+    def _run_spans(self, paragraph: Paragraph) -> list[tuple[int, int, Any]]:
+        """Character range each run covers, over the paragraph's run text."""
+        spans = []
+        offset = 0
+        for run in paragraph.runs:
+            spans.append((offset, offset + len(run.text), run._element))
+            offset += len(run.text)
+        return spans
+
+    def _append_run(self, paragraph: Paragraph, template_element, text: str, format_data: dict[str, Any]):
+        """Append a run, cloning `template_element` so its rPr carries over."""
+        if template_element is None:
+            run = paragraph.add_run(text)
+        else:
+            element = copy.deepcopy(template_element)
+            paragraph._element.append(element)
+            run = Run(element, paragraph)
+            run.text = text
+        if format_data:
+            self._apply_run_format(run, format_data)
+        return run
+
     def _replace_paragraph_placeholders(
         self,
         paragraph: Paragraph,
@@ -234,59 +257,91 @@ class DocxReplacer:
         variables: dict[str, list[dict[str, Any]]],
         insert_index: int,
     ):
+        """Split a paragraph around block-level values (table / image / heading).
+
+        The paragraph has to be taken apart here, so every piece is rebuilt from
+        the original XML rather than from plain text: each new paragraph clones
+        the source paragraph's pPr (style, numbering, borders) and each run is
+        cloned from the run the text actually came from, which is what keeps a
+        mid-paragraph underline or font change alive.
+        """
         parent = paragraph._element.getparent()
-        text = paragraph.text
+        run_spans = self._run_spans(paragraph)
+        runs_text = "".join(paragraph.runs[i].text for i in range(len(paragraph.runs)))
+        run_matches = list(self.placeholder_pattern.finditer(runs_text))
+
+        if len(run_matches) == len(matches):
+            # Offsets line up with the runs, so text can keep its own formatting.
+            text, matches = runs_text, run_matches
+        else:
+            # Placeholder lives somewhere runs don't reach (a hyperlink, a field).
+            # Fall back to the flat text; formatting fidelity is lost but the
+            # value still lands.
+            text, run_spans = paragraph.text, []
 
         segments = []
         last_end = 0
-
         for match in matches:
             var_name = match.group(1)
             start, end = match.span()
-
             if start > last_end:
-                segments.append({"type": "text_segment", "content": text[last_end:start], "paragraph": paragraph})
-
+                segments.append({"type": "text_range", "start": last_end, "end": start})
             if var_name in variables:
-                segments.append({"type": "variable", "content": variables[var_name], "paragraph": paragraph})
+                segments.append(
+                    {
+                        "type": "variable",
+                        "items": variables[var_name],
+                        "template": self._run_element_at(run_spans, start),
+                    }
+                )
             else:
-                segments.append({"type": "text_segment", "content": match.group(0), "paragraph": paragraph})
-
+                segments.append({"type": "text_range", "start": start, "end": end})
             last_end = end
-
         if last_end < len(text):
-            segments.append({"type": "text_segment", "content": text[last_end:], "paragraph": paragraph})
+            segments.append({"type": "text_range", "start": last_end, "end": len(text)})
 
+        pPr = paragraph._element.find(qn("w:pPr"))
+        pPr_template = copy.deepcopy(pPr) if pPr is not None else None
         original_format = self._extract_paragraph_format(paragraph)
-        original_run_format = self._extract_run_format(paragraph.runs[0] if paragraph.runs else None)
+        fallback_run_format = self._extract_run_format(paragraph.runs[0] if paragraph.runs else None)
 
         parent.remove(paragraph._element)
 
         current_insert_index = insert_index
         current_paragraph = None
 
-        for segment in segments:
-            if segment["type"] == "text_segment":
-                if current_paragraph is None:
-                    current_paragraph = self._insert_paragraph_at_index(parent, current_insert_index, original_format)
-                    current_insert_index += 1
+        def ensure_paragraph():
+            nonlocal current_paragraph, current_insert_index
+            if current_paragraph is None:
+                current_paragraph = self._insert_paragraph_at_index(
+                    parent, current_insert_index, original_format, pPr_template
+                )
+                current_insert_index += 1
+            return current_paragraph
 
-                run = current_paragraph.add_run(segment["content"])
-                self._apply_run_format(run, original_run_format)
+        for segment in segments:
+            if segment["type"] == "text_range":
+                start, end = segment["start"], segment["end"]
+                if start >= end:
+                    continue
+                target = ensure_paragraph()
+                if run_spans:
+                    for run_start, run_end, element in run_spans:
+                        if run_end <= start or run_start >= end:
+                            continue
+                        piece = self._element_text(element)[max(start, run_start) - run_start : min(end, run_end) - run_start]
+                        if piece:
+                            self._append_run(target, element, piece, {})
+                else:
+                    self._append_run(target, None, text[start:end], fallback_run_format)
 
             elif segment["type"] == "variable":
-                for item in segment["content"]:
+                for item in segment["items"]:
                     item_type = item.get("type")
 
                     if item_type == "text":
-                        if current_paragraph is None:
-                            current_paragraph = self._insert_paragraph_at_index(
-                                parent, current_insert_index, original_format
-                            )
-                            current_insert_index += 1
-
-                        run = current_paragraph.add_run(item["content"])
-                        self._apply_run_format(run, item)
+                        target = ensure_paragraph()
+                        self._append_run(target, segment["template"], item["content"], item)
 
                     elif item_type in ["table", "image", "heading"]:
                         if current_paragraph is not None and current_paragraph.text.strip():
@@ -301,6 +356,18 @@ class DocxReplacer:
 
                         current_insert_index += 1
                         current_paragraph = None
+
+    @staticmethod
+    def _run_element_at(run_spans, position: int):
+        """The run element covering `position`, or None when spans are unusable."""
+        for run_start, run_end, element in run_spans:
+            if run_start <= position < run_end:
+                return element
+        return None
+
+    @staticmethod
+    def _element_text(element) -> str:
+        return Run(element, None).text
 
     def _extract_paragraph_format(self, paragraph: Paragraph) -> dict[str, Any]:
         return {
@@ -326,8 +393,14 @@ class DocxReplacer:
             "font_color": run.font.color.rgb if run.font.color.rgb else None,
         }
 
-    def _insert_paragraph_at_index(self, parent, index: int, format_dict: dict[str, Any]) -> Paragraph:
+    def _insert_paragraph_at_index(
+        self, parent, index: int, format_dict: dict[str, Any], pPr_template=None
+    ) -> Paragraph:
         p_element = OxmlElement("w:p")
+        if pPr_template is not None:
+            # Carrying the whole pPr keeps the style, numbering and borders that
+            # the seven copied properties below cannot express.
+            p_element.append(copy.deepcopy(pPr_template))
         parent.insert(index, p_element)
         paragraph = Paragraph(p_element, self.doc)
 

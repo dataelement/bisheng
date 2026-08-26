@@ -10,7 +10,7 @@ from typing import Protocol
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from bisheng.channel.domain.models.channel import Channel
+from bisheng.channel.domain.models.channel import Channel, ChannelVisibilityEnum
 from bisheng.common.models.space_channel_member import (
     BusinessTypeEnum,
     MembershipStatusEnum,
@@ -32,6 +32,7 @@ class ChannelMigrationRow:
     status: str
     owner_user_id: int | None
     creator_user_ids: tuple[int, ...] = ()
+    migrate_ordinary_grants: bool = True
     source_version: str = "1"
 
 
@@ -90,6 +91,7 @@ class SqlChannelMigrationRepository:
                 status="ACTIVE",
                 owner_user_id=row.user_id,
                 creator_user_ids=tuple(sorted(creators.get(str(row.id), ()))),
+                migrate_ordinary_grants=row.visibility != ChannelVisibilityEnum.PRIVATE,
                 source_version=(row.update_time.isoformat() if row.update_time is not None else "0"),
             )
             for row in selected
@@ -127,6 +129,7 @@ class ChannelPermissionMigrationSource:
                     ownership_kind="USER",
                     source_locator=f"channel:{row.resource_id}",
                     creator_user_ids=row.creator_user_ids,
+                    migrate_ordinary_grants=row.migrate_ordinary_grants,
                     source_version=row.source_version,
                 )
                 for row in rows

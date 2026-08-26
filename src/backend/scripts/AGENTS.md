@@ -170,6 +170,24 @@ Without `bypass_tenant_filter()`, every query gets `WHERE tenant_id = NULL` inje
 
 For async DB work use `get_async_db_session()` + `asyncio.run(main())`; for sync use `get_sync_db_session()`. Don't mix the two in one transaction.
 
+### 7.1 SQLModel async query API
+
+`get_async_db_session()` returns SQLModel's `AsyncSession`. For ORM/select
+queries, use `session.exec()` and consume the typed result directly:
+
+```python
+statement = select(ResourcePermissionMode).where(...)
+row = (await session.exec(statement)).first()
+```
+
+Do **not** use the SQLAlchemy-style
+`(await session.execute(statement)).scalars().first()` for SQLModel selects.
+It emits a production `DeprecationWarning` telling operators to use
+`session.exec()`, adds noise to maintenance-script output, and makes real
+recovery warnings easier to miss. Use `session.execute()` only when a script
+specifically needs SQLAlchemy `Row` semantics or an API unsupported by
+`session.exec()`; document that exception next to the call.
+
 ---
 
 ## 8. Documentation Requirement

@@ -448,11 +448,11 @@ class KnowledgeService(KnowledgeUtils):
 
         Strategy — F048 visible-first:
           * Super admins and tenant admins skip the permission system entirely
-            and scan the business DB directly; every returned row receives the
-            full ``_KNOWLEDGE_LIST_ACTIONS`` set. The premise is that these
-            identities are effectively unrestricted, and enumerating "all
-            libraries in a tenant" through OpenFGA is both wasteful and prone
-            to trip the 5 000-object visible enumeration cap.
+            and scan the business DB directly; every returned row receives only
+            the minimal ``visible`` marker, matching regular-user list rows.
+            The premise is that these identities are effectively unrestricted,
+            and enumerating "all libraries in a tenant" through OpenFGA is both
+            wasteful and prone to trip the 5 000-object visible enumeration cap.
           * Regular users first ask OpenFGA for the small set of libraries
             they can see (``list_visible_objects``), then run the historical
             keyset scan under an ``id IN (:visible_ids)`` filter. ``visible``
@@ -630,23 +630,14 @@ class KnowledgeService(KnowledgeUtils):
         if has_more:
             res = res[:page_size]
 
-        # ---- 5. Build the action map for enrichment ----
-        # Admins get every action on every row without a check. Regular users
-        # go through F048 BatchCheck on just the surviving page — asking for
-        # all of them per candidate multiplied the scan by the number of
-        # actions, and that cost grew with every extra scan round instead of
-        # with the page.
-        if not res:
-            action_map = {}
-        elif is_admin:
-            all_actions = set(_KNOWLEDGE_LIST_ACTIONS)
-            action_map = {int(one.id): set(all_actions) for one in res}
-        else:
-            action_map = await cls.permission_service.get_knowledge_action_map_async(
-                login_user,
-                [int(one.id) for one in res],
-                _KNOWLEDGE_LIST_ACTIONS,
-            )
+        # ---- 5. Build the minimal list action map ----
+        # Every surviving row is already known to be visible: regular users
+        # came from the complete visible-id enumeration, while administrators
+        # use the reviewed tenant-scoped list bypass. Management actions are
+        # loaded for one resource only when its row menu is opened. Keeping
+        # that work out of the list avoids actions x rows target resolution and
+        # OpenFGA BatchCheck amplification.
+        action_map = {int(one.id): {"visible"} for one in res}
 
         # ---- 6. Enrich + build response ----
         enrich_start = perf_counter()

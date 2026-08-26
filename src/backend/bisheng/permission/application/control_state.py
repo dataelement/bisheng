@@ -19,6 +19,7 @@ from bisheng.permission.application.sql_runtime import (
     stable_grant_key,
 )
 from bisheng.permission.domain.models import (
+    DECIDABLE_PROJECTION_STATES,
     AuthorizationModelRelease,
     PermissionAction,
     PermissionCatalogRelease,
@@ -77,6 +78,21 @@ class RuntimeCatalogSnapshot:
     model_id: str
     model_checksum: str
     models: tuple[RuntimeModelSnapshot, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PermissionResourceSnapshot:
+    """Permission-owned state needed by a business Service to verify a target."""
+
+    tenant_id: int
+    resource_type: str
+    resource_id: str
+    version: int
+    context_version: str
+    mode: str
+    parent_type: str | None
+    parent_id: str | None
+    projection_state: str
 
 
 class SqlPermissionControlState:
@@ -200,7 +216,7 @@ class SqlPermissionControlState:
                 ResourcePermissionMode.resource_id == resource_id,
             )
             row = (await session.execute(statement)).scalars().first()
-        if row is None or row.projection_state != "CURRENT":
+        if row is None or row.projection_state not in DECIDABLE_PROJECTION_STATES:
             raise PermissionPublishNotReadyError(msg="Resource permission projection is not current")
         context = "|".join(
             (
@@ -212,6 +228,54 @@ class SqlPermissionControlState:
             )
         )
         return row.version, context[:64]
+
+    async def permission_snapshots(
+        self,
+        resources: tuple[tuple[int, str, str], ...],
+    ) -> dict[tuple[int, str, str], PermissionResourceSnapshot]:
+        """Read a bounded set of permission targets in one dual-DB-safe query."""
+
+        normalized = tuple(dict.fromkeys(resources))
+        if not normalized:
+            return {}
+        tenant_ids = tuple(dict.fromkeys(tenant_id for tenant_id, _, _ in normalized))
+        resource_types = tuple(dict.fromkeys(resource_type for _, resource_type, _ in normalized))
+        resource_ids = tuple(dict.fromkeys(resource_id for _, _, resource_id in normalized))
+        async with get_async_db_session() as session:
+            statement = select(ResourcePermissionMode).where(
+                col(ResourcePermissionMode.tenant_id).in_(tenant_ids),
+                col(ResourcePermissionMode.resource_type).in_(resource_types),
+                col(ResourcePermissionMode.resource_id).in_(resource_ids),
+            )
+            rows = list((await session.execute(statement)).scalars().all())
+
+        requested = set(normalized)
+        snapshots: dict[tuple[int, str, str], PermissionResourceSnapshot] = {}
+        for row in rows:
+            key = (int(row.tenant_id), str(row.resource_type), str(row.resource_id))
+            if key not in requested or row.projection_state not in DECIDABLE_PROJECTION_STATES:
+                continue
+            context = "|".join(
+                (
+                    str(row.version),
+                    row.mode,
+                    row.parent_type or "",
+                    row.parent_id or "",
+                    row.projection_state,
+                )
+            )[:64]
+            snapshots[key] = PermissionResourceSnapshot(
+                tenant_id=key[0],
+                resource_type=key[1],
+                resource_id=key[2],
+                version=row.version,
+                context_version=context,
+                mode=row.mode,
+                parent_type=row.parent_type,
+                parent_id=row.parent_id,
+                projection_state=row.projection_state,
+            )
+        return snapshots
 
     async def load_grants(
         self,
@@ -824,6 +888,7 @@ class SqlPermissionControlState:
         context: ModeContext,
         draft: PermissionModeDraft,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation,
         *,
         idempotency_key: str,
         operation_id: int,
@@ -843,7 +908,7 @@ class SqlPermissionControlState:
         await self.prepare_grants(
             grant_context,
             grants,
-            None,
+            visibility,
             idempotency_key=idempotency_key,
             operation_id=operation_id,
         )
@@ -853,6 +918,7 @@ class SqlPermissionControlState:
         context: ModeContext,
         draft: PermissionModeDraft,
         grants: tuple[GrantSnapshot, ...],
+        visibility: VisibilityProjectionCompilation,
         outcome: ProjectionOutcome,
     ) -> None:
         grant_context = GrantMutationContext(
@@ -867,7 +933,7 @@ class SqlPermissionControlState:
             models=tuple(grant.model for grant in grants),
             grants=grants,
         )
-        await self.finalize_grants(grant_context, grants, None, outcome)
+        await self.finalize_grants(grant_context, grants, visibility, outcome)
         async with get_async_db_session() as session:
             async with session.begin():
                 await session.execute(
@@ -1281,6 +1347,47 @@ class SqlPermissionControlState:
             .scalars()
             .first()
         )
+        if row is not None and row.id != source.source_id:
+            signature = (
+                row.subject_type,
+                row.subject_id,
+                row.userset_relation,
+                row.source_locator,
+                bool(row.protected),
+            )
+            expected = (
+                source.subject_type,
+                source.subject_id,
+                source.userset_relation,
+                source.source_locator,
+                source.protected,
+            )
+            if signature != expected:
+                raise PermissionVersionConflictError(msg="Permission source fingerprint collision")
+            if row.state != "INACTIVE":
+                raise PermissionVersionConflictError(
+                    msg="Target Grant already contains another current assignee identity",
+                )
+            visible_owner_key = f"grant_assignee:{row.id}"
+            current_visible_source = (
+                await session.execute(
+                    select(PermissionVisibleSourceProjection.id)
+                    .where(
+                        PermissionVisibleSourceProjection.tenant_id == grant_row.tenant_id,
+                        PermissionVisibleSourceProjection.source_kind == "GRANT_ASSIGNEE",
+                        PermissionVisibleSourceProjection.source_owner_key == visible_owner_key,
+                        PermissionVisibleSourceProjection.state != "RETIRED",
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if current_visible_source is not None:
+                raise PermissionVersionConflictError(
+                    msg="Historical target assignee still owns a current visible projection",
+                )
+            await session.delete(row)
+            await session.flush()
+            row = None
         if row is None:
             id_collision = await session.get(
                 PermissionGrantAssignee,
@@ -1432,6 +1539,7 @@ class SqlModeState:
         context,
         draft,
         grants,
+        visibility,
         *,
         idempotency_key,
         operation_id,
@@ -1440,15 +1548,17 @@ class SqlModeState:
             context,
             draft,
             grants,
+            visibility,
             idempotency_key=idempotency_key,
             operation_id=operation_id,
         )
 
-    async def finalize(self, context, draft, grants, outcome) -> None:
+    async def finalize(self, context, draft, grants, visibility, outcome) -> None:
         await self._state.finalize_mode(
             context,
             draft,
             grants,
+            visibility,
             outcome,
         )
 

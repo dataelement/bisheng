@@ -21,6 +21,7 @@ from bisheng.citation.domain.services.citation_prompt_helper import (
     collect_rag_citation_registry_items,
     save_message_citations,
     select_registry_items_for_persistence,
+    strip_unregistered_citation_markers,
 )
 from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.common.dependencies.user_deps import UserPayload
@@ -235,6 +236,8 @@ class KnowledgeSpaceChatService:
             )
             reasoning_content += chunk_reasoning_content
             answer += one.content
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        answer = strip_unregistered_citation_markers(answer, cited_items)
         messages = [
             ChatMessage(
                 category=MessageCategory.QUESTION,
@@ -263,7 +266,6 @@ class KnowledgeSpaceChatService:
             ),
         ]
         await ChatMessageDao.ainsert_batch(messages)
-        cited_items = select_registry_items_for_persistence(citation_items, answer)
         await save_message_citations(
             message_id=messages[1].id,
             items=cited_items,
@@ -632,6 +634,8 @@ class KnowledgeSpaceChatService:
             )
             reasoning_content += chunk_reasoning_content
             answer += one.content
+        cited_items = select_registry_items_for_persistence(citation_items, answer)
+        answer = strip_unregistered_citation_markers(answer, cited_items)
         messages = [
             ChatMessage(
                 category=MessageCategory.QUESTION,
@@ -660,7 +664,6 @@ class KnowledgeSpaceChatService:
             ),
         ]
         await ChatMessageDao.ainsert_batch(messages)
-        cited_items = select_registry_items_for_persistence(citation_items, answer)
         await save_message_citations(
             message_id=messages[1].id,
             items=cited_items,

@@ -6,17 +6,22 @@ uses PermissionGrant/PermissionGrantAssignee as the canonical authorization
 source, rebuilds permission_visible_source_projection, idempotently ensures
 all expected direct ``visible`` tuples, verifies them at higher consistency,
 and can perform the immutable Authorization Model + Catalog forward cutover required after an
-older F048 migration.
+older F048 migration. An explicit orphan audit compares Store tuples with all
+ACTIVE SQL visible-source contributions. Orphan cleanup is separately gated by
+``--cleanup-orphan-tuples`` and the checksum printed by a prior dry-run.
 
 Run from ``src/backend`` with the live ``config`` value::
 
     PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py
+    PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py --audit-orphan-tuples
     PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py --apply --confirm-store-id <store-id> --operator-id <user-id> --allow-model-upgrade
+    PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py --audit-orphan-tuples --orphan-object folder:97394
+    PYTHONPATH=./ .venv/bin/python scripts/reconcile_f048_visible_projection.py --apply --audit-orphan-tuples --orphan-object folder:97394 --cleanup-orphan-tuples --confirm-orphan-checksum <checksum> --confirm-store-id <store-id> --operator-id <user-id>
 
 Dry-run is the default.  Apply refuses active runtime heartbeats or in-flight
-permission projection operations. It never scans or deletes existing
-``visible`` tuples: system/public/shared sources are owned outside the Grant
-source projection.
+permission projection operations. Orphan cleanup deletes only exact direct
+``visible`` tuple keys that have no ACTIVE SQL source contribution, and records
+each resource-scoped deletion in the durable projection ledger.
 """
 
 from __future__ import annotations
@@ -65,7 +70,13 @@ from bisheng.permission.application.catalog_api import (  # noqa: E402
     SqlCatalogImpact,
     SqlCatalogState,
 )
-from bisheng.permission.application.sql_runtime import RedisConsistencyMarker  # noqa: E402
+from bisheng.permission.application.control_state import (  # noqa: E402
+    SqlPermissionControlState,
+)
+from bisheng.permission.application.sql_runtime import (  # noqa: E402
+    RedisConsistencyMarker,
+    build_sql_projection_runtime,
+)
 from bisheng.permission.domain.models import (  # noqa: E402
     AuthorizationModelRelease,
     PermissionCatalogRelease,
@@ -73,7 +84,10 @@ from bisheng.permission.domain.models import (  # noqa: E402
     PermissionGrantAssignee,
     PermissionProjectionOperation,
     PermissionVisibleSourceProjection,
+    ProjectionOperationStatus,
+    ResourcePermissionMode,
 )
+from bisheng.permission.domain.schemas import VerifiedPermissionTarget  # noqa: E402
 from bisheng.permission.domain.services.catalog_service import (  # noqa: E402
     CatalogDraftBuildInput,
     CatalogService,
@@ -86,6 +100,14 @@ from bisheng.permission.domain.services.grant_source_service import (  # noqa: E
 )
 from bisheng.permission.domain.services.model_policy import (  # noqa: E402
     CustomModelSelection,
+)
+from bisheng.permission.domain.services.projection_plan import (  # noqa: E402
+    MAX_CHANGE_ITEMS,
+    ProjectionPlan,
+    ProjectionTupleDelta,
+)
+from bisheng.permission.domain.services.projection_service import (  # noqa: E402
+    ProjectionService,
 )
 from bisheng.permission.domain.services.visibility_projection_service import (  # noqa: E402
     VisibilityProjectionCompiler,
@@ -135,6 +157,27 @@ class ReconcileReport:
     expected_tuple_checksum: str
 
 
+@dataclass(frozen=True, slots=True)
+class OrphanTupleAudit:
+    object_filters: tuple[str, ...]
+    live_direct_visible_count: int
+    supported_tuple_count: int
+    missing_tuple_count: int
+    orphan_tuple_count: int
+    missing_tuple_checksum: str
+    orphan_tuple_checksum: str
+    missing_tuples: tuple[tuple[str, str, str], ...]
+    orphan_tuples: tuple[tuple[str, str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class OrphanCleanupSelection:
+    object_filters: tuple[str, ...]
+    tuple_count: int
+    tuple_checksum: str
+    tuples: tuple[tuple[str, str, str], ...]
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -167,6 +210,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=80,
         help="OpenFGA write batch size, 1..90 (default: 80)",
     )
+    parser.add_argument(
+        "--audit-orphan-tuples",
+        action="store_true",
+        help="Scan direct visible Store tuples and report unsupported or missing tuple keys",
+    )
+    parser.add_argument(
+        "--cleanup-orphan-tuples",
+        action="store_true",
+        help="With --apply, delete audited orphan tuple keys through resource-scoped projection operations",
+    )
+    parser.add_argument(
+        "--orphan-object",
+        action="append",
+        default=[],
+        help="Limit the reported cleanup selection to an exact resource key; repeatable",
+    )
+    parser.add_argument(
+        "--confirm-orphan-checksum",
+        default=None,
+        help="Required for orphan cleanup; must match the dry-run orphan_tuple_checksum",
+    )
     args = parser.parse_args(argv)
     if not 1 <= args.batch_size <= 90:
         parser.error("--batch-size must be between 1 and 90")
@@ -176,6 +240,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--apply requires --confirm-store-id")
     if args.apply and args.operator_id <= 0:
         parser.error("--apply requires a positive --operator-id")
+    if args.cleanup_orphan_tuples and not args.apply:
+        parser.error("--cleanup-orphan-tuples requires --apply")
+    if args.cleanup_orphan_tuples and not args.audit_orphan_tuples:
+        parser.error("--cleanup-orphan-tuples requires --audit-orphan-tuples")
+    if args.cleanup_orphan_tuples and not args.confirm_orphan_checksum:
+        parser.error("--cleanup-orphan-tuples requires --confirm-orphan-checksum")
+    if args.confirm_orphan_checksum and not args.cleanup_orphan_tuples:
+        parser.error("--confirm-orphan-checksum requires --cleanup-orphan-tuples")
+    if args.orphan_object and not args.audit_orphan_tuples:
+        parser.error("--orphan-object requires --audit-orphan-tuples")
     return args
 
 
@@ -427,6 +501,210 @@ def _build_report(
         expected_tuple_checksum=_checksum(sorted(expected)),
     )
     return report, upserts, retires, expected
+
+
+async def _audit_orphan_tuples(
+    client: FGAClient,
+    *,
+    canonical_sources: tuple[Any, ...],
+    persisted: tuple[PermissionVisibleSourceProjection, ...],
+    object_filters: tuple[str, ...] = (),
+) -> OrphanTupleAudit:
+    normalized_filters = tuple(sorted(dict.fromkeys(object_filters)))
+    invalid = [value for value in normalized_filters if not all(value.partition(":"))]
+    _require(not invalid, f"invalid --orphan-object resource keys: {invalid}")
+    if normalized_filters:
+        rows = [
+            row
+            for object_key in normalized_filters
+            for row in await client.read_tuples(
+                relation="visible",
+                object=object_key,
+                consistency=HIGHER_CONSISTENCY,
+            )
+        ]
+    else:
+        rows = await client.read_tuples(consistency=HIGHER_CONSISTENCY)
+    live = frozenset(
+        (str(row["user"]), "visible", str(row["object"]))
+        for row in rows
+        if row.get("relation") == "visible" and row.get("user") and row.get("object")
+    )
+    canonical = frozenset(_tuple_key(row) for row in canonical_sources)
+    persisted_active = frozenset(_tuple_key(row) for row in persisted if row.state == "ACTIVE")
+    supported = canonical | persisted_active
+    if normalized_filters:
+        supported = frozenset(row for row in supported if row[2] in normalized_filters)
+    missing = tuple(sorted(supported - live))
+    orphans = tuple(sorted(live - supported))
+    return OrphanTupleAudit(
+        object_filters=normalized_filters,
+        live_direct_visible_count=len(live),
+        supported_tuple_count=len(supported),
+        missing_tuple_count=len(missing),
+        orphan_tuple_count=len(orphans),
+        missing_tuple_checksum=_checksum(missing),
+        orphan_tuple_checksum=_checksum(orphans),
+        missing_tuples=missing,
+        orphan_tuples=orphans,
+    )
+
+
+def _select_orphan_tuples(
+    audit: OrphanTupleAudit,
+    *,
+    object_filters: tuple[str, ...],
+) -> OrphanCleanupSelection:
+    normalized_filters = tuple(sorted(dict.fromkeys(object_filters)))
+    selected = tuple(row for row in audit.orphan_tuples if not normalized_filters or row[2] in normalized_filters)
+    return OrphanCleanupSelection(
+        object_filters=normalized_filters,
+        tuple_count=len(selected),
+        tuple_checksum=_checksum(selected),
+        tuples=selected,
+    )
+
+
+async def _load_cleanup_scope(object_key: str) -> ResourcePermissionMode:
+    resource_type, separator, resource_id = object_key.partition(":")
+    _require(
+        bool(separator and resource_type and resource_id),
+        f"orphan visible tuple has an invalid resource key: {object_key}",
+    )
+    with bypass_tenant_filter():
+        async with get_async_db_session() as session:
+            rows = list(
+                (
+                    await session.exec(
+                        select(ResourcePermissionMode).where(
+                            ResourcePermissionMode.resource_type == resource_type,
+                            ResourcePermissionMode.resource_id == resource_id,
+                        )
+                    )
+                ).all()
+            )
+    _require(
+        len(rows) == 1,
+        f"orphan visible tuple resource must map to exactly one SQL scope: {object_key}",
+    )
+    row = rows[0]
+    _require(
+        row.projection_state == "CURRENT",
+        f"orphan visible tuple resource is not CURRENT: {object_key}",
+    )
+    _require(
+        row.tenant_id is not None and int(row.tenant_id) > 0,
+        f"orphan visible tuple resource has no tenant: {object_key}",
+    )
+    return row
+
+
+def _build_orphan_cleanup_plan(
+    *,
+    current: CurrentRelease,
+    scope: ResourcePermissionMode,
+    tuples: tuple[tuple[str, str, str], ...],
+    operator_id: int,
+) -> ProjectionPlan:
+    _require(bool(tuples), "orphan cleanup plan must contain tuple keys")
+    _require(
+        len(tuples) <= MAX_CHANGE_ITEMS,
+        f"one resource has {len(tuples)} orphan tuples; maximum classified cleanup size is {MAX_CHANGE_ITEMS}",
+    )
+    object_keys = {row[2] for row in tuples}
+    scope_key = f"{scope.resource_type}:{scope.resource_id}"
+    _require(
+        object_keys == {scope_key},
+        "orphan cleanup plan cannot mix resource scopes",
+    )
+    version = int(scope.version)
+    digest = _checksum(tuples)
+    return ProjectionPlan(
+        tenant_id=int(scope.tenant_id or 0),
+        idempotency_key=f"f048:visible-orphan:{digest[:40]}:{version}",
+        operation_type="VISIBLE_ORPHAN_CLEANUP",
+        scope_type="resource",
+        scope_key=scope_key,
+        expected_version=version,
+        target_version=version + 1,
+        store_id=current.store_id,
+        model_id=current.model_id,
+        operator_id=operator_id,
+        change_item_count=len(tuples),
+        deltas=tuple(
+            ProjectionTupleDelta(
+                phase="COMMIT",
+                sequence=index,
+                action="DELETE",
+                user=user,
+                relation=relation,
+                object=object_key,
+            )
+            for index, (user, relation, object_key) in enumerate(tuples)
+        ),
+    )
+
+
+async def _cleanup_orphan_tuples(
+    client: FGAClient,
+    *,
+    current: CurrentRelease,
+    selection: OrphanCleanupSelection,
+    operator_id: int,
+) -> tuple[int, ...]:
+    if not selection.tuples:
+        return ()
+    grouped: dict[str, list[tuple[str, str, str]]] = defaultdict(list)
+    for tuple_key in selection.tuples:
+        grouped[tuple_key[2]].append(tuple_key)
+
+    sql_projection = await build_sql_projection_runtime(client)
+    projection = ProjectionService(
+        repository=sql_projection.repository,
+        marker=sql_projection.marker,
+        scope_guard=sql_projection.scope_guard,
+        fga=sql_projection.fga,
+        finalizer=sql_projection.finalizer,
+    )
+    state = SqlPermissionControlState()
+    operation_ids: list[int] = []
+    for object_key, tuple_keys in sorted(grouped.items()):
+        scope = await _load_cleanup_scope(object_key)
+        exact_tuples = tuple(sorted(tuple_keys))
+        plan = _build_orphan_cleanup_plan(
+            current=current,
+            scope=scope,
+            tuples=exact_tuples,
+            operator_id=operator_id,
+        )
+        target = VerifiedPermissionTarget.from_business_service(
+            tenant_id=plan.tenant_id,
+            resource_type=scope.resource_type,
+            resource_id=scope.resource_id,
+            resource_version=plan.expected_version,
+            parent_type=scope.parent_type,
+            parent_id=scope.parent_id,
+            context_version=f"visible-orphan-{selection.tuple_checksum[:40]}",
+        )
+        with bypass_tenant_filter():
+            operation = await projection.prepare(plan)
+            if str(operation.status) == ProjectionOperationStatus.PREPARED.value:
+                try:
+                    await state.mark_projecting(
+                        target=target,
+                        operation_id=int(operation.id),
+                        expected_catalog_release_id=current.catalog_id,
+                    )
+                except Exception as exc:
+                    await projection.abandon_prepared(plan, exc)
+                    raise
+            outcome = await projection.execute(plan)
+        _require(
+            outcome.status == ProjectionOperationStatus.FINALIZED.value,
+            f"orphan cleanup did not finalize for {object_key}",
+        )
+        operation_ids.append(outcome.operation_id)
+    return tuple(operation_ids)
 
 
 async def _apply_source_rows(upserts: tuple[Any, ...]) -> None:
@@ -693,8 +971,76 @@ async def execute(args: argparse.Namespace, *, live_settings: Any = settings) ->
             persisted=persisted,
         )
         print(json.dumps(asdict(report), ensure_ascii=False, sort_keys=True))
+        orphan_audit: OrphanTupleAudit | None = None
+        cleanup_selection: OrphanCleanupSelection | None = None
+        if args.audit_orphan_tuples:
+            orphan_audit = await _audit_orphan_tuples(
+                source_client,
+                canonical_sources=canonical_sources,
+                persisted=persisted,
+                object_filters=tuple(args.orphan_object),
+            )
+            print(
+                json.dumps(
+                    {"event": "orphan_tuple_audit", **asdict(orphan_audit)},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
+            cleanup_selection = _select_orphan_tuples(
+                orphan_audit,
+                object_filters=tuple(args.orphan_object),
+            )
+            print(
+                json.dumps(
+                    {"event": "orphan_cleanup_selection", **asdict(cleanup_selection)},
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
         if not args.apply:
             print("[dry-run] no SQL, OpenFGA, Authorization Model, or Catalog mutations were requested")
+            return EXIT_OK
+
+        if args.cleanup_orphan_tuples:
+            _require(cleanup_selection is not None, "orphan cleanup requires a completed orphan selection")
+            _require(not current.write_fenced, "CURRENT Catalog is write fenced")
+            _require(
+                args.confirm_orphan_checksum == cleanup_selection.tuple_checksum,
+                "--confirm-orphan-checksum does not match the selected orphan tuple set",
+            )
+            cleanup_operation_ids = await _cleanup_orphan_tuples(
+                source_client,
+                current=current,
+                selection=cleanup_selection,
+                operator_id=args.operator_id,
+            )
+            persisted_after = await _load_persisted_sources()
+            audit_after = await _audit_orphan_tuples(
+                source_client,
+                canonical_sources=canonical_sources,
+                persisted=persisted_after,
+                object_filters=tuple(args.orphan_object),
+            )
+            remaining_selected = tuple(sorted(set(cleanup_selection.tuples) & set(audit_after.orphan_tuples)))
+            _require(
+                not remaining_selected,
+                f"{len(remaining_selected)} selected orphan visible tuples remain after cleanup",
+            )
+            print(
+                json.dumps(
+                    {
+                        "event": "orphan_tuple_cleanup",
+                        "deleted_tuple_count": cleanup_selection.tuple_count,
+                        "operation_ids": cleanup_operation_ids,
+                        "orphan_tuple_checksum": cleanup_selection.tuple_checksum,
+                        "remaining_audited_orphan_tuple_count": audit_after.orphan_tuple_count,
+                        "remaining_selected_orphan_tuple_count": len(remaining_selected),
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+            )
             return EXIT_OK
 
         _require(

@@ -11,11 +11,10 @@ import {
   type ResourcePermissionContext,
 } from "@/controllers/API/permission"
 import { LockKeyhole } from "lucide-react"
-import { userContext } from "@/contexts/userContext"
-import { useContext, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { canMutatePermissionAssignee } from "./assigneePolicy"
 import { SourceBadge } from "./SourceBadge"
-import { canManageLevel, viewerIsCreator } from "./topTierGuard"
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment"
 import { SubjectSearchUser } from "./SubjectSearchUser"
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup"
@@ -66,12 +65,7 @@ function ExistingAssigneeRow({
 }: ExistingAssigneeRowProps) {
   const { t } = useTranslation("permission")
   const [targetModelKey, setTargetModelKey] = useState(assignee.model.key)
-  const editable =
-    context.mode === "CUSTOM" &&
-    context.can_manage_permission &&
-    assignee.scope === "LOCAL" &&
-    assignee.editable &&
-    !assignee.protected
+  const editable = canMutatePermissionAssignee(assignee, context, models)
   const currentIsGrantable = models.some(
     (model) => model.key === assignee.model.key,
   )
@@ -164,11 +158,6 @@ export function PermissionGrantTab({
   onSuccess,
 }: PermissionGrantTabProps) {
   const { t } = useTranslation("permission")
-  const { user } = useContext(userContext)
-  const isCreator = useMemo(
-    () => viewerIsCreator(assignees, user?.user_id),
-    [assignees, user?.user_id],
-  )
   const [models, setModels] = useState<GrantablePermissionModel[]>([])
   const [subjectType, setSubjectType] = useState<SubjectType>(
     fixedSubjectType ?? "user",
@@ -192,11 +181,7 @@ export function PermissionGrantTab({
     void getGrantablePermissionModelsApi(resourceType, resourceId)
       .then((result) => {
         if (cancelled) return
-        // Hiding the edit control on existing owner rows would be pointless if
-        // the same viewer could still grant a fresh one here.
-        const activeModels = result.filter(
-          (model) => model.active && canManageLevel(model.level, isCreator),
-        )
+        const activeModels = result.filter((model) => model.active)
         setModels(activeModels)
         setSelectedModelKey((current) =>
           activeModels.some((model) => model.key === current)
@@ -213,7 +198,7 @@ export function PermissionGrantTab({
     return () => {
       cancelled = true
     }
-  }, [resourceId, resourceType, isCreator])
+  }, [resourceId, resourceType])
 
   useEffect(() => {
     if (fixedSubjectType) setSubjectType(fixedSubjectType)

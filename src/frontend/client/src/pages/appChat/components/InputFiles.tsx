@@ -26,6 +26,7 @@ import {
     TASK_MODE_MAX_FOLDER_FILES,
 } from "~/utils/folderUpload";
 import {
+    captureVideoPosterFromFile,
     getMediaKind,
     readMediaDurationFromFile,
     isMediaAttachmentFile,
@@ -160,6 +161,9 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 : undefined,
         previewUrl: f.previewUrl,
         mediaPreviewUrl: f.mediaPreviewUrl,
+        // Keep the local poster here: in daily chat this payload is what the
+        // composer renders once an upload completes. A `blob:` cover is ignored
+        // by the message-side chip, so it cannot leak into a sent bubble.
         mediaCoverUrl: f.mediaCoverUrl,
         cover_filepath: f.cover_filepath,
         mediaDurationSec: f.mediaDurationSec,
@@ -282,6 +286,34 @@ const InputFiles = forwardRef(({ v, showVoice, accepts, disabled = false, size, 
                 }
                 const updated = filesRef.current.map((f) =>
                     f.id === id ? { ...f, mediaDurationSec } : f,
+                );
+                filesRef.current = updated;
+                setFiles(updated);
+                onFilesStateChange?.(updated);
+            });
+        });
+
+        // Local first-frame poster for video chips. The server cover only exists
+        // after the turn is submitted and parsed, so without this the chip sits
+        // as a bare icon for the whole time the user is composing. Best effort:
+        // a codec the browser cannot decode just leaves the icon in place, and
+        // the server poster replaces this blob as soon as it lands.
+        filesWithProgress.forEach(({ file, id }: { file: File; id: string }) => {
+            if (!file || getMediaKind(file.name) !== 'video') {
+                return;
+            }
+            captureVideoPosterFromFile(file).then((mediaCoverUrl) => {
+                if (!mediaCoverUrl) {
+                    return;
+                }
+                const target = filesRef.current.find((f) => f.id === id);
+                // Removed while decoding, or the server poster won the race.
+                if (!target || target.cover_filepath) {
+                    URL.revokeObjectURL(mediaCoverUrl);
+                    return;
+                }
+                const updated = filesRef.current.map((f) =>
+                    f.id === id ? { ...f, mediaCoverUrl } : f,
                 );
                 filesRef.current = updated;
                 setFiles(updated);

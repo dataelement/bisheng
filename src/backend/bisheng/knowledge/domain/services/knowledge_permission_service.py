@@ -10,15 +10,18 @@ from bisheng.common.errcode.permission import (
     InvalidPermissionModeError,
     PermissionInvalidResourceError,
 )
+from bisheng.common.services.metric_log import emit_metric
 from bisheng.database.models.department import DepartmentDao
 from bisheng.database.models.tenant import UserTenantDao
 from bisheng.knowledge.domain.models.knowledge import (
+    Knowledge,
     KnowledgeDao,
     KnowledgeState,
     KnowledgeTypeEnum,
 )
 from bisheng.knowledge.domain.models.knowledge_file import (
     FileType,
+    KnowledgeFile,
     KnowledgeFileDao,
     KnowledgeFileStatus,
 )
@@ -26,6 +29,7 @@ from bisheng.permission.application.business_authorization import (
     batch_check_business_actions,
     check_business_action,
 )
+from bisheng.permission.application.control_state import PermissionResourceSnapshot
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.grant_source_service import (
     GrantSourceService,
@@ -268,6 +272,11 @@ class KnowledgePermissionVersionPort(Protocol):
         self,
         target: VerifiedPermissionTarget,
     ): ...
+
+    async def get_permission_snapshots(
+        self,
+        resources: tuple[tuple[int, str, str], ...],
+    ) -> dict[tuple[int, str, str], PermissionResourceSnapshot]: ...
 
 
 class KnowledgeContainerDaoPermissionLoader:
@@ -757,12 +766,128 @@ class KnowledgeFilePermissionLoader(Protocol):
         resource_id: str,
     ) -> KnowledgeFilePermissionRecord | None: ...
 
+    async def load_permission_records_from_rows(
+        self,
+        rows: list[KnowledgeFile],
+        *,
+        knowledge: Knowledge,
+    ) -> tuple[KnowledgeFilePermissionRecord, ...]: ...
+
 
 class KnowledgeFileDaoPermissionLoader:
     """Resolve canonical file/folder tree facts through Knowledge DAOs."""
 
     def __init__(self, version_port: KnowledgePermissionVersionPort) -> None:
         self._versions = version_port
+
+    @staticmethod
+    def _resource_type(row: KnowledgeFile) -> str:
+        return "folder" if row.file_type == FileType.DIR.value else "knowledge_file"
+
+    @staticmethod
+    def _parent_scope(
+        row: KnowledgeFile,
+        knowledge: Knowledge,
+    ) -> tuple[str, str, tuple[str, ...]]:
+        ancestors = tuple(part for part in (row.file_level_path or "").split("/") if part)
+        if ancestors:
+            return "folder", ancestors[-1], ancestors
+        root_type = (
+            "knowledge_space"
+            if knowledge.type == KnowledgeTypeEnum.SPACE.value
+            else "knowledge_library"
+        )
+        return root_type, str(knowledge.id), ancestors
+
+    async def load_permission_records_from_rows(
+        self,
+        rows: list[KnowledgeFile],
+        *,
+        knowledge: Knowledge,
+    ) -> tuple[KnowledgeFilePermissionRecord, ...]:
+        """Build canonical records from rows already loaded by the business list."""
+
+        started_at = perf_counter()
+        if (
+            knowledge.id is None
+            or knowledge.tenant_id is None
+            or knowledge.type
+            not in {
+                KnowledgeTypeEnum.SPACE.value,
+                KnowledgeTypeEnum.NORMAL.value,
+                KnowledgeTypeEnum.QA.value,
+            }
+        ):
+            return ()
+
+        candidates = [
+            row
+            for row in rows
+            if row.id is not None
+            and row.knowledge_id == knowledge.id
+            and int(row.tenant_id or 0) == int(knowledge.tenant_id)
+        ]
+        resource_keys = tuple(
+            (
+                int(row.tenant_id or 0),
+                self._resource_type(row),
+                str(row.id),
+            )
+            for row in candidates
+        )
+        snapshot_started_at = perf_counter()
+        snapshots = await self._versions.get_permission_snapshots(resource_keys)
+        snapshot_elapsed_ms = (perf_counter() - snapshot_started_at) * 1000
+
+        records: list[KnowledgeFilePermissionRecord] = []
+        for row in candidates:
+            resource_type = self._resource_type(row)
+            key = (int(row.tenant_id or 0), resource_type, str(row.id))
+            snapshot = snapshots.get(key)
+            if snapshot is None:
+                continue
+            try:
+                status = KnowledgeFileStatus(row.status).name
+            except ValueError:
+                continue
+            if resource_type == "folder":
+                status = "ACTIVE"
+            parent_type, parent_id, ancestors = self._parent_scope(row, knowledge)
+            context_version = sha256(
+                (
+                    f"{snapshot.context_version}|"
+                    f"{row.update_time.isoformat() if row.update_time else '0'}"
+                ).encode()
+            ).hexdigest()[:64]
+            records.append(
+                KnowledgeFilePermissionRecord(
+                    tenant_id=key[0],
+                    resource_type=resource_type,
+                    resource_id=key[2],
+                    status=status,
+                    owner_user_id=int(row.user_id or 0),
+                    permission_version=snapshot.version,
+                    context_version=context_version,
+                    parent_type=parent_type,
+                    parent_id=parent_id,
+                    mode=snapshot.mode,
+                    ancestor_ids=ancestors,
+                )
+            )
+        emit_metric(
+            "permission",
+            event="verified_target_build",
+            tenant_id=int(knowledge.tenant_id),
+            candidate_count=len(rows),
+            valid_candidate_count=len(candidates),
+            snapshot_count=len(snapshots),
+            target_record_count=len(records),
+            folder_count=sum(row.file_type == FileType.DIR.value for row in candidates),
+            file_count=sum(row.file_type != FileType.DIR.value for row in candidates),
+            snapshot_elapsed_ms=snapshot_elapsed_ms,
+            total_elapsed_ms=(perf_counter() - started_at) * 1000,
+        )
+        return tuple(records)
 
     async def load_permission_record(
         self,
@@ -968,6 +1093,36 @@ class F048KnowledgeFilePermissionAdapter:
             resource_id,
             action=action,
         )
+
+    async def resolve_permission_targets_from_rows(
+        self,
+        *,
+        rows: list[KnowledgeFile],
+        knowledge: Knowledge,
+        actor: PermissionActor,
+        action: str,
+    ) -> tuple[VerifiedPermissionTarget, ...]:
+        """Verify an existing business batch without reloading each resource by id."""
+
+        records = await self._loader.load_permission_records_from_rows(
+            rows,
+            knowledge=knowledge,
+        )
+        targets: list[VerifiedPermissionTarget] = []
+        for record in records:
+            try:
+                targets.append(
+                    self._target(
+                        record,
+                        actor,
+                        record.resource_type,
+                        record.resource_id,
+                        action=action,
+                    )
+                )
+            except PermissionInvalidResourceError:
+                continue
+        return tuple(targets)
 
     async def check_action(
         self,
