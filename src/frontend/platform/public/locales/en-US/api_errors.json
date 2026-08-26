@@ -234,7 +234,7 @@
   "17014": "No corresponding dimension configurations found",
   "17015": "Corresponding operator configuration not found",
   "18000": "Knowledge Space does not exist",
-  "18001": "You can create a maximum of 30 Knowledge Spaces",
+  "18001": "You have reached the maximum number of Knowledge Spaces you can create",
   "18002": "A knowledge space for this department already exists.",
   "18010": "Folder does not exist",
   "18011": "Directory depth cannot exceed 10 levels",

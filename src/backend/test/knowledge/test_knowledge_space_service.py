@@ -138,6 +138,13 @@ async def test_create_limit_count_excludes_department_spaces(
     service: KnowledgeSpaceService,
 ) -> None:
     with (
+        # A finite quota keeps the count path alive; -1 would skip it entirely.
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "QuotaService.get_effective_quota",
+            new_callable=AsyncMock,
+            return_value=50,
+        ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service."
             "KnowledgeDao.async_count_spaces_by_user",

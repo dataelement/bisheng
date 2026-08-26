@@ -45,7 +45,7 @@ class _Prospective:
 def _service(prospective: _Prospective) -> KnowledgeSpaceService:
     service = KnowledgeSpaceService(
         request=MagicMock(),
-        login_user=SimpleNamespace(user_id=11, tenant_id=7),
+        login_user=SimpleNamespace(user_id=11, tenant_id=7, is_admin=lambda: False),
         prospective_grant_application=prospective,
     )
     service._permission_actor = AsyncMock(return_value=SimpleNamespace(user_id=11, current_tenant_id=7))
@@ -56,6 +56,10 @@ async def test_creation_context_and_candidates_use_server_tenant_and_same_shape(
     prospective = _Prospective()
     service = _service(prospective)
     with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_effective_quota",
+            new=AsyncMock(return_value=50),
+        ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user",
             new=AsyncMock(return_value=0),
@@ -89,9 +93,15 @@ async def test_creation_context_and_candidates_use_server_tenant_and_same_shape(
 async def test_creation_qualification_fails_closed_before_permission_directory() -> None:
     prospective = _Prospective()
     service = _service(prospective)
-    with patch(
-        "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user",
-        new=AsyncMock(return_value=30),
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_effective_quota",
+            new=AsyncMock(return_value=30),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.async_count_spaces_by_user",
+            new=AsyncMock(return_value=30),
+        ),
     ):
         with pytest.raises(SpaceLimitError):
             await service.get_creation_permission_context()
