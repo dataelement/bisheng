@@ -73,7 +73,7 @@ function HomeEntryRedirect() {
     is_department_admin: (user as { is_department_admin?: boolean } | null)?.is_department_admin,
   });
   if (!canOpenWorkbenchEntry) {
-    return <Navigate to="/404" replace />;
+    return <Navigate to="/menu-unavailable" replace />;
   }
   const has = (id: string) => plugins.includes(id);
   // Only users with WEB_MENU `home` land on chat home; do not use menu_approval_mode here — it incorrectly

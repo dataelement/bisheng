@@ -10,9 +10,7 @@ import { usePrefersMobileLayout, useScrollRevealRef } from '~/hooks';
 import { bishengConfState } from '~/pages/appChat/store/atoms';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
 import { useAuthContext, useLocalize, useWorkbenchMenuNames } from '~/hooks';
-import { Button } from '~/components/ui/Button';
 import { LoadingIcon } from '~/components/ui/icon/Loading';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '~/components/ui/Dialog';
 import store from '~/store';
 
 const systemNoticeTodayKey = () => {
@@ -25,6 +23,7 @@ import { canOpenWorkbench, canShowPlatformAdminEntry } from '~/utils/platformAcc
 import { UserPopMenu } from './UserPopMenu';
 import WorkbenchAccessGuard from './WorkbenchAccessGuard';
 import { appsSectionLinkTarget, lastSectionPaths } from './appModuleNavPaths';
+import { SystemNoticeDialog } from './SystemNoticeDialog';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
@@ -139,6 +138,7 @@ function Sidebar({
     is_department_admin: user?.is_department_admin,
     has_admin_console: user?.has_admin_console,
   });
+  const showUserMenu = Boolean(user?.has_workbench ?? canOpenWorkbenchEntry) || showAdminEntry;
 
   // --- Sidebar link definitions with dynamic `to` for KeepAlive restoration ---
   const links = useMemo<Array<{
@@ -292,7 +292,7 @@ function Sidebar({
         )}
 
         {/* 用户菜单：应用中心抽屉模式展示整行（含右箭头） */}
-        <UserPopMenu variant={showExpandedHubSidebar ? 'drawer' : 'rail'} />
+        {showUserMenu ? <UserPopMenu variant={showExpandedHubSidebar ? 'drawer' : 'rail'} /> : null}
       </div>
     </div>
   );
@@ -594,28 +594,7 @@ export default function MainLayout() {
         </KeepAlive>
         )}
       </main>
-      <Dialog
-        open={!!systemNotice}
-        onOpenChange={(open) => {
-          if (!open) closeSystemNotice();
-        }}
-      >
-        <DialogContent className="sm:max-w-md w-[calc(100%-40px)] rounded-2xl mx-auto top-[50%] -translate-y-[50%]">
-          <DialogHeader>
-            <DialogTitle className="text-center text-lg font-medium">系统通知</DialogTitle>
-          </DialogHeader>
-          <div className="py-6 px-2">
-            <div className="text-sm text-gray-700 leading-relaxed text-center whitespace-pre-wrap">
-              {systemNotice}
-            </div>
-          </div>
-          <DialogFooter className="sm:justify-center flex-row justify-center pb-2">
-            <Button onClick={closeSystemNotice} className="w-[120px] rounded-full">
-              我知道了
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SystemNoticeDialog notice={systemNotice} onClose={closeSystemNotice} />
     </div>
   );
 }

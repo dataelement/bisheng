@@ -1881,6 +1881,10 @@
     "channel_permission_management": "Member Management",
     "organization_grant_unsubscribe_blocked": "This channel was granted to you through a department/user group and cannot be unsubscribed from yet."
   },
+  "com_ui": {
+    "system_notice_acknowledge": "Got it",
+    "system_notice_title": "System notification"
+  },
   "com_unified_permission": {
     "access_and_share": "Access and sharing",
     "add_authorization": "Add permission",

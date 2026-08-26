@@ -157,16 +157,10 @@ export function getUser(): Promise<t.TUser> {
         plugins: wm,
         is_department_admin: Boolean(is_department_admin),
       });
-    if (role !== 'admin' && !canWorkspace) {
-      if (!canManagement) {
-        // 无工作台也无管理端菜单 — 退出并回管理端登录
-        logout().catch(() => { });
-        location.href = getPlatformAdminPanelUrl();
-        return Promise.reject(new Error('no_permission'));
-      }
+    if (role !== 'admin' && !canWorkspace && canManagement) {
       location.href = getPlatformAdminPanelUrl('error=90002');
     }
-    // 仅管理后台：由 WorkbenchAccessGuard 提示并 history.back / fallback
+    // Keep the authenticated user so WorkbenchAccessGuard can render the final state.
     return {
       "_id": user_id,
       "name": user_name,
