@@ -148,6 +148,11 @@ information_conf:
   api_key: ""
   kwargs: # 发送给情报订阅服务额外参数
     timeout: 3600  # 请求情报订阅服务的超时时间，单位秒
+  information_initial_article_limit: 20
+  information_sync_jitter_seconds: 600
+  information_subscription_auto_unsubscribe_enabled: true
+  information_knowledge_delivery_enabled: true
+  information_business_timezone: Asia/Shanghai
 
 mcp:
   enable_stdio: true
