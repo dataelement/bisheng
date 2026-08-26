@@ -57,7 +57,7 @@ const TAB_SIZE: Record<TabsSize, string> = {
 };
 
 /** §5 — selected-state color per variant. `brand` follows the blue⇄green
- * theme (dark: one step lighter, see the comment at the use site). `neutral`
+ * theme (and the dark brand ramp — see the use site). `neutral`
  * speaks in ink: selected text and indicator are text-1, which already flips
  * to near-white in dark mode — no dark override needed, and no contrast debt
  * (text-1 is the loudest text on either background). Selection then rests on
@@ -65,21 +65,12 @@ const TAB_SIZE: Record<TabsSize, string> = {
  * accent would fight nearby brand elements (§5). */
 const VARIANT: Record<TabsVariant, { tab: string; indicator: string }> = {
   brand: {
-    tab: cn(
-      'data-[state=active]:text-blue-500 data-[state=active]:hover:text-blue-500',
-      // Dark: brand-500 has no dark ramp yet (known debt) and lands at 3.6:1
-      // on #121212 while text-2 sits at 8.2:1 — the selected tab reads DIMMER
-      // than its neighbors (bright text blooms, dark blue recedes; perceived
-      // as "smaller"). One step lighter (blue-400, 5.2:1) — the designer
-      // tried the full ladder (2026-08-26): 500 too dim, 300 bright but
-      // washed out (the LIGHT ramp lightens by blending toward white, so
-      // brightness costs chroma — brand feel dies). 400 matches Arco's
-      // official dark primary (#3C7EFF) and Button's dark brand-text; hue +
-      // weight 500 + the indicator carry the selection, not raw luminance.
-      // The real both-bright-AND-saturated fix is the pending dark brand ramp.
-      'dark:data-[state=active]:text-blue-400 dark:data-[state=active]:hover:text-blue-400',
-    ),
-    indicator: 'bg-blue-500 dark:bg-blue-400',
+    // Dark needs no override: blue-500 resolves through the dark brand ramp
+    // (tokens.css .dark → #3C7EFF blue / #3CB062 green), bright AND saturated
+    // on #121212 — the fix §5's 实测 ladder (500 too dim / 300 washed out /
+    // interim 400) was waiting for.
+    tab: 'data-[state=active]:text-blue-500 data-[state=active]:hover:text-blue-500',
+    indicator: 'bg-blue-500',
   },
   neutral: {
     tab: 'data-[state=active]:text-text-1 data-[state=active]:hover:text-text-1',

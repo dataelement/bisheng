@@ -67,7 +67,7 @@ export default function ApiKeyDialog({
                 href="https://code.librechat.ai/pricing"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block text-center text-[15px] font-medium text-blue-500 underline decoration-1 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                className="block text-center text-[15px] font-medium text-blue-500 underline decoration-1 hover:text-blue-600"
               >
                 {localize('com_ui_librechat_code_api_key')}
               </a>
