@@ -145,6 +145,7 @@
   "10989": "The tag library is invalid. Please select another one.",
   "10990": "Processing in the background, try again later",
   "10991": "The page cursor has expired. Please refresh the list and try again.",
+  "10992": "This list does not show knowledge spaces. Please use the knowledge space page instead.",
   "11001": "The software license has expired. Please contact your administrator to renew.",
   "11010": "Invalid SOP file format",
   "11011": "Failed to set featured SOP case",
