@@ -1,5 +1,5 @@
+import { Segmented } from "@bisheng/ui";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { SegmentedControl } from "~/components/ui/SegmentedControl";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
 
@@ -134,10 +134,12 @@ export function ChannelSquareTabs({
     }
 
     return (
-        <SegmentedControl
+        <Segmented
+            size="large"
             options={segments.map(({ key, label }) => ({ value: key, label }))}
             value={active}
             onChange={(next) => segments.find((seg) => seg.key === next)?.onClick?.()}
+            disabled={disabled}
             className={className}
         />
     );
