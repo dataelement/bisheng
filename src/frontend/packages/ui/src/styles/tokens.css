@@ -180,7 +180,9 @@
  * semantic text / fill / border tokens defined in :root as var(--arco-gray-N)
  * auto-flip here without being redeclared — custom properties resolve lazily at
  * use time. Neutral + semantic only; brand and functional dark ramps are still
- * pending (they keep their light values in dark — known debt). */
+ * pending (they keep their light values in dark — known debt).
+ * One semantic token is re-pointed below (--text-2) — the same-rung flip is
+ * kept for everything else. */
 .dark {
   --arco-gray-1: 23 23 26;      /* #17171A */
   --arco-gray-2: 46 46 48;      /* #2E2E30 */
@@ -193,6 +195,16 @@
   --arco-gray-9: 223 223 223;   /* #DFDFDF */
   --arco-gray-10: 246 246 246;  /* #F6F6F6 */
   --bg-page: 18 18 18;          /* #121212 — page surface, dark */
+
+  /* Secondary text drops ONE extra rung in dark (gray-7 #ABABAC, not the
+     same-rung gray-8 #C5C5C5). The same-rung flip compressed the hierarchy:
+     light text-1/text-2 sit ΔL* ≈ 24 apart, but flipped dark values were only
+     ΔL* ≈ 17 — and light-on-dark blooms, so secondary text read almost as loud
+     as primary (first noticed on unselected tab labels, 2026-08-26). gray-7
+     restores the light-mode gap and lands next to Arco's official dark text-2
+     (70% white ≈ #B3B3B3). text-3/4 keep the same-rung flip — their gaps
+     survive inversion; revisit with the pending brand/functional dark ramps. */
+  --text-2: var(--arco-gray-7);
 
   /* Tooltip stays a DARK bubble in dark mode (it does not follow the ramp
      inversion) — a step lighter than the light-mode surface so it reads as a
