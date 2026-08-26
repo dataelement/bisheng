@@ -1,3 +1,4 @@
+# ruff: noqa: RUF002, RUF003
 """平台超管在专家问答违规删除：先删内容，再扣分（失败入补扣队列）。"""
 
 from __future__ import annotations
@@ -65,7 +66,8 @@ class ModerateDeleteService:
     ) -> ModerateDeleteResult:
         """删除问题、回答或评论/追问；若传入启用中的 R* 则对内容作者扣分。
 
-        未选规则 = 只删不扣。扣分失败不回滚删除, 写入 point_pending_deduct 供 Beat 补扣.
+        未选规则 = 只删不扣。作者即操作人（超管删自己）强制不扣。
+        扣分失败不回滚删除, 写入 point_pending_deduct 供 Beat 补扣.
         删回答时级联硬删其下评论，扣分仅针对回答作者。
         """
         require_platform_admin(operator)
@@ -75,6 +77,18 @@ class ModerateDeleteService:
             raise QuestionNotFoundError()
 
         author_id, biz_type, biz_id = await self._resolve_and_delete(target_type, int(target_id))
+        operator_id = int(getattr(operator, "user_id", 0) or 0)
+        # 超管删自己的内容：不参与积分排行，强制不扣，避免误选 R* 写脏账本。
+        if operator_id and int(author_id) == operator_id:
+            return ModerateDeleteResult(
+                deleted=True,
+                target_type=target_type,
+                target_id=int(target_id),
+                target_user_id=author_id,
+                deducted=False,
+                pending_deduct=False,
+                reason="self_author",
+            )
         code = (rule_code or "").strip().upper()
         if not code:
             return ModerateDeleteResult(
@@ -107,9 +121,7 @@ class ModerateDeleteService:
             reason=attempt.reason,
         )
 
-    async def _resolve_and_delete(
-        self, target_type: TargetType, target_id: int
-    ) -> tuple[int, str, str]:
+    async def _resolve_and_delete(self, target_type: TargetType, target_id: int) -> tuple[int, str, str]:
         """解析作者并删除, 返回 (author_user_id, biz_type, biz_id)."""
         if target_type == "question":
             return await self._delete_question(target_id)

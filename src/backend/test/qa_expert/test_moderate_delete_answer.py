@@ -1,3 +1,4 @@
+# ruff: noqa: RUF002
 """平台超管违规删除回答：作者解析、软删、级联评论、采纳指针与可选扣分。"""
 
 from types import SimpleNamespace
@@ -63,9 +64,7 @@ async def test_delete_answer_no_rule_cascades_and_clears_adopted():
             status=2,
         )
     )
-    svc.expert_repo.get_by_id = AsyncMock(
-        return_value=SimpleNamespace(id=5, user_id=55)
-    )
+    svc.expert_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id=5, user_id=55))
     svc.answer_repo.delete = AsyncMock(return_value=True)
     svc.comment_repo.delete_by_answer_id = AsyncMock(return_value=3)
     svc.question_repo.get_by_id = AsyncMock(
@@ -112,9 +111,7 @@ async def test_delete_answer_with_rule_uses_qa_answer_biz_type():
             status=1,
         )
     )
-    svc.expert_repo.get_by_id = AsyncMock(
-        return_value=SimpleNamespace(id=6, user_id=66)
-    )
+    svc.expert_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id=6, user_id=66))
     svc.answer_repo.delete = AsyncMock(return_value=True)
     svc.comment_repo.delete_by_answer_id = AsyncMock(return_value=0)
     svc.question_repo.get_by_id = AsyncMock(
@@ -126,9 +123,7 @@ async def test_delete_answer_with_rule_uses_qa_answer_biz_type():
         )
     )
     svc.question_repo.update = AsyncMock(return_value=True)
-    pending.deduct_or_enqueue = AsyncMock(
-        return_value=SimpleNamespace(applied=True, pending=False, reason=None)
-    )
+    pending.deduct_or_enqueue = AsyncMock(return_value=SimpleNamespace(applied=True, pending=False, reason=None))
 
     result = await svc.moderate_delete(
         operator=_admin_user(user_id=9),
@@ -149,6 +144,62 @@ async def test_delete_answer_with_rule_uses_qa_answer_biz_type():
     assert kwargs["operator_id"] == 9
     assert kwargs["remark"] == "违规"
     svc.question_repo.update.assert_awaited_once_with(101, answer_count=0)
+
+
+@pytest.mark.asyncio
+async def test_delete_own_question_skips_deduct_even_with_rule(monkeypatch):
+    """超管删自己的问题：即使带 R* 也不扣分。"""
+    svc, pending = _service_with_mocks()
+    svc.question_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id=8, user_id=1))
+    svc.question_repo.delete = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.moderate_delete_service.RealtimeQaQuestionFact.delete_question",
+        AsyncMock(),
+    )
+
+    result = await svc.moderate_delete(
+        operator=_admin_user(user_id=1),
+        target_type="question",
+        target_id=8,
+        rule_code="R1",
+        remark="测试",
+    )
+
+    assert result.deleted is True
+    assert result.deducted is False
+    assert result.pending_deduct is False
+    assert result.reason == "self_author"
+    pending.deduct_or_enqueue.assert_not_called()
+    svc.question_repo.delete.assert_awaited_once_with(8)
+
+
+@pytest.mark.asyncio
+async def test_delete_others_question_with_rule_deducts(monkeypatch):
+    """超管删别人的问题：仍按 R* 对提问者扣分。"""
+    svc, pending = _service_with_mocks()
+    svc.question_repo.get_by_id = AsyncMock(return_value=SimpleNamespace(id=9, user_id=2))
+    svc.question_repo.delete = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        "bisheng.qa_expert.domain.moderate_delete_service.RealtimeQaQuestionFact.delete_question",
+        AsyncMock(),
+    )
+    pending.deduct_or_enqueue = AsyncMock(return_value=SimpleNamespace(applied=True, pending=False, reason=None))
+
+    result = await svc.moderate_delete(
+        operator=_admin_user(user_id=1),
+        target_type="question",
+        target_id=9,
+        rule_code="r1",
+        remark="违规",
+    )
+
+    assert result.deducted is True
+    pending.deduct_or_enqueue.assert_awaited_once()
+    kwargs = pending.deduct_or_enqueue.await_args.kwargs
+    assert kwargs["user_id"] == 2
+    assert kwargs["rule_code"] == "R1"
+    assert kwargs["biz_type"] == "qa_question"
+    assert kwargs["biz_id"] == "9"
 
 
 @pytest.mark.asyncio

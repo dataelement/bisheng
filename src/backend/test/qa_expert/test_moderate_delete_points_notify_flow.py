@@ -193,3 +193,105 @@ async def test_moderate_delete_unadopted_answer_writes_log_and_inbox(flow_env, m
         assert len(inbox_after) == 1
     finally:
         await _cleanup_points_rows(env.engine, user_id=expert_uid, remark=remark)
+
+
+async def test_moderate_delete_own_answered_question_skips_deduct(flow_env, monkeypatch):
+    """超管删自己的已答问题：题被删、即使带 R1 也不写扣分流水；再删不得脏写。"""
+    env = flow_env
+
+    @asynccontextmanager
+    async def patched_session():
+        session = AsyncSession(bind=env.engine, expire_on_commit=False)
+        try:
+            yield session
+        finally:
+            await session.close()
+
+    monkeypatch.setattr(
+        "bisheng.points.domain.services.points_pending_deduct_service.get_async_db_session",
+        patched_session,
+    )
+    await env.seed_expert(user_id=201, name="回答专家")
+    admin = env.user(501, name="super-admin", super_admin=True)
+    admin_uid = env.uid(501)
+    remark = env.t("超管自删已答问题")
+    env.as_user(admin)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df超管自删已答",
+            "description": "已回答后锁定",
+            "business_domain": "steel",
+            "question_type": "public",
+        },
+    )
+    env.as_user(env.user(201, name="回答专家"))
+    await _create_answer(env, qid, "锁定用首答")
+    locked = await env.reload_row(Question, id=qid)
+    assert locked is not None
+    assert int(locked.content_locked) == 1
+    key = stable_deduct_idempotency_key("R1", "qa_question", str(qid))
+
+    try:
+        env.as_user(admin)
+        body = _ok(
+            await env.client.post(
+                f"{PREFIX}/admin/moderate-delete",
+                json={
+                    "target_type": "question",
+                    "target_id": qid,
+                    "rule_code": "R1",
+                    "remark": remark,
+                },
+            )
+        )
+        assert body.get("status_code") == 200, body
+        data = body.get("data") or {}
+        assert data.get("deleted") is True
+        assert data.get("deducted") is False
+        assert data.get("pending_deduct") is False
+        assert data.get("reason") == "self_author"
+        assert data.get("target_user_id") == admin_uid
+
+        gone = await env.reload_row(Question, id=qid)
+        assert gone is None
+
+        logs = await _select_maps(
+            env.engine,
+            "SELECT id FROM user_point_log WHERE idempotency_key = :k OR (user_id = :u AND remark = :r)",
+            {"k": key, "u": admin_uid, "r": remark},
+        )
+        pending = await _select_maps(
+            env.engine,
+            "SELECT id FROM point_pending_deduct WHERE user_id = :u",
+            {"u": admin_uid},
+        )
+        assert logs == []
+        assert pending == []
+
+        again = _ok(
+            await env.client.post(
+                f"{PREFIX}/admin/moderate-delete",
+                json={
+                    "target_type": "question",
+                    "target_id": qid,
+                    "rule_code": "R1",
+                    "remark": remark,
+                },
+            )
+        )
+        assert again.get("status_code") != 200
+        logs_after = await _select_maps(
+            env.engine,
+            "SELECT id FROM user_point_log WHERE idempotency_key = :k OR (user_id = :u AND remark = :r)",
+            {"k": key, "u": admin_uid, "r": remark},
+        )
+        pending_after = await _select_maps(
+            env.engine,
+            "SELECT id FROM point_pending_deduct WHERE user_id = :u",
+            {"u": admin_uid},
+        )
+        assert logs_after == []
+        assert pending_after == []
+    finally:
+        await _cleanup_points_rows(env.engine, user_id=admin_uid, remark=remark)
