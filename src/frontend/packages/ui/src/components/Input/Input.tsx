@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Outlined } from 'bisheng-icons';
+import { Filled } from 'bisheng-icons';
 import cn from '../../utils/cn';
 import {
   ADDON_BASE,
@@ -174,12 +174,17 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
             type="button"
             tabIndex={-1}
             aria-label={clearLabel}
-            className={cn(FIELD_ACTION, CLEAR_VISIBILITY)}
+            // One shade lighter than the shared action color (text-3 → text-4):
+            // clear is the quietest control in the box.
+            className={cn(FIELD_ACTION, CLEAR_VISIBILITY, 'text-text-4 hover:text-text-3')}
             // Keep the caret (and the focus ring) in the box while clearing.
             onMouseDown={(event) => event.preventDefault()}
             onClick={handleClear}
           >
-            <Outlined.CloseCircle />
+            {/* Filled glyph, pinned at 14px in every size档 (designer call) —
+                inline style because the row's [&_svg]:size-* ladder outranks
+                any class set on the icon itself. */}
+            <Filled.CloseCircle style={{ width: 14, height: 14 }} />
           </button>
         )}
         {suffix !== undefined && (

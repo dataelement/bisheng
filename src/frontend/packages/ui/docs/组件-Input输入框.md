@@ -62,7 +62,7 @@
 
 ### 4.3 一键清除
 
-- 悬停或聚焦、且框内有内容时出现；点击清空并保持聚焦，方便立刻重输。
+- 悬停或聚焦、且框内有内容时出现；点击清空并保持聚焦，方便立刻重输。图标用**实心圆底的 CloseCircle（Filled），固定 14px、颜色比后缀动作再淡一档（text-4，悬停 text-3）**——不随档位阶梯走：它是站在内容旁边的小动作，不是内容本身，随档放大到 18px 会喧宾夺主；比明暗切换那类常驻动作更安静。
 - 搜索、筛选类输入框默认开启；正式表单字段默认不开——误触清掉一整段辛苦输入的代价太大。
 
 ### 4.4 字数统计
@@ -167,5 +167,6 @@
 | 2026-08-25 | **client 落地首批**：存量扫描（57 处旧 `<Input>` / 77 处原生 `<input>` / 17 处裸 hex 聚焦对，口径见落地区 6）；17 处裸 hex 全部归并 token（ExpandableSearchField 的 rounded-lg→md、蓝框注释一并修正，勾销落地区 3 的遗留项）；六个手拼搜索框迁 `SearchInput`；旧 `ui/Input.tsx` 挂弃用指针 | 待 committer 窗口提交 |
 | 2026-08-25 | **client 第二批（`<Input>` 收官）**：剩余 45 文件 / 50 处旧 `<Input>` 全部迁至 `@bisheng/ui`（40px 默认高全部归 medium，用户拍板）；再收编五个手拼搜索框（KnowledgeSpaceSelect / AddToKnowledgeModal / ArchivedChatsTable / AddSourceDropdown / MultiSelect，累计 11 个）；PasswordForm 换 `PasswordInput` 并删父级明暗 flag（新增三语 key `com_ui_show_password` / `com_ui_hide_password`）；旧 `ui/Input.tsx` 翻成 re-export，import 零改动；例外与行为差见落地区 6 | 待 committer 窗口提交 |
 | 2026-08-26 | 勾销待决策「eye 图标缺位」：bisheng-icons 0.2.33 补齐 Eye / EyeClose，`PasswordInput` 的 `revealIcon` / `hideIcon` 收成默认值（prop 保留），PasswordForm 摘掉 lucide 的 Eye/EyeOff，demo 页同步 | 待 committer 窗口提交 |
+| 2026-08-26 | 一键清除图标定稿：Outlined.CloseCircle → **Filled.CloseCircle，固定 14px 不随档，色降一档 text-4（悬停 text-3）**（设计师拍板，初版 12px 当天调 14px）；实现注意行容器的 `[&_svg]:size-*` 阶梯类会压过图标自身 class，尺寸用内联样式钉死 | 待 committer 窗口提交 |
 | 2026-08-25 | 新增 **`borderless` 形态**（Input / Textarea，Search / Password 透传）：嵌在自带描边容器里的字段整套关掉描边+悬停+聚焦环，1px 透明边保尺寸；此前用 `border-none` 类名压不干净聚焦环（`shadow-focus` 单独就画出一圈）。AddSourceDropdown、ArchivedChatsTable 两处改用该 prop；定档来源为创建频道添加信息源面板的设计反馈 | 待 committer 窗口提交 |
 | 2026-08-25 | **Textarea 首迁**：频道简介（创建频道/频道设置，设计点名）+ 知识空间设置两处文本域换规范 `Textarea`；旧 `ui/Textarea` 剩余 4 个消费者均为聊天 composer 形态，划出表单文本域范围不迁 | 待 committer 窗口提交 |
