@@ -92,3 +92,61 @@ def default_permission_ids_for_relation(relation: str) -> set[str]:
         for item in knowledge_space_template_permissions()
         if relation_level >= _RELATION_LEVEL.get(item["relation"], 99)
     }
+
+
+def _column_items(column_title: str) -> list[dict]:
+    return next(
+        column["items"] for column in KNOWLEDGE_SPACE_PERMISSION_TEMPLATE["columns"] if column["title"] == column_title
+    )
+
+
+# IKBA8U: a binding placed on a specific column-level resource (knowledge_space,
+# folder, knowledge_file) must only grant the permissions of THAT column --
+# otherwise a space-level viewer binding leaks "view_file" into every file
+# inside the space, which the knowledge QA retrieval filter then cannot
+# distinguish from a real per-file grant. ``column_permission_ids_for_relation``
+# returns the resource-type-scoped permission set with the correct transitive
+# semantics:
+# - knowledge_space + viewer: "view_space" only -- browsing the space does
+#   not automatically grant folder/file access.
+# - folder + viewer: the folder column's view/download ids AND transitively
+#   the file column's view/download ids (a folder-level grant must unlock the
+#   files inside the folder -- the F036 listing UI relies on this).
+# - knowledge_file + viewer: the file column's view/download ids only.
+# Higher relations (editor / manager / owner) follow the same column scoping
+# while preserving "higher level subsumes lower level" semantics within a
+# column.
+_COLUMN_PERMISSIONS_FOR_OBJECT_TYPE: dict[str, list[dict]] = {
+    "knowledge_space": _column_items("空间级"),
+    "folder": _column_items("文件夹级"),
+    "knowledge_file": _column_items("文件级"),
+}
+
+
+def column_permission_ids_for_relation(object_type: str, relation: str) -> set[str]:
+    """Resource-type-scoped system-model defaults for the lineage walk.
+
+    Unlike ``default_permission_ids_for_relation`` (which returns ALL level-1
+    permission ids across all three columns), this returns the permission ids
+    from the column matching ``object_type`` only. For ``folder`` the file
+    column's level-1 ids are added transitively so that a folder-level
+    ``viewer`` binding still unlocks the files inside the folder. Returns
+    an empty set for unknown object types.
+    """
+    column_items = _COLUMN_PERMISSIONS_FOR_OBJECT_TYPE.get(object_type)
+    if not column_items:
+        return set()
+    normalized = _COMPUTED_TO_MODEL_RELATION.get(relation, relation)
+    relation_level = _MODEL_LEVEL.get(normalized, 0)
+    own_column_ids = {
+        item["id"] for item in column_items if relation_level >= _RELATION_LEVEL.get(item["relation"], 99)
+    }
+    if object_type == "folder":
+        # Transitive: a folder-level grant unlocks the files in that folder.
+        file_column_ids = {
+            item["id"]
+            for item in _COLUMN_PERMISSIONS_FOR_OBJECT_TYPE["knowledge_file"]
+            if _RELATION_LEVEL.get(item["relation"], 99) == 1
+        }
+        own_column_ids.update(file_column_ids)
+    return own_column_ids
