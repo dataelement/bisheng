@@ -6,8 +6,10 @@ detail) re-reads + ``json.loads`` + legacy-scans the full relation-binding / mod
 config and re-derives subject strings. The config is platform-global and changes only
 on (rare) admin edits, so caching the *parsed* result keyed by the config row's
 ``update_time`` lets N consecutive reads reuse one parse — and the key changes the
-instant an admin edits the config (``update_time`` has ``onupdate=CURRENT_TIMESTAMP``),
-so a stale roster can never be served.
+instant an admin edits the config (``update_time`` carries the dialect-aware
+``UPDATE_TIME_SERVER_DEFAULT``: ``DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP``
+on MySQL, ``DEFAULT CURRENT_TIMESTAMP`` on DaMeng where boot-time triggers supply
+ON UPDATE), so a stale roster can never be served.
 
 This is the "read-side version-derived key" path F036 design §8 sanctioned — it has
 ZERO coupling to the authorization / department / org-sync write paths (no explicit
