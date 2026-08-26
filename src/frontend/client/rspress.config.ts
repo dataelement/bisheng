@@ -190,6 +190,8 @@ export default defineConfig({
             { text: '复选框 Checkbox', link: '/组件-Checkbox复选框' },
             { text: '单选框 Radio', link: '/组件-Radio单选框' },
             { text: '开关 Switch', link: '/组件-Switch开关' },
+            { text: '标签页 Tabs', link: '/组件-Tabs标签页' },
+            { text: '分段控制器 Segmented', link: '/组件-Segmented分段控制器' },
             { text: '文字提示 Tooltip', link: '/组件-Tooltip文字提示' },
             { text: '气泡卡片 Popover', link: '/组件-Popover气泡卡片' },
             { text: '面包屑 Breadcrumb', link: '/组件-Breadcrumb面包屑' },
