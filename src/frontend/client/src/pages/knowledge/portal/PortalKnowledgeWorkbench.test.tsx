@@ -4376,6 +4376,13 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(`${workbenchSource}\n${spaceDetailSource}\n${filePreviewSource}`).not.toContain("getFileDownloadApi");
     });
 
+    test("patches search results when accepting or rejecting an alias", () => {
+        const workbenchSource = stripComments(readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.tsx"), "utf8"));
+        expect(workbenchSource).toContain("setFiles: setDisplayFiles");
+        expect(workbenchSource).toMatch(/files:\s*searchMode/);
+        expect(workbenchSource).toContain("applyKnowledgeFileAliasDecision");
+    });
+
     test("hides document preview permission action without file management permission", async () => {
         const teamSpace = makeSpace("team-1", "我的技术文档", {
             spaceLevel: SpaceLevel.TEAM,

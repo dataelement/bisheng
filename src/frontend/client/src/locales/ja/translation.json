@@ -1370,6 +1370,7 @@
     "batch_reject_alias_success": "{{count}} 件の規範名称提案を破棄しました",
     "batch_reject_alias_partial": "{{success}} 件を破棄、{{failed}} 件が失敗しました",
     "batch_alias_no_eligible": "選択したファイルに確認待ちの規範名称がありません",
+    "alias_already_processed": "この規範名称はすでに処理済みです",
     "cancel": "キャンセル",
     "close": "閉じる",
     "collapse_drawer": "引き出しを閉じる",

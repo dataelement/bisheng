@@ -1373,6 +1373,7 @@
     "batch_reject_alias_success": "已放弃 {{count}} 个规范名称建议",
     "batch_reject_alias_partial": "已放弃 {{success}} 个，{{failed}} 个失败",
     "batch_alias_no_eligible": "所选文件中没有待确认的规范名称",
+    "alias_already_processed": "该规范名称建议已处理",
     "cancel": "取消",
     "close": "关闭",
     "collapse_drawer": "收起抽屉",

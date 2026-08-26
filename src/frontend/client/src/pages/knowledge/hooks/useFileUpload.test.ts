@@ -164,3 +164,39 @@ describe("useFileUpload helpers", () => {
     );
   });
 });
+
+describe("knowledge file alias decision cache", () => {
+  test("reject decision strips aliasName from a later poll snapshot", async () => {
+    const {
+      applyKnowledgeFileAliasDecision,
+      recordKnowledgeFileAliasDecision,
+    } = await import("./useFileManager");
+
+    recordKnowledgeFileAliasDecision("42", "reject");
+    expect(applyKnowledgeFileAliasDecision(makeKnowledgeFile({
+      id: "42",
+      name: "哈哈哈.docx",
+      aliasName: "知识库测试文档 20.docx",
+    }))).toMatchObject({
+      name: "哈哈哈.docx",
+      aliasName: undefined,
+    });
+  });
+
+  test("accept decision keeps the promoted name and clears aliasName", async () => {
+    const {
+      applyKnowledgeFileAliasDecision,
+      recordKnowledgeFileAliasDecision,
+    } = await import("./useFileManager");
+
+    recordKnowledgeFileAliasDecision("43", "accept", "知识库测试文档 20.docx");
+    expect(applyKnowledgeFileAliasDecision(makeKnowledgeFile({
+      id: "43",
+      name: "哈哈哈.docx",
+      aliasName: "知识库测试文档 20.docx",
+    }))).toMatchObject({
+      name: "知识库测试文档 20.docx",
+      aliasName: undefined,
+    });
+  });
+});
