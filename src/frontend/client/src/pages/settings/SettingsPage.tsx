@@ -13,6 +13,11 @@ import { cn } from "~/utils";
 import { AccountPane } from "./sections/AccountPane";
 import { GeneralSection } from "~/components/Settings/sections/GeneralSection";
 import {
+  readSettingsRouteState,
+  resolveSettingsExitTarget,
+  type SettingsRouteState,
+} from "./settingsHistory";
+import {
   approvalTabOf,
   DEFAULT_SETTINGS_SECTION,
   isSettingsPageSection,
@@ -63,9 +68,9 @@ export default function SettingsPage() {
   /** Mobile-only menu landing: /settings with no section segment. */
   const isMenu = isMobile && rawSection == null;
 
-  /** True when this module entry was pushed from the mobile menu — back can pop. */
-  const cameFromMenu =
-    (location.state as { fromSettingsMenu?: boolean } | null)?.fromSettingsMenu === true;
+  /** The entry source is captured once; all navigation inside settings only carries it. */
+  const settingsRouteState = readSettingsRouteState(location.state);
+  const cameFromMenu = settingsRouteState.fromSettingsMenu === true;
 
   const section: SettingsPageSection = isSettingsPageSection(rawSection)
     ? rawSection
@@ -76,16 +81,24 @@ export default function SettingsPage() {
     void refreshCount();
   }, [section, refreshCount]);
 
-  // Leaves settings entirely. A direct visit (no prior entry in this tab) falls back home.
+  // Leaves settings for the route that opened it. Direct visits fall back to browser
+  // history and then home when this is the first entry in the tab.
   const leaveSettings = () => {
-    if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
-    else navigate("/");
+    const target = resolveSettingsExitTarget(settingsRouteState, window.history.state?.idx);
+    if (target.delta !== undefined) navigate(target.delta);
+    else navigate(target.path, { replace: true });
   };
 
   if (!isMenu && !isSettingsPageSection(rawSection)) {
     // Desktop has no menu screen — /settings and unknown sections land on the default
     // section. Mobile unknown sections land on the menu.
-    return <Navigate to={isMobile ? "/settings" : `/settings/${DEFAULT_SETTINGS_SECTION}`} replace />;
+    return (
+      <Navigate
+        to={isMobile ? "/settings" : `/settings/${DEFAULT_SETTINGS_SECTION}`}
+        replace
+        state={settingsRouteState}
+      />
+    );
   }
 
   // Desktop sidebar/deep-link moves REPLACE the history entry: settings keeps exactly
@@ -94,21 +107,28 @@ export default function SettingsPage() {
   const goToSection = (next: SettingsPageSection) => {
     setCompactView("list");
     setDeepLink(null);
-    navigate(`/settings/${next}`, { replace: true });
+    navigate(`/settings/${next}`, { replace: true, state: settingsRouteState });
   };
 
   // Mobile menu → module PUSHES (flagged), so back — button or gesture — pops to the menu.
   const openSectionFromMenu = (next: SettingsPageSection) => {
     setCompactView("list");
     setDeepLink(null);
-    navigate(`/settings/${next}`, { state: { fromSettingsMenu: true } });
+    navigate(`/settings/${next}`, {
+      state: { ...settingsRouteState, fromSettingsMenu: true } satisfies SettingsRouteState,
+    });
   };
 
   // Mobile module back → the menu. Pop when the menu pushed this entry; otherwise
   // (deep link, external redirect) swap it for the menu so backing out still leaves.
   const backToMenu = () => {
     if (cameFromMenu && (window.history.state?.idx ?? 0) > 0) navigate(-1);
-    else navigate("/settings", { replace: true });
+    else {
+      const menuState: SettingsRouteState = settingsRouteState.settingsOrigin
+        ? { settingsOrigin: settingsRouteState.settingsOrigin }
+        : {};
+      navigate("/settings", { replace: true, state: menuState });
+    }
   };
 
   const approvalTab = approvalTabOf(section);
@@ -215,7 +235,7 @@ export default function SettingsPage() {
             // the mobile menu pushed this entry (so its back button still pops).
             navigate(`/settings/${approvalTarget.tab === "my_requests" ? "my-requests" : "my-tasks"}`, {
               replace: true,
-              state: location.state,
+              state: settingsRouteState,
             });
           }}
           onUnreadMaybeChanged={refreshCount}

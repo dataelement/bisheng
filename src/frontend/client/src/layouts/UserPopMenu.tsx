@@ -1,8 +1,12 @@
 import { ChevronRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
 import { useAuthContext, usePrefersMobileLayout } from "~/hooks";
 import { useNotificationCount } from "~/hooks/useNotificationCount";
+import {
+    createSettingsRouteState,
+    readSettingsRouteState,
+} from "~/pages/settings/settingsHistory";
 import { settingsLandingPath } from "~/pages/settings/settingsSections";
 import { cn } from "~/utils";
 
@@ -22,6 +26,7 @@ export interface UserPopMenuProps {
 export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
     const isDrawer = variant === "drawer";
     const navigate = useNavigate();
+    const location = useLocation();
 
     const { user } = useAuthContext();
     const { unreadCount, pendingApprovalCount } = useNotificationCount();
@@ -31,7 +36,15 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
     const openSettings = () => {
         // Mobile always lands on the settings menu screen; picking a module is a
         // second, explicit step there. Desktop keeps the "whatever is waiting wins" landing.
-        navigate(isMobile ? "/settings" : settingsLandingPath(pendingApprovalCount, unreadCount));
+        const target = isMobile ? "/settings" : settingsLandingPath(pendingApprovalCount, unreadCount);
+        const alreadyInSettings = /^\/settings(?:\/|$)/.test(location.pathname);
+        const state = alreadyInSettings
+            ? readSettingsRouteState(location.state)
+            : createSettingsRouteState(location, window.history.state?.idx);
+
+        // Reopening the avatar entry while settings is visible must not create a new
+        // settings history entry or replace the original return destination.
+        navigate(target, { replace: alreadyInSettings, state });
     };
 
     // Avatar edits on the settings page flow back through the user query cache.
