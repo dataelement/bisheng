@@ -141,6 +141,21 @@ def test_parse_params_rejects_non_string_tags():
         )
 
 
+def test_validate_upload_rejects_unsupported_file_format():
+    params = FilelibSyncParams(external_file_id="ext-1", file_name="archive.zip")
+    upload_file = UploadFile(filename="archive.zip", file=BytesIO(b"data"))
+
+    with pytest.raises(FilelibSyncInvalidParamsError, match="file format is not supported"):
+        FilelibSyncService._validate_upload(params, upload_file)
+
+
+def test_validate_upload_accepts_platform_supported_format():
+    params = FilelibSyncParams(external_file_id="ext-1", file_name="report.pdf")
+    upload_file = UploadFile(filename="report.pdf", file=BytesIO(b"data"))
+
+    FilelibSyncService._validate_upload(params, upload_file)
+
+
 def test_portal_domain_config_preserves_department_bindings():
     domain = PortalDomainConfig(
         name="信息",

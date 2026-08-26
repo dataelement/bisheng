@@ -24,6 +24,7 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
+from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import Department
@@ -40,6 +41,10 @@ from bisheng.knowledge.domain.services.department_space_target_resolver import (
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
+from bisheng.knowledge.domain.upload_extensions import (
+    UnsupportedUploadFileExtensionError,
+    validate_knowledge_upload_file_extension,
+)
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_repository import (
     FilelibSyncRepository,
@@ -147,6 +152,7 @@ class FilelibSyncService:
         target_folder_id_override: int | None = None,
         extra_user_metadata: dict[str, Any] | None = None,
     ) -> FilelibSyncResponseData:
+        self._validate_file_name(params.file_name)
         self._require_dynamic_source_id(params)
         created_file: KnowledgeFile | None = None
         file_persisted = False
@@ -434,9 +440,23 @@ class FilelibSyncService:
             raise FilelibSyncInvalidParamsError(msg="params fields are invalid") from exc
 
     @staticmethod
-    def _validate_upload(params: FilelibSyncParams, upload_file: UploadFile) -> None:
-        if "/" in params.file_name or "\\" in params.file_name:
+    def _validate_file_name(file_name: str) -> None:
+        if "/" in file_name or "\\" in file_name:
             raise FilelibSyncInvalidParamsError(msg="file_name must be a base name")
+        try:
+            validate_knowledge_upload_file_extension(
+                file_name,
+                image_parser_enabled=settings.get_knowledge().image_parser_enabled,
+            )
+        except UnsupportedUploadFileExtensionError as exc:
+            extension = str(exc) or "unknown"
+            raise FilelibSyncInvalidParamsError(
+                msg=f"file format is not supported: .{extension}",
+            ) from exc
+
+    @staticmethod
+    def _validate_upload(params: FilelibSyncParams, upload_file: UploadFile) -> None:
+        FilelibSyncService._validate_file_name(params.file_name)
         if upload_file.size == 0:
             raise FilelibSyncInvalidParamsError(msg="file must not be empty")
 
