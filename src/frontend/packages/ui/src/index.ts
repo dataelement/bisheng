@@ -36,6 +36,16 @@ export * from './components/Tooltip';
 export * from './components/Checkbox';
 export * from './components/Radio';
 export * from './components/Switch';
+// Tabs — peer content blocks in one area, switching changes WHERE you are
+// (组件-Tabs标签页.md). Line type only; the brand indicator slide, the
+// overflow fade + keep-visible scroll and the touch rules are baked in; every
+// label is a prop. Same content shown a different WAY is the Segmented below
+// (判别表 in 组件-Segmented分段控制器.md §1).
+export * from './components/Tabs';
+// Segmented — the same content shown a different way, applied immediately
+// (组件-Segmented分段控制器.md). The gray track + sliding thumb, equal-width
+// segments and the touch rules are baked in; every label is a prop.
+export * from './components/Segmented';
 // Breadcrumb — where the current page sits in the structure
 // (组件-Breadcrumb面包屑.md). The collapse rules, the 96px name cap and the
 // ellipsis menu are baked in; the page passes the full chain and the copy.

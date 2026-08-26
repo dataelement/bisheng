@@ -132,6 +132,7 @@ export default defineConfig({
           text: '导航 Navigation',
           items: [
             { text: '面包屑 Breadcrumb', link: '/components/breadcrumb' },
+            { text: '标签页 Tabs', link: '/components/tabs' },
           ],
         },
         {
@@ -146,6 +147,7 @@ export default defineConfig({
         {
           text: '数据展示 Data Display',
           items: [
+            { text: '分段控制器 Segmented', link: '/components/segmented' },
             { text: '文字提示 Tooltip', link: '/components/tooltip' },
             { text: '气泡卡片 Popover', link: '/components/popover' },
           ],

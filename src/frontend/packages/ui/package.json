@@ -27,6 +27,7 @@
     "@radix-ui/react-radio-group": "catalog:",
     "@radix-ui/react-slot": "catalog:",
     "@radix-ui/react-switch": "catalog:",
+    "@radix-ui/react-tabs": "catalog:",
     "@radix-ui/react-tooltip": "catalog:",
     "bisheng-icons": "catalog:",
     "class-variance-authority": "catalog:",
