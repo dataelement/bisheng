@@ -22,7 +22,7 @@ catalog:
   '@radix-ui/react-switch': ^1.0.3
   '@radix-ui/react-tabs': ^1.1.0
   '@radix-ui/react-tooltip': ^1.2.7
-  bisheng-icons: ^0.2.32
+  bisheng-icons: ^0.2.33
   class-variance-authority: ^0.6.0
   clsx: ^1.2.1
   qrcode.react: ^4.2.0

@@ -1,5 +1,4 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Eye, EyeOff } from "lucide-react";
 import { JSEncrypt } from "jsencrypt";
 import { getPublicKeyApi, updatePasswordApi } from "~/api/user";
 import { NotificationSeverity } from "~/common";
@@ -60,8 +59,6 @@ function PasswordField({ id, label, value, placeholder, onChange }: PasswordFiel
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
-                revealIcon={<Eye />}
-                hideIcon={<EyeOff />}
                 revealLabel={localize("com_ui_show_password")}
                 hideLabel={localize("com_ui_hide_password")}
             />

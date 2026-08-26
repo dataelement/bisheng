@@ -69,20 +69,15 @@ export default () => (
 
 ## 密码框
 
-后缀放「明暗切换」——这个动作属于这个框，做成框外按钮会把表单排版撑乱。
-
-> 图标由调用方传入：`bisheng-icons` 目前没有 eye 图标，而组件库不允许自己画图标（库契约）。图标包补上之后这两个 prop 会有默认值。
+后缀放「明暗切换」——这个动作属于这个框，做成框外按钮会把表单排版撑乱。图标默认取 `bisheng-icons` 的 Eye / EyeClose，不用传。
 
 ```tsx
 import { PasswordInput } from '@bisheng/ui';
-import { Eye, EyeOff } from 'lucide-react';
 
 export default () => (
   <div style={{ maxWidth: 320 }}>
     <PasswordInput
       placeholder="8-20 位，含字母和数字"
-      revealIcon={<Eye />}
-      hideIcon={<EyeOff />}
       revealLabel="显示密码"
       hideLabel="隐藏密码"
       allowClear
@@ -216,7 +211,7 @@ export default () => (
 
 | prop | 类型 | 说明 |
 |---|---|---|
-| `revealIcon` / `hideIcon` | `ReactNode` | 必填，明暗切换的两个图标（图标包补 eye 后改为默认值） |
+| `revealIcon` / `hideIcon` | `ReactNode` | 默认 `Outlined.Eye` / `Outlined.EyeClose`（bisheng-icons），少数要换图标的场景才传 |
 | `revealLabel` / `hideLabel` | `string` | 切换按钮的无障碍名称 |
 | `defaultVisible` | `boolean` | 默认 `false`；生成的密钥这类「本来就要给人看」的内容才置 `true` |
 | `onVisibleChange` | `(visible: boolean) => void` | 明暗切换回调 |

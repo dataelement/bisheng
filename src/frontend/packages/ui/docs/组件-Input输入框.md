@@ -150,7 +150,7 @@
 
 - 聚焦阴影环 gray-2 为不透明色，放在非白底（如 fill-subtle 浅灰底卡片内）上会露一圈浅边；若后续出现灰底表单场景，再议是否改半透明等效值（现按白底表单为主定稿）。
 - ~~字数统计超限策略现按「截断录入」写；antd 另有「允许超出、计数标红、提交时拦」路线，若表单校验需要再议。~~ **2026-08-20 结案：走「允许超出」路线**，见 §4.4。
-- **`bisheng-icons` 没有 eye 图标**，而组件库契约不许自己画图标，所以 `PasswordInput` 的明暗切换两个图标（`revealIcon` / `hideIcon`）暂由调用方传入。图标包补上之后收成默认值，prop 保留给需要换图标的场景。
+- ~~`bisheng-icons` 没有 eye 图标，`PasswordInput` 的明暗切换图标暂由调用方传入。~~ **2026-08-26 结案**：图标包 0.2.33 补齐 `Outlined.Eye` / `Outlined.EyeClose`，已收成默认值；`revealIcon` / `hideIcon` prop 保留给要换图标的场景。
 - Textarea 自动长高未内建：§2 要求它必须设上限，而目前没有调用场景来定这个上限，等真有场景再定 `autoSize` 的 API 形状。
 - Form 表单项（label、必填标记、错误文字字号与间距）未建档，错误提示的排版细节届时归口 Form 规范，本文只定「框下方 + 危险色 + 说清怎么改」。
 
@@ -166,5 +166,6 @@
 | 2026-08-20 | **超限策略改为「允许超出」**（勾销待决策清单同名项）：§4.4 由「达到上限停止录入」改写为「字照打、计数照走、超出转危险色、拦截交给表单校验」，转红阈值由「达到」改为「超出」（50 / 50 是合法值）；组件不再把 `maxLength` 透传给 DOM，超限时另置 `aria-invalid` 给读屏 | 待 committer 窗口提交 |
 | 2026-08-25 | **client 落地首批**：存量扫描（57 处旧 `<Input>` / 77 处原生 `<input>` / 17 处裸 hex 聚焦对，口径见落地区 6）；17 处裸 hex 全部归并 token（ExpandableSearchField 的 rounded-lg→md、蓝框注释一并修正，勾销落地区 3 的遗留项）；六个手拼搜索框迁 `SearchInput`；旧 `ui/Input.tsx` 挂弃用指针 | 待 committer 窗口提交 |
 | 2026-08-25 | **client 第二批（`<Input>` 收官）**：剩余 45 文件 / 50 处旧 `<Input>` 全部迁至 `@bisheng/ui`（40px 默认高全部归 medium，用户拍板）；再收编五个手拼搜索框（KnowledgeSpaceSelect / AddToKnowledgeModal / ArchivedChatsTable / AddSourceDropdown / MultiSelect，累计 11 个）；PasswordForm 换 `PasswordInput` 并删父级明暗 flag（新增三语 key `com_ui_show_password` / `com_ui_hide_password`）；旧 `ui/Input.tsx` 翻成 re-export，import 零改动；例外与行为差见落地区 6 | 待 committer 窗口提交 |
+| 2026-08-26 | 勾销待决策「eye 图标缺位」：bisheng-icons 0.2.33 补齐 Eye / EyeClose，`PasswordInput` 的 `revealIcon` / `hideIcon` 收成默认值（prop 保留），PasswordForm 摘掉 lucide 的 Eye/EyeOff，demo 页同步 | 待 committer 窗口提交 |
 | 2026-08-25 | 新增 **`borderless` 形态**（Input / Textarea，Search / Password 透传）：嵌在自带描边容器里的字段整套关掉描边+悬停+聚焦环，1px 透明边保尺寸；此前用 `border-none` 类名压不干净聚焦环（`shadow-focus` 单独就画出一圈）。AddSourceDropdown、ArchivedChatsTable 两处改用该 prop；定档来源为创建频道添加信息源面板的设计反馈 | 待 committer 窗口提交 |
 | 2026-08-25 | **Textarea 首迁**：频道简介（创建频道/频道设置，设计点名）+ 知识空间设置两处文本域换规范 `Textarea`；旧 `ui/Textarea` 剩余 4 个消费者均为聊天 composer 形态，划出表单文本域范围不迁 | 待 committer 窗口提交 |
