@@ -91,12 +91,3 @@ export const CARD_LABEL = 'shrink-0 whitespace-nowrap font-medium';
 /** Card secondary line: hint color, ellipsis when it runs out of room (§2). */
 export const CARD_DESCRIPTION =
   'min-w-0 truncate text-text-3 group-has-[[data-disabled]]/row:text-btn-disabled-text';
-
-/**
- * Focus ring, INSET flavor — the segmented radio-button group clips children
- * (overflow-hidden keeps cell corners inside the shared border), so the same
- * 2px token ring draws inward. Same focus-indicator exception as
- * `shadow-focus` (design-token FOCUS_RING) — the color IS the token var.
- */
-export const FOCUS_RING_INSET =
-  'focus-visible:shadow-[inset_0_0_0_2px_rgb(var(--shadow-focus-ring))]';

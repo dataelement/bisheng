@@ -10,7 +10,6 @@ import {
   CONTROL_OFFSET,
   CONTROL_SIZE,
   DESCRIPTION,
-  FOCUS_RING_INSET,
   GROUP_LAYOUT,
   ROW_BASE,
   ROW_HOVER_CONTROL,
@@ -48,18 +47,15 @@ const DOT_SIZE: Record<SelectionSize, string> = {
   large: 'size-2.5',
 };
 
-/** §3 — button-group cells ride the Button ladder: 24/32/40 high, 8/16/16 padding. */
+/** §3 — button-group cells ride the Button ladder: 24/32/40 high, 8/16/16
+ * padding, radius 4/6/8 on the group's outer corners only. */
 const BUTTON_CELL_SIZE: Record<SelectionSize, string> = {
-  small: 'h-6 px-2 text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
-  medium: 'h-8 px-4 text-[length:var(--font-size-3)] leading-[var(--line-height-3)]',
-  large: 'h-10 px-4 text-[length:var(--font-size-4)] leading-[var(--line-height-4)]',
-};
-
-/** §3 — group radius follows the Button ladder (4/6/8); only the outer corners round. */
-const BUTTON_GROUP_RADIUS: Record<SelectionSize, string> = {
-  small: 'rounded',
-  medium: 'rounded-md',
-  large: 'rounded-lg',
+  small:
+    'h-6 px-2 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] first:rounded-l last:rounded-r',
+  medium:
+    'h-8 px-4 text-[length:var(--font-size-3)] leading-[var(--line-height-3)] first:rounded-l-md last:rounded-r-md',
+  large:
+    'h-10 px-4 text-[length:var(--font-size-4)] leading-[var(--line-height-4)] first:rounded-l-lg last:rounded-r-lg',
 };
 
 /**
@@ -67,9 +63,16 @@ const BUTTON_GROUP_RADIUS: Record<SelectionSize, string> = {
  * wash on hover (text-button hover), brand text over the unified selection
  * tint when checked — never a solid brand fill (a switcher must not compete
  * with the primary button). Disabled reuses the button tokens.
+ *
+ * Border plumbing follows antd's segmented layout (designer call,
+ * 2026-08-25): every cell OWNS its 1px border and overlaps its neighbor by
+ * -ml-px, so the CHECKED cell can turn its whole ring brand — shared edges
+ * included — by rising one z step. A container border + dividers could never
+ * recolor the checked segment's edges. The ring is the light brand step
+ * (blue-100), same value as the card shell's selected border.
  */
 const BUTTON_CELL_BASE =
-  'btn-touch-hit relative inline-flex cursor-pointer items-center justify-center whitespace-nowrap text-text-1 outline-none transition-colors data-[state=unchecked]:hover:bg-btn-fill-1 data-[state=checked]:bg-blue-500/[0.07] data-[state=checked]:text-blue-500 disabled:cursor-not-allowed disabled:!bg-btn-disabled-bg disabled:!text-btn-disabled-text';
+  'btn-touch-hit relative -ml-px inline-flex cursor-pointer items-center justify-center whitespace-nowrap border border-border-base bg-bg-page text-text-1 outline-none transition-colors first:ml-0 data-[state=unchecked]:hover:bg-btn-fill-1 data-[state=checked]:z-10 data-[state=checked]:border-blue-100 data-[state=checked]:bg-blue-500/[0.07] data-[state=checked]:text-blue-500 focus-visible:z-20 focus-visible:shadow-focus disabled:cursor-not-allowed disabled:!border-btn-disabled-border disabled:!bg-btn-disabled-bg disabled:!text-btn-disabled-text';
 
 export interface RadioGroupProps
   extends Omit<React.ComponentPropsWithoutRef<typeof RadioGroupPrimitive.Root>, 'asChild'> {
@@ -89,14 +92,9 @@ const RadioGroup = React.forwardRef<HTMLDivElement, RadioGroupProps>(
         <RadioGroupPrimitive.Root
           ref={ref}
           className={cn(
-            variant === 'button'
-              ? // One shared outer border, 1px dividers between cells (§2);
-                // overflow-hidden keeps cell corners inside the group radius.
-                cn(
-                  'inline-flex items-stretch divide-x divide-border-base overflow-hidden border border-border-base bg-bg-page',
-                  BUTTON_GROUP_RADIUS[size],
-                )
-              : GROUP_LAYOUT[direction],
+            // Button skin: the cells own their borders (see BUTTON_CELL_BASE),
+            // the container is just a row.
+            variant === 'button' ? 'inline-flex items-stretch' : GROUP_LAYOUT[direction],
             className,
           )}
           {...props}
@@ -163,7 +161,7 @@ const Radio = React.forwardRef<HTMLButtonElement, RadioProps>(
       return (
         <RadioGroupPrimitive.Item
           ref={ref}
-          className={cn(BUTTON_CELL_BASE, FOCUS_RING_INSET, BUTTON_CELL_SIZE[size], className)}
+          className={cn(BUTTON_CELL_BASE, BUTTON_CELL_SIZE[size], className)}
           {...props}
         >
           {children}
