@@ -119,12 +119,13 @@ export const ADDON_BASE =
 
 /**
  * The field itself: no chrome of its own (the shell owns it), inheriting the
- * shell's type size. `.input-no-zoom` is the iOS anti-zoom rule (§6);
- * `::-ms-*` are Edge's built-in reveal / clear buttons, which would double up
- * with ours.
+ * shell's type size. `.input-no-zoom` is the iOS anti-zoom rule (§6).
+ * `::-ms-*` (Edge reveal / clear) and `::-webkit-search-*` (the native ×
+ * Chrome / Safari draw on type="search") are hidden — they would double up
+ * with our own clear button.
  */
 export const FIELD_BASE =
-  'input-no-zoom min-w-0 flex-1 border-0 bg-transparent p-0 text-inherit outline-none placeholder:text-text-3 disabled:cursor-not-allowed disabled:text-btn-disabled-text disabled:placeholder:text-btn-disabled-text [&::-ms-clear]:hidden [&::-ms-reveal]:hidden';
+  'input-no-zoom min-w-0 flex-1 border-0 bg-transparent p-0 text-inherit outline-none placeholder:text-text-3 disabled:cursor-not-allowed disabled:text-btn-disabled-text disabled:placeholder:text-btn-disabled-text [&::-ms-clear]:hidden [&::-ms-reveal]:hidden [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden';
 
 /**
  * §4.2/§4.3 — a suffix ACTION (clear, reveal). `btn-touch-hit` gives it the
