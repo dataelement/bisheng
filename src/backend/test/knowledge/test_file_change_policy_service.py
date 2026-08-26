@@ -137,7 +137,7 @@ async def _read_setting(engine, tenant_id: int, space_id: int) -> KnowledgeSpace
         return (await session.exec(statement)).first()
 
 
-async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_space_requires_approval(policy_engine):
+async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_space_skips_approval(policy_engine):
     set_current_tenant_id(17)
     await _insert_space(policy_engine, tenant_id=17, space_id=101)
     service = _service(policy_engine)
@@ -146,9 +146,9 @@ async def test_missing_policy_defaults_to_enabled_per_space_and_unconfigured_spa
 
     assert policy.enabled is True
     assert policy.scope == KnowledgeSpaceFileChangePolicyScope.PER_SPACE
-    # An unconfigured space defaults to REQUIRING approval; only a space the user
-    # explicitly turned OFF skips approval.
-    assert await service.is_approval_required(space_id=101) is True
+    # per_space means the admin picks which spaces are governed; a space they
+    # have not picked must not gate its editors on their behalf.
+    assert await service.is_approval_required(space_id=101) is False
     assert await _read_policy(policy_engine, 17) is None
 
 
@@ -185,13 +185,35 @@ async def test_all_spaces_defaults_unconfigured_space_to_required(policy_engine)
     await service.save_space_setting(space_id=101, approval_required=True)
     await service.save_policy(enabled=True, scope=KnowledgeSpaceFileChangePolicyScope.ALL_SPACES)
 
-    # An unconfigured space still defaults to requiring approval; a space kept ON
-    # requires approval too. Both switches ON => approval required.
+    # all_spaces means "current and future spaces, no need to configure them one
+    # by one", so an unconfigured space must still require approval — this is the
+    # half of the default that did NOT move when per_space flipped to OFF.
     assert await service.is_approval_required(space_id=101) is True
     assert await service.is_approval_required(space_id=102) is True
 
 
-async def test_per_space_uses_saved_value_and_defaults_unconfigured_space_to_required(policy_engine):
+async def test_the_settings_projection_agrees_with_the_gate_under_both_scopes(policy_engine):
+    """The console list and the runtime gate read the same default.
+
+    They are computed in two different places, and a space nobody has configured
+    is exactly where they can silently disagree — the list would promise an
+    approval that never happens, or hide one that does.
+    """
+    set_current_tenant_id(17)
+    await _insert_space(policy_engine, tenant_id=17, space_id=101)
+    service = _service(policy_engine)
+
+    for scope, expected in (
+        (KnowledgeSpaceFileChangePolicyScope.PER_SPACE, False),
+        (KnowledgeSpaceFileChangePolicyScope.ALL_SPACES, True),
+    ):
+        await service.save_policy(enabled=True, scope=scope)
+        page = await service.get_space_settings_page(keyword=None, page=1, page_size=20)
+        assert [row.approval_required for row in page.data] == [expected], scope
+        assert await service.is_approval_required(space_id=101) is expected, scope
+
+
+async def test_per_space_uses_saved_value_and_defaults_unconfigured_space_to_not_required(policy_engine):
     set_current_tenant_id(17)
     await _insert_space(policy_engine, tenant_id=17, space_id=101)
     await _insert_space(policy_engine, tenant_id=17, space_id=102)
@@ -201,10 +223,9 @@ async def test_per_space_uses_saved_value_and_defaults_unconfigured_space_to_req
     await service.save_space_setting(space_id=103, approval_required=True)
     await service.save_policy(enabled=True, scope=KnowledgeSpaceFileChangePolicyScope.PER_SPACE)
 
-    # Explicit OFF -> skip; explicit ON -> require; unconfigured -> require
-    # (a space defaults to approval unless the user explicitly turns it OFF).
+    # Explicit OFF -> skip; explicit ON -> require; unconfigured -> skip.
     assert await service.is_approval_required(space_id=101) is False
-    assert await service.is_approval_required(space_id=102) is True
+    assert await service.is_approval_required(space_id=102) is False
     assert await service.is_approval_required(space_id=103) is True
 
 
@@ -301,11 +322,11 @@ async def test_settings_page_keeps_unconfigured_spaces_and_marks_department_spac
     )
 
     assert page.total == 2
-    # Unconfigured spaces default to REQUIRING approval in the projection
-    # (a space is on unless the user explicitly turns it off).
+    # The projection must show the same default the runtime gate applies, or the
+    # console promises an approval that never happens (or vice versa).
     assert [(row.space_id, row.space_kind, row.approval_required) for row in page.data] == [
-        (101, "normal", True),
-        (102, "department", True),
+        (101, "normal", False),
+        (102, "department", False),
     ]
 
 
@@ -474,9 +495,9 @@ async def test_tenant_configuration_is_strictly_isolated_without_root_fallback(p
     assert tenant_policy.enabled is True
     assert tenant_policy.scope == KnowledgeSpaceFileChangePolicyScope.PER_SPACE
     # Tenant 17 has no policy of its own: it resolves to the default enabled
-    # per_space policy, so an unconfigured space defaults to REQUIRING approval
-    # (no cross-tenant fallback to tenant 1's disabled all_spaces policy).
-    assert await service.is_approval_required(space_id=201) is True
+    # per_space policy, so an unconfigured space skips approval — and NOT to
+    # tenant 1's disabled all_spaces policy (no cross-tenant fallback).
+    assert await service.is_approval_required(space_id=201) is False
     assert await _read_policy(policy_engine, 17) is None
 
     with pytest.raises(LookupError, match="knowledge space not found"):
