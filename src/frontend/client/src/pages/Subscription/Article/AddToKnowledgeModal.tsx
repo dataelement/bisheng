@@ -1,11 +1,11 @@
 import { useLocalize, usePrefersMobileLayout, useScrollRevealRef } from "~/hooks";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import useMediaQuery from "~/hooks/useMediaQuery";
-import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, Search, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, FolderClosedIcon, Loader2, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { NotificationSeverity } from "~/common";
-import { Input } from "~/components";
+import { SearchInput } from "@bisheng/ui";
 import { Button } from "~/components/ui/Button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/Dialog";
 import { useToastContext } from "~/Providers";
@@ -773,24 +773,13 @@ export function AddToKnowledgeModal({
             )}
 
             <div className={embedInChannelSheet ? "shrink-0 px-4 pt-4 sm:px-6" : "px-5 pt-4 touch-mobile:px-4"}>
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-text-3 pointer-events-none" />
-                    <Input
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
-                        className="w-full h-8 pl-8 pr-8 text-[14px] rounded-md border border-border-base focus:outline-none"
-                    />
-                    {search && (
-                        <button
-                            type="button"
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2"
-                            onClick={() => setSearch("")}
-                        >
-                            <X className="size-3.5 text-text-3" />
-                        </button>
-                    )}
-                </div>
+                {/* Spec SearchInput — built-in clear replaces the hand-rolled X. */}
+                <SearchInput
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder={localize("com_subscription.search_knowledge_space_placeholder")}
+                    clearLabel={localize("com_ui_clear")}
+                />
             </div>
 
             <div

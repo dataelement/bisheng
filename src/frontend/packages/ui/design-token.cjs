@@ -152,7 +152,10 @@ const GRAY = [
 // `hex` = light value; `darkHex` = same gray ref resolved on the dark ramp.
 const TEXT = [
   { name: 'strong',    legacy: '1', cssVar: '--text-1', ref: 'gray-10', hex: '#1D2129', darkHex: '#F6F6F6', usage: '主文字：标题、正文主体' },
-  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#525865', darkHex: '#C5C5C5', usage: '次要文字：次要说明、默认按钮文字' },
+  // darkHex is gray-7 dark, NOT the same-rung gray-8 (#C5C5C5): the same-rung
+  // flip left secondary text almost as loud as primary in dark (ΔL* 17 vs the
+  // light mode 24) — tokens.css .dark re-points --text-2 accordingly (2026-08-26).
+  { name: 'muted',     legacy: '2', cssVar: '--text-2', ref: 'gray-8',  hex: '#525865', darkHex: '#ABABAC', usage: '次要文字：次要说明、默认按钮文字' },
   { name: 'hint',      legacy: '3', cssVar: '--text-3', ref: 'gray-6',  hex: '#898F9C', darkHex: '#929293', usage: '辅助文字：弱提示、时间戳、占位符' },
   { name: 'disabled',  legacy: '4', cssVar: '--text-4', ref: 'gray-4',  hex: '#CACDD4', darkHex: '#5F5F60', usage: '禁用文字' },
 ];

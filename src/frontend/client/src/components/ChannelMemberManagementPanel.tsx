@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import {
     getChannelMembersApi,
@@ -12,6 +12,7 @@ import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { cn } from "~/utils";
 import { Button } from "~/components/ui/Button";
+import { SearchInput } from "@bisheng/ui";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -311,15 +312,13 @@ export function ChannelMemberManagementPanel({
     return (
         <>
             <div className="flex min-h-0 flex-1 flex-col">
-                <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8B8FA8]" />
-                    <input
-                        value={keyword}
-                        onChange={(e) => setKeyword(e.target.value)}
-                        placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
-                        className="h-8 w-full rounded-md border border-border-base pl-9 pr-3 text-[14px] text-text-1 placeholder:text-text-3 focus:border-[#DDDDDD] focus:outline-none focus:ring-2 focus:ring-[#F1F5F9]"
-                    />
-                </div>
+                <SearchInput
+                    className="mb-4"
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    placeholder={localize("com_subscription.search_user_placeholder") || "请输入用户名进行搜索"}
+                    clearLabel={localize("com_ui_clear")}
+                />
 
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {loading ? (
@@ -436,7 +435,7 @@ export function ChannelMemberManagementPanel({
                             {localize("com_subscription.cancel")}
                         </AlertDialogCancel>
                         <AlertDialogAction
-                            className={cn("bg-[#F53F3F] hover:bg-[#F76965]")}
+                            className="bg-danger hover:bg-danger-hover"
                             onClick={() => {
                                 if (removeTarget) {
                                     void handleRemove(removeTarget);

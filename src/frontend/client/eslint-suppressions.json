@@ -1593,11 +1593,6 @@
       "count": 1
     }
   },
-  "src/components/SidePanel/Parameters/DynamicTags.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/components/SidePanel/Parameters/DynamicTextarea.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -3643,11 +3638,6 @@
   "src/vite-env.d.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    }
-  },
-  "tailwind.config.cjs": {
-    "@typescript-eslint/no-require-imports": {
-      "count": 3
     }
   },
   "tailwind.docs.config.cjs": {

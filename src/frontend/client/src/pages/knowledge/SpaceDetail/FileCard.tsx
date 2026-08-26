@@ -307,7 +307,7 @@ export function FileCard({
                         onBlur={handleRenameSubmit}
                         onKeyDown={handleKeyDown}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full h-6 px-1.5 text-sm border border-[#DDDDDD] rounded outline-none shadow-[0_0_0_2px_#F1F5F9] bg-white font-normal"
+                        className="w-full h-6 px-1.5 text-sm border border-border-deep rounded outline-none shadow-focus bg-white font-normal"
                     />
                 </div>
             );
@@ -493,7 +493,7 @@ export function FileCard({
                             onBlur={handleRenameSubmit}
                             onKeyDown={handleKeyDown}
                             onClick={(e) => e.stopPropagation()}
-                            className="h-6 w-full rounded border border-[#DDDDDD] bg-white px-1.5 text-sm font-normal shadow-[0_0_0_2px_#F1F5F9] outline-none"
+                            className="h-6 w-full rounded border border-border-deep bg-white px-1.5 text-sm font-normal shadow-focus outline-none"
                         />
                     ) : (
                         <div className="flex min-w-0 items-center gap-1.5">

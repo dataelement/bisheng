@@ -1,10 +1,10 @@
+import { Segmented } from "@bisheng/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MessageItem, MessageReadState } from "~/api/message";
 import { getMessageListApi, markAllMessageReadApi, markMessageReadApi } from "~/api/message";
 import { NotificationSeverity } from "~/common";
 import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
-import { SegmentedControl } from "~/components/ui/SegmentedControl";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { NotificationRow, type ApprovalCenterTarget } from "./NotificationRow";
@@ -134,15 +134,16 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
     // reads as one block, same as the 账号信息 / 通用 sections.
     <div className="flex min-h-0 flex-1 flex-col bg-white">
       <div className="flex w-full items-center gap-3 pb-4">
-        {/* 所有 / 未读 segmented toggle — shared SegmentedControl, same control as the
-            channel page's 频道/广场 switcher. */}
-        <SegmentedControl
+        {/* 所有 / 未读 — design-system Segmented (medium = 32px, matching the
+            search field and 全部已读 beside it). */}
+        <Segmented
+          size="medium"
           options={[
             { value: "all", label: localize("com_ui_all_proper") },
             { value: "unread", label: localize("com_notifications_tab_unread") },
           ]}
           value={readState}
-          onChange={setReadState}
+          onChange={(next) => setReadState(next as typeof readState)}
           // Extra 108px on top of the row's gap-3 — 120px total against the search field.
           className="mr-[108px]"
         />

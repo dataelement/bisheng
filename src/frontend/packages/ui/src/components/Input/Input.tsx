@@ -43,6 +43,12 @@ export interface InputProps
   size?: InputSize;
   /** §5.2 — `error` blocks submit and turns the border red; `warning` is "look again". */
   status?: InputStatus;
+  /**
+   * For a field embedded in a container that draws its own chrome (a panel
+   * header, a composed control): border, hover step and focus ring all off —
+   * the container owns the states, the caret is the focus indicator.
+   */
+  borderless?: boolean;
   /** §4.2 — says WHAT the box is (magnifier, link icon). */
   prefix?: React.ReactNode;
   /** §4.2 — a unit, a counter, or an action; at most two action icons. */
@@ -56,7 +62,12 @@ export interface InputProps
   clearLabel?: string;
   /** Fires after the box is emptied; the `onChange` for the empty value fires too. */
   onClear?: () => void;
-  /** §4.4 — "current / limit"; needs `maxLength`, and only for limits users actually hit. */
+  /**
+   * §4.4 — "current / limit"; needs `maxLength`, and only for limits users
+   * actually hit. The limit is SOFT: typing past it is allowed and the counter
+   * turns red — blocking the keystroke is what makes people think the field is
+   * broken. Rejecting the value is the form's job, not the box's.
+   */
   showCount?: boolean;
   /** Classes for the shell (width lives here: `className="w-64"`). */
   className?: string;
@@ -68,6 +79,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   {
     size = 'medium',
     status = 'default',
+    borderless = false,
     prefix,
     suffix,
     addonBefore,
@@ -114,11 +126,12 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
   const showClear = allowClear && !disabled && !readOnly && text.length > 0;
   // §4.4 — the counter only makes sense against a limit.
   const countVisible = showCount && maxLength !== undefined;
-  const atLimit = maxLength !== undefined && text.length >= maxLength;
+  // Over, not at: "50 / 50" is still a valid value, "51 / 50" is not.
+  const overLimit = maxLength !== undefined && text.length > maxLength;
 
   return (
     <div
-      className={cn(shellStyles({ size, status, state }), className)}
+      className={cn(shellStyles({ size, status, state, borderless }), className)}
       onPointerDown={(event) => {
         if (!disabled) focusFieldFromShell(event, fieldRef.current);
       }}
@@ -143,12 +156,16 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
           value={value}
           defaultValue={defaultValue}
           onChange={handleChange}
-          maxLength={maxLength}
-          aria-invalid={status === 'error' || undefined}
+          // `maxLength` is deliberately NOT forwarded to the DOM (§4.4): the
+          // native attribute silently swallows keystrokes, which reads as a
+          // broken keyboard. The count is the feedback; the form does the
+          // rejecting. `aria-invalid` carries that to a screen reader, which
+          // cannot see the counter turn red.
+          aria-invalid={status === 'error' || overLimit || undefined}
           {...props}
         />
         {countVisible && (
-          <span className={cn(COUNT_BASE, atLimit ? 'text-danger' : 'text-text-3')}>
+          <span className={cn(COUNT_BASE, overLimit ? 'text-danger' : 'text-text-3')}>
             {text.length} / {maxLength}
           </span>
         )}
