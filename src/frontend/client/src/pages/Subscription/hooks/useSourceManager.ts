@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { type InformationSource, type SourceType } from "~/api/channels";
 import {
     ChannelBusinessType,
+    getChannelsApi,
     listManagerSourcesApi,
     searchManagerSourcesApi,
+    SortType,
     type ManagerSource,
     addWechatSourceApi
 } from "~/api/channels";
 import { useLocalize } from "~/hooks";
+import { useEffectiveQuota } from "~/hooks/useEffectiveQuota";
 import { useConfirm } from "~/Providers";
 import { extractApiStatusCode } from "../errorUtils";
 import { normalizeUrlForSearch } from "../urlNormalize";
@@ -132,6 +136,40 @@ export function useSourceManager(
     // (errcode 19007) on save; the number shown in the UI is just a default reference.
     const canSelectMore = true;
     const isAtLimit = false;
+
+    // `info_source_subscribe` role quota preview: mirrors the backend's own dedup
+    // check (QuotaService.check_info_source_subscribe_limit) — usage is the union
+    // of source ids across every channel the user has created, so a source already
+    // used by another of the user's channels never consumes an extra slot here.
+    // Legacy roles without this key saved yet must still read as the product
+    // default (200), not "unlimited" — only an explicit backend value (including
+    // an explicit -1 for admin exemption) overrides it.
+    const INFO_SOURCE_SUBSCRIBE_DEFAULT_LIMIT = 200;
+    const { quotas } = useEffectiveQuota();
+    const sourceQuotaLimit = quotas["info_source_subscribe"]?.effective ?? INFO_SOURCE_SUBSCRIBE_DEFAULT_LIMIT;
+    const { data: ownedChannels = [] } = useQuery({
+        queryKey: ["channels", "created", SortType.RECENT_UPDATE],
+        queryFn: () => getChannelsApi({ type: "created", sortBy: SortType.RECENT_UPDATE }),
+        staleTime: 30_000,
+    });
+    const otherUsedSourceIds = useMemo(() => {
+        const ids = new Set<string>();
+        ownedChannels.forEach((c) => (c.source_list || []).forEach((id) => ids.add(id)));
+        return ids;
+    }, [ownedChannels]);
+    const sourceQuotaUsedIds = useMemo(() => {
+        const ids = new Set(otherUsedSourceIds);
+        pendingSources.forEach((s) => ids.add(s.id));
+        return ids;
+    }, [otherUsedSourceIds, pendingSources]);
+    const sourceQuotaUsed = sourceQuotaUsedIds.size;
+    // A source not already counted (neither used elsewhere nor already pending)
+    // is blocked only once adding it would push the deduped total past the limit.
+    const isSourceQuotaBlocked = (sourceId: string) => {
+        if (sourceQuotaLimit === -1) return false;
+        if (sourceQuotaUsedIds.has(sourceId)) return false;
+        return sourceQuotaUsed >= sourceQuotaLimit;
+    };
 
     // 当外部 sources 在面板展开期间新增时（例如通过爬取新网址信源），
     // 自动将新增的信源合并进 pendingSources，并保持选中态。
@@ -382,7 +420,7 @@ export function useSourceManager(
             const next = workingSources.filter((s) => s.id !== source.id);
             if (expanded) setPendingSources(next);
             else onSourcesChange(next);
-        } else if (canSelectMore) {
+        } else if (canSelectMore && !isSourceQuotaBlocked(source.id)) {
             const next = [...workingSources, source];
             if (expanded) setPendingSources(next);
             else onSourcesChange(next);
@@ -434,6 +472,9 @@ export function useSourceManager(
         isSearchMode,
         selectedIds,
         isAtLimit,
+        sourceQuotaUsed,
+        sourceQuotaLimit,
+        isSourceQuotaBlocked,
         viewMode,
         toggleSource,
         loadMoreSources,

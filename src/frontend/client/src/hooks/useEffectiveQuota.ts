@@ -4,6 +4,7 @@ import { EffectiveQuotaItem, getEffectiveQuotaApi } from "~/api/quota";
 
 export type QuotaResource =
   | "channel"
+  | "info_source_subscribe"
   | "knowledge_space"
   | "knowledge_space_subscribe"
   | "knowledge_space_file";

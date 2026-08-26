@@ -15,7 +15,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip
 // the app's base path and fingerprints it — no env-var lookup at render time.
 import wechatCopyLinkGuide from "./wechat-copy-link-guide.png";
 
-const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
 
 /**
@@ -244,7 +243,7 @@ export function AddSourceDropdown({
                         <Outlined.Plus className="size-4 flex-shrink-0 text-text-3" />
                         <span className="flex-1 text-left text-[14px] text-text-3">{localize("com_subscription.add_official_accounts_and_webpages")}</span>
                         <span className="flex-shrink-0 text-[12px] text-text-3">
-                            {sources.length}/{MAX_SOURCES}
+                            {localize("com_subscription.channel_selected_sources_count", { 0: sources.length })}
                         </span>
                     </div>
                     {sources.length > 0 && (
@@ -317,7 +316,7 @@ export function AddSourceDropdown({
                 <div className="flex items-center gap-2 h-[46px]">
                     <div className="flex-1" />
                     <span className="flex-shrink-0 text-[12px] text-text-3">
-                        {mgr.pendingSources.length}/{MAX_SOURCES}
+                        {localize("com_subscription.channel_selected_sources_count", { 0: mgr.pendingSources.length })}
                     </span>
                 </div>
             )}
@@ -468,7 +467,7 @@ export function AddSourceDropdown({
                                     <div className="">
                                         {displayList.map((source) => {
                                             const sel = mgr.selectedIds.has(source.id);
-                                            const dis = !sel && mgr.isAtLimit;
+                                            const dis = !sel && mgr.isSourceQuotaBlocked(source.id);
                                             return (
                                                 <div
                                                     key={source.id}
@@ -534,7 +533,14 @@ export function AddSourceDropdown({
                     </div>
                     {mgr.viewMode === "list" && (
                         <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-border-base bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
-                            <span className="text-[12px] text-text-3">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
+                            <span className="flex flex-col gap-0.5 text-[12px] text-text-3">
+                                <span>{localize("com_subscription.channel_selected_sources_count", { 0: mgr.pendingSources.length })}</span>
+                                <span>
+                                    {localize("com_subscription.info_source_quota_usage", {
+                                        0: mgr.sourceQuotaUsed,
+                                        1: mgr.sourceQuotaLimit === -1 ? localize("com_storage_quota.unlimited") : mgr.sourceQuotaLimit,
+                                    })}
+                                </span>
                             </span>
                             <div className="flex gap-2 touch-mobile:w-full">
                                 <Button
