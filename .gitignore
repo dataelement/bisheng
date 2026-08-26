@@ -63,7 +63,10 @@ bower_components
 build/Release
 
 # Dependency directories
-node_modules/
+# No trailing slash: a symlinked node_modules (e.g. a worktree pointing at
+# another checkout's install) is a file to git, and `node_modules/` would not
+# match it — it got committed once that way.
+node_modules
 jspm_packages/
 
 # TypeScript v1 declaration files
