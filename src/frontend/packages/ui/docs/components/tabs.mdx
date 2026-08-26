@@ -7,7 +7,7 @@ component: Tabs
 
 把**同一层级的几组内容**收进同一块区域,点谁看谁——切的是「内容区」,属于导航。只是同一份内容换个看法(列表还是卡片)的,用[分段控制器](/components/segmented);要随表单提交才生效的,用单选框。组件库 `@bisheng/ui` 导出 **`Tabs`**。规范全文见「文档 → 组件规范 → 标签页 Tabs」。
 
-**壳把规范写死的部分**:只有线型一种画法——标签行 + 2px 品牌色指示条(随蓝⇄绿主题)+ 底部 1px 通栏分隔线;三档高度 24/32/40;页签间距 24px、首个页签与内容区左缘对齐;未选中字重 400、选中 500(宽度按加粗态预留,切换零位移);指示条 200ms 滑动、内容区即时替换不加转场;溢出横向滚动 + 两端渐隐,选中页签自动保持可见;触屏热区 ≥44px。这些没有 prop。键盘走 WAI-ARIA tabs pattern 的 **automatic 模式**:左右方向键移动焦点即激活,Home/End 跳两端。
+**壳把规范写死的部分**:只有线型一种画法——标签行 + 2px 指示条 + 底部 1px 通栏分隔线;选中态两种配色经 `variant` 二选一:`brand`(默认,随蓝⇄绿主题)/ `neutral`(墨色,见下),不开放任意配色;三档高度 24/32/40;页签间距 24px、首个页签与内容区左缘对齐;未选中字重 400、选中 500(宽度按加粗态预留,切换零位移);指示条 200ms 滑动、内容区即时替换不加转场;溢出横向滚动 + 两端渐隐,选中页签自动保持可见;触屏热区 ≥44px。这些没有 prop。键盘走 WAI-ARIA tabs pattern 的 **automatic 模式**:左右方向键移动焦点即激活,Home/End 跳两端。
 
 ## 基础用法
 
@@ -49,21 +49,45 @@ export default () => (
 );
 ```
 
+## 墨色款
+
+`variant="neutral"`:选中态不用品牌色,文字与指示条都用墨色(text-1),选中靠**加粗 + 指示条**表达。用在品牌色会打架的界面——页面上已有品牌色主按钮/链接群,或页签只是弱导航不想抢焦点时。默认款仍是品牌色。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+const items = [
+  { key: 'a', label: '详情' },
+  { key: 'b', label: '版本' },
+  { key: 'c', label: '权限' },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs items={items} />
+    <Tabs variant="neutral" items={items} />
+  </div>
+);
+```
+
 ## 前缀图标
 
-icon 随档 14/16/18px,与文字间距 8px(small 档 4px)。同组页签**要么都带 icon 要么都不带**,一半有一半没有的组读起来最累。
+icon 随档 14/16/18px,与文字间距 8px(small 档 4px)。同组页签**要么都带 icon 要么都不带**,一半有一半没有的组读起来最累。icon 走 `currentColor` 跟随文字色,所以与配色款正交——墨色款下图标同样变墨色,无需额外处理。
 
 ```tsx
 import { Tabs } from '@bisheng/ui';
 import { Outlined } from 'bisheng-icons';
 
+const items = [
+  { key: 'list', label: '列表', icon: <Outlined.List /> },
+  { key: 'calendar', label: '日历', icon: <Outlined.Calendar /> },
+];
+
 export default () => (
-  <Tabs
-    items={[
-      { key: 'list', label: '列表', icon: <Outlined.List /> },
-      { key: 'calendar', label: '日历', icon: <Outlined.Calendar /> },
-    ]}
-  />
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs items={items} />
+    <Tabs variant="neutral" items={items} />
+  </div>
 );
 ```
 

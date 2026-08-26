@@ -13,8 +13,9 @@ import cn from '../../utils/cn';
  * three sizes on the 24/32/40 ladder; unselected weight 400, selected 500 —
  * every tab reserves its width at 500 via an invisible bold copy of the label
  * (antd's trick), so bolding never moves the neighbors or the indicator (§3);
- * brand-colored text + a 2px brand indicator sliding 200ms
- * under the selected tab (§5); content swaps instantly, no transition (§5);
+ * selected text + a 2px indicator sliding 200ms under the selected tab, in
+ * the brand color by default or in ink via `variant="neutral"` (§5); content
+ * swaps instantly, no transition (§5);
  * overflow scrolls horizontally with fading edges, never wraps, the selected
  * tab keeps itself visible (§4); ≥44px touch hot zones (§6). Accessibility is
  * the WAI-ARIA tabs pattern in automatic mode: arrow keys move focus AND
@@ -22,6 +23,9 @@ import cn from '../../utils/cn';
  */
 
 export type TabsSize = 'small' | 'medium' | 'large';
+
+/** §5 — how the selected tab speaks: brand color (default) or ink (text-1). */
+export type TabsVariant = 'brand' | 'neutral';
 
 export interface TabItem {
   /** Identity of the tab; also what `activeKey` / `onChange` speak. */
@@ -52,6 +56,37 @@ const TAB_SIZE: Record<TabsSize, string> = {
   large: 'gap-2 [&_svg]:size-[18px]',
 };
 
+/** §5 — selected-state color per variant. `brand` follows the blue⇄green
+ * theme (dark: one step lighter, see the comment at the use site). `neutral`
+ * speaks in ink: selected text and indicator are text-1, which already flips
+ * to near-white in dark mode — no dark override needed, and no contrast debt
+ * (text-1 is the loudest text on either background). Selection then rests on
+ * weight 500 + the indicator alone, so neutral is for surfaces where a brand
+ * accent would fight nearby brand elements (§5). */
+const VARIANT: Record<TabsVariant, { tab: string; indicator: string }> = {
+  brand: {
+    tab: cn(
+      'data-[state=active]:text-blue-500 data-[state=active]:hover:text-blue-500',
+      // Dark: brand-500 has no dark ramp yet (known debt) and lands at 3.6:1
+      // on #121212 while text-2 sits at 8.2:1 — the selected tab reads DIMMER
+      // than its neighbors (bright text blooms, dark blue recedes; perceived
+      // as "smaller"). One step lighter (blue-400, 5.2:1) — the designer
+      // tried the full ladder (2026-08-26): 500 too dim, 300 bright but
+      // washed out (the LIGHT ramp lightens by blending toward white, so
+      // brightness costs chroma — brand feel dies). 400 matches Arco's
+      // official dark primary (#3C7EFF) and Button's dark brand-text; hue +
+      // weight 500 + the indicator carry the selection, not raw luminance.
+      // The real both-bright-AND-saturated fix is the pending dark brand ramp.
+      'dark:data-[state=active]:text-blue-400 dark:data-[state=active]:hover:text-blue-400',
+    ),
+    indicator: 'bg-blue-500 dark:bg-blue-400',
+  },
+  neutral: {
+    tab: 'data-[state=active]:text-text-1 data-[state=active]:hover:text-text-1',
+    indicator: 'bg-text-1',
+  },
+};
+
 /** §4 — fading edges while overflowing: mask off the side(s) that continue. */
 const EDGE_FADE = {
   none: undefined,
@@ -65,6 +100,12 @@ export interface TabsProps {
   items: TabItem[];
   /** §3 — deeper containers take smaller rungs: page header large, dialogs small. */
   size?: TabsSize;
+  /**
+   * §5 — `brand` (default): selected tab in the brand color. `neutral`:
+   * selected tab in ink (text-1) — for surfaces where a brand accent would
+   * compete with nearby brand elements; selection rests on weight + indicator.
+   */
+  variant?: TabsVariant;
   /** Controlled selected key; use `defaultActiveKey` for uncontrolled. */
   activeKey?: string;
   defaultActiveKey?: string;
@@ -77,7 +118,16 @@ export interface TabsProps {
   className?: string;
 }
 
-function Tabs({ items, size = 'medium', activeKey, defaultActiveKey, onChange, extra, className }: TabsProps) {
+function Tabs({
+  items,
+  size = 'medium',
+  variant = 'brand',
+  activeKey,
+  defaultActiveKey,
+  onChange,
+  extra,
+  className,
+}: TabsProps) {
   const listRef = React.useRef<HTMLDivElement>(null);
   const tabRefs = React.useRef(new Map<string, HTMLButtonElement>());
 
@@ -141,7 +191,11 @@ function Tabs({ items, size = 'medium', activeKey, defaultActiveKey, onChange, e
           className={cn(
             // §4 — overflow scrolls, never wraps; the scrollbar itself is
             // hidden (the fading edges are the affordance).
-            'relative flex min-w-0 flex-1 items-center gap-6 overflow-x-auto',
+            // -mb-px sinks the list 1px onto the wrapper's border-b so the
+            // bottom-0 indicator paints OVER the gray divider instead of
+            // stacking above it (the indicator can't use -bottom-px itself:
+            // overflow-x-auto forces overflow-y to auto, which would clip it).
+            'relative -mb-px flex min-w-0 flex-1 items-center gap-6 overflow-x-auto',
             '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
             ROW_SIZE[size],
           )}
@@ -160,23 +214,11 @@ function Tabs({ items, size = 'medium', activeKey, defaultActiveKey, onChange, e
                 // relative anchors the ≥44px touch hot zone (§6); rounded only
                 // softens the keyboard focus ring (§5 — 2px gray, input's ring).
                 'btn-touch-hit relative inline-flex h-full shrink-0 cursor-pointer items-center whitespace-nowrap rounded font-normal outline-none transition-colors focus-visible:shadow-focus',
-                // §5 — unselected text-2, hover deepens to text-1, selected is
-                // the ONE brand-color moment (follows the blue⇄green theme),
-                // one weight step up (the label box already reserves this width).
-                'text-text-2 hover:text-text-1 data-[state=active]:font-medium data-[state=active]:text-blue-500 data-[state=active]:hover:text-blue-500',
-                // Dark: brand-500 has no dark ramp yet (known debt) and lands
-                // at 3.6:1 on #121212 while text-2 sits at 8.2:1 — the selected
-                // tab reads DIMMER than its neighbors (bright text blooms, dark
-                // blue recedes; perceived as "smaller"). One step lighter
-                // (blue-400, 5.2:1) — the designer tried the full ladder
-                // (2026-08-26): 500 too dim, 300 bright but washed out (the
-                // LIGHT ramp lightens by blending toward white, so brightness
-                // costs chroma — brand feel dies). 400 matches Arco's official
-                // dark primary (#3C7EFF) and Button's dark brand-text; hue +
-                // weight 500 + the indicator carry the selection, not raw
-                // luminance. The real both-bright-AND-saturated fix is the
-                // pending dark brand ramp.
-                'dark:data-[state=active]:text-blue-400 dark:data-[state=active]:hover:text-blue-400',
+                // §5 — unselected text-2, hover deepens to text-1, selected
+                // speaks per variant (brand color or ink — see VARIANT), one
+                // weight step up (the label box already reserves this width).
+                'text-text-2 hover:text-text-1 data-[state=active]:font-medium',
+                VARIANT[variant].tab,
                 'disabled:cursor-not-allowed disabled:text-btn-disabled-text',
                 TAB_SIZE[size],
               )}
@@ -198,7 +240,10 @@ function Tabs({ items, size = 'medium', activeKey, defaultActiveKey, onChange, e
           {indicator && (
             <span
               aria-hidden
-              className="absolute bottom-0 left-0 h-0.5 bg-blue-500 transition-[transform,width] duration-200 dark:bg-blue-400"
+              className={cn(
+                'absolute bottom-0 left-0 h-0.5 transition-[transform,width] duration-200',
+                VARIANT[variant].indicator,
+              )}
               style={{ width: indicator.width, transform: `translateX(${indicator.left}px)` }}
             />
           )}
