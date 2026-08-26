@@ -150,8 +150,6 @@ if TYPE_CHECKING:
     )
     from bisheng.message.domain.services.message_service import MessageService
 
-# Maximum number of Knowledge Spaces a user can create
-_MAX_SPACE_PER_USER = 30
 # Folder depth cap: product rule is "10 层". UI 第1层 = level 0, so the deepest
 # allowed FOLDER level is 9. Files inside a deepest-level folder don't count as
 # a layer. Existing level-10 folders (legacy over-deep data) stay accessible and
@@ -1119,18 +1117,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         initial_permissions: InitialPermissionsRequest | None = None,
         skip_user_limit: bool = False,
     ) -> KnowledgeSpaceCreateResp:
-        """Create a new knowledge space (max 30 per user)."""
+        """Create a new knowledge space, subject to the role-level creation quota."""
 
         existing = await self._existing_creation(creation_request_id, None)
         workbench_llm = None
         if existing is None:
             if not skip_user_limit:
-                count = await KnowledgeDao.async_count_spaces_by_user(
-                    self.login_user.user_id,
-                    exclude_department_spaces=True,
-                )
-                if count >= _MAX_SPACE_PER_USER:
-                    raise SpaceLimitError()
+                await self._assert_space_creation_quota()
 
             workbench_llm = await LLMService.get_workbench_llm()
             if not workbench_llm or not workbench_llm.embedding_model:
@@ -1473,15 +1466,40 @@ class KnowledgeSpaceService(KnowledgeUtils):
             department_id=department_id,
         )
 
-    async def _prospective_creation_access(self):
-        if self.prospective_grant_application is None:
-            raise RuntimeError("F050 Prospective Grant application is not configured")
+    async def _assert_space_creation_quota(self) -> None:
+        """Enforce the role-configurable cap on Knowledge Spaces a user may create.
+
+        Reads the quota through ``get_effective_quota`` rather than
+        ``check_quota``: this also guards the six F050 prospective-grant GET
+        endpoints, two of which fire on every keystroke in a search box.
+        ``check_quota`` walks the tenant chain and, on a Root tenant, fans out
+        one COUNT per active child; ``get_effective_quota`` short-circuits on an
+        unlimited role quota and only touches the tenant when that tenant
+        actually sets the key.
+
+        Counting stays on ``async_count_spaces_by_user`` (department spaces
+        excluded) so the gate keeps its own single definition, independent of
+        the quota engine's counting path.
+        """
+        effective = await QuotaService.get_effective_quota(
+            self.login_user.user_id,
+            QuotaResourceType.KNOWLEDGE_SPACE,
+            self.login_user.tenant_id,
+            login_user=self.login_user,
+        )
+        if effective == -1:
+            return
         count = await KnowledgeDao.async_count_spaces_by_user(
             self.login_user.user_id,
             exclude_department_spaces=True,
         )
-        if count >= _MAX_SPACE_PER_USER:
+        if count >= effective:
             raise SpaceLimitError()
+
+    async def _prospective_creation_access(self):
+        if self.prospective_grant_application is None:
+            raise RuntimeError("F050 Prospective Grant application is not configured")
+        await self._assert_space_creation_quota()
         workbench_llm = await LLMService.get_workbench_llm()
         if not workbench_llm or not workbench_llm.embedding_model:
             raise WorkbenchEmbeddingError()

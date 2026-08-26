@@ -303,10 +303,23 @@ class UserService:
                 tenant_id=assigned_tenant_id,
             )
             await cls._ensure_user_guest_department_membership(db_user.user_id)
+            await cls.areconcile_first_user_dashboard_permissions(db_user.user_id)
             return db_user
         finally:
             if tenant_token is not None:
                 current_tenant_id.reset(tenant_token)
+
+    @classmethod
+    async def areconcile_first_user_dashboard_permissions(cls, user_id: int) -> None:
+        """Bind seeded dashboard examples after the first admin is durable."""
+
+        if user_id != 1 or not settings.openfga.enabled:
+            return
+        from bisheng.api.services.f048_preset_dashboard_bootstrap import (
+            reconcile_preset_dashboard_permissions,
+        )
+
+        await reconcile_preset_dashboard_permissions()
 
     @classmethod
     async def _ensure_user_guest_department_membership(cls, user_id: int) -> None:

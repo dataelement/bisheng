@@ -80,6 +80,7 @@ async def sso(*, request: Request, user: UserCreate, auth_jwt: AuthJwt = Depends
                     user_exist.user_id,
                     [AdminRole],
                 )
+                await UserService.areconcile_first_user_dashboard_permissions(user_exist.user_id)
             else:
                 # Create as Normal User
                 user_exist = await UserDao.add_user_and_configured_default_auth(

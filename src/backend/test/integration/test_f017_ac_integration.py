@@ -286,10 +286,18 @@ def test_ac_10_shared_resource_is_counted_on_root_only():
     """
     from bisheng.role.domain.services import quota_service as qs_mod
 
-    template = qs_mod._RESOURCE_COUNT_TEMPLATES.get("knowledge_space", "")
-    assert "=" in template and "IN" not in template.upper().split("WHERE", 1)[-1], (
-        "AC-10: knowledge_space count SQL must use strict tenant_id equality, "
-        "not an IN list (that would double-count shared rows for a Child)"
+    # knowledge_space moved off the raw-SQL templates (it needs `type = 3`);
+    # its tenant predicate is now built by _count_knowledge_space, so assert on
+    # the compiled statement instead of on a template string.
+    stmt = qs_mod.QuotaService._knowledge_space_count_stmt("tenant_id", 7)
+    ks_sql = str(stmt.compile(compile_kwargs={"literal_binds": True})).replace("\n", " ").upper()
+    where = ks_sql.split("WHERE", 1)[-1]
+    assert "TENANT_ID = 7" in where, (
+        "AC-10: knowledge_space count SQL must use strict tenant_id equality"
+    )
+    assert "TENANT_ID IN" not in where, (
+        "AC-10: knowledge_space count SQL must not use a tenant IN list "
+        "(that would double-count shared rows for a Child)"
     )
     # storage_gb follows the same pattern
     storage_tpl = qs_mod._RESOURCE_COUNT_TEMPLATES.get("storage_gb", "")

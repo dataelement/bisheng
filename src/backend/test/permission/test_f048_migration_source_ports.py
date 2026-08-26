@@ -179,7 +179,7 @@ async def test_application_source_requires_builtin_and_allowlist_for_system_owne
     assert page.items[1].system_allowlisted is True
 
 
-async def test_tool_and_dashboard_sources_use_double_system_predicate():
+async def test_tool_is_system_owned_but_dashboards_are_user_owned():
     tool_repository = FakeRepository(
         (
             ToolMigrationRow(
@@ -198,9 +198,8 @@ async def test_tool_and_dashboard_sources_use_double_system_predicate():
                 tenant_id=7,
                 resource_id="3",
                 status="published",
-                owner_user_id=None,
+                owner_user_id=11,
                 dashboard_type="preset_oss",
-                system_allowlisted=True,
             ),
             DashboardMigrationRow(
                 tenant_id=7,
@@ -208,7 +207,6 @@ async def test_tool_and_dashboard_sources_use_double_system_predicate():
                 status="draft",
                 owner_user_id=11,
                 dashboard_type="custom",
-                system_allowlisted=False,
             ),
         )
     )
@@ -221,9 +219,10 @@ async def test_tool_and_dashboard_sources_use_double_system_predicate():
 
     assert tool_page.items[0].ownership_kind == "SYSTEM"
     assert [item.ownership_kind for item in dashboard_page.items] == [
-        "SYSTEM",
+        "USER",
         "USER",
     ]
+    assert dashboard_page.items[0].owner_user_id == 11
     assert dashboard_page.items[1].owner_user_id == 11
 
 

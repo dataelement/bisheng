@@ -148,6 +148,46 @@ is safe: already `FINALIZED` operations are verified and skipped. Catalog
 publish should only be retried when the final `remaining_active` report is
 empty.
 
+### `reconcile_f048_system_owned_resources.py`
+
+Audit and repair missing F048 projections for business-verified platform
+resources. The current inventory covers preset tool categories
+(`is_preset=1 AND user_id IS NULL`). Preset dashboards are intentionally
+excluded: they are ordinary resources owned by the first super administrator.
+The reconciler does not infer system ownership from the resource-type
+allowlist alone.
+
+The default dry-run reports missing/non-current modes for those tool
+categories:
+
+```bash
+export config=config.yaml
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_f048_system_owned_resources.py
+```
+
+After reviewing the Store ID and exact resource list, apply with an explicit
+Store confirmation and audit operator:
+
+```bash
+PYTHONPATH=./ .venv/bin/python \
+  scripts/reconcile_f048_system_owned_resources.py \
+  --apply \
+  --confirm-store-id '<dry-run store_id>' \
+  --operator-id 1
+```
+
+Apply calls the regular `authorize_system_owned` facade. The resulting mode,
+durable projection operation/tuples, and OpenFGA marker tuples are therefore
+created by the same path as online resource creation. An existing
+non-`CURRENT` mode is a blocker and remains owned by the ordinary
+operation/FAILED_CLOSED recovery scripts.
+
+The general projection-operation reconciler cannot repair this case because a
+freshly seeded resource has no durable operation yet. The visible reconciler
+also cannot repair it because system-owned resources intentionally have no
+Grant/assignee source rows.
+
 ### `recover_f048_failed_closed_projection.py`
 
 Forward-recover one explicitly selected F048 resource operation that has

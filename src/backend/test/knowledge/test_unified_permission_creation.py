@@ -124,6 +124,13 @@ def _creation_patches(space: Knowledge):
             "KnowledgeAuditTelemetryService.audit_create_knowledge_space",
             new_callable=AsyncMock,
         ),
+        # Creation quota is role-configurable; stub the lookup so these tests
+        # stay about the permission/creation flow rather than the quota engine.
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.QuotaService.get_effective_quota",
+            new_callable=AsyncMock,
+            return_value=50,
+        ),
     )
 
 
@@ -138,6 +145,7 @@ async def test_legacy_payload_preserves_original_response_and_side_effects() -> 
         patches[3] as create,
         patches[4] as member,
         patches[5] as audit,
+        patches[6],
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
             new_callable=AsyncMock,
@@ -167,6 +175,7 @@ async def test_new_payload_persists_hash_preserves_auto_tag_and_applies_grants()
         patches[3] as create,
         patches[4],
         patches[5],
+        patches[6],
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
             new_callable=AsyncMock,
@@ -215,6 +224,7 @@ async def test_owner_failure_propagates_without_attempting_initial_grants() -> N
         patches[3],
         patches[4],
         patches[5],
+        patches[6],
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
             new_callable=AsyncMock,
@@ -242,6 +252,7 @@ async def test_initial_grant_failure_is_returned_as_partial_success() -> None:
         patches[3],
         patches[4],
         patches[5],
+        patches[6],
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
             new_callable=AsyncMock,
@@ -272,6 +283,7 @@ async def test_initial_target_resolution_failure_is_returned_as_partial_success(
         patches[3],
         patches[4],
         patches[5],
+        patches[6],
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
             new_callable=AsyncMock,
@@ -376,6 +388,7 @@ async def test_unique_key_race_loads_winner_and_skips_duplicate_side_effects() -
         ),
         patches[4] as member,
         patches[5] as audit,
+        patches[6],
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.KnowledgeDao.aget_by_creation_request",
             new_callable=AsyncMock,

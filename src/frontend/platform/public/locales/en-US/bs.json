@@ -371,6 +371,8 @@
     "menuEnableAll": "Enable all",
     "menuDisableAll": "Disable all",
     "channelQuotaLimit": "Channel creation limit",
+    "spaceCreateQuotaLimit": "Knowledge space creation limit",
+    "spaceCreateQuotaLimitDesc": "Limit how many knowledge spaces users with this role can create",
     "spaceSubscribeQuotaLimit": "Knowledge space join limit",
     "spaceSubscribeQuotaLimitDesc": "Limit how many knowledge spaces users with this role can join (subscribe to)",
     "roleListKnowledgeSpaceUploadLimit": "Knowledge space upload limit",

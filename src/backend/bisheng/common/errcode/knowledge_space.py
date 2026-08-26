@@ -9,7 +9,7 @@ class SpaceNotFoundError(BaseErrorCode):
 
 class SpaceLimitError(BaseErrorCode):
     Code: int = 18001
-    Msg: str = "You can create a maximum of 30 Knowledge Spaces"
+    Msg: str = "You have reached the maximum number of Knowledge Spaces you can create"
 
 
 class DepartmentKnowledgeSpaceExistsError(BaseErrorCode):

@@ -1489,7 +1489,7 @@ Constitution 头部要求 law change 经过 PR review；用户 Design ★ 确认
    - ordinary/protected + CUSTOM/INHERIT + 始终存在的 canonical parent；
    - permission_enabled create/delete fence；
    - public/shared 只读沿 parent 传播且不受普通 mode gate 影响；
-   - dashboard visible/edit/delete/manage_permission 与 preset system visibility；
+   - dashboard visible/edit/delete/manage_permission；预置示例看板仍按首个超管用户拥有的普通资源处理；
    - 单槽浅层 visible 与深层 canonical oracle 对 direct、部门、
      用户组、多 Grant、多来源、protected、system、CUSTOM/INHERIT 的集合完全一致。
 2. **Catalog publisher crash matrix**：在 SQL prepare、FGA stage、FGA commit、SQL finalize
@@ -1723,7 +1723,7 @@ migration coordinator 只接收规范化事实，不 import 这些业务 ORM/Rep
 | workflow / assistant | `Flow.user_id` / `Assistant.user_id` | 当前 `user_id`→protected；其他 direct owner→ordinary；builtin 走 system allowlist |
 | tool | `GptsTools.user_id/is_preset` | 普通工具当前 `user_id`→protected；其他 owner→ordinary；preset 可为 system-owned |
 | channel | `Channel.user_id` + active channel CREATOR membership | 唯一 CREATOR→protected；若 `user_id` 不同则作为 ordinary owner 保留；缺 CREATOR 可按有效 `user_id` 修复，多个 CREATOR 阻断 |
-| dashboard | `Dashboard.user_id/dashboard_type` | CUSTOM 当前 `user_id`→protected；其他 owner→ordinary；preset 走 system predicate |
+| dashboard | `Dashboard.user_id/dashboard_type` | CUSTOM；包括 preset 示例在内，当前 `user_id`→protected，其他 owner→ordinary，不使用 system predicate |
 
 对 F018 可能留下的 knowledge_space/channel 不一致，迁移按当前**有效语义**保留两侧：
 唯一 active CREATOR 是 protected，差异 `user_id` 与 direct owner tuple 各自成为 ordinary，
