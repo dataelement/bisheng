@@ -177,6 +177,11 @@ class F048AppPermissionAdapter:
         ``_target`` only validates state / tenant / owner, none of which need the
         version. The row is still read so a vanished app is caught (returns
         ``None``) rather than projected onto nothing.
+
+        Tracked against Gitee IKB8X9 ("【全新部署】执行任务模式失败"), where a
+        first-publish on a fresh deployment surfaced this 25008 with the
+        back-end English message "Resource permission projection is not
+        current" because the deployment was built before this fix landed.
         """
         from bisheng.core.database import get_async_db_session
         from bisheng.database.models.app import AppDao
