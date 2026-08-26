@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { SearchInput } from "@bisheng/ui";
 import { Button } from "~/components/ui/Button";
+import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useToastContext } from "~/Providers";
 import { NotificationSeverity } from "~/common";
 import {
@@ -14,6 +15,21 @@ import { useLocalize, useMediaQuery } from "~/hooks";
 import KnowledgeSquareCard from "./KnowledgeSquareCard";
 
 type SquareSpaceStatus = "join" | "joined" | "pending" | "rejected";
+
+const KNOWLEDGE_SQUARE_PAGE_SIZE = 60;
+
+function mergeSpacesById(existing: KnowledgeSpace[], incoming: KnowledgeSpace[]) {
+    const seenIds = new Set(existing.map((space) => String(space.id)));
+    return [
+        ...existing,
+        ...incoming.filter((space) => {
+            const id = String(space.id);
+            if (seenIds.has(id)) return false;
+            seenIds.add(id);
+            return true;
+        }),
+    ];
+}
 
 interface KnowledgeSquareProps {
     onBack?: () => void;
@@ -56,20 +72,20 @@ export default function KnowledgeSquare({
     const [hasMorePage, setHasMorePage] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [initialError, setInitialError] = useState(false);
+    const [loadMoreError, setLoadMoreError] = useState(false);
     const [spaces, setSpaces] = useState<KnowledgeSpace[]>([]);
+    const spacesRef = useRef<KnowledgeSpace[]>([]);
+    const requestSeqRef = useRef(0);
     // In-flight join requests keyed by space id, so concurrent joins to
     // different spaces (e.g. clicking quickly across pages) don't block each
     // other — a single shared id used to silently drop them (see handleJoin).
     const [joiningIds, setJoiningIds] = useState<Set<string>>(() => new Set());
 
     const scrollRef = useRef<HTMLDivElement | null>(null);
+    const loadMoreRef = useRef<HTMLDivElement | null>(null);
+    const loadMoreLockRef = useRef(false);
     const searchImeComposingRef = useRef(false);
-    // Larger page reduces the "subscribe reorders rows mid-pagination" issue:
-    // the not-subscribed-first sort moves a space to the back the moment it's
-    // joined, which with offset pagination skips/duplicates rows across pages.
-    // Fitting more per page keeps most spaces on one page.
-    const PAGE_SIZE = 60;
-
     const MAX_SEARCH_LEN = 40;
 
     const tTitle = title || localize("com_knowledge.explore_square");
@@ -78,39 +94,85 @@ export default function KnowledgeSquare({
     const tEmptyText = emptyText || localize("com_knowledge.no_matched_space");
     const tJoinPrefix = joinToastPrefix || localize("com_knowledge.applied_to_join_space");
 
-    const visibleSpaces = useMemo(() => {
-        const q = searchQuery.trim().toLowerCase();
-        if (!q) return spaces;
-        return spaces.filter(
-            (s) => s.name.toLowerCase().includes(q) || (s.description || "").toLowerCase().includes(q)
-        );
-    }, [spaces, searchQuery]);
+    const updateSpaces = useCallback((updater: (prev: KnowledgeSpace[]) => KnowledgeSpace[]) => {
+        setSpaces((prev) => {
+            const next = updater(prev);
+            spacesRef.current = next;
+            return next;
+        });
+    }, []);
+
+    const visibleSpaces = spaces;
 
     const load = useCallback(
         async (nextPage: number) => {
-            try {
-                if (nextPage === 1) setLoading(true);
-                else setLoadingMore(true);
+            const isFirstPage = nextPage === 1;
+            const requestId = ++requestSeqRef.current;
 
+            if (isFirstPage) {
+                setLoading(true);
+                setLoadingMore(false);
+                setInitialError(false);
+                setLoadMoreError(false);
+                loadMoreLockRef.current = false;
+                spacesRef.current = [];
+                setSpaces([]);
+            } else {
+                setLoadingMore(true);
+                setLoadMoreError(false);
+            }
+
+            try {
                 const keyword = searchQuery.trim();
                 const res = await getSquareSpacesApi({
                     page: nextPage,
-                    page_size: PAGE_SIZE,
+                    page_size: KNOWLEDGE_SQUARE_PAGE_SIZE,
                     ...(keyword ? { keyword } : {}),
                 });
+                if (requestId !== requestSeqRef.current) return;
 
                 const list = (res.data || []) as KnowledgeSpace[];
-                setSpaces((prev) => (nextPage === 1 ? list : [...prev, ...list]));
+                const rawTotal = res.total;
+                const total = Number(rawTotal);
+                const hasExplicitTotal = rawTotal !== undefined && rawTotal !== null && Number.isFinite(total);
+                const previous = isFirstPage ? [] : spacesRef.current;
+                const nextSpaces = isFirstPage ? list : mergeSpacesById(previous, list);
+                const uniqueAddedCount = nextSpaces.length - previous.length;
+
+                if (hasExplicitTotal && nextSpaces.length < total && (list.length === 0 || (!isFirstPage && uniqueAddedCount === 0))) {
+                    if (isFirstPage) {
+                        spacesRef.current = [];
+                        setSpaces([]);
+                        setInitialError(true);
+                    } else {
+                        setLoadMoreError(true);
+                    }
+                    setHasMorePage(false);
+                    return;
+                }
+
+                spacesRef.current = nextSpaces;
+                setSpaces(nextSpaces);
                 setPage(nextPage);
-                setHasMorePage(list.length >= PAGE_SIZE);
+                setHasMorePage(hasExplicitTotal ? nextSpaces.length < total : list.length >= KNOWLEDGE_SQUARE_PAGE_SIZE);
             } catch {
-                // Keep existing list
+                if (requestId !== requestSeqRef.current) return;
+                if (isFirstPage) {
+                    spacesRef.current = [];
+                    setSpaces([]);
+                    setInitialError(true);
+                } else {
+                    setLoadMoreError(true);
+                }
+                setHasMorePage(false);
             } finally {
-                if (nextPage === 1) setLoading(false);
-                else setLoadingMore(false);
+                if (requestId === requestSeqRef.current) {
+                    if (isFirstPage) setLoading(false);
+                    else setLoadingMore(false);
+                }
             }
         },
-        [PAGE_SIZE, searchQuery]
+        [searchQuery]
     );
 
     const applySearchLengthLimit = (raw: string) => {
@@ -150,22 +212,44 @@ export default function KnowledgeSquare({
         load(1);
     }, [searchQuery, load]);
 
+    const handleLoadMore = useCallback(() => {
+        if (loadMoreLockRef.current || loading || loadingMore || loadMoreError || !hasMorePage) return;
+        loadMoreLockRef.current = true;
+        load(page + 1).finally(() => {
+            loadMoreLockRef.current = false;
+        });
+    }, [hasMorePage, load, loadMoreError, loading, loadingMore, page]);
+
     // Infinite scroll
     useEffect(() => {
         const node = scrollRef.current;
         if (!node) return;
 
         const onScroll = () => {
-            if (loadingMore || !hasMorePage) return;
             const threshold = 60;
             if (node.scrollTop + node.clientHeight >= node.scrollHeight - threshold) {
-                load(page + 1);
+                handleLoadMore();
             }
         };
 
         node.addEventListener("scroll", onScroll);
         return () => node.removeEventListener("scroll", onScroll);
-    }, [hasMorePage, loadingMore, load, page]);
+    }, [handleLoadMore]);
+
+    useEffect(() => {
+        const root = scrollRef.current;
+        const target = loadMoreRef.current;
+        if (!root || !target) return;
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting) handleLoadMore();
+            },
+            { root, rootMargin: "60px 0px", threshold: 0 }
+        );
+        observer.observe(target);
+        return () => observer.disconnect();
+    }, [handleLoadMore, visibleSpaces.length]);
 
     const handleJoin = async (space: KnowledgeSpace) => {
         // Rejected applications can be submitted again.
@@ -187,7 +271,7 @@ export default function KnowledgeSquare({
         try {
             const result = await subscribeSpaceApi(space.id);
             const nextStatus: SquareSpaceStatus = result.status === "subscribed" ? "joined" : "pending";
-            setSpaces((prev) =>
+            updateSpaces((prev) =>
                 prev.map((s) =>
                     s.id === space.id
                         ? {
@@ -297,7 +381,14 @@ export default function KnowledgeSquare({
 
                 <div className="flex-1 flex flex-col w-full max-w-[1032px] mx-auto px-4 py-4">
                     {loading && spaces.length === 0 ? (
-                        <div className="flex-1 flex items-center justify-center text-text-3">{localize("com_knowledge.loading")}</div>
+                        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-text-3">
+                            <LoadingIcon className="size-20 text-primary" />
+                            <span className="text-sm">{localize("com_list_loading")}</span>
+                        </div>
+                    ) : initialError ? (
+                        <div className="flex-1 flex items-center justify-center text-text-3">
+                            <p className="text-[14px] font-normal text-text-3">{localize("com_list_load_failed")}</p>
+                        </div>
                     ) : visibleSpaces.length === 0 ? (
                         <div className="flex-1 flex flex-col items-center justify-center text-text-3">
                             <EmptyStateIllustration className="size-[120px] mb-4" />
@@ -324,8 +415,14 @@ export default function KnowledgeSquare({
                                 ))}
                             </div>
 
-                            <div className="h-10 flex items-center justify-center text-[12px] text-text-4">
-                                {loadingMore ? localize("com_knowledge.loading") : !hasMorePage ? localize("com_knowledge.no_more_content") : ""}
+                            <div ref={loadMoreRef} className="h-10 flex items-center justify-center text-[12px] text-text-4">
+                                {loadingMore
+                                    ? localize("com_list_loading_more")
+                                    : loadMoreError
+                                        ? localize("com_list_load_failed")
+                                        : !hasMorePage
+                                            ? localize("com_list_all_loaded")
+                                            : ""}
                             </div>
                         </div>
                     )}

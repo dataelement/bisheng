@@ -102,7 +102,7 @@
   },
   "src/api/message.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 7
+      "count": 6
     }
   },
   "src/api/messageExport.ts": {
@@ -1419,20 +1419,6 @@
       "count": 1
     }
   },
-  "src/components/NotificationsDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 23
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 4
-    },
-    "no-console": {
-      "count": 8
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
-    }
-  },
   "src/components/PreviewFile/DocxFileViewer.tsx": {
     "no-useless-escape": {
       "count": 1
@@ -1680,17 +1666,6 @@
   "src/components/Voice/textToSpeechStore.tsx": {
     "no-restricted-imports": {
       "count": 1
-    }
-  },
-  "src/components/approval/ApprovalCenterDialog.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 16
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 3
     }
   },
   "src/components/icons/DocxIcon.tsx": {
@@ -2273,9 +2248,6 @@
     },
     "no-restricted-syntax": {
       "count": 3
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 1
     }
   },
   "src/hooks/useAutoScroll.ts": {
@@ -2426,15 +2398,9 @@
   },
   "src/pages/ChannelSquare.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
-    },
-    "no-restricted-syntax": {
-      "count": 7
-    },
-    "react-hooks/exhaustive-deps": {
       "count": 1
     }
   },
@@ -3148,24 +3114,8 @@
       "count": 1
     }
   },
-  "src/pages/apps/explore.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 5
-    },
-    "react-hooks/exhaustive-deps": {
-      "count": 2
-    }
-  },
   "src/pages/apps/hooks/useAppCenter.ts": {
     "no-restricted-imports": {
-      "count": 1
-    },
-    "no-restricted-syntax": {
-      "count": 4
-    }
-  },
-  "src/pages/apps/index.tsx": {
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },
@@ -3346,7 +3296,7 @@
   },
   "src/pages/knowledge/hooks/useFileManager.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
+      "count": 2
     }
   },
   "src/pages/knowledge/hooks/useFileUpload.test.ts": {

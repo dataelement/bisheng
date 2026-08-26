@@ -21,6 +21,7 @@ import { useCitationReferencePanel } from '~/components/Chat/Messages/Content/us
 import { Spinner } from '~/components/svg';
 import { useAuthContext } from '~/hooks/AuthContext';
 import { useGetBsConfig } from '~/hooks/queries/data-provider';
+import { useGetWorkbenchModelsQuery } from '~/hooks/queries/queries';
 import useAiChat from '~/hooks/useAiChat';
 import useChatModelMemo from '~/hooks/useChatModelMemo';
 import useLocalize from '~/hooks/useLocalize';
@@ -88,6 +89,48 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   //  - org KB: default per bsConfig.orgKbs[].default_checked; remember toggles
   //  - tools: default per bsConfig.tools[].default_checked; remember toggles
   useChatModelMemo(user, bsConfig as any);
+
+  // Per-mode model resolution. Each mode owns a separate manual memory
+  // (`bs:{uid}:chatModel` / `bs:{uid}:taskModel`); with no valid record the
+  // mode's admin default applies (daily → chat_default_model_id, task →
+  // linsight_default_model_id). Runs on mount and on every mode switch, so
+  // 新建对话/新建任务 swap the displayed model between the two memories /
+  // defaults. KeepAlive-safe: only the activated page runs effects.
+  const { data: workbenchCfg } = useGetWorkbenchModelsQuery();
+  useEffect(() => {
+    const models = bsConfig?.models || [];
+    if (!models.length || !user?.id) return;
+    const mode = taskMode ? 'task' : 'daily';
+    const key = `bs:${user.id}:${taskMode ? 'taskModel' : 'chatModel'}`;
+    const savedId = localStorage.getItem(key);
+    let manual = true;
+    let target = savedId ? models.find((m) => String(m.id) === savedId) : undefined;
+    if (!target) {
+      manual = false;
+      // A saved id that no longer resolves (model removed/disabled) is a
+      // stale record — drop it so the admin default takes over for good.
+      if (savedId) localStorage.removeItem(key);
+      const raw = (workbenchCfg as Record<string, unknown> | undefined)?.[
+        taskMode ? 'linsight_default_model_id' : 'chat_default_model_id'
+      ];
+      const adminDefaultId =
+        typeof raw === 'string' || typeof raw === 'number' ? String(raw) : null;
+      target =
+        (adminDefaultId ? models.find((m) => String(m.id) === adminDefaultId) : undefined) ??
+        (taskMode ? models[0] : models[models.length - 1]);
+    }
+    if (
+      target &&
+      (String(target.id) !== String(chatModel.id) || !!chatModel.manual !== manual || chatModel.mode !== mode)
+    ) {
+      setChatModel({
+        id: Number(target.id),
+        name: target.displayName || target.name || '',
+        manual,
+        mode,
+      });
+    }
+  }, [taskMode, chatModel.id, chatModel.manual, chatModel.mode, bsConfig, workbenchCfg, user?.id, setChatModel]);
 
   const memoReadyRef = useRef(false);
   useEffect(() => {
@@ -714,7 +757,18 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                                 setChatModel({
                                   id: Number(val),
                                   name: model?.displayName || '',
+                                  manual: true,
+                                  mode: taskMode ? 'task' : 'daily',
                                 });
+                              }}
+                              onModelAutoChange={(val) => {
+                                const model = bsConfig?.models?.find((m) => String(m.id) === String(val));
+                                setChatModel((prev) => ({
+                                  id: Number(val),
+                                  name: model?.displayName || prev.name || '',
+                                  manual: prev.manual ?? false,
+                                  mode: prev.mode,
+                                }));
                               }}
                               onSend={handleSend}
                               onStop={handleStop}
@@ -883,7 +937,18 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
                               setChatModel({
                                 id: Number(val),
                                 name: model?.displayName || '',
+                                manual: true,
+                                mode: taskMode ? 'task' : 'daily',
                               });
+                            }}
+                            onModelAutoChange={(val) => {
+                              const model = bsConfig?.models?.find((m) => String(m.id) === String(val));
+                              setChatModel((prev) => ({
+                                id: Number(val),
+                                name: model?.displayName || prev.name || '',
+                                manual: prev.manual ?? false,
+                                mode: prev.mode,
+                              }));
                             }}
                             onSend={handleSend}
                             onStop={stopGenerating}

@@ -28,21 +28,19 @@ function findScrollableAncestor(el: Element | null): Element | null {
 interface LoadMoreProps {
     onLoad: () => void;
     loading?: boolean;
+    disabled?: boolean;
+    loadingText?: string;
 }
 
-/**
- * F027 §AC-17-client-补做: bottom sentinel that triggers `onLoad` when it
- * scrolls into view inside its nearest overflow:auto/scroll ancestor.
- * Callers should conditionally render this (e.g. `{hasMore && <LoadMore .../>}`)
- * so the sentinel disappears at end-of-list and the observer unbinds.
- */
-export function LoadMore({ onLoad, loading }: LoadMoreProps) {
+export function LoadMore({ onLoad, loading = false, disabled = false, loadingText = "" }: LoadMoreProps) {
     const sentinelRef = useRef<HTMLDivElement>(null);
-    // Keep `onLoad` in a ref so the observer (created once at mount) always
-    // invokes the LATEST version — otherwise the closure freezes stale
-    // cursor / hasMore values from first render.
     const onLoadRef = useRef(onLoad);
+    const loadingRef = useRef(loading);
+    const disabledRef = useRef(disabled);
+
     useEffect(() => { onLoadRef.current = onLoad; }, [onLoad]);
+    useEffect(() => { loadingRef.current = loading; }, [loading]);
+    useEffect(() => { disabledRef.current = disabled; }, [disabled]);
 
     useEffect(() => {
         if (!sentinelRef.current) return;
@@ -50,18 +48,18 @@ export function LoadMore({ onLoad, loading }: LoadMoreProps) {
         const observer = new IntersectionObserver(
             (entries) => {
                 entries.forEach((entry) => {
-                    if (entry.isIntersecting) onLoadRef.current?.();
+                    if (entry.isIntersecting && !loadingRef.current && !disabledRef.current) onLoadRef.current?.();
                 });
             },
             { root, rootMargin: "0px", threshold: 0.1 },
         );
         observer.observe(sentinelRef.current);
         return () => observer.disconnect();
-    }, []);
+    }, [disabled, loading]);
 
     return (
-        <div ref={sentinelRef} className="flex h-10 w-full items-center justify-center text-xs text-text-3">
-            {loading ? "..." : ""}
+        <div ref={sentinelRef} className="col-span-full flex h-10 w-full items-center justify-center text-xs text-text-3">
+            {loading ? loadingText : ""}
         </div>
     );
 }

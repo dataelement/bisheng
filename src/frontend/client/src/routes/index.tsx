@@ -50,6 +50,7 @@ const FilePreviewPage = lazy(() => import('~/pages/knowledge/FilePreview/FilePre
 const ArticlePage = lazy(() => import('~/pages/Subscription/Article/ArticlePage'));
 const DevLogin = lazy(() => import('~/pages/DevLogin'));
 const StandaloneChatPage = lazy(() => import('~/pages/standaloneChat/StandaloneChatPage'));
+const SettingsPage = lazy(() => import('~/pages/settings/SettingsPage'));
 
 function RouteLoading() {
   return (
@@ -266,6 +267,8 @@ export const router = createBrowserRouter([
             </MenuApprovalPluginGate>
           )},
           { path: 'knowledge/share/:spaceId', element: suspended(<Knowledge />) },
+          // Personal settings + 消息与审批, merged into one routed page (no plugin gate — always available).
+          { path: 'settings/:section?', element: suspended(<SettingsPage />) },
           { path: 'menu-unavailable', element: <MenuUnavailablePage /> },
         ],
       },

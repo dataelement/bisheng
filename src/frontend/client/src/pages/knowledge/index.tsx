@@ -760,6 +760,8 @@ export default function Knowledge() {
                             onLoadMore={fileManager.loadMore}
                             hasMore={fileManager.hasMore}
                             loading={fileManager.loading}
+                            loadError={fileManager.loadError}
+                            loadMoreError={fileManager.loadMoreError}
                             onSearch={fileManager.handleSearch}
                             onFilterStatus={fileManager.setStatusFilter}
                             onSort={(sortBy, direction) => {
