@@ -65,10 +65,13 @@ export default function SettingsPage() {
     return <Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />;
   }
 
+  // Sidebar/deep-link moves REPLACE the history entry: settings keeps exactly one
+  // entry, so 返回 (and the browser's own back) leads to whatever page the user was
+  // on before opening settings, never through the sections they browsed here.
   const goToSection = (next: SettingsPageSection) => {
     setCompactView("list");
     setDeepLink(null);
-    navigate(`/settings/${next}`);
+    navigate(`/settings/${next}`, { replace: true });
   };
 
   const approvalTab = approvalTabOf(section);
@@ -114,7 +117,9 @@ export default function SettingsPage() {
           onOpenApprovalCenter={(approvalTarget) => {
             setDeepLink({ taskId: approvalTarget.taskId, instanceId: approvalTarget.instanceId });
             setCompactView("detail");
-            navigate(`/settings/${approvalTarget.tab === "my_requests" ? "my-requests" : "my-tasks"}`);
+            navigate(`/settings/${approvalTarget.tab === "my_requests" ? "my-requests" : "my-tasks"}`, {
+              replace: true,
+            });
           }}
           onUnreadMaybeChanged={refreshCount}
         />
@@ -158,7 +163,9 @@ export default function SettingsPage() {
             Group captions reuse the home sidebar's date-label style. */}
         <nav className="hidden w-[200px] shrink-0 flex-col border-r border-fill-2 px-3 pb-3 pt-4 md:flex">
           <div className="flex items-center gap-1 pl-2">
-            {/* Back to wherever the user came from; direct visits fall back to home. */}
+            {/* Leaves settings entirely: section switches replace their history entry, so
+                one step back lands on the page the user opened settings from. A direct
+                visit (no prior entry in this tab) falls back to home. */}
             <button
               type="button"
               aria-label={localize("com_ui_go_back")}
