@@ -88,6 +88,20 @@ const BRAND = {
   },
   blue:  { '50': '#E8F3FF', '100': '#BEDAFF', '200': '#94BFFF', '300': '#6AA1FF', '400': '#4080FF', '500': '#165DFF', '600': '#024DE3', '700': '#0239AB', '800': '#042B80', '900': '#051D52', muted: '#5773B4' },
   green: { '50': '#E4F1E7', '100': '#CCE4D2', '200': '#A3D2B0', '300': '#6FBA85', '400': '#3D9B5C', '500': '#169C47', '600': '#098B35', '700': '#076929', '800': '#074E20', '900': '#063216', muted: '#5C8A77' },
+  /* Dark-mode ramps — official @arco-design/color dark algorithm (the same
+   * `getPresetColors(seed).dark` Arco ships), seeded on each theme's FIXED
+   * primary. Index semantics hold (500 = main, 50 = tint bg) while the
+   * lightness DIRECTION inverts (50 darkest → 900 lightest, like the gray
+   * ramp), so tokens.css overrides same-rung and every `blue-*` class keeps
+   * meaning. The dark main lightens WITHOUT bleaching (#165DFF → #3C7EFF,
+   * 5.0:1 on #121212): the light ramp lightens by blending toward white, so
+   * picking a light 3xx step in dark bought brightness with chroma — measured
+   * 2026-08-26, 组件-Tabs标签页.md §5. The designer's veto of the algorithmic
+   * light green ramp (neon at v=100) doesn't apply here: the dark side never
+   * reaches full value. `muted` has no dark value yet — it stays fixed until
+   * a real dark use case tunes it. */
+  blueDark:  { '50': '#000D4D', '100': '#041B79', '200': '#0E32A6', '300': '#1D4DD2', '400': '#306FFF', '500': '#3C7EFF', '600': '#689FFF', '700': '#93BEFF', '800': '#BEDAFF', '900': '#EAF4FF' },
+  greenDark: { '50': '#004D26', '100': '#066031', '200': '#0F743B', '300': '#1B8847', '400': '#2A9C54', '500': '#3CB062', '600': '#60C47E', '700': '#8AD79F', '800': '#BAEBC5', '900': '#F0FFF3' },
 };
 
 /* ------------------------------------------------------------------ *
@@ -181,13 +195,23 @@ const BG = [
 ];
 
 /* ------------------------------------------------------------------ *
- * Functional colors (§3) — fixed hex, never theme-switched.
+ * Functional colors (§3) — fixed hex, never brand-theme-switched (they DO
+ * flip light⇄dark). `dark` values come from the same @arco-design/color dark
+ * algorithm as the brand ramps, seeded on each light main; the four roles map
+ * to Arco ramp indices main=6 / hover=5 / active=7 / tint=1 (light picks the
+ * same slots, except danger's hand-darkened hover/active). In dark that means
+ * hover darkens and active lightens — the direction flip is Arco's own dark
+ * semantics, same as the fill ramp. Tints go deep-and-saturated (#004D1C …),
+ * so tinted surfaces read as color washes on #121212 instead of light chips.
  * ------------------------------------------------------------------ */
 
 const FUNCTIONAL = [
-  { name: 'success', label: '成功 Success', cssVar: '--success', main: '#00B42A', hover: '#23C343', active: '#009A29', tint: '#E8FFEA' },
-  { name: 'warning', label: '警告 Warning', cssVar: '--warning', main: '#FF7D00', hover: '#FF9A2E', active: '#D25F00', tint: '#FFF7E8' },
-  { name: 'danger',  label: '危险 Danger',  cssVar: '--danger',  main: '#F53F3F', hover: '#D6373A', active: '#D02F33', tint: '#FFECE8' },
+  { name: 'success', label: '成功 Success', cssVar: '--success', main: '#00B42A', hover: '#23C343', active: '#009A29', tint: '#E8FFEA',
+    dark: { main: '#27C346', hover: '#1DB440', active: '#50D266', tint: '#004D1C' } },
+  { name: 'warning', label: '警告 Warning', cssVar: '--warning', main: '#FF7D00', hover: '#FF9A2E', active: '#D25F00', tint: '#FFF7E8',
+    dark: { main: '#FF9626', hover: '#FF8D1F', active: '#FFB357', tint: '#4D1B00' } },
+  { name: 'danger',  label: '危险 Danger',  cssVar: '--danger',  main: '#F53F3F', hover: '#D6373A', active: '#D02F33', tint: '#FFECE8',
+    dark: { main: '#F76965', hover: '#F54E4E', active: '#F98D86', tint: '#4D000A' } },
 ];
 
 /* ------------------------------------------------------------------ *

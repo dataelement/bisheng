@@ -5,8 +5,10 @@
  * `import '@bisheng/ui/tokens.css'` 加载(其 style.css 只保留 client 自有变量),
  * 文档站通过 rspress.config.ts 的 preEntry 加载;platform 接入时同样引本文件。
  * 覆盖顺序在本文件内部即已排定::root 在前,.dark / ≤768px / .theme-green /
- * .illus-grey 在后——它们与 :root 特异性相同,靠这个先后决胜,不要重排。
- * 覆盖范围 v0:字体阶梯 / Arco 中性色 / 功能色 / 品牌色 / Button 语义 token。
+ * .dark.theme-green / .illus-grey 在后——除 .dark.theme-green(双类,特异性更高)
+ * 外它们与 :root 特异性相同,靠这个先后决胜,不要重排。深色×绿主题必须由
+ * .dark.theme-green 收口:.theme-green 排在 .dark 之后,只有它能压回绿色深色阶。
+ * 覆盖范围 v0:字体阶梯 / Arco 中性色 / 功能色 / 品牌色(均含深色阶)/ Button 语义 token。
  * ============================================================ */
 
 :root {
@@ -115,9 +117,13 @@
   --btn-fill-2: 243 243 244;       /* #F3F3F4 — active bg / filled base */
   --btn-fill-3: 229 230 233;       /* #E5E6E9 — filled hover */
   --btn-fill-4: 202 205 212;       /* #CACDD4 — filled active */
-  --btn-danger: 245 63 63;         /* #F53F3F */
-  --btn-danger-hover: 214 55 58;   /* #D6373A */
-  --btn-danger-active: 208 47 51;  /* #D02F33 */
+  /* Danger reads the functional tokens lazily (values are identical — the
+     old literals duplicated --danger/-hover/-active), so the button red flips
+     to the dark danger ramp with them: ONE red per mode everywhere. Still
+     never brand-themed. */
+  --btn-danger: var(--danger);         /* #F53F3F light / #F76965 dark */
+  --btn-danger-hover: var(--danger-hover);   /* #D6373A / #F54E4E */
+  --btn-danger-active: var(--danger-active); /* #D02F33 / #F98D86 */
   --btn-disabled-border: 217 217 217; /* #D9D9D9 — bordered variants, disabled */
   --btn-disabled-bg: 245 245 245;     /* #F5F5F5 — disabled fill */
   --btn-disabled-text: 191 191 191;   /* #BFBFBF — disabled text */
@@ -179,8 +185,8 @@
  * gray.dark). Lightness INVERTS (gray-1 darkest, gray-10 lightest), so the
  * semantic text / fill / border tokens defined in :root as var(--arco-gray-N)
  * auto-flip here without being redeclared — custom properties resolve lazily at
- * use time. Neutral + semantic only; brand and functional dark ramps are still
- * pending (they keep their light values in dark — known debt).
+ * use time. Brand + functional dark ramps live at the end of this block (green
+ * theme's brand ramp is re-overridden in .dark.theme-green further down).
  * One semantic token is re-pointed below (--text-2) — the same-rung flip is
  * kept for everything else. */
 .dark {
@@ -232,6 +238,48 @@
   --btn-fill-2: 46 46 48;          /* gray-2 dark — filled base */
   --btn-fill-3: 72 72 73;          /* gray-3 dark — filled hover */
   --btn-fill-4: 95 95 96;          /* gray-4 dark — filled active */
+
+  /* Brand ramp, dark (blue theme) — official @arco-design/color dark algorithm
+     seeded on the primary #165DFF; the dark main IS Arco's own dark arcoblue
+     #3C7EFF. It lightens while KEEPING saturation: the light ramp lightens by
+     blending toward white, so borrowing a light 3xx step in dark bought
+     brightness with chroma (brand feel died), while 500 kept dark sat at
+     3.6:1 on #121212 — dark-500 lands at 5.0:1 (实测 2026-08-26,
+     组件-Tabs标签页.md §5). Same-rung override: index semantics hold
+     (500 main, 50 tint bg) while lightness direction inverts (50 darkest →
+     900 lightest), exactly like the gray ramp — so `bg-blue-50` selection
+     tints become deep navy washes and hover(400)/active(600) swap lightness
+     direction, which is Arco's own dark semantics. --brand-muted stays fixed
+     (no dark use case has tuned it yet). Green theme: .dark.theme-green. */
+  --brand-50: 0 13 77;       /* #000D4D — selection / tint bg on dark */
+  --brand-100: 4 27 121;     /* #041B79 */
+  --brand-200: 14 50 166;    /* #0E32A6 */
+  --brand-300: 29 77 210;    /* #1D4DD2 */
+  --brand-400: 48 111 255;   /* #306FFF — hover (darkens in dark) */
+  --brand-500: 60 126 255;   /* #3C7EFF — main (Arco official dark primary) */
+  --brand-600: 104 159 255;  /* #689FFF — active (lightens in dark) */
+  --brand-700: 147 190 255;  /* #93BEFF */
+  --brand-800: 190 218 255;  /* #BEDAFF */
+  --brand-900: 234 244 255;  /* #EAF4FF */
+  --brand-main: 60 126 255;  /* #3C7EFF */
+
+  /* Functional, dark — same algorithm seeded on each light main; roles map to
+     Arco ramp indices main=6 / hover=5 / active=7 / tint=1. Tints go deep and
+     saturated so tinted surfaces (toast / tag) read as color washes on
+     #121212, not light chips; --btn-danger* in :root reference these lazily
+     and flip along. Theme-independent, like the light values. */
+  --success: 39 195 70;         /* #27C346 */
+  --success-hover: 29 180 64;   /* #1DB440 */
+  --success-active: 80 210 102; /* #50D266 */
+  --success-tint: 0 77 28;      /* #004D1C */
+  --warning: 255 150 38;        /* #FF9626 */
+  --warning-hover: 255 141 31;  /* #FF8D1F */
+  --warning-active: 255 179 87; /* #FFB357 */
+  --warning-tint: 77 27 0;      /* #4D1B00 */
+  --danger: 247 105 101;        /* #F76965 */
+  --danger-hover: 245 78 78;    /* #F54E4E */
+  --danger-active: 249 141 134; /* #F98D86 */
+  --danger-tint: 77 0 10;       /* #4D000A */
 }
 
 /* Mobile (≤768px) remap of the SEMANTIC typography layer only:
@@ -277,6 +325,28 @@
   --illus-500: 22 156 71;    /* #169C47 */
 }
 
+/* Dark × green — MUST sit after .theme-green: that block sits after .dark and
+ * wins the tie, so only this compound selector (also higher specificity) can
+ * put the green DARK ramp back on top for html.dark.theme-green. Official
+ * @arco-design/color dark algorithm seeded on the fixed primary #169C47 —
+ * the designer's veto of the algorithmic light green ramp (hit v=100, read
+ * neon) doesn't apply to the dark side, which never reaches full value.
+ * Same-rung mapping as the blue dark ramp; dark main 6.8:1 on #121212.
+ * --illus-* deliberately untouched: illustrations have no dark treatment yet. */
+.dark.theme-green {
+  --brand-50: 0 77 38;       /* #004D26 — selection / tint bg on dark */
+  --brand-100: 6 96 49;      /* #066031 */
+  --brand-200: 15 116 59;    /* #0F743B */
+  --brand-300: 27 136 71;    /* #1B8847 */
+  --brand-400: 42 156 84;    /* #2A9C54 — hover (darkens in dark) */
+  --brand-500: 60 176 98;    /* #3CB062 — main */
+  --brand-600: 96 196 126;   /* #60C47E — active (lightens in dark) */
+  --brand-700: 138 215 159;  /* #8AD79F */
+  --brand-800: 186 235 197;  /* #BAEBC5 */
+  --brand-900: 240 255 243;  /* #F0FFF3 */
+  --brand-main: 60 176 98;   /* #3CB062 */
+}
+
 /* Illustration grey mode — THEME-INDEPENDENT. Add `illus-grey` to an illustration
  * itself (the `grey` prop does this) or to any ancestor for a global toggle, and
  * it renders greyscale whatever the brand theme is. Declared AFTER .theme-green
@@ -309,6 +379,22 @@
 }
 .theme-green .btn-brand-primary:not(:disabled) > svg {
   color: #fff !important;
+}
+/* Dark × green primary button — the hardcoded !important block above ignores
+ * the --brand-* flip, so it needs its own dark values: green dark ramp
+ * main / hover(darkens) / touch-active(lightens), mirroring how the blue
+ * solid's blue-500/400/600 resolve in dark. Text stays #fff (inherited from
+ * the block above), same tradeoff as Arco's dark primary buttons. */
+.dark.theme-green .btn-brand-primary:not(:disabled) {
+  background-color: #3cb062 !important;
+}
+.dark.theme-green .btn-brand-primary:not(:disabled):hover {
+  background-color: #2a9c54 !important;
+}
+@media not ((hover: hover) and (pointer: fine)) {
+  .dark.theme-green .btn-brand-primary:not(:disabled):active {
+    background-color: #60c47e !important;
+  }
 }
 
 /* Touch hit-area expansion (§5.5): invisible ≥44×44 hot zone on touch devices
