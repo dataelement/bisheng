@@ -2049,7 +2049,7 @@
   },
   "com_message_approval_title": "消息与审批",
   "com_message_approval_notifications": "通知",
-  "com_notifications_tab_unread": "未读消息",
+  "com_notifications_tab_unread": "未读",
   "com_notifications_tab_read": "已读消息",
   "com_notifications_target_unavailable": "内容已失效或暂无查看权限"
 }

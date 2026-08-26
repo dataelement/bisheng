@@ -157,9 +157,24 @@ export default function SettingsPage() {
             panel pt-4 px-3 pb-3, title pl-3 leading-8, 12px gap before the item groups.
             Group captions reuse the home sidebar's date-label style. */}
         <nav className="hidden w-[200px] shrink-0 flex-col border-r border-fill-2 px-3 pb-3 pt-4 md:flex">
-          <h1 className="flex items-center pl-3 text-base font-semibold leading-8 text-text-1">
-            {localize("com_nav_settings")}
-          </h1>
+          <div className="flex items-center gap-1 pl-2">
+            {/* Back to wherever the user came from; direct visits fall back to home. */}
+            <button
+              type="button"
+              aria-label={localize("com_ui_go_back")}
+              onClick={() => {
+                if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
+                else navigate("/");
+              }}
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2 hover:text-text-1"
+            >
+              <Outlined.ArrowLeft className="size-4" />
+            </button>
+            <span aria-hidden className="h-3.5 w-px shrink-0 bg-border-base" />
+            <h1 className="ml-1 text-base font-semibold leading-8 text-text-1">
+              {localize("com_nav_settings")}
+            </h1>
+          </div>
           <div className="flex flex-col pt-3">
             {SETTINGS_NAV_GROUPS.map((group, groupIdx) => (
               <div key={group.labelKey} className="flex flex-col gap-1">

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { MessageItem } from "~/api/message";
+import type { MessageItem, MessageReadState } from "~/api/message";
 import { getMessageListApi, markAllMessageReadApi, markMessageReadApi } from "~/api/message";
 import { NotificationSeverity } from "~/common";
 import { ExpandableSearchField } from "~/components/ui/ExpandableSearchField";
+import { SegmentedControl } from "~/components/ui/SegmentedControl";
 import { useLocalize } from "~/hooks";
 import { useToastContext } from "~/Providers";
 import { NotificationRow, type ApprovalCenterTarget } from "./NotificationRow";
@@ -37,6 +38,9 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
   const { i18n } = useTranslation();
   const { showToast } = useToastContext();
 
+  // 所有 / 未读 filter — 所有 is the mixed list (unread carries the red dot),
+  // 未读 narrows to what still needs a look. Both keep the 全部已读 action.
+  const [readState, setReadState] = useState<Extract<MessageReadState, "all" | "unread">>("all");
   const [notifications, setNotifications] = useState<MessageItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,7 +65,7 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
       try {
         const { data, total } = await getMessageListApi({
           tab: "notify",
-          read_state: "all",
+          read_state: readState,
           keyword: searchQuery || undefined,
           page: nextPage,
           page_size: PAGE_SIZE,
@@ -76,7 +80,7 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
         if (!append) setLoading(false);
       }
     },
-    [searchQuery],
+    [searchQuery, readState],
   );
 
   useEffect(() => {
@@ -97,7 +101,12 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
   const handleMarkRead = async (id: number) => {
     try {
       await markMessageReadApi([id]);
-      setNotifications((prev) => prev.map((n) => (Number(n.id) === id ? { ...n, is_read: true } : n)));
+      // 所有: flip the row in place; 未读: the row no longer belongs to the filter.
+      setNotifications((prev) =>
+        readState === "unread"
+          ? prev.filter((n) => Number(n.id) !== id)
+          : prev.map((n) => (Number(n.id) === id ? { ...n, is_read: true } : n)),
+      );
       onUnreadMaybeChanged?.();
     } catch {
       showToast({ message: localize("com_notifications_toast_operation_failed"), severity: NotificationSeverity.INFO });
@@ -125,6 +134,18 @@ export function NotificationPane({ open, onOpenApprovalCenter, onUnreadMaybeChan
     // reads as one block, same as the 账号信息 / 通用 sections.
     <div className="flex min-h-0 flex-1 flex-col bg-white">
       <div className="flex w-full items-center gap-3 pb-4">
+        {/* 所有 / 未读 segmented toggle — shared SegmentedControl, same control as the
+            channel page's 频道/广场 switcher. */}
+        <SegmentedControl
+          options={[
+            { value: "all", label: localize("com_ui_all_proper") },
+            { value: "unread", label: localize("com_notifications_tab_unread") },
+          ]}
+          value={readState}
+          onChange={setReadState}
+          // Extra 108px on top of the row's gap-3 — 120px total against the search field.
+          className="mr-[108px]"
+        />
         <ExpandableSearchField
           alwaysExpanded
           showClearButton

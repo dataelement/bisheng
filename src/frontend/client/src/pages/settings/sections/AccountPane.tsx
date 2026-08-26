@@ -1,6 +1,7 @@
 import { Outlined } from "bisheng-icons";
 import { useState } from "react";
 import { AccountSection } from "~/components/Settings/sections/AccountSection";
+import { Button } from "~/components/ui/Button";
 import { useAuthContext, useLocalize } from "~/hooks";
 
 /**
@@ -22,14 +23,10 @@ export function AccountPane() {
       />
 
       <section className="flex flex-col gap-4 border-t border-fill-2 pt-5">
-        <button
-          type="button"
-          onClick={() => logout()}
-          className="flex h-9 w-fit items-center gap-2 rounded-lg border border-[#f53f3f]/30 px-4 text-[14px] font-medium text-[#f53f3f] transition-colors hover:bg-red-50"
-        >
-          <Outlined.LogOut className="size-4" />
+        <Button color="danger" variant="filled" className="w-fit" onClick={() => logout()}>
+          <Outlined.LogOut />
           {localize("com_nav_log_out")}
-        </button>
+        </Button>
       </section>
     </div>
   );
