@@ -26,7 +26,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
   {
     labelKey: "com_settings_group_personal",
     items: [
-      { key: "account", labelKey: "com_account_info_title", icon: Outlined.PeopleRound },
+      { key: "account", labelKey: "com_account_info_title", icon: Outlined.PeopleEdit },
       { key: "general", labelKey: "com_settings_general", icon: Outlined.Setting },
     ],
   },
@@ -58,9 +58,10 @@ export function approvalTabOf(section: SettingsPageSection): ApprovalCenterTab |
 }
 
 /**
- * Where the avatar entry lands: whatever is actually waiting on the user wins,
- * otherwise the plain settings landing. Counts are already loaded at click time,
- * so this never flashes a wrong section.
+ * Where the DESKTOP avatar entry lands: whatever is actually waiting on the user
+ * wins, otherwise the plain settings landing. Counts are already loaded at click
+ * time, so this never flashes a wrong section. Mobile ignores this and always
+ * lands on the /settings menu screen.
  */
 export function settingsLandingPath(pendingApprovalCount: number, unreadCount: number): string {
   if (pendingApprovalCount > 0) return "/settings/my-tasks";

@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
-import { useAuthContext } from "~/hooks";
+import { useAuthContext, usePrefersMobileLayout } from "~/hooks";
 import { useNotificationCount } from "~/hooks/useNotificationCount";
 import { settingsLandingPath } from "~/pages/settings/settingsSections";
 import { cn } from "~/utils";
@@ -25,10 +25,13 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
 
     const { user } = useAuthContext();
     const { unreadCount, pendingApprovalCount } = useNotificationCount();
+    const isMobile = usePrefersMobileLayout();
     const displayName = user?.username || "admin";
 
     const openSettings = () => {
-        navigate(settingsLandingPath(pendingApprovalCount, unreadCount));
+        // Mobile always lands on the settings menu screen; picking a module is a
+        // second, explicit step there. Desktop keeps the "whatever is waiting wins" landing.
+        navigate(isMobile ? "/settings" : settingsLandingPath(pendingApprovalCount, unreadCount));
     };
 
     // Avatar edits on the settings page flow back through the user query cache.

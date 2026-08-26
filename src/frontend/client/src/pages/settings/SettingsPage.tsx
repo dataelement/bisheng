@@ -1,6 +1,6 @@
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 // store.mobileSystemMenuOpenState is a shared legacy atom (same usage as Subscription/knowledge pages).
 // eslint-disable-next-line no-restricted-imports
 import { useSetRecoilState } from "recoil";
@@ -35,6 +35,13 @@ function NavCountBadge({ count }: { count: number }) {
  * routed page (/settings/:section). One flat nav: approval + notifications first,
  * personal settings after the divider.
  *
+ * History model differs by layout:
+ * - Desktop: sidebar moves REPLACE the entry — settings holds exactly one entry, so
+ *   back always leaves settings to wherever the user came from.
+ * - Mobile: /settings (no section) is a menu landing; picking a module PUSHES, so
+ *   both the top back button and system back pop to the menu first, and backing out
+ *   of the menu leaves settings.
+ *
  * Ownership stays strict (same as the retired dialog): an approval that still needs
  * handling lives only under 我的审批-待我处理, and 通知 only informs — nothing here
  * decrements the pending count except a real decision.
@@ -42,6 +49,7 @@ function NavCountBadge({ count }: { count: number }) {
 export default function SettingsPage() {
   const localize = useLocalize();
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = usePrefersMobileLayout();
   const setSystemMenuOpen = useSetRecoilState(store.mobileSystemMenuOpenState);
   const { section: rawSection } = useParams<{ section?: string }>();
@@ -52,6 +60,13 @@ export default function SettingsPage() {
   /** Set when a notification jumps into an approval detail. */
   const [deepLink, setDeepLink] = useState<{ taskId?: number | null; instanceId?: number | null } | null>(null);
 
+  /** Mobile-only menu landing: /settings with no section segment. */
+  const isMenu = isMobile && rawSection == null;
+
+  /** True when this module entry was pushed from the mobile menu — back can pop. */
+  const cameFromMenu =
+    (location.state as { fromSettingsMenu?: boolean } | null)?.fromSettingsMenu === true;
+
   const section: SettingsPageSection = isSettingsPageSection(rawSection)
     ? rawSection
     : DEFAULT_SETTINGS_SECTION;
@@ -61,17 +76,39 @@ export default function SettingsPage() {
     void refreshCount();
   }, [section, refreshCount]);
 
-  if (!isSettingsPageSection(rawSection)) {
-    return <Navigate to={`/settings/${DEFAULT_SETTINGS_SECTION}`} replace />;
+  // Leaves settings entirely. A direct visit (no prior entry in this tab) falls back home.
+  const leaveSettings = () => {
+    if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
+    else navigate("/");
+  };
+
+  if (!isMenu && !isSettingsPageSection(rawSection)) {
+    // Desktop has no menu screen — /settings and unknown sections land on the default
+    // section. Mobile unknown sections land on the menu.
+    return <Navigate to={isMobile ? "/settings" : `/settings/${DEFAULT_SETTINGS_SECTION}`} replace />;
   }
 
-  // Sidebar/deep-link moves REPLACE the history entry: settings keeps exactly one
-  // entry, so 返回 (and the browser's own back) leads to whatever page the user was
-  // on before opening settings, never through the sections they browsed here.
+  // Desktop sidebar/deep-link moves REPLACE the history entry: settings keeps exactly
+  // one entry, so 返回 (and the browser's own back) leads to whatever page the user
+  // was on before opening settings, never through the sections they browsed here.
   const goToSection = (next: SettingsPageSection) => {
     setCompactView("list");
     setDeepLink(null);
     navigate(`/settings/${next}`, { replace: true });
+  };
+
+  // Mobile menu → module PUSHES (flagged), so back — button or gesture — pops to the menu.
+  const openSectionFromMenu = (next: SettingsPageSection) => {
+    setCompactView("list");
+    setDeepLink(null);
+    navigate(`/settings/${next}`, { state: { fromSettingsMenu: true } });
+  };
+
+  // Mobile module back → the menu. Pop when the menu pushed this entry; otherwise
+  // (deep link, external redirect) swap it for the menu so backing out still leaves.
+  const backToMenu = () => {
+    if (cameFromMenu && (window.history.state?.idx ?? 0) > 0) navigate(-1);
+    else navigate("/settings", { replace: true });
   };
 
   const approvalTab = approvalTabOf(section);
@@ -80,6 +117,63 @@ export default function SettingsPage() {
 
   const navBadge = (key: SettingsPageSection) =>
     key === "my-tasks" ? pendingApprovalCount : key === "notifications" ? unreadCount : 0;
+
+  // Mobile menu landing — the grouped nav as a full screen. Rows mirror the desktop
+  // sidebar's grouping but at touch size; the hamburger stays here (module screens
+  // swap it for a back button).
+  if (isMenu) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col bg-white">
+        <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
+          <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
+            <button
+              type="button"
+              aria-label={localize("com_nav_open_sidebar")}
+              onClick={() => setSystemMenuOpen(true)}
+              className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
+            >
+              <Outlined.SidebarMenu className="size-5" />
+            </button>
+            <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
+              {localize("com_nav_settings")}
+            </span>
+            <div className="min-w-0 flex-1" aria-hidden />
+          </div>
+        </div>
+        <div className="scrollbar-os min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-1">
+          {SETTINGS_NAV_GROUPS.map((group, groupIdx) => (
+            <div key={group.labelKey} className="flex flex-col gap-0.5">
+              <div
+                className={cn(
+                  "mb-1 pl-3 text-[13px] text-text-3",
+                  groupIdx === 0 ? "pt-2" : "pt-5",
+                )}
+              >
+                {localize(group.labelKey)}
+              </div>
+              {group.items.map((item) => {
+                const ItemIcon = item.icon;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className="flex h-11 items-center justify-between gap-3 rounded-lg px-3 text-left text-[15px] leading-[22px] text-text-1 transition-colors coarse-pointer:active:bg-fill-2"
+                    onClick={() => openSectionFromMenu(item.key)}
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <ItemIcon className="size-5 shrink-0" />
+                      <span className="truncate">{localize(item.labelKey)}</span>
+                    </span>
+                    <NavCountBadge count={navBadge(item.key)} />
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   // Every content pane carries the active section's name as its title (desktop only —
   // the mobile top bar + tabs already announce the section). Style and top spacing
@@ -117,8 +211,11 @@ export default function SettingsPage() {
           onOpenApprovalCenter={(approvalTarget) => {
             setDeepLink({ taskId: approvalTarget.taskId, instanceId: approvalTarget.instanceId });
             setCompactView("detail");
+            // Replace keeps the module depth flat; carrying state preserves whether
+            // the mobile menu pushed this entry (so its back button still pops).
             navigate(`/settings/${approvalTarget.tab === "my_requests" ? "my-requests" : "my-tasks"}`, {
               replace: true,
+              state: location.state,
             });
           }}
           onUnreadMaybeChanged={refreshCount}
@@ -137,20 +234,20 @@ export default function SettingsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
-      {/* Mobile top bar — hamburger reveals the system menu, same as channel/knowledge pages. */}
+      {/* Mobile module top bar — back leads to the settings menu, title names the module. */}
       {isMobile ? (
         <div className="sticky top-0 z-[50] w-full shrink-0 bg-white pt-[calc(env(safe-area-inset-top,0px)+8px)]">
           <div className="relative flex h-11 min-h-11 w-full flex-row items-center justify-between px-4">
             <button
               type="button"
-              aria-label={localize("com_nav_open_sidebar")}
-              onClick={() => setSystemMenuOpen(true)}
+              aria-label={localize("com_ui_go_back")}
+              onClick={backToMenu}
               className="inline-flex size-5 shrink-0 items-center justify-center text-text-1"
             >
-              <Outlined.SidebarMenu className="size-5" />
+              <Outlined.ArrowLeft className="size-5" />
             </button>
-            <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
-              {localize("com_nav_settings")}
+            <span className="pointer-events-none absolute left-1/2 max-w-[60%] -translate-x-1/2 truncate text-[16px] font-medium leading-6 text-text-1">
+              {sectionTitle}
             </span>
             <div className="min-w-0 flex-1" aria-hidden />
           </div>
@@ -164,15 +261,11 @@ export default function SettingsPage() {
         <nav className="hidden w-[200px] shrink-0 flex-col border-r border-fill-2 px-3 pb-3 pt-4 md:flex">
           <div className="flex items-center gap-1 pl-2">
             {/* Leaves settings entirely: section switches replace their history entry, so
-                one step back lands on the page the user opened settings from. A direct
-                visit (no prior entry in this tab) falls back to home. */}
+                one step back lands on the page the user opened settings from. */}
             <button
               type="button"
               aria-label={localize("com_ui_go_back")}
-              onClick={() => {
-                if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
-                else navigate("/");
-              }}
+              onClick={leaveSettings}
               className="flex size-6 shrink-0 items-center justify-center rounded-md text-text-2 transition-colors hover:bg-fill-2 hover:text-text-1"
             >
               <Outlined.ArrowLeft className="size-4" />
@@ -219,29 +312,6 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
-        </nav>
-
-        {/* Mobile: horizontal tabs (hidden while an approval detail is open full-screen) */}
-        <nav
-          className={cn(
-            "flex shrink-0 gap-1 overflow-x-auto border-b border-fill-2 px-4 pb-2 pt-1 md:hidden",
-            isApproval && compactView === "detail" && "hidden",
-          )}
-        >
-          {SETTINGS_NAV_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[13px] transition-colors",
-                section === item.key ? "bg-fill-2 font-medium text-text-1" : "text-text-3",
-              )}
-              onClick={() => goToSection(item.key)}
-            >
-              {localize(item.labelKey)}
-              <NavCountBadge count={navBadge(item.key)} />
-            </button>
-          ))}
         </nav>
 
         <div className="flex min-h-0 flex-1 flex-col">{content}</div>

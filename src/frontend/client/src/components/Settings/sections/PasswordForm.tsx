@@ -241,25 +241,28 @@ export function PasswordForm({ onCancel, onSuccess }: PasswordFormProps) {
                 onChange={setConfirmPassword}
             />
 
-            {/* Desktop: right-aligned compact actions; mobile: full-width pair */}
+            {/* Desktop: right-aligned compact actions; mobile: full-width pair.
+                Both stay medium (visual 32px) on touch — the Button's own hit
+                area covers the 44px target, per 组件-Button按钮.md §7. */}
             <div className="mt-1 flex items-center justify-end gap-4 touch-mobile:gap-3">
-                <button
-                    type="button"
-                    onClick={onCancel}
-                    className="h-8 rounded-md border border-[#e5e6eb] bg-white px-4 text-[14px] font-normal text-[#4e5969] transition-colors hover:bg-[#f7f8fa] hover:text-[#1d2129] touch-mobile:h-11 touch-mobile:flex-1 touch-mobile:rounded-lg touch-mobile:text-[15px]"
-                >
-                    {localize("cancel")}
-                </button>
                 <Button
                     type="button"
+                    color="default"
+                    variant="outlined"
+                    size="medium"
+                    onClick={onCancel}
+                    className="touch-mobile:flex-1"
+                >
+                    {localize("cancel")}
+                </Button>
+                <Button
+                    type="button"
+                    color="primary"
+                    variant="solid"
+                    size="medium"
                     onClick={handleSubmit}
                     disabled={isSubmitDisabled()}
-                    className={cn(
-                        "h-8 rounded-md px-4 text-[14px] font-normal text-white disabled:opacity-100 touch-mobile:h-11 touch-mobile:flex-1 touch-mobile:rounded-lg touch-mobile:text-[15px]",
-                        isSubmitDisabled()
-                            ? "cursor-not-allowed bg-blue-300 hover:bg-blue-300"
-                            : "bg-blue-600 hover:bg-blue-700 btn-brand-primary",
-                    )}
+                    className="touch-mobile:flex-1"
                 >
                     {localize("com_account_info_confirm_change")}
                 </Button>
