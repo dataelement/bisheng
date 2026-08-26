@@ -18,6 +18,9 @@ from bisheng.permission.domain.knowledge_library_permission_template import (
     default_permission_ids_for_relation as default_knowledge_library_permissions,
 )
 from bisheng.permission.domain.knowledge_space_permission_template import (
+    column_permission_ids_for_relation,
+)
+from bisheng.permission.domain.knowledge_space_permission_template import (
     default_permission_ids_for_relation as default_knowledge_space_permissions,
 )
 from bisheng.permission.domain.services.permission_service import PermissionService
@@ -80,6 +83,19 @@ class FineGrainedPermissionService:
             if permissions:
                 return set(permissions)
             if model.get("is_system"):
+                # IKBA8U: lineage walk must honor the column the binding was
+                # placed on. ``default_permission_ids_for_relation`` flattens
+                # every level-1 permission across all three columns, which
+                # lets a space-level ``viewer`` binding grant ``view_file``
+                # on every file in the space (the QA retrieval leak).
+                # ``column_permission_ids_for_relation`` returns the
+                # matching column only, with the transitive folder->file
+                # grant preserved so the F036 listing UI keeps working.
+                if object_type in {"knowledge_space", "folder", "knowledge_file"}:
+                    return column_permission_ids_for_relation(
+                        object_type,
+                        model.get("relation") or relation,
+                    )
                 return cls.default_permission_ids_for_relation(
                     object_type,
                     model.get("relation") or relation,
@@ -578,8 +594,7 @@ class FineGrainedPermissionService:
         bindings = [
             binding
             for binding in await _get_bindings()
-            if binding.get("resource_type") == object_type
-            and str(binding.get("resource_id")) == str(object_id)
+            if binding.get("resource_type") == object_type and str(binding.get("resource_id")) == str(object_id)
         ]
         user_subject_strings = await cls.get_current_user_subject_strings(login_user)
         binding_department_paths = await cls.get_binding_department_paths(bindings)
