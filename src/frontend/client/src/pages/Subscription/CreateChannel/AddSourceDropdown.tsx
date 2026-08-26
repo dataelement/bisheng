@@ -10,75 +10,10 @@ import { useSourceManager } from "../hooks/useSourceManager";
 import { useConfirm } from "~/Providers";
 import { ChannelRightSmallUpIcon } from "~/components/icons/channels";
 import { ListWebLinkIllustration, EmptyStateIllustration, CrawlingIllustration } from "~/components/illustrations";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
-// Imported as a module (not a /public URL) so the bundler resolves it against
-// the app's base path and fingerprints it — no env-var lookup at render time.
-import wechatCopyLinkGuide from "./wechat-copy-link-guide.png";
+import { WechatLinkHint } from "./WechatLinkHint";
 
 const MAX_SOURCES = 50;
 const MAX_NAME_DISPLAY = 20;
-
-/**
- * A sentence with one highlighted phrase that hovers open the "where do I copy
- * a WeChat article link from" tooltip. Used both after a link fails to resolve
- * and when a search turns up nothing — each passes its own copy, since the two
- * moments word the advice differently.
- *
- * The sentence is one i18n key with a `{{link}}` placeholder so translators keep
- * control of word order; it is split back apart on the localized phrase.
- */
-export function WechatLinkHint({
-    className,
-    sentenceKey,
-    labelKey,
-}: {
-    className?: string;
-    sentenceKey: string;
-    labelKey: string;
-}) {
-    const localize = useLocalize();
-    const linkLabel = localize(labelKey);
-    const sentence = localize(sentenceKey, { link: linkLabel });
-    const splitAt = sentence.indexOf(linkLabel);
-
-    const highlighted = (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                {/* mx-1 gives the highlighted phrase breathing room from the grey
-                    text on both sides; CJK copy has no natural word spacing. */}
-                <span className="mx-1 cursor-pointer text-blue-500 no-underline">{linkLabel}</span>
-            </TooltipTrigger>
-            <TooltipContent
-                side="top"
-                className="w-[280px] max-w-[280px] rounded-md border-none bg-white p-3 text-left text-xs leading-5 text-text-3 shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
-                arrowClassName="bg-white fill-white"
-            >
-                <img src={wechatCopyLinkGuide} alt="" className="mx-auto mb-2 w-[160px] rounded" />
-                {/* Size/colour live on the <p> itself, matching the sentence that
-                    owns the trigger — inheriting from the panel lets the panel's
-                    own text-* classes compete with them. */}
-                <p className="text-[12px] leading-5 text-[#999999]">
-                    {localize("com_subscription.wechat_link_copy_tip")}
-                </p>
-            </TooltipContent>
-        </Tooltip>
-    );
-
-    // Defensive: a translation that dropped the placeholder still renders readably.
-    if (splitAt === -1) {
-        return <p className={cn("text-[14px] font-normal text-[#999999]", className)}>{sentence}</p>;
-    }
-
-    return (
-        <p className={cn("text-[14px] font-normal leading-[22px] text-[#999999]", className)}>
-            {/* Trim the seam so `mx-1` is the only gap — languages that already
-                separate words with spaces would otherwise read as a double space. */}
-            {sentence.slice(0, splitAt).replace(/\s+$/, "")}
-            {highlighted}
-            {sentence.slice(splitAt + linkLabel.length).replace(/^\s+/, "")}
-        </p>
-    );
-}
 
 /** 网站行：文本只展示（无超链接样式与点击），跳转入口收口到末尾箭头按钮上；箭头仅 hover 时露出 */
 function WebsiteSourceLink({
@@ -322,12 +257,18 @@ export function AddSourceDropdown({
                 </div>
             )}
 
-            {/* 添加时：输入框+Tab+列表 同一整体，高 z-index 浮动，实时搜索 */}
+            {/* 添加时：输入框+Tab+列表 同一整体，浮在表单之上，实时搜索 */}
+            {/* Page-level dropdown, so it must stay UNDER everything that is meant
+                to cover it: portalled tooltips (z-50) and the modal layer
+                (Dialog z-100 / AlertDialog z-110). It used to sit at z-[220] —
+                a leftover from when this panel lived inside a drawer — which put
+                it above the confirm dialog and above its own "where to copy the
+                link" tooltip. Only the crawl-queue dropdown (z-30) outranks it. */}
             {expanded && (
                 <div
                     ref={expandedPanelRef}
                     className={cn(
-                        "absolute left-0 right-0 top-0 z-[220] flex flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]",
+                        "absolute left-0 right-0 top-0 z-20 flex flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white shadow-[0_4px_16px_rgba(0,0,0,0.12)]",
                         "h-[440px] min-w-[400px]",
                         isH5 && "h-[min(70dvh,560px)] min-w-0 max-w-full rounded-lg"
                     )}
@@ -406,9 +347,13 @@ export function AddSourceDropdown({
                                 </div>
                                 {/* One line: the sentence reads as a single
                                     instruction, so it is kept unwrapped and the
-                                    panel scrolls rather than breaking it. */}
+                                    panel scrolls rather than breaking it. Below
+                                    the H5 breakpoint it must wrap instead —
+                                    unwrapped it needs ~520px, which pushes the
+                                    tappable phrase off-screen behind a
+                                    horizontal scroll on a phone. */}
                                 <WechatLinkHint
-                                    className="max-w-full whitespace-nowrap"
+                                    className="max-w-full whitespace-nowrap max-[767px]:whitespace-normal"
                                     sentenceKey="com_subscription.no_source_collected"
                                     labelKey="com_subscription.wechat_article_link_label"
                                 />
@@ -454,7 +399,7 @@ export function AddSourceDropdown({
                                 </div>
                                 {mgr.wechatLinkFailed ? (
                                     <WechatLinkHint
-                                        className="mb-5 max-w-full whitespace-nowrap"
+                                        className="mb-5 max-w-full whitespace-nowrap max-[767px]:whitespace-normal"
                                         sentenceKey="com_subscription.wechat_link_retry_hint"
                                         labelKey="com_subscription.wechat_link_label"
                                     />
@@ -545,7 +490,7 @@ export function AddSourceDropdown({
                         )}
                     </div>
                     {mgr.viewMode === "list" && (
-                        <div className="relative z-[221] flex shrink-0 items-center justify-between border-t border-[#E5E6EB] bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
+                        <div className="relative z-10 flex shrink-0 items-center justify-between border-t border-[#E5E6EB] bg-white px-4 py-3 touch-mobile:flex-col touch-mobile:items-stretch touch-mobile:gap-2">
                             <span className="text-[12px] text-[#999999]">{localize("com_subscription.total_channel_sources")}{mgr.pendingSources.length}/{MAX_SOURCES}
                             </span>
                             <div className="flex gap-2 touch-mobile:w-full">

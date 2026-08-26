@@ -96,7 +96,7 @@ def register_f048_permission_runtime_context(
             seed_initial_permission_catalog,
         )
 
-        await seed_initial_permission_catalog(
+        seeded_fresh_catalog = await seed_initial_permission_catalog(
             client,
             store_id=str(readiness.get("store_id") or ""),
             model_id=str(readiness.get("model_id") or ""),
@@ -111,6 +111,10 @@ def register_f048_permission_runtime_context(
         ) as exc:
             await manager.mark_migration_required(reason=str(exc) or "permission_data_migration_required")
             raise
+        if seeded_fresh_catalog:
+            await _components(runtime).marker.wait_until_ready(
+                timeout_seconds=float(settings.openfga.recent_consistency_window_seconds) + 5.0,
+            )
         await bind_f048_process_runtime(
             manager,
             _components(runtime).facade,

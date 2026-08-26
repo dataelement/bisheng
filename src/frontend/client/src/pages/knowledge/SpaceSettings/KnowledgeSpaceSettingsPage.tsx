@@ -74,13 +74,15 @@ export function KnowledgeSpaceSettingsPage() {
   const creatorRow = useMemo<PermissionDraftRow | null>(() => {
     if (settings.mode !== "create" || !user) return null;
     const numericUserId = Number(user.id);
-    const ownerModel = relationModels.find((model) => model.level === 4);
+    const ownerModel =
+      relationModels.find((model) => model.id === "owner") ??
+      relationModels.find((model) => model.level === 4);
     return {
       subjectType: "user",
       subjectId: Number.isFinite(numericUserId) ? numericUserId : -1,
       subjectName: user.name || user.username || user.email,
       modelKey: ownerModel?.id ?? "owner",
-      modelName: localize("creator"),
+      modelName: ownerModel?.name ?? localize("com_permission.level_owner"),
       modelLevel: ownerModel?.level ?? 4,
       protected: true,
       editable: false,

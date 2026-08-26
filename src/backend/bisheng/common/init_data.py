@@ -30,6 +30,7 @@ async def init_default_data():
             from bisheng.core.context.tenant import _bypass_tenant_filter
 
             _bypass_token = _bypass_tenant_filter.set(True)
+            seeded_preset_tool_types = False
             async with get_async_db_session() as session:
                 db_role = await session.exec(select(Role).limit(1))
                 db_role = db_role.all()
@@ -151,6 +152,7 @@ async def init_default_data():
                 preset_tools_type = await session.exec(select(GptsToolsType).limit(1))
                 preset_tools_type = preset_tools_type.all()
                 if not preset_tools_type:
+                    seeded_preset_tool_types = True
                     preset_tools_type = []
                     json_items = json.loads(read_from_conf("../database/data/t_gpts_tools_type.json"))
                     for item in json_items:
@@ -176,6 +178,29 @@ async def init_default_data():
             await init_dashboard_datasets()
 
             _bypass_tenant_filter.reset(_bypass_token)
+            if settings.openfga.enabled:
+                if seeded_preset_tool_types:
+                    from bisheng.api.services.f048_system_resource_bootstrap import (
+                        reconcile_fresh_install_system_resources,
+                    )
+
+                    report = await reconcile_fresh_install_system_resources()
+                    logger.info(
+                        "Seeded F048 system-owned resource projections: current={} missing_before={}",
+                        report.current_count,
+                        report.missing_count,
+                    )
+                from bisheng.api.services.f048_preset_dashboard_bootstrap import (
+                    reconcile_preset_dashboard_permissions,
+                )
+
+                dashboard_report = await reconcile_preset_dashboard_permissions()
+                logger.info(
+                    "Reconciled preset dashboard owner projections: owner_ready={} current={} missing_before={}",
+                    dashboard_report.owner_ready,
+                    dashboard_report.current_count,
+                    dashboard_report.missing_count,
+                )
 
         except Exception as exc:
             # if the exception involves tables already existing

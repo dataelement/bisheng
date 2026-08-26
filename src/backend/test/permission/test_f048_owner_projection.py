@@ -471,6 +471,16 @@ async def test_system_owned_requires_code_allowlist_and_business_predicate() -> 
                 context_version="file-builtin-v0",
             ),
         ),
+        replace(
+            valid,
+            target=VerifiedPermissionTarget.from_business_service(
+                tenant_id=5,
+                resource_type="dashboard",
+                resource_id="10",
+                resource_version=0,
+                context_version="dashboard-10-v0",
+            ),
+        ),
     ):
         with pytest.raises(PermissionInvalidResourceError):
             await service.project_created(invalid)

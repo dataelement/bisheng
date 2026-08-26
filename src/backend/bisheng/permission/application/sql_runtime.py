@@ -235,10 +235,7 @@ class SqlPermissionScopeFence:
                 col(ResourcePermissionMode.resource_id).in_(resource_ids),
             )
             rows = list((await session.execute(statement)).scalars().all())
-        row_map = {
-            (int(row.tenant_id), str(row.resource_type), str(row.resource_id)): row
-            for row in rows
-        }
+        row_map = {(int(row.tenant_id), str(row.resource_type), str(row.resource_id)): row for row in rows}
         return tuple(
             self._decision(
                 target,
@@ -278,6 +275,19 @@ class RedisConsistencyMarker:
         if not ready:
             await self._ensure_recovery_started(redis=redis)
         return ready
+
+    async def wait_until_ready(self, *, timeout_seconds: float) -> None:
+        """Wait for crash-recovery fencing before the first fresh projection."""
+
+        if timeout_seconds <= 0:
+            raise ValueError("marker readiness timeout must be positive")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_seconds
+        while not await self.is_ready():
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise PermissionPublishNotReadyError(msg="Permission recent-change marker sentinel is not ready")
+            await asyncio.sleep(min(0.25, remaining))
 
     async def arm(self, plan: ProjectionPlan) -> None:
         redis = await get_redis_client()

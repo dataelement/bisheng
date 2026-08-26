@@ -125,7 +125,7 @@ export async function getRolesPageApi(params: {
 export async function createRoleV2Api(data: {
   role_name: string
   department_id?: number | null
-  quota_config?: Record<string, number>
+  quota_config?: Record<string, unknown>
   remark?: string
   menu_ids?: string[]
 }) {
@@ -137,7 +137,7 @@ export async function updateRoleV2Api(
   data: {
     role_name?: string
     department_id?: number | null
-    quota_config?: Record<string, number>
+    quota_config?: Record<string, unknown>
     remark?: string
     menu_ids?: string[]
   }

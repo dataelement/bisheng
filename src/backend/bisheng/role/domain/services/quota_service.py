@@ -28,7 +28,7 @@ from bisheng.user.domain.models.user_role import UserRoleDao
 logger = logging.getLogger(__name__)
 
 DEFAULT_ROLE_QUOTA: dict[str, int] = {
-    "knowledge_space": 30,
+    "knowledge_space": 50,
     "knowledge_space_file": 500,  # GB
     "knowledge_space_subscribe": 100,
     "channel": 10,
@@ -59,10 +59,10 @@ VALID_QUOTA_KEYS = set(DEFAULT_ROLE_QUOTA.keys()) | _TENANT_ONLY_QUOTA_KEYS | _R
 # Resource counting SQL templates — keyed by {col}=:{param} placeholder.
 # Shared between tenant-level and user-level counts.
 _RESOURCE_COUNT_TEMPLATES: dict[str, str] = {
-    # v2.5.0 F005 KI-01 fix (2026-04-19): removed bogus `AND status != -1`
-    # — knowledge table has no `status` column (has `state` + `is_released`)
-    # and delete_knowledge uses hard DELETE, so a plain COUNT(*) is correct.
-    "knowledge_space": "SELECT COUNT(*) FROM knowledge WHERE {col}=:{param}",
+    # `knowledge_space` is NOT here — it needs `type = 3` plus a department-space
+    # exclusion, and `type` is a reserved word on DM8 that raw text() cannot quote
+    # portably. It is dispatched to `_count_knowledge_space` (ORM) from
+    # `_count_resource` instead.
     # Storage usage = every file whose source contributed to tenant minio
     # occupancy (knowledge-space manual uploads + channel article imports).
     # No status filter: a parse failure / timeout still leaves an object on
@@ -585,6 +585,8 @@ class QuotaService:
             return await cls._count_user_count(col, val)
         if resource_type == "model_tokens_monthly":
             return await cls._count_tokens_monthly(col, val)
+        if resource_type == "knowledge_space":
+            return await cls._count_knowledge_space(col, val)
 
         from sqlalchemy import text
 
@@ -617,6 +619,78 @@ class QuotaService:
         except Exception as e:
             logger.warning("Failed to count resource %s for %s=%s: %s", resource_type, col, val, e)
             return 0
+
+    @classmethod
+    async def _count_knowledge_space(cls, col: str, val) -> int:
+        """Count Knowledge Spaces (``knowledge.type = 3``) for a user or tenant.
+
+        Deliberately not a raw-SQL template like the other resources: the filter
+        needs ``type`` — a reserved word on DM8 that ``text()`` cannot quote
+        portably — plus a NOT IN against ``department_knowledge_space``. The ORM
+        quotes per dialect.
+
+        Department spaces are excluded from ``user_id`` counts only. Batch
+        department-space creation rewrites ``user_id`` to the operator, so
+        counting them would burn an admin's personal quota — that is the whole
+        reason ``exclude_department_spaces`` exists. ``tenant_id`` counts keep
+        them: they do occupy tenant capacity.
+
+        ``bypass_tenant_filter()`` is required, not defensive. For a single-table
+        ``select(func.count(...))`` the tenant listener misses its
+        ``column_descriptions`` path (a count has no ``entity`` key) but matches
+        via ``get_final_froms()`` on the bare ``knowledge`` table, and would AND
+        the *caller's* tenant onto the explicit ``tenant_id == val`` below —
+        making Root aggregation over child tenants (``_aggregate_root_usage``)
+        return 0, a silent fail-open. Isolation here comes from the explicit
+        ``tenant_id`` / ``user_id`` predicate, which is stricter than the
+        listener's IN-list anyway.
+
+        Note this is a *global* per-user count (no tenant predicate for
+        ``user_id``), matching the raw-SQL behaviour of the other eight resource
+        types and keeping the function usable outside a request context. The
+        domain-side gate in ``KnowledgeSpaceService`` counts via
+        ``KnowledgeDao.async_count_spaces_by_user`` instead, which the ORM
+        listener does scope to the current tenant.
+        """
+        from bisheng.core.context.tenant import bypass_tenant_filter
+        from bisheng.core.database import get_async_db_session
+
+        stmt = cls._knowledge_space_count_stmt(col, val)
+        if stmt is None:
+            return 0
+
+        try:
+            with bypass_tenant_filter():
+                async with get_async_db_session() as session:
+                    return (await session.execute(stmt)).scalar() or 0
+        except Exception as e:
+            logger.warning("Failed to count knowledge_space for %s=%s: %s", col, val, e)
+            return 0
+
+    @staticmethod
+    def _knowledge_space_count_stmt(col: str, val):
+        """Build the COUNT statement for `_count_knowledge_space`.
+
+        Split out so tests can compile and assert the predicates (type filter,
+        department exclusion, strict tenant equality per AC-10) without a DB.
+        Returns ``None`` for an unsupported column.
+        """
+        from sqlalchemy import func, select
+
+        from bisheng.knowledge.domain.models.knowledge import (
+            Knowledge,
+            KnowledgeDao,
+            KnowledgeTypeEnum,
+        )
+
+        stmt = select(func.count(Knowledge.id)).where(Knowledge.type == KnowledgeTypeEnum.SPACE.value)
+        if col == "user_id":
+            # Reuse the DAO helper so this stays the same predicate the domain
+            # gate uses — two definitions of "department space" would drift.
+            return KnowledgeDao._exclude_department_spaces(stmt.where(Knowledge.user_id == val))
+        if col == "tenant_id":
+            return stmt.where(Knowledge.tenant_id == val)
+        return None
 
     @classmethod
     async def _count_user_count(cls, col: str, val) -> int:
@@ -695,10 +769,14 @@ class QuotaService:
         """Strict-equality tenant count — prevents IN-list over-counting (INV-T6).
 
         Wraps ``get_tenant_resource_count`` in ``strict_tenant_filter()`` so Root's
-        shared resources don't inflate Child usage (AC-02, AC-09). The underlying
-        ``_count_resource`` uses raw ``text()`` SQL with explicit ``WHERE tenant_id=:id``,
-        so the current ORM event listener does not rewrite the query — but we keep
-        this defensive wrapper for semantic clarity and future ORM migration.
+        shared resources don't inflate Child usage (AC-02, AC-09). For the
+        template-driven resources the underlying ``_count_resource`` uses raw
+        ``text()`` SQL with explicit ``WHERE tenant_id=:id``, so the ORM event
+        listener does not rewrite the query — the wrapper is kept for semantic
+        clarity. ``knowledge_space`` has since moved to the ORM
+        (``_count_knowledge_space``) and bypasses the listener outright; there the
+        strict-equality invariant is carried structurally by its explicit
+        ``tenant_id ==`` predicate rather than by this context manager.
         """
         from bisheng.core.context.tenant import strict_tenant_filter
 

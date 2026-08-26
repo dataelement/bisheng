@@ -6,10 +6,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import Protocol
 
-from bisheng.common.errcode.permission import (
-    InvalidCatalogActionError,
-    PermissionInvalidResourceError,
-)
+from bisheng.common.errcode.permission import PermissionInvalidResourceError
 from bisheng.permission.domain.schemas import VerifiedPermissionTarget
 from bisheng.permission.domain.services.permission_action_service import (
     PermissionActor,
@@ -17,9 +14,8 @@ from bisheng.permission.domain.services.permission_action_service import (
 from bisheng.telemetry_search.domain.models.dashboard_dao import DashboardDao
 
 CUSTOM_DASHBOARD_TYPE = "custom"
-SYSTEM_DASHBOARD_TYPES = frozenset({"preset_oss", "preset_commercial"})
+PRESET_DASHBOARD_TYPES = frozenset({"preset_oss", "preset_commercial"})
 VALID_DASHBOARD_STATUSES = frozenset({"draft", "published"})
-SYSTEM_DASHBOARD_ACTIONS = frozenset({"visible"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,11 +27,6 @@ class DashboardPermissionRecord:
     owner_user_id: int | None
     permission_version: int
     context_version: str
-    system_allowlisted: bool = False
-
-    @property
-    def system_owned(self) -> bool:
-        return self.dashboard_type in SYSTEM_DASHBOARD_TYPES
 
 
 class DashboardPermissionLoader(Protocol):
@@ -71,7 +62,6 @@ class DashboardDaoPermissionLoader:
         context_version = sha256(
             (f"{permission_context}|{row.update_time.isoformat() if row.update_time else '0'}").encode()
         ).hexdigest()[:64]
-        system_owned = row.dashboard_type in SYSTEM_DASHBOARD_TYPES
         return DashboardPermissionRecord(
             tenant_id=tenant_id,
             resource_id=str(row.id),
@@ -80,7 +70,6 @@ class DashboardDaoPermissionLoader:
             owner_user_id=row.user_id,
             permission_version=version,
             context_version=context_version,
-            system_allowlisted=system_owned and row.user_id is None,
         )
 
 
@@ -100,8 +89,6 @@ class DashboardPermissionPort(Protocol):
     ) -> tuple[bool, ...]: ...
 
     async def authorize_created(self, **kwargs): ...
-
-    async def authorize_system_owned(self, **kwargs): ...
 
     async def project_copy(self, **kwargs): ...
 
@@ -133,8 +120,9 @@ class F048DashboardPermissionAdapter:
         actor: PermissionActor,
         action: str,
     ) -> VerifiedPermissionTarget:
+        del action
         record = await self._loader.load_permission_record(resource_id)
-        return self._target(record, resource_id, actor, action=action)
+        return self._target(record, resource_id, actor)
 
     async def check_action(
         self,
@@ -156,7 +144,7 @@ class F048DashboardPermissionAdapter:
         records: tuple[DashboardPermissionRecord, ...],
         actor: PermissionActor,
     ) -> tuple[bool, ...]:
-        targets = tuple(self._record_target(record, actor, action="visible") for record in records)
+        targets = tuple(self._record_target(record, actor) for record in records)
         return await self._permission.batch_check_actions(
             actor,
             targets,
@@ -170,12 +158,6 @@ class F048DashboardPermissionAdapter:
         actor: PermissionActor,
     ):
         target = self._record_target(record, actor)
-        if record.system_owned:
-            return await self._permission.authorize_system_owned(
-                actor=actor,
-                target=target,
-                action_codes=tuple(sorted(SYSTEM_DASHBOARD_ACTIONS)),
-            )
         return await self._permission.authorize_created(
             actor=actor,
             target=target,
@@ -216,14 +198,11 @@ class F048DashboardPermissionAdapter:
         self,
         record: DashboardPermissionRecord,
         actor: PermissionActor,
-        *,
-        action: str | None = None,
     ) -> VerifiedPermissionTarget:
         return self._target(
             record,
             record.resource_id,
             actor,
-            action=action,
         )
 
     @staticmethod
@@ -231,21 +210,17 @@ class F048DashboardPermissionAdapter:
         record: DashboardPermissionRecord | None,
         resource_id: str,
         actor: PermissionActor,
-        *,
-        action: str | None = None,
     ) -> VerifiedPermissionTarget:
         if (
             record is None
             or record.resource_id != resource_id
-            or record.dashboard_type not in {CUSTOM_DASHBOARD_TYPE, *SYSTEM_DASHBOARD_TYPES}
+            or record.dashboard_type not in {CUSTOM_DASHBOARD_TYPE, *PRESET_DASHBOARD_TYPES}
             or record.status not in VALID_DASHBOARD_STATUSES
             or (record.tenant_id != actor.current_tenant_id and not actor.super_admin)
-            or (record.system_owned and not record.system_allowlisted)
-            or (not record.system_owned and (record.owner_user_id is None or record.owner_user_id <= 0))
+            or record.owner_user_id is None
+            or record.owner_user_id <= 0
         ):
             raise PermissionInvalidResourceError()
-        if record.system_owned and action is not None and action not in SYSTEM_DASHBOARD_ACTIONS:
-            raise InvalidCatalogActionError(msg=f"Preset dashboard does not support action: {action}")
         return VerifiedPermissionTarget.from_business_service(
             tenant_id=record.tenant_id,
             resource_type="dashboard",

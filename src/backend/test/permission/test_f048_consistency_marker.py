@@ -145,6 +145,18 @@ async def test_missing_sentinel_forces_higher_and_rejects_writes_until_recovered
 
 
 @pytest.mark.asyncio
+async def test_wait_until_ready_observes_sentinel_recovery(redis: _Redis) -> None:
+    marker = RedisConsistencyMarker(
+        window_seconds=1,
+        recovery_wait_seconds=0,
+    )
+
+    await marker.wait_until_ready(timeout_seconds=1)
+
+    assert redis.values[RECENT_MARKER_SENTINEL] == "ready"
+
+
+@pytest.mark.asyncio
 async def test_department_marker_forces_higher_for_the_entire_tenant(
     redis: _Redis,
 ) -> None:
