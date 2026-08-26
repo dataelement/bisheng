@@ -189,6 +189,30 @@ def _compile_update_time_default_sqlite(element, compiler, **kw):
     return "CURRENT_TIMESTAMP"
 
 
+def is_update_time_server_default(server_default) -> bool:
+    """True if ``server_default`` is the shared update_time default marker.
+
+    A SQLAlchemy ``Column.server_default`` is a ``DefaultClause`` whose
+    ``.arg`` holds the original clause we passed in (the ``FunctionElement``
+    marker, ``text('CURRENT_TIMESTAMP')``, ``func.now()``, ``None``, …)::
+
+        is_update_time_server_default(table.c.update_time.server_default)
+
+    Returns True only for the dialect-aware marker. Anything else —
+    ``text('CURRENT_TIMESTAMP')``, ``func.now()``, a string literal,
+    ``None`` — returns False. Tolerant of the marker being passed either
+    directly (test path) or wrapped in a ``DefaultClause`` (live
+    ``table.c.<col>.server_default`` path) by reading ``.arg`` first and
+    falling back to the value itself if no ``.arg`` is present.
+    """
+    if server_default is None:
+        return False
+    arg = getattr(server_default, "arg", None)
+    if arg is not None:
+        return isinstance(arg, _UpdateTimeServerDefault)
+    return isinstance(server_default, _UpdateTimeServerDefault)
+
+
 # Singleton — import and use directly in sa_column definitions
 UPDATE_TIME_SERVER_DEFAULT = _UpdateTimeServerDefault()
 

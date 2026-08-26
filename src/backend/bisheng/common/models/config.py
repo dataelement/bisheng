@@ -6,7 +6,10 @@ from sqlmodel import Field, select
 
 from bisheng.common.models.base import SQLModelSerializable
 from bisheng.core.database import get_async_db_session, get_sync_db_session
-from bisheng.core.database.dialect_helpers import LargeText
+from bisheng.core.database.dialect_helpers import (
+    UPDATE_TIME_SERVER_DEFAULT,
+    LargeText,
+)
 
 
 class ConfigKeyEnum(Enum):
@@ -32,11 +35,18 @@ class ConfigBase(SQLModelSerializable):
     create_time: datetime | None = Field(
         default=None, sa_column=Column(DateTime, nullable=False, index=True, server_default=text("CURRENT_TIMESTAMP"))
     )
+    # F040 reads ``update_time`` on every authorization-related read as the
+    # version key for the relation-roster process-local cache
+    # (``relation_roster_cache.get_or_build``). It MUST advance on every
+    # config write, otherwise newly saved ReBAC bindings stay invisible to
+    # the reader for as long as the process lives. The marker is the same
+    # one every other ``update_time`` column uses — it compiles to
+    # ``DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`` on MySQL and
+    # ``DEFAULT CURRENT_TIMESTAMP`` on DaMeng (where boot-time triggers
+    # supply ON UPDATE). See ``dialect_helpers.UPDATE_TIME_SERVER_DEFAULT``.
     update_time: datetime | None = Field(
         default=None,
-        sa_column=Column(
-            DateTime, nullable=False, server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")
-        ),
+        sa_column=Column(DateTime, nullable=False, server_default=UPDATE_TIME_SERVER_DEFAULT),
     )
 
 
@@ -89,8 +99,11 @@ class ConfigDao(ConfigBase):
         """F040: lightweight version read — fetch ONLY ``update_time`` (not the
         possibly-large ``value`` blob) for use as a cache key. Returns ``None`` when
         the row is absent so callers fail-safe to a live rebuild without caching.
-        ``update_time`` carries ``onupdate=CURRENT_TIMESTAMP`` so it advances on every
-        config write, making it a safe version for read-side cache invalidation."""
+        ``update_time`` carries ``UPDATE_TIME_SERVER_DEFAULT`` (Dialect-aware
+        ``DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`` on MySQL, plain
+        ``DEFAULT CURRENT_TIMESTAMP`` on DaMeng where boot-time triggers supply
+        ON UPDATE), so it advances on every config write, making it a safe version
+        for read-side cache invalidation."""
         async with get_async_db_session() as session:
             statement = select(Config.update_time).where(Config.key == key)
             result = await session.exec(statement)
