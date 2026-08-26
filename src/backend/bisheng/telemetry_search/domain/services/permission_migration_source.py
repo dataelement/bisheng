@@ -23,8 +23,6 @@ from bisheng.telemetry_search.domain.models.dashboard import (
     DashboardType,
 )
 
-SYSTEM_DASHBOARD_TYPES = frozenset({"preset_oss", "preset_commercial"})
-
 
 @dataclass(frozen=True, slots=True)
 class DashboardMigrationRow:
@@ -33,7 +31,6 @@ class DashboardMigrationRow:
     status: str
     owner_user_id: int | None
     dashboard_type: str
-    system_allowlisted: bool
     source_version: str = "1"
 
 
@@ -131,14 +128,6 @@ class SqlDashboardMigrationRepository:
                 status=str(row.status).upper(),
                 owner_user_id=row.user_id,
                 dashboard_type=str(row.dashboard_type),
-                system_allowlisted=(
-                    row.dashboard_type
-                    in {
-                        DashboardType.PRESET_OSS.value,
-                        DashboardType.PRESET_COMMERCIAL.value,
-                    }
-                    and row.user_id is None
-                ),
                 source_version=(row.update_time.isoformat() if row.update_time is not None else "0"),
             )
             for row in selected
@@ -167,8 +156,6 @@ class DashboardPermissionMigrationSource:
         )
         items: list[PermissionMigrationResourceDTO] = []
         for row in rows:
-            preset = row.dashboard_type in SYSTEM_DASHBOARD_TYPES
-            system_owned = preset and row.system_allowlisted
             items.append(
                 PermissionMigrationResourceDTO(
                     tenant_id=row.tenant_id,
@@ -176,9 +163,9 @@ class DashboardPermissionMigrationSource:
                     resource_id=row.resource_id,
                     status=row.status,
                     owner_user_id=row.owner_user_id,
-                    ownership_kind="SYSTEM" if system_owned else "USER",
+                    ownership_kind="USER",
                     source_locator=f"dashboard:{row.resource_id}",
-                    system_allowlisted=system_owned,
+                    system_allowlisted=False,
                     source_version=row.source_version,
                 )
             )

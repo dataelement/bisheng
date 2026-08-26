@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 from typing import Any
 
 from fastapi import BackgroundTasks, Request
@@ -39,9 +40,16 @@ from bisheng.knowledge.domain.services.knowledge_permission_service import Knowl
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.llm.domain.schemas import WorkbenchModelConfig
 from bisheng.llm.domain.services import LLMService
+from bisheng.permission.application.access import get_f048_runtime
+from bisheng.permission.application.system_resource_reconcile import (
+    SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+    SystemOwnedResourceSpec,
+    reconcile_system_owned_resources,
+)
 from bisheng.tool.domain.const import ToolPresetType
 from bisheng.tool.domain.langchain.knowledge import KnowledgeRetrieverTool
 from bisheng.tool.domain.models.gpts_tools import GptsTools, GptsToolsDao, GptsToolsType
+from bisheng.tool.domain.services.f048_tool_permission import SYSTEM_TOOL_ACTIONS
 
 from ..models import TenantWorkstationConfigDao
 
@@ -583,11 +591,7 @@ class WorkStationService(BaseService):
             resource_ids=[group["id"] for group in identified],
             actions=("use",),
         )
-        return [
-            group
-            for group in identified
-            if "use" in action_map.get(str(group["id"]), frozenset())
-        ]
+        return [group for group in identified if "use" in action_map.get(str(group["id"]), frozenset())]
 
     @classmethod
     async def _aproject_daily_config_for_current_tenant(
@@ -909,6 +913,7 @@ class WorkStationService(BaseService):
             "created_types": 0,
             "created_tools": 0,
             "skipped_tools": 0,
+            "projected_types": 0,
         }
         if tenant_id == DEFAULT_TENANT_ID:
             return result
@@ -1004,6 +1009,29 @@ class WorkStationService(BaseService):
                 session.add(new_tool)
                 result["created_tools"] += 1
             await session.commit()
+            system_types = tuple(child_type_by_name.values())
+        if not settings.openfga.enabled:
+            return result
+        invalid_types = tuple(row for row in system_types if row.id is None or row.user_id is not None)
+        if invalid_types:
+            raise RuntimeError("copied preset tool category does not satisfy the system-owned predicate")
+        specs = tuple(
+            SystemOwnedResourceSpec(
+                tenant_id=tenant_id,
+                resource_type="tool",
+                resource_id=str(row.id),
+                action_codes=tuple(sorted(SYSTEM_TOOL_ACTIONS)),
+                context_version=sha256(f"tool|{row.id}|{tenant_id}|{row.user_id}|{row.is_preset}".encode()).hexdigest(),
+            )
+            for row in system_types
+        )
+        report = await reconcile_system_owned_resources(
+            await get_f048_runtime(),
+            specs,
+            apply=True,
+            operator_id=SYSTEM_RESOURCE_BOOTSTRAP_OPERATOR_ID,
+        )
+        result["projected_types"] = report.current_count
         return result
 
     @classmethod

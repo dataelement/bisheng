@@ -9,9 +9,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from bisheng.common.dependencies.user_deps import UserPayload
-from bisheng.common.errcode.http_error import NotFoundError
+from bisheng.common.errcode.http_error import NotFoundError, UnAuthorizedError
 from bisheng.common.errcode.permission import (
-    InvalidCatalogActionError,
     PermissionFGAUnavailableError,
     PermissionInvalidResourceError,
 )
@@ -62,10 +61,6 @@ class _Permission:
         self.calls.append(("create", kwargs))
         return {"status": "FINALIZED"}
 
-    async def authorize_system_owned(self, **kwargs):
-        self.calls.append(("system", kwargs))
-        return {"status": "FINALIZED"}
-
     async def project_copy(self, **kwargs):
         self.calls.append(("copy", kwargs))
         return {"status": "FINALIZED"}
@@ -80,17 +75,16 @@ def _record(
     tenant_id: int = 5,
     dashboard_type: str = "custom",
     status: str = "draft",
-    system_allowlisted: bool = False,
+    owner_user_id: int | None = 7,
 ) -> DashboardPermissionRecord:
     return DashboardPermissionRecord(
         tenant_id=tenant_id,
         resource_id="41",
         dashboard_type=dashboard_type,
         status=status,
-        owner_user_id=None if dashboard_type != "custom" else 7,
+        owner_user_id=owner_user_id,
         permission_version=4,
         context_version="dashboard-41-v4",
-        system_allowlisted=system_allowlisted,
     )
 
 
@@ -193,30 +187,30 @@ async def test_dashboard_copy_preserves_custom_grants_and_regenerates_owner() ->
 
 
 @pytest.mark.asyncio
-async def test_preset_dashboard_requires_predicate_and_is_visible_only() -> None:
+async def test_preset_dashboard_is_an_ordinary_owned_resource() -> None:
     preset = _record(
         dashboard_type="preset_commercial",
         status="published",
-        system_allowlisted=True,
     )
+    permission = _Permission()
     adapter = F048DashboardPermissionAdapter(
         loader=_Loader((preset,)),
-        permission=_Permission(),
+        permission=permission,
     )
 
-    assert await adapter.check_action(
-        resource_id="41",
-        actor=_actor(),
-        action="visible",
-    )
-    with pytest.raises(InvalidCatalogActionError):
-        await adapter.check_action(
+    for action in ("visible", "edit", "delete", "manage_permission"):
+        assert await adapter.check_action(
             resource_id="41",
             actor=_actor(),
-            action="edit",
+            action=action,
         )
+    await adapter.authorize_created(record=preset, actor=_actor())
+    create = permission.calls[-1][1]
+    assert create["owner_user_id"] == 7
+    assert create["mode"] == "CUSTOM"
+    assert create["protected"] is True
 
-    blocked = replace(preset, system_allowlisted=False)
+    blocked = replace(preset, owner_user_id=None)
     with pytest.raises(PermissionInvalidResourceError):
         await F048DashboardPermissionAdapter(
             loader=_Loader((blocked,)),
@@ -226,6 +220,38 @@ async def test_preset_dashboard_requires_predicate_and_is_visible_only() -> None
             actor=_actor(),
             action="visible",
         )
+
+
+async def test_preset_oss_delete_remains_blocked_by_dashboard_business_rule(
+    monkeypatch,
+) -> None:
+    dashboard = Dashboard(
+        id=10,
+        tenant_id=1,
+        user_id=1,
+        title="Preset",
+        dashboard_type=DashboardType.PRESET_OSS.value,
+        status=DashboardStatus.PUBLISHED.value,
+    )
+    monkeypatch.setattr(
+        "bisheng.telemetry_search.domain.services.dashboard.DashboardDao.get_one",
+        AsyncMock(return_value=dashboard),
+    )
+    service = DashboardService(
+        login_user=UserPayload(
+            user_id=1,
+            tenant_id=1,
+            user_name="admin",
+            user_role=[],
+            is_global_super=True,
+        )
+    )
+    service._require_action = AsyncMock()
+
+    with pytest.raises(UnAuthorizedError):
+        await service.delete_dashboard(10)
+
+    service._require_action.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -277,7 +303,7 @@ async def test_copy_preset_creates_custom_dashboard_owned_by_copier(
     source = Dashboard(
         id=41,
         tenant_id=5,
-        user_id=None,
+        user_id=7,
         title="Preset",
         dashboard_type=DashboardType.PRESET_COMMERCIAL.value,
         status=DashboardStatus.PUBLISHED.value,
@@ -292,7 +318,6 @@ async def test_copy_preset_creates_custom_dashboard_owned_by_copier(
     source_permission = _record(
         dashboard_type=DashboardType.PRESET_COMMERCIAL.value,
         status=DashboardStatus.PUBLISHED.value,
-        system_allowlisted=True,
     )
     adapter = SimpleNamespace(
         load_permission_record=AsyncMock(return_value=source_permission),
@@ -321,6 +346,10 @@ async def test_copy_preset_creates_custom_dashboard_owned_by_copier(
     monkeypatch.setattr(
         "bisheng.telemetry_search.domain.services.dashboard.get_f048_resource_adapter",
         AsyncMock(return_value=adapter),
+    )
+    monkeypatch.setattr(
+        "bisheng.telemetry_search.domain.services.dashboard.resolve_permission_actor",
+        AsyncMock(return_value=_actor(tenant_id=6)),
     )
     service = DashboardService(
         login_user=UserPayload(

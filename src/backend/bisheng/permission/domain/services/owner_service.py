@@ -36,7 +36,7 @@ from bisheng.permission.domain.services.visibility_projection_service import (
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_OWNED_RESOURCE_ALLOWLIST = frozenset({"workflow", "assistant", "tool", "dashboard"})
+SYSTEM_OWNED_RESOURCE_ALLOWLIST = frozenset({"workflow", "assistant", "tool"})
 
 
 @dataclass(frozen=True, slots=True)
