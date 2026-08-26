@@ -125,24 +125,6 @@ const baseConfig = {
   basename: __APP_ENV__.BASE_URL
 }
 
-// DEV-ONLY component gallery for the UI unification effort (docs-ui-refactor/).
-// `import.meta.env.DEV` is statically false in production builds, so both the lazy
-// import and the route below are tree-shaken out — the gallery never ships to users.
-const GalleryApp = import.meta.env.DEV
-  ? lazy(() => import('~/pages/_gallery/GalleryApp'))
-  : null;
-
-const devGalleryRoutes = import.meta.env.DEV && GalleryApp
-  ? [{
-      path: '/gallery',
-      element: (
-        <Suspense fallback={null}>
-          <GalleryApp />
-        </Suspense>
-      ),
-    }]
-  : [];
-
 export const router = createBrowserRouter([
   {
     element: <AuthLayout />,
@@ -288,7 +270,6 @@ export const router = createBrowserRouter([
   { path: 'chat/flow/:flowId', element: suspended(<StandaloneChatPage mode="guest" flowType="workflow" />), errorElement: <RouteErrorBoundary /> },
   { path: 'chat/assistant/:flowId', element: suspended(<StandaloneChatPage mode="guest" flowType="assistant" />), errorElement: <RouteErrorBoundary /> },
   { path: '/html', element: suspended(<WebView />) },
-  ...devGalleryRoutes,
   { path: '/__dev/login', element: suspended(<DevLogin />) },
   { path: '/404', element: <Page404 /> },
   { path: '/403', element: <Page403 /> },
