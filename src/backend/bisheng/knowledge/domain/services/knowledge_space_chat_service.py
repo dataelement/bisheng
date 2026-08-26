@@ -550,7 +550,7 @@ class KnowledgeSpaceChatService:
                 for d in docs
                 if d.metadata and d.metadata.get("document_id") is not None
             }
-            permitted = await visibility.post_filter_visible_files(space.id, unique_file_ids)
+            permitted = await visibility.post_filter_retrievable_files(space.id, unique_file_ids)
             survivors = [d for d in docs if int(d.metadata.get("document_id", -1)) in permitted]
             dropped = len(docs) - len(survivors)
 

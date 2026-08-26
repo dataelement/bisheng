@@ -1175,18 +1175,16 @@ class WorkStationService(BaseService):
 
         Returns the docs unchanged when:
         - the input is empty,
-        - the login_user is admin (short-circuit), or
         - the kb belongs to the org bucket (AC-14, legacy knowledge_library).
 
         Otherwise resolves the unique document_id set via
-        ``KnowledgeFileVisibilityService.post_filter_visible_files`` and
-        retains only chunks whose file_id survived.
+        ``KnowledgeFileVisibilityService.post_filter_retrievable_files`` and
+        retains only chunks whose file_id is both visible and the current
+        primary version.
         """
         if not docs:
             return []
         if not is_space_bucket:
-            return docs
-        if login_user.is_admin():
             return docs
 
         from bisheng.knowledge.domain.services.knowledge_file_visibility_service import (
@@ -1206,7 +1204,7 @@ class WorkStationService(BaseService):
                 continue
         if not unique_file_ids:
             return []
-        permitted = await visibility.post_filter_visible_files(int(kb_id), unique_file_ids)
+        permitted = await visibility.post_filter_retrievable_files(int(kb_id), unique_file_ids)
         return [d for d in docs if int((getattr(d, "metadata", {}) or {}).get("document_id", -1)) in permitted]
 
     @classmethod
