@@ -181,6 +181,25 @@ class TestCreationGate:
                 await service.create_knowledge_space(name="Space", skip_user_limit=True)
         gate.assert_not_awaited()
 
+    def test_create_endpoint_has_no_quota_decorator(self):
+        """The gate must stay in the service layer so the domain code survives.
+
+        `@require_quota` runs before the handler and raises the generic 19402
+        ("当前角色配额已用尽"), which hides 18001 and with it *which* quota ran
+        out. The service-layer check also covers the v2 open API and the F050
+        prospective-grant GETs, which the decorator cannot reach.
+        """
+        import inspect
+
+        from bisheng.knowledge.api.endpoints import knowledge_space as ep
+
+        # Match decorator lines only — the comment above the handler explains
+        # why it is absent and mentions the name.
+        decorators = [
+            ln.strip() for ln in inspect.getsource(ep).splitlines() if ln.strip().startswith("@")
+        ]
+        assert not any(d.startswith("@require_quota") for d in decorators), decorators
+
     async def test_gate_runs_before_the_embedding_lookup(self):
         """Fail-closed ordering: quota must reject before any downstream work."""
         service = _service()

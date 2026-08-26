@@ -111,13 +111,14 @@ async def test_filter_visible_space_kb_ids_admin_bypasses(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_post_filter_kb_docs_drops_inaccessible_files(monkeypatch):
-    """post_filter_visible_files reports only {1, 3} → docs for 2 and 4 dropped."""
+    """post_filter_retrievable_files reports only {1, 3} → docs for 2 and 4 dropped."""
+
     async def fake_post(self, space_id, file_ids):
         return {1, 3}
 
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_file_visibility_service."
-        "KnowledgeFileVisibilityService.post_filter_visible_files",
+        "KnowledgeFileVisibilityService.post_filter_retrievable_files",
         fake_post,
     )
 
@@ -135,12 +136,13 @@ async def test_post_filter_kb_docs_drops_inaccessible_files(monkeypatch):
 @pytest.mark.asyncio
 async def test_post_filter_kb_docs_empty_when_nothing_permitted(monkeypatch):
     """User has zero permitted files → empty docs (AC-12 second route)."""
+
     async def fake_post(self, space_id, file_ids):
         return set()
 
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_file_visibility_service."
-        "KnowledgeFileVisibilityService.post_filter_visible_files",
+        "KnowledgeFileVisibilityService.post_filter_retrievable_files",
         fake_post,
     )
 
@@ -155,8 +157,20 @@ async def test_post_filter_kb_docs_empty_when_nothing_permitted(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_post_filter_kb_docs_admin_returns_all_input():
-    """Admin users skip the FGA round-trip — input docs returned as-is."""
+async def test_post_filter_kb_docs_admin_still_drops_non_primary(monkeypatch):
+    """Admin bypasses visibility in FGA, but never the primary-version boundary."""
+
+    async def fake_post(self, space_id, file_ids):
+        assert space_id == 10
+        assert file_ids == {1, 2}
+        return {1}
+
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_file_visibility_service."
+        "KnowledgeFileVisibilityService.post_filter_retrievable_files",
+        fake_post,
+    )
+
     login_user = MagicMock(user_id=99)
     login_user.is_admin = MagicMock(return_value=True)
 
@@ -164,7 +178,7 @@ async def test_post_filter_kb_docs_admin_returns_all_input():
     survivors = await WorkStationService._post_filter_kb_docs_by_view_file(
         login_user=login_user, kb_id=10, docs=raw_docs
     )
-    assert survivors is raw_docs or survivors == raw_docs
+    assert [int(doc.metadata["document_id"]) for doc in survivors] == [1]
 
 
 @pytest.mark.asyncio
@@ -178,16 +192,14 @@ async def test_post_filter_kb_docs_no_docs_short_circuits(monkeypatch):
 
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_file_visibility_service."
-        "KnowledgeFileVisibilityService.post_filter_visible_files",
+        "KnowledgeFileVisibilityService.post_filter_retrievable_files",
         fake_post,
     )
 
     login_user = MagicMock(user_id=42)
     login_user.is_admin = MagicMock(return_value=False)
 
-    survivors = await WorkStationService._post_filter_kb_docs_by_view_file(
-        login_user=login_user, kb_id=10, docs=[]
-    )
+    survivors = await WorkStationService._post_filter_kb_docs_by_view_file(login_user=login_user, kb_id=10, docs=[])
     assert survivors == []
     assert calls == []
 
@@ -211,7 +223,7 @@ async def test_post_filter_kb_docs_org_bucket_passthrough(monkeypatch):
 
     monkeypatch.setattr(
         "bisheng.knowledge.domain.services.knowledge_file_visibility_service."
-        "KnowledgeFileVisibilityService.post_filter_visible_files",
+        "KnowledgeFileVisibilityService.post_filter_retrievable_files",
         fake_post,
     )
 
@@ -267,8 +279,7 @@ async def test_query_chunks_org_kb_uses_use_permission_and_bypasses_legacy_auth(
         fake_filter_ids,
     )
     monkeypatch.setattr(
-        "bisheng.workstation.domain.services.workstation_service."
-        "KnowledgeRag.get_multi_knowledge_vectorstore",
+        "bisheng.workstation.domain.services.workstation_service.KnowledgeRag.get_multi_knowledge_vectorstore",
         fake_get_vectorstore,
     )
     monkeypatch.setattr(
@@ -317,8 +328,7 @@ async def test_query_chunks_org_kb_init_failure_is_reported(monkeypatch):
         fake_filter_ids,
     )
     monkeypatch.setattr(
-        "bisheng.workstation.domain.services.workstation_service."
-        "KnowledgeRag.get_multi_knowledge_vectorstore",
+        "bisheng.workstation.domain.services.workstation_service.KnowledgeRag.get_multi_knowledge_vectorstore",
         fake_get_vectorstore,
     )
 
