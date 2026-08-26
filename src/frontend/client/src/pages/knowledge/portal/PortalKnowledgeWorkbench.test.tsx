@@ -4376,6 +4376,13 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(`${workbenchSource}\n${spaceDetailSource}\n${filePreviewSource}`).not.toContain("getFileDownloadApi");
     });
 
+    test("patches search results when accepting or rejecting an alias", () => {
+        const workbenchSource = stripComments(readFileSync(path.join(__dirname, "PortalKnowledgeWorkbench.tsx"), "utf8"));
+        expect(workbenchSource).toContain("setFiles: setDisplayFiles");
+        expect(workbenchSource).toMatch(/files:\s*searchMode/);
+        expect(workbenchSource).toContain("applyKnowledgeFileAliasDecision");
+    });
+
     test("hides document preview permission action without file management permission", async () => {
         const teamSpace = makeSpace("team-1", "我的技术文档", {
             spaceLevel: SpaceLevel.TEAM,
@@ -4740,22 +4747,23 @@ describe("PortalKnowledgeWorkbench", () => {
 
         expect(screen.queryByText("保存摘要")).not.toBeInTheDocument();
 
-        const summaryButton = await screen.findByRole("button", { name: "查看文档摘要" });
-        fireEvent.click(summaryButton);
+        const summaryToggle = await screen.findByRole("button", { name: "查看文档摘要" });
+        const summaryBar = screen.getByTestId("portal-summary-bar");
+        fireEvent.click(summaryToggle);
 
-        expect(summaryButton).toHaveAttribute("aria-expanded", "true");
-        expect(summaryButton).toHaveAccessibleName("收起文档摘要");
-        const summaryHeader = within(summaryButton).getByTestId("portal-summary-header");
-        const summaryContent = within(summaryButton).getByTestId("portal-summary-content");
+        expect(summaryToggle).toHaveAttribute("aria-expanded", "true");
+        expect(summaryToggle).toHaveAccessibleName("收起文档摘要");
+        const summaryHeader = within(summaryBar).getByTestId("portal-summary-header");
+        const summaryContent = within(summaryBar).getByTestId("portal-summary-content");
         expect(summaryHeader).toHaveTextContent("文档摘要");
         expect(summaryContent).toHaveTextContent("这是一段完整的文档摘要内容");
-        expect(Array.from(summaryButton.children)).toEqual([summaryHeader, summaryContent]);
+        expect(Array.from(summaryBar.children)).toEqual([summaryHeader, summaryContent]);
         expect(screen.queryByTestId("portal-summary-detail")).not.toBeInTheDocument();
 
-        fireEvent.click(summaryButton);
+        fireEvent.click(summaryToggle);
 
-        expect(summaryButton).toHaveAttribute("aria-expanded", "false");
-        expect(summaryButton).toHaveAccessibleName("查看文档摘要");
+        expect(summaryToggle).toHaveAttribute("aria-expanded", "false");
+        expect(summaryToggle).toHaveAccessibleName("查看文档摘要");
         expect(screen.queryByText("摘要内容")).not.toBeInTheDocument();
     });
 
@@ -4764,12 +4772,15 @@ describe("PortalKnowledgeWorkbench", () => {
         const expandedRule = css.match(/\.summaryBarExpanded\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
         const expandedHeaderRule = css.match(/\.summaryBarExpanded\s+\.summaryHeader\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
         const expandedTextRule = css.match(/\.summaryBarExpanded\s+\.summaryText\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+        const summaryTextRule = css.match(/\.summaryText\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
 
         expect(expandedRule).toMatch(/flex-direction\s*:\s*column/);
         expect(expandedRule).toMatch(/background\s*:\s*#eef4ff/);
         expect(expandedHeaderRule).not.toMatch(/display\s*:\s*contents/);
         expect(expandedTextRule).toMatch(/margin-left\s*:\s*calc\(var\(--summary-icon-size\)\s*\+\s*var\(--summary-title-gap\)\)/);
         expect(expandedTextRule).toMatch(/white-space\s*:\s*pre-wrap/);
+        expect(expandedTextRule).toMatch(/cursor\s*:\s*text/);
+        expect(summaryTextRule).toMatch(/user-select\s*:\s*text/);
         expect(expandedTextRule).not.toMatch(/padding-left\s*:/);
         expect(expandedTextRule).not.toMatch(/grid-column\s*:/);
         expect(expandedTextRule).not.toMatch(/max-height\s*:/);

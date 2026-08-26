@@ -1445,6 +1445,7 @@
     "batch_reject_alias_success": "Dismissed suggestions for {{count}} files",
     "batch_reject_alias_partial": "Dismissed {{success}} files, {{failed}} failed",
     "batch_alias_no_eligible": "No selected files have pending standardized names",
+    "alias_already_processed": "This standardized name has already been processed",
     "cancel": "Cancel",
     "close": "Close",
     "collapse_drawer": "Collapse drawer",

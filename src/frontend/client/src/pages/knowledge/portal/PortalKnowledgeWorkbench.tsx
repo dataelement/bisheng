@@ -50,6 +50,7 @@ import type { CreateKnowledgeSpaceFormData } from "../CreateKnowledgeSpaceDrawer
 import { buildAutoTagLibraryPayload } from "../createKnowledgeSpaceApproval";
 import { extractKnowledgeActionErrorMessage } from "../errorUtils";
 import { useAiSplitPane } from "../hooks/useAiSplitPane";
+import { applyKnowledgeFileAliasDecision } from "../hooks/useFileManager";
 import { useFileUpload } from "../hooks/useFileUpload";
 import { DEFAULT_MAX_FILE_SIZE_MB, isKnowledgeFileReparseRetryable, isKnowledgeItemPending, resolveUploadSizeLimits, type UploadSizeEnvConfig } from "../knowledgeUtils";
 import { submitKnowledgeSpaceCreate } from "../createKnowledgeSpaceApproval";
@@ -191,16 +192,17 @@ const markFolderStatsLoading = (files: KnowledgeFile[]): KnowledgeFile[] => (
 );
 
 const mergeFolderStatsState = (current: KnowledgeFile, incoming: KnowledgeFile): KnowledgeFile => {
-    if (!isFolder(incoming)) return incoming;
+    const nextIncoming = applyKnowledgeFileAliasDecision(incoming);
+    if (!isFolder(nextIncoming)) return nextIncoming;
     const incomingHasStats = (
-        incoming.successFileNum !== undefined
-        || incoming.fileNum !== undefined
-        || incoming.visibleSuccessFileNum !== undefined
-        || incoming.processingFileNum !== undefined
+        nextIncoming.successFileNum !== undefined
+        || nextIncoming.fileNum !== undefined
+        || nextIncoming.visibleSuccessFileNum !== undefined
+        || nextIncoming.processingFileNum !== undefined
     );
-    if (incomingHasStats) return incoming;
+    if (incomingHasStats) return nextIncoming;
     return {
-        ...incoming,
+        ...nextIncoming,
         successFileNum: current.successFileNum,
         fileNum: current.fileNum,
         visibleSuccessFileNum: current.visibleSuccessFileNum,
@@ -944,16 +946,11 @@ export default function PortalKnowledgeWorkbench() {
         }));
     }, [currentFolderId, setRootFiles]);
 
-    /** Keep search results in sync when tags/metadata are patched in place during search mode. */
+    /** Keep search results in sync when in-place patches (tags, alias, metadata) use a functional updater. */
     const setDisplayFiles = useCallback<Dispatch<SetStateAction<KnowledgeFile[]>>>((value) => {
         setCurrentFolderFiles(value);
-        if (searchModeRef.current) {
-            setSearchResults((prev) => (
-                typeof value === "function"
-                    ? (value as (prev: KnowledgeFile[]) => KnowledgeFile[])(prev)
-                    : value
-            ));
-        }
+        if (!searchModeRef.current || typeof value !== "function") return;
+        setSearchResults(value as (prev: KnowledgeFile[]) => KnowledgeFile[]);
     }, [setCurrentFolderFiles]);
 
     const setCurrentFileListTotal = useCallback<Dispatch<SetStateAction<number>>>((value) => {
@@ -1183,8 +1180,10 @@ export default function PortalKnowledgeWorkbench() {
         activeSpace,
         currentFolderId,
         currentPath,
-        files: currentFolderNode ? currentFolderNode.children.map((node) => node.file) : treeNodes.map((node) => node.file),
-        setFiles: setCurrentFolderFiles,
+        files: searchMode
+            ? searchResults
+            : (currentFolderNode ? currentFolderNode.children.map((node) => node.file) : treeNodes.map((node) => node.file)),
+        setFiles: setDisplayFiles,
         setTotal: setCurrentFileListTotal,
         loadFiles: reloadFiles,
         currentPage: 1,
@@ -1263,7 +1262,9 @@ export default function PortalKnowledgeWorkbench() {
                     return incoming ? mergeFolderStatsState(file, incoming) : file;
                 });
                 const newRows = markFolderStatsLoading(
-                    res.data.filter((file) => !knownIds.has(String(file.id))),
+                    res.data
+                        .filter((file) => !knownIds.has(String(file.id)))
+                        .map(applyKnowledgeFileAliasDecision),
                 );
                 return newRows.length > 0 ? [...newRows, ...merged] : merged;
             });

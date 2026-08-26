@@ -24,9 +24,11 @@ from bisheng.common.errcode.knowledge_space import (
     SpaceNotFoundError,
     SpacePermissionDeniedError,
 )
+from bisheng.common.services.config_service import settings
 from bisheng.core.cache.utils import save_uploaded_file
 from bisheng.core.storage.minio.minio_manager import get_minio_storage
 from bisheng.database.models.department import Department
+from bisheng.database.models.tag import TagResourceTypeEnum
 from bisheng.developer_token.domain.file_sync_folder_path import split_file_sync_folder_path
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.knowledge.domain.constants import normalize_business_domain_code
@@ -38,8 +40,12 @@ from bisheng.knowledge.domain.services.department_space_target_resolver import (
 )
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
+from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
+from bisheng.knowledge.domain.upload_extensions import (
+    UnsupportedUploadFileExtensionError,
+    validate_knowledge_upload_file_extension,
+)
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
-from bisheng.user.domain.models.user import User
 from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_repository import (
     FilelibSyncRepository,
 )
@@ -59,6 +65,7 @@ from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
 from bisheng.shougang_portal_config.domain.services.portal_config_service import (
     ShougangPortalConfigService,
 )
+from bisheng.user.domain.models.user import User
 
 
 @dataclass(frozen=True)
@@ -93,6 +100,7 @@ FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE = "token_user_personal"
 FILELIB_SYNC_PERSONAL_FALLBACK_LEVEL2_FOLDER = "业务接口未分配"
 FILELIB_SYNC_DEVELOPER_TOKEN_ID_METADATA_KEY = "developer_token_id"
 FILELIB_SYNC_DEVELOPER_TOKEN_NAME_METADATA_KEY = "developer_token_name"
+FILELIB_SYNC_TAGS_METADATA_KEY = "filelib_sync_tags"
 
 
 class FilelibSyncService:
@@ -144,6 +152,7 @@ class FilelibSyncService:
         target_folder_id_override: int | None = None,
         extra_user_metadata: dict[str, Any] | None = None,
     ) -> FilelibSyncResponseData:
+        self._validate_file_name(params.file_name)
         self._require_dynamic_source_id(params)
         created_file: KnowledgeFile | None = None
         file_persisted = False
@@ -288,6 +297,18 @@ class FilelibSyncService:
             created_file = await asyncio.to_thread(KnowledgeFileDao.update, created_file)
             file_persisted = True
 
+            applied_tags = await self._apply_sync_tags(
+                space_id=int(target.space.id),
+                file_id=int(created_file.id),
+                tag_names=params.tags,
+            )
+            if applied_tags:
+                created_file.user_metadata = {
+                    **(created_file.user_metadata or {}),
+                    FILELIB_SYNC_TAGS_METADATA_KEY: applied_tags,
+                }
+                created_file = await asyncio.to_thread(KnowledgeFileDao.update, created_file)
+
             await self.knowledge_space_service.enqueue_file_title_extraction(
                 [created_file],
                 [preview_cache_key],
@@ -316,6 +337,7 @@ class FilelibSyncService:
                 status=int(created_file.status),
                 version_link_pending=replaced_file_id is not None,
                 replaced_file_id=replaced_file_id,
+                tags=applied_tags,
             )
             folder_display_name = await self._resolve_folder_display_label(
                 identity=identity,
@@ -418,11 +440,52 @@ class FilelibSyncService:
             raise FilelibSyncInvalidParamsError(msg="params fields are invalid") from exc
 
     @staticmethod
-    def _validate_upload(params: FilelibSyncParams, upload_file: UploadFile) -> None:
-        if "/" in params.file_name or "\\" in params.file_name:
+    def _validate_file_name(file_name: str) -> None:
+        if "/" in file_name or "\\" in file_name:
             raise FilelibSyncInvalidParamsError(msg="file_name must be a base name")
+        try:
+            validate_knowledge_upload_file_extension(
+                file_name,
+                image_parser_enabled=settings.get_knowledge().image_parser_enabled,
+            )
+        except UnsupportedUploadFileExtensionError as exc:
+            extension = str(exc) or "unknown"
+            raise FilelibSyncInvalidParamsError(
+                msg=f"file format is not supported: .{extension}",
+            ) from exc
+
+    @staticmethod
+    def _validate_upload(params: FilelibSyncParams, upload_file: UploadFile) -> None:
+        FilelibSyncService._validate_file_name(params.file_name)
         if upload_file.size == 0:
             raise FilelibSyncInvalidParamsError(msg="file must not be empty")
+
+    async def _apply_sync_tags(
+        self,
+        *,
+        space_id: int,
+        file_id: int,
+        tag_names: list[str],
+    ) -> list[str]:
+        if not tag_names:
+            return []
+        applied = await TagLibraryTagService.ensure_and_append_file_tags(
+            space_id=space_id,
+            file_id=file_id,
+            tag_names=tag_names,
+            user_id=int(self.login_user.user_id),
+            tenant_id=int(self.login_user.tenant_id) if self.login_user.tenant_id is not None else None,
+            resource_type=TagResourceTypeEnum.MANUAL_TAG,
+        )
+        logger.info(
+            "filelib sync tags applied token_id={} file_id={} knowledge_id={} requested={} applied={}",
+            self.token_id,
+            file_id,
+            space_id,
+            len(tag_names),
+            len(applied),
+        )
+        return applied
 
     def _require_dynamic_source_id(self, params: FilelibSyncParams) -> None:
         required_fields: set[str] = set()

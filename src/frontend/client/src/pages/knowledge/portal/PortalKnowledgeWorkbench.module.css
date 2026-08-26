@@ -1277,7 +1277,6 @@
   position: relative;
   font: inherit;
   text-align: left;
-  cursor: pointer;
 }
 
 .summaryBar:hover {
@@ -1298,6 +1297,13 @@
   gap: var(--summary-title-gap);
   min-width: 0;
   flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 .summaryIcon {
@@ -1341,6 +1347,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+  user-select: text;
+  cursor: pointer;
 }
 
 .summaryBarExpanded .summaryText {
@@ -1351,6 +1359,7 @@
   text-overflow: clip;
   white-space: pre-wrap;
   line-height: 1.7;
+  cursor: text;
 }
 
 .summaryDetail {
@@ -2285,6 +2294,15 @@
 .uploadDropzone small {
   color: #768499;
   font-size: 13px;
+}
+
+/* Excel 取消合并单元格提示：与格式说明区分，略偏强调色 */
+.uploadExcelTip {
+  color: #b45309;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  max-width: 90%;
 }
 
 .uploadPickActions {

@@ -51,6 +51,7 @@ def _service() -> QuestionService:
     svc.invite_repo = MagicMock()
     svc.answer_repo = MagicMock()
     svc.invite_repo.create_many = AsyncMock()
+    svc.invite_repo.replace_for_question = AsyncMock(return_value=[])
     svc.invite_repo.list_user_ids_by_question_ids = AsyncMock(return_value={})
     svc.invite_repo.list_question_ids_for_user = AsyncMock(return_value=[])
     svc._send_expert_invitation_inbox_notice = AsyncMock()
@@ -222,6 +223,84 @@ async def test_create_rejects_self_invite_and_disabled_expert():
         await _create(
             svc, _create_request(question_type="directed", invited_expert_ids=[5], asker_reveal_on_public=False)
         )
+
+
+async def test_update_directed_syncs_invite_table_and_notifies_new_only():
+    """编辑追加专家：双写分号串 + 对齐 invite 表，只通知新增专家。"""
+    from bisheng.qa_expert.domain.schemas import QuestionUpdateRequest
+
+    svc = _service()
+    existing = _question_row(
+        id=10,
+        user_id=1,
+        question_type="directed",
+        invited_experts="5",
+        experts_names="专家甲",
+        content_locked=0,
+        description="定向正文",
+        title="定向题",
+        asker_anonymous=0,
+        asker_reveal_on_public=None,
+    )
+    updated = _question_row(
+        id=10,
+        user_id=1,
+        question_type="directed",
+        invited_experts="5;6",
+        experts_names="专家甲;专家乙",
+        content_locked=0,
+        description="定向正文",
+        title="定向题",
+        asker_anonymous=0,
+        asker_reveal_on_public=None,
+    )
+    svc.repository.get_by_id = AsyncMock(return_value=existing)
+    svc.repository.update = AsyncMock(return_value=updated)
+    svc.invite_repo.replace_for_question = AsyncMock(
+        return_value=[_expert(expert_id=6, user_id=60, expert_name="专家乙")]
+    )
+    svc.expert_repo.get_by_id = AsyncMock(
+        side_effect=[
+            _expert(expert_id=5, user_id=50, expert_name="专家甲"),
+            _expert(expert_id=6, user_id=60, expert_name="专家乙"),
+        ]
+    )
+
+    result = await svc.update_question(
+        10,
+        QuestionUpdateRequest(invited_experts="5;6", experts_names="ignored"),
+        tenant_id=1,
+        user_id=1,
+        user_name="asker",
+    )
+
+    assert result.invited_experts == "5;6"
+    update_kwargs = svc.repository.update.await_args.kwargs
+    assert update_kwargs["invited_experts"] == "5;6"
+    assert update_kwargs["experts_names"] == "专家甲;专家乙"
+    svc.invite_repo.replace_for_question.assert_awaited_once()
+    replace_kwargs = svc.invite_repo.replace_for_question.await_args.kwargs
+    assert replace_kwargs["question_id"] == 10
+    assert [int(e.id) for e in replace_kwargs["experts"]] == [5, 6]
+    svc._send_expert_invitation_inbox_notice.assert_awaited_once()
+    notice_kwargs = svc._send_expert_invitation_inbox_notice.await_args.kwargs
+    assert notice_kwargs["only_expert_ids"] == [6]
+
+
+async def test_update_without_invite_field_skips_invite_sync():
+    from bisheng.qa_expert.domain.schemas import QuestionUpdateRequest
+
+    svc = _service()
+    existing = _question_row(id=10, content_locked=0, title="old", description="d")
+    updated = _question_row(id=10, content_locked=0, title="new", description="d")
+    svc.repository.get_by_id = AsyncMock(return_value=existing)
+    svc.repository.update = AsyncMock(return_value=updated)
+    svc.invite_repo.replace_for_question = AsyncMock()
+
+    await svc.update_question(10, QuestionUpdateRequest(title="new"), tenant_id=1, user_id=1)
+
+    svc.invite_repo.replace_for_question.assert_not_awaited()
+    svc._send_expert_invitation_inbox_notice.assert_not_awaited()
 
 
 async def test_list_hides_directed_title_from_stranger():

@@ -649,12 +649,15 @@ class QuestionService:
         user_id: int,
         question_type: str,
         invite_ids: list[int],
-        request: QuestionCreateRequest,
+        request,
+        *,
+        require_directed_anon_reveal: bool = True,
     ) -> list:
         """校验邀请人数与专家有效性；定向且匿名时须预选转公开后是否公开姓名。"""
         if question_type == QUESTION_TYPE_DIRECTED:
             if (
-                bool(getattr(request, "asker_anonymous", False))
+                require_directed_anon_reveal
+                and bool(getattr(request, "asker_anonymous", False))
                 and getattr(request, "asker_reveal_on_public", None) is None
             ):
                 raise InvalidInvitationError(msg="定向匿名题须选择转公开后是否公开姓名")
@@ -1290,8 +1293,10 @@ class QuestionService:
         question_id: int,
         request: QuestionUpdateRequest,
         tenant_id: int | None = None,
+        user_id: int | None = None,
+        user_name: str | None = None,
     ) -> Question:
-        """更新问题信息；首答后正文/类型/邀请已锁定。"""
+        """更新问题信息；首答后正文/类型/邀请已锁定。带邀请变更时同步 qa_question_invite。"""
         question = await self.repository.get_by_id(question_id)
         if not question:
             raise QuestionNotFoundError()
@@ -1303,6 +1308,30 @@ class QuestionService:
             update_data.pop("status", None)
         if "related_docs" in update_data:
             update_data["related_docs"] = await self._canonicalize_related_docs(update_data.get("related_docs"))
+
+        # 邀请真相源是 qa_question_invite；只改分号串会导致新专家看不见定向题。
+        invite_experts: list | None = None
+        if "invited_experts" in update_data:
+            invite_ids = parse_invite_expert_ids(
+                invited_expert_ids=None,
+                invited_experts=update_data.get("invited_experts"),
+            )
+            operator_id = int(user_id or getattr(question, "user_id", 0) or 0)
+            question_type = normalize_question_type(getattr(question, "question_type", None))
+            invite_stub = SimpleNamespace(
+                asker_anonymous=bool(int(getattr(question, "asker_anonymous", 0) or 0)),
+                asker_reveal_on_public=getattr(question, "asker_reveal_on_public", None),
+            )
+            invite_experts = await self._validate_invites(
+                operator_id,
+                question_type,
+                invite_ids,
+                invite_stub,
+                require_directed_anon_reveal=False,
+            )
+            update_data["invited_experts"] = serialize_invite_ids(invite_ids)
+            update_data["experts_names"] = serialize_expert_names(invite_experts)
+
         asset_fields = {"image_url", "file_url", "attachments"}
         requested_assets = {name: update_data[name] for name in asset_fields if name in update_data}
         promotion = None
@@ -1323,10 +1352,21 @@ class QuestionService:
             raise
         if promotion is not None:
             await (await self._assets()).cleanup_sources(promotion)
-        # 发送邀请通知
-        # await self._send_expert_invitation_inbox_notice(new_question, user_id,user_name)
 
-        # logger.info(f"Question updated: {new_question.id} by user {user_id}")
+        if invite_experts is not None and new_question is not None:
+            added = await self.invite_repo.replace_for_question(
+                question_id=question_id,
+                tenant_id=int(tenant_id or getattr(question, "tenant_id", 1) or 1),
+                experts=invite_experts,
+            )
+            if added and user_id:
+                await self._send_expert_invitation_inbox_notice(
+                    new_question,
+                    int(user_id),
+                    user_name or "",
+                    only_expert_ids=[int(expert.id) for expert in added],
+                )
+
         return await self._resolve_question(new_question)
 
     async def _send_expert_invitation_inbox_notice(
@@ -1334,8 +1374,16 @@ class QuestionService:
         question: Question,
         sender_id: int,
         sender_name: str,
+        *,
+        only_expert_ids: list[int] | None = None,
     ):
-        expert_ids = [int(item) for item in (question.invited_experts or "").split(";") if item.strip().isdigit()]
+        if only_expert_ids is not None:
+            expert_ids = [int(item) for item in only_expert_ids if int(item) > 0]
+        else:
+            expert_ids = parse_invite_expert_ids(
+                invited_expert_ids=None,
+                invited_experts=getattr(question, "invited_experts", None),
+            )
         if not expert_ids:
             return
 

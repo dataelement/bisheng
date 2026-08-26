@@ -21,6 +21,9 @@ from bisheng.database.models.department import Department, UserDepartment
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.services.department_space_target_resolver import (
+    DepartmentSpaceTargetKind,
+)
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.open_endpoints.api.dependencies import get_filelib_sync_service
@@ -28,9 +31,6 @@ from bisheng.open_endpoints.api.endpoints.filelib_sync import _sync_file, router
 from bisheng.open_endpoints.domain.schemas.filelib_sync import (
     FilelibSyncParams,
     FilelibSyncResponseData,
-)
-from bisheng.knowledge.domain.services.department_space_target_resolver import (
-    DepartmentSpaceTargetKind,
 )
 from bisheng.open_endpoints.domain.services.filelib_sync_service import (
     FilelibSyncService,
@@ -118,6 +118,42 @@ def test_parse_params_normalizes_string_ids():
     assert params.file_name == "report.pdf"
     assert params.department_id == "12"
     assert params.responsible_person_id == "34"
+    assert params.tags == []
+
+
+def test_parse_params_normalizes_tags():
+    params = FilelibSyncService.parse_params(
+        json.dumps(
+            {
+                "external_file_id": "ext-1",
+                "file_name": "report.pdf",
+                "tags": [" 安全生产 ", "", "管理制度", "安全生产", " 管理制度 "],
+            }
+        )
+    )
+    assert params.tags == ["安全生产", "管理制度"]
+
+
+def test_parse_params_rejects_non_string_tags():
+    with pytest.raises(FilelibSyncInvalidParamsError, match="params fields are invalid"):
+        FilelibSyncService.parse_params(
+            json.dumps({"external_file_id": "ext-1", "file_name": "a.pdf", "tags": "安全生产"})
+        )
+
+
+def test_validate_upload_rejects_unsupported_file_format():
+    params = FilelibSyncParams(external_file_id="ext-1", file_name="archive.zip")
+    upload_file = UploadFile(filename="archive.zip", file=BytesIO(b"data"))
+
+    with pytest.raises(FilelibSyncInvalidParamsError, match="file format is not supported"):
+        FilelibSyncService._validate_upload(params, upload_file)
+
+
+def test_validate_upload_accepts_platform_supported_format():
+    params = FilelibSyncParams(external_file_id="ext-1", file_name="report.pdf")
+    upload_file = UploadFile(filename="report.pdf", file=BytesIO(b"data"))
+
+    FilelibSyncService._validate_upload(params, upload_file)
 
 
 def test_portal_domain_config_preserves_department_bindings():

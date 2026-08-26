@@ -9,7 +9,10 @@ import { Badge } from "@/components/bs-ui/badge";
 import { Button } from "@/components/bs-ui/button";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { ResizableTableHead, TruncatedTableCell } from "@/components/bs-ui/table/TruncatedTableCell";
+import { useResizableColumns } from "@/components/bs-ui/table/useResizableColumns";
+import { TooltipProvider } from "@/components/bs-ui/tooltip";
 import { useToast } from "@/components/bs-ui/toast/use-toast";
 import { locationContext } from "@/contexts/locationContext";
 import { userContext } from "@/contexts/userContext";
@@ -95,6 +98,32 @@ export default function AppUseLog() {
         feedback: '',
         sensitive_status: ''
     });
+
+    const appLogTableCols = useMemo(() => {
+        const cols = [
+            { defaultWidth: 200, minWidth: 80 },
+            { defaultWidth: 140, minWidth: 80 },
+            { defaultWidth: 180, minWidth: 80 },
+            { defaultWidth: 170, minWidth: 120 },
+            { defaultWidth: 160, minWidth: 120 },
+        ]
+        if (appConfig.isPro) {
+            cols.push({ defaultWidth: 140, minWidth: 100 })
+        }
+        cols.push({ defaultWidth: 100, minWidth: 80 })
+        return cols
+    }, [appConfig.isPro])
+    const rc = useResizableColumns(appLogTableCols)
+    const lastCol = appLogTableCols.length - 1
+    const headerItems = [
+        { label: t('log.appName') },
+        { label: t('log.userName') },
+        { label: t('log.userGroup') },
+        { label: t('createTime') },
+        { label: t('log.userFeedback') },
+        ...(appConfig.isPro ? [{ label: t('log.sensitiveReviewResult') }] : []),
+        { label: t('operations'), className: 'text-right' },
+    ]
 
     const resetClick = () => {
         dispatch({ type: 'RESET' });
@@ -271,7 +300,7 @@ export default function AppUseLog() {
             <LoadingIcon />
         </div>}
         <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-20">
-            <div className="flex flex-wrap gap-4">
+            <div className="mb-4 flex flex-wrap gap-4">
                 <FilterByApp value={filters.appName} placeholder={t('log.appName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['appName']: value } })} />
                 <FilterByUser value={filters.userName} placeholder={t('log.userName')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userName']: value } })} />
                 <FilterByUsergroup value={filters.userGroup} placeholder={t('log.userGroup')} onChange={(value) => dispatch({ type: 'SET_FILTER', payload: { ['userGroup']: value } })} />
@@ -321,77 +350,88 @@ export default function AppUseLog() {
                 <Button onClick={handleExport} disabled={auditing}>
                     {auditing && <LoadIcon className="mr-1" />}{t('log.exportButton')}</Button>
             </div>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[200px]">{t('log.appName')}</TableHead>
-                        <TableHead>{t('log.userName')}</TableHead>
-                        <TableHead>{t('log.userGroup')}</TableHead>
-                        <TableHead>{t('createTime')}</TableHead>
-                        <TableHead>{t('log.userFeedback')}</TableHead>
-                        {appConfig.isPro && <TableHead>{t('log.sensitiveReviewResult')}</TableHead>}
-                        <TableHead className="text-right">{t('operations')}</TableHead>
-                    </TableRow>
-                </TableHeader>
-
-                <TableBody>
-                    {processedData.map((el: any) => (
-                        <TableRow key={el.id}>
-                            <TableCell className="font-medium max-w-[200px]">
-                                {/* <div className=" truncate-multiline"></div> */}
-                                <div className="truncate-multiline">
-                                    {el.flow_type === 15 ? t('log.workbench_daily') : el.flow_name}
-                                </div>
-                            </TableCell>
-                            <TableCell>{el.user_name}</TableCell>
-                            <TableCell>{el.userGroupsString}</TableCell>
-                            <TableCell>{el.create_time.replace('T', ' ')}</TableCell>
-                            <TableCell className="break-all flex gap-2">
-                                <div className="text-center text-xs relative">
-                                    <ThunmbIcon
-                                        type='like'
-                                        className={`cursor-pointer ${el.like_count && 'text-primary hover:text-primary'}`}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.like_count}</span>
-                                </div>
-                                <div className="text-center text-xs relative">
-                                    <ThunmbIcon
-                                        type='unLike'
-                                        className={`cursor-pointer ${el.dislike_count && 'text-primary hover:text-primary'}`}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.dislike_count}</span>
-                                </div>
-                                <div className="text-center text-xs relative">
-                                    <ThunmbIcon
-                                        type='copy'
-                                        className={`cursor-pointer ${el.copied_count && 'text-primary hover:text-primary'}`}
-                                    />
-                                    <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
-                                </div>
-                            </TableCell>
-                            {appConfig.isPro && <TableCell>
-                                {el.sensitive_status === 1 ? <Badge variant="outline" className="text-green-500">{t('log.sensitivePass')}</Badge>
-                                    : <Badge variant="outline" className="text-red-500">{t('log.sensitiveViolation')}</Badge>
-                                }
-                            </TableCell>}
-                            <TableCell className="text-right" onClick={() => {
-                                // @ts-ignore
-                                // window.libname = el.name;
-                            }}>
-                                {/* <Button variant="link" className="" onClick={() => setOpenData(true)}>Add to dataset</Button> */}
-                                {
-                                    el.chat_id && <Link
-                                        to={el.flow_type === 15 ? `${routePrefix}/log/chatlog/${el.chat_id}` : `${routePrefix}/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
-                                        className="no-underline hover:underline text-primary"
-                                        onClick={handleCachePage}
-                                    >{t('lib.details')}</Link>
-                                }
-                            </TableCell>
+            <TooltipProvider delayDuration={200}>
+                <Table
+                    noScroll
+                    variant="filelist"
+                    className="mb-[50px]"
+                    style={{ tableLayout: "fixed", width: rc.totalWidth, minWidth: "100%" }}
+                >
+                    <TableHeader>
+                        <TableRow>
+                            {headerItems.map((item, index) => (
+                                <ResizableTableHead
+                                    key={`${index}-${item.label}`}
+                                    label={item.label}
+                                    columnIndex={index}
+                                    lastColumn={index === lastCol}
+                                    thProps={rc.getThProps(index)}
+                                    startResize={rc.startResize}
+                                    className={item.className}
+                                />
+                            ))}
                         </TableRow>
-                    )
-                    )}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+
+                    <TableBody>
+                        {processedData.map((el: any) => {
+                            const flowName = el.flow_type === 15 ? t('log.workbench_daily') : (el.flow_name || "-")
+                            const sensitiveIdx = appConfig.isPro ? 5 : -1
+                            const opsIdx = appConfig.isPro ? 6 : 5
+                            return (
+                                <TableRow key={el.id}>
+                                    <TruncatedTableCell tdProps={rc.getTdProps(0)} text={flowName} />
+                                    <TruncatedTableCell tdProps={rc.getTdProps(1)} text={el.user_name || "-"} />
+                                    <TruncatedTableCell tdProps={rc.getTdProps(2)} text={el.userGroupsString || "-"} />
+                                    <TruncatedTableCell tdProps={rc.getTdProps(3)} text={el.create_time.replace("T", " ")} />
+                                    <TableCell {...rc.getTdProps(4)}>
+                                        <div className="flex gap-2 break-all">
+                                            <div className="text-center text-xs relative">
+                                                <ThunmbIcon
+                                                    type='like'
+                                                    className={`cursor-pointer ${el.like_count && 'text-primary hover:text-primary'}`}
+                                                />
+                                                <span className="left-4 top-[-4px] break-keep">{el.like_count}</span>
+                                            </div>
+                                            <div className="text-center text-xs relative">
+                                                <ThunmbIcon
+                                                    type='unLike'
+                                                    className={`cursor-pointer ${el.dislike_count && 'text-primary hover:text-primary'}`}
+                                                />
+                                                <span className="left-4 top-[-4px] break-keep">{el.dislike_count}</span>
+                                            </div>
+                                            <div className="text-center text-xs relative">
+                                                <ThunmbIcon
+                                                    type='copy'
+                                                    className={`cursor-pointer ${el.copied_count && 'text-primary hover:text-primary'}`}
+                                                />
+                                                <span className="left-4 top-[-4px] break-keep">{el.copied_count}</span>
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    {appConfig.isPro && (
+                                        <TableCell {...rc.getTdProps(sensitiveIdx)} className="overflow-hidden">
+                                            {el.sensitive_status === 1
+                                                ? <Badge variant="outline" className="text-green-500">{t('log.sensitivePass')}</Badge>
+                                                : <Badge variant="outline" className="text-red-500">{t('log.sensitiveViolation')}</Badge>
+                                            }
+                                        </TableCell>
+                                    )}
+                                    <TableCell {...rc.getTdProps(opsIdx)} className="overflow-hidden text-right">
+                                        {el.chat_id && (
+                                            <Link
+                                                to={el.flow_type === 15 ? `${routePrefix}/log/chatlog/${el.chat_id}` : `${routePrefix}/log/chatlog/${el.flow_id}/${el.chat_id}/${el.flow_type}`}
+                                                className="no-underline hover:underline text-primary"
+                                                onClick={handleCachePage}
+                                            >{t('lib.details')}</Link>
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
+                    </TableBody>
+                </Table>
+            </TooltipProvider>
         </div>
         <div className="bisheng-table-footer px-6 bg-background-login">
             <p className="desc"></p>

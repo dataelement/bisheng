@@ -30,6 +30,7 @@ import { useTranslation } from "react-i18next";
 const PAGE_SIZE = 10;
 const TAG_LIMIT = 999;
 const TAG_LIBRARY_NAME_MAX_LENGTH = 20;
+const DEFAULT_TAG_LIBRARY_NAME = "通用标签库";
 const BOUND_SPACE_NAME_MAX_CHARS = 12;
 
 function BoundSpaceNamesCell({ names }: { names: string[] }) {
@@ -234,6 +235,7 @@ function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSaved }: Ta
         onSaved();
     };
 
+    const nameLocked = mode === "edit" && (initial?.name || "").trim() === DEFAULT_TAG_LIBRARY_NAME;
     const title =
         mode === "edit"
             ? t("build.editTagLibrary", "编辑标签库")
@@ -272,9 +274,15 @@ function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSaved }: Ta
                             className="mt-2"
                             value={name}
                             maxLength={TAG_LIBRARY_NAME_MAX_LENGTH}
+                            disabled={nameLocked}
                             placeholder={t("build.tagLibraryNamePlaceholder", "请输入标签库名称")}
                             onChange={(e) => setName(e.target.value)}
                         />
+                        {nameLocked ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                {t("build.defaultTagLibraryNameLocked", "通用标签库不可修改名称")}
+                            </p>
+                        ) : null}
                     </div>
                     <div>
                         <Label className="bisheng-label" htmlFor="tag-library-description">

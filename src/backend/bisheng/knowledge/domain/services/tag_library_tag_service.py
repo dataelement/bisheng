@@ -25,14 +25,9 @@ from bisheng.database.models.tag import (
     TagLink,
     TagResourceTypeEnum,
 )
+from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
 from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
     KnowledgeTagLibraryLinkDao,
-)
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
-from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
-    KnowledgeFulltextFileRef,
-    request_file_sync_intents,
-    request_file_sync_intents_sync,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_tag_library_schema import KnowledgeSpaceTagLibraryTreeItem
 from bisheng.knowledge.domain.schemas.link_b_tag_resolver_schema import (
@@ -41,6 +36,11 @@ from bisheng.knowledge.domain.schemas.link_b_tag_resolver_schema import (
     TagMatchKind,
     TagNameCatalogEntry,
     TagResolutionBatch,
+)
+from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
+    KnowledgeFulltextFileRef,
+    request_file_sync_intents,
+    request_file_sync_intents_sync,
 )
 
 PENDING_REVIEW_TAG_SIMILARITY_THRESHOLD = 0.85
@@ -1257,6 +1257,106 @@ class TagLibraryTagService:
                 resource_type=resource_type.value,
             )
         )
+
+    @classmethod
+    async def ensure_and_append_file_tags(
+        cls,
+        *,
+        space_id: int,
+        file_id: int,
+        tag_names: Iterable[str],
+        user_id: int,
+        tenant_id: int | None,
+        resource_type: TagResourceTypeEnum = TagResourceTypeEnum.MANUAL_TAG,
+    ) -> list[str]:
+        """Reuse tenant-wide library tags or insert into the space's first bound library.
+
+        Unbound spaces skip tagging and return an empty list so the caller can
+        still persist the file. Does not fall back to library id=1.
+        """
+        from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
+            MAX_LIBRARY_TAGS,
+        )
+
+        normalized_names = list(dict.fromkeys(cls._normalize_names(tag_names)))
+        if not normalized_names:
+            return []
+        if tenant_id is None:
+            logger.warning(
+                "skip_file_tags_missing_tenant space_id={} file_id={}",
+                space_id,
+                file_id,
+            )
+            return []
+
+        library_ids = await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(space_id)
+        if not library_ids:
+            logger.info(
+                "skip_file_tags_unbound_library space_id={} file_id={} tag_count={}",
+                space_id,
+                file_id,
+                len(normalized_names),
+            )
+            return []
+
+        target_library_id = library_ids[0]
+        library_tag_count = await cls.count_tags(target_library_id)
+        applied: list[str] = []
+        tag_ids: list[int] = []
+        created_in_library = False
+
+        for tag_name in normalized_names:
+            existing = await cls.find_library_tag_by_name(tenant_id=tenant_id, tag_name=tag_name)
+            if existing is not None and existing.id is not None:
+                tag_ids.append(int(existing.id))
+                applied.append(str(existing.name or tag_name))
+                continue
+            if library_tag_count >= MAX_LIBRARY_TAGS:
+                logger.warning(
+                    "skip_tag_insert_library_full library_id={} space_id={} file_id={} tag_name={}",
+                    target_library_id,
+                    space_id,
+                    file_id,
+                    tag_name,
+                )
+                continue
+            created = await TagDao.ainsert_tag(
+                Tag(
+                    name=tag_name,
+                    user_id=user_id,
+                    tenant_id=tenant_id,
+                    business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
+                    business_id=cls._business_id(target_library_id),
+                    resource_type=resource_type.value,
+                )
+            )
+            if created.id is None:
+                continue
+            library_tag_count += 1
+            created_in_library = True
+            tag_ids.append(int(created.id))
+            applied.append(tag_name)
+
+        if not tag_ids:
+            return []
+
+        await TagDao.add_tags(tag_ids, str(file_id), ResourceTypeEnum.SPACE_FILE, user_id)
+        async with get_async_db_session() as session:
+            await request_file_sync_intents(
+                session,
+                [
+                    KnowledgeFulltextFileRef(
+                        file_id=int(file_id),
+                        knowledge_id=int(space_id),
+                        tenant_id=int(tenant_id),
+                    )
+                ],
+                trigger_type="approved_file_tags_updated",
+            )
+        if created_in_library:
+            await cls.sync_library_name_lists(target_library_id)
+        await cls.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
+        return applied
 
     @classmethod
     async def get_or_create_pending_review_tag_async(

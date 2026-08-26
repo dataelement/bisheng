@@ -118,6 +118,67 @@ async def test_df01_directed_persists_question_and_invite(flow_env):
     assert (again.get("data") or {}).get("experts_names") == expert.expert_name
 
 
+async def test_df01b_update_directed_adds_invite_row_and_visibility(flow_env):
+    """编辑定向题追加专家：invite 表补行后，新专家可见且可进详情。"""
+    env = flow_env
+    expert_a = await env.seed_expert(user_id=201, name="专家甲")
+    expert_b = await env.seed_expert(user_id=202, name="专家乙")
+    env.as_user(env.asker)
+    qid = await _create_question(
+        env,
+        {
+            "title": "df01b追加邀请",
+            "description": "仅先邀甲",
+            "business_domain": "steel",
+            "question_type": "directed",
+            "invited_expert_ids": [expert_a.id],
+            "asker_reveal_on_public": True,
+        },
+    )
+    invites_before = await env.reload_all(QuestionInvite, question_id=qid)
+    assert {int(row.expert_id) for row in invites_before} == {int(expert_a.id)}
+
+    env.as_user(env.user(202, name="专家乙"))
+    denied = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert denied["status_code"] == 18301
+    assert "仅先邀甲" not in str(denied)
+
+    env.as_user(env.asker)
+    updated = _ok(
+        await env.client.put(
+            f"{PREFIX}/questions/{qid}",
+            json={
+                "title": env.t("df01b追加邀请"),
+                "description": "仅先邀甲",
+                "business_domain": "steel",
+                "invited_experts": f"{expert_a.id};{expert_b.id}",
+                "experts_names": f"{expert_a.expert_name};{expert_b.expert_name}",
+            },
+        )
+    )
+    assert updated["status_code"] == 200
+    question = await env.reload_row(Question, id=qid)
+    invites_after = await env.reload_all(QuestionInvite, question_id=qid)
+    assert question.invited_experts == f"{expert_a.id};{expert_b.id}"
+    assert {int(row.expert_id) for row in invites_after} == {int(expert_a.id), int(expert_b.id)}
+    assert {int(row.user_id) for row in invites_after} == {env.uid(201), env.uid(202)}
+
+    env.as_user(env.user(202, name="专家乙"))
+    detail = _ok(await env.client.get(f"{PREFIX}/questions/{qid}"))
+    assert detail["status_code"] == 200
+    assert "仅先邀甲" in str(detail.get("data"))
+    listed = _ok(
+        await env.client.get(
+            f"{PREFIX}/questions",
+            params={"page": 1, "page_size": 50, "keyword": env.t("df01b追加邀请")},
+        )
+    )
+    assert listed["status_code"] == 200
+    questions = (listed.get("data") or {}).get("questions") or []
+    ids = {int(item["id"]) for item in questions if isinstance(item, dict) and item.get("id")}
+    assert qid in ids
+
+
 async def test_df02_public_visible_to_stranger(flow_env):
     env = flow_env
     env.as_user(env.asker)

@@ -45,9 +45,6 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_document_ve
 from bisheng.knowledge.domain.repositories.implementations.knowledge_file_repository_impl import (
     KnowledgeFileRepositoryImpl,
 )
-from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
-    KnowledgeDocumentProjectionService,
-)
 from bisheng.knowledge.domain.services.knowledge_fulltext_lifecycle_hook import (
     KnowledgeFulltextFileRef,
     request_file_delete_intents,
@@ -62,6 +59,76 @@ from bisheng.worker.main import bisheng_celery
 logger = logging.getLogger(__name__)
 DEFAULT_QUEUE = "celery"
 SCAN_PAGE_SIZE = 100
+
+#: Optional shared-storage writer provider (F1 wiring). ``factory(tenant_id)``
+#: returns a per-tenant SharedSpaceStorageWriter or None when shared routing
+#: is not available for the tenant. Tests override this hook; production uses
+#: the default F1 builder (``build_shared_space_components_for_tenant``),
+#: which returns None whenever the switch/routing row is off - in that case
+#: the projection service keeps the legacy per-entry behaviour.
+shared_storage_writer_factory = None
+
+
+def _default_shared_storage_writer_factory(tenant_id: int):
+    from bisheng.knowledge.rag.shared_space_storage import (
+        build_shared_space_components_for_tenant,
+    )
+
+    components = build_shared_space_components_for_tenant(int(tenant_id))
+    return components[0] if components is not None else None
+
+
+async def _build_document_projection_service(
+    session,
+    *,
+    file_repository,
+    document_repository,
+    version_repository,
+    deleting_entry_finalizer=None,
+    tenant_id: int | None = None,
+):
+    from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
+        KnowledgeDocumentProjectionService,
+    )
+    from bisheng.knowledge.domain.services.shared_space_projection_support import (
+        load_shared_content_chunks_from_legacy,
+        resolve_shared_space_storage_enabled,
+    )
+
+    kwargs = {}
+    if await resolve_shared_space_storage_enabled():
+        writer = None
+        factory = shared_storage_writer_factory or _default_shared_storage_writer_factory
+        if tenant_id is not None:
+            try:
+                writer = factory(tenant_id=int(tenant_id))
+            except TypeError:
+                writer = factory(session=session)
+        if writer is not None:
+            kwargs = {
+                "shared_storage_writer": writer,
+                "shared_storage_enabled": True,
+                "shared_content_chunk_loader": load_shared_content_chunks_from_legacy,
+            }
+            logger.info(
+                "F059 projection using shared dual projection mode "
+                "(content + membership)"
+            )
+        elif tenant_id is not None:
+            # no routing row / switch off for this tenant: legacy projection
+            logger.debug(
+                "shared storage not routed for tenant %s; legacy projection",
+                tenant_id,
+            )
+    if deleting_entry_finalizer is not None:
+        kwargs["deleting_entry_finalizer"] = deleting_entry_finalizer
+    return KnowledgeDocumentProjectionService(
+        session=session,
+        file_repository=file_repository,
+        document_repository=document_repository,
+        version_repository=version_repository,
+        **kwargs,
+    )
 
 
 async def _delete_entry_permissions(entry_id: int) -> None:
@@ -368,14 +435,15 @@ async def _process_projection_async(
 ) -> str:
     async with get_async_db_session() as session:
         repository = KnowledgeFileRepositoryImpl(session)
-        service = KnowledgeDocumentProjectionService(
-            session=session,
+        service = await _build_document_projection_service(
+            session,
             file_repository=repository,
             document_repository=KnowledgeDocumentRepositoryImpl(session),
             version_repository=KnowledgeDocumentVersionRepositoryImpl(
                 session
             ),
             deleting_entry_finalizer=_finalize_deleting_entry,
+            tenant_id=int(tenant_id),
         )
         result = await service.process_entry(
             tenant_id=tenant_id,
@@ -585,6 +653,10 @@ async def _reconcile_rollback_candidates(
 
 
 async def _scan_tenant_projection_async(tenant_id: int) -> int:
+    from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
+        KnowledgeDocumentProjectionService,
+    )
+
     async with get_async_db_session() as session:
         repository = KnowledgeFileRepositoryImpl(session)
         service = KnowledgeDocumentProjectionService(

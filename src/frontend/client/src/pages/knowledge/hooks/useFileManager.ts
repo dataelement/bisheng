@@ -88,6 +88,51 @@ export function dispatchKnowledgeSpaceFilesRefresh(spaceId?: number | string): v
     );
 }
 
+type KnowledgeFileAliasDecision = {
+    mode: "accept" | "reject";
+    name?: string;
+};
+
+const ALIAS_DECISION_TTL_MS = 2 * 60 * 1000;
+const aliasDecisionByFileId = new Map<string, { decision: KnowledgeFileAliasDecision; expiresAt: number }>();
+
+function pruneExpiredAliasDecisions(now = Date.now()): void {
+    for (const [fileId, entry] of aliasDecisionByFileId) {
+        if (entry.expiresAt <= now) {
+            aliasDecisionByFileId.delete(fileId);
+        }
+    }
+}
+
+/** Remember a user accept/reject so a stale children poll cannot restore alias buttons. */
+export function recordKnowledgeFileAliasDecision(
+    fileId: string,
+    mode: "accept" | "reject",
+    acceptedName?: string,
+): void {
+    const id = String(fileId);
+    if (!id) return;
+    pruneExpiredAliasDecisions();
+    aliasDecisionByFileId.set(id, {
+        decision: { mode, name: acceptedName },
+        expiresAt: Date.now() + ALIAS_DECISION_TTL_MS,
+    });
+}
+
+export function applyKnowledgeFileAliasDecision(file: KnowledgeFile): KnowledgeFile {
+    pruneExpiredAliasDecisions();
+    const entry = aliasDecisionByFileId.get(String(file.id));
+    if (!entry) return file;
+    if (entry.decision.mode === "accept") {
+        return {
+            ...file,
+            name: entry.decision.name || file.name,
+            aliasName: undefined,
+        };
+    }
+    return { ...file, aliasName: undefined };
+}
+
 /**
  * Manages file list state: loading, pagination, search, sorting, folder navigation.
  * Extracted from the root Knowledge component.
@@ -497,13 +542,17 @@ export function useFileManager({ activeSpace, initialFolderId, enabled = true }:
                 const knownIds = new Set(prev.map(f => String(f.id)));
                 // Replace matched rows wholesale — the API returns the full
                 // refreshed row; nextCursor / accumulated tail untouched.
-                const merged = prev.map(f => updatesById.get(String(f.id)) ?? f);
+                // Keep a just-accepted/rejected alias from being restored by a stale poll.
+                const merged = prev.map((f) => {
+                    const incoming = updatesById.get(String(f.id));
+                    return incoming ? applyKnowledgeFileAliasDecision(incoming) : f;
+                });
                 // Prepend rows we haven't seen (likely user-uploaded since
                 // last load). Filter pending-deletion ghosts here too.
                 const ignore = pendingDeletionIdsRef.current;
-                const newRows = res.data.filter(f =>
-                    !knownIds.has(String(f.id)) && !ignore.has(String(f.id))
-                );
+                const newRows = res.data
+                    .filter(f => !knownIds.has(String(f.id)) && !ignore.has(String(f.id)))
+                    .map(applyKnowledgeFileAliasDecision);
                 return newRows.length > 0 ? [...newRows, ...merged] : merged;
             });
         } catch {
