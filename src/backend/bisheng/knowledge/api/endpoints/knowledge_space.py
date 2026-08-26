@@ -39,7 +39,6 @@ from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
 from bisheng.knowledge.domain.services.knowledge_space_service import (
     KnowledgeSpaceService,
 )
-from bisheng.role.domain.services.quota_service import QuotaResourceType, require_quota
 from bisheng.workstation.domain.services.workstation_service import WorkStationService
 
 router = APIRouter(prefix="/knowledge/space", tags=["knowledge_space"])
@@ -51,8 +50,15 @@ SPACE_FILE_DOWNLOAD_PERMISSION_ACTION = "download"
 # ──────────────────────────── Space CRUD ──────────────────────────────────────
 
 
+# No `@require_quota` here, unlike assistant / workflow / tool. Those have no
+# domain-level quota check, so the decorator is their only gate. Knowledge spaces
+# gate inside `KnowledgeSpaceService._assert_space_creation_quota`, which also
+# covers the two paths the decorator cannot reach (the v2 open API in
+# `open_endpoints/filelib.py` and the F050 prospective-grant GETs). Keeping the
+# decorator would only duplicate the COUNT and — because it runs first — replace
+# the domain error 18001 ("创建知识空间数量已达上限") with the generic 19402
+# ("当前角色配额已用尽"), losing which resource actually ran out.
 @router.post("")
-@require_quota(QuotaResourceType.KNOWLEDGE_SPACE)
 async def create_space(
     req: KnowledgeSpaceCreateReq,
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
