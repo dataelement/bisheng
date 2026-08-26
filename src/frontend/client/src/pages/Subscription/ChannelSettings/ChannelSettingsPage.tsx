@@ -97,13 +97,15 @@ export function ChannelSettingsPage() {
   const creatorRow = useMemo<PermissionDraftRow | null>(() => {
     if (isEditMode || !user) return null;
     const numericUserId = Number(user.id);
-    const ownerModel = relationOptions.find((model) => model.level === 4);
+    const ownerModel =
+      relationOptions.find((model) => model.id === "owner") ??
+      relationOptions.find((model) => model.level === 4);
     return {
       subjectType: "user",
       subjectId: Number.isFinite(numericUserId) ? numericUserId : -1,
       subjectName: user.name || user.username || user.email,
       modelKey: ownerModel?.id ?? "owner",
-      modelName: localize("creator"),
+      modelName: ownerModel?.name ?? localize("com_permission.level_owner"),
       modelLevel: ownerModel?.level ?? 4,
       protected: true,
       editable: false,
