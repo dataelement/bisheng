@@ -23,6 +23,7 @@ from bisheng.points.domain.constants.monthly_reward_rules import (
     pick_highest_reward,
 )
 from bisheng.points.domain.constants.notify_templates import resolve_earn_notify
+from bisheng.points.domain.constants.rule_display_name import resolve_point_rule_display_name
 from bisheng.points.domain.repositories.points_repository import PointsRepository
 from bisheng.points.domain.services.points_ledger_service import PointsLedgerService
 from bisheng.points.domain.services.points_notify_service import (

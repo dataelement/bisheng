@@ -1,5 +1,6 @@
 """积分规则 display_name 与默认 name 分离。"""
 
+import importlib
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,6 +9,14 @@ import pytest
 from bisheng.points.domain.constants.rule_display_name import resolve_point_rule_display_name
 from bisheng.points.domain.schemas.points_schema import PointRuleRequest
 from bisheng.points.domain.services.points_rule_service import PointsRuleService
+
+# 8/21 把流水标题改成 helper 后漏 import，发分被 _safe 吞成 error。这些模块必须绑定该名字。
+_DISPLAY_NAME_CONSUMER_MODULES = (
+    "bisheng.points.domain.services.points_award_facade",
+    "bisheng.points.domain.services.points_monthly_reward_service",
+    "bisheng.points.domain.services.points_query_service",
+    "bisheng.points.domain.services.points_pending_deduct_service",
+)
 
 
 def test_resolve_point_rule_display_name_prefers_display_name():
@@ -18,6 +27,14 @@ def test_resolve_point_rule_display_name_prefers_display_name():
 def test_resolve_point_rule_display_name_falls_back_to_default_name():
     rule = SimpleNamespace(rule_code="G1", name="发布/上传文档到公共库", display_name=None)
     assert resolve_point_rule_display_name(rule) == "发布/上传文档到公共库"
+
+
+@pytest.mark.parametrize("modname", _DISPLAY_NAME_CONSUMER_MODULES)
+def test_award_related_services_bind_display_name_helper(modname):
+    """消费展示名的服务必须 import helper，避免运行时 NameError。"""
+    mod = importlib.import_module(modname)
+    helper = getattr(mod, "resolve_point_rule_display_name", None)
+    assert helper is resolve_point_rule_display_name, f"{modname} 未绑定 resolve_point_rule_display_name"
 
 
 @pytest.mark.asyncio
