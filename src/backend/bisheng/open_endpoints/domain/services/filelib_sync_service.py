@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterator
 
 from fastapi import Request, UploadFile
 from loguru import logger
@@ -88,10 +89,12 @@ class ResolvedFileSyncTarget:
     space: Knowledge
     folder_id: int | None
     used_personal_fallback: bool = False
+    used_responsible_person_personal: bool = False
 
 
 FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY = "filelib_sync_target_fallback"
 FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE = "token_user_personal"
+FILELIB_SYNC_RESPONSIBLE_PERSON_PERSONAL_METADATA_VALUE = "responsible_person_personal"
 FILELIB_SYNC_PERSONAL_FALLBACK_LEVEL2_FOLDER = "业务接口未分配"
 FILELIB_SYNC_DEVELOPER_TOKEN_ID_METADATA_KEY = "developer_token_id"
 FILELIB_SYNC_DEVELOPER_TOKEN_NAME_METADATA_KEY = "developer_token_name"
@@ -165,80 +168,85 @@ class FilelibSyncService:
                 identity,
                 allow_personal_fallback=allow_personal_fallback,
             )
-            if not target.used_personal_fallback:
-                if target_folder_id_override is not None:
-                    folder_id = int(target_folder_id_override)
-                elif target_folder_path_override is not None:
-                    folder_id = await self._resolve_folder_path_override(
-                        int(target.space.id),
-                        target_folder_path_override,
+            with self._impersonate_for_target_write(target, identity):
+                if not target.used_personal_fallback:
+                    if target_folder_id_override is not None:
+                        folder_id = int(target_folder_id_override)
+                    elif target_folder_path_override is not None:
+                        folder_id = await self._resolve_folder_path_override(
+                            int(target.space.id),
+                            target_folder_path_override,
+                        )
+                    else:
+                        folder_id = await self._resolve_target_folder(int(target.space.id), identity)
+                    target = ResolvedFileSyncTarget(
+                        space=target.space,
+                        folder_id=folder_id,
+                        used_personal_fallback=False,
+                        used_responsible_person_personal=target.used_responsible_person_personal,
                     )
-                else:
-                    folder_id = await self._resolve_target_folder(int(target.space.id), identity)
-                target = ResolvedFileSyncTarget(
-                    space=target.space,
-                    folder_id=folder_id,
-                    used_personal_fallback=False,
+                try:
+                    await self._require_upload_permission(target)
+                except FilelibSyncNotFoundError:
+                    if target.used_personal_fallback or not allow_personal_fallback:
+                        raise
+                    logger.warning(
+                        "filelib sync target unavailable, fallback to token user personal space token_id={} knowledge_id={}",
+                        self.token_id,
+                        target.space.id,
+                    )
+                    target = await self._resolve_personal_fallback_target(identity)
+                    await self._require_upload_permission(target)
+
+                domain = self._resolve_business_domain(
+                    portal_config,
+                    identity.business_domain_department,
+                    target_space=target.space,
                 )
-            try:
-                await self._require_upload_permission(target)
-            except FilelibSyncNotFoundError:
-                if target.used_personal_fallback or not allow_personal_fallback:
-                    raise
-                logger.warning(
-                    "filelib sync target unavailable, fallback to token user personal space token_id={} knowledge_id={}",
-                    self.token_id,
-                    target.space.id,
+                if (
+                    domain is not None
+                    and self.file_sync_rule.business_domain.mode == "dynamic"
+                    and not target.used_personal_fallback
+                    and not target.used_responsible_person_personal
+                ):
+                    self._ensure_domain_bound(target.space, domain)
+
+                replaced_file_id = await self._cleanup_duplicate_files_before_sync(
+                    knowledge_id=int(target.space.id),
+                    folder_id=target.folder_id,
+                    file_name=params.file_name,
+                    external_file_id=params.external_file_id,
                 )
-                target = await self._resolve_personal_fallback_target(identity)
-                await self._require_upload_permission(target)
 
-            domain = self._resolve_business_domain(
-                portal_config,
-                identity.business_domain_department,
-                target_space=target.space,
-            )
-            if (
-                domain is not None
-                and self.file_sync_rule.business_domain.mode == "dynamic"
-                and not target.used_personal_fallback
-            ):
-                self._ensure_domain_bound(target.space, domain)
+                staged_upload_path = await self._ensure_upload_path_preserves_display_name(
+                    local_file_path=local_file_path,
+                    file_name=params.file_name,
+                )
+                if staged_upload_path != local_file_path:
+                    extra_cleanup_paths.append(staged_upload_path)
 
-            replaced_file_id = await self._cleanup_duplicate_files_before_sync(
-                knowledge_id=int(target.space.id),
-                folder_id=target.folder_id,
-                file_name=params.file_name,
-                external_file_id=params.external_file_id,
-            )
-
-            staged_upload_path = await self._ensure_upload_path_preserves_display_name(
-                local_file_path=local_file_path,
-                file_name=params.file_name,
-            )
-            if staged_upload_path != local_file_path:
-                extra_cleanup_paths.append(staged_upload_path)
-
-            preview_cache_key = self.knowledge_space_service.get_preview_cache_key(
-                int(target.space.id),
-                staged_upload_path,
-            )
-            business_domain_code = domain.code if domain is not None else None
-            upload_results = await self.knowledge_space_service.add_file(
-                knowledge_id=int(target.space.id),
-                file_path=[staged_upload_path],
-                parent_id=target.folder_id,
-                file_category_code=self.file_sync_rule.category.code,
-                file_subcategory_code=self.file_sync_rule.category.subcategory_code,
-                business_domain_code=business_domain_code,
-                skip_approval=True,
-                enqueue_processing=False,
-                allow_duplicate_name=True,
-                allow_duplicate_content=True,
-                skip_space_business_domain_check=(
-                    self.file_sync_rule.business_domain.mode == "fixed" or domain is None
-                ),
-            )
+                preview_cache_key = self.knowledge_space_service.get_preview_cache_key(
+                    int(target.space.id),
+                    staged_upload_path,
+                )
+                business_domain_code = domain.code if domain is not None else None
+                upload_results = await self.knowledge_space_service.add_file(
+                    knowledge_id=int(target.space.id),
+                    file_path=[staged_upload_path],
+                    parent_id=target.folder_id,
+                    file_category_code=self.file_sync_rule.category.code,
+                    file_subcategory_code=self.file_sync_rule.category.subcategory_code,
+                    business_domain_code=business_domain_code,
+                    skip_approval=True,
+                    enqueue_processing=False,
+                    allow_duplicate_name=True,
+                    allow_duplicate_content=True,
+                    skip_space_business_domain_check=(
+                        self.file_sync_rule.business_domain.mode == "fixed"
+                        or domain is None
+                        or target.used_responsible_person_personal
+                    ),
+                )
             if len(upload_results) != 1 or upload_results[0].status == KnowledgeFileStatus.FAILED.value:
                 raise FilelibSyncConflictError(msg="duplicate file content or name")
 
@@ -277,6 +285,10 @@ class FilelibSyncService:
                 user_metadata[FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY] = (
                     FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE
                 )
+            elif target.used_responsible_person_personal:
+                user_metadata[FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY] = (
+                    FILELIB_SYNC_RESPONSIBLE_PERSON_PERSONAL_METADATA_VALUE
+                )
             created_file.user_metadata = user_metadata
             if domain is not None:
                 await FileEncodingTransformer.generate_fixed_encoding(
@@ -307,7 +319,7 @@ class FilelibSyncService:
                 operator_is_global_super=bool(getattr(self.login_user, "is_global_super", False)),
             )
             logger.info(
-                "filelib sync queued token_id={} external_file_id={} file_id={} knowledge_id={} folder_id={} token_user_id={} responsible_user_id={} personal_fallback={} endpoint={} trigger={}",
+                "filelib sync queued token_id={} external_file_id={} file_id={} knowledge_id={} folder_id={} token_user_id={} responsible_user_id={} personal_fallback={} responsible_person_personal={} endpoint={} trigger={}",
                 self.token_id,
                 params.external_file_id,
                 created_file.id,
@@ -316,6 +328,7 @@ class FilelibSyncService:
                 self.login_user.user_id,
                 identity.responsible_user_id,
                 target.used_personal_fallback,
+                target.used_responsible_person_personal,
                 endpoint_tag,
                 trigger_type,
             )
@@ -794,8 +807,7 @@ class FilelibSyncService:
         allow_personal_fallback: bool = True,
     ) -> ResolvedFileSyncTarget:
         try:
-            space = await self._resolve_configured_target_space(identity)
-            return ResolvedFileSyncTarget(space=space, folder_id=None, used_personal_fallback=False)
+            return await self._resolve_configured_target_space(identity)
         except (FilelibSyncNotFoundError, FilelibSyncConflictError) as exc:
             if not allow_personal_fallback:
                 raise
@@ -805,19 +817,31 @@ class FilelibSyncService:
             )
             return await self._resolve_personal_fallback_target(identity)
 
-    async def _resolve_configured_target_space(self, identity: ResolvedIdentity) -> Knowledge:
+    async def _resolve_configured_target_space(self, identity: ResolvedIdentity) -> ResolvedFileSyncTarget:
         if self.file_sync_rule.target_space.mode == "fixed":
             space = await self.repository.find_knowledge_by_id(int(self.file_sync_rule.target_space.knowledge_id))
             if space is None:
                 raise FilelibSyncNotFoundError(msg="configured target knowledge space does not exist")
-            return space
+            return ResolvedFileSyncTarget(space=space, folder_id=None)
         if identity.target_space_department is None:
             raise FilelibSyncNotFoundError(msg="dynamic target department does not exist")
         dynamic_source = str(self.file_sync_rule.target_space.dynamic_source or "")
-        return await self._find_department_space(
+        if dynamic_source == "responsible_person_id":
+            space, used_personal = await self._find_responsible_person_target_space(
+                identity.target_space_department,
+                identity,
+            )
+            return ResolvedFileSyncTarget(
+                space=space,
+                folder_id=None,
+                used_responsible_person_personal=used_personal,
+            )
+        space = await self._find_department_space(
             identity.target_space_department,
             dynamic_source=dynamic_source,
+            identity=identity,
         )
+        return ResolvedFileSyncTarget(space=space, folder_id=None)
 
     async def _resolve_personal_fallback_target(self, identity: ResolvedIdentity) -> ResolvedFileSyncTarget:
         space = await self.knowledge_space_service.ensure_personal_default_space()
@@ -972,22 +996,64 @@ class FilelibSyncService:
             return str(identity.caller_department.name or "")
         raise FilelibSyncInvalidParamsError(msg="invalid folder dynamic source in token rule")
 
+    def _responsible_person_payload(self, identity: ResolvedIdentity) -> UserPayload:
+        return UserPayload(
+            user_id=int(identity.responsible_user_id),
+            user_name=str(identity.responsible_user_name or ""),
+            user_role=list(self.login_user.user_role or []),
+            tenant_id=int(getattr(self.login_user, "tenant_id", None) or 1),
+        )
+
+    @contextmanager
+    def _impersonate_for_target_write(
+        self,
+        target: ResolvedFileSyncTarget,
+        identity: ResolvedIdentity,
+    ) -> Iterator[None]:
+        """Write into the responsible person's personal space as that user.
+
+        Token users typically have no ReBAC on another user's private personal
+        space; the owner identity is required for folder create and upload.
+        """
+        if not target.used_responsible_person_personal:
+            yield
+            return
+        acting = self._responsible_person_payload(identity)
+        previous_self = self.login_user
+        previous_kss = getattr(self.knowledge_space_service, "login_user", None)
+        self.login_user = acting
+        self.knowledge_space_service.login_user = acting
+        try:
+            yield
+        finally:
+            self.login_user = previous_self
+            self.knowledge_space_service.login_user = previous_kss
+
     async def _find_department_space(
         self,
         department: Department,
         *,
         dynamic_source: str = "department_id",
+        identity: ResolvedIdentity | None = None,
     ) -> Knowledge:
         if dynamic_source == "responsible_person_id":
-            return await self._find_responsible_person_target_space(department)
+            space, _used_personal = await self._find_responsible_person_target_space(
+                department,
+                identity,
+            )
+            return space
         return await self._resolve_bound_space(
             department,
             department_ids=self._department_chain(department),
             kind=DepartmentSpaceTargetKind.DEPARTMENT,
         )
 
-    async def _find_responsible_person_target_space(self, department: Department) -> Knowledge:
-        """Clinic library on the responsible person's department, then nearest department library."""
+    async def _find_responsible_person_target_space(
+        self,
+        department: Department,
+        identity: ResolvedIdentity | None,
+    ) -> tuple[Knowledge, bool]:
+        """Clinic library on the responsible person's department, else their personal space."""
         clinic_space = await self._resolve_bound_space(
             department,
             department_ids=[int(department.id)],
@@ -996,12 +1062,19 @@ class FilelibSyncService:
             ambiguous_picks_first=True,
         )
         if clinic_space is not None:
-            return clinic_space
-        return await self._resolve_bound_space(
-            department,
-            department_ids=self._department_chain(department),
-            kind=DepartmentSpaceTargetKind.DEPARTMENT,
+            return clinic_space, False
+        if identity is None or not identity.responsible_user_id:
+            raise FilelibSyncNotFoundError(msg=f"首钢股份知识管理平台不存在知识库{department.name}")
+        owner = self._responsible_person_payload(identity)
+        space = await self.knowledge_space_service.ensure_personal_default_space_for_owner(owner)
+        logger.info(
+            "filelib sync no clinic library, using responsible person personal space "
+            "department_id={} user_id={} space_id={}",
+            int(department.id),
+            int(identity.responsible_user_id),
+            getattr(space, "id", None),
         )
+        return space, True
 
     async def _resolve_bound_space(
         self,
@@ -1081,6 +1154,7 @@ class FilelibSyncService:
         strict_catalog = (
             self.file_sync_rule.target_space.mode == "fixed"
             and not target.used_personal_fallback
+            and not target.used_responsible_person_personal
         )
         try:
             await KnowledgeSpaceService.validate_file_sync_target(

@@ -9,26 +9,21 @@ interface DropZoneProps {
     onDrop: (files: File[]) => void;
 }
 
+const KNOWLEDGE_UPLOAD_FORMATS = [
+    '.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.HTM', '.XLS', '.XLSX',
+];
+
 export default function DropZone({ onDrop }: DropZoneProps) {
     const { t } = useTranslation()
     const { appConfig } = useContext(locationContext)
-    const xinChuangFormats = ['.WPS', '.ET', '.DPS'];
-    const mediaFormats = ['.MP3', '.WAV', '.M4A', '.AAC', '.FLAC', '.OGG', '.MP4', '.MOV', '.AVI', '.MKV', '.WEBM'];
 
-    // Define supported file formats (for display purposes only, not for filtering)
-    const supportedFormats = appConfig.enableEtl4lm
-        ? ['.PDF', '.TXT', '.DOCX', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', '.DOC', '.PNG', '.JPG', '.JPEG', '.BMP', ...xinChuangFormats, ...mediaFormats]
-        : ['.PDF', '.TXT', '.DOCX', '.DOC', '.PPT', '.PPTX', '.MD', '.HTML', '.XLS', '.XLSX', '.CSV', ...xinChuangFormats, ...mediaFormats];
     const allowedExts = new Set(
-        supportedFormats.map(ext => ext.toLowerCase().replace('.', ''))
+        KNOWLEDGE_UPLOAD_FORMATS.map(ext => ext.toLowerCase().replace('.', ''))
     );
     const { getRootProps, getInputProps } = useDropzone({
         accept: {
-            'application/*': supportedFormats,
-            'text/*': supportedFormats,
-            'image/*': supportedFormats,
-            'audio/*': supportedFormats,
-            'video/*': supportedFormats
+            'application/*': KNOWLEDGE_UPLOAD_FORMATS,
+            'text/*': KNOWLEDGE_UPLOAD_FORMATS,
         },
         useFsAccessApi: false,
         onDrop: (acceptedFiles, disAcceptedFiles) => {
@@ -60,9 +55,7 @@ export default function DropZone({ onDrop }: DropZoneProps) {
         }
     });
 
-    const formatText = appConfig.enableEtl4lm
-        ? t('supportedFormatsWithImages', { maxSize: appConfig.uploadFileMaxSize })
-        : t('supportedFormatsWithoutImages', { maxSize: appConfig.uploadFileMaxSize })
+    const formatText = t('supportedFormatsWithoutImages', { maxSize: appConfig.uploadFileMaxSize })
 
     return (
         <div {...getRootProps()} className="group h-48 border border-dashed rounded-md flex flex-col justify-center items-center cursor-pointer gap-3 hover:border-primary">

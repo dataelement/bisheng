@@ -36,6 +36,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeDepartmentFileUnavailableError,
     KnowledgeDepartmentFileViewApprovalRequiredError,
     KnowledgeDepartmentShareLoginRequiredError,
+    KnowledgeFileNotSupportedError,
     KnowledgeInvalidCursorError,
     KnowledgeShareCreationDisabledError,
     KnowledgeSpaceTagLibraryInvalidError,
@@ -305,6 +306,10 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibrary
 from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
     WebLinkImportResult,
+)
+from bisheng.knowledge.domain.upload_extensions import (
+    UnsupportedUploadFileExtensionError,
+    validate_knowledge_upload_file_extension,
 )
 from bisheng.llm.domain import LLMService
 from bisheng.message.domain.services.notification_content import build_notify_content
@@ -4710,6 +4715,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def ensure_personal_default_space(self) -> Knowledge:
         """Get or create the login user's default personal knowledge space."""
         return await self._ensure_personal_default_space()
+
+    async def ensure_personal_default_space_for_owner(self, owner: UserPayload) -> Knowledge:
+        """Get or create the default personal knowledge space for ``owner``.
+
+        Temporarily switches ``login_user`` so the space is named, owned, and
+        authorized as that user, then restores the previous identity.
+        """
+        previous = self.login_user
+        self.login_user = owner
+        try:
+            return await self._ensure_personal_default_space()
+        finally:
+            self.login_user = previous
 
     async def _ensure_personal_spaces(self) -> tuple[Knowledge, Knowledge]:
         """确保并返回当前用户固定的『我的收藏』和默认个人知识库。"""
@@ -16529,6 +16547,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for fp in file_path:
             fname = fp.rsplit("/", 1)[-1] if "/" in fp else fp
             self._check_filename_sensitive_words(fname)
+            try:
+                validate_knowledge_upload_file_extension(fname)
+            except UnsupportedUploadFileExtensionError as exc:
+                extension = str(exc) or "unknown"
+                raise KnowledgeFileNotSupportedError(
+                    msg=f"file format is not supported: .{extension}",
+                ) from exc
 
         async def cleanup_created_files() -> None:
             created_file_ids = [created_file.id for created_file in created_files if getattr(created_file, "id", None)]
