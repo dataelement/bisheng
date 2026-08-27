@@ -4,6 +4,7 @@ import type { ResourceType, SelectedSubject } from "~/api/permission";
 import { ChevronDown, ChevronRight, Building2, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalize } from "~/hooks";
+import { cn } from "~/utils";
 import {
   departmentMatchesKeyword,
   resolveDepartmentDisplayName,
@@ -17,6 +18,7 @@ export interface DepartmentNode {
   display_name?: string;
   parent_id: number | null;
   member_count?: number;
+  org_level?: string | null;
   children?: DepartmentNode[];
 }
 
@@ -26,6 +28,29 @@ function departmentDisplayName(node: DepartmentNode): string {
     shortName: node.short_name,
     name: node.name,
   });
+}
+
+const ORG_LEVEL_I18N_KEYS: Record<string, string> = {
+  company: "com_permission.org_level_company",
+  dept: "com_permission.org_level_dept",
+  office: "com_permission.org_level_office",
+  squad: "com_permission.org_level_squad",
+};
+
+/** 对齐后台「组织与成员」树行徽章颜色。 */
+function orgLevelBadgeClass(level: string): string {
+  switch (level) {
+    case "company":
+      return "bg-amber-100 text-amber-800";
+    case "dept":
+      return "bg-sky-100 text-sky-800";
+    case "office":
+      return "bg-violet-100 text-violet-800";
+    case "squad":
+      return "bg-emerald-100 text-emerald-800";
+    default:
+      return "bg-gray-100 text-gray-500";
+  }
 }
 
 function sortDepartmentTree(nodes: DepartmentNode[]): DepartmentNode[] {
@@ -54,6 +79,11 @@ interface SubjectSearchDepartmentProps {
   selectionMode?: "multiple" | "single";
   grantDepartmentsApi?: typeof getResourceGrantDepartments;
   searchPlaceholder?: string;
+  canSelectNode?: (node: DepartmentNode) => boolean;
+  /** 已绑定节点仍禁用；false 时不展示右侧状态文案。 */
+  showAlreadyGrantedLabel?: boolean;
+  /** 已绑定节点右侧文案 i18n key；默认「已授权」，科室绑定下拉传「已绑定」。 */
+  boundDisabledLabelKey?: string;
 }
 
 function collectExplicitDepartmentSelections(
@@ -124,6 +154,9 @@ export function SubjectSearchDepartment({
   selectionMode = "multiple",
   grantDepartmentsApi,
   searchPlaceholder,
+  canSelectNode,
+  showAlreadyGrantedLabel = true,
+  boundDisabledLabelKey = "com_permission.already_granted",
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const [tree, setTree] = useState<DepartmentNode[]>([]);
@@ -177,7 +210,7 @@ export function SubjectSearchDepartment({
   }, [onSelectionSummaryChange, selectedDepartmentsById, tree]);
 
   const toggle = (node: DepartmentNode) => {
-    if (disabledIdSet.has(node.id)) return;
+    if (disabledIdSet.has(node.id) || (canSelectNode && !canSelectNode(node))) return;
     if (selectionMode === "single") {
       onChange(
         selectedIds.has(node.id)
@@ -291,6 +324,9 @@ export function SubjectSearchDepartment({
               onToggle={toggle}
               onExpand={toggleExpand}
               selectionMode={selectionMode}
+              canSelectNode={canSelectNode}
+              showAlreadyGrantedLabel={showAlreadyGrantedLabel}
+              boundDisabledLabelKey={boundDisabledLabelKey}
             />
           ))}
       </div>
@@ -299,7 +335,7 @@ export function SubjectSearchDepartment({
 }
 
 function TreeNode({
-  node, depth, expanded, selectedIds, indeterminateIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode,
+  node, depth, expanded, selectedIds, indeterminateIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode, canSelectNode, showAlreadyGrantedLabel, boundDisabledLabelKey,
 }: {
   node: DepartmentNode;
   depth: number;
@@ -314,6 +350,9 @@ function TreeNode({
   onToggle: (n: DepartmentNode) => void;
   onExpand: (id: number) => void;
   selectionMode: "multiple" | "single";
+  canSelectNode?: (node: DepartmentNode) => boolean;
+  showAlreadyGrantedLabel: boolean;
+  boundDisabledLabelKey: string;
 }) {
   const localize = useLocalize();
   if (!matchesKeyword(node)) return null;
@@ -327,7 +366,9 @@ function TreeNode({
   const isImplicitlySelected = selectionMode === "multiple"
     && ancestorIncluded
     && !isExplicitlySelected;
-  const isDisabled = disabledIds.has(node.id);
+  const isBoundDisabled = disabledIds.has(node.id);
+  const isLevelBlocked = Boolean(canSelectNode && !canSelectNode(node));
+  const isDisabled = isBoundDisabled || isLevelBlocked;
   const isChecked = isExplicitlySelected || isImplicitlySelected;
   const isIndeterminate = !isChecked && indeterminateIds.has(node.id);
   const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
@@ -337,11 +378,15 @@ function TreeNode({
     <>
       <div
         className={`flex items-center gap-1 px-2 py-1.5 ${
-          isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-gray-50"
+          isBoundDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-gray-50"
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={() => {
-          if (isDisabled) return;
+          if (isBoundDisabled) return;
+          if (isLevelBlocked) {
+            if (hasChildren) onExpand(node.id);
+            return;
+          }
           if (isImplicitlySelected) {
             onMaterializeInheritedSelection();
             return;
@@ -372,10 +417,20 @@ function TreeNode({
             onToggle(node);
           }}
         />
-        <Building2 className="h-4 w-4 text-gray-400" />
+        <Building2 className="h-4 w-4 shrink-0 text-gray-400" />
         <span className="min-w-0 truncate text-sm" title={displayName}>
           {displayName}
         </span>
+        {node.org_level && ORG_LEVEL_I18N_KEYS[node.org_level] ? (
+          <span
+            className={cn(
+              "ml-1 shrink-0 rounded px-1 py-0.5 text-[10px] font-medium",
+              orgLevelBadgeClass(node.org_level),
+            )}
+          >
+            {localize(ORG_LEVEL_I18N_KEYS[node.org_level])}
+          </span>
+        ) : null}
         {node.member_count != null && (
           <span className="ml-1 text-xs text-gray-400">({node.member_count})</span>
         )}
@@ -384,9 +439,9 @@ function TreeNode({
             {localize("com_permission.covered_by_parent_department")}
           </span>
         )}
-        {isDisabled && (
+        {isBoundDisabled && showAlreadyGrantedLabel && (
           <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-            {localize("com_permission.already_granted")}
+            {localize(boundDisabledLabelKey)}
           </span>
         )}
       </div>
@@ -406,6 +461,9 @@ function TreeNode({
           onToggle={onToggle}
           onExpand={onExpand}
           selectionMode={selectionMode}
+          canSelectNode={canSelectNode}
+          showAlreadyGrantedLabel={showAlreadyGrantedLabel}
+          boundDisabledLabelKey={boundDisabledLabelKey}
         />
       ))}
     </>
