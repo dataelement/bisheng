@@ -84,6 +84,8 @@ workflow:
   max_steps: 50
   # 等待用户输入的超时时间，单位分钟
   timeout: 5
+  # 首次打开已结束的独立工作流会话时是否自动重新运行（全局开关，默认关闭）
+  auto_rerun_on_open: false
 
 # 日常聊天（Agent 模式）相关配置
 daily_chat:
