@@ -1,6 +1,7 @@
 import MultiSelect from "@/components/bs-ui/select/multi";
 import { getUsersApi } from "@/controllers/API/user";
-import { debounce } from "lodash";
+import { formatUserDisplayLabel } from "@/util/utils";
+import { debounce } from "lodash-es";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface UserOption {
@@ -38,7 +39,10 @@ const useUsers = () => {
 
     // 通用数据映射
     const mapUserData = (data: any[]): UserOption[] =>
-        data.map(u => ({ label: u.user_name, value: u.user_id }));
+        data.map(u => ({
+            label: formatUserDisplayLabel(u.user_name, u.external_id),
+            value: u.user_id,
+        }));
 
     // 统一请求处理
     const fetchUsers = async (params: {

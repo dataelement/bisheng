@@ -421,7 +421,7 @@ class AuditLogDao(AuditLogBase):
                     continue
                 external_id = str(metadata.get('responsible_person_external_id') or '').strip()
                 user_name = str(metadata.get('responsible_user_name') or '').strip()
-                if external_id and user_name and external_id != user_name:
+                if external_id and user_name:
                     label = f'{external_id} ({user_name})'
                 else:
                     label = external_id or user_name or f'#{user_id}'
