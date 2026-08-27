@@ -190,6 +190,11 @@ export function ActionLevelBoard({
           <p className="mt-1 text-sm leading-6 text-muted-foreground">
             {t("actionLevel.description")}
           </p>
+          {/* The page's whole reason for existing: without this, a level is just
+              a column number and nobody knows what dragging a card costs. */}
+          <p className="mt-1 max-w-4xl text-xs leading-5 text-muted-foreground/80">
+            {t("actionLevel.descriptionMore")}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -294,14 +299,19 @@ export function ActionLevelBoard({
                   <h3 className="text-sm font-semibold text-foreground">
                     {levelName(level)}
                   </h3>
-                  <span className="rounded-full bg-background px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
-                    {zoneActions.length}
+                  {/* The count was redundant — five cards at most, all visible.
+                      The header slot now carries the one fact the page was missing. */}
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    {t(`actionLevel.zoneHint.${key}`)}
                   </span>
                 </div>
 
                 <div className="flex flex-col gap-2">
                   {zoneActions.map((action) => {
                     const active = activeStates[action.code] ?? action.active
+                    const appliesTo = action.resource_types
+                      .map((resourceType) => resourceTypeLabel(t, resourceType))
+                      .join("、")
                     return (
                       <article
                         key={action.code}
@@ -408,6 +418,15 @@ export function ActionLevelBoard({
                               {t("actionLevel.inactive")}
                             </span>
                           )}
+                          {/* Which resources this operation even applies to used to
+                              live in a tooltip nobody hovers. It fits in the row the
+                              level dropdown already occupies, so the card stays put. */}
+                          <span
+                            className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground"
+                            title={appliesTo}
+                          >
+                            {appliesTo}
+                          </span>
                         </div>
                       </article>
                     )

@@ -2083,7 +2083,7 @@
   "f048_permission": {
     "dialog": {
       "title": "Permissions",
-      "description": "Review permission sources or manage local grants with grantable models.",
+      "description": "See where each person's permission comes from, or add and remove members at this level.",
       "loading": "Loading resource permissions…",
       "load_failed": "Failed to load resource permissions",
       "roster": "Current Permissions",
@@ -2093,8 +2093,8 @@
       "unassigned": "Unassigned"
     },
     "model": {
-      "level": "Derived Level",
-      "inactive": "Model inactive"
+      "level": "Template Level",
+      "inactive": "Template inactive"
     },
     "mode": {
       "label": "Permission Mode",
@@ -2156,13 +2156,14 @@
     },
     "grant": {
       "existing": "Current Grants",
-      "model": "Permission Model",
-      "add_model": "Model for New Grant",
+      "model": "Permission Template",
+      "add_model": "Template for New Grant",
       "add": "Add",
       "remove": "Remove",
       "pending": "{{count}} pending changes",
       "submit": "Submit Changes",
-      "conflict": "The grant version changed. Refresh and try again."
+      "conflict": "The grant version changed. Refresh and try again.",
+      "grantable_hint": "You can only grant templates below your own level. Granting the same level requires that template to allow same-level granting."
     },
     "impact": {
       "title": "Impact Confirmation",

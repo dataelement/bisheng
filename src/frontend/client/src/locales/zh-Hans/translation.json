@@ -2012,7 +2012,7 @@
   "f048_permission": {
     "dialog": {
       "title": "权限管理",
-      "description": "查看权限来源，或按可授模型管理本级权限。",
+      "description": "查看每个人的权限来自哪里，或在这里增删本级成员。",
       "loading": "正在加载资源权限…",
       "load_failed": "资源权限加载失败",
       "roster": "当前权限",
@@ -2022,8 +2022,8 @@
       "unassigned": "未分配"
     },
     "model": {
-      "level": "派生等级",
-      "inactive": "模型已停用"
+      "level": "模板等级",
+      "inactive": "模板已停用"
     },
     "mode": {
       "label": "权限模式",
@@ -2085,13 +2085,14 @@
     },
     "grant": {
       "existing": "当前授权",
-      "model": "权限模型",
-      "add_model": "新增授权模型",
+      "model": "权限模板",
+      "add_model": "新增授权模板",
       "add": "添加",
       "remove": "移除",
       "pending": "待提交 {{count}} 项变更",
       "submit": "提交变更",
-      "conflict": "授权版本已变化，请刷新后重试"
+      "conflict": "授权版本已变化，请刷新后重试",
+      "grantable_hint": "只能授出等级低于你自己的模板；要授出同等级，需该模板开启「允许授予同等级」。"
     },
     "impact": {
       "title": "影响确认",
