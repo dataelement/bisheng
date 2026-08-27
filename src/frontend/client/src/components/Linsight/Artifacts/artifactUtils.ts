@@ -116,6 +116,55 @@ export function toUploadedArtifacts(files: any[] | undefined): ArtifactFile[] {
         });
 }
 
+export interface WorkspaceArtifactSnapshot {
+    files?: Parameters<typeof toUploadedArtifacts>[0];
+    file_list?: ArtifactFile[];
+    history?: Array<{ file_list?: ArtifactFile[] }>;
+}
+
+function getWorkspaceArtifactKey(file: ArtifactFile): string {
+    const source = file.source || 'output';
+    const normalizedPath = decodeSafe(file.file_path || '').replace(/\\/g, '/');
+    const workspacePath = normalizedPath.match(/(?:^|\/)(output|uploads)\/(.+)$/i);
+    const identity = workspacePath
+        ? `${workspacePath[1].toLowerCase()}/${workspacePath[2]}`
+        : decodeSafe(file.file_name || '').toLowerCase();
+    return `${source}:${identity}`;
+}
+
+/**
+ * Build the conversation-scoped workspace list from per-round result snapshots.
+ *
+ * `final_files` describes what one task round delivered; it is not the workspace
+ * itself. A later greeting can legitimately have an empty `final_files` array
+ * while still inheriting every prior deliverable. Accumulate snapshots in
+ * chronological order so the drawer keeps those files, with a newer artifact
+ * replacing an older entry at the same workspace path.
+ */
+export function collectConversationWorkspaceFiles(
+    snapshots: Array<WorkspaceArtifactSnapshot | null | undefined>,
+): ArtifactFile[] {
+    const collected = new Map<string, ArtifactFile>();
+
+    const addFiles = (files: ArtifactFile[] | undefined) => {
+        for (const file of files || []) {
+            if (!file?.file_name || !file?.file_url) continue;
+            collected.set(getWorkspaceArtifactKey(file), file);
+        }
+    };
+
+    for (const snapshot of snapshots) {
+        if (!snapshot) continue;
+        addFiles(toUploadedArtifacts(snapshot.files));
+        for (const round of snapshot.history || []) {
+            addFiles(round.file_list);
+        }
+        addFiles(snapshot.file_list);
+    }
+
+    return Array.from(collected.values());
+}
+
 /**
  * Resolve a MinIO share url into a same-origin fetchable path.
  *

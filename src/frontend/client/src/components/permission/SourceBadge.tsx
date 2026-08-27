@@ -31,6 +31,11 @@ export function SourceBadge({ source }: SourceBadgeProps) {
           · {localize("f048_permission.source.include_children")}
         </span>
       )}
+      {source.userset_relation === "admin" && (
+        <span className="font-normal">
+          · {localize("f048_permission.source.user_group_admin")}
+        </span>
+      )}
     </span>
   );
 }

@@ -17,6 +17,7 @@ import type {
 import { Button, Checkbox } from "~/components/ui";
 import { useLocalize } from "~/hooks";
 import { canMutatePermissionAssignee } from "./assigneePolicy";
+import { SourceBadge } from "./SourceBadge";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserGroup } from "./SubjectSearchUserGroup";
@@ -398,15 +399,15 @@ export function PermissionGrantTab({
                     {assignee.subject.name ||
                       `${assignee.subject.type}:${assignee.subject.id}`}
                   </p>
-                  <p className="mt-1 text-xs text-[#818181]">
-                    {assignee.source.type}
+                  <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-[#818181]">
+                    <SourceBadge source={assignee.source} />
                     {assignee.protected && (
                       <span className="ml-2 inline-flex items-center gap-1">
                         <LockKeyhole aria-hidden="true" className="size-3" />
                         {localize("f048_permission.roster.protected")}
                       </span>
                     )}
-                  </p>
+                  </div>
                 </div>
                 <select
                   aria-label={`${localize(

@@ -165,6 +165,7 @@ export interface PermissionGrantSubject {
 export interface PermissionGrantSource {
   type: string
   include_children: boolean
+  userset_relation?: string | null
 }
 
 export interface PermissionGrantAssignee {

@@ -36,7 +36,23 @@ vi.mock("@/components/bs-comp/permission/SubjectSearchDepartment", () => ({
 }))
 
 vi.mock("@/components/bs-comp/permission/SubjectSearchUserGroup", () => ({
-  SubjectSearchUserGroup: () => <div>group-picker</div>,
+  SubjectSearchUserGroup: (props: {
+    value: Array<{ type: "user_group"; id: number; name: string }>
+    onChange: (
+      value: Array<{ type: "user_group"; id: number; name: string }>,
+    ) => void
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        props.onChange([
+          { type: "user_group", id: 77, name: "Reviewers" },
+        ])
+      }
+    >
+      select-group
+    </button>
+  ),
 }))
 
 const context: ResourcePermissionContext = {
@@ -207,6 +223,71 @@ describe("F048 PermissionGrantTab", () => {
     })
     expect(screen.getByLabelText("grant.model.42")).toBeDisabled()
     expect(screen.getByRole("button", { name: "grant.remove.42" })).toBeDisabled()
+  })
+
+  it("shows an existing user-group administrator grant", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="workflow"
+        resourceId="flow-1"
+        context={context}
+        assignees={[
+          {
+            ...editableAssignee,
+            subject: {
+              type: "user_group",
+              id: "77",
+              name: "Reviewers",
+            },
+            source: {
+              type: "USER_GROUP",
+              include_children: false,
+              userset_relation: "admin",
+            },
+          },
+        ]}
+        onSuccess={vi.fn()}
+      />,
+    )
+
+    expect(
+      await screen.findByText(/source\.userGroupAdmin/),
+    ).toBeInTheDocument()
+  })
+
+  it("does not expose or submit a user-group administrator grant", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="workflow"
+        resourceId="flow-1"
+        context={context}
+        onSuccess={vi.fn()}
+      />,
+    )
+
+    await screen.findByLabelText("grant.addModel")
+    fireEvent.click(screen.getByRole("button", { name: "subject.userGroup" }))
+    fireEvent.click(screen.getByRole("button", { name: "select-group" }))
+    fireEvent.click(screen.getByRole("button", { name: "grant.submit" }))
+
+    await waitFor(() => {
+      expect(mutateResourceGrantsApi).toHaveBeenCalledWith(
+        "workflow",
+        "flow-1",
+        expect.objectContaining({
+          changes: [
+            {
+              op: "ADD",
+              model_key: "viewer",
+              subject: {
+                type: "user_group",
+                id: "77",
+              },
+            },
+          ],
+        }),
+      )
+    })
   })
 
   it("removes exactly one editable assignee and reports stale conflicts", async () => {

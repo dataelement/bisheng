@@ -12,7 +12,7 @@ import AiChatMessages from '~/components/Chat/AiChatMessages';
 import { PinnedTaskPanel } from '~/components/Linsight/Execution/PinnedTaskPanel';
 import { WorkspacePanel } from '~/components/Linsight/Artifacts/WorkspacePanel';
 import { useWorkspacePanel } from '~/components/Linsight/Artifacts/useWorkspacePanel';
-import { type ArtifactFile, toUploadedArtifacts } from '~/components/Linsight/Artifacts/artifactUtils';
+import { collectConversationWorkspaceFiles } from '~/components/Linsight/Artifacts/artifactUtils';
 import { useLinsightManager } from '~/hooks/useLinsightManager';
 import { userStopLinsightEvent } from '~/api/linsight';
 import { SopStatus, taskModeState } from '~/store/linsight';
@@ -363,15 +363,20 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
   // 12221-40080) for the conversation's latest task turn — it tracks that turn's
   // execution detail from the linsight store rather than scrolling away in the
   // message stream.
-  const latestTaskVersionId = useMemo(() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i] as any;
-      if (m?.category === 'task' && m?.linsightSessionVersionId) {
-        return m.linsightSessionVersionId as string;
+  const taskVersionIds = useMemo(() => {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const message of messages) {
+      const m = message as any;
+      const versionId = m?.category === 'task' ? m?.linsightSessionVersionId : '';
+      if (versionId && !seen.has(versionId)) {
+        seen.add(versionId);
+        ids.push(versionId);
       }
     }
-    return '';
+    return ids;
   }, [messages]);
+  const latestTaskVersionId = taskVersionIds[taskVersionIds.length - 1] || '';
 
   // F035: a conversation that already holds a task turn IS a task-mode
   // conversation. Guard on the message's own conversationId so the stale
@@ -451,10 +456,11 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   // F035: workspace drawer for the chat-embedded task mode. Lifted to ChatView
   // (the task turn renders inline per message, but the entry button lives in the
-  // shared header) and bound to the LATEST task turn. Shows uploaded sources +
-  // generated deliverables. The drawer only opens on the header button — no
-  // auto-expand (the entry icon appearing is enough).
-  const { getLinsight, updateLinsight } = useLinsightManager();
+  // shared header). Execution state remains bound to the LATEST task turn, while
+  // the file list accumulates formal artifacts from every task turn because the
+  // workspace itself belongs to the conversation. The drawer only opens on the
+  // header button — no auto-expand (the entry icon appearing is enough).
+  const { getLinsight, updateLinsight, linsightMap } = useLinsightManager();
   const taskArtifacts = useWorkspacePanel(latestTaskVersionId);
 
   // F035: enter/exit animation for the fullscreen workspace overlay. The overlay
@@ -559,10 +565,8 @@ const ChatView = ({ id = '', index = 0, shareToken = '' }: { id?: string, index?
 
   const taskLinsight = latestTaskVersionId ? getLinsight(latestTaskVersionId) : null;
   const taskWorkspaceFiles = useMemo(() => {
-    const uploaded = toUploadedArtifacts(taskLinsight?.files as any[]);
-    const generated = (taskLinsight?.file_list as ArtifactFile[]) || [];
-    return [...uploaded, ...generated];
-  }, [taskLinsight?.files, taskLinsight?.file_list]);
+    return collectConversationWorkspaceFiles(taskVersionIds.map((versionId) => linsightMap.get(versionId)));
+  }, [taskVersionIds, linsightMap]);
 
   // F035: while the latest task round is in a non-terminal state (generating /
   // running / queued), the input stays editable but the send button is disabled
