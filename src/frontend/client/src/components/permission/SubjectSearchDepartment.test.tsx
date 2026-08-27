@@ -343,6 +343,49 @@ describe("SubjectSearchDepartment", () => {
     expect(screen.queryByText("com_permission.already_granted")).not.toBeInTheDocument();
   });
 
+  it("does not show already bound label on non-office nodes", async () => {
+    const loadDepartments = jest.fn().mockResolvedValue([
+      {
+        id: 1,
+        dept_id: "dept-1",
+        name: "炼铁部",
+        org_level: "dept",
+        parent_id: null,
+        children: [
+          {
+            id: 2,
+            dept_id: "dept-2",
+            name: "炼铁作业区",
+            org_level: "office",
+            parent_id: 1,
+            children: [],
+          },
+        ],
+      },
+    ]);
+
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={jest.fn()}
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+        selectionMode="single"
+        loadDepartments={loadDepartments}
+        disabledIds={[1, 2]}
+        canSelectNode={(node) => node.org_level === "office"}
+        boundDisabledLabelKey="com_permission.already_bound"
+      />,
+    );
+
+    const deptLabel = await screen.findByText("炼铁部");
+    expect(within(deptLabel.parentElement as HTMLElement).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(deptLabel.parentElement as HTMLElement).queryByText("com_permission.already_bound")).not.toBeInTheDocument();
+    fireEvent.click(within(deptLabel.parentElement as HTMLElement).getByRole("button"));
+    const officeLabel = await screen.findByText("炼铁作业区");
+    expect(within(officeLabel.parentElement as HTMLElement).getByText("com_permission.already_bound")).toBeInTheDocument();
+  });
+
   it("uses resource-scoped department candidates when a resource is provided", async () => {
     mockedGetResourceGrantDepartments.mockResolvedValue([
       {
@@ -579,12 +622,14 @@ describe("SubjectSearchDepartment", () => {
 
     const deptLabel = await screen.findByText("炼铁部");
     expect(within(deptLabel.parentElement as HTMLElement).getByText("com_permission.org_level_dept")).toBeInTheDocument();
+    expect(within(deptLabel.parentElement as HTMLElement).queryByRole("checkbox")).not.toBeInTheDocument();
     // 非 office 不可选，点行只展开；不要再点 chevron，否则会收起。
     fireEvent.click(deptLabel);
     expect(onChange).not.toHaveBeenCalled();
 
     const officeLabel = await screen.findByText("炼铁作业区");
     expect(within(officeLabel.parentElement as HTMLElement).getByText("com_permission.org_level_office")).toBeInTheDocument();
+    expect(within(officeLabel.parentElement as HTMLElement).getByRole("checkbox")).toBeInTheDocument();
     fireEvent.click(officeLabel);
     expect(onChange).toHaveBeenCalledWith([
       expect.objectContaining({ type: "department", id: 2, name: "炼铁作业区" }),
