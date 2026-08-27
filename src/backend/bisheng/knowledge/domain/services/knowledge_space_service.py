@@ -16595,6 +16595,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFileNameDuplicateError()
 
         file_record.file_name = new_name
+        file_record.alias_name = None
         file_record.updater_id = self.login_user.user_id
         file_record.updater_name = self.login_user.user_name
         if file_record.file_source == FileSource.WEB_LINK.value:
@@ -16615,6 +16616,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     updater_id=int(self.login_user.user_id),
                     updater_name=self.login_user.user_name,
                     user_metadata=file_record.user_metadata,
+                    clear_alias=True,
                 )
             except Exception as exc:
                 if "name conflict" in str(exc):
