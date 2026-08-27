@@ -236,6 +236,16 @@ export function KnowledgeSpaceContent({
         ...files.filter((file) => isCurrentSpaceFile(file) && !uploadingNames.has(file.name)),
     ];
 
+    // 当前页文件总数：文件夹按状态列展示的总文件数(fileNum)累加，普通文件按 1 个累加
+    const totalFileCount = useMemo(() => {
+        return displayFiles.reduce((sum, file) => {
+            if (file.type === FileType.FOLDER) {
+                return sum + (file.fileNum ?? 0);
+            }
+            return sum + 1;
+        }, 0);
+    }, [displayFiles]);
+
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
     const [viewMode, setViewModeState] = useState<"card" | "list">(() => {
@@ -1666,6 +1676,7 @@ export function KnowledgeSpaceContent({
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}
                 canManageMembers={canManageMembers}
+                totalFileCount={totalFileCount}
             />
             </div>
 
@@ -1822,8 +1833,9 @@ export function KnowledgeSpaceContent({
                             )}
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">
-                            <FileTable files={displayFiles}
+                        <>
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">
+                                <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
@@ -1881,7 +1893,7 @@ export function KnowledgeSpaceContent({
                                     loading={loading}
                                 />
                             )}
-                        </div>
+                        </>
                     )}
                 </div>
             </div>
