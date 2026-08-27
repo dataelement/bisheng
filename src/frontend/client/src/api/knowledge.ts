@@ -232,6 +232,7 @@ export interface KnowledgeSpaceCreateDepartmentNode {
     display_name?: string;
     parent_id: number | null;
     member_count?: number;
+    org_level?: string | null;
     children?: KnowledgeSpaceCreateDepartmentNode[];
 }
 
@@ -1592,6 +1593,7 @@ function mapCreateDepartmentNode(raw: any): KnowledgeSpaceCreateDepartmentNode {
         }),
         parent_id: raw.parent_id == null ? null : Number(raw.parent_id),
         member_count: raw.member_count == null ? undefined : Number(raw.member_count),
+        org_level: raw.org_level ? String(raw.org_level) : null,
         children: asArray<any>(raw.children).map((child) => mapCreateDepartmentNode(child)),
     };
 }

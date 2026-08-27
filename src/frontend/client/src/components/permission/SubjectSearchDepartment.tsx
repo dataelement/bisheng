@@ -17,6 +17,7 @@ export interface DepartmentNode {
   display_name?: string;
   parent_id: number | null;
   member_count?: number;
+  org_level?: string | null;
   children?: DepartmentNode[];
 }
 
@@ -54,6 +55,7 @@ interface SubjectSearchDepartmentProps {
   selectionMode?: "multiple" | "single";
   grantDepartmentsApi?: typeof getResourceGrantDepartments;
   searchPlaceholder?: string;
+  canSelectNode?: (node: DepartmentNode) => boolean;
 }
 
 function collectExplicitDepartmentSelections(
@@ -124,6 +126,7 @@ export function SubjectSearchDepartment({
   selectionMode = "multiple",
   grantDepartmentsApi,
   searchPlaceholder,
+  canSelectNode,
 }: SubjectSearchDepartmentProps) {
   const localize = useLocalize();
   const [tree, setTree] = useState<DepartmentNode[]>([]);
@@ -177,7 +180,7 @@ export function SubjectSearchDepartment({
   }, [onSelectionSummaryChange, selectedDepartmentsById, tree]);
 
   const toggle = (node: DepartmentNode) => {
-    if (disabledIdSet.has(node.id)) return;
+    if (disabledIdSet.has(node.id) || (canSelectNode && !canSelectNode(node))) return;
     if (selectionMode === "single") {
       onChange(
         selectedIds.has(node.id)
@@ -291,6 +294,7 @@ export function SubjectSearchDepartment({
               onToggle={toggle}
               onExpand={toggleExpand}
               selectionMode={selectionMode}
+              canSelectNode={canSelectNode}
             />
           ))}
       </div>
@@ -299,7 +303,7 @@ export function SubjectSearchDepartment({
 }
 
 function TreeNode({
-  node, depth, expanded, selectedIds, indeterminateIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode,
+  node, depth, expanded, selectedIds, indeterminateIds, selectedDepartmentsById, ancestorIncluded, disabledIds, matchesKeyword, onMaterializeInheritedSelection, onToggle, onExpand, selectionMode, canSelectNode,
 }: {
   node: DepartmentNode;
   depth: number;
@@ -314,6 +318,7 @@ function TreeNode({
   onToggle: (n: DepartmentNode) => void;
   onExpand: (id: number) => void;
   selectionMode: "multiple" | "single";
+  canSelectNode?: (node: DepartmentNode) => boolean;
 }) {
   const localize = useLocalize();
   if (!matchesKeyword(node)) return null;
@@ -327,7 +332,9 @@ function TreeNode({
   const isImplicitlySelected = selectionMode === "multiple"
     && ancestorIncluded
     && !isExplicitlySelected;
-  const isDisabled = disabledIds.has(node.id);
+  const isBoundDisabled = disabledIds.has(node.id);
+  const isLevelBlocked = Boolean(canSelectNode && !canSelectNode(node));
+  const isDisabled = isBoundDisabled || isLevelBlocked;
   const isChecked = isExplicitlySelected || isImplicitlySelected;
   const isIndeterminate = !isChecked && indeterminateIds.has(node.id);
   const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
@@ -337,11 +344,15 @@ function TreeNode({
     <>
       <div
         className={`flex items-center gap-1 px-2 py-1.5 ${
-          isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-gray-50"
+          isBoundDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-gray-50"
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={() => {
-          if (isDisabled) return;
+          if (isBoundDisabled) return;
+          if (isLevelBlocked) {
+            if (hasChildren) onExpand(node.id);
+            return;
+          }
           if (isImplicitlySelected) {
             onMaterializeInheritedSelection();
             return;
@@ -384,7 +395,7 @@ function TreeNode({
             {localize("com_permission.covered_by_parent_department")}
           </span>
         )}
-        {isDisabled && (
+        {isBoundDisabled && (
           <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
             {localize("com_permission.already_granted")}
           </span>
@@ -406,6 +417,7 @@ function TreeNode({
           onToggle={onToggle}
           onExpand={onExpand}
           selectionMode={selectionMode}
+          canSelectNode={canSelectNode}
         />
       ))}
     </>

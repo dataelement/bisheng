@@ -470,4 +470,59 @@ describe("SubjectSearchDepartment", () => {
     expect(within(childLabel.parentElement as HTMLElement).getByRole("checkbox"))
       .toHaveAttribute("data-state", "checked");
   });
+
+  it("only allows selecting office nodes when canSelectNode is provided", async () => {
+    const onChange = jest.fn();
+    const loadDepartments = jest.fn().mockResolvedValue([
+      {
+        id: 1,
+        dept_id: "dept-1",
+        name: "炼铁部",
+        org_level: "dept",
+        parent_id: null,
+        children: [
+          {
+            id: 2,
+            dept_id: "dept-2",
+            name: "炼铁作业区",
+            org_level: "office",
+            parent_id: 1,
+            children: [],
+          },
+        ],
+      },
+    ]);
+
+    function ClinicTree() {
+      const [value, setValue] = useState<SelectedSubject[]>([]);
+      return (
+        <SubjectSearchDepartment
+          value={value}
+          onChange={(next) => {
+            setValue(next);
+            onChange(next);
+          }}
+          includeChildren
+          onIncludeChildrenChange={jest.fn()}
+          selectionMode="single"
+          loadDepartments={loadDepartments}
+          canSelectNode={(node) => node.org_level === "office"}
+        />
+      );
+    }
+
+    render(<ClinicTree />);
+
+    const deptLabel = await screen.findByText("炼铁部");
+    // 非 office 不可选，点行只展开；不要再点 chevron，否则会收起。
+    fireEvent.click(deptLabel);
+    expect(onChange).not.toHaveBeenCalled();
+
+    const officeLabel = await screen.findByText("炼铁作业区");
+    fireEvent.click(officeLabel);
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ type: "department", id: 2, name: "炼铁作业区" }),
+    ]);
+    expect(screen.queryByText("com_permission.already_granted")).not.toBeInTheDocument();
+  });
 });
