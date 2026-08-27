@@ -413,9 +413,9 @@ const SortableHeader = ({
     return (
         <TableHead
             className={cn(
-                "group relative my-2 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
+                "group sticky top-0 my-2 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
                 "transition-colors hover:bg-[#f2f3f5]",
-                isSticky && "sticky top-0 z-20"
+                isSticky && "z-20"
             )}
             style={{
                 width,
@@ -504,7 +504,7 @@ function FileTableHeader({
     };
 
     return (
-        <TableHeader className="sticky top-0 z-10 border-b border-[#e5e6eb] bg-[#F3F4F6]">
+        <TableHeader className="border-b border-[#e5e6eb] bg-[#F3F4F6]">
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
@@ -551,7 +551,7 @@ function FileTableHeader({
                 {/* 状态（移至文件大小原位置） */}
                 {showStatusColumn && (
                     <TableHead
-                        className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                        className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                         style={{ width: columnWidths.status, minWidth: columnWidths.status, maxWidth: columnWidths.status }}
                     >
                         <div className="flex items-center gap-1.5 border-l pl-3">
@@ -563,7 +563,7 @@ function FileTableHeader({
                 {shougangEnabled && enableEncodingClassification && (
                     <>
                         <TableHead
-                            className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                            className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                             style={{
                                 width: columnWidths.fileType,
                                 minWidth: columnWidths.fileType,
@@ -576,7 +576,7 @@ function FileTableHeader({
                             <ResizeHandle columnKey="fileType" onResizeStart={onResizeStart} />
                         </TableHead>
                         <TableHead
-                            className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                            className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                             style={{
                                 width: columnWidths.businessDomain,
                                 minWidth: columnWidths.businessDomain,
@@ -593,7 +593,7 @@ function FileTableHeader({
 
                 {/* 标签 — 不排序 */}
                 <TableHead
-                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.tags, minWidth: columnWidths.tags, maxWidth: columnWidths.tags }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
@@ -604,7 +604,7 @@ function FileTableHeader({
                 {/* 文件编码 — 仅 shougang 模式显示 */}
                 {shougangEnabled && (
                     <TableHead
-                        className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                        className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                         style={{
                             width: columnWidths.fileEncoding,
                             minWidth: columnWidths.fileEncoding,
@@ -620,7 +620,7 @@ function FileTableHeader({
 
                 {/* 入库方式 */}
                 <TableHead
-                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{
                         width: columnWidths.ingestMethod,
                         minWidth: columnWidths.ingestMethod,
@@ -635,7 +635,7 @@ function FileTableHeader({
 
                 {/* 上传人 */}
                 <TableHead
-                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.uploader, minWidth: columnWidths.uploader, maxWidth: columnWidths.uploader }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
@@ -646,7 +646,7 @@ function FileTableHeader({
 
                 {/* 原始上传人 */}
                 <TableHead
-                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{
                         width: columnWidths.originalUploader,
                         minWidth: columnWidths.originalUploader,
@@ -661,7 +661,7 @@ function FileTableHeader({
 
                 {/* 更新人 */}
                 <TableHead
-                    className="relative bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 bg-[#F3F4F6] p-0 font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.updater, minWidth: columnWidths.updater, maxWidth: columnWidths.updater }}
                 >
                     <div className="flex items-center gap-1.5 border-l pl-3">
@@ -697,7 +697,7 @@ function FileTableHeader({
 
                 {/* 当前页文件总数统计（含子文件夹） */}
                 <TableHead
-                    className="relative bg-[#F3F4F6] p-0 text-right font-normal text-[15px] text-[#545A60]"
+                    className="sticky top-0 bg-[#F3F4F6] p-0 text-right font-normal text-[15px] text-[#545A60]"
                     style={{ width: columnWidths.totalCount, minWidth: columnWidths.totalCount, maxWidth: columnWidths.totalCount }}
                 >
                     <div className="flex h-full items-center justify-end border-l pl-3 pr-3">
@@ -1006,7 +1006,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                 className="max-w-full flex-1 overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scrollbar-on-scroll"
             >
                 <table
-                    className="w-full caption-bottom text-sm border-collapse"
+                    className="w-full caption-bottom border-separate border-spacing-0 text-sm"
                     style={{
                         tableLayout: "fixed",
                         width: totalWidth,
