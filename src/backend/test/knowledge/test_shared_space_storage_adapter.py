@@ -21,6 +21,9 @@ from bisheng.knowledge.domain.contracts.retrieval_scope import (
     BackendQueryFilter,
     CanonicalGenerationConstraint,
 )
+from bisheng.knowledge.domain.contracts.shared_space_storage import (
+    MembershipUpdateRequest,
+)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
     KnowledgeSpaceSharedStorageRouting,
@@ -353,6 +356,72 @@ class TestSchemaFingerprint:
                     index_params={"index_type": "HNSW"}, knowledge_ids_max_capacity=4096)
         other = sss.SharedStoreSchemaSpec(dimension=768, **{k: v for k, v in base.items() if k != "dimension"})
         assert sss.SharedStoreSchemaSpec(**base).fingerprint() != other.fingerprint()
+
+
+class TestMembershipRewrite:
+    async def test_retry_converges_duplicate_canonical_chunks(self):
+        writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
+        writer.tenant_id = 1
+        writer._assert_writable = lambda: _snapshot()
+        writer._check_membership_limits = lambda _ids: None
+        writer._conf = lambda: _conf()
+        writer.es_client = SimpleNamespace(
+            indices=SimpleNamespace(refresh=lambda **_kwargs: None)
+        )
+        calls = []
+
+        async def milvus(method, *args, **kwargs):
+            calls.append((method, args, kwargs))
+            if method == "query":
+                return [
+                    {
+                        "pk": 1,
+                        "canonical_version_id": 9,
+                        "content_generation": 2,
+                        "membership_generation": 1,
+                        "chunk_index": 0,
+                        "knowledge_ids": [10],
+                    },
+                    {
+                        "pk": 2,
+                        "canonical_version_id": 9,
+                        "content_generation": 2,
+                        "membership_generation": 2,
+                        "chunk_index": 0,
+                        "knowledge_ids": [10],
+                    },
+                    {
+                        "pk": 3,
+                        "canonical_version_id": 9,
+                        "content_generation": 2,
+                        "membership_generation": 2,
+                        "chunk_index": 1,
+                        "knowledge_ids": [10],
+                    },
+                ]
+            return None
+
+        async def es(method, *args, **kwargs):
+            calls.append((f"es:{method}", args, kwargs))
+
+        writer._run_milvus = milvus
+        writer._run_es = es
+
+        await writer.update_membership(
+            MembershipUpdateRequest(
+                tenant_id=1,
+                canonical_document_id=8,
+                knowledge_ids=(10, 20),
+                membership_generation=3,
+                content_generation=2,
+            )
+        )
+
+        insert = next(call for call in calls if call[0] == "insert")
+        delete_call = next(call for call in calls if call[0] == "delete")
+        assert len(insert[1][0]) == 2
+        assert {row["chunk_index"] for row in insert[1][0]} == {0, 1}
+        assert delete_call[2]["expr"] == "pk in [1, 2, 3]"
 
 
 class TestSharedCollectionBootstrap:

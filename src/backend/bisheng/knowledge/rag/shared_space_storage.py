@@ -665,6 +665,12 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             self._embedding_model_validator(int(str(embedding_model_id)), snapshot)
             return
         if embedding_model_id is None:
+            if snapshot.embedding_model_id is not None:
+                raise SharedStorageContractError(
+                    SharedStorageErrorCode.EMBEDDING_MODEL_MISMATCH,
+                    "embedding model is required for shared content writes",
+                    tenant_id=self.tenant_id,
+                )
             return
         if snapshot.embedding_model_id is not None and int(str(embedding_model_id)) != int(
             snapshot.embedding_model_id
@@ -997,15 +1003,32 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             return
 
         old_pks = [int(item[SHARED_MILVUS_PK_FIELD]) for item in existing]
-        new_rows = []
+        deduplicated: dict[tuple[int, int, int], dict[str, Any]] = {}
         for item in existing:
+            identity = (
+                int(item.get("canonical_version_id") or 0),
+                int(item.get("content_generation") or 0),
+                int(item.get("chunk_index") or 0),
+            )
+            current = deduplicated.get(identity)
+            if current is None or (
+                int(item.get("membership_generation") or 0),
+                int(item.get(SHARED_MILVUS_PK_FIELD) or 0),
+            ) > (
+                int(current.get("membership_generation") or 0),
+                int(current.get(SHARED_MILVUS_PK_FIELD) or 0),
+            ):
+                deduplicated[identity] = item
+        new_rows = []
+        for item in deduplicated.values():
             row = dict(item)
             row.pop(SHARED_MILVUS_PK_FIELD, None)
             row["knowledge_ids"] = [int(k) for k in knowledge_ids]
             row["membership_generation"] = int(request.membership_generation)
             new_rows.append(row)
 
-        # write the rewritten rows first, then drop the old ones by pk
+        # Insert one row per canonical chunk, then remove every old PK. A
+        # retry after a crash between these calls converges duplicates too.
         await self._run_milvus("insert", new_rows)
         await self._run_milvus(
             "delete", expr=f"{SHARED_MILVUS_PK_FIELD} in {old_pks}"
@@ -1100,7 +1123,7 @@ def build_shared_space_components_for_tenant(
         knowledge_ids_max_capacity=conf.knowledge_ids_max_capacity,
     )
     alias = _ensure_shared_milvus_connection()
-    name = shared_collection_name(tenant_id, conf)
+    name = snapshot.collection_name or shared_collection_name(tenant_id, conf)
     if not utility.has_collection(name, using=alias):
         raise SharedStorageContractError(
             SharedStorageErrorCode.SCHEMA_FINGERPRINT_MISMATCH,

@@ -443,12 +443,18 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 KnowledgeFile.reference_document_id.is_not(None),
                 col(KnowledgeFile.entry_type).in_(
                     [
+                        KnowledgeFileEntryType.MANAGER.value,
                         KnowledgeFileEntryType.PUBLISH.value,
                         KnowledgeFileEntryType.SHARE.value,
                     ]
                 ),
                 KnowledgeFile.entry_status == KnowledgeFileEntryStatus.ACTIVE.value,
-                KnowledgeFile.projection_status == KnowledgeFileProjectionStatus.READY.value,
+                col(KnowledgeFile.projection_status).in_(
+                    [
+                        KnowledgeFileProjectionStatus.READY.value,
+                        KnowledgeFileProjectionStatus.FAILED.value,
+                    ]
+                ),
                 KnowledgeFile.projection_lease_owner.is_(None),
             )
             .values(
@@ -456,13 +462,18 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
                 projection_next_retry_at=None,
                 projection_lease_owner=None,
                 projection_lease_until=None,
+                projection_retry_count=0,
+                projection_last_error=None,
             )
         )
         await self.session.flush()
         return int(result.rowcount or 0) == 1
 
     @staticmethod
-    def _projection_candidate_predicate(now: datetime):
+    def _projection_candidate_predicate(
+        now: datetime,
+        max_retries: int | None = None,
+    ):
         is_distribution_row = or_(
             KnowledgeFile.reference_document_id.is_not(None),
             KnowledgeFile.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value,
@@ -488,7 +499,7 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             KnowledgeFile.projection_lease_until.is_(None),
             KnowledgeFile.projection_lease_until <= now,
         )
-        return and_(
+        predicates = [
             is_distribution_row,
             col(KnowledgeFile.entry_status).in_(
                 [
@@ -500,19 +511,25 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
             has_work,
             retry_due,
             lease_available,
-        )
+        ]
+        if max_retries is not None:
+            predicates.append(
+                KnowledgeFile.projection_retry_count < max(int(max_retries), 1)
+            )
+        return and_(*predicates)
 
     async def find_projection_candidates(
         self,
         *,
         now: datetime,
         limit: int,
+        max_retries: int | None = None,
     ) -> list[KnowledgeFile]:
         if limit <= 0:
             return []
         result = await self.session.execute(
             select(KnowledgeFile)
-            .where(self._projection_candidate_predicate(now))
+            .where(self._projection_candidate_predicate(now, max_retries))
             .order_by(KnowledgeFile.id.asc())
             .limit(limit)
             .execution_options(populate_existing=True)
@@ -526,12 +543,13 @@ class KnowledgeFileRepositoryImpl(BaseRepositoryImpl[KnowledgeFile, int], Knowle
         lease_owner: str,
         lease_until: datetime,
         now: datetime,
+        max_retries: int | None = None,
     ) -> KnowledgeFile | None:
         result = await self.session.execute(
             update(KnowledgeFile)
             .where(
                 KnowledgeFile.id == entry_id,
-                self._projection_candidate_predicate(now),
+                self._projection_candidate_predicate(now, max_retries),
             )
             .values(
                 projection_status=KnowledgeFileProjectionStatus.PROCESSING.value,

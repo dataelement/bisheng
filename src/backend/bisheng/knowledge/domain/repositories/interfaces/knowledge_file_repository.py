@@ -130,6 +130,7 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         *,
         now: datetime,
         limit: int,
+        max_retries: int | None = None,
     ) -> list[KnowledgeFile]:
         """Return due F059 projection rows using the complete retry predicate."""
         ...
@@ -141,6 +142,7 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         lease_owner: str,
         lease_until: datetime,
         now: datetime,
+        max_retries: int | None = None,
     ) -> KnowledgeFile | None:
         """Atomically claim or take over an expired projection lease."""
         ...

@@ -378,10 +378,29 @@ class KnowledgeDocumentDistributionService:
             await self.session.rollback()
             raise KnowledgeDocumentDistributionError("source canonical document has changed")
 
+        if (
+            source_file.reference_document_id == int(document.id)
+            and source_file.entry_type == KnowledgeFileEntryType.MANAGER.value
+            and source_file.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            await self._commit()
+            return CanonicalManagerSnapshot(
+                document_id=int(document.id),
+                manager_file_id=int(source_file.id),
+                manager_space_id=int(source_file.knowledge_id),
+                original_uploader_id=source_file.original_uploader_id,
+                original_knowledge_id=source_file.original_knowledge_id,
+            )
+
         source_file.reference_document_id = int(document.id)
         source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
         source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
         source_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        source_file.projection_retry_count = 0
+        source_file.projection_next_retry_at = None
+        source_file.projection_lease_owner = None
+        source_file.projection_lease_until = None
+        source_file.projection_last_error = None
         source_file.desired_content_generation = document.content_generation
         source_file.applied_content_generation = 0
         source_file.desired_entry_generation += 1
