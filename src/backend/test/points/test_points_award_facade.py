@@ -64,11 +64,21 @@ class FakeAwardRepository:
         pass
 
 
-def _rule(code="G1", *, status="enabled", beneficiary="uploader", score=3, daily_cap=15, score_expr=None):
+def _rule(
+    code="G1",
+    *,
+    status="enabled",
+    beneficiary="uploader",
+    score=3,
+    daily_cap=15,
+    score_expr=None,
+    display_name=None,
+):
     return SimpleNamespace(
         rule_code=code,
         rule_type="earn",
         name=f"rule-{code}",
+        display_name=display_name,
         status=status,
         beneficiary=beneficiary,
         daily_cap=daily_cap,
@@ -224,6 +234,36 @@ async def test_same_session_serial_awards_respect_daily_cap():
     assert third.reason == "daily_cap"
     assert repo.account.balance == 60
     assert len(repo.logs) == 2
+
+
+@pytest.mark.asyncio
+async def test_space_file_award_uses_rule_display_name_as_title():
+    """入库发分必须解析展示名；漏 import 会被 _safe 吞成 reason=error，流水为空。"""
+    repo = FakeAwardRepository(
+        {"G1": _rule(score=3, display_name="公共库上传展示名")},
+    )
+    outcome = await _facade(repo).on_space_file_ready(_file_event())
+    assert not outcome.skipped, outcome.reason
+    assert outcome.rule_name == "公共库上传展示名"
+    log = next(iter(repo.logs.values()))
+    assert log.title == "公共库上传展示名"
+    assert log.delta == 3
+
+
+@pytest.mark.asyncio
+async def test_team_ks_space_awards_g6_with_publisher_beneficiary():
+    """科室库 team_ks 走 G6；受益人 publisher 且直传人=发布人时应入账。"""
+    repo = FakeAwardRepository(
+        {"G6": _rule("G6", beneficiary="publisher", score=20, daily_cap=1000, display_name="科室库上传")},
+    )
+    outcome = await _facade(repo).on_space_file_ready(_file_event(space_level="team_ks", uploader_id=4, publisher_id=4))
+    assert not outcome.skipped, outcome.reason
+    assert outcome.rule_code == "G6"
+    assert outcome.rule_name == "科室库上传"
+    assert repo.account.balance == 20
+    log = next(iter(repo.logs.values()))
+    assert log.title == "科室库上传"
+    assert "earn:G6:100:10" in repo.logs
 
 
 @pytest.mark.asyncio
