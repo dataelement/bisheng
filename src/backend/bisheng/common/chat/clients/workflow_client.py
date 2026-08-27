@@ -17,6 +17,11 @@ from bisheng.worker.workflow.redis_callback import RedisCallback
 from bisheng.worker.workflow.tasks import continue_workflow, execute_workflow, workflow_stateful_worker
 from bisheng.workflow.common.workflow import WorkflowStatus
 
+WORKFLOW_STATUS_CHECK_FINISHED = {
+    "event": "workflow_status_checked",
+    "status": "finished",
+}
+
 
 class WorkflowClient(BaseClient):
     def __init__(
@@ -100,9 +105,8 @@ class WorkflowClient(BaseClient):
             try:
                 await WorkflowOfflineError().websocket_close_message(websocket=self.websocket, close_ws=False)
                 await self.send_response("processing", "close", "")
-            except:
+            except Exception:
                 logger.warning("websocket is closed")
-                pass
             self.workflow.clear_workflow_status()
             self.workflow = None
             logger.debug("workflow is offline not support with chat")
@@ -114,8 +118,15 @@ class WorkflowClient(BaseClient):
             self.workflow = None
             if self.latest_history and not is_init:
                 # Let the front-end terminate the last run
-                await self.send_response("processing", "close", "")
+                await self.send_response("processing", "close", WORKFLOW_STATUS_CHECK_FINISHED)
             return True, unique_id
+
+        terminal_statuses = [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]
+        if status_info["status"] in terminal_statuses:
+            close_message = WORKFLOW_STATUS_CHECK_FINISHED if self.latest_history and not is_init else ""
+            workflow_over = await self.workflow_run(close_message=close_message)
+            return workflow_over, unique_id
+
         # Indicates that the session is still running
         if status_info["status"] == WorkflowStatus.INPUT.value and self.latest_history:
             # If it is a state waiting for user input, you need to resend the last input message to the front-end
@@ -166,11 +177,11 @@ class WorkflowClient(BaseClient):
             await self.send_response("error", "over", {"status_code": 500, "message": str(e)})
             return
 
-    async def workflow_run(self):
+    async def workflow_run(self, close_message: str | dict = ""):
         async with self.run_lock:
-            return await self._workflow_run()
+            return await self._workflow_run(close_message=close_message)
 
-    async def _workflow_run(self):
+    async def _workflow_run(self, close_message: str | dict = ""):
         logger.debug("start workflow run")
         if not self.workflow:
             logger.warning("workflow is over by other task")
@@ -182,10 +193,10 @@ class WorkflowClient(BaseClient):
 
         status_info = await self.workflow.async_get_workflow_status()
         if not status_info or status_info["status"] in [WorkflowStatus.FAILED.value, WorkflowStatus.SUCCESS.value]:
-            await self.send_response("processing", "close", "")
             logger.debug(f"workflow is {status_info}, clear workflow object")
             await self.workflow.async_clear_workflow_status()
             self.workflow = None
+            await self.send_response("processing", "close", close_message)
             return True
 
         # Description runs to the state to be entered

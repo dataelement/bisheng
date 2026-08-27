@@ -100,6 +100,12 @@ def get_env():
     # /apps/* entry has to answer "this environment has no app factory" before
     # anyone is logged in (AC-30 / AC-62).
     env["app_runtime_enabled"] = bisheng_settings.app_runtime.enabled
+    try:
+        workflow_auto_rerun_on_open = bisheng_settings.get_workflow_conf().auto_rerun_on_open
+    except Exception as exc:
+        logger.warning(f"Failed to load workflow auto-rerun config, using disabled: {exc}")
+        workflow_auto_rerun_on_open = False
+    env["workflow"] = {"auto_rerun_on_open": workflow_auto_rerun_on_open}
 
     # Expose knowledge-space version management flag so the client can toggle UI affordances.
     vm = getattr(bisheng_settings.get_knowledge(), "version_management", None)

@@ -136,4 +136,8 @@ export type BishengConfig = {
       simhash_similarity_threshold?: number;
     };
   };
+  /** Standalone workflow conversation behavior */
+  workflow?: {
+    auto_rerun_on_open?: boolean;
+  };
 };
