@@ -941,6 +941,11 @@ export function CreateKnowledgeSpaceDrawer({
                                                     loadDepartments={loadCreateDepartments}
                                                     disabledIds={boundDepartmentIds}
                                                     canSelectNode={isClinicMode ? (node) => node.org_level === "office" : undefined}
+                                                    boundDisabledLabelKey={
+                                                      isClinicMode
+                                                        ? "com_permission.already_bound"
+                                                        : "com_permission.already_granted"
+                                                    }
                                                     searchPlaceholder={bindDepartmentSearchPlaceholder}
                                                 />
                                             </div>

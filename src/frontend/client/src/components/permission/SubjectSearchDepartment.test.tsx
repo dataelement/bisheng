@@ -280,6 +280,69 @@ describe("SubjectSearchDepartment", () => {
     expect(screen.getByText("com_permission.already_granted")).toBeInTheDocument();
   });
 
+  it("hides already granted label when showAlreadyGrantedLabel is false", async () => {
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={jest.fn()}
+        resourceType="workflow"
+        resourceId="wf-1"
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+        disabledIds={[1]}
+        showAlreadyGrantedLabel={false}
+      />,
+    );
+
+    const departmentLabel = await screen.findByText("全集团");
+    expect(within(departmentLabel.parentElement as HTMLElement).getByRole("checkbox")).toBeDisabled();
+    expect(screen.queryByText("com_permission.already_granted")).not.toBeInTheDocument();
+  });
+
+  it("shows already bound label for clinic disabled offices", async () => {
+    const loadDepartments = jest.fn().mockResolvedValue([
+      {
+        id: 1,
+        dept_id: "dept-1",
+        name: "炼铁部",
+        org_level: "dept",
+        parent_id: null,
+        children: [
+          {
+            id: 2,
+            dept_id: "dept-2",
+            name: "炼铁作业区",
+            org_level: "office",
+            parent_id: 1,
+            children: [],
+          },
+        ],
+      },
+    ]);
+
+    render(
+      <SubjectSearchDepartment
+        value={[]}
+        onChange={jest.fn()}
+        includeChildren
+        onIncludeChildrenChange={jest.fn()}
+        selectionMode="single"
+        loadDepartments={loadDepartments}
+        disabledIds={[2]}
+        canSelectNode={(node) => node.org_level === "office"}
+        boundDisabledLabelKey="com_permission.already_bound"
+      />,
+    );
+
+    const deptLabel = await screen.findByText("炼铁部");
+    fireEvent.click(deptLabel);
+    const officeLabel = await screen.findByText("炼铁作业区");
+    const officeRow = officeLabel.parentElement as HTMLElement;
+    expect(within(officeRow).getByRole("checkbox")).toBeDisabled();
+    expect(within(officeRow).getByText("com_permission.already_bound")).toBeInTheDocument();
+    expect(screen.queryByText("com_permission.already_granted")).not.toBeInTheDocument();
+  });
+
   it("uses resource-scoped department candidates when a resource is provided", async () => {
     mockedGetResourceGrantDepartments.mockResolvedValue([
       {
@@ -507,6 +570,7 @@ describe("SubjectSearchDepartment", () => {
           selectionMode="single"
           loadDepartments={loadDepartments}
           canSelectNode={(node) => node.org_level === "office"}
+          boundDisabledLabelKey="com_permission.already_bound"
         />
       );
     }
@@ -514,15 +578,18 @@ describe("SubjectSearchDepartment", () => {
     render(<ClinicTree />);
 
     const deptLabel = await screen.findByText("炼铁部");
+    expect(within(deptLabel.parentElement as HTMLElement).getByText("com_permission.org_level_dept")).toBeInTheDocument();
     // 非 office 不可选，点行只展开；不要再点 chevron，否则会收起。
     fireEvent.click(deptLabel);
     expect(onChange).not.toHaveBeenCalled();
 
     const officeLabel = await screen.findByText("炼铁作业区");
+    expect(within(officeLabel.parentElement as HTMLElement).getByText("com_permission.org_level_office")).toBeInTheDocument();
     fireEvent.click(officeLabel);
     expect(onChange).toHaveBeenCalledWith([
       expect.objectContaining({ type: "department", id: 2, name: "炼铁作业区" }),
     ]);
     expect(screen.queryByText("com_permission.already_granted")).not.toBeInTheDocument();
+    expect(screen.queryByText("com_permission.already_bound")).not.toBeInTheDocument();
   });
 });
