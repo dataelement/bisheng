@@ -18,6 +18,7 @@ class LLMServerType(Enum):
     MINIMAX = 'minimax'
     ANTHROPIC = 'anthropic'
     DEEPSEEK = 'deepseek'
+    ORCAROUTER = 'orcarouter'  # OrcaRouter OpenAI-compatible AI gateway
     SPARK = 'spark'  # Xunfei Starfire Large Model
     BISHENG_RT = 'bisheng_rt'
     TENCENT = 'tencent'  # Tencent Cloud

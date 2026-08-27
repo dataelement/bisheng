@@ -244,6 +244,7 @@ export interface AdvancedParams {
     'minimax': 'minimax-llm',
     'anthropic': 'anthropic-llm',
     'deepseek': 'deepseek-llm',
+    'orcarouter': 'openai-llm', // OrcaRouter OpenAI-compatible AI gateway
     'moonshot': 'moonshot-llm' // 月之暗面
   };
   

@@ -79,6 +79,24 @@ const modelProviders = {
             key: "openai_api_key",
         },
     ],
+    orcarouter: [
+        {
+            label: "Base URL",
+            type: "text",
+            placeholder: "https://api.orcarouter.ai/v1",
+            default: "https://api.orcarouter.ai/v1",
+            required: true,
+            key: "openai_api_base",
+        },
+        {
+            label: "API Key",
+            type: "password",
+            placeholder: "",
+            default: "",
+            required: true,
+            key: "openai_api_key",
+        },
+    ],
     azure_openai: [
         {
             label: "Azure Endpoint",

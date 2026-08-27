@@ -47,6 +47,10 @@ const modelProviderInfo: Record<string, ProviderInfo> = {
         apiKeyUrl: 'https://platform.deepseek.com/api_keys',
         modelUrl: 'https://platform.deepseek.com/docs',
     },
+    orcarouter: {
+        apiKeyUrl: 'https://www.orcarouter.ai/console',
+        modelUrl: 'https://www.orcarouter.ai/models',
+    },
 };
 
 // 获取API信息
