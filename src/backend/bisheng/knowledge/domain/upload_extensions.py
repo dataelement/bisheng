@@ -27,6 +27,11 @@ class UnsupportedUploadFileExtensionError(ValueError):
 
 def extract_upload_file_extension(file_name: str | None) -> str | None:
     name = str(file_name or "").strip()
+    if not name:
+        return None
+    # MinIO presigned URLs are returned as upload file_path; strip query/fragment
+    # before parsing so ".pdf?x-amz-algorithm=..." is treated as ".pdf".
+    name = name.split("?", 1)[0].split("#", 1)[0].strip()
     if not name or "/" in name or "\\" in name:
         return None
     if name.startswith(".") and name.count(".") == 1:
