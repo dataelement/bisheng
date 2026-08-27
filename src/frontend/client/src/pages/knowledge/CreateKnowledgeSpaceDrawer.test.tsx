@@ -562,6 +562,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         };
         const { unmount } = renderDrawer({
             mode: "edit",
+            isSystemAdmin: true,
             editingSpace: {
                 ...base,
                 id: "public-1",
@@ -594,10 +595,38 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         expect(screen.queryByText("公开用于首页知识库获取")).not.toBeInTheDocument();
     });
 
+    test("非系统管理员编辑公共知识库时不显示门户发现开关且保存不提交该字段", async () => {
+        const onConfirm = jest.fn().mockResolvedValue(true);
+        renderDrawer({
+            mode: "edit",
+            isSystemAdmin: false,
+            editingSpace: {
+                id: "public-1",
+                name: "公共知识库",
+                description: "",
+                visibility: VisibilityType.PRIVATE,
+                isReleased: false,
+                spaceLevel: SpaceLevel.PUBLIC,
+                portalDiscoveryEnabled: true,
+                autoTagEnabled: false,
+                autoTagLibraryIds: [],
+            } as any,
+            onConfirm,
+        });
+
+        expect(screen.queryByText("公开用于首页知识库获取")).not.toBeInTheDocument();
+        await selectDefaultTagLibrary();
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+        await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1));
+        expect(onConfirm.mock.calls[0][0]).not.toHaveProperty("portalDiscoveryEnabled");
+    });
+
     test("编辑开关仅在保存成功后由权威响应更新", async () => {
         const onConfirm = jest.fn().mockResolvedValue(true);
         renderDrawer({
             mode: "edit",
+            isSystemAdmin: true,
             editingSpace: {
                 id: "clinic-1",
                 name: "科室知识库",
