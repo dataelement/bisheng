@@ -51,11 +51,6 @@ from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_reposito
 )
 from bisheng.open_endpoints.domain.schemas.filelib_sync import FilelibSyncParams, FilelibSyncResponseData
 from bisheng.open_endpoints.domain.services.filelib_sync_audit_writer import FilelibSyncAuditWriter
-from bisheng.open_endpoints.domain.services.filelib_sync_version_link_service import (
-    FILELIB_SYNC_PENDING_VERSION_LINK_KEY,
-    build_filelib_sync_pending_version_link_metadata,
-    resolve_version_link_target_document_id,
-)
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import (
     PortalDocumentTypeChildConfig,
     PortalDocumentTypeConfig,
@@ -208,10 +203,11 @@ class FilelibSyncService:
                 target = await self._resolve_personal_fallback_target(identity)
                 await self._require_upload_permission(target)
 
-            replaced_file_id, target_document_id = await self._resolve_same_name_version_overwrite(
+            replaced_file_id = await self._cleanup_duplicate_files_before_sync(
                 knowledge_id=int(target.space.id),
                 folder_id=target.folder_id,
                 file_name=params.file_name,
+                external_file_id=params.external_file_id,
             )
 
             staged_upload_path = await self._ensure_upload_path_preserves_display_name(
@@ -279,13 +275,6 @@ class FilelibSyncService:
                 user_metadata[FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_KEY] = (
                     FILELIB_SYNC_PERSONAL_FALLBACK_METADATA_VALUE
                 )
-            if replaced_file_id is not None and target_document_id is not None:
-                user_metadata[FILELIB_SYNC_PENDING_VERSION_LINK_KEY] = (
-                    build_filelib_sync_pending_version_link_metadata(
-                        target_document_id=target_document_id,
-                        replaced_file_id=replaced_file_id,
-                    )
-                )
             created_file.user_metadata = user_metadata
             if domain is not None:
                 await FileEncodingTransformer.generate_fixed_encoding(
@@ -335,7 +324,7 @@ class FilelibSyncService:
                 knowledge_id=int(target.space.id),
                 knowledge_name=target.space.name,
                 status=int(created_file.status),
-                version_link_pending=replaced_file_id is not None,
+                version_link_pending=False,
                 replaced_file_id=replaced_file_id,
                 tags=applied_tags,
             )
@@ -1039,50 +1028,63 @@ class FilelibSyncService:
         except SpacePermissionDeniedError as exc:
             raise FilelibSyncPermissionDeniedError(msg="no upload permission for file sync target") from exc
 
-    async def _resolve_same_name_version_overwrite(
+    async def _cleanup_duplicate_files_before_sync(
         self,
         *,
         knowledge_id: int,
         folder_id: int | None,
         file_name: str,
-    ) -> tuple[int | None, int | None]:
-        """Replace same-name files in the target folder via version link or delete."""
+        external_file_id: str,
+    ) -> int | None:
+        """Soft-delete historical duplicates in the target folder; newest upload wins."""
         file_level_path = await self._resolve_upload_file_level_path(
             knowledge_id=knowledge_id,
             folder_id=folder_id,
         )
-        existing_files = await asyncio.to_thread(
+        candidates: dict[int, KnowledgeFile] = {}
+
+        for existing_file in await asyncio.to_thread(
             KnowledgeFileDao.get_file_by_condition,
             knowledge_id=knowledge_id,
             file_name=file_name,
             file_level_path=file_level_path,
+        ) or []:
+            candidates[int(existing_file.id)] = existing_file
+
+        for existing_file in await self.repository.find_files_by_external_file_id(
+            knowledge_id,
+            external_file_id,
+            file_level_path=file_level_path,
+        ):
+            candidates[int(existing_file.id)] = existing_file
+
+        if not candidates:
+            return None
+
+        ordered = sorted(
+            candidates.values(),
+            key=lambda item: (
+                getattr(item, "create_time", None),
+                int(item.id),
+            ),
+            reverse=True,
         )
-        if not existing_files:
-            return None, None
+        replaced_file_id = int(ordered[0].id)
+        removed_ids: list[int] = []
+        for existing_file in ordered:
+            await self._remove_duplicate_file_for_sync_replace(int(existing_file.id))
+            removed_ids.append(int(existing_file.id))
 
-        for existing_file in existing_files:
-            if int(existing_file.status) != KnowledgeFileStatus.SUCCESS.value:
-                continue
-            try:
-                target_document_id = await resolve_version_link_target_document_id(
-                    request=self.request,
-                    login_user=self.login_user,
-                    existing_file=existing_file,
-                )
-            except ValueError as exc:
-                logger.warning(
-                    "filelib sync version-link overwrite skipped file_id={} error={}",
-                    existing_file.id,
-                    exc,
-                )
-                continue
-            return int(existing_file.id), int(target_document_id)
-
-        for existing_file in existing_files:
-            if int(existing_file.status) == KnowledgeFileStatus.SUCCESS.value:
-                continue
-            await self._remove_same_name_file_for_sync_replace(int(existing_file.id))
-        return None, None
+        logger.info(
+            "filelib sync duplicate cleanup knowledge_id={} folder_id={} file_name={} external_file_id={} removed_ids={} replaced_file_id={}",
+            knowledge_id,
+            folder_id,
+            file_name,
+            external_file_id,
+            removed_ids,
+            replaced_file_id,
+        )
+        return replaced_file_id
 
     @staticmethod
     async def _resolve_upload_file_level_path(
@@ -1098,7 +1100,7 @@ class FilelibSyncService:
         parent_path = folder.file_level_path or ""
         return f"{parent_path}/{int(folder_id)}" if parent_path else str(int(folder_id))
 
-    async def _remove_same_name_file_for_sync_replace(self, file_id: int) -> None:
+    async def _remove_duplicate_file_for_sync_replace(self, file_id: int) -> None:
         try:
             await self.knowledge_space_service.delete_file(file_id)
         except SpaceNotFoundError:

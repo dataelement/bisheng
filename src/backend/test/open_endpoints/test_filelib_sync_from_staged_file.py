@@ -73,7 +73,7 @@ def _stub_orchestration(service: FilelibSyncService, knowledge_file: KnowledgeFi
     service._resolve_target_folder = AsyncMock(return_value=100)
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
-    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
+    service._cleanup_duplicate_files_before_sync = AsyncMock(return_value=None)
     service.repository.find_by_id = AsyncMock(return_value=knowledge_file)
     return identity, target_space
 

@@ -239,7 +239,7 @@ async def test_fixed_folder_upload_passes_parent_id_and_keeps_response_contract(
     service._ensure_domain_bound = MagicMock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
-    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
+    service._cleanup_duplicate_files_before_sync = AsyncMock(return_value=None)
 
     with (
         patch.object(

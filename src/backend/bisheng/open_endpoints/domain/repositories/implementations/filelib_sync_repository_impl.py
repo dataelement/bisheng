@@ -8,7 +8,7 @@ from bisheng.common.repositories.implementations.base_repository_impl import Bas
 from bisheng.database.models.department import Department, UserDepartment
 from bisheng.database.models.tenant import UserTenant
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
-from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.models.knowledge_file import FileType, KnowledgeFile
 from bisheng.open_endpoints.domain.models.filelib_department_mapping import FilelibDepartmentMapping
 from bisheng.open_endpoints.domain.repositories.interfaces.filelib_sync_repository import (
     FilelibSyncRepository,
@@ -129,3 +129,28 @@ class FilelibSyncRepositoryImpl(
             )
         )
         return result.first()
+
+    async def find_files_by_external_file_id(
+        self,
+        knowledge_id: int,
+        external_file_id: str,
+        *,
+        file_level_path: str,
+    ) -> list[KnowledgeFile]:
+        normalized_external_file_id = str(external_file_id or "").strip()
+        if not normalized_external_file_id:
+            return []
+        result = await self.session.exec(
+            select(KnowledgeFile).where(
+                KnowledgeFile.knowledge_id == knowledge_id,
+                KnowledgeFile.file_type == FileType.FILE.value,
+                KnowledgeFile.file_level_path == file_level_path,
+                KnowledgeFile.deleted_at.is_(None),
+            )
+        )
+        matched: list[KnowledgeFile] = []
+        for record in result.all():
+            metadata = record.user_metadata if isinstance(record.user_metadata, dict) else {}
+            if str(metadata.get("external_file_id") or "").strip() == normalized_external_file_id:
+                matched.append(record)
+        return matched

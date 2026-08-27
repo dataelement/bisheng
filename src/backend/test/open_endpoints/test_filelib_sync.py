@@ -752,7 +752,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
-    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
+    service._cleanup_duplicate_files_before_sync = AsyncMock(return_value=None)
 
     async def _generate_fixed_encoding(**kwargs):
         kwargs["knowledge_file"].file_encoding = "SGGF-POL-IT-20260700000001"
@@ -875,7 +875,7 @@ async def test_sync_orchestration_skips_business_domain_when_dynamic_resolution_
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
-    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
+    service._cleanup_duplicate_files_before_sync = AsyncMock(return_value=None)
 
     upload = UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7)
     with (

@@ -51,3 +51,13 @@ class FilelibSyncRepository(BaseRepository[KnowledgeFile, int], ABC):
     @abstractmethod
     async def find_knowledge_by_id(self, knowledge_id: int) -> Knowledge | None:
         pass
+
+    @abstractmethod
+    async def find_files_by_external_file_id(
+        self,
+        knowledge_id: int,
+        external_file_id: str,
+        *,
+        file_level_path: str,
+    ) -> list[KnowledgeFile]:
+        pass
