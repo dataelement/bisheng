@@ -5,6 +5,7 @@ export interface StandaloneChatContextValue {
   flowType: 'workflow' | 'assistant';
   flowId: string;
   apiVersion: 'v1' | 'v2';
+  autoRerunOnOpen: boolean;
 }
 
 export const StandaloneChatContext = createContext<StandaloneChatContextValue | null>(null);
@@ -15,4 +16,8 @@ export function useStandaloneChatContext() {
     throw new Error('useStandaloneChatContext must be used within StandaloneChatContext.Provider');
   }
   return ctx;
+}
+
+export function useOptionalStandaloneChatContext() {
+  return useContext(StandaloneChatContext);
 }

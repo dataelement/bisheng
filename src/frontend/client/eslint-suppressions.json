@@ -3122,10 +3122,7 @@
   },
   "src/pages/appChat/useWebsocket.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 3
-    },
-    "@typescript-eslint/no-unused-expressions": {
-      "count": 1
+      "count": 2
     },
     "no-console": {
       "count": 4
@@ -3186,10 +3183,10 @@
   },
   "src/pages/apps/explore.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 4
     },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/pages/apps/hooks/useAppCenter.ts": {

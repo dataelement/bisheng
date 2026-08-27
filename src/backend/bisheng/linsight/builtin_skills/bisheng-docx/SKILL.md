@@ -7,7 +7,9 @@ description: >-
   「方案」「纪要」「公文」「通知」「说明书」「docx」「写一份 X」「整理成 Word」
   「导出成 Word」时触发。本技能给出 BiSheng 代码执行器里唯一可行的 python-docx 路径
   （该环境没有 Node/docx-js，中文字体必须显式写 w:eastAsia 才生效），
-  以及中文排版规范、目录页码写法、交付前自检与渲染脚本。
+  内置 GB/T 9704-2012 公文版式为默认档，另有一档给简历宣传稿这类非公文文档；
+  还包括目录页码写法、交付前自检与渲染脚本。
+  本技能只负责版式落地：同时勾选了公文写作类技能时，文种、结构、文风、措辞以那个技能为准。
   只是把已经写好的回答原样存成 Word、不要求目录页码表格版式的，用 export_docx 更省事。
   如果用户要的是 Excel 表格、PPT 或纯 Markdown，不要用本技能。
 metadata:
@@ -79,7 +81,7 @@ print("pandoc :", shutil.which("pandoc") or "无（读 .docx 用 inspect_docx.py
 | 纸张 | **US Letter 21.6×27.9cm**（不是 A4），左右边距 3.2cm，改不了 | A4 纵/横随选，边距可调 |
 | 标题 | 用内置 Heading 样式，中文字体已设（黑体/楷体） | 同样用内置 Heading，字体字号全可控 |
 | 目录 / 页码 | **都没有**，也加不了 | `add_toc` + `add_page_number_footer` |
-| 表格 | 宽度 auto，无表头底纹、无列宽、不重复表头 | 列宽写到每个单元格、表头深底白字、跨页重复表头 |
+| 表格 | 宽度 auto，无表头底纹、无列宽、不重复表头 | 列宽写到每个单元格、表头按档（企业档深底白字 / 公文档素表加粗）、跨页重复表头 |
 | 图片 | 固定 5.7 英寸宽 | 按版心等比缩放 + 图注 |
 | 封面、分节、页眉、分隔线 | 没有 | 都有 |
 | 代价 | 一次调用，零风险 | 写脚本 + 体检，2–4 轮 |
@@ -90,7 +92,40 @@ print("pandoc :", shutil.which("pandoc") or "无（读 .docx 用 inspect_docx.py
 | 用户要目录 / 页码 / A4 / 表格列宽 / 封面 / 特定字体字号 | §3 从零构建 |
 | 用户上传了 .docx 要改 | §5 改已有文件（`export_docx` 做不到） |
 | 用户上传了模板要按样式填 | 用 `Document("uploads/模板.docx")` 打开**模板本身**，样式自动继承 |
+| 还勾选了公文写作类技能 | §2.1：文种文风听它的，版式落地仍走本技能 |
 | 拿不准 | 按用户原话里的名词判：出现「正式/对外/打印/汇报稿/公文/目录/页码」走本技能，否则走 `export_docx` |
+
+### 2.1 定版式档（决定全篇字体字号，只需定一次）
+
+本技能自带两档。`apply_chinese_defaults()` 选定后，`add_body` / `add_heading_cn` /
+`add_table` / `add_toc` / 页码全部自动跟随，**不必逐处传字体**（逐处传的结果通常是
+「大部分对、少数几处漏了」，这是本技能历史上最常见的翻车方式）。
+
+| 档 | 什么时候用 | 取值 |
+|---|---|---|
+| **`gongwen`（默认）** | 公文、通知、报告、请示、函、纪要、制度办法，以及任何"正式行文" | GB/T 9704-2012：标题二号小标宋、正文三号仿宋_GB2312、一级黑体、二级楷体、行距固定 28 磅 → 读 `/skills/bisheng-docx/references/gongwen-gbt9704.md` |
+| `modern` | 简历、宣传方案、对外提案、周报月报 —— **明确不是公文**的 | 微软雅黑 11pt 那一套 → 读 `/skills/bisheng-docx/references/design-zh.md` |
+
+```python
+apply_chinese_defaults(doc)                     # 公文档，默认，什么都不用做
+apply_chinese_defaults(doc, profile="modern")   # 简历 / 宣传稿 / 周报
+```
+
+**同时勾选了其他公文技能时**（用户导入的某单位公文规范、gongwen-draft 之类），分工是硬的：
+
+- **文种、结构、文风、措辞听它的；版式落地永远是本技能。**
+- 它若给出了明确的字体字号（本单位模板要求华文中宋之类），把取值翻成 dict 传进来，
+  **只写有差异的项**，其余自动沿用默认档：
+
+  ```python
+  apply_chinese_defaults(doc, profile={"body": {"font": "华文中宋"},
+                                       "headings": {1: {"font": "方正小标宋简体"}}})
+  ```
+
+- 它没给版式取值就用默认公文档，**不要为此去翻它的一堆 references** —— 那会烧掉几轮还找不到。
+- ❌ **不要调用其他技能的 Word 导出脚本**（`generate_docx.py`、`export.py` 之类）。
+  它们多是给 Windows 桌面环境写的，在这里会因为"系统未安装公文字体"直接退出 ——
+  而这个检查在本环境毫无意义：字体名只写进 XML，渲染发生在用户的 Word 里。
 
 ## 3. 从零构建
 
@@ -102,7 +137,8 @@ print("pandoc :", shutil.which("pandoc") or "无（读 .docx 用 inspect_docx.py
 **不要把整段代码塞进代码执行器的参数里** —— 参数过长会被截断，导致反复重试却总差一截。
 写法读 `/skills/bisheng-docx/references/python-docx-cookbook.md`
 （中文字体、标题、目录、页码、表格、图片、列表都有可直接抄的片段），
-排版规范读 `/skills/bisheng-docx/references/design-zh.md`。
+排版规范按 §2.1 定的档读：公文走 `references/gongwen-gbt9704.md`，
+非公文走 `references/design-zh.md`。
 
 骨架长这样：
 
@@ -110,17 +146,23 @@ print("pandoc :", shutil.which("pandoc") or "无（读 .docx 用 inspect_docx.py
 import sys, os
 sys.path.insert(0, "skills/bisheng-docx/scripts")
 from docx_helpers import setup_page, apply_chinese_defaults, add_heading_cn, add_body, \
-                         add_table, add_toc, add_page_number_footer
+                         add_table, add_toc, add_page_number_footer, add_gongwen_title, \
+                         add_signature_block
 from docx import Document
 
 os.makedirs("output", exist_ok=True)
 doc = Document()
-section = setup_page(doc)          # A4 纵向
-apply_chinese_defaults(doc)        # ★ 必须调：设好中文字体和标题样式
-add_heading_cn(doc, "标题", 1)
-add_toc(doc)                       # 3 页以上才需要
-add_heading_cn(doc, "一、xxx", 2)
-add_body(doc, "正文……")
+apply_chinese_defaults(doc)        # ★ 必须调，且要在 setup_page 之前：定档（默认公文）
+section = setup_page(doc)          # A4 纵向，页边距按档取（公文 3.7/3.5/2.8/2.6）
+
+# —— 公文档 ——
+add_gongwen_title(doc, "关于××××的通知")     # 标题：二号小标宋，不进目录
+add_body(doc, "各有关部门：", indent=False)   # 主送机关顶格
+add_body(doc, "正文……")                      # 自动左空二字
+add_heading_cn(doc, "一、xxx", 1)             # 一级：三号黑体
+add_heading_cn(doc, "（一）xxx", 2)           # 二级：三号楷体
+add_signature_block(doc, "××××公司", "2026年8月27日")
+
 add_page_number_footer(section)
 doc.save("output/xxx.docx")
 print("saved")
@@ -148,13 +190,17 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 
 ```python
 from docx_helpers import set_run_font
-set_run_font(run, "微软雅黑", size_pt=11, bold=True)     # ✅
-run.font.name = "微软雅黑"                                # ❌ 中文不生效
+set_run_font(run, "仿宋_GB2312", size_pt=16, bold=True)   # ✅
+run.font.name = "仿宋_GB2312"                             # ❌ 中文不生效
 ```
 
-`apply_chinese_defaults(doc)` 会把 Normal 和 Heading 1–4 一次性设好（顺带关掉 Word 内置
-Heading 4 的斜体）。用 `add_body` / `add_heading_cn` 写的内容自动就是对的。
-体检脚本专门抓这条。
+`apply_chinese_defaults(doc)` 会按 §2.1 定的档把 Normal 和 Heading 1–4 一次性设好
+（顺带关掉 Word 内置 Heading 4 的斜体）。用 `add_body` / `add_heading_cn` / `add_table`
+写的内容自动就是对的，**不需要也不应该逐处传字体名**。体检脚本专门抓这条。
+
+⚠️ 「用户机器可能没装仿宋_GB2312 / 方正小标宋简体」**不是弃用它们的理由**：
+.docx 只把字体名写进 XML，渲染发生在用户的 Word 里，服务端装没装完全不影响产物。
+公文字体是国标强制项 —— 换成微软雅黑等于交了一份不合规的公文。
 
 ## 5. 改用户上传的文档
 
@@ -187,8 +233,9 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
 输出分两段：
 
 - **`=== 内容 ===`**：页面尺寸、段落数、逐段样式与文本、逐表内容。用它核对错字、顺序、缺漏。
-- **`=== 体检 ===`**：ERROR 必须修完；WARN 逐条复核（确认无误可交付）；INFO 是建议。
-  覆盖中文字体缺 `w:eastAsia`（含样式继承链）、字号过小、标题层级跳级、表格超出版心、
+- **`=== 体检 ===`**：开头会先说明它**按哪个版式档校验**（公文 / 非公文，从文档自身推断）。
+  ERROR 必须修完；WARN 逐条复核（确认无误可交付）；INFO 是建议。
+  覆盖公文文档混入通用字体、中文字体缺 `w:eastAsia`（含样式继承链）、字号过小、标题层级跳级、表格超出版心、
   表格首行不像表头、长表不重复表头、图片超宽、目录域没开 updateFields、目录域下没有 Heading、
   残留占位符、段落里塞 `\n`、连续空段落、长文档缺页码域。
 
@@ -233,6 +280,8 @@ print(r.stderr[-2000:] if r.stderr else "(no stderr)")
   `read_file` 读技能文档带斜杠（`/skills/bisheng-docx/references/design-zh.md`），
   代码执行器里的路径一律不带（`skills/bisheng-docx/scripts/inspect_docx.py`、`output/x.docx`）。
 - ❌ 只写 `run.font.name` 就以为中文字体设好了。
+- ❌ 因为「用户机器上可能没装仿宋_GB2312 / 方正小标宋简体」就换成微软雅黑、宋体。
+  字体名只写进 XML，渲染在用户的 Word 里 —— 服务端装没装不影响产物，公文字体是国标强制项。
 - ❌ 用手写的 `•` / `1.` 当列表，用 `\n` 当换行。
 - ❌ 用单行表格画分隔线（用 `add_hr`）。
 - ❌ 把文档降级成 Markdown 或 PDF 交付。用户要的是 .docx。

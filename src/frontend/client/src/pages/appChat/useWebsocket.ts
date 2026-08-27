@@ -8,11 +8,23 @@ import { SkillMethod } from "./appUtils/skillMethod"
 import { chatApiVersionState, submitDataState } from "./store/atoms"
 import { appConversationsState } from "./store/appSidebarAtoms"
 import { genTitle } from "~/api/chat/data-service"
+import logger from "~/utils/logger"
+import { useOptionalStandaloneChatContext } from "~/pages/standaloneChat/StandaloneChatContext"
+import {
+    buildWorkflowInitMessage,
+    claimWorkflowHandshake,
+    createWorkflowActivation,
+    decideWorkflowCloseAction,
+    isWorkflowFinishedStatusCheck,
+    syncWorkflowActivation,
+} from "./workflowAutoRerun"
+import type { WorkflowCloseAction } from "./workflowAutoRerun"
 
 export const AppLostMessage = '11111'
 const wsMap = new Map<string, WebSocket>()
 // 会话运行时信息
 const sessionInfoMap = new Map<string, any>()
+const restartCallbacks = new Map<string, () => void>()
 
 /**
  * Force-close the websocket and forget any session info for the given chatId.
@@ -40,6 +52,7 @@ export const closeAppChatWebSocket = (chatId: string) => {
     }
     wsMap.delete(chatId)
     sessionInfoMap.delete(chatId)
+    restartCallbacks.delete(chatId)
 }
 
 export const enum ActionType {
@@ -54,14 +67,15 @@ export const enum ActionType {
     SKILL_FORM_SUBMIT = 'skill_form_submit'
 }
 
-const restartCallBack: any = { current: null } // 用于存储重启回调函数
-
 export const useWebSocket = (helpers) => {
     const { showToast } = useToast();
     const [submitData, setSubmitData] = useRecoilState(submitDataState)
     const [, setAppConversations] = useRecoilState(appConversationsState)
     const apiVersion = useRecoilValue(chatApiVersionState)
     const localize = useLocalize()
+    const standaloneContext = useOptionalStandaloneChatContext()
+    const activationRef = useRef(createWorkflowActivation(helpers.chatId))
+    activationRef.current = syncWorkflowActivation(activationRef.current, helpers.chatId)
 
     const websocket = wsMap.get(helpers.chatId)
     const currentChatId = useCurrentChatId(helpers.chatId)
@@ -92,11 +106,31 @@ export const useWebSocket = (helpers) => {
             })
     }
 
+    const sendWorkflowStatusCheck = (ws: WebSocket) => {
+        const activation = activationRef.current
+        if (!claimWorkflowHandshake(activation, helpers.chatId)) return
+
+        ws.send(JSON.stringify({
+            action: ActionType.CHECK_STATUS,
+            chat_id: helpers.chatId,
+            flow_id: helpers.flow.id,
+        }))
+    }
+
     // 连接WebSocket
     const connect = (callBack) => {
+        const replacingExistingSocket = !!websocket
         if (websocket) {
-            if (!(callBack && websocket.readyState !== WebSocket.OPEN)) {
-                // 发送消息并链接断开，重新连接
+            if (!callBack) {
+                if (websocket.readyState === WebSocket.OPEN) {
+                    if (helpers.flow.flow_type === 10) {
+                        sendWorkflowStatusCheck(websocket)
+                    }
+                    return
+                }
+                if (websocket.readyState === WebSocket.CONNECTING) return
+                wsMap.delete(helpers.chatId)
+            } else if (websocket.readyState === WebSocket.OPEN) {
                 return
             }
         }
@@ -114,13 +148,19 @@ export const useWebSocket = (helpers) => {
             if (helpers.flow.flow_type === 10) {
                 // 工作流初始化
                 // console.log('helpers.flow :>> ', helpers.flow);
+                const shouldCheckStatus = replacingExistingSocket || !helpers.flow.isNew
+                if (shouldCheckStatus) {
+                    sendWorkflowStatusCheck(ws)
+                    return
+                }
                 const { data, ...flow } = helpers.flow
                 const msg = {
-                    action: helpers.flow.isNew ? ActionType.INIT_DATA : ActionType.CHECK_STATUS,
+                    action: ActionType.INIT_DATA,
                     chat_id: helpers.chatId,
                     flow_id: helpers.flow.id,
                     data: { ...flow, ...data },
                 }
+                claimWorkflowHandshake(activationRef.current, helpers.chatId)
                 ws?.send(JSON.stringify(msg))
             } else {
                 // 助手初始化
@@ -178,6 +218,25 @@ export const useWebSocket = (helpers) => {
         // 过滤无效数据
         if ((data.category === 'end_cover' && data.type !== 'end_cover')) {
             return
+        }
+
+        let workflowCloseAction: WorkflowCloseAction | null = null
+        if (helpers.flow.flow_type === 10 && data.type === 'close' && data.category === 'processing') {
+            workflowCloseAction = decideWorkflowCloseAction({
+                data,
+                activation: activationRef.current,
+                enabled: standaloneContext?.autoRerunOnOpen ?? false,
+                isStandaloneWorkflow: standaloneContext?.flowType === 'workflow',
+                isNewConversation: !!helpers.flow.isNew,
+            })
+            logger.debug('workflow-auto-rerun', {
+                chatId: helpers.chatId,
+                decision: workflowCloseAction,
+            })
+            if (workflowCloseAction === 'ignore') return
+            if (isWorkflowFinishedStatusCheck(data)) {
+                activationRef.current.handled = true
+            }
         }
 
         if (data.type === 'begin') {
@@ -259,11 +318,18 @@ export const useWebSocket = (helpers) => {
         if (data.type === 'close' && data.category === 'processing') {
             helpers.message.insetSeparator(helpers.chatId, 'com_chat_round_finished')
             // 重启会话按钮,接收close确认后端处理结束后重启会话
-            if (restartCallBack.current) {
-                restartCallBack.current()
-                restartCallBack.current = null
+            const restartCallback = restartCallbacks.get(helpers.chatId)
+            if (restartCallback) {
+                restartCallbacks.delete(helpers.chatId)
+                restartCallback()
             } else {
-                helpers.flow.flow_type === 10 && helpers.reRunShow(true)
+                if (workflowCloseAction === 'auto') {
+                    helpers.reRunShow(false)
+                    helpers.stopShow(true)
+                    _ws.send(JSON.stringify(buildWorkflowInitMessage(helpers.flow, helpers.chatId)))
+                } else if (workflowCloseAction === 'manual') {
+                    helpers.reRunShow(true)
+                }
             }
         } else if (data.type === 'over') {
             helpers.message.createMsg(helpers.chatId, data)
@@ -280,6 +346,7 @@ export const useWebSocket = (helpers) => {
                     console.log('ws close', currentChatId, helpers.chatId)
                     websocket.close()
                     wsMap.delete(helpers.chatId)
+                    restartCallbacks.delete(helpers.chatId)
                 }
             }
         }
@@ -311,16 +378,10 @@ export const useWebSocket = (helpers) => {
             switch (action) {
                 case ActionType.RESTART: {
                     sendWsMsg({ action: 'stop' })
-                    const { data, ...other } = submitData.flow
-                    const flow = { ...other, edges: data.edges, nodes: data.nodes, viewport: data.viewport }
-                    restartCallBack.current = () => {
-                        sendWsMsg({
-                            action: ActionType.INIT_DATA,
-                            chat_id: submitData.chatId,
-                            flow_id: flow.id,
-                            data: flow,
-                        })
-                    }
+                    const initMessage = buildWorkflowInitMessage(submitData.flow, submitData.chatId)
+                    restartCallbacks.set(submitData.chatId, () => {
+                        sendWsMsg(initMessage)
+                    })
                     break
                 }
                 case ActionType.INPUT: {
@@ -449,4 +510,3 @@ const useCurrentChatId = (chatId) => {
 
     return currentChatIdRef.current
 }
-
