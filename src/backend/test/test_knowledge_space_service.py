@@ -1029,9 +1029,13 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
         ),
         patch.object(
             svc,
-            "_can_bind_department_on_create",
+            "_can_bind_clinic_department",
             new_callable=AsyncMock,
             return_value=True,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service._require_not_write_frozen",
+            new_callable=AsyncMock,
         ),
         patch.object(
             DepartmentKnowledgeSpaceDao,
@@ -1055,6 +1059,7 @@ async def test_create_clinic_space_uses_team_level_and_writes_department_binding
         owner_type=KnowledgeSpaceOwnerTypeEnum.USER,
         owner_id=7,
         created_by=7,
+        portal_discovery_enabled=False,
     )
     mock_binding_create.assert_awaited_once_with(
         tenant_id=1,
@@ -1107,9 +1112,13 @@ async def test_update_clinic_space_rebinds_department():
         ),
         patch.object(
             svc,
-            "_can_bind_department_on_create",
+            "_can_bind_clinic_department",
             new_callable=AsyncMock,
             return_value=True,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service._require_not_write_frozen",
+            new_callable=AsyncMock,
         ),
         patch.object(
             svc,

@@ -356,8 +356,9 @@ export function CreateKnowledgeSpaceDrawer({
     }, [levelOptions, mode, spaceLevel]);
     const shouldShowVisibilityControls = false;
     const shouldShowPublishOption = shouldShowVisibilityControls && needPublishOption;
+    // 科室库落库为 TEAM/team_ks，编辑更绑不能只看 DEPARTMENT。创建仍看 spaceLevel，避免选团队库时误出绑定科室。
     const shouldShowDepartmentSelector = (
-        spaceLevel === SpaceLevel.DEPARTMENT
+        (spaceLevel === SpaceLevel.DEPARTMENT || isEditingClinic)
             && (
                 (mode === "create" && selectedLevelCreateEnabled)
                 || (mode === "edit" && canEditDepartmentBinding)
@@ -648,7 +649,7 @@ export function CreateKnowledgeSpaceDrawer({
         }
         if (shouldShowDepartmentSelector && !selectedDepartmentId) {
             showToast({
-                message: "请选择部门",
+                message: isClinicMode ? "请选择绑定科室" : "请选择部门",
                 severity: NotificationSeverity.WARNING
             });
             return;
@@ -939,6 +940,12 @@ export function CreateKnowledgeSpaceDrawer({
                                                     selectionMode="single"
                                                     loadDepartments={loadCreateDepartments}
                                                     disabledIds={boundDepartmentIds}
+                                                    canSelectNode={isClinicMode ? (node) => node.org_level === "office" : undefined}
+                                                    boundDisabledLabelKey={
+                                                      isClinicMode
+                                                        ? "com_permission.already_bound"
+                                                        : "com_permission.already_granted"
+                                                    }
                                                     searchPlaceholder={bindDepartmentSearchPlaceholder}
                                                 />
                                             </div>
