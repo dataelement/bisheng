@@ -37,6 +37,9 @@ from bisheng.linsight.domain.services.binary_content_guard import (
     CODE_INTERPRETER_TOOL,
     build_binary_guards,
 )
+from bisheng.linsight.domain.services.invalid_tool_call_middleware import (
+    build_invalid_tool_call_repair_middleware,
+)
 from bisheng.linsight.domain.services.resilience_middleware import build_resilience_middleware
 from bisheng.linsight.domain.services.tool_loop_middleware import build_tool_loop_breaker_middleware
 from bisheng.llm.domain.services import LLMService
@@ -138,6 +141,7 @@ __SKILL_DELIVERABLE_LINE__   - 3a（始终）：write_file 写 output/<name>.md�
   - 每个问题**必须给 2-4 个具体预设选项**（options），每项是一个简短的选项文案（纯字符串），优先让用户点选；只有该信息天然无法预设选项（如“请输入你的身高”）时，才把该问题的 options 留空走开放输入——但问题本身仍要写出来，不能整个 questions 留空。
   - 多选问题（multiple=true，如输出格式）：用户可勾选多项。
   - 收集“输出格式”用一个多选问题，选项含 markdown / html / docx / pdf。
+  - reason / question / options 文本里**不要出现英文双引号 `"`**（它会破坏工具调用的 JSON 参数，整次澄清会直接失效）；需要引用词语时用中文引号「」或“”。每个键只写一次（例如 multiple 不要重复）。
 - 一次性把所有要问的问完。不要罗列工具或能力限制，也不要预先解释工作流。
 - 【正确示例】questions 必须是这样的 JSON 数组（照此结构直接填——切勿把问题写进 reason，也切勿把数组序列化成字符串）：
   questions=[
@@ -653,6 +657,7 @@ async def ask_user(
             {"question": "问题标题", "options": ["选项1", "选项2"], "multiple": false}。
             options 为空表示开放式自由输入；multiple=true 表示多选。仅当确实没有任何
             结构化问题、只需给一句总体说明时，才省略 questions。
+            文本内不要使用英文双引号（会破坏 JSON 参数），需要引用时用中文引号「」/“”。
 
     Returns:
         用户的回答文本。
@@ -865,6 +870,14 @@ async def create_linsight_agent(
     from bisheng.tool.domain.langchain.linsight_export import init_linsight_export_tools
 
     export_tools = init_linsight_export_tools(backend)
+    # Invalid tool-call repair (after_model). Appended LAST on purpose: after_model
+    # hooks run in REVERSE middleware order, so this one sees the model output
+    # first and the tool-loop breaker / TodoList hooks then see the repaired call.
+    # It appends no system prompt, so the language tail above stays the tail.
+    # ``tools`` = the exact list bound below, for the repaired-key sanity check.
+    middlewares.append(
+        build_invalid_tool_call_repair_middleware(tools=[*tools, ask_user, *export_tools], is_subagent=False)
+    )
     # The researcher subagent is a separate subgraph: the main-graph middleware
     # above does NOT wrap its internal model calls, so it carries its OWN
     # resilience instance (is_subagent=True) which DEGRADES a content-filter /
@@ -886,6 +899,9 @@ async def create_linsight_agent(
         # its TodoList/Filesystem framework prompts), so the researcher also
         # reasons in the user's language.
         _LanguageTailMiddleware(_LINSIGHT_LANGUAGE_DIRECTIVE_ZH),
+        # Same invalid-call repair on the subagent's own graph (see the main-graph
+        # note above for why it goes last).
+        build_invalid_tool_call_repair_middleware(tools=researcher.get("tools"), is_subagent=True),
     ]
     # Advertise search_knowledge_base in the system prompt IFF it is actually in
     # `tools` (init_linsight_tools injects it only when the user selected a KB /
