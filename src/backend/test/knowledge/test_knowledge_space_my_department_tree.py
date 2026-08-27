@@ -287,6 +287,44 @@ async def test_marks_bound_offices(mock_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_does_not_mark_bound_non_office_nodes(mock_session) -> None:
+    login_user = _login_user()
+    svc = KnowledgeSpaceService(request=None, login_user=login_user)
+    bindings_mock = AsyncMock(return_value=[_binding(1, 200)])
+
+    departments = [
+        _department(1, name="炼铁部", path="/1/", org_level="dept"),
+        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", org_level="office"),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[1]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new=AsyncMock(return_value=departments),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            bindings_mock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+            return_value=mock_session,
+        ),
+    ):
+        result = await svc.get_my_department_tree_for_create()
+
+    assert result["bound_department_ids"] == []
+    bindings_mock.assert_awaited_once()
+    queried_ids = set(bindings_mock.await_args.args[0])
+    assert queried_ids == {2}
+
+
+@pytest.mark.asyncio
 async def test_exclude_space_id_omits_current_binding(mock_session) -> None:
     login_user = _login_user()
     svc = KnowledgeSpaceService(request=None, login_user=login_user)

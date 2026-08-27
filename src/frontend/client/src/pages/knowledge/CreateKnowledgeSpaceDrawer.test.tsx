@@ -201,7 +201,7 @@ jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
                             data-disabled={disabled ? "true" : "false"}
                             onClick={() => onChange([{ type: "department", id: department.id, name: department.name }])}
                         >
-                            选择{department.name}{bound ? "(已绑定)" : ""}
+                            选择{department.name}{bound && (!canSelectNode || canSelectNode(department)) ? "(已绑定)" : ""}
                         </button>
                     );
                 })}

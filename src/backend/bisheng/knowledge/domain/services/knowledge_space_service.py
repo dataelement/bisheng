@@ -2076,16 +2076,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> dict[str, Any]:
         """科室库绑定下拉: 部门管理员授权子树并集, 展示最多到 office.
 
-        超管看租户全部活跃组织后再裁剪. 已绑定 ID 只返回仍出现在树上的节点.
+        超管看租户全部活跃组织后再裁剪. 已绑定 ID 只返回树上的 office,
+        公司/部门即使已绑知识库也不标已绑定.
         """
         departments = filter_clinic_bind_tree_departments(await self._clinic_visible_departments())
         tree = await self._build_department_tree(departments)
 
-        filtered_ids = {int(dept.id) for dept in departments if getattr(dept, "id", None) is not None}
+        office_ids = {
+            int(dept.id)
+            for dept in departments
+            if getattr(dept, "id", None) is not None and is_clinic_bindable_department(dept)
+        }
         bound_ids = await self._bound_department_ids(
-            filtered_ids,
+            office_ids,
             exclude_space_id=exclude_space_id,
         )
+        bound_ids &= office_ids
 
         return {"data": tree, "bound_department_ids": sorted(bound_ids)}
 
