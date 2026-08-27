@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRecoilState } from 'recoil';
 import { useAuthContext, useMediaQuery, usePrefersMobileLayout } from '~/hooks';
+import { getBysConfigApi } from '~/api/apps';
 import { AuthContext } from '~/hooks/AuthContext';
 import { MobileNav } from '~/components/Nav';
 import NavToggle from '~/components/Nav/NavToggle';
@@ -13,6 +14,7 @@ import { StandaloneChatContext } from './StandaloneChatContext';
 import type { StandaloneChatContextValue } from './StandaloneChatContext';
 import { StandaloneSideNav } from './StandaloneSideNav';
 import { useStandaloneSidebar } from './hooks/useStandaloneSidebar';
+import { loadStandaloneAutoRerunOnOpen } from './standaloneAutoRerunConfig';
 
 interface StandaloneChatPageProps {
   mode: 'guest' | 'auth';
@@ -75,6 +77,8 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const { flowId } = useParams<{ flowId: string }>();
   const [sidebarVisible, setSidebarVisible] = useRecoilState(sidebarVisibleState);
   const [isHovering, setIsHovering] = useState(false);
+  const [configReady, setConfigReady] = useState(flowType !== 'workflow');
+  const [autoRerunOnOpen, setAutoRerunOnOpen] = useState(false);
   const isTabletOrMobile = usePrefersMobileLayout();
   const isChatShellCompact = useMediaQuery('(max-width: 1023px)');
   const sidebarWidth = 240;
@@ -83,11 +87,35 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
   const numericFlowType = FLOW_TYPE_MAP[flowType];
   const isGuestMode = mode === 'guest';
 
+  useEffect(() => {
+    if (flowType !== 'workflow') {
+      setAutoRerunOnOpen(false);
+      setConfigReady(true);
+      return;
+    }
+
+    let active = true;
+    setConfigReady(false);
+    loadStandaloneAutoRerunOnOpen(flowType, getBysConfigApi)
+      .then((enabled) => {
+        if (!active) return;
+        setAutoRerunOnOpen(enabled);
+      })
+      .finally(() => {
+        if (active) setConfigReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [flowType]);
+
   const contextValue: StandaloneChatContextValue = {
     mode,
     flowType,
     flowId: flowId ?? '',
     apiVersion,
+    autoRerunOnOpen: flowType === 'workflow' && autoRerunOnOpen,
   };
 
   // Lifted to page level so both sidebar and chat panel share one instance
@@ -184,7 +212,7 @@ function StandaloneChatInner({ mode, flowType }: StandaloneChatPageProps) {
                   !isGuestMode && 'touch-mobile:rounded-none touch-mobile:border-0 touch-mobile:shadow-none',
                 )}
               >
-                {activeChatId ? (
+                {activeChatId && configReady ? (
                   <AppChat
                     chatId={activeChatId}
                     flowId={flowId}
