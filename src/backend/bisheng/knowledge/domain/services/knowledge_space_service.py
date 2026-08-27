@@ -12002,6 +12002,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
 
+        # 门户发现开关只允许平台系统管理员改；非 admin 只要带该字段就整单拒绝，避免其它字段先写库。
+        if portal_discovery_enabled is not None and not self.login_user.is_admin():
+            raise UnAuthorizedError(msg="仅系统管理员可以配置门户公开范围")
+
         rebind_scope = None
         target_department = None
         old_department = None

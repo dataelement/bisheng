@@ -157,6 +157,8 @@ interface CreateKnowledgeSpaceDrawerProps {
     initialSpaceLevel?: SpaceLevel;
     showApprovalReason?: boolean;
     canEditDepartmentBinding?: boolean;
+    /** 仅平台系统管理员可改门户发现开关；默认 false，漏传则隐藏且保存时不提交该字段。 */
+    isSystemAdmin?: boolean;
 }
 
 /**
@@ -207,6 +209,7 @@ export function CreateKnowledgeSpaceDrawer({
     initialSpaceLevel,
     showApprovalReason = false,
     canEditDepartmentBinding = false,
+    isSystemAdmin = false,
 }: CreateKnowledgeSpaceDrawerProps) {
     const { showToast } = useToastContext();
     const confirm = useConfirm();
@@ -366,7 +369,8 @@ export function CreateKnowledgeSpaceDrawer({
     const shouldShowApprovalReason = mode === "create"
         && showApprovalReason
         && initialSpaceLevel === SpaceLevel.TEAM;
-    const shouldShowPortalDiscoverySwitch = mode === "edit" && Boolean(
+    // 开关仅系统管理员可见；隐藏时 payload 不含 portalDiscoveryEnabled，库里原值保持不变。
+    const shouldShowPortalDiscoverySwitch = mode === "edit" && isSystemAdmin && Boolean(
         editingSpace?.spaceLevel === SpaceLevel.PUBLIC
         || editingSpace?.spaceLevel === SpaceLevel.DEPARTMENT
         || editingSpace?.isClinic,

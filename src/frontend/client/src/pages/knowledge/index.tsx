@@ -903,6 +903,7 @@ export default function Knowledge() {
                         ? user?.role === "admin" || Boolean(user?.is_department_admin)
                         : user?.role === "admin"
                 }
+                isSystemAdmin={user?.role === "admin"}
                 onViewSpace={() => setShowCreateDrawer(false)}
                 onManageMembers={() => {
                     setShowCreateDrawer(false);

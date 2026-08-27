@@ -298,7 +298,7 @@ jest.mock("~/components/ui/icon/File", () => ({
 }));
 
 jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
-    CreateKnowledgeSpaceDrawer: ({ open, initialSpaceLevel, mode = "create", editingSpace, showApprovalReason, showSuccessManageMembers, canEditDepartmentBinding, onConfirm }: any) => {
+    CreateKnowledgeSpaceDrawer: ({ open, initialSpaceLevel, mode = "create", editingSpace, showApprovalReason, showSuccessManageMembers, canEditDepartmentBinding, isSystemAdmin, onConfirm }: any) => {
         if (!open) return null;
         const successManageMembersVisible = typeof showSuccessManageMembers === "function"
             ? showSuccessManageMembers(initialSpaceLevel)
@@ -312,6 +312,7 @@ jest.mock("../CreateKnowledgeSpaceDrawer", () => ({
                 approvalReason:{String(Boolean(showApprovalReason))}
                 successManageMembers:{String(successManageMembersVisible)}
                 canEditDepartmentBinding:{String(Boolean(canEditDepartmentBinding))}
+                isSystemAdmin:{String(Boolean(isSystemAdmin))}
                 <button
                     type="button"
                     onClick={async () => {
@@ -1877,6 +1878,7 @@ describe("PortalKnowledgeWorkbench", () => {
         expect(await screen.findByTestId("create-space-drawer")).toHaveTextContent(
             "canEditDepartmentBinding:true",
         );
+        expect(screen.getByTestId("create-space-drawer")).toHaveTextContent("isSystemAdmin:true");
         fireEvent.click(screen.getByRole("button", { name: "提交创建" }));
 
         await waitFor(() => expect(updateSpaceApi).toHaveBeenCalledTimes(1));

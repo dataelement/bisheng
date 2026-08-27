@@ -2991,6 +2991,7 @@ export default function PortalKnowledgeWorkbench() {
                         ? false
                         : isSystemAdmin
                 }
+                isSystemAdmin={isSystemAdmin}
                 onViewCreatedSpace={() => setCreateDrawerOpen(false)}
                 onManageEditingSpaceMembers={() => {
                     setCreateDrawerOpen(false);
