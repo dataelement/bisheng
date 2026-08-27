@@ -299,7 +299,7 @@
   },
   "src/components/Chat/ChatView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 28
+      "count": 27
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2

@@ -27,8 +27,10 @@ Always exits 0 — the executor discards stdout on a non-zero exit.
 
 import argparse
 import os
+import re
 import sys
 import traceback
+from itertools import pairwise
 
 try:
     from docx import Document
@@ -37,11 +39,28 @@ except ImportError:  # pragma: no cover
     print("[FATAL] python-docx 不可用；无法体检。")
     sys.exit(0)
 
+try:
+    from style_profiles import GENERIC_CN_FONTS, GONGWEN, MODERN
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        from style_profiles import GENERIC_CN_FONTS, GONGWEN, MODERN
+    except ImportError:  # pragma: no cover - script copied out of the bundle
+        GENERIC_CN_FONTS = ("微软雅黑", "等线", "宋体", "SimSun", "Microsoft YaHei", "DengXian")
+        GONGWEN = MODERN = None
+
 PLACEHOLDERS = ["待填", "待补", "TODO", "XXX", "占位", "请填写", "TBD", "lorem ipsum", "示例文字"]
 CJK_RANGE = ("一", "鿿")
-MIN_RUN_PT = 9.0  # design-zh: 图注 9pt 是最小合法字号
-MIN_BODY_PT = 10.5  # design-zh: 正文 11pt
+MIN_RUN_PT = 9.0  # 图注 9pt 是最小合法字号
 REPEAT_HEADER_ROWS = 12  # 超过这个行数的表跨页时必须重复表头
+
+# Faces no corporate document reaches for by accident. Their presence is the
+# most reliable signal that this document is meant to be an official one.
+GONGWEN_ONLY_FONTS = ("方正小标宋简体", "小标宋", "仿宋_GB2312", "楷体_GB2312")
+# 「关于××的通知」and its siblings — a narrow shape, so a CV or a deck title
+# cannot trip it. Catches the case where every face was already swapped out and
+# GONGWEN_ONLY_FONTS finds nothing.
+GONGWEN_TITLE_RE = re.compile(r"^关于.{2,60}的(通知|报告|请示|函|意见|批复|决定|通报|纪要|公告|通告)$")
 
 findings: list[tuple[str, str]] = []
 
@@ -185,7 +204,72 @@ def dump_content(path: str, max_paras: int) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def check_fonts(doc) -> None:
+def document_faces(doc) -> set[str]:
+    """Every CJK face the document actually names, styles and runs alike."""
+    faces: set[str] = set()
+    for style_name in ("Normal", "Heading 1", "Heading 2", "Heading 3", "Heading 4"):
+        try:
+            face = style_east_asia(doc.styles[style_name])
+        except KeyError:
+            continue
+        if face:
+            faces.add(face)
+    for paragraph, _ in iter_block_paragraphs(doc):
+        for run in paragraph.runs:
+            face = run_east_asia(run)
+            if face:
+                faces.add(face)
+    return faces
+
+
+def looks_like_gongwen(doc, faces: set[str]) -> bool:
+    """Is this document *meant* to be an official document?
+
+    Deliberately not "what does Normal say" — if the body face was swapped for
+    微软雅黑 that is exactly the defect being looked for, and keying off it would
+    make the check disappear precisely when it matters.
+    """
+    if any(face in GONGWEN_ONLY_FONTS for face in faces):
+        return True
+
+    # A 公文 title wraps on meaning rather than running to the margin, so it is
+    # routinely split across two paragraphs («关于××映射表 V2.0» / «变量个数情况的报告»).
+    # Test the first few leading paragraphs both alone and pairwise joined.
+    leading = []
+    for paragraph in doc.paragraphs:
+        text = paragraph.text.strip().replace(" ", "")
+        if text:
+            leading.append(text)
+        if len(leading) >= 3:
+            break
+    candidates = list(leading)
+    candidates += [a + b for a, b in pairwise(leading)]
+    return any(GONGWEN_TITLE_RE.match(text) for text in candidates)
+
+
+def check_profile_fonts(doc, faces: set[str], is_gongwen: bool) -> None:
+    """公文 faces are a national-standard requirement, not a preference.
+
+    Reported as WARN, never ERROR: the user's own unit template legitimately
+    overrides GB/T 9704, and an unsatisfiable checker sends the model into a
+    repair loop that burns the remaining rounds.
+    """
+    if not is_gongwen or GONGWEN is None:
+        return
+    generic = sorted(face for face in faces if face in GENERIC_CN_FONTS)
+    if not generic:
+        return
+    add(
+        "WARN",
+        f"这份文档看着是公文，却用到了通用字体：{', '.join(generic)}。"
+        "GB/T 9704 规定标题二号方正小标宋简体、正文三号仿宋_GB2312、一级黑体、二级楷体_GB2312。"
+        "调 apply_chinese_defaults(doc)（默认就是公文档）而不是逐处写字体名；"
+        "「用户机器可能没装」不成立 —— 字体名只写进 XML，渲染在用户的 Word 里完成。"
+        "若这是本单位模板要求的字体，忽略本条。",
+    )
+
+
+def check_fonts(doc, profile=None) -> None:
     """The headline check: every Chinese run must end up with a w:eastAsia face."""
     if not style_east_asia(doc.styles["Normal"]):
         add(
@@ -259,12 +343,13 @@ def check_fonts(doc) -> None:
             f"{' …' if len(small) > 6 else ''}。打印后基本读不清 —— "
             f"正文 11pt、表格 10pt、图注 9pt，最小不要低于 {MIN_RUN_PT:g}pt。",
         )
+    expected_pt = (profile or MODERN or {}).get("body", {}).get("pt", 11)
     normal_pt = style_size_pt(doc.styles["Normal"])
-    if normal_pt is not None and normal_pt < MIN_BODY_PT:
+    if normal_pt is not None and normal_pt < expected_pt - 1:
         add(
             "WARN",
-            f"Normal 样式字号 {normal_pt:g}pt 偏小（正文规范 11pt）。"
-            "在 apply_chinese_defaults(doc, body_pt=11) 里调回来。",
+            f"Normal 样式字号 {normal_pt:g}pt 偏小（当前版式档的正文是 {expected_pt:g}pt）。"
+            f"在 apply_chinese_defaults(doc, body_pt={expected_pt:g}) 里调回来。",
         )
 
 
@@ -368,7 +453,7 @@ def check_images(doc, section) -> None:
             )
 
 
-def check_text(doc) -> None:
+def check_text(doc, is_gongwen: bool = False) -> None:
     empty_streak = 0
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
@@ -386,7 +471,15 @@ def check_text(doc) -> None:
         prefix = f"{where} " if where else ""
         for token in PLACEHOLDERS:
             if token in text:
-                add("WARN", f"{prefix}残留占位文本「{token}」：{text[:40]} —— 换成真实内容，或整段删掉")
+                # In an official document a bracketed 发文机关 is the *correct*
+                # output when the user gave no authorised issuer — telling the
+                # model to "replace with real content" invites it to invent one.
+                advice = (
+                    "确认是否应换成真实机关名；用户没给授权名称时保留占位是对的，不要编造"
+                    if is_gongwen
+                    else "换成真实内容，或整段删掉"
+                )
+                add("WARN", f"{prefix}残留占位文本「{token}」：{text[:40]} —— {advice}")
                 break
         if "\n" in paragraph.text:
             add(
@@ -422,15 +515,20 @@ def check_fields(doc) -> None:
 def run_checks(path: str) -> None:
     doc = Document(path)
     section = doc.sections[0]
-    check_fonts(doc)
+    faces = document_faces(doc)
+    is_gongwen = looks_like_gongwen(doc, faces)
+    profile = GONGWEN if is_gongwen else MODERN
+    check_fonts(doc, profile)
+    check_profile_fonts(doc, faces, is_gongwen)
     check_headings(doc)
     check_tables(doc, section)
     check_images(doc, section)
-    check_text(doc)
+    check_text(doc, is_gongwen)
     check_fields(doc)
 
     print()
     print("=== 体检 ===")
+    print(f"（按「{'公文' if is_gongwen else '非公文'}」版式档校验）")
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}
     counts = {"ERROR": 0, "WARN": 0, "INFO": 0}

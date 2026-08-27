@@ -2170,6 +2170,7 @@
       "shared": "Shared Source",
       "system": "System Source",
       "include_children": "Include sub-departments",
+      "user_group_admin": "User group administrators",
       "snapshot_from_parent": "Copied on inherit",
       "space_membership": "Space member",
       "channel_membership": "Channel member",

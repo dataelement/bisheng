@@ -29,6 +29,9 @@ export function SourceBadge({ source }: SourceBadgeProps) {
       {source.include_children && (
         <span className="font-normal">· {t("source.includeChildren")}</span>
       )}
+      {source.userset_relation === "admin" && (
+        <span className="font-normal">· {t("source.userGroupAdmin")}</span>
+      )}
     </span>
   )
 }

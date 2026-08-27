@@ -313,6 +313,7 @@ class GrantModelDTO(BaseModel):
 class GrantSourceDTO(BaseModel):
     type: str
     include_children: bool = False
+    userset_relation: str | None = None
 
 
 class GrantAssigneeDTO(BaseModel):

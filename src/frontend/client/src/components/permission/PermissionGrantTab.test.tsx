@@ -65,7 +65,22 @@ jest.mock("./SubjectSearchDepartment", () => ({
 }));
 
 jest.mock("./SubjectSearchUserGroup", () => ({
-  SubjectSearchUserGroup: () => <div>group picker</div>,
+  SubjectSearchUserGroup: ({
+    onChange,
+  }: {
+    onChange: (
+      subjects: Array<{ type: "user_group"; id: number; name: string }>,
+    ) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() =>
+        onChange([{ type: "user_group", id: 77, name: "Reviewers" }])
+      }
+    >
+      select group
+    </button>
+  ),
 }));
 
 const mockedGetModels = getGrantablePermissionModels as jest.MockedFunction<
@@ -256,6 +271,37 @@ describe("F048 Client PermissionGrantTab", () => {
     ).toBeDisabled();
   });
 
+  it("shows an existing user-group administrator grant", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        context={context}
+        assignees={[
+          existing("77", {
+            subject: {
+              type: "user_group",
+              id: "77",
+              name: "Reviewers",
+            },
+            source: {
+              type: "USER_GROUP",
+              include_children: false,
+              userset_relation: "admin",
+            },
+          }),
+        ]}
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        /f048_permission\.source\.user_group_admin/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("keeps an inactive existing row read-only when it is not grantable", async () => {
     render(
       <PermissionGrantTab
@@ -420,6 +466,47 @@ describe("F048 Client PermissionGrantTab", () => {
               id: "42",
               include_children: true,
               userset_relation: "subtree_member",
+            },
+          },
+        ],
+      }),
+    );
+  });
+
+  it("does not expose or submit a user-group administrator grant", async () => {
+    render(
+      <PermissionGrantTab
+        resourceType="channel"
+        resourceId="channel-1"
+        context={context}
+        onSuccess={jest.fn()}
+      />,
+    );
+
+    await screen.findByLabelText("f048_permission.grant.add_model");
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "f048_permission.subject.user_group",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "select group" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "f048_permission.grant.add" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "f048_permission.grant.submit" }),
+    );
+
+    await waitFor(() => expect(mockedMutate).toHaveBeenCalledTimes(1));
+    expect(mockedMutate.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        changes: [
+          {
+            op: "ADD",
+            model_key: "viewer",
+            subject: {
+              type: "user_group",
+              id: "77",
             },
           },
         ],

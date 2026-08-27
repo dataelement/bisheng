@@ -2099,6 +2099,7 @@
       "shared": "共享来源",
       "system": "系统来源",
       "include_children": "包含子部门",
+      "user_group_admin": "用户组管理员",
       "snapshot_from_parent": "继承时复制",
       "space_membership": "空间成员",
       "channel_membership": "频道成员",

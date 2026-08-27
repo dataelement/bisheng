@@ -93,22 +93,25 @@ class ToolExecutor(BaseTool):
     tool_instance: BaseTool = Field(..., description="Langchain Tool Instance")
 
     @staticmethod
-    def _build_permission_user(
+    async def _build_permission_user(
         user_id: int,
         tenant_id: int,
     ) -> UserPayload:
+        from bisheng.utils.http_middleware import _check_is_global_super
+
         return UserPayload(
             user_id=user_id,
             user_name="",
             user_role=[],
             tenant_id=tenant_id,
+            is_global_super=await _check_is_global_super(user_id),
         )
 
     @classmethod
     async def _ensure_use_permission_async(cls, tool_type: GptsToolsType, user_id: int) -> None:
         if not tool_type.id or not tool_type.tenant_id:
             raise PermissionError("Permission denied: use")
-        login_user = cls._build_permission_user(
+        login_user = await cls._build_permission_user(
             user_id,
             int(tool_type.tenant_id),
         )
