@@ -1741,7 +1741,12 @@
     "move_duplicate_error": "目标位置已存在同名文件夹",
     "select_target_location": "选择目标位置",
     "root_directory": "根目录",
-    "no_sub_folders": "此处没有子文件夹"
+    "no_sub_folders": "此处没有子文件夹",
+    "delete_impact_rollback": "{{count}} 个文件已发布到其他位置，删除后将退回原知识库",
+    "delete_impact_permanent": "{{count}} 个文件将被彻底删除",
+    "delete_impact_reference": "{{count}} 个引用入口将被移除",
+    "delete_impact_separator": "；",
+    "delete_impact_irreversible": "。以上内容不会进入回收站，删除后无法还原。"
   },
   "com_subscription": {
     "add": "加入",

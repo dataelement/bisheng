@@ -1737,7 +1737,12 @@
     "move_duplicate_error": "移動先に同名のフォルダが既に存在します",
     "select_target_location": "移動先を選択",
     "root_directory": "ルートディレクトリ",
-    "no_sub_folders": "サブフォルダはありません"
+    "no_sub_folders": "サブフォルダはありません",
+    "delete_impact_rollback": "他の場所に公開済みのファイル {{count}} 件は元のナレッジベースに戻ります",
+    "delete_impact_permanent": "ファイル {{count}} 件は完全に削除されます",
+    "delete_impact_reference": "参照 {{count}} 件が削除されます",
+    "delete_impact_separator": "、",
+    "delete_impact_irreversible": "。これらはごみ箱に入らず、復元できません。"
   },
   "com_subscription": {
     "add": "追加",

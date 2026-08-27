@@ -1813,7 +1813,12 @@
     "move_duplicate_error": "A folder with the same name already exists at the target location",
     "select_target_location": "Select target location",
     "root_directory": "Root directory",
-    "no_sub_folders": "No sub-folders here"
+    "no_sub_folders": "No sub-folders here",
+    "delete_impact_rollback": "{{count}} file(s) published elsewhere will move back to their original knowledge base",
+    "delete_impact_permanent": "{{count}} file(s) will be deleted for good",
+    "delete_impact_reference": "{{count}} reference(s) will be removed",
+    "delete_impact_separator": "; ",
+    "delete_impact_irreversible": ". These do not go to the recycle bin and cannot be restored."
   },
   "com_subscription": {
     "add": "Add",

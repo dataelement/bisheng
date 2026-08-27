@@ -626,27 +626,18 @@ async def test_final_delete_keeps_physical_cleanup_facts_until_worker_finishes(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("retiring_space_id", "expected_document_status", "expected_remote_status"),
-    [
-        (
-            10,
-            KnowledgeDocumentLifecycleStatus.DELETING.value,
-            KnowledgeFileEntryStatus.INVALID.value,
-        ),
-        (
-            20,
-            KnowledgeDocumentLifecycleStatus.ACTIVE.value,
-            KnowledgeFileEntryStatus.DELETING.value,
-        ),
-    ],
-)
-async def test_space_retirement_invalidates_only_when_manager_space_is_deleted(
+@pytest.mark.parametrize("retiring_space_id", [10, 20])
+async def test_space_retirement_only_flips_the_space_and_defers_entries(
     async_db_session: AsyncSession,
     retiring_space_id: int,
-    expected_document_status: str,
-    expected_remote_status: str,
 ):
+    """F098: retirement no longer decides each entry's fate in its own transaction.
+
+    It used to mark entries inline, which both skipped chain relinking (leaving
+    documents pointing at rows the projection worker later removed) and had no
+    room for a manager rollback. Entries are now swept afterwards under the
+    same rules a single-file delete follows.
+    """
     await _seed_manager(async_db_session)
     async_db_session.add_all(
         [
@@ -676,14 +667,24 @@ async def test_space_retirement_invalidates_only_when_manager_space_is_deleted(
     manager = await repository.find_by_id(100)
     remote = await repository.find_by_id(101)
     retired_space = await async_db_session.get(Knowledge, retiring_space_id)
+
     assert result.idempotent is False
     assert retired_space.state == KnowledgeState.DELETING.value
-    assert document.lifecycle_status == expected_document_status
-    if retiring_space_id == 10:
-        assert manager.entry_status == KnowledgeFileEntryStatus.DELETING.value
-    else:
-        assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
-    assert remote.entry_status == expected_remote_status
+    assert document.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value
+    assert manager.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+    assert remote.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+
+
+@pytest.mark.asyncio
+async def test_space_retirement_is_idempotent(async_db_session: AsyncSession):
+    await _seed_manager(async_db_session)
+    service = KnowledgeSpaceRetirementService(session=async_db_session)
+
+    first = await service.retire(tenant_id=7, space_id=10)
+    second = await service.retire(tenant_id=7, space_id=10)
+
+    assert first.idempotent is False
+    assert second.idempotent is True
 
 
 @pytest.mark.asyncio
