@@ -222,6 +222,7 @@ class F048ResourcePermissionApi:
                 "source": {
                     "type": row.source_type,
                     "include_children": row.include_children,
+                    "userset_relation": row.userset_relation,
                 },
                 "scope": row.scope,
                 "inherited_from": row.inherited_from,

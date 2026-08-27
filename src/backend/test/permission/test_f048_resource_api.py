@@ -124,11 +124,11 @@ class _Runtime:
                 PermissionSourceExplanation(
                     source_id=91,
                     source_version=2,
-                    subject_type="user",
-                    subject_id="8",
-                    userset_relation=None,
+                    subject_type="user_group",
+                    subject_id="2",
+                    userset_relation="admin",
                     include_children=False,
-                    source_type="DIRECT",
+                    source_type="USER_GROUP",
                     model_key="viewer",
                     model_level=1,
                     scope="LOCAL",
@@ -156,7 +156,10 @@ class _Subjects:
         )
 
     async def display_names(self, subjects):
-        return {("user", "8"): "Member 8"}
+        return {
+            ("user", "8"): "Member 8",
+            ("user_group", "2"): "Reviewers",
+        }
 
     async def actor_projected_subjects(self, actor):
         return frozenset({f"user:{actor.user_id}"})
@@ -500,7 +503,16 @@ async def test_roster_uses_bounded_sql_page_instead_of_full_explanation() -> Non
         page_size=25,
     )
 
-    assert result["data"][0]["subject"]["name"] == "Member 8"
+    assert result["data"][0]["subject"] == {
+        "type": "user_group",
+        "id": "2",
+        "name": "Reviewers",
+    }
+    assert result["data"][0]["source"] == {
+        "type": "USER_GROUP",
+        "include_children": False,
+        "userset_relation": "admin",
+    }
     assert result["has_more"] is True
     assert result["next_cursor"]
     assert runtime.page_calls == [
