@@ -152,6 +152,7 @@ async def test_cleanup_duplicate_files_before_sync_deletes_all_success_matches()
             side_effect=[
                 SimpleNamespace(file_level_path="", knowledge_id=8),
                 existing,
+                [],
             ]
         ),
     ):
@@ -182,6 +183,7 @@ async def test_cleanup_duplicate_files_before_sync_deletes_non_success_existing(
             side_effect=[
                 SimpleNamespace(file_level_path="", knowledge_id=8),
                 existing,
+                [],
             ]
         ),
     ):
@@ -197,23 +199,16 @@ async def test_cleanup_duplicate_files_before_sync_deletes_non_success_existing(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_duplicate_files_before_sync_includes_external_file_id_matches():
+async def test_cleanup_duplicate_files_before_sync_skips_external_file_id_with_different_name():
     knowledge_space_service = SimpleNamespace(delete_file=AsyncMock())
-    external_match = KnowledgeFile(
-        id=60,
-        knowledge_id=8,
-        file_name="legacy-name.pdf",
-        status=KnowledgeFileStatus.SUCCESS.value,
-        create_time=datetime(2026, 7, 3),
-        user_metadata={"external_file_id": "ext-9"},
-    )
-    repository = SimpleNamespace(find_files_by_external_file_id=AsyncMock(return_value=[external_match]))
+    repository = SimpleNamespace(find_files_by_external_file_id=AsyncMock(return_value=[]))
     service = _service(knowledge_space_service=knowledge_space_service, repository=repository)
     with patch(
         "bisheng.open_endpoints.domain.services.filelib_sync_service.asyncio.to_thread",
         new=AsyncMock(
             side_effect=[
                 SimpleNamespace(file_level_path="", knowledge_id=8),
+                [],
                 [],
             ]
         ),
@@ -225,13 +220,59 @@ async def test_cleanup_duplicate_files_before_sync_includes_external_file_id_mat
             external_file_id="ext-9",
         )
 
-    assert replaced_file_id == 60
-    knowledge_space_service.delete_file.assert_awaited_once_with(60)
-    repository.find_files_by_external_file_id.assert_awaited_once_with(
-        8,
-        "ext-9",
-        file_level_path="9001",
+    assert replaced_file_id is None
+    knowledge_space_service.delete_file.assert_not_awaited()
+    repository.find_files_by_external_file_id.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cleanup_duplicate_files_before_sync_matches_legacy_file_level_path():
+    knowledge_space_service = SimpleNamespace(delete_file=AsyncMock())
+    repository = SimpleNamespace(find_files_by_external_file_id=AsyncMock(return_value=[]))
+    service = _service(knowledge_space_service=knowledge_space_service, repository=repository)
+    legacy_file = KnowledgeFile(
+        id=61,
+        knowledge_id=8,
+        file_name="report.pdf",
+        file_level_path="/9001",
+        status=KnowledgeFileStatus.PROCESSING.value,
+        create_time=datetime(2026, 7, 4),
     )
+
+    async def _to_thread_side_effect(func, *args, **kwargs):
+        if func.__name__ == "query_by_id_sync":
+            return SimpleNamespace(file_level_path="", knowledge_id=8)
+        if func.__name__ == "get_file_by_condition":
+            if kwargs.get("file_level_path") == "/9001":
+                return [legacy_file]
+            return []
+        raise AssertionError(f"unexpected to_thread call: {func.__name__}")
+
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.asyncio.to_thread",
+        new=AsyncMock(side_effect=_to_thread_side_effect),
+    ):
+        replaced_file_id = await service._cleanup_duplicate_files_before_sync(
+            knowledge_id=8,
+            folder_id=9001,
+            file_name="report.pdf",
+            external_file_id="ext-9",
+        )
+
+    assert replaced_file_id == 61
+    knowledge_space_service.delete_file.assert_awaited_once_with(61)
+
+
+@pytest.mark.asyncio
+async def test_resolve_upload_file_level_path_matches_add_file_for_root_folder():
+    service = _service()
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.asyncio.to_thread",
+        new=AsyncMock(return_value=SimpleNamespace(file_level_path="", knowledge_id=8)),
+    ):
+        resolved = await service._resolve_upload_file_level_path(knowledge_id=8, folder_id=9001)
+
+    assert resolved == "/9001"
 
 
 @pytest.mark.asyncio

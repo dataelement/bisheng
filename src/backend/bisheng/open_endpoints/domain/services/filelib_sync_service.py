@@ -1036,27 +1036,21 @@ class FilelibSyncService:
         file_name: str,
         external_file_id: str,
     ) -> int | None:
-        """Soft-delete historical duplicates in the target folder; newest upload wins."""
+        """Soft-delete same-name files in the target folder; newest upload wins."""
         file_level_path = await self._resolve_upload_file_level_path(
             knowledge_id=knowledge_id,
             folder_id=folder_id,
         )
         candidates: dict[int, KnowledgeFile] = {}
 
-        for existing_file in await asyncio.to_thread(
-            KnowledgeFileDao.get_file_by_condition,
-            knowledge_id=knowledge_id,
-            file_name=file_name,
-            file_level_path=file_level_path,
-        ) or []:
-            candidates[int(existing_file.id)] = existing_file
-
-        for existing_file in await self.repository.find_files_by_external_file_id(
-            knowledge_id,
-            external_file_id,
-            file_level_path=file_level_path,
-        ):
-            candidates[int(existing_file.id)] = existing_file
+        for path in self._file_level_path_variants(file_level_path):
+            for existing_file in await asyncio.to_thread(
+                KnowledgeFileDao.get_file_by_condition,
+                knowledge_id=knowledge_id,
+                file_name=file_name,
+                file_level_path=path,
+            ) or []:
+                candidates[int(existing_file.id)] = existing_file
 
         if not candidates:
             return None
@@ -1087,6 +1081,21 @@ class FilelibSyncService:
         return replaced_file_id
 
     @staticmethod
+    def _file_level_path_variants(path: str) -> set[str]:
+        """Return canonical and legacy path forms for duplicate lookup."""
+        normalized = str(path or "").strip()
+        if not normalized:
+            return {""}
+        variants = {normalized}
+        if normalized.startswith("/"):
+            stripped = normalized.lstrip("/")
+            if stripped:
+                variants.add(stripped)
+        else:
+            variants.add(f"/{normalized}")
+        return variants
+
+    @staticmethod
     async def _resolve_upload_file_level_path(
         *,
         knowledge_id: int,
@@ -1097,8 +1106,9 @@ class FilelibSyncService:
         folder = await asyncio.to_thread(KnowledgeFileDao.query_by_id_sync, int(folder_id))
         if folder is None or int(folder.knowledge_id) != int(knowledge_id):
             raise FilelibSyncNotFoundError(msg="target folder does not exist")
+        # Keep aligned with KnowledgeSpaceService.add_file and folder list queries.
         parent_path = folder.file_level_path or ""
-        return f"{parent_path}/{int(folder_id)}" if parent_path else str(int(folder_id))
+        return f"{parent_path}/{int(folder_id)}"
 
     async def _remove_duplicate_file_for_sync_replace(self, file_id: int) -> None:
         try:
