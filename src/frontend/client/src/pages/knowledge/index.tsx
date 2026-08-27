@@ -807,6 +807,12 @@ export default function Knowledge() {
                                         onRejectAlias={fileUpload.handleRejectAlias}
                                         onBatchAcceptAlias={fileUpload.handleBatchAcceptAlias}
                                         onBatchRejectAlias={fileUpload.handleBatchRejectAlias}
+                                        onMoveFile={async (fileId, targetFolderId) => {
+                                            await fileUpload.handleMoveFile(fileId, targetFolderId);
+                                            fileManager.loadFiles(fileManager.currentPage);
+                                        }}
+                                        onAfterBatchMove={() => fileManager.loadFiles(fileManager.currentPage)}
+                                        onMoveDialogFolderCreated={() => fileManager.loadFiles(fileManager.currentPage)}
                                         currentPath={fileManager.currentPath}
                                         currentFolderId={fileManager.currentFolderId}
                                         onDragStateChange={handleDragStateChange}

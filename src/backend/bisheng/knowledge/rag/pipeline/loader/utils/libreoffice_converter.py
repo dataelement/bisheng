@@ -33,7 +33,7 @@ def get_libreoffice_path():
     return None
 
 
-def _convert_file_extension(input_path, convert_extension, output_dir=None, except_file_ext=None, timeout=180):
+def _convert_file_extension(input_path, convert_extension, output_dir=None, except_file_ext=None, timeout=1800):
     if not os.path.isabs(input_path):
         input_path = os.path.abspath(input_path)
     if not os.path.exists(input_path):

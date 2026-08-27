@@ -279,6 +279,15 @@ async def reorder_folder(
     return resp_200(data=True)
 
 
+@router.get("/{space_id}/delete-preflight")
+async def preflight_delete_space(
+    space_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """What deleting this space would do to files published or shared elsewhere."""
+    return resp_200(await svc.preflight_container_delete(space_id=space_id))
+
+
 @router.delete("/{space_id}")
 async def delete_space(
     space_id: int,
@@ -744,6 +753,18 @@ async def move_folder(
 ) -> Any:
     folder = await svc.move_folder(space_id, folder_id, req.target_folder_id)
     return resp_200(folder)
+
+
+@router.get("/{space_id}/folders/{folder_id}/delete-preflight")
+async def preflight_delete_folder(
+    space_id: int,
+    folder_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """What deleting this folder would do to files published or shared elsewhere."""
+    return resp_200(
+        await svc.preflight_container_delete(space_id=space_id, folder_id=folder_id)
+    )
 
 
 @router.delete("/{space_id}/folders/{folder_id}")

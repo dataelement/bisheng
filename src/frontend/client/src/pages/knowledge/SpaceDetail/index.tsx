@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, typ
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getPendingSimilarFilesApi, importWebLinkApi, reorderFolderApi } from "~/api/knowledge";
+import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getFolderDeleteImpactApi, getPendingSimilarFilesApi, importWebLinkApi, reorderFolderApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -20,6 +20,7 @@ import {
     Button,
     Input,
 } from "~/components/ui";
+import { buildDeleteImpactDescription, mergeDeleteImpacts } from "../utils/deleteImpact";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import {
@@ -215,7 +216,6 @@ export function KnowledgeSpaceContent({
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const normalizeParentId = (id?: string | number | null) =>
         id === undefined || id === null || id === "" ? undefined : String(id);
     const isCurrentSpaceFile = (file: KnowledgeFile) =>
@@ -235,6 +235,16 @@ export function KnowledgeSpaceContent({
         ...transientFiles,
         ...files.filter((file) => isCurrentSpaceFile(file) && !uploadingNames.has(file.name)),
     ];
+
+    // 当前页文件总数：文件夹按状态列展示的总文件数(fileNum)累加，普通文件按 1 个累加
+    const totalFileCount = useMemo(() => {
+        return displayFiles.reduce((sum, file) => {
+            if (file.type === FileType.FOLDER) {
+                return sum + (file.fileNum ?? 0);
+            }
+            return sum + 1;
+        }, 0);
+    }, [displayFiles]);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [searchTagIds, setSearchTagIds] = useState<number[]>([]);
@@ -1362,6 +1372,36 @@ export function KnowledgeSpaceContent({
         });
     };
 
+    const confirmDeleteImpact = async (itemsToDelete: KnowledgeFile[]): Promise<boolean> => {
+        const folderIds = itemsToDelete
+            .filter((item) => item.type === FileType.FOLDER)
+            .map((item) => item.id);
+        if (!folderIds.length) return true;
+
+        const summaries = await Promise.all(
+            folderIds.map((folderId) =>
+                getFolderDeleteImpactApi(space.id, folderId).catch(() => null)
+            )
+        );
+        const resolved = summaries.filter(
+            (item): item is NonNullable<typeof item> => item !== null
+        );
+        if (!resolved.length) return true;
+
+        const description = buildDeleteImpactDescription(mergeDeleteImpacts(resolved), localize);
+        // No description means nothing irreversible is involved, so the ordinary
+        // confirmation the caller already showed is enough.
+        if (!description) return true;
+
+        return confirm({
+            title: localize("com_knowledge.prompt"),
+            description,
+            cancelText: localize("com_knowledge.cancel"),
+            confirmText: localize("com_knowledge.delete"),
+            variant: "destructive",
+        });
+    };
+
     const handleBatchDelete = async () => {
         if (!canBatchDelete) {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
@@ -1370,6 +1410,9 @@ export function KnowledgeSpaceContent({
 
         const ok = await confirmDeleteMultiVersionFile(selectedList);
         if (!ok) return;
+
+        const impactAccepted = await confirmDeleteImpact(selectedList);
+        if (!impactAccepted) return;
 
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));
@@ -1633,6 +1676,7 @@ export function KnowledgeSpaceContent({
                 pendingSimilarCount={pendingSimilarCount}
                 onProcessSimilar={() => setSimilarDialogOpen(true)}
                 canManageMembers={canManageMembers}
+                totalFileCount={totalFileCount}
             />
             </div>
 
@@ -1789,8 +1833,8 @@ export function KnowledgeSpaceContent({
                             )}
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll">
+                        <>
+                            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">
                                 <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
@@ -1842,14 +1886,14 @@ export function KnowledgeSpaceContent({
                                     encodingPrefix={encodingPrefix}
                                     onFileEncodingUpdated={handleFileEncodingUpdated}
                                 />
-                                {hasMore && (
-                                    <LoadMore
-                                        onLoad={() => onPageChange(currentPage + 1)}
-                                        loading={loading}
-                                    />
-                                )}
                             </div>
-                        </div>
+                            {hasMore && (
+                                <LoadMore
+                                    onLoad={() => onPageChange(currentPage + 1)}
+                                    loading={loading}
+                                />
+                            )}
+                        </>
                     )}
                 </div>
             </div>

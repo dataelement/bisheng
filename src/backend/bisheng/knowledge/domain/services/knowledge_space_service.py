@@ -36,6 +36,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeDepartmentFileUnavailableError,
     KnowledgeDepartmentFileViewApprovalRequiredError,
     KnowledgeDepartmentShareLoginRequiredError,
+    KnowledgeFileNotSupportedError,
     KnowledgeInvalidCursorError,
     KnowledgeShareCreationDisabledError,
     KnowledgeSpaceTagLibraryInvalidError,
@@ -192,6 +193,7 @@ from bisheng.knowledge.domain.schemas.knowledge_document_distribution_schema imp
 )
 from bisheng.knowledge.domain.schemas.knowledge_fulltext_search_schema import (
     KnowledgeFulltextAdvancedSearchQuery,
+    KnowledgeFulltextSearchSort,
 )
 from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     BatchAliasActionResult,
@@ -281,6 +283,7 @@ from bisheng.knowledge.domain.services.knowledge_audit_telemetry_service import 
 from bisheng.knowledge.domain.services.knowledge_service import KnowledgeService
 from bisheng.knowledge.domain.services.knowledge_space_pin_service import KnowledgeSpacePinService
 from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
+    DEFAULT_TAG_LIBRARY_NAME,
     KnowledgeSpaceTagLibraryService,
 )
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
@@ -308,6 +311,10 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibrary
 from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
     WebLinkImportResult,
+)
+from bisheng.knowledge.domain.upload_extensions import (
+    UnsupportedUploadFileExtensionError,
+    validate_knowledge_upload_file_extension,
 )
 from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
 from bisheng.llm.domain import LLMService
@@ -418,10 +425,6 @@ _SPACE_MEMBER_RELATION_LEVEL = {
 }
 
 _logger = logging.getLogger(__name__)
-
-# Tag library auto-bound to newly created personal spaces, matched by name with a
-# fallback to the earliest builtin library.
-DEFAULT_TAG_LIBRARY_NAME = "默认标签库"
 
 _PERMISSION_LEVEL_TO_RELATION = {
     "owner": "owner",
@@ -711,6 +714,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.document_durable_reference_resolver: KnowledgeDocumentDurableReferenceResolver | None = None
 
     @staticmethod
+    def _split_distribution_entries(
+        files: list[KnowledgeFile],
+    ) -> tuple[list[KnowledgeFile], list[KnowledgeFile]]:
+        """Separate container children into distribution entries and plain files.
+
+        Plain files go to the recycle bin as before. Distribution entries must
+        not: the bin only sets a deleted flag, which the distribution state
+        machine cannot see, so a shortcut sitting in the bin would still count
+        as a live link and a manager delete would "roll back" into a folder
+        nobody can open. They go through the state machine instead, which also
+        means they cannot be restored.
+        """
+        live_statuses = {
+            KnowledgeFileEntryStatus.PREPARING.value,
+            KnowledgeFileEntryStatus.ACTIVE.value,
+            KnowledgeFileEntryStatus.DELETING.value,
+            KnowledgeFileEntryStatus.INVALID.value,
+        }
+        distribution: list[KnowledgeFile] = []
+        ordinary: list[KnowledgeFile] = []
+        for item in files:
+            is_entry = (
+                item.reference_document_id is not None
+                or item.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
+            )
+            if is_entry and item.entry_status in live_statuses:
+                distribution.append(item)
+            else:
+                ordinary.append(item)
+        return distribution, ordinary
+
+    @staticmethod
     def _ensure_container_has_no_distribution_entries(
         files: list[KnowledgeFile],
     ) -> None:
@@ -728,6 +763,31 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for file in files
         ):
             raise KnowledgeDocumentStateConflictError()
+
+    async def _enqueue_container_distribution_cleanup(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+        folder_prefix: str | None = None,
+    ) -> None:
+        try:
+            from bisheng.worker.knowledge.document_projection import (
+                enqueue_container_distribution_cleanup,
+            )
+
+            enqueue_container_distribution_cleanup(
+                tenant_id=tenant_id,
+                space_id=space_id,
+                folder_prefix=folder_prefix,
+            )
+        except Exception:
+            logger.exception(
+                "F098 container cleanup enqueue failed: tenant_id=%s space_id=%s prefix=%s",
+                tenant_id,
+                space_id,
+                folder_prefix,
+            )
 
     async def _enqueue_document_distribution_projection(
         self,
@@ -881,7 +941,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             folder.knowledge_id,
             prefix,
         )
-        self._ensure_container_has_no_distribution_entries(children)
         for child in children:
             if child.file_type == FileType.DIR.value:
                 await self._require_permission_id(
@@ -897,6 +956,98 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "delete_file",
                     space_id=space_id,
                 )
+
+    _PREFLIGHT_SAMPLE_LIMIT = 5
+
+    async def _container_children(
+        self,
+        *,
+        space_id: int,
+        folder: KnowledgeFile | None,
+    ) -> list[KnowledgeFile]:
+        if folder is None:
+            async with get_async_db_session() as session:
+                result = await session.exec(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == space_id))
+                return list(result.all())
+        prefix = f"{folder.file_level_path}/{folder.id}"
+        return await SpaceFileDao.get_children_by_prefix(space_id, prefix)
+
+    async def preflight_container_delete(
+        self,
+        *,
+        space_id: int,
+        folder_id: int | None = None,
+    ) -> dict:
+        """Summarise what deleting this container would do to distributed files.
+
+        Read-only. Callers use it to warn before an irreversible step: files in
+        the container that were published elsewhere go back to where they came
+        from, the rest are destroyed, and neither can be undone from the
+        recycle bin.
+        """
+        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+            KnowledgeDocumentDistributionError,
+        )
+
+        if folder_id is None:
+            space = await KnowledgeDao.aquery_by_id(space_id)
+            if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+                raise SpaceNotFoundError()
+            await self._require_permission_id("knowledge_space", space_id, "delete_space")
+            folder = None
+        else:
+            folder = await self._get_folder_for_action(space_id, folder_id)
+            await self._require_permission_id(
+                "folder",
+                folder_id,
+                "delete_folder",
+                space_id=space_id,
+            )
+
+        children = await self._container_children(space_id=space_id, folder=folder)
+        distribution, ordinary = self._split_distribution_entries(children)
+
+        soft_link_count = sum(1 for item in distribution if item.entry_type == KnowledgeFileEntryType.PUBLISH.value)
+        share_count = sum(1 for item in distribution if item.entry_type == KnowledgeFileEntryType.SHARE.value)
+        managers = [
+            item
+            for item in distribution
+            if item.entry_type == KnowledgeFileEntryType.MANAGER.value
+            and item.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        ]
+
+        rollback_files: list[KnowledgeFile] = []
+        permanent_count = 0
+        for manager in managers:
+            action = "final_delete"
+            if self.document_distribution_service is not None:
+                try:
+                    action = await self.document_distribution_service.preflight_delete_entry(
+                        tenant_id=int(manager.tenant_id),
+                        document_id=int(manager.reference_document_id),
+                        entry_id=int(manager.id),
+                    )
+                except KnowledgeDocumentDistributionError:
+                    # An unresolvable chain cannot roll back, so report the
+                    # harsher outcome rather than promising a safe landing.
+                    action = "final_delete"
+            if action == "rollback":
+                rollback_files.append(manager)
+            else:
+                permanent_count += 1
+
+        return {
+            "rollback_count": len(rollback_files),
+            "permanent_delete_count": permanent_count,
+            "soft_link_count": soft_link_count,
+            "share_count": share_count,
+            "recyclable_count": sum(1 for item in ordinary if item.file_type != FileType.DIR.value),
+            "irreversible": bool(distribution),
+            "rollback_samples": [
+                {"file_id": int(item.id), "file_name": str(item.file_name or "")}
+                for item in rollback_files[: self._PREFLIGHT_SAMPLE_LIMIT]
+            ],
+        }
 
     @staticmethod
     def _require_distribution_manager(
@@ -4603,6 +4754,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """Get or create the login user's default personal knowledge space."""
         return await self._ensure_personal_default_space()
 
+    async def ensure_personal_default_space_for_owner(self, owner: UserPayload) -> Knowledge:
+        """Get or create the default personal knowledge space for ``owner``.
+
+        Temporarily switches ``login_user`` so the space is named, owned, and
+        authorized as that user, then restores the previous identity.
+        """
+        previous = self.login_user
+        self.login_user = owner
+        try:
+            return await self._ensure_personal_default_space()
+        finally:
+            self.login_user = previous
+
     async def _ensure_personal_spaces(self) -> tuple[Knowledge, Knowledge]:
         """确保并返回当前用户固定的『我的收藏』和默认个人知识库。"""
         favorite_space = await self._ensure_favorite_space()
@@ -5693,6 +5857,53 @@ class KnowledgeSpaceService(KnowledgeUtils):
             discovery = getattr(self, "_portal_discovery_result", None)
             return {
                 "total": len(seen_documents),
+                "discovery_snapshot": discovery.snapshot if discovery else "",
+            }
+
+        if req.query_type == "browse" and self._normalize_shougang_document_type_code(req.document_type):
+            # 与列表一致：document_type 浏览走 ES 全文，不能用 MySQL file_encoding LIKE 计数。
+            browse_payload = req.model_dump(
+                exclude={
+                    "query_type",
+                    "q",
+                    "conditions",
+                    "filter_tag",
+                    "all_keywords",
+                    "exact_phrase",
+                    "any_keywords",
+                    "exclude_keywords",
+                    "search_field",
+                    "original_uploader_id",
+                    "original_knowledge_id",
+                    "preview_count_min",
+                    "preview_count_max",
+                    "download_count_min",
+                    "download_count_max",
+                    "updated_from",
+                    "updated_to",
+                },
+                exclude_unset=True,
+            )
+            browse_payload["limit"] = 100
+            browse_payload["cursor"] = None
+            total = 0
+            seen_cursors: set[str] = set()
+            while True:
+                result = await self.browse_shougang_portal_files(
+                    ShougangPortalFileBrowseReq.model_validate(browse_payload)
+                )
+                total += len(result.get("data") or [])
+                next_cursor = str(result.get("next_cursor") or "")
+                if not result.get("has_more") or not next_cursor:
+                    break
+                if next_cursor in seen_cursors:
+                    logger.warning("portal document_type browse count stopped on repeated cursor")
+                    break
+                seen_cursors.add(next_cursor)
+                browse_payload["cursor"] = next_cursor
+            discovery = getattr(self, "_portal_discovery_result", None)
+            return {
+                "total": total,
                 "discovery_snapshot": discovery.snapshot if discovery else "",
             }
 
@@ -8999,6 +9210,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
         tag_file_ids: list[int] | None,
         trusted_public_scope: bool = False,
     ) -> dict:
+        # 有一级文件分类时走 ES keyword 等值过滤，避免 MySQL file_encoding LIKE。
+        # 无回退：全文服务不可用时直接失败，避免与 LIKE/标签结果集不一致。
+        if self._normalize_shougang_document_type_code(req.document_type):
+            return await self._list_shougang_portal_files_via_fulltext_document_type(req)
+
         from bisheng.common.cursor import CursorDecodeError, decode_cursor
 
         space_ids = [int(space.id) for space in spaces]
@@ -9094,6 +9310,36 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if has_more and page_files:
             next_cursor = self._encode_shougang_portal_file_cursor(page_files[-1], cursor_context)
         return self._build_shougang_portal_cursor_response(page_items, has_more, next_cursor)
+
+    async def _list_shougang_portal_files_via_fulltext_document_type(
+        self,
+        req: ShougangPortalFileBrowseReq,
+    ) -> dict:
+        """无关键词浏览在带 document_type 时复用高级全文检索（ES term 过滤）。"""
+        sort = self._map_browse_sort_to_fulltext_sort(req.sort)
+        payload = req.model_dump()
+        payload["sort"] = sort
+        payload["document_type"] = self._normalize_shougang_document_type_code(req.document_type)
+        advanced_req = ShougangPortalAdvancedFileSearchReq.model_validate(payload)
+        return await self.advanced_search_shougang_portal_files(advanced_req)
+
+    @staticmethod
+    def _map_browse_sort_to_fulltext_sort(sort: str | None) -> str:
+        """将 browse 排序映射为全文检索可接受的 sort 字面量。"""
+        normalized = (sort or "updated_at_desc").strip().lower()
+        if normalized == "updated_at_asc":
+            return KnowledgeFulltextSearchSort.UPDATED_AT_ASC.value
+        if normalized in {
+            KnowledgeFulltextSearchSort.PREVIEW_COUNT_DESC.value,
+            KnowledgeFulltextSearchSort.PREVIEW_COUNT_ASC.value,
+            KnowledgeFulltextSearchSort.DOWNLOAD_COUNT_DESC.value,
+            KnowledgeFulltextSearchSort.DOWNLOAD_COUNT_ASC.value,
+            KnowledgeFulltextSearchSort.UPDATED_AT_DESC.value,
+            KnowledgeFulltextSearchSort.UPDATED_AT_ASC.value,
+        }:
+            return normalized
+        # browse 默认与历史 updated_at 别名统一为时间倒序
+        return KnowledgeFulltextSearchSort.UPDATED_AT_DESC.value
 
     async def _semantic_search_shougang_portal_files(
         self,
@@ -11662,19 +11908,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
             if self.knowledge_space_retirement_service is None:
                 raise KnowledgeDocumentStateConflictError(msg="知识库退役服务不可用")
-            result = await self.knowledge_space_retirement_service.retire(
+            await self.knowledge_space_retirement_service.retire(
                 tenant_id=int(space.tenant_id),
                 space_id=space_id,
-            )
-            await self._enqueue_document_distribution_projection(
-                tenant_id=int(space.tenant_id),
-                entry_ids=result.entry_ids,
             )
             try:
                 from bisheng.worker.knowledge.document_projection import (
                     enqueue_knowledge_space_retirement,
                 )
 
+                # The retirement task sweeps the space's distribution entries
+                # itself — each one follows the same rule a single-file delete
+                # would — so this one enqueue covers both halves of the work.
                 enqueue_knowledge_space_retirement(
                     tenant_id=int(space.tenant_id),
                     space_id=space_id,
@@ -15188,7 +15433,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         prefix = f"{folder.file_level_path}/{folder.id}"
         children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
-        self._ensure_container_has_no_distribution_entries(children)
+        distribution_children, ordinary_children = self._split_distribution_entries(children)
+        distribution_ids = {int(item.id) for item in distribution_children}
         folder_ids = [folder_id]
         file_ids = []
         for child in children:
@@ -15197,12 +15443,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 folder_ids.append(child.id)
             else:
                 await self._require_permission_id("knowledge_file", child.id, "delete_file", space_id=space_id)
-                file_ids.append(child.id)
+                if int(child.id) not in distribution_ids:
+                    file_ids.append(child.id)
 
         delete_plan = await self._plan_cascade_version_links_on_delete(file_ids)
         favorite_delete_events = await self._prepare_favorite_delete_events(
             delete_plan.expanded_file_ids,
-            source_files=[child for child in children if child.file_type != FileType.DIR.value],
+            source_files=[child for child in ordinary_children if child.file_type != FileType.DIR.value],
         )
         await self._apply_cascade_version_delete_plan(delete_plan)
         expanded_file_ids = delete_plan.expanded_file_ids
@@ -15218,6 +15465,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             folder_ids=folder_ids,
             list_entry_ids=[int(folder_id)],
         )
+
+        if distribution_children:
+            await self._enqueue_container_distribution_cleanup(
+                tenant_id=int(getattr(folder, "tenant_id", None) or DEFAULT_TENANT_ID),
+                space_id=int(folder.knowledge_id),
+                folder_prefix=prefix,
+            )
 
         await self.update_folder_update_time(folder.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
@@ -16315,6 +16569,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for fp in file_path:
             fname = fp.rsplit("/", 1)[-1] if "/" in fp else fp
             self._check_filename_sensitive_words(fname)
+            try:
+                validate_knowledge_upload_file_extension(fname)
+            except UnsupportedUploadFileExtensionError as exc:
+                extension = str(exc) or "unknown"
+                raise KnowledgeFileNotSupportedError(
+                    msg=f"file format is not supported: .{extension}",
+                ) from exc
 
         async def cleanup_created_files() -> None:
             created_file_ids = [created_file.id for created_file in created_files if getattr(created_file, "id", None)]
@@ -16549,6 +16810,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFileNameDuplicateError()
 
         file_record.file_name = new_name
+        file_record.alias_name = None
         file_record.updater_id = self.login_user.user_id
         file_record.updater_name = self.login_user.user_name
         if file_record.file_source == FileSource.WEB_LINK.value:
@@ -16569,6 +16831,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     updater_id=int(self.login_user.user_id),
                     updater_name=self.login_user.user_name,
                     user_metadata=file_record.user_metadata,
+                    clear_alias=True,
                 )
             except Exception as exc:
                 if "name conflict" in str(exc):
@@ -18183,6 +18446,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         descendant_folder_ids: list[int] = []
         descendant_file_ids: list[int] = []
         descendant_files: list[KnowledgeFile] = []
+        distribution_folder_prefixes: list[str] = []
         for folder_id in unique_folder_ids:
             folder = await self._get_folder_for_action(knowledge_id, folder_id)
             folder_records.append(folder)
@@ -18191,9 +18455,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_id,
                 prefix,
             )
-            descendant_folder_ids.extend(int(child.id) for child in children if child.file_type == FileType.DIR.value)
-            descendant_file_ids.extend(int(child.id) for child in children if child.file_type != FileType.DIR.value)
-            descendant_files.extend(child for child in children if child.file_type != FileType.DIR.value)
+            # Distribution entries nested inside a deleted folder must not reach
+            # the recycle bin — see _split_distribution_entries. They go to the
+            # async sweep instead, which applies the same rule a single-file
+            # delete would.
+            nested_distribution, nested_ordinary = self._split_distribution_entries(children)
+            if nested_distribution:
+                distribution_folder_prefixes.append(prefix)
+            descendant_folder_ids.extend(
+                int(child.id) for child in nested_ordinary if child.file_type == FileType.DIR.value
+            )
+            descendant_file_ids.extend(
+                int(child.id) for child in nested_ordinary if child.file_type != FileType.DIR.value
+            )
+            descendant_files.extend(child for child in nested_ordinary if child.file_type != FileType.DIR.value)
 
         direct_file_ids = [int(file.id) for file in ordinary_files]
         planned_file_ids = self._dedupe_ids([*direct_file_ids, *descendant_file_ids])
@@ -18247,6 +18522,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     unique_folder_ids,
                     e,
                 )
+
+        for prefix in distribution_folder_prefixes:
+            await self._enqueue_container_distribution_cleanup(
+                tenant_id=int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID),
+                space_id=int(knowledge_id),
+                folder_prefix=prefix,
+            )
 
         if unique_file_ids or unique_folder_ids:
             await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)

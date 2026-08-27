@@ -288,3 +288,13 @@ knowledge_space:
   # 知识空间左侧目录树展示开关（仅前端读取，后端 API 不变）
   # 默认 true；中粮场内部署改为 false 走原 Tab 布局
   tree_structured_directory_display: true
+
+openfga_guard:
+  # OpenFGA 过载保护：在飞请求数达到阈值时直接拒绝新请求并提示用户稍后重试
+  enabled: true
+  # 单进程最大在飞请求数；集群上限 = 该值 × API/Celery 进程数
+  max_in_flight: 512
+  # 占用率达到该比例开始拒绝，同时决定提示文案中的百分比
+  reject_ratio: 0.9
+  # 单次调用等待空闲名额的最长秒数，超时按过载处理
+  acquire_timeout: 20

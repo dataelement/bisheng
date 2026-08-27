@@ -2,7 +2,12 @@ import { paramsSerializer } from ".";
 import axios from "../request";
 
 // 获取操作过组下资源的所有用户
-export async function getOperatorsApi(): Promise<[]> {
+export async function getOperatorsApi(): Promise<Array<{
+    user_id: number
+    user_name?: string | null
+    external_id?: string | null
+    label: string
+}>> {
     return await axios.get('/api/v1/audit/operators')
 }
 

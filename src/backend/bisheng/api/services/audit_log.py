@@ -106,7 +106,25 @@ class AuditLogService:
             limit,
             tenant_scope=tenant_scope,
         )
-        return resp_200(data={'data': data, 'total': total})
+        operator_user_ids = sorted(
+            {int(log.operator_id) for log in data if getattr(log, 'operator_id', None) not in (None, 0)}
+        )
+        external_id_map: dict[int, str | None] = {}
+        if operator_user_ids:
+            users = await UserDao.aget_user_by_ids(operator_user_ids) or []
+            for user in users:
+                if user.user_id is None:
+                    continue
+                external_id = str(getattr(user, 'external_id', None) or '').strip() or None
+                external_id_map[int(user.user_id)] = external_id
+
+        serialized: list[dict] = []
+        for log in data:
+            item = log.model_dump()
+            operator_id = int(getattr(log, 'operator_id', 0) or 0)
+            item['operator_external_id'] = external_id_map.get(operator_id) if operator_id else None
+            serialized.append(item)
+        return resp_200(data={'data': serialized, 'total': total})
 
     @classmethod
     async def get_all_responsible_persons(cls, login_user: UserPayload) -> List[Dict]:
@@ -119,6 +137,14 @@ class AuditLogService:
 
         tenant_scope = cls._get_audit_tenant_scope(login_user)
         return AuditLogDao.get_all_responsible_persons(groups, tenant_scope=tenant_scope)
+
+    @staticmethod
+    def _operator_dropdown_label(user_name: str | None, external_id: str | None) -> str:
+        name = (user_name or "").strip()
+        ext = (external_id or "").strip()
+        if name and ext:
+            return f"{name} ({ext})"
+        return name or ext
 
     @classmethod
     async def get_all_operators(cls, login_user: UserPayload) -> List[Dict]:
@@ -135,7 +161,22 @@ class AuditLogService:
         for one in data:
             if not one[1]:
                 continue
-            res[one[0]] = {'user_id': one[0], 'user_name': one[1]}
+            res[one[0]] = {
+                "user_id": one[0],
+                "user_name": one[1],
+                "external_id": None,
+                "label": one[1],
+            }
+
+        user_ids = [int(user_id) for user_id in res.keys() if user_id]
+        if user_ids:
+            users = await UserDao.aget_user_by_ids(user_ids) or []
+            by_id = {int(user.user_id): user for user in users if user.user_id is not None}
+            for user_id, item in res.items():
+                user = by_id.get(int(user_id))
+                external_id = str(getattr(user, "external_id", None) or "").strip() or None
+                item["external_id"] = external_id
+                item["label"] = cls._operator_dropdown_label(item["user_name"], external_id)
         return list(res.values())
 
     @classmethod
@@ -875,6 +916,11 @@ class AuditLogService:
         )
 
         user_map = {u.user_id: u.user_name for u in users_data}
+        user_external_id_map = {
+            u.user_id: (str(getattr(u, 'external_id', None) or '').strip() or None)
+            for u in users_data
+            if u.user_id is not None
+        }
         flow_map = {f.id: f.name for f in flows_data}
         assistant_map = {a.id: a.name for a in assistants_data}
 
@@ -896,7 +942,8 @@ class AuditLogService:
                 like_count=session.like,
                 dislike_count=session.dislike,
                 copied_count=session.copied,
-                user_name=user_map.get(session.user_id, ""),  # get user name
+                user_name=user_map.get(session.user_id, ""),
+                user_external_id=user_external_id_map.get(session.user_id),
                 user_groups=user_groups_map.get(session.user_id, [])
             ))
 

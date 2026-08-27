@@ -14,6 +14,7 @@ from bisheng.common.errcode.filelib_sync import FilelibSyncError
 from bisheng.common.exceptions.auth import AuthJWTException
 from bisheng.common.init_data import init_default_data
 from bisheng.common.middleware.admin_scope import AdminScopeMiddleware
+from bisheng.common.middleware.openfga_guard import OpenFgaGuardMiddleware
 from bisheng.common.services.config_service import settings
 from bisheng.core.context import close_app_context, initialize_app_context
 from bisheng.core.logger import set_logger_config
@@ -98,6 +99,9 @@ def create_app():
 
     # Register first so CORS and request logging wrap short-circuited 429 responses.
     app.add_middleware(ApiRateLimitMiddleware)
+    # Sits just outside rate limiting for the same reason: CORS and request
+    # logging must still wrap the short-circuited 503.
+    app.add_middleware(OpenFgaGuardMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,

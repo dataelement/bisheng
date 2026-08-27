@@ -3,14 +3,17 @@ import { DatePicker } from "@/components/bs-ui/calendar/datePicker";
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/bs-ui/select";
 import MultiSelect from "@/components/bs-ui/select/multi";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/bs-ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from "@/components/bs-ui/table";
 import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi, getResponsiblePersonsApi } from "@/controllers/API/log";
 import { getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
-import { formatDate } from "@/util/utils";
-import { useEffect, useRef, useState } from "react";
+import { formatDate, formatUserDisplayLabel } from "@/util/utils";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TooltipProvider } from "@/components/bs-ui/tooltip";
 import { LoadingIcon } from "@/components/bs-icons/loading";
+import { useResizableColumns } from "@/components/bs-ui/table/useResizableColumns";
+import { ResizableTableHead, TruncatedTableCell } from "@/components/bs-ui/table/TruncatedTableCell";
 
 const useGroups = () => {
     const [groups, setGroups] = useState([])
@@ -88,7 +91,7 @@ const renderResponsiblePerson = (log: any, t: (key: string, opts?: any) => strin
     const metadata = getAuditMetadata(log)
     const externalId = String(metadata.responsible_person_external_id || '').trim()
     const userName = String(metadata.responsible_user_name || '').trim()
-    if (externalId && userName && externalId !== userName) {
+    if (externalId && userName) {
         return `${externalId} (${userName})`
     }
     if (externalId || userName) {
@@ -121,6 +124,36 @@ export default function SystemLog() {
 
     const [actions, setActions] = useState<any[]>([])
     const [keys, setKeys] = useState({ ...init })
+    const auditTableCols = useMemo(
+        () => [
+            { defaultWidth: 200, minWidth: 80 },
+            { defaultWidth: 160, minWidth: 80 },
+            { defaultWidth: 100, minWidth: 70 },
+            { defaultWidth: 180, minWidth: 80 },
+            { defaultWidth: 170, minWidth: 120 },
+            { defaultWidth: 120, minWidth: 80 },
+            { defaultWidth: 160, minWidth: 80 },
+            { defaultWidth: 140, minWidth: 80 },
+            { defaultWidth: 200, minWidth: 80 },
+            { defaultWidth: 140, minWidth: 80 },
+            { defaultWidth: 280, minWidth: 120 },
+        ],
+        []
+    )
+    const rc = useResizableColumns(auditTableCols)
+    const headerLabels = [
+        t('log.auditId'),
+        t('log.username'),
+        t('log.externalId'),
+        t('log.responsiblePerson'),
+        t('log.operationTime'),
+        t('log.systemModule'),
+        t('log.operationAction'),
+        t('log.objectType'),
+        t('log.operationObject'),
+        t('log.ipAddress'),
+        t('log.remark'),
+    ]
 
     const handleActionOpen = async () => {
         setActions((keys.moduleId ? await getActionsByModuleApi(keys.moduleId) : await getActionsApi()))
@@ -145,9 +178,9 @@ export default function SystemLog() {
             </div>
         )}
         <div className="h-[calc(100vh-128px)] overflow-y-auto px-2 py-4 pb-10">
-            <div className="flex flex-wrap gap-4">
-                <div className="w-[200px] relative">
-                    <MultiSelect contentClassName="overflow-y-auto max-w-[200px]" multiple
+            <div className="mb-4 flex flex-wrap gap-4">
+                <div className="w-[240px] relative">
+                    <MultiSelect contentClassName="overflow-y-auto max-w-[240px]" multiple
                         options={users}
                         value={keys.userIds}
                         placeholder={t('log.selectUser')}
@@ -216,45 +249,51 @@ export default function SystemLog() {
                     </Button>
                 </div>
             </div>
-            <Table className="mb-[50px]">
+            <TooltipProvider delayDuration={200}>
+                <Table
+                    noScroll
+                    variant="filelist"
+                    className="mb-[50px]"
+                    style={{ tableLayout: "fixed", width: rc.totalWidth, minWidth: "100%" }}
+                >
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[200px]">{t('log.auditId')}</TableHead>
-                        <TableHead className="w-[200px] min-w-[100px]">{t('log.username')}</TableHead>
-                        <TableHead className="w-[200px] min-w-[100px]">{t('log.responsiblePerson')}</TableHead>
-                        <TableHead className="w-[200px] min-w-[100px]">{t('log.operationTime')}</TableHead>
-                        <TableHead className="w-[100px] min-w-[100px]">{t('log.systemModule')}</TableHead>
-                        <TableHead className="w-[150px] min-w-[100px]">{t('log.operationAction')}</TableHead>
-                        <TableHead className="w-[150px] min-w-[100px]">{t('log.objectType')}</TableHead>
-                        <TableHead className="w-[200px] min-w-[100px]">{t('log.operationObject')}</TableHead>
-                        <TableHead className="w-[150px]">{t('log.ipAddress')}</TableHead>
-                        <TableHead className="w-[250px] min-w-[250px]">{t('log.remark')}</TableHead>
+                        {headerLabels.map((label, index) => (
+                            <ResizableTableHead
+                                key={`${index}-${label}`}
+                                label={label}
+                                columnIndex={index}
+                                lastColumn={index === headerLabels.length - 1}
+                                thProps={rc.getThProps(index)}
+                                startResize={rc.startResize}
+                            />
+                        ))}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
                     {logs.map((log: any) => (
                         <TableRow key={log.id}>
-                            <TableCell>{log.id}</TableCell>
-                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{log.operator_name}</div></TableCell>
-                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderResponsiblePerson(log, t)}</div></TableCell>
-                            <TableCell>{log.create_time.replace('T', ' ')}</TableCell>
-                            <TableCell>{renderSystemId(log, t)}</TableCell>
-                            <TableCell>{renderEventType(log, t)}</TableCell>
-                            <TableCell>{renderObjectType(log, t)}</TableCell>
-                            <TableCell><div className="max-w-[200px] break-all truncate-multiline">{renderObjectName(log, t)}</div></TableCell>
-                            <TableCell>{log.ip_address}</TableCell>
-                            <TableCell className="max-w-[250px]">
-                                <div className="whitespace-pre-line break-all">{renderRemark(log, t)}</div>
-                            </TableCell>
+                            <TruncatedTableCell tdProps={rc.getTdProps(0)} text={String(log.id)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(1)} text={log.operator_name || "-"} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(2)} text={log.operator_external_id || "-"} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(3)} text={renderResponsiblePerson(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(4)} text={log.create_time.replace("T", " ")} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(5)} text={renderSystemId(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(6)} text={renderEventType(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(7)} text={renderObjectType(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(8)} text={renderObjectName(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(9)} text={log.ip_address || "-"} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(10)} text={renderRemark(log, t)} full />
                         </TableRow>
                     ))}
                 </TableBody>
                 {!logs.length && <TableFooter>
                     <TableRow>
-                        <TableCell colSpan={10} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                        <TableCell colSpan={11} className="text-center text-gray-400">{t('build.empty')}</TableCell>
                     </TableRow>
                 </TableFooter>}
-            </Table>
+                </Table>
+            </TooltipProvider>
             {!logs.length && <div className="h-[700px]"></div>}
         </div>
         {/* Pagination */}
@@ -283,7 +322,10 @@ const useUsers = () => {
 
     const loadUsers = () => {
         getOperatorsApi().then(res => {
-            const options = res.map((u: any) => ({ label: u.user_name, value: u.user_id }))
+            const options = (Array.isArray(res) ? res : []).map((u) => ({
+                label: formatUserDisplayLabel(u.user_name, u.external_id),
+                value: u.user_id,
+            }))
             userRef.current = options
             setUsers(options)
         })
@@ -310,7 +352,7 @@ const useResponsiblePersons = () => {
     const loadResponsiblePersons = () => {
         getResponsiblePersonsApi().then((res: any) => {
             const options = (Array.isArray(res) ? res : []).map((item: any) => ({
-                label: item.label,
+                label: formatUserDisplayLabel(item.user_name, item.external_id),
                 value: item.user_id,
             }))
             setResponsiblePersons(options)

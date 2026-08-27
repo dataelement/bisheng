@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next"
 import { KnowledgePickerDialog } from "./KnowledgePickerDialog"
 
 const NAME_MAX_LENGTH = 20
+const DEFAULT_TAG_LIBRARY_NAME = "通用标签库"
 
 interface TagLibraryFormDialogProps {
     open: boolean
@@ -39,6 +40,7 @@ export function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSave
     const [linking, setLinking] = useState(false)
 
     const libraryId = mode === "edit" ? initial?.id ?? null : null
+    const nameLocked = mode === "edit" && (initial?.name || "").trim() === DEFAULT_TAG_LIBRARY_NAME
 
     const loadBound = useCallback(async () => {
         if (libraryId === null) {
@@ -128,9 +130,15 @@ export function TagLibraryFormDialog({ open, mode, initial, onOpenChange, onSave
                                 value={name}
                                 maxLength={NAME_MAX_LENGTH}
                                 autoComplete="off"
+                                disabled={nameLocked}
                                 placeholder={t("build.tagLibraryNamePlaceholder", "请输入标签库名称")}
                                 onChange={(e) => setName(e.target.value)}
                             />
+                            {nameLocked ? (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                    {t("build.defaultTagLibraryNameLocked", "通用标签库不可修改名称")}
+                                </p>
+                            ) : null}
                         </div>
                         <div>
                             <Label className="bisheng-label">{t("build.description", "说明")}</Label>

@@ -21,6 +21,9 @@ from bisheng.database.models.department import Department, UserDepartment
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+from bisheng.knowledge.domain.services.department_space_target_resolver import (
+    DepartmentSpaceTargetKind,
+)
 from bisheng.knowledge.domain.services.knowledge_space_service import KnowledgeSpaceService
 from bisheng.knowledge.rag.pipeline.transformer.file_encoding import FileEncodingTransformer
 from bisheng.open_endpoints.api.dependencies import get_filelib_sync_service
@@ -29,12 +32,10 @@ from bisheng.open_endpoints.domain.schemas.filelib_sync import (
     FilelibSyncParams,
     FilelibSyncResponseData,
 )
-from bisheng.knowledge.domain.services.department_space_target_resolver import (
-    DepartmentSpaceTargetKind,
-)
 from bisheng.open_endpoints.domain.services.filelib_sync_service import (
     FilelibSyncService,
     ResolvedFileSyncTarget,
+    ResolvedIdentity,
 )
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import PortalDomainConfig
 
@@ -73,6 +74,19 @@ def _service(repository=None, knowledge_space_service=None) -> FilelibSyncServic
         file_sync_rule=_rule(),
         repository=repository or SimpleNamespace(),
         knowledge_space_service=knowledge_space_service or SimpleNamespace(),
+    )
+
+
+def _responsible_identity(department: Department) -> ResolvedIdentity:
+    return ResolvedIdentity(
+        responsible_user_id=99,
+        responsible_user_name="张三",
+        responsible_user_external_id="EMP001",
+        responsible_department=department,
+        caller_department=department,
+        main_department=department,
+        business_domain_department=department,
+        target_space_department=department,
     )
 
 
@@ -118,6 +132,43 @@ def test_parse_params_normalizes_string_ids():
     assert params.file_name == "report.pdf"
     assert params.department_id == "12"
     assert params.responsible_person_id == "34"
+    assert params.tags == []
+
+
+def test_parse_params_normalizes_tags():
+    params = FilelibSyncService.parse_params(
+        json.dumps(
+            {
+                "external_file_id": "ext-1",
+                "file_name": "report.pdf",
+                "tags": [" 安全生产 ", "", "管理制度", "安全生产", " 管理制度 "],
+            }
+        )
+    )
+    assert params.tags == ["安全生产", "管理制度"]
+
+
+def test_parse_params_rejects_non_string_tags():
+    with pytest.raises(FilelibSyncInvalidParamsError, match="params fields are invalid"):
+        FilelibSyncService.parse_params(
+            json.dumps({"external_file_id": "ext-1", "file_name": "a.pdf", "tags": "安全生产"})
+        )
+
+
+@pytest.mark.parametrize("file_name", ["archive.zip", "data.csv", "audio.mp3", "scan.png"])
+def test_validate_upload_rejects_unsupported_file_format(file_name: str):
+    params = FilelibSyncParams(external_file_id="ext-1", file_name=file_name)
+    upload_file = UploadFile(filename=file_name, file=BytesIO(b"data"))
+
+    with pytest.raises(FilelibSyncInvalidParamsError, match="file format is not supported"):
+        FilelibSyncService._validate_upload(params, upload_file)
+
+
+def test_validate_upload_accepts_platform_supported_format():
+    params = FilelibSyncParams(external_file_id="ext-1", file_name="report.pdf")
+    upload_file = UploadFile(filename="report.pdf", file=BytesIO(b"data"))
+
+    FilelibSyncService._validate_upload(params, upload_file)
 
 
 def test_portal_domain_config_preserves_department_bindings():
@@ -283,39 +334,50 @@ async def test_clinic_binding_is_selected_for_responsible_person_dynamic_source(
     )
 
 
-async def test_responsible_person_target_space_falls_back_to_nearest_department_library():
+async def test_responsible_person_target_space_falls_back_to_personal_library():
     department = _department(3, "三级科室", "/1/2/3/")
-    department_space = Knowledge(id=22, name="二级部门库", type=3)
-    repository = SimpleNamespace(
-        find_knowledge_by_id=AsyncMock(return_value=department_space),
+    personal_space = Knowledge(id=88, name="张三的知识库", type=3)
+    repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
+    knowledge_space_service = SimpleNamespace(
+        ensure_personal_default_space_for_owner=AsyncMock(return_value=personal_space),
     )
-    resolve = AsyncMock(side_effect=[None, 22])
+    resolve = AsyncMock(return_value=None)
     with patch(
         "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=resolve,
     ):
-        space = await _service(repository)._find_department_space(
+        space = await _service(repository, knowledge_space_service)._find_department_space(
             department,
             dynamic_source="responsible_person_id",
+            identity=_responsible_identity(department),
         )
-    assert space.id == 22
-    assert resolve.await_args_list == [
-        call([3], kind=DepartmentSpaceTargetKind.CLINIC, allow_legacy=False),
-        call([3, 2, 1], kind=DepartmentSpaceTargetKind.DEPARTMENT, allow_legacy=False),
-    ]
+    assert space.id == 88
+    resolve.assert_awaited_once_with(
+        [3],
+        kind=DepartmentSpaceTargetKind.CLINIC,
+        allow_legacy=False,
+    )
+    knowledge_space_service.ensure_personal_default_space_for_owner.assert_awaited_once()
+    owner = knowledge_space_service.ensure_personal_default_space_for_owner.await_args.args[0]
+    assert owner.user_id == 99
+    assert owner.user_name == "张三"
+    repository.find_knowledge_by_id.assert_not_awaited()
 
 
-async def test_responsible_person_target_space_prefers_clinic_before_department_walk():
+async def test_responsible_person_target_space_prefers_clinic_before_personal_library():
     department = _department(3, "三级科室", "/1/2/3/")
     clinic_space = Knowledge(id=33, name="三级科室库", type=3)
     repository = SimpleNamespace(
         find_knowledge_by_id=AsyncMock(return_value=clinic_space),
     )
+    knowledge_space_service = SimpleNamespace(
+        ensure_personal_default_space_for_owner=AsyncMock(),
+    )
     with patch(
         "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(return_value=33),
     ) as resolve:
-        space = await _service(repository)._find_department_space(
+        space = await _service(repository, knowledge_space_service)._find_department_space(
             department,
             dynamic_source="responsible_person_id",
         )
@@ -325,6 +387,7 @@ async def test_responsible_person_target_space_prefers_clinic_before_department_
         kind=DepartmentSpaceTargetKind.CLINIC,
         allow_legacy=False,
     )
+    knowledge_space_service.ensure_personal_default_space_for_owner.assert_not_awaited()
 
 
 async def test_responsible_person_target_space_picks_first_clinic_when_ambiguous():
@@ -355,22 +418,61 @@ async def test_responsible_person_target_space_picks_first_clinic_when_ambiguous
     repository.find_knowledge_by_id.assert_awaited_once_with(100)
 
 
-async def test_responsible_person_target_space_raises_when_clinic_and_department_missing():
+async def test_responsible_person_target_space_uses_personal_library_when_clinic_missing():
     department = _department(3, "三级科室", "/1/2/3/")
+    personal_space = Knowledge(id=88, name="张三的知识库", type=3)
     repository = SimpleNamespace(find_knowledge_by_id=AsyncMock())
+    knowledge_space_service = SimpleNamespace(
+        ensure_personal_default_space_for_owner=AsyncMock(return_value=personal_space),
+    )
     with patch(
         "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
         new=AsyncMock(return_value=None),
     ) as resolve:
-        with pytest.raises(FilelibSyncNotFoundError, match="不存在知识库"):
-            await _service(repository)._find_department_space(
-                department,
-                dynamic_source="responsible_person_id",
-            )
+        space = await _service(repository, knowledge_space_service)._find_department_space(
+            department,
+            dynamic_source="responsible_person_id",
+            identity=_responsible_identity(department),
+        )
+    assert space.id == 88
     assert resolve.await_args_list == [
         call([3], kind=DepartmentSpaceTargetKind.CLINIC, allow_legacy=False),
-        call([3, 2, 1], kind=DepartmentSpaceTargetKind.DEPARTMENT, allow_legacy=False),
     ]
+    knowledge_space_service.ensure_personal_default_space_for_owner.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_resolve_target_space_uses_responsible_person_personal_without_token_fallback():
+    department = _department(3, "三级科室", "/1/2/3/")
+    personal_space = Knowledge(id=88, name="张三的知识库", type=3)
+    knowledge_space_service = SimpleNamespace(
+        ensure_personal_default_space_for_owner=AsyncMock(return_value=personal_space),
+        ensure_personal_default_space=AsyncMock(),
+    )
+    service = _service(SimpleNamespace(find_knowledge_by_id=AsyncMock()), knowledge_space_service)
+    service.file_sync_rule = DeveloperTokenFileSyncRule.model_validate(
+        {
+            "category": {"code": "POLICY", "subcategory_code": "MGMT_POLICY"},
+            "business_domain": {"mode": "fixed", "code": "IT"},
+            "target_space": {
+                "mode": "dynamic",
+                "knowledge_id": None,
+                "dynamic_source": "responsible_person_id",
+            },
+        }
+    )
+    with patch(
+        "bisheng.open_endpoints.domain.services.filelib_sync_service.DepartmentSpaceTargetResolver.resolve",
+        new=AsyncMock(return_value=None),
+    ):
+        target = await service._resolve_target_space(
+            _responsible_identity(department),
+            allow_personal_fallback=True,
+        )
+    assert target.space.id == 88
+    assert target.used_personal_fallback is False
+    assert target.used_responsible_person_personal is True
+    knowledge_space_service.ensure_personal_default_space.assert_not_awaited()
 
 
 async def test_nearest_department_binding_is_selected():
@@ -716,7 +818,7 @@ async def test_sync_orchestration_allows_repeated_external_id_and_writes_source_
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
-    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
+    service._cleanup_duplicate_files_before_sync = AsyncMock(return_value=None)
 
     async def _generate_fixed_encoding(**kwargs):
         kwargs["knowledge_file"].file_encoding = "SGGF-POL-IT-20260700000001"
@@ -839,7 +941,7 @@ async def test_sync_orchestration_skips_business_domain_when_dynamic_resolution_
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
     service._save_temporary_file = AsyncMock(return_value="temporary-url")
-    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
+    service._cleanup_duplicate_files_before_sync = AsyncMock(return_value=None)
 
     upload = UploadFile(filename="a.pdf", file=BytesIO(b"content"), size=7)
     with (

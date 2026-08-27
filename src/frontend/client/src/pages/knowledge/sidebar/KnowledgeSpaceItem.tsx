@@ -27,6 +27,8 @@ import ClosedIcon from "~/components/ui/icon/ClosedIcon";
 import { SpaceNotebookIcon } from "~/components/icons/SpaceNotebookIcon";
 import { KnowledgeFolderTree, type FolderSelectPayload } from "./KnowledgeFolderTree";
 import { isFavoriteSpace } from "../portal/favoriteView";
+import { getSpaceDeleteImpactApi } from "~/api/knowledge";
+import { buildDeleteImpactDescription } from "~/pages/knowledge/utils/deleteImpact";
 
 interface KnowledgeSpaceItemProps {
     space: KnowledgeSpace;
@@ -231,7 +233,15 @@ export default function KnowledgeSpaceItem({
                             {showDangerAction && !isFavorite && (
                                 <DropdownMenuItem
                                     onClick={async () => {
-                                        const description = canDeleteSpace ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
+                                        let description = canDeleteSpace ? localize("com_knowledge.confirm_operation") : localize("com_knowledge.confirm_exit_space");
+                                        if (canDeleteSpace) {
+                                            // Files published or shared out of this space are not
+                                            // recoverable from the recycle bin, so spell that out
+                                            // rather than let the user find out afterwards.
+                                            const impact = await getSpaceDeleteImpactApi(space.id).catch(() => null);
+                                            const impactText = impact ? buildDeleteImpactDescription(impact, localize) : null;
+                                            if (impactText) description = `${description}${impactText}`;
+                                        }
                                         const ok = await confirm({
                                             title: localize("com_knowledge.prompt"),
                                             description,

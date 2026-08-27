@@ -111,18 +111,16 @@ export function isKnowledgeFileReparseRetryable(
 
 // ─── File upload constants ──────────────────────────────────────────
 /**
- * Allowed file extensions for upload — fully populated set (assumes ETL4LM is enabled).
- * Prefer `getAllowedExtensions(enableEtl4lm)` for runtime-correct lists.
+ * Allowed file extensions for knowledge-space upload.
+ * Keep in sync with backend `upload_extensions.py`.
  */
 export const ALLOWED_EXTENSIONS = [
-    "pdf", "txt", "docx", "ppt", "pptx", "md", "html",
-    "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg",
+    "pdf", "txt", "docx", "ppt", "pptx", "md", "html", "htm",
+    "xls", "xlsx", "doc",
 ] as const;
 
-/** Subset used when ETL4LM is NOT deployed — same set for this project. */
-const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = [
-    "pdf", "txt", "docx", "ppt", "pptx", "md", "html", "xls", "xlsx", "csv", "doc", "png", "jpg", "jpeg",
-];
+/** Same allowlist regardless of ETL4LM; images are no longer accepted. */
+const ALLOWED_EXTENSIONS_NO_ETL4LM: readonly string[] = ALLOWED_EXTENSIONS;
 
 /**
  * MIME types accepted during drag validation — fully populated set.
@@ -137,8 +135,7 @@ export const ALLOWED_MIME_TYPES = [
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
     "application/vnd.ms-powerpoint", // ppt
     "application/vnd.openxmlformats-officedocument.presentationml.presentation", // pptx
-    "text/markdown", "text/html", "text/csv",
-    "image/png", "image/jpeg",
+    "text/markdown", "text/html",
 ] as const;
 
 /** MIME types when ETL4LM is NOT deployed — same set for this project. */

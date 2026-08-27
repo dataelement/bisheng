@@ -15,3 +15,7 @@ class FGAWriteError(FGAClientError):
 
 class FGAModelError(FGAClientError):
     """Failed to write or read authorization model."""
+
+
+class FGAOverloadError(FGAClientError):
+    """The concurrency gate is full and the caller waited longer than allowed."""

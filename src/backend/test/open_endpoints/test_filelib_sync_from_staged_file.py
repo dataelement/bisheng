@@ -10,6 +10,7 @@ from fastapi import UploadFile
 
 from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.filelib_sync import FilelibSyncNotFoundError
+from bisheng.database.models.tag import TagResourceTypeEnum
 from bisheng.developer_token.domain.schemas import DeveloperTokenFileSyncRule
 from bisheng.knowledge.domain.models.knowledge import Knowledge
 from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
@@ -72,7 +73,7 @@ def _stub_orchestration(service: FilelibSyncService, knowledge_file: KnowledgeFi
     service._resolve_target_folder = AsyncMock(return_value=100)
     service._ensure_domain_bound = Mock()
     service._require_upload_permission = AsyncMock()
-    service._resolve_same_name_version_overwrite = AsyncMock(return_value=(None, None))
+    service._cleanup_duplicate_files_before_sync = AsyncMock(return_value=None)
     service.repository.find_by_id = AsyncMock(return_value=knowledge_file)
     return identity, target_space
 
@@ -309,3 +310,113 @@ async def test_ensure_upload_path_preserves_display_name_skips_minio_url():
         )
 
     assert staged_path == minio_url
+
+
+@pytest.mark.asyncio
+async def test_sync_from_staged_file_applies_tags_and_writes_metadata():
+    knowledge_file = KnowledgeFile(
+        id=9,
+        knowledge_id=8,
+        file_name="汽车板介绍.pdf",
+        status=5,
+        create_time=datetime(2026, 7, 28),
+    )
+    knowledge_space_service = SimpleNamespace(
+        get_preview_cache_key=Mock(return_value="cache-key"),
+        add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=5)]),
+        enqueue_file_title_extraction=AsyncMock(),
+    )
+    service = _service(knowledge_space_service=knowledge_space_service)
+    _stub_orchestration(service, knowledge_file)
+    params = FilelibSyncParams(
+        external_file_id="automotive_sheet_intro",
+        file_name="汽车板介绍.pdf",
+        tags=["安全生产", "管理制度"],
+    )
+
+    with (
+        patch.object(
+            FileEncodingTransformer,
+            "generate_fixed_encoding",
+            AsyncMock(return_value="SGGF-POL-IT-20260700000009"),
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.KnowledgeFileDao.update",
+            side_effect=lambda value: value,
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.TagLibraryTagService.ensure_and_append_file_tags",
+            new_callable=AsyncMock,
+            return_value=["安全生产", "管理制度"],
+        ) as apply_tags,
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.FilelibSyncAuditWriter.write_upload_success",
+            new_callable=AsyncMock,
+        ),
+    ):
+        result = await service.sync_from_staged_file(
+            params=params,
+            local_file_path="/tmp/staged.pdf",
+            endpoint_tag="sync",
+            allow_personal_fallback=False,
+        )
+
+    apply_tags.assert_awaited_once_with(
+        space_id=8,
+        file_id=9,
+        tag_names=["安全生产", "管理制度"],
+        user_id=1,
+        tenant_id=1,
+        resource_type=TagResourceTypeEnum.MANUAL_TAG,
+    )
+    assert knowledge_file.user_metadata["filelib_sync_tags"] == ["安全生产", "管理制度"]
+    assert result.tags == ["安全生产", "管理制度"]
+
+
+@pytest.mark.asyncio
+async def test_sync_from_staged_file_skips_tag_service_when_tags_empty():
+    knowledge_file = KnowledgeFile(
+        id=9,
+        knowledge_id=8,
+        file_name="汽车板介绍.pdf",
+        status=5,
+        create_time=datetime(2026, 7, 28),
+    )
+    knowledge_space_service = SimpleNamespace(
+        get_preview_cache_key=Mock(return_value="cache-key"),
+        add_file=AsyncMock(return_value=[SimpleNamespace(id=9, status=5)]),
+        enqueue_file_title_extraction=AsyncMock(),
+    )
+    service = _service(knowledge_space_service=knowledge_space_service)
+    _stub_orchestration(service, knowledge_file)
+
+    with (
+        patch.object(
+            FileEncodingTransformer,
+            "generate_fixed_encoding",
+            AsyncMock(return_value="SGGF-POL-IT-20260700000009"),
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.KnowledgeFileDao.update",
+            side_effect=lambda value: value,
+        ),
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.TagLibraryTagService.ensure_and_append_file_tags",
+            new_callable=AsyncMock,
+            return_value=["should-not-run"],
+        ) as apply_tags,
+        patch(
+            "bisheng.open_endpoints.domain.services.filelib_sync_service.FilelibSyncAuditWriter.write_upload_success",
+            new_callable=AsyncMock,
+        ),
+    ):
+        result = await service.sync_from_staged_file(
+            params=_params(),
+            local_file_path="/tmp/staged.pdf",
+            endpoint_tag="sync",
+            allow_personal_fallback=False,
+        )
+
+    apply_tags.assert_not_awaited()
+    assert "filelib_sync_tags" not in (knowledge_file.user_metadata or {})
+    assert result.tags == []

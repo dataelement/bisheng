@@ -59,6 +59,8 @@ class FilelibSyncAuditWriter:
                 cls._append_note_line(lines, "目录", folder_display_name)
             if bool(getattr(target, "used_personal_fallback", False)):
                 cls._append_note_line(lines, "目标降级", "Token用户个人库")
+            elif bool(getattr(target, "used_responsible_person_personal", False)):
+                cls._append_note_line(lines, "目标降级", "责任人个人库")
         cls._append_note_line(lines, "外部文件ID", params.external_file_id)
         cls._append_note_line(lines, "文件名", params.file_name)
         if identity is not None:
@@ -176,9 +178,13 @@ class FilelibSyncAuditWriter:
             "subcategory_code": subcategory_code,
             "file_encoding": str(created_file.file_encoding or "") if created_file is not None else None,
             "personal_fallback": bool(target.used_personal_fallback) if target is not None else None,
+            "responsible_person_personal": (
+                bool(target.used_responsible_person_personal) if target is not None else None
+            ),
             "version_link_pending": bool(response.version_link_pending) if response is not None else None,
             "replaced_file_id": replaced_file_id,
             "trigger_type": trigger_type,
+            "tags": list(params.tags or []),
             "error_code": error_code,
             "error_message": error_message,
             "request_id": cls._request_id(request),

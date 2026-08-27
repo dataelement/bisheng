@@ -352,3 +352,15 @@ export function generateUniqueName(list, key, baseName, pattern) {
         return baseName + pattern.replace('x', String(maxNum + 1));
     }
 }
+
+export function formatUserDisplayLabel(
+    name: string | null | undefined,
+    externalId: string | null | undefined,
+): string {
+    const nameText = String(name ?? '').trim();
+    const idText = String(externalId ?? '').trim();
+    if (nameText && idText) return `${nameText} (${idText})`;
+    if (nameText) return nameText;
+    if (idText) return idText;
+    return '-';
+}

@@ -79,6 +79,13 @@ describe("useFileManager — F027 infinite-scroll guards", () => {
     expect(body).toMatch(/if\s*\(isSearching\)\s*return/);
   });
 
+  it("poll merge reapplies local accept/reject alias decisions", () => {
+    const startIdx = src.indexOf("const refreshLoadedStatuses");
+    const endIdx = src.indexOf("const refreshLoadedStatusesRef", startIdx);
+    const body = src.slice(startIdx, endIdx);
+    expect(body).toMatch(/applyKnowledgeFileAliasDecision\(incoming\)/);
+  });
+
   it("external knowledge-space-files refresh event resets to page 1", () => {
     // Structural change handler must call loadFiles(1), not the previous
     // currentPage — the accumulated tail is no longer trustworthy.

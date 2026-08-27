@@ -7,7 +7,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete
+from sqlalchemy import delete, or_
 from sqlmodel import col, select
 
 from bisheng.approval.domain.models.approval_instance import (
@@ -797,6 +797,208 @@ def enqueue_document_projection_entries(
         )
 
 
+_CONTAINER_CLEANUP_BATCH_SIZE = 50
+_CONTAINER_CLEANUP_MAX_BATCHES = 10
+
+
+async def _build_distribution_cleanup_service(session):
+    from bisheng.knowledge.domain.services.knowledge_distribution_cleanup_service import (
+        KnowledgeDistributionCleanupService,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+        KnowledgeDocumentDistributionService,
+    )
+    from bisheng.knowledge.domain.services.knowledge_document_permission_activation_service import (
+        KnowledgeDocumentPermissionActivationService,
+    )
+
+    file_repository = KnowledgeFileRepositoryImpl(session)
+    return KnowledgeDistributionCleanupService(
+        distribution_service=KnowledgeDocumentDistributionService(
+            session=session,
+            document_repository=KnowledgeDocumentRepositoryImpl(session),
+            version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
+            file_repository=file_repository,
+            permission_activation_service=KnowledgeDocumentPermissionActivationService(
+                file_repository=file_repository,
+            ),
+        )
+    )
+
+
+async def _load_container_distribution_entries(
+    session,
+    *,
+    tenant_id: int,
+    space_id: int,
+    folder_prefix: str | None,
+    limit: int,
+) -> list[KnowledgeFile]:
+    """Entries inside the container that still need a cleanup decision.
+
+    ``deleting`` is deliberately excluded: those already belong to the
+    projection worker, and re-processing them would undo nothing but waste a
+    round trip.
+    """
+    statement = (
+        select(KnowledgeFile)
+        .where(
+            KnowledgeFile.tenant_id == tenant_id,
+            KnowledgeFile.knowledge_id == space_id,
+            col(KnowledgeFile.reference_document_id).is_not(None),
+            col(KnowledgeFile.entry_status).in_(
+                [
+                    KnowledgeFileEntryStatus.PREPARING.value,
+                    KnowledgeFileEntryStatus.ACTIVE.value,
+                    KnowledgeFileEntryStatus.INVALID.value,
+                ]
+            ),
+        )
+        .order_by(KnowledgeFile.id.asc())
+        .limit(limit)
+    )
+    if folder_prefix:
+        statement = statement.where(
+            or_(
+                col(KnowledgeFile.file_level_path) == folder_prefix,
+                col(KnowledgeFile.file_level_path).like(f"{folder_prefix}/%"),
+            )
+        )
+    return list((await session.exec(statement)).all())
+
+
+async def _sweep_container_distribution_entries(
+    *,
+    tenant_id: int,
+    space_id: int,
+    folder_prefix: str | None = None,
+) -> tuple[str, int]:
+    """Clean one container's distribution entries; returns (status, processed).
+
+    Status is ``completed`` when nothing is left, ``pending`` when more remain
+    after this invocation's batch budget, and ``stalled`` when a whole batch
+    failed to move — the latter must not be re-queued in a loop, since the
+    periodic reconcile scan will come back to it.
+    """
+    processed = 0
+    for _ in range(_CONTAINER_CLEANUP_MAX_BATCHES):
+        async with get_async_db_session() as session:
+            entries = await _load_container_distribution_entries(
+                session,
+                tenant_id=tenant_id,
+                space_id=space_id,
+                folder_prefix=folder_prefix,
+                limit=_CONTAINER_CLEANUP_BATCH_SIZE,
+            )
+            if not entries:
+                return "completed", processed
+            service = await _build_distribution_cleanup_service(session)
+            outcomes = await service.cleanup_entries(entries)
+
+        processed += len(outcomes)
+        moved = [item for item in outcomes if item.action.value not in {"failed", "skipped"}]
+        degraded = [item for item in outcomes if item.degraded]
+        failed = [item for item in outcomes if item.action.value == "failed"]
+        logger.info(
+            "F098 container cleanup tenant_id=%s space_id=%s folder_prefix=%s "
+            "batch=%s moved=%s degraded=%s failed=%s",
+            tenant_id,
+            space_id,
+            folder_prefix,
+            len(outcomes),
+            len(moved),
+            len(degraded),
+            len(failed),
+        )
+        if not moved:
+            logger.error(
+                "F098 container cleanup made no progress tenant_id=%s space_id=%s "
+                "folder_prefix=%s stuck_entry_ids=%s",
+                tenant_id,
+                space_id,
+                folder_prefix,
+                [item.entry_id for item in failed],
+            )
+            return "stalled", processed
+        enqueue_document_projection_entries(
+            tenant_id=tenant_id,
+            entry_ids=[item.entry_id for item in moved],
+        )
+    return "pending", processed
+
+
+async def _process_container_distribution_cleanup_async(
+    *,
+    tenant_id: int,
+    space_id: int,
+    folder_prefix: str | None,
+) -> str:
+    status, processed = await _sweep_container_distribution_entries(
+        tenant_id=tenant_id,
+        space_id=space_id,
+        folder_prefix=folder_prefix,
+    )
+    if status == "pending":
+        enqueue_container_distribution_cleanup(
+            tenant_id=tenant_id,
+            space_id=space_id,
+            folder_prefix=folder_prefix,
+        )
+    logger.info(
+        "F098 container cleanup pass finished tenant_id=%s space_id=%s "
+        "folder_prefix=%s status=%s processed=%s",
+        tenant_id,
+        space_id,
+        folder_prefix,
+        status,
+        processed,
+    )
+    return status
+
+
+@bisheng_celery.task(
+    bind=True,
+    acks_late=True,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 5},
+    name=(
+        "bisheng.worker.knowledge.document_projection."
+        "process_container_distribution_cleanup"
+    ),
+)
+def process_container_distribution_cleanup(
+    task,
+    tenant_id: int,
+    space_id: int,
+    folder_prefix: str | None = None,
+) -> str:
+    return run_async_task(
+        lambda: _process_container_distribution_cleanup_async(
+            tenant_id=int(tenant_id),
+            space_id=int(space_id),
+            folder_prefix=folder_prefix,
+        )
+    )
+
+
+def enqueue_container_distribution_cleanup(
+    *,
+    tenant_id: int,
+    space_id: int,
+    folder_prefix: str | None = None,
+) -> None:
+    process_container_distribution_cleanup.apply_async(
+        kwargs={
+            "tenant_id": int(tenant_id),
+            "space_id": int(space_id),
+            "folder_prefix": folder_prefix,
+        },
+        headers={"tenant_id": int(tenant_id)},
+        queue=DEFAULT_QUEUE,
+    )
+
+
 async def _process_knowledge_space_retirement_async(
     *,
     tenant_id: int,
@@ -826,6 +1028,15 @@ async def _process_knowledge_space_retirement_async(
         ).first()
         if space is None:
             return "completed"
+
+    # Sweep before checking: the reconcile scan re-queues retiring spaces, so
+    # doing the work here is what actually moves a space toward disappearing.
+    await _sweep_container_distribution_entries(
+        tenant_id=tenant_id,
+        space_id=space_id,
+    )
+
+    async with get_async_db_session() as session:
         local_files = list(
             (
                 await session.exec(

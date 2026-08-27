@@ -22,6 +22,7 @@ class FilelibSyncParams(BaseModel):
         max_length=128,
         description="Responsible person external_id in user table",
     )
+    tags: list[str] = Field(default_factory=list, description="Tag names applied to the synced file")
 
     @field_validator("external_file_id", "file_name", mode="before")
     @classmethod
@@ -40,6 +41,25 @@ class FilelibSyncParams(BaseModel):
         text = str(value or "").strip()
         return text or None
 
+    @field_validator("tags", mode="before")
+    @classmethod
+    def normalize_tags(cls, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise ValueError("tags must be a list of strings")
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("tags must be a list of strings")
+            name = item.strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            normalized.append(name)
+        return normalized
+
 
 class FilelibSyncResponseData(BaseModel):
     external_file_id: str
@@ -50,3 +70,4 @@ class FilelibSyncResponseData(BaseModel):
     status: int
     version_link_pending: bool = False
     replaced_file_id: int | None = None
+    tags: list[str] = Field(default_factory=list)

@@ -40,7 +40,10 @@ import {
     type UploadSizeLimits,
 } from "../knowledgeUtils";
 import { useLocalize } from "~/hooks";
-import { dispatchKnowledgeSpaceFilesRefresh } from "./useFileManager";
+import {
+    dispatchKnowledgeSpaceFilesRefresh,
+    recordKnowledgeFileAliasDecision,
+} from "./useFileManager";
 import {
     extractDuplicateFileEntries,
     type DuplicateFileEntry,
@@ -599,10 +602,11 @@ export function useFileUpload({
                     await renameFileApi(activeSpace.id, fileId, apiName);
                     setFiles(prev => prev.map(f => {
                         if (f.id !== fileId) return f;
-                        if (!isWebLink) return { ...f, name: displayName };
+                        if (!isWebLink) return { ...f, name: displayName, aliasName: undefined };
                         return {
                             ...f,
                             name: displayName,
+                            aliasName: undefined,
                             userMetadata: {
                                 ...f.userMetadata,
                                 web_title: displayName,
@@ -704,21 +708,49 @@ export function useFileUpload({
     );
 
     // ─── Accept / reject AI-generated alias rename ───────────────────────
+    const aliasActionInFlightRef = useRef(new Set<string>());
+
+    const applyAliasLocalUpdate = useCallback(
+        (fileId: string, mode: "accept" | "reject", acceptedName?: string) => {
+            const id = String(fileId);
+            recordKnowledgeFileAliasDecision(id, mode, acceptedName);
+            setFiles((prev) =>
+                prev.map((file) => {
+                    if (String(file.id) !== id) return file;
+                    if (mode === "accept") {
+                        return {
+                            ...file,
+                            name: acceptedName || file.aliasName || file.name,
+                            aliasName: undefined,
+                        };
+                    }
+                    return { ...file, aliasName: undefined };
+                }),
+            );
+        },
+        [setFiles],
+    );
+
     const handleAcceptAlias = useCallback(
         async (fileId: string) => {
             if (!activeSpace) return;
-            const target = files.find((f) => f.id === fileId);
-            if (!target || !target.aliasName) return;
+            const id = String(fileId);
+            const target = files.find((file) => String(file.id) === id);
+            if (!target) return;
+            if (!target.aliasName) {
+                applyAliasLocalUpdate(id, "accept");
+                showToast({
+                    message: localize("com_knowledge.alias_already_processed"),
+                    severity: NotificationSeverity.INFO,
+                } as any);
+                return;
+            }
+            if (aliasActionInFlightRef.current.has(id)) return;
+            aliasActionInFlightRef.current.add(id);
 
             try {
-                await acceptFileAliasApi(String(activeSpace.id), fileId);
-                setFiles((prev) =>
-                    prev.map((f) =>
-                        f.id === fileId
-                            ? { ...f, name: target.aliasName as string, aliasName: undefined }
-                            : f
-                    )
-                );
+                await acceptFileAliasApi(String(activeSpace.id), id);
+                applyAliasLocalUpdate(id, "accept", target.aliasName);
                 showToast({
                     message: localize("com_knowledge.rename_success"),
                     severity: NotificationSeverity.SUCCESS,
@@ -728,24 +760,33 @@ export function useFileUpload({
                     message: localize("com_knowledge.rename_failed"),
                     severity: NotificationSeverity.ERROR,
                 });
+            } finally {
+                aliasActionInFlightRef.current.delete(id);
             }
         },
-        [activeSpace, files, setFiles, showToast, localize]
+        [activeSpace, applyAliasLocalUpdate, files, showToast, localize]
     );
 
     const handleRejectAlias = useCallback(
         async (fileId: string) => {
             if (!activeSpace) return;
-            const target = files.find((f) => f.id === fileId);
-            if (!target || !target.aliasName) return;
+            const id = String(fileId);
+            const target = files.find((file) => String(file.id) === id);
+            if (!target) return;
+            if (!target.aliasName) {
+                applyAliasLocalUpdate(id, "reject");
+                showToast({
+                    message: localize("com_knowledge.alias_already_processed"),
+                    severity: NotificationSeverity.INFO,
+                } as any);
+                return;
+            }
+            if (aliasActionInFlightRef.current.has(id)) return;
+            aliasActionInFlightRef.current.add(id);
 
             try {
-                await rejectFileAliasApi(String(activeSpace.id), fileId);
-                setFiles((prev) =>
-                    prev.map((f) =>
-                        f.id === fileId ? { ...f, aliasName: undefined } : f
-                    )
-                );
+                await rejectFileAliasApi(String(activeSpace.id), id);
+                applyAliasLocalUpdate(id, "reject");
                 showToast({
                     message: localize("com_knowledge.success"),
                     severity: NotificationSeverity.SUCCESS,
@@ -755,9 +796,11 @@ export function useFileUpload({
                     message: localize("com_knowledge.operation_failed"),
                     severity: NotificationSeverity.ERROR,
                 });
+            } finally {
+                aliasActionInFlightRef.current.delete(id);
             }
         },
-        [activeSpace, files, setFiles, showToast, localize]
+        [activeSpace, applyAliasLocalUpdate, files, showToast, localize]
     );
 
     const applyBatchAliasResultToFiles = useCallback(
@@ -766,14 +809,16 @@ export function useFileUpload({
             if (succeededIdSet.size === 0) return;
             setFiles((prev) =>
                 prev.map((file) => {
-                    if (!succeededIdSet.has(file.id)) return file;
+                    if (!succeededIdSet.has(String(file.id))) return file;
                     if (mode === "accept" && file.aliasName) {
+                        recordKnowledgeFileAliasDecision(file.id, "accept", file.aliasName);
                         return {
                             ...file,
                             name: file.aliasName,
                             aliasName: undefined,
                         };
                     }
+                    recordKnowledgeFileAliasDecision(file.id, "reject");
                     return { ...file, aliasName: undefined };
                 }),
             );
