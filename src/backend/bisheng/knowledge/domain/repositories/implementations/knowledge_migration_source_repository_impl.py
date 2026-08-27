@@ -46,11 +46,16 @@ class KnowledgeMigrationSourceRepositoryImpl(KnowledgeMigrationSourceRepository)
         level: str | None,
         offset: int,
         limit: int,
+        levels: set[str] | None = None,
     ) -> tuple[list[MigrationSpaceRecord], int]:
         filters = list(self._space_filters())
         if keyword:
             filters.append(Knowledge.name.contains(keyword, autoescape=True))
-        if level:
+        if levels is not None:
+            # A source level can have more than one parent (personal publishes
+            # into either team flavour), so the caller may need a set here.
+            filters.append(col(KnowledgeSpaceScope.level).in_(sorted(levels)))
+        elif level:
             filters.append(KnowledgeSpaceScope.level == level)
         total = int(
             (
