@@ -263,6 +263,47 @@ def test_duplicate_dynamic_business_domains_use_first_match() -> None:
     assert domain is first_domain
 
 
+def test_dynamic_business_domain_prefers_space_allowed_candidate() -> None:
+    first_domain = SimpleNamespace(enabled=True, code="PP", name="生产", department_ids=[20])
+    second_domain = SimpleNamespace(enabled=True, code="PM", name="设备", department_ids=[20])
+    config = SimpleNamespace(
+        portal=SimpleNamespace(
+            domains=[first_domain, second_domain],
+        )
+    )
+    service = _service(_rule("dynamic", "fixed", "department_id"))
+    target_space = Knowledge(id=8, name="维检库", type=3, business_domain_codes=["PM"])
+
+    domain = service._resolve_business_domain(
+        config,
+        _department(20, "维检作业区"),
+        target_space=target_space,
+    )
+
+    assert domain is second_domain
+
+
+def test_dynamic_business_domain_returns_none_when_no_space_overlap() -> None:
+    config = SimpleNamespace(
+        portal=SimpleNamespace(
+            domains=[
+                SimpleNamespace(enabled=True, code="PP", name="生产", department_ids=[20]),
+                SimpleNamespace(enabled=True, code="PM", name="设备", department_ids=[20]),
+            ],
+        )
+    )
+    service = _service(_rule("dynamic", "fixed", "department_id"))
+    target_space = Knowledge(id=8, name="信息库", type=3, business_domain_codes=["IT"])
+
+    domain = service._resolve_business_domain(
+        config,
+        _department(20, "维检作业区"),
+        target_space=target_space,
+    )
+
+    assert domain is None
+
+
 def test_fixed_business_domain_duplicate_codes_still_conflict() -> None:
     config = SimpleNamespace(
         portal=SimpleNamespace(

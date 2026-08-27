@@ -161,10 +161,6 @@ class FilelibSyncService:
             identity = await self._resolve_identity(params)
             portal_config = await self._get_portal_config()
             self._resolve_document_type(portal_config)
-            domain = self._resolve_business_domain(
-                portal_config,
-                identity.business_domain_department,
-            )
             target = await self._resolve_target_space(
                 identity,
                 allow_personal_fallback=allow_personal_fallback,
@@ -184,12 +180,6 @@ class FilelibSyncService:
                     folder_id=folder_id,
                     used_personal_fallback=False,
                 )
-            if (
-                domain is not None
-                and self.file_sync_rule.business_domain.mode == "dynamic"
-                and not target.used_personal_fallback
-            ):
-                self._ensure_domain_bound(target.space, domain)
             try:
                 await self._require_upload_permission(target)
             except FilelibSyncNotFoundError:
@@ -202,6 +192,18 @@ class FilelibSyncService:
                 )
                 target = await self._resolve_personal_fallback_target(identity)
                 await self._require_upload_permission(target)
+
+            domain = self._resolve_business_domain(
+                portal_config,
+                identity.business_domain_department,
+                target_space=target.space,
+            )
+            if (
+                domain is not None
+                and self.file_sync_rule.business_domain.mode == "dynamic"
+                and not target.used_personal_fallback
+            ):
+                self._ensure_domain_bound(target.space, domain)
 
             replaced_file_id = await self._cleanup_duplicate_files_before_sync(
                 knowledge_id=int(target.space.id),
@@ -678,28 +680,61 @@ class FilelibSyncService:
             raise FilelibSyncConflictError(msg="multiple configured file subcategories match")
         return document_type, child_matches[0]
 
-    def _resolve_business_domain(
+    @staticmethod
+    def _space_allowed_business_domain_code_set(space: Knowledge | None) -> set[str]:
+        if space is None:
+            return set()
+        return {
+            normalized
+            for code in (space.business_domain_codes or [])
+            if (normalized := normalize_business_domain_code(code)) is not None
+        }
+
+    @classmethod
+    def _filter_business_domain_candidates_for_space(
+        cls,
+        candidates: list[PortalDomainConfig],
+        space: Knowledge | None,
+    ) -> list[PortalDomainConfig]:
+        allowed_codes = cls._space_allowed_business_domain_code_set(space)
+        if not allowed_codes:
+            return candidates
+        return [
+            item
+            for item in candidates
+            if normalize_business_domain_code(item.code) in allowed_codes
+        ]
+
+    def _list_business_domain_candidates(
         self,
         config: ShougangPortalAdminConfig,
         selected_department: Department | None,
-    ) -> PortalDomainConfig | None:
+    ) -> list[PortalDomainConfig]:
         if self.file_sync_rule.business_domain.mode == "fixed":
-            candidates = [
+            return [
                 item
                 for item in config.portal.domains
                 if item.enabled
                 and normalize_business_domain_code(item.code) == self.file_sync_rule.business_domain.code
             ]
-        else:
-            if selected_department is None:
-                raise FilelibSyncNotFoundError(msg="dynamic business department does not exist")
-            candidates = [
-                item
-                for item in config.portal.domains
-                if item.enabled
-                and normalize_business_domain_code(item.code)
-                and int(selected_department.id) in (item.department_ids or [])
-            ]
+        if selected_department is None:
+            raise FilelibSyncNotFoundError(msg="dynamic business department does not exist")
+        return [
+            item
+            for item in config.portal.domains
+            if item.enabled
+            and normalize_business_domain_code(item.code)
+            and int(selected_department.id) in (item.department_ids or [])
+        ]
+
+    def _resolve_business_domain(
+        self,
+        config: ShougangPortalAdminConfig,
+        selected_department: Department | None,
+        *,
+        target_space: Knowledge | None = None,
+    ) -> PortalDomainConfig | None:
+        candidates = self._list_business_domain_candidates(config, selected_department)
         if not candidates:
             if self.file_sync_rule.business_domain.mode == "dynamic":
                 logger.warning(
@@ -709,6 +744,37 @@ class FilelibSyncService:
                 )
                 return None
             raise FilelibSyncNotFoundError(msg="configured business domain does not exist")
+
+        if (
+            self.file_sync_rule.business_domain.mode == "dynamic"
+            and target_space is not None
+        ):
+            space_allowed_codes = self._space_allowed_business_domain_code_set(target_space)
+            if space_allowed_codes:
+                space_candidates = self._filter_business_domain_candidates_for_space(
+                    candidates,
+                    target_space,
+                )
+                if not space_candidates:
+                    logger.warning(
+                        "filelib sync business domain candidates {} not allowed in space_id={} space_name={} allowed_codes={}; uploading without business domain",
+                        [item.code for item in candidates],
+                        target_space.id,
+                        getattr(target_space, "name", None),
+                        sorted(space_allowed_codes),
+                    )
+                    return None
+                if len(space_candidates) < len(candidates):
+                    logger.warning(
+                        "filelib sync business domain narrowed department_id={} department_name={} from {} to {} for space_id={}",
+                        getattr(selected_department, "id", None),
+                        getattr(selected_department, "name", None),
+                        [item.code for item in candidates],
+                        [item.code for item in space_candidates],
+                        target_space.id,
+                    )
+                candidates = space_candidates
+
         if len(candidates) > 1:
             if self.file_sync_rule.business_domain.mode == "dynamic":
                 logger.warning(
