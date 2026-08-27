@@ -2,7 +2,6 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import { resolveAdminLandingPath, resolveRoutePermissions } from "@/routes";
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl";
-import i18next from "i18next";
 import { ReactNode, createContext, useLayoutEffect, useState } from "react";
 import { delComponentApi, getComponents, overridComponent, saveComponent } from "../controllers/API";
 import { getUserInfo, logoutApi } from "../controllers/API/user";
@@ -187,11 +186,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             const platformEntry = resolvePlatformEntry(res, web_menu)
             if (platformEntry !== 'platform') {
                 if (platformEntry === 'forbidden') {
-                    toast({
-                        variant: 'error',
-                        description: i18next.t('menu.noAdminConsoleAccess'),
-                    })
-                    history.pushState(null, '', BASE_URL + '/403')
+                    window.location.replace(getWorkspaceClientUrl('/menu-unavailable'))
                     return
                 }
                 // Hard-navigate to the workspace client. Must NOT use history.back()

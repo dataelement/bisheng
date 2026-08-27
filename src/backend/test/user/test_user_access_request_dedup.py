@@ -72,7 +72,7 @@ async def test_init_login_user_reuses_explicit_empty_role_snapshot():
     mock_global_super.assert_awaited_once_with(9, role_ids=[])
 
 
-async def test_login_access_guard_reuses_resolved_roles_and_department_flag():
+async def test_login_access_guard_allows_role_holder_without_effective_menu():
     user = SimpleNamespace(user_id=11)
 
     with (
@@ -92,7 +92,7 @@ async def test_login_access_guard_reuses_resolved_roles_and_department_flag():
             user_service_module.LoginUser,
             "user_has_workbench_or_admin_effective_menu",
             new_callable=AsyncMock,
-            return_value=True,
+            return_value=False,
         ) as mock_effective_menu,
     ):
         result = await user_service_module.UserService._reject_login_if_user_has_no_usable_access(user)
@@ -100,11 +100,36 @@ async def test_login_access_guard_reuses_resolved_roles_and_department_flag():
     assert result is None
     mock_roles.assert_awaited_once_with(11)
     mock_departments.assert_awaited_once_with(11)
-    mock_effective_menu.assert_awaited_once_with(
-        user,
-        role_ids=[2],
-        is_department_admin=False,
-    )
+    mock_effective_menu.assert_not_awaited()
+
+
+async def test_login_access_guard_rejects_user_without_role_or_delegated_admin():
+    user = SimpleNamespace(user_id=12)
+
+    with (
+        patch.object(
+            user_service_module.UserRoleDao,
+            "aget_user_roles",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            user_service_module.DepartmentDao,
+            "aget_user_admin_departments",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch.object(
+            user_service_module.UserGroupDao,
+            "aget_user_admin_group",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+    ):
+        result = await user_service_module.UserService._reject_login_if_user_has_no_usable_access(user)
+
+    assert result is not None
+    assert result.status_code == 10609
 
 
 async def test_user_login_enters_tenant_bypass_before_multi_tenant_resolution():
