@@ -2264,6 +2264,71 @@ export async function getFolderParentPathApi(
 }
 
 /**
+ * What deleting a container would do to files published or shared elsewhere.
+ *
+ * Distribution entries never reach the recycle bin, so a container holding any
+ * of them deletes irreversibly. Callers use this to say so before the user
+ * commits.
+ */
+export interface DeleteImpactSummary {
+    rollback_count: number;
+    permanent_delete_count: number;
+    soft_link_count: number;
+    share_count: number;
+    recyclable_count: number;
+    irreversible: boolean;
+    rollback_samples: Array<{ file_id: number; file_name: string }>;
+}
+
+const EMPTY_DELETE_IMPACT: DeleteImpactSummary = {
+    rollback_count: 0,
+    permanent_delete_count: 0,
+    soft_link_count: 0,
+    share_count: 0,
+    recyclable_count: 0,
+    irreversible: false,
+    rollback_samples: [],
+};
+
+function normalizeDeleteImpact(data: unknown): DeleteImpactSummary {
+    if (!data || typeof data !== "object") return EMPTY_DELETE_IMPACT;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = data as any;
+    return {
+        rollback_count: Number(raw.rollback_count) || 0,
+        permanent_delete_count: Number(raw.permanent_delete_count) || 0,
+        soft_link_count: Number(raw.soft_link_count) || 0,
+        share_count: Number(raw.share_count) || 0,
+        recyclable_count: Number(raw.recyclable_count) || 0,
+        irreversible: Boolean(raw.irreversible),
+        rollback_samples: Array.isArray(raw.rollback_samples) ? raw.rollback_samples : [],
+    };
+}
+
+/**
+ * GET /api/v1/knowledge/space/{space_id}/delete-preflight
+ */
+export async function getSpaceDeleteImpactApi(spaceId: string): Promise<DeleteImpactSummary> {
+    const res = await request.get<ApiResponse<DeleteImpactSummary>>(
+        `/api/v1/knowledge/space/${spaceId}/delete-preflight`
+    );
+    return normalizeDeleteImpact(res?.data);
+}
+
+/**
+ * GET /api/v1/knowledge/space/{space_id}/folders/{folder_id}/delete-preflight
+ */
+export async function getFolderDeleteImpactApi(
+    spaceId: string,
+    folderId: string
+): Promise<DeleteImpactSummary> {
+    const res = await request.get<ApiResponse<DeleteImpactSummary>>(
+        `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/delete-preflight`
+    );
+    return normalizeDeleteImpact(res?.data);
+}
+
+/**
  * Pin / unpin a space
  * POST /api/v1/knowledge/space/{space_id}/set-pin
  * @param is_pined - true to pin, false to unpin (backend field name: is_pined)

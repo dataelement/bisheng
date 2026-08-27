@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback, typ
 import { useRecoilValue } from "recoil";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderPlus, Loader2 } from "lucide-react";
-import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getPendingSimilarFilesApi, importWebLinkApi, reorderFolderApi } from "~/api/knowledge";
+import { FileStatus, FileType, FileTag, KnowledgeFile, KnowledgeSpace, SortDirection, SortType, SpaceLevel, SpaceRole, batchDeleteApi, batchDownloadApi, batchMoveApi, batchRetryApi, downloadWatermarkedKnowledgeFileApi, getFolderDeleteImpactApi, getPendingSimilarFilesApi, importWebLinkApi, reorderFolderApi } from "~/api/knowledge";
 import { useConfirm, useToastContext } from "~/Providers";
 import { useVersionManagementEnabled } from "~/hooks";
 import {
@@ -20,6 +20,7 @@ import {
     Button,
     Input,
 } from "~/components/ui";
+import { buildDeleteImpactDescription, mergeDeleteImpacts } from "../utils/deleteImpact";
 import { useFileDragDrop } from "../hooks/useFileDragDrop";
 import { dispatchKnowledgeSpaceFilesRefresh } from "../hooks/useFileManager";
 import {
@@ -1362,6 +1363,36 @@ export function KnowledgeSpaceContent({
         });
     };
 
+    const confirmDeleteImpact = async (itemsToDelete: KnowledgeFile[]): Promise<boolean> => {
+        const folderIds = itemsToDelete
+            .filter((item) => item.type === FileType.FOLDER)
+            .map((item) => item.id);
+        if (!folderIds.length) return true;
+
+        const summaries = await Promise.all(
+            folderIds.map((folderId) =>
+                getFolderDeleteImpactApi(space.id, folderId).catch(() => null)
+            )
+        );
+        const resolved = summaries.filter(
+            (item): item is NonNullable<typeof item> => item !== null
+        );
+        if (!resolved.length) return true;
+
+        const description = buildDeleteImpactDescription(mergeDeleteImpacts(resolved), localize);
+        // No description means nothing irreversible is involved, so the ordinary
+        // confirmation the caller already showed is enough.
+        if (!description) return true;
+
+        return confirm({
+            title: localize("com_knowledge.prompt"),
+            description,
+            cancelText: localize("com_knowledge.cancel"),
+            confirmText: localize("com_knowledge.delete"),
+            variant: "destructive",
+        });
+    };
+
     const handleBatchDelete = async () => {
         if (!canBatchDelete) {
             showToast({ message: localize("com_knowledge.batch_delete_failed"), status: "error" });
@@ -1370,6 +1401,9 @@ export function KnowledgeSpaceContent({
 
         const ok = await confirmDeleteMultiVersionFile(selectedList);
         if (!ok) return;
+
+        const impactAccepted = await confirmDeleteImpact(selectedList);
+        if (!impactAccepted) return;
 
         const fileIds = selectedList.filter(f => f.type !== FileType.FOLDER).map(f => Number(f.id));
         const folderIds = selectedList.filter(f => f.type === FileType.FOLDER).map(f => Number(f.id));

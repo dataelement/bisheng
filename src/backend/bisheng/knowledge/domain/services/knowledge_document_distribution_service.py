@@ -125,6 +125,15 @@ class RemovePublishEntryResult:
 
 
 @dataclass(frozen=True)
+class ForceDetachPublishEntryResult:
+    document_id: int
+    publish_entry_id: int
+    relinked_entry_ids: tuple[int, ...] = ()
+    document_pointer_moved: bool = False
+    idempotent: bool = False
+
+
+@dataclass(frozen=True)
 class DeleteManagerResult:
     document_id: int
     manager_file_id: int
@@ -1976,6 +1985,83 @@ class KnowledgeDocumentDistributionService:
             document_id=document_id,
             publish_entry_id=publish_entry_id,
             idempotent=False,
+        )
+
+    async def force_detach_publish_entry(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        publish_entry_id: int,
+    ) -> ForceDetachPublishEntryResult:
+        """Drop a publish entry from the chain without proving the chain is sound.
+
+        ``remove_publish_entry`` refuses anything it cannot validate, which is
+        the right answer when a user deletes one shortcut by hand. A container
+        delete cannot stop there: a single unprovable chain would strand the
+        whole knowledge space in retirement with no way out. So this relinks
+        every successor — and the document pointer — onto whatever the entry
+        itself pointed at, and lets the entry go.
+
+        Use it only as the fallback after the strict path has refused.
+        """
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            for_update=True,
+        )
+        entry_map = {int(entry.id): entry for entry in entries}
+        publish = entry_map.get(publish_entry_id)
+        if document is None or publish is None:
+            raise KnowledgeDocumentDistributionError("publish detach state no longer exists")
+        if (
+            int(document.tenant_id or 0) != tenant_id
+            or int(publish.tenant_id or 0) != tenant_id
+            or int(publish.reference_document_id or 0) != document_id
+            or publish.entry_type != KnowledgeFileEntryType.PUBLISH.value
+        ):
+            raise KnowledgeDocumentDistributionError("target entry is not a publish")
+        if publish.entry_status == KnowledgeFileEntryStatus.DELETING.value:
+            return ForceDetachPublishEntryResult(
+                document_id=document_id,
+                publish_entry_id=publish_entry_id,
+                idempotent=True,
+            )
+
+        target_predecessor_id = publish.predecessor_logic_file_id
+        relinked: list[int] = []
+        for entry in entries:
+            if int(entry.id) == publish_entry_id:
+                continue
+            if int(entry.predecessor_logic_file_id or 0) == publish_entry_id:
+                entry.predecessor_logic_file_id = target_predecessor_id
+                relinked.append(int(entry.id))
+        document_pointer_moved = int(document.predecessor_logic_file_id or 0) == publish_entry_id
+        if document_pointer_moved:
+            document.predecessor_logic_file_id = target_predecessor_id
+
+        self._mark_entry_for_manager_delete(publish, KnowledgeFileEntryStatus.DELETING)
+        self.session.add(document)
+        self.session.add_all(entries)
+        await self._commit()
+
+        try:
+            explicit_snapshot = list(await self.permission_snapshot_loader(publish_entry_id))
+            await self.permission_activation_service.revoke_deleting_entry(
+                entry_id=publish_entry_id,
+                explicit_operations=explicit_snapshot,
+            )
+        except Exception:
+            logger.exception(
+                "F098 forced detach permission revoke deferred: entry_id=%s",
+                publish_entry_id,
+            )
+
+        return ForceDetachPublishEntryResult(
+            document_id=document_id,
+            publish_entry_id=publish_entry_id,
+            relinked_entry_ids=tuple(sorted(relinked)),
+            document_pointer_moved=document_pointer_moved,
         )
 
     async def remove_invalid_entry(
