@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from bisheng.common.errcode.points import PointsInvalidAdjustError, PointsRuleNotFoundError
 from bisheng.core.database import get_async_db_session
 from bisheng.points.domain.constants.notify_templates import format_deduct_notify_reason
+from bisheng.points.domain.constants.rule_display_name import resolve_point_rule_display_name
 from bisheng.points.domain.models import PointPendingDeduct
 from bisheng.points.domain.repositories.points_repository import PointsRepository
 from bisheng.points.domain.services.points_ledger_service import PointsLedgerService

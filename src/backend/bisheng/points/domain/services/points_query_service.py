@@ -11,6 +11,7 @@ from bisheng.common.dependencies.user_deps import UserPayload
 from bisheng.common.errcode.points import PointsInvalidAdjustError, PointsRuleNotFoundError
 from bisheng.common.schemas.api import PageData
 from bisheng.points.domain.constants.notify_templates import format_deduct_notify_reason
+from bisheng.points.domain.constants.rule_display_name import resolve_point_rule_display_name
 from bisheng.points.domain.schemas.points_schema import (
     PointAdjustRequest,
     PointAdminDepartmentOption,

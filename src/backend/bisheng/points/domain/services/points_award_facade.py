@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from bisheng.points.domain.constants.rule_display_name import resolve_point_rule_display_name
 from bisheng.points.domain.constants.space_level_rules import earn_rule_for_space_level
 from bisheng.points.domain.services.points_ledger_service import LedgerResult, PointsLedgerService
 
