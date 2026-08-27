@@ -150,12 +150,20 @@ jest.mock("~/components/icons/channels", () => ({
 }));
 
 jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
-    SubjectSearchDepartment: ({ value, onChange, loadDepartments, disabledIds = [] }: any) => {
+    SubjectSearchDepartment: ({ value, onChange, loadDepartments, disabledIds = [], canSelectNode }: any) => {
         const React = require("react") as typeof import("react");
         const [departments, setDepartments] = React.useState<any[]>([]);
         const [loading, setLoading] = React.useState(Boolean(loadDepartments));
         const [failed, setFailed] = React.useState(false);
         const disabledSet = React.useMemo(() => new Set(disabledIds), [disabledIds]);
+        const flatten = (nodes: any[]): any[] => {
+            const out: any[] = [];
+            for (const node of nodes || []) {
+                out.push(node);
+                if (node.children?.length) out.push(...flatten(node.children));
+            }
+            return out;
+        };
 
         React.useEffect(() => {
             if (!loadDepartments) return;
@@ -163,7 +171,7 @@ jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
             setLoading(true);
             loadDepartments()
                 .then((rows: any[]) => {
-                    if (active) setDepartments(rows);
+                    if (active) setDepartments(flatten(rows));
                 })
                 .catch(() => {
                     if (active) setFailed(true);
@@ -182,7 +190,9 @@ jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
                 {loading ? <span>加载部门中</span> : null}
                 {!loading && failed ? <span>暂无部门数据</span> : null}
                 {!loading && departments.map((department) => {
-                    const disabled = disabledSet.has(department.id);
+                    const bound = disabledSet.has(department.id);
+                    const levelBlocked = canSelectNode ? !canSelectNode(department) : false;
+                    const disabled = bound || levelBlocked;
                     return (
                         <button
                             key={department.id}
@@ -191,7 +201,7 @@ jest.mock("~/components/permission/SubjectSearchDepartment", () => ({
                             data-disabled={disabled ? "true" : "false"}
                             onClick={() => onChange([{ type: "department", id: department.id, name: department.name }])}
                         >
-                            选择{department.name}{disabled ? "(已绑定)" : ""}
+                            选择{department.name}{bound ? "(已绑定)" : ""}
                         </button>
                     );
                 })}
@@ -342,8 +352,16 @@ describe("CreateKnowledgeSpaceDrawer", () => {
     test("科室知识库场景调用新接口获取当前用户部门树并标记已绑定部门", async () => {
         jest.mocked(getCreateSpaceMyDepartmentTreeApi).mockResolvedValue({
             data: [
-                { id: 1, dept_id: "SG-1", name: "研发部", parent_id: null, children: [] },
-                { id: 2, dept_id: "SG-2", name: "前端组", parent_id: 1, children: [] },
+                {
+                    id: 1,
+                    dept_id: "SG-1",
+                    name: "研发部",
+                    org_level: "dept",
+                    parent_id: null,
+                    children: [
+                        { id: 2, dept_id: "SG-2", name: "前端组", org_level: "office", parent_id: 1, children: [] },
+                    ],
+                },
             ],
             bound_department_ids: [2],
         });
@@ -368,7 +386,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         const selector = await screen.findByTestId("department-selector");
         expect(selector).toHaveAttribute("data-disabled-ids", JSON.stringify([2]));
         expect(screen.getByRole("button", { name: "选择前端组(已绑定)" })).toBeDisabled();
-        expect(screen.getByRole("button", { name: "选择研发部" })).not.toBeDisabled();
+        expect(screen.getByRole("button", { name: "选择研发部" })).toBeDisabled();
     });
 
     test("部门知识库创建需要选择部门并提交部门", async () => {
@@ -425,7 +443,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
                 return Promise.reject(new Error("page_size must be less than or equal to 100"));
             }
             return Promise.resolve({
-                data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", parent_id: null, children: [] }],
+                data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", org_level: "office", parent_id: null, children: [] }],
                 total: 1,
             });
         });
@@ -637,7 +655,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
         });
         const getDepartments = jest.requireMock("~/api/knowledge").getCreateSpaceDepartmentsApi;
         getDepartments.mockResolvedValue({
-            data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", parent_id: null, children: [] }],
+            data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", org_level: "office", parent_id: null, children: [] }],
             total: 1,
         });
 
@@ -698,7 +716,7 @@ describe("CreateKnowledgeSpaceDrawer", () => {
     test("系统管理员编辑科室知识库时可回显并修改所属科室", async () => {
         const onConfirm = jest.fn().mockResolvedValue(true);
         jest.mocked(getCreateSpaceMyDepartmentTreeApi).mockResolvedValue({
-            data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", parent_id: null, children: [] }],
+            data: [{ id: 12, dept_id: "SG-12", name: "炼钢部", org_level: "office", parent_id: null, children: [] }],
             bound_department_ids: [],
         });
 
