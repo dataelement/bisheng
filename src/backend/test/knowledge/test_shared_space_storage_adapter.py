@@ -17,7 +17,10 @@ from bisheng.knowledge.domain.contracts.errors import (
     SharedStorageContractError,
     SharedStorageErrorCode,
 )
-from bisheng.knowledge.domain.contracts.retrieval_scope import BackendQueryFilter
+from bisheng.knowledge.domain.contracts.retrieval_scope import (
+    BackendQueryFilter,
+    CanonicalGenerationConstraint,
+)
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
     KnowledgeSpaceSharedStorageRouting,
@@ -163,6 +166,8 @@ class TestSharedSpaceStorageReader:
                 {
                     "canonical_document_id": 10,
                     "canonical_version_id": 100,
+                    "content_generation": 4,
+                    "membership_generation": 5,
                     "chunk_index": 0,
                     "text": "hello",
                 },
@@ -180,6 +185,8 @@ class TestSharedSpaceStorageReader:
                                 "metadata": {
                                     "canonical_document_id": 10,
                                     "canonical_version_id": 100,
+                                    "content_generation": 4,
+                                    "membership_generation": 5,
                                     "chunk_index": 0,
                                 },
                             },
@@ -206,6 +213,7 @@ class TestSharedSpaceStorageReader:
         assert len(hits) == 1
         assert hits[0].canonical_document_id == 10
         assert hits[0].score == pytest.approx(0.42)
+        assert hits[0].content_generation == 4
 
     async def test_es_search_returns_canonical_hits(self):
         reader = self._reader()
@@ -295,6 +303,31 @@ class TestESQueryRendering:
         expr = SharedSpaceStorageReader._full_expr(filter_)
         assert "ARRAY_CONTAINS(knowledge_ids, 11)" in expr
         assert "canonical_document_id in [10, 11]" in expr
+
+    def test_generation_constraints_are_pushed_to_both_backends(self):
+        constraint = CanonicalGenerationConstraint(
+            canonical_document_id=10,
+            canonical_version_id=100,
+            content_generation=4,
+            membership_generation=5,
+        )
+        filter_ = BackendQueryFilter(
+            tenant_id=1,
+            requested_space_ids=(11,),
+            routing_version=3,
+            generation_constraints=(constraint,),
+        )
+
+        expr = SharedSpaceStorageReader._full_expr(filter_)
+        es_filter = SharedSpaceStorageReader._es_bool_filter(filter_)
+
+        assert "content_generation == 4" in expr
+        assert "membership_generation == 5" in expr
+        generation_bool = es_filter[-1]["bool"]
+        assert generation_bool["minimum_should_match"] == 1
+        terms = generation_bool["should"][0]["bool"]["filter"]
+        assert {"term": {"metadata.content_generation": 4}} in terms
+        assert {"term": {"metadata.membership_generation": 5}} in terms
 
 
 class TestSchemaFingerprint:

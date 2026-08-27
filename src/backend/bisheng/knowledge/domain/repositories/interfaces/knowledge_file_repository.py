@@ -72,6 +72,15 @@ class KnowledgeFileRepository(BaseRepository[KnowledgeFile, int], ABC):
         """
         ...
 
+    async def find_active_entries_for_documents_any_space(
+        self,
+        *,
+        tenant_id: int,
+        document_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        """Active manager/publish/share entries across all spaces for generation checks."""
+        ...
+
     async def find_entry_in_space_for_update(
         self,
         document_id: int,

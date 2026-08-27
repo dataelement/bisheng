@@ -1149,6 +1149,8 @@ def build_shared_space_components_for_tenant(
 _READER_OUTPUT_FIELDS = [
     "canonical_document_id",
     "canonical_version_id",
+    "content_generation",
+    "membership_generation",
     "chunk_index",
     "text",
 ]
@@ -1225,6 +1227,16 @@ class SharedSpaceStorageReader:
         if filter_.canonical_version_ids:
             ids = ", ".join(str(int(v)) for v in filter_.canonical_version_ids)
             expr += f" and canonical_version_id in [{ids}]"
+        if filter_.generation_constraints:
+            generation_expr = " or ".join(
+                "(canonical_document_id == "
+                f"{int(item.canonical_document_id)} and canonical_version_id == "
+                f"{int(item.canonical_version_id)} and content_generation == "
+                f"{int(item.content_generation)} and membership_generation == "
+                f"{int(item.membership_generation)})"
+                for item in filter_.generation_constraints
+            )
+            expr += f" and ({generation_expr})"
         return expr
 
     @staticmethod
@@ -1250,6 +1262,51 @@ class SharedSpaceStorageReader:
                     }
                 }
             )
+        if filter_.generation_constraints:
+            clauses.append(
+                {
+                    "bool": {
+                        "minimum_should_match": 1,
+                        "should": [
+                            {
+                                "bool": {
+                                    "filter": [
+                                        {
+                                            "term": {
+                                                "metadata.canonical_document_id": int(
+                                                    item.canonical_document_id
+                                                )
+                                            }
+                                        },
+                                        {
+                                            "term": {
+                                                "metadata.canonical_version_id": int(
+                                                    item.canonical_version_id
+                                                )
+                                            }
+                                        },
+                                        {
+                                            "term": {
+                                                "metadata.content_generation": int(
+                                                    item.content_generation
+                                                )
+                                            }
+                                        },
+                                        {
+                                            "term": {
+                                                "metadata.membership_generation": int(
+                                                    item.membership_generation
+                                                )
+                                            }
+                                        },
+                                    ]
+                                }
+                            }
+                            for item in filter_.generation_constraints
+                        ],
+                    }
+                }
+            )
         return clauses
 
     @staticmethod
@@ -1257,7 +1314,11 @@ class SharedSpaceStorageReader:
         hits: list[CanonicalChunkHit] = []
         for row in rows:
             entity = getattr(row, "entity", row)
-            get = entity.get if hasattr(entity, "get") else (lambda k, d=None: getattr(entity, k, d))
+            get = (
+                entity.get
+                if hasattr(entity, "get")
+                else (lambda key, default=None, item=entity: getattr(item, key, default))
+            )
             hits.append(
                 CanonicalChunkHit(
                     canonical_document_id=CanonicalDocumentId(int(get("canonical_document_id"))),
@@ -1265,6 +1326,8 @@ class SharedSpaceStorageReader:
                     chunk_index=int(get("chunk_index", 0) or 0),
                     score=float(getattr(row, "distance", getattr(row, "score", 0.0)) or 0.0),
                     text=get("text"),
+                    content_generation=int(get("content_generation", 0) or 0),
+                    membership_generation=int(get("membership_generation", 0) or 0),
                 )
             )
         return hits
@@ -1309,7 +1372,14 @@ class SharedSpaceStorageReader:
                     "filter": self._es_bool_filter(filter_),
                 }
             },
-            "_source": ["metadata.canonical_document_id", "metadata.canonical_version_id", "metadata.chunk_index", "text"],
+            "_source": [
+                "metadata.canonical_document_id",
+                "metadata.canonical_version_id",
+                "metadata.content_generation",
+                "metadata.membership_generation",
+                "metadata.chunk_index",
+                "text",
+            ],
         }
         kwargs: dict[str, Any] = {"index": snapshot.index_name or shared_index_name(self.tenant_id), "body": body}
         if (
@@ -1336,6 +1406,8 @@ class SharedSpaceStorageReader:
                     chunk_index=int(metadata.get("chunk_index", 0) or 0),
                     score=float(row.get("_score", 0.0) or 0.0),
                     text=source.get("text"),
+                    content_generation=int(metadata.get("content_generation", 0) or 0),
+                    membership_generation=int(metadata.get("membership_generation", 0) or 0),
                 )
             )
         return hits

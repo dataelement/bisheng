@@ -394,6 +394,84 @@ async def test_query_chunks_skips_spaces_missing_file_filter_when_file_scope(mon
     embedding_factory.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_query_chunks_routes_shared_spaces_without_loading_legacy_rows(monkeypatch):
+    from bisheng.knowledge.domain.services.knowledge_space_chat_service import (
+        KnowledgeSpaceChatService,
+    )
+
+    class _SessionContext:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, *_args):
+            return False
+
+    legacy_loader = AsyncMock()
+    shared_retrieve = AsyncMock(
+        return_value=[
+            (
+                7101,
+                Document(
+                    page_content='共享库内容',
+                    metadata={
+                        'knowledge_id': 7101,
+                        'document_id': 9001,
+                        'score': 0.9,
+                    },
+                ),
+            )
+        ]
+    )
+    monkeypatch.setattr(
+        workstation_service.WorkStationService,
+        '_split_retrieval_knowledge_ids_by_type',
+        AsyncMock(return_value=([], [7101])),
+    )
+    monkeypatch.setattr(
+        workstation_service.WorkStationService,
+        '_load_retrieval_knowledge_rows',
+        legacy_loader,
+    )
+    monkeypatch.setattr(
+        workstation_service.WorkStationService,
+        '_rerank_retrieval_candidates',
+        AsyncMock(side_effect=lambda *, candidates, **_kwargs: candidates),
+    )
+    monkeypatch.setattr(
+        workstation_service,
+        'get_async_db_session',
+        lambda: _SessionContext(),
+    )
+    monkeypatch.setattr(
+        KnowledgeSpaceChatService,
+        '_is_shared_storage_active',
+        AsyncMock(return_value=True),
+    )
+    monkeypatch.setattr(
+        KnowledgeSpaceChatService,
+        'aretrieve_chunks',
+        shared_retrieve,
+    )
+
+    _formatted, docs, failures = await workstation_service.WorkStationService.queryChunksFromDB(
+        question='流程',
+        use_knowledge_param=UseKnowledgeBaseParam(knowledge_space_ids=[7101]),
+        max_token=15000,
+        login_user=_login_user(),
+        file_ids_by_space={7101: [9001]},
+        request=SimpleNamespace(),
+    )
+
+    assert failures == []
+    assert [doc.metadata['document_id'] for doc in docs] == [9001]
+    assert docs[0].metadata['retrieval_source'] == 'shared_space'
+    legacy_loader.assert_not_awaited()
+    assert shared_retrieve.await_args.kwargs['kb_filters'] == {
+        7101: {'file_ids': [9001]}
+    }
+
+
 def test_global_rrf_uses_chunk_identity_instead_of_page_content():
     kb1_vector = Document(
         page_content='相同正文',
