@@ -996,14 +996,14 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
     }, [files]);
 
     return (
-        <div className="relative max-w-full min-w-0 overflow-x-clip px-2" data-testid="portal-file-table">
-            {/* 横向滚动限制在容器内，不撑开整页；隐藏原生滚动条，由下方 sticky 滚动条代替 */}
+        <div className="relative flex min-w-0 max-w-full flex-1 flex-col overflow-hidden px-2" data-testid="portal-file-table">
+            {/* 表格主体区域：同时负责水平和垂直滚动；原生滚动条隐藏，由下方 sticky 滚动条代替 */}
             <div
                 ref={(el) => {
                     scrollRef.current = el;
                     hScrollRevealRef(el);
                 }}
-                className="max-w-full overflow-x-auto overflow-y-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="max-w-full flex-1 overflow-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden scrollbar-on-scroll"
             >
                 <table
                     className="w-full caption-bottom text-sm border-collapse"

@@ -216,7 +216,6 @@ export function KnowledgeSpaceContent({
     const localize = useLocalize();
     const isH5 = usePrefersMobileLayout();
     const fileListScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
-    const tableScrollRevealRef = useScrollRevealRef<HTMLDivElement>();
     const normalizeParentId = (id?: string | number | null) =>
         id === undefined || id === null || id === "" ? undefined : String(id);
     const isCurrentSpaceFile = (file: KnowledgeFile) =>
@@ -1823,9 +1822,8 @@ export function KnowledgeSpaceContent({
                             )}
                         </div>
                     ) : (
-                        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-4">
-                            <div ref={tableScrollRevealRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto scrollbar-on-scroll">
-                                <FileTable files={displayFiles}
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden pb-4">
+                            <FileTable files={displayFiles}
                                     selectedFiles={selectedFiles}
                                     handleSelectAll={handleSelectAll}
                                     handleSelectFile={handleSelectFile}
@@ -1876,13 +1874,13 @@ export function KnowledgeSpaceContent({
                                     encodingPrefix={encodingPrefix}
                                     onFileEncodingUpdated={handleFileEncodingUpdated}
                                 />
-                                {hasMore && (
-                                    <LoadMore
-                                        onLoad={() => onPageChange(currentPage + 1)}
-                                        loading={loading}
-                                    />
-                                )}
                             </div>
+                            {hasMore && (
+                                <LoadMore
+                                    onLoad={() => onPageChange(currentPage + 1)}
+                                    loading={loading}
+                                />
+                            )}
                         </div>
                     )}
                 </div>
