@@ -124,12 +124,13 @@ const COLUMN_CONFIG = {
     updater: { minWidth: 100, initialWidth: 140 },
     updateTime: { minWidth: 140, initialWidth: 180 },
     status: { minWidth: 120, initialWidth: 160 },
+    totalCount: { minWidth: 100, initialWidth: 120 },
 } as const;
 
 type ColumnKey = keyof typeof COLUMN_CONFIG;
 
 // 不参与拖拽调整的列
-const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox"];
+const NON_RESIZABLE_COLUMNS: ColumnKey[] = ["checkbox", "totalCount"];
 // 左侧固定列
 const STICKY_COLUMNS: ColumnKey[] = ["checkbox", "name"];
 
@@ -476,6 +477,7 @@ function FileTableHeader({
     onSelectAll,
     shougangEnabled,
     enableEncodingClassification,
+    totalFileCount,
 }: {
     columnWidths: Record<ColumnKey, number>;
     onResizeStart: (key: ColumnKey, e: React.MouseEvent) => void;
@@ -492,6 +494,7 @@ function FileTableHeader({
     onSelectAll: () => void;
     shougangEnabled: boolean;
     enableEncodingClassification: boolean;
+    totalFileCount: number;
 }) {
     const localize = useLocalize();
     const currentSort = { key: sortBy, direction: sortDirection };
@@ -501,7 +504,7 @@ function FileTableHeader({
     };
 
     return (
-        <TableHeader className="border-b border-[#e5e6eb] bg-[#F3F4F6]">
+        <TableHeader className="sticky top-0 z-10 border-b border-[#e5e6eb] bg-[#F3F4F6]">
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
@@ -691,6 +694,16 @@ function FileTableHeader({
                     headerAlignEnd
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
+
+                {/* 当前页文件总数统计（含子文件夹） */}
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 text-right font-normal text-[15px] text-[#545A60]"
+                    style={{ width: columnWidths.totalCount, minWidth: columnWidths.totalCount, maxWidth: columnWidths.totalCount }}
+                >
+                    <div className="flex h-full items-center justify-end border-l pl-3 pr-3">
+                        共计 {totalFileCount} 文件
+                    </div>
+                </TableHead>
 
                 {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
                 <TableHead
@@ -973,6 +986,14 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
 
     const isAllSelected = files.length > 0 && files.every((f) => selectedFiles.has(f.id));
     const isIndeterminate = !isAllSelected && files.some((f) => selectedFiles.has(f.id));
+    const totalFileCount = useMemo(() => {
+        return files.reduce((sum, file) => {
+            if (file.type === FileType.FOLDER) {
+                return sum + (file.fileNum ?? 0);
+            }
+            return sum + 1;
+        }, 0);
+    }, [files]);
 
     return (
         <div className="relative max-w-full min-w-0 overflow-x-clip px-2" data-testid="portal-file-table">
@@ -1008,6 +1029,7 @@ export function FileTable({ files, selectedFiles, handleSelectAll, handleSelectF
                         onSelectAll={() => handleSelectAll(isAllSelected)}
                         shougangEnabled={shougangEnabled}
                         enableEncodingClassification={showEncodingClassification}
+                        totalFileCount={totalFileCount}
                     />
                     <TableBody>
                         {files.map((file) => (
@@ -1901,6 +1923,13 @@ function FileRow({
                     {isFolder ? EMPTY_FIELD_PLACEHOLDER : getFileSizeDisplay(file.size)}
                 </span>
             </TableCell>
+
+            {/* 当前页文件总数占位列（与表头统计列对齐） */}
+            <TableCell
+                className={cn("py-3", rowBg)}
+                style={{ width: columnWidths.totalCount, minWidth: columnWidths.totalCount, maxWidth: columnWidths.totalCount }}
+            />
+
             {/* 行末锚点：固定在可视区最右侧，按钮距右侧 12px，不受横向滚动影响 */}
             <TableCell
                 className="sticky right-0 z-[34] overflow-visible border-none bg-transparent p-0"
