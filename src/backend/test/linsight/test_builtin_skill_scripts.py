@@ -28,6 +28,7 @@ the contract that matters.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import os
 import re
@@ -230,6 +231,27 @@ def _docx_helpers():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _style_profiles():
+    """Import the bundle's style_profiles by path, without polluting sys.path."""
+    source = BUILTIN_SKILLS_DIR / "bisheng-docx" / "scripts" / "style_profiles.py"
+    spec = importlib.util.spec_from_file_location("builtin_style_profiles", source)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _style_face(doc, style_name: str) -> str | None:
+    """The ``w:eastAsia`` face a style actually carries — the only field that
+    decides how a Chinese glyph renders."""
+    from docx.oxml.ns import qn
+
+    rpr = doc.styles[style_name].element.find(qn("w:rPr"))
+    if rpr is None:
+        return None
+    rfonts = rpr.find(qn("w:rFonts"))
+    return rfonts.get(qn("w:eastAsia")) if rfonts is not None else None
 
 
 def build_good_docx(path: Path) -> Path:
@@ -471,6 +493,162 @@ def test_docx_content_dump_prints_paragraphs_and_tables(samples):
     assert_mentions(out, "=== 内容 ===", "电力工程年度经营报告", "## 表 1")
 
 
+# --------------------------------------------------------------------------- #
+# docx · 版式档 (style profiles)
+# --------------------------------------------------------------------------- #
+def test_docx_defaults_to_the_gongwen_profile(tmp_path):
+    """Calling ``apply_chinese_defaults(doc)`` with no argument must produce a
+    GB/T 9704 document.
+
+    Two sessions shipped 公文 in 微软雅黑 because the helper hardcoded a corporate
+    face and the model, told by design-zh.md to avoid "exotic" fonts, went along
+    with it. The default is the whole fix — parameterising the helpers while
+    leaving 微软雅黑 as the default would have changed nothing.
+    """
+    helpers = _docx_helpers()
+    doc = Document()
+    helpers.apply_chinese_defaults(doc)
+    section = helpers.setup_page(doc)
+    path = tmp_path / "gongwen.docx"
+    doc.save(path)
+
+    saved = Document(path)
+    assert _style_face(saved, "Normal") == "仿宋_GB2312"
+    assert _style_face(saved, "Heading 1") == "黑体"
+    assert _style_face(saved, "Heading 2") == "楷体_GB2312"
+    # 三号 throughout; the standard separates levels by face, not by size
+    assert saved.styles["Normal"].font.size.pt == 16
+    assert saved.styles["Heading 1"].font.size.pt == 16
+    assert saved.styles["Heading 2"].font.size.pt == 16
+    # 版心: 37 / 35 / 28 / 26 mm
+    assert round(section.top_margin.cm, 2) == 3.7
+    assert round(section.left_margin.cm, 2) == 2.8
+
+
+def test_docx_modern_profile_restores_the_corporate_look(tmp_path):
+    """A CV or a marketing one-pager must still be able to opt out."""
+    helpers = _docx_helpers()
+    doc = Document()
+    helpers.apply_chinese_defaults(doc, profile="modern")
+    section = helpers.setup_page(doc)
+    path = tmp_path / "modern.docx"
+    doc.save(path)
+
+    saved = Document(path)
+    assert _style_face(saved, "Normal") == "微软雅黑"
+    assert saved.styles["Normal"].font.size.pt == 11
+    assert saved.styles["Heading 1"].font.size.pt == 20
+    assert round(section.top_margin.cm, 2) == 2.54
+
+
+def test_setup_page_before_apply_defaults_still_lands_on_profile_margins(tmp_path):
+    """SKILL.md's skeleton used to call ``setup_page`` first, and a model that
+    copies the old order must not end up with 公文 margins on a modern document.
+
+    ``apply_chinese_defaults`` therefore rewrites the margins of the sections
+    already laid out, rather than trusting the call order.
+    """
+    helpers = _docx_helpers()
+    doc = Document()
+    section = helpers.setup_page(doc)  # laid out under whatever profile was active
+    helpers.apply_chinese_defaults(doc, profile="modern")
+    path = tmp_path / "order.docx"
+    doc.save(path)
+
+    assert round(Document(path).sections[0].top_margin.cm, 2) == 2.54
+    assert round(section.left_margin.cm, 2) == 2.54
+
+
+def test_profile_overrides_replace_only_the_keys_given():
+    """The override dict is the seam an imported third-party 公文 skill hands its
+    unit template through, so it has to merge deeply — a caller naming one face
+    must not lose the size, leading and indent that came with the profile."""
+    profiles = _style_profiles()
+
+    merged = profiles.resolve_profile("gongwen", {"body": {"font": "华文中宋"}})
+    assert merged["body"]["font"] == "华文中宋"
+    assert merged["body"]["pt"] == 16  # untouched
+    assert merged["body"]["line_pt"] == 28  # untouched
+    assert merged["headings"][1]["font"] == "黑体"  # untouched
+
+    # A bare dict is read as overrides on the default (公文) profile.
+    bare = profiles.resolve_profile({"headings": {1: {"font": "方正小标宋简体"}}})
+    assert bare["headings"][1]["font"] == "方正小标宋简体"
+    assert bare["headings"][2]["font"] == "楷体_GB2312"
+    assert bare["body"]["font"] == "仿宋_GB2312"
+
+    # Resolving must not mutate the module-level profile.
+    assert profiles.GONGWEN["body"]["font"] == "仿宋_GB2312"
+
+
+def test_helpers_follow_the_active_profile_without_being_told(tmp_path):
+    """Passing the profile to every call is how a document ends up 90% right:
+    ``apply_chinese_defaults`` sets it once and the rest follow."""
+    helpers = _docx_helpers()
+    doc = Document()
+    helpers.apply_chinese_defaults(doc)
+    helpers.add_gongwen_title(doc, "关于××××的通知")
+    helpers.add_body(doc, "正文内容。")
+    helpers.add_heading_cn(doc, "一、总体情况", 1)
+    helpers.add_table(doc, ["列一", "列二"], [["甲", "乙"]])
+    path = tmp_path / "follow.docx"
+    doc.save(path)
+
+    from docx.oxml.ns import qn
+
+    faces = {
+        run._element.find(qn("w:rPr")).find(qn("w:rFonts")).get(qn("w:eastAsia"))
+        for paragraph in Document(path).paragraphs
+        for run in paragraph.runs
+        if run.text.strip()
+    }
+    assert faces == {"方正小标宋简体", "仿宋_GB2312", "黑体"}, faces
+
+
+def test_gongwen_document_built_with_generic_fonts_is_warned(tmp_path):
+    """Regression for the two shipped sessions: a document that is plainly an
+    official one, rendered in 微软雅黑, must be called out.
+
+    Detection keys off the 公文 *intent* (a 「关于××的通知」title, or any of the
+    four mandated faces appearing somewhere) rather than off the body face —
+    keying off the body face would make the check vanish exactly when the body
+    face is the thing that was replaced.
+    """
+    helpers = _docx_helpers()
+    doc = Document()
+    helpers.apply_chinese_defaults(doc, profile="modern")
+    helpers.add_gongwen_title(doc, "关于下发《电力行业映射表 V2.0》的通知")
+    helpers.add_body(doc, "各有关部门：", indent=False)
+    helpers.add_body(doc, "现将映射表予以印发，请遵照执行。")
+    path = tmp_path / "gongwen_in_yahei.docx"
+    doc.save(path)
+
+    out = run_script("bisheng-docx", "inspect_docx.py", path, "--check-only").stdout
+
+    assert_mentions(out, "按「公文」版式档校验", "看着是公文，却用到了通用字体", "微软雅黑")
+    # WARN, never ERROR: a unit template legitimately overrides the standard, and
+    # an unsatisfiable checker turns the model's repair loop into an infinite one.
+    assert PASS in out, out
+    assert "合计: 0 ERROR" in out
+
+
+def test_a_corporate_document_is_not_judged_as_gongwen(tmp_path):
+    """The 公文 detector must stay narrow — a weekly report in 微软雅黑 is fine."""
+    helpers = _docx_helpers()
+    doc = Document()
+    helpers.apply_chinese_defaults(doc, profile="modern")
+    helpers.add_heading_cn(doc, "本周工作进展", 1)
+    helpers.add_body(doc, "本周完成三项交付，下周进入联调。")
+    path = tmp_path / "weekly.docx"
+    doc.save(path)
+
+    out = run_script("bisheng-docx", "inspect_docx.py", path, "--check-only").stdout
+
+    assert "按「非公文」版式档校验" in out, out
+    assert "通用字体" not in out, out
+    assert PASS in out, out
+
+
 def test_docx_render_degrades_without_libreoffice(samples, no_soffice_path):
     out = run_script(
         "bisheng-docx",
@@ -586,6 +764,38 @@ def test_only_the_inspect_scripts_may_print_the_stop_string(script):
     printed = [line.strip() for line in source.splitlines() if "print(" in line and PASS in line]
 
     assert owner or not printed, f"{script} prints {PASS!r}, which only the inspect_* script may claim: {printed}"
+
+
+_CN_FACE_LITERAL = re.compile(r"微软雅黑|仿宋|小标宋|楷体|黑体|等线|宋体")
+_COMPAT_CONSTANTS = {"CN_FONT", "CN_FONT_SERIF", "CN_FONT_HEADING"}
+
+
+def test_docx_helpers_read_faces_from_the_profile_not_from_literals():
+    """Static half of the profile fix: no helper may name a Chinese face itself.
+
+    The original defect was exactly this — ``add_heading_cn`` wrote
+    ``CN_FONT_HEADING`` into the run, at the highest precedence there is, so a
+    build script could set every style correctly and still get 微软雅黑 headings.
+    The module-level compat constants may stay (build scripts reference them);
+    what may not come back is a *helper* reading one, or inlining a face name.
+    """
+    source = (BUILTIN_SKILLS_DIR / "bisheng-docx" / "scripts" / "docx_helpers.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in _COMPAT_CONSTANTS:
+            offenders.append(f"line {node.lineno}: reads {node.id}")
+
+    for func in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+        body = func.body[1:] if ast.get_docstring(func) else func.body
+        for statement in body:
+            for node in ast.walk(statement):
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    if _CN_FACE_LITERAL.search(node.value):
+                        offenders.append(f"line {node.lineno}: {func.name}() inlines {node.value!r}")
+
+    assert not offenders, "faces must come from style_profiles, not from docx_helpers: " + "; ".join(offenders)
 
 
 def test_warnings_alone_do_not_block_xlsx_delivery(tmp_path):

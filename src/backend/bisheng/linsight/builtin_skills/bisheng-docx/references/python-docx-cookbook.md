@@ -11,8 +11,10 @@ sys.path.insert(0, "skills/bisheng-docx/scripts")
 from docx_helpers import (
     setup_page, apply_chinese_defaults, set_run_font, add_heading_cn, add_body,
     add_table, add_toc, add_page_number_footer, add_hr, add_image_fitted,
-    set_cell_shading, content_width_cm, first_line_indent, CN_FONT,
+    set_cell_shading, content_width_cm, first_line_indent,
+    add_gongwen_title, add_signature_block,
 )
+from style_profiles import active_profile      # 需要取当前档的字体/字号时
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -21,8 +23,22 @@ os.makedirs("output", exist_ok=True)
 os.makedirs("scratch", exist_ok=True)
 
 doc = Document()
-section = setup_page(doc)          # A4 纵向，2.54cm 页边距
-apply_chinese_defaults(doc)        # ★ 必须调，见下
+apply_chinese_defaults(doc)        # ★ 必须调，且在 setup_page 之前：定档（默认公文）
+section = setup_page(doc)          # A4 纵向，页边距按档取
+```
+
+**版式档决定全篇字体字号**，`apply_chinese_defaults()` 定一次，下面所有 helper 自动跟随：
+
+```python
+apply_chinese_defaults(doc)                     # 公文档（默认）：三号仿宋_GB2312 / 黑体 / 楷体
+apply_chinese_defaults(doc, profile="modern")   # 简历、宣传稿：微软雅黑 11pt
+```
+
+要在片段里手工取当前档的取值（而不是写死字体名）：
+
+```python
+P = active_profile()
+body_font, body_pt = P["body"]["font"], P["body"]["pt"]
 ```
 
 ---
@@ -34,13 +50,14 @@ apply_chinese_defaults(doc)        # ★ 必须调，见下
 用户打开一看就是"字体乱了"。
 
 ```python
-set_run_font(run, "微软雅黑", size_pt=11, bold=True, color="1F1F1F")   # ✅ 三个都设
-run.font.name = "微软雅黑"                                             # ❌ 中文不生效
+set_run_font(run, "仿宋_GB2312", size_pt=16, bold=True)   # ✅ 三个字段一起设
+run.font.name = "仿宋_GB2312"                             # ❌ 中文不生效
 ```
 
-`apply_chinese_defaults(doc)` 会把 Normal 和 Heading 1–4 的 `w:eastAsia` 一次性设好
+`apply_chinese_defaults(doc)` 会按当前档把 Normal 和 Heading 1–4 的 `w:eastAsia` 一次性设好
 （顺带把 Word 内置 Heading 4 的**斜体**关掉 —— 不关的话四级标题会渲成斜体衬线）。
-之后用 `add_body` / `add_heading_cn` 写的内容就都是对的。
+之后用 `add_body` / `add_heading_cn` / `add_table` 写的内容就都是对的，
+**不必也不该逐处写死字体名** —— 写死就会在切档时留下几处漏网的。
 
 体检脚本会专门抓这条。
 
@@ -82,11 +99,12 @@ add_body(doc, "这段不缩进。", indent=False)
 手写段落时：
 
 ```python
+P = active_profile()["body"]
 p = doc.add_paragraph()
-set_run_font(p.add_run("加粗片段"), CN_FONT, 11, bold=True)
-set_run_font(p.add_run("，普通片段。"), CN_FONT, 11)
+set_run_font(p.add_run("加粗片段"), P["font"], P["pt"], bold=True)
+set_run_font(p.add_run("，普通片段。"), P["font"], P["pt"])
 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY        # 中文正文常用两端对齐
-first_line_indent(p, 2, 11)
+first_line_indent(p)                            # 缩进字数与字号都按当前档
 ```
 
 > **绝不要用 `\n`**。python-docx 不会把它变成换行，要么用多个 `Paragraph`，
@@ -186,7 +204,7 @@ new_section.page_width, new_section.page_height = section.page_height, section.p
 ```python
 header = section.header
 p = header.paragraphs[0]
-set_run_font(p.add_run("XX 公司 · 内部资料"), CN_FONT, 9, color="808080")
+set_run_font(p.add_run("XX 公司 · 内部资料"), active_profile()["caption"]["font"], 9, color="808080")
 p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 ```
 
