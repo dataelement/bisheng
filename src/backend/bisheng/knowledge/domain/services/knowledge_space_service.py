@@ -18204,6 +18204,132 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._mark_document_content_changed(notified_file)
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([int(file_record.id) for file_record in files])
 
+    async def batch_overwrite_file_tags(
+        self, space_id: int, file_ids: list[int], tag_ids: list[int], review_tag_ids: list[int]
+    ):
+        """批量编辑标签(覆盖模式): Replace each file's tag set with the given ids.
+
+        Mirrors batch_add_file_tags but calls the *update* (full-replace) DAO
+        methods instead of the increment-only ``add_tags`` ones, so each file's
+        tag set becomes exactly ``tag_ids``/``review_tag_ids`` — dropping tags
+        not in the new set. ``TagDao.aupdate_resource_tags`` /
+        ``ReviewTagDao.aupdate_resource_tags`` already delete orphaned review
+        tags left with no remaining source file, so no extra cleanup is needed
+        here.
+        """
+        await self._require_read_permission(space_id)
+        if not file_ids:
+            return
+
+        files = await self._get_space_files_or_raise(space_id, file_ids)
+        before_tags_by_file = await self._load_file_tags_batch([int(file_record.id) for file_record in files])
+
+        resource_type = ResourceTypeEnum.SPACE_FILE
+        tenant_id = int(self.login_user.tenant_id)
+        normalized_tag_ids, normalized_review_tag_ids = await self._partition_file_tag_ids_for_update(
+            tag_ids, review_tag_ids
+        )
+        normalized_tag_ids, normalized_review_tag_ids = await self._promote_review_tags_existing_in_libraries(
+            normalized_tag_ids, normalized_review_tag_ids
+        )
+        if normalized_review_tag_ids:
+            await self._require_review_tag_feature_enabled()
+
+        resolved_by_file_id = {}
+        for file_record in files:
+            resolved = await self._require_file_metadata_edit_permission(file_record)
+            resolved_by_file_id[int(file_record.id)] = resolved
+
+        for file_record in files:
+            resource_id = str(file_record.id)
+            await TagDao.aupdate_resource_tags(normalized_tag_ids, resource_id, resource_type, self.login_user.user_id)
+            await ReviewTagDao.aupdate_resource_tags(
+                normalized_review_tag_ids,
+                resource_id,
+                resource_type,
+                self.login_user.user_id,
+                tenant_id=tenant_id,
+            )
+
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        after_tags_by_file = await self._load_file_tags_batch([int(file_record.id) for file_record in files])
+        for notified_file in files:
+            notified_file_id = int(notified_file.id)
+            await self._notify_favorite_source_changed(
+                source_space_id=space_id,
+                source_file_id=notified_file_id,
+                file_name=notified_file.file_name,
+                action_code=FAVORITE_SOURCE_TAGS_UPDATED,
+                before_value=[str(item.get("name") or "") for item in before_tags_by_file.get(notified_file_id, [])],
+                after_value=[str(item.get("name") or "") for item in after_tags_by_file.get(notified_file_id, [])],
+            )
+            if resolved_by_file_id[notified_file_id] is not None:
+                await self._mark_document_content_changed(notified_file)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([int(file_record.id) for file_record in files])
+
+    async def batch_update_file_encoding_fields(
+        self,
+        space_id: int,
+        file_ids: list[int],
+        *,
+        file_category_code: str | None = None,
+        file_subcategory_code: str | None = None,
+        business_domain_code: str | None = None,
+    ) -> dict[str, list]:
+        """批量修改文件分类/业务域: batch-update the encoding segments shared by
+        the "modify classification" and "modify business domain" batch actions.
+
+        ``file_encoding`` has no standalone business-domain/category columns —
+        category and business domain are the 2nd/3rd segments of the composed
+        ``{prefix}-{category}-{domain}-{yyyymm}{seq}`` string. Each file keeps
+        its own prefix/year-month/seq segment; only the segment(s) the caller
+        passes get replaced, then the whole thing is routed through the
+        existing single-file ``update_file_encoding`` so permission checks,
+        business-domain whitelist validation, split_rule sync, document-
+        distribution metadata sync, favorite notifications and recommendation-
+        refresh enqueueing all stay identical to editing one file at a time.
+
+        Files whose current ``file_encoding`` can't be parsed (e.g. not yet
+        classified at upload time) are skipped rather than failing the whole
+        batch; they come back in ``skipped`` with a reason.
+        """
+        await self._require_read_permission(space_id)
+        result: dict[str, list] = {"updated_file_ids": [], "skipped": []}
+        if not file_ids:
+            return result
+        if file_category_code is None and file_subcategory_code is None and business_domain_code is None:
+            return result
+
+        files = await self._get_space_files_or_raise(space_id, file_ids)
+
+        normalized_category = (
+            self.normalize_file_category_code(file_category_code) if file_category_code is not None else None
+        )
+        normalized_domain = (
+            self._normalize_shougang_portal_business_domain_code(business_domain_code)
+            if business_domain_code is not None
+            else None
+        )
+        if business_domain_code is not None:
+            db_knowledge = await KnowledgeDao.aquery_by_id(space_id)
+            self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_domain)
+
+        for file_record in files:
+            parsed = self._parse_shougang_file_encoding_parts(file_record.file_encoding or "")
+            if parsed is None:
+                result["skipped"].append(
+                    {"file_id": int(file_record.id), "reason": "file_encoding_unparseable_or_missing"}
+                )
+                continue
+            prefix, current_category, current_domain, year_month, seq = parsed
+            new_category = normalized_category if file_category_code is not None else current_category
+            new_domain = normalized_domain if business_domain_code is not None else current_domain
+            new_encoding = self._compose_shougang_file_encoding(prefix, new_category, new_domain, year_month, seq)
+            await self.update_file_encoding(int(file_record.id), new_encoding, file_subcategory_code)
+            result["updated_file_ids"].append(int(file_record.id))
+
+        return result
+
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """
         Retry logic for multiple files in a knowledge space with potentially new split rules.
