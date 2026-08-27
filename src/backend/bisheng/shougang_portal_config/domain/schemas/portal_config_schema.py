@@ -392,6 +392,7 @@ class PortalDisplayHomeConfig(BaseModel):
     apps_count: int = 6
     expert_qa_count: int = 8
     course_count: int = 6
+    banner_interval_seconds: int = Field(default=5, ge=3, le=10, strict=True)
 
 
 class PortalDisplayListConfig(BaseModel):
