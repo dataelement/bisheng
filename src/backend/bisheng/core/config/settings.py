@@ -158,6 +158,15 @@ class WorkflowConf(BaseModel):
 
     max_steps: int = Field(default=50, description="Maximum number of steps a node can run")
     timeout: int = Field(default=720, description="Node timeout (min)")
+    auto_rerun_on_open: bool = Field(
+        default=False,
+        description="Auto rerun an already-ended standalone workflow conversation when opened",
+    )
+
+    @field_validator("auto_rerun_on_open", mode="before")
+    @classmethod
+    def validate_auto_rerun_on_open(cls, value: object) -> bool:
+        return value if isinstance(value, bool) else False
 
 
 class CeleryConf(BaseModel):
