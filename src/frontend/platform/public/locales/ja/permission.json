@@ -213,6 +213,7 @@
     "shared": "共有元",
     "system": "システム元",
     "includeChildren": "サブ部門を含む",
+    "userGroupAdmin": "ユーザーグループ管理者",
     "snapshot_from_parent": "継承時にコピー",
     "space_membership": "スペースメンバー",
     "channel_membership": "チャンネルメンバー",
