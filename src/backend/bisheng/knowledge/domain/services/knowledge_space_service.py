@@ -54,6 +54,7 @@ from bisheng.common.errcode.knowledge_space import (
     KnowledgeDocumentStateConflictError,
     PersonalSpaceProtectedError,
     PortalShareDownloadGrantInvalidError,
+    ReviewTagFeatureDisabledError,
     SpaceBusinessDomainCodeInvalidError,
     SpaceCreateDepartmentDeniedError,
     SpaceCreatePublicDeniedError,
@@ -158,14 +159,14 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.models.knowledge_space_file import SpaceFileDao
-from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
-    KnowledgeSpaceSharedStorageRoutingDao,
-)
 from bisheng.knowledge.domain.models.knowledge_space_scope import (
     KnowledgeSpaceLevelEnum,
     KnowledgeSpaceOwnerTypeEnum,
     KnowledgeSpaceScope,
     KnowledgeSpaceScopeDao,
+)
+from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
+    KnowledgeSpaceSharedStorageRoutingDao,
 )
 from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
     KnowledgeSpaceTagLibraryDao,
@@ -249,6 +250,11 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     UploadFolderRecommendationResp,
     UploadFolderRecommendFileReq,
 )
+from bisheng.knowledge.domain.services.clinic_department_bind import (
+    CLINIC_BIND_DENIED_MSG,
+    filter_clinic_bind_tree_departments,
+    is_clinic_bindable_department,
+)
 from bisheng.knowledge.domain.services.department_file_view_access_service import (
     DepartmentFileAccessDecision,
     DepartmentFileAccessSource,
@@ -280,7 +286,6 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
     DEFAULT_TAG_LIBRARY_NAME,
     KnowledgeSpaceTagLibraryService,
 )
-from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.domain.services.portal_recommendation_behavior_service import (
     PortalRecommendationBehaviorService,
@@ -311,6 +316,7 @@ from bisheng.knowledge.domain.upload_extensions import (
     UnsupportedUploadFileExtensionError,
     validate_knowledge_upload_file_extension,
 )
+from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
 from bisheng.llm.domain import LLMService
 from bisheng.message.domain.services.notification_content import build_notify_content
 from bisheng.permission.domain.knowledge_space_permission_template import (
@@ -640,6 +646,7 @@ async def _require_not_write_frozen(tenant_id: int) -> None:
         SharedStorageContractError,
         SharedStorageErrorCode,
     )
+
     conf = get_shared_storage_conf()
     if not conf.migration_write_block_enabled:
         return
@@ -960,9 +967,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> list[KnowledgeFile]:
         if folder is None:
             async with get_async_db_session() as session:
-                result = await session.exec(
-                    select(KnowledgeFile).where(KnowledgeFile.knowledge_id == space_id)
-                )
+                result = await session.exec(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == space_id))
                 return list(result.all())
         prefix = f"{folder.file_level_path}/{folder.id}"
         return await SpaceFileDao.get_children_by_prefix(space_id, prefix)
@@ -1002,16 +1007,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
         children = await self._container_children(space_id=space_id, folder=folder)
         distribution, ordinary = self._split_distribution_entries(children)
 
-        soft_link_count = sum(
-            1
-            for item in distribution
-            if item.entry_type == KnowledgeFileEntryType.PUBLISH.value
-        )
-        share_count = sum(
-            1
-            for item in distribution
-            if item.entry_type == KnowledgeFileEntryType.SHARE.value
-        )
+        soft_link_count = sum(1 for item in distribution if item.entry_type == KnowledgeFileEntryType.PUBLISH.value)
+        share_count = sum(1 for item in distribution if item.entry_type == KnowledgeFileEntryType.SHARE.value)
         managers = [
             item
             for item in distribution
@@ -1044,9 +1041,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             "permanent_delete_count": permanent_count,
             "soft_link_count": soft_link_count,
             "share_count": share_count,
-            "recyclable_count": sum(
-                1 for item in ordinary if item.file_type != FileType.DIR.value
-            ),
+            "recyclable_count": sum(1 for item in ordinary if item.file_type != FileType.DIR.value),
             "irreversible": bool(distribution),
             "rollback_samples": [
                 {"file_id": int(item.id), "file_name": str(item.file_name or "")}
@@ -1978,6 +1973,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "parent_id": int(dept.parent_id) if getattr(dept, "parent_id", None) is not None else None,
                 "member_count": count_map.get(int(dept.id), 0),
                 "sort_order": int(getattr(dept, "sort_order", 0) or 0),
+                "org_level": str(getattr(dept, "org_level", None) or "") or None,
                 "children": [],
             }
         roots: list[dict] = []
@@ -2032,25 +2028,70 @@ class KnowledgeSpaceService(KnowledgeUtils):
             bound -= only_excluded
         return bound
 
+    async def _clinic_visible_departments(self) -> list[Any]:
+        """科室库下拉的可见组织: 超管看租户全部活跃节点; 其他人只看部门管理员授权子树并集.
+
+        不含挂载部门. 授权在班组上时子树里没有 office, 裁剪后为空.
+        """
+        all_departments = await DepartmentDao.aget_active_by_tenant(int(self.login_user.tenant_id))
+        if self.login_user.is_admin():
+            return all_departments
+
+        grant_ids = {
+            int(department_id)
+            for department_id in await DepartmentAdminGrantDao.aget_department_ids_by_user_id(self.login_user.user_id)
+        }
+        if not grant_ids:
+            return []
+
+        visible_root_paths = {
+            dept.path for dept in all_departments if int(dept.id) in grant_ids and getattr(dept, "path", None)
+        }
+        if not visible_root_paths:
+            return []
+        return [
+            dept
+            for dept in all_departments
+            if getattr(dept, "path", None) and any(dept.path.startswith(path) for path in visible_root_paths)
+        ]
+
+    async def _can_bind_clinic_department(self, department_id: int) -> bool:
+        """创建/更绑科室库时, 目标必须是授权子树内的 office."""
+        dept = await DepartmentDao.aget_by_id(int(department_id))
+        if dept is None or getattr(dept, "status", "active") != "active":
+            return False
+        if int(getattr(dept, "is_deleted", 0) or 0) == 1:
+            return False
+        if not is_clinic_bindable_department(dept):
+            return False
+        if self.login_user.is_admin():
+            return True
+        visible = await self._clinic_visible_departments()
+        return any(int(getattr(row, "id", None) or 0) == int(department_id) for row in visible)
+
     async def get_my_department_tree_for_create(
         self,
         *,
         exclude_space_id: int | None = None,
     ) -> dict[str, Any]:
-        """Return the current user's organization departments and their subordinates,
-        with IDs of departments already bound to other knowledge spaces.
+        """科室库绑定下拉: 部门管理员授权子树并集, 展示最多到 office.
 
-        Global admins see every active department in the tenant; other users only
-        see the departments they belong to plus their descendants.
+        超管看租户全部活跃组织后再裁剪. 已绑定 ID 只返回树上的 office,
+        公司/部门即使已绑知识库也不标已绑定.
         """
-        departments = await self._visible_departments_for_create()
+        departments = filter_clinic_bind_tree_departments(await self._clinic_visible_departments())
         tree = await self._build_department_tree(departments)
 
-        filtered_ids = {int(dept.id) for dept in departments if getattr(dept, "id", None) is not None}
+        office_ids = {
+            int(dept.id)
+            for dept in departments
+            if getattr(dept, "id", None) is not None and is_clinic_bindable_department(dept)
+        }
         bound_ids = await self._bound_department_ids(
-            filtered_ids,
+            office_ids,
             exclude_space_id=exclude_space_id,
         )
+        bound_ids &= office_ids
 
         return {"data": tree, "bound_department_ids": sorted(bound_ids)}
 
@@ -2097,8 +2138,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
             dept = await DepartmentDao.aget_by_id(int(department_id))
             if dept is None or getattr(dept, "status", "active") != "active":
                 raise SpaceInvalidScopeOwnerError(msg="Department does not exist or is archived")
-            if not await self._can_bind_department_on_create(int(department_id)):
-                raise SpaceCreateDepartmentDeniedError()
+            if not await self._can_bind_clinic_department(int(department_id)):
+                raise SpaceCreateDepartmentDeniedError(msg=CLINIC_BIND_DENIED_MSG)
             return KnowledgeSpaceLevelEnum.TEAM_KS, KnowledgeSpaceOwnerTypeEnum.USER, int(self.login_user.user_id)
 
         if level == KnowledgeSpaceLevelEnum.PUBLIC:
@@ -3971,10 +4012,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """
         from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
 
-        if resolve_space_shared_routing(
-            int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID),
-            space.type,
-        ) is None:
+        if (
+            resolve_space_shared_routing(
+                int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID),
+                space.type,
+            )
+            is None
+        ):
             return  # Legacy per-space storage: no shared-store manager protection
 
         # Query active MANAGER entries in this space.
@@ -5822,10 +5866,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "discovery_snapshot": discovery.snapshot if discovery else "",
             }
 
-        if (
-            req.query_type == "browse"
-            and self._normalize_shougang_document_type_code(req.document_type)
-        ):
+        if req.query_type == "browse" and self._normalize_shougang_document_type_code(req.document_type):
             # 与列表一致：document_type 浏览走 ES 全文，不能用 MySQL file_encoding LIKE 计数。
             browse_payload = req.model_dump(
                 exclude={
@@ -5862,9 +5903,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not result.get("has_more") or not next_cursor:
                     break
                 if next_cursor in seen_cursors:
-                    logger.warning(
-                        "portal document_type browse count stopped on repeated cursor"
-                    )
+                    logger.warning("portal document_type browse count stopped on repeated cursor")
                     break
                 seen_cursors.add(next_cursor)
                 browse_payload["cursor"] = next_cursor
@@ -6046,17 +6085,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         sections: dict[str, list[dict]] = {section.tag: [] for section in req.sections}
         hot_read_item_cache: dict[int, list[ShougangPortalFileItemResp]] = {}
-        section_page_size = 6
-        if section.page_size < 1:
-            config = await ShougangPortalConfigService.get_config()
-            if config:
-                section_page_size = config.portal.display.home.section_page_size or 6
-        else:
-            section_page_size = section.page_size
+        # 每个 latest_selected 区块用自己的 page_size; <1 时回落门户配置. 循环外没有 section.
+        fallback_page_size: int | None = None
         for section in req.sections:
             if not self._is_shougang_portal_latest_selected_home_section(section):
                 continue
-            page_size = min(max(section_page_size, 1), 100)
+            page_size = int(section.page_size or 0)
+            if page_size < 1:
+                if fallback_page_size is None:
+                    config = await ShougangPortalConfigService.get_config()
+                    fallback_page_size = 6
+                    if config:
+                        fallback_page_size = config.portal.display.home.section_page_size or 6
+                page_size = fallback_page_size
+            page_size = min(max(page_size, 1), 100)
             if page_size not in hot_read_item_cache:
                 hot_read_item_cache[page_size] = await self._get_shougang_portal_hot_read_file_items(
                     spaces=spaces,
@@ -11821,9 +11863,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        await _require_not_write_frozen(
-            int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID))
         if not force:
             if getattr(space, "is_favorite", False):
                 raise FavoriteSpaceProtectedError()
@@ -11831,6 +11871,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
                 raise PersonalSpaceProtectedError()
             await self._require_permission_id("knowledge_space", space_id, "delete_space")
+            # B5.2: tenant-routed shared-storage SPACE must not be deleted while
+            # it holds active MANAGER entries that are the canonical content
+            # owner for documents distributed to other spaces. Deleting the
+            # manager would orphan the shared-store content projection (risk R7:
+            # shared store lifecycle is not per-space).
+            #
+            # Checked here rather than after the free-space branch below: that
+            # branch hands the delete to a Celery task and returns, so the caller
+            # was told the delete succeeded and only found out otherwise when the
+            # space reappeared in the list. One indexed LIMIT 1 up front buys an
+            # honest error instead.
+            await self._require_no_active_shared_managers(space)
             if migrate_free_space:
                 decision = await FreeSpaceMigrationService.pre_delete_guard(space)
                 if decision.action == "block":
@@ -11865,13 +11917,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
         original_member_ids = [member.user_id for member in original_members]
 
         if not force:
-            # B5.2: tenant-routed shared-storage SPACE must not be deleted
-            # while it holds active MANAGER entries that are the canonical
-            # content owner for documents distributed to other spaces.
-            # Deleting the manager would orphan the shared-store content
-            # projection (risk R7: shared store lifecycle is not per-space).
-            await self._require_no_active_shared_managers(space)
-
             if self.knowledge_space_retirement_service is None:
                 raise KnowledgeDocumentStateConflictError(msg="知识库退役服务不可用")
             await self.knowledge_space_retirement_service.retire(
@@ -12173,9 +12218,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space or space.type != KnowledgeTypeEnum.SPACE.value:
             raise SpaceNotFoundError()
-        await _require_not_write_frozen(
-            int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID))
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
 
@@ -12227,9 +12270,11 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 # the binding department can be changed by admins or department
                 # admins within their visible scope.
                 is_clinic_rebind = True
-                if not await self._can_bind_department_on_create(int(department_id)):
-                    raise SpaceCreateDepartmentDeniedError()
                 old_department_id = int(clinic_binding.department_id)
+                if int(department_id) != old_department_id and not await self._can_bind_clinic_department(
+                    int(department_id)
+                ):
+                    raise SpaceCreateDepartmentDeniedError(msg=CLINIC_BIND_DENIED_MSG)
                 old_department = (
                     target_department
                     if old_department_id == int(department_id)
@@ -15260,9 +15305,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise SpaceNotFoundError()
-        await _require_not_write_frozen(
-            int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID))
         if parent_id:
             await self._require_permission_id("folder", parent_id, "create_folder", space_id=knowledge_id)
         else:
@@ -15361,9 +15404,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         if not folder or folder.file_type != 0:
             raise SpaceFolderNotFoundError()
         folder = self._ensure_space_folder(folder, folder.knowledge_id)
-        await _require_not_write_frozen(
-            int(getattr(folder, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(folder, "tenant_id", None) or DEFAULT_TENANT_ID))
         await self._require_permission_id("folder", folder_id, "rename_folder", space_id=folder.knowledge_id)
         self._check_name_sensitive_words(new_name)
 
@@ -15397,9 +15438,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         space = await KnowledgeDao.aquery_by_id(space_id)
         if not space:
             raise SpaceNotFoundError()
-        await _require_not_write_frozen(
-            int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID))
         self._ensure_space_async_task_tenant_consistency(space, "delete_folder")
         folder_name = str(getattr(folder, "file_name", None) or folder_id)
 
@@ -15421,9 +15460,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         delete_plan = await self._plan_cascade_version_links_on_delete(file_ids)
         favorite_delete_events = await self._prepare_favorite_delete_events(
             delete_plan.expanded_file_ids,
-            source_files=[
-                child for child in ordinary_children if child.file_type != FileType.DIR.value
-            ],
+            source_files=[child for child in ordinary_children if child.file_type != FileType.DIR.value],
         )
         await self._apply_cascade_version_delete_plan(delete_plan)
         expanded_file_ids = delete_plan.expanded_file_ids
@@ -15843,9 +15880,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> KnowledgeSpaceFileResponse:
         file_record = await KnowledgeFileDao.query_by_id(file_id)
         file_record = self._ensure_space_file(file_record, space_id)
-        await _require_not_write_frozen(
-            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID))
         resolved = await self._resolve_document_entry(
             file_record,
             required_capability="can_move",
@@ -15948,9 +15983,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         """Move a folder (and all its descendants) to a new location within the same space."""
         folder = await KnowledgeFileDao.query_by_id(folder_id)
         folder = self._ensure_space_folder(folder, space_id)
-        await _require_not_write_frozen(
-            int(getattr(folder, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(folder, "tenant_id", None) or DEFAULT_TENANT_ID))
         await self._require_permission_id("folder", folder_id, "rename_file", space_id=space_id)
 
         old_folder_path = folder.file_level_path or ""
@@ -16476,7 +16509,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         # F4: shared-storage write-freeze guard — prevent new uploads during
         # tenant migration into the shared store (spec 7.4 / risk R17).
-        await _require_not_write_frozen(int(getattr(db_knowledge, 'tenant_id', None) or DEFAULT_TENANT_ID))
+        await _require_not_write_frozen(int(getattr(db_knowledge, "tenant_id", None) or DEFAULT_TENANT_ID))
 
         level = 0
         file_level_path = ""
@@ -16752,9 +16785,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         file_record = await self._get_file_for_action(file_id)
-        await _require_not_write_frozen(
-            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID))
         resolved = await self._require_document_content_manager(file_record)
         if resolved is None:
             await self._require_permission_id(
@@ -17167,9 +17198,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         encoding segments so list APIs and reparses keep the edited selection.
         """
         file_record = await self._get_file_for_action(file_id)
-        await _require_not_write_frozen(
-            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID))
         resolved = await self._require_file_metadata_edit_permission(file_record)
 
         cleaned = encoding.strip()
@@ -17487,9 +17516,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
     async def delete_file(self, file_id: int):
         file_record = await self._get_file_for_action(file_id)
-        await _require_not_write_frozen(
-            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID))
         await self._require_permission_id("knowledge_file", file_id, "delete_file", space_id=file_record.knowledge_id)
         space = await KnowledgeDao.aquery_by_id(file_record.knowledge_id)
         if not space:
@@ -18077,9 +18104,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def update_file_tags(self, space_id: int, file_id: int, tag_ids: list[int], review_tag_ids: list[int]):
         """2：支持对单文件的标签管理: Overwrite tags for a single file."""
         file_record = await self._get_file_for_action(file_id, space_id=space_id)
-        await _require_not_write_frozen(
-            int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(file_record, "tenant_id", None) or DEFAULT_TENANT_ID))
         before_tags = [
             str(item.get("name") or "") for item in (await self._load_file_tags_batch([file_id])).get(file_id, [])
         ]
@@ -18391,9 +18416,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         knowledge = await KnowledgeDao.aquery_by_id(knowledge_id)
         if not knowledge:
             raise SpaceNotFoundError()
-        await _require_not_write_frozen(
-            int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID)
-        )
+        await _require_not_write_frozen(int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID))
 
         await self._require_read_permission(knowledge_id)
         self._ensure_space_async_task_tenant_consistency(knowledge, "batch_delete")
@@ -18456,9 +18479,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             descendant_file_ids.extend(
                 int(child.id) for child in nested_ordinary if child.file_type != FileType.DIR.value
             )
-            descendant_files.extend(
-                child for child in nested_ordinary if child.file_type != FileType.DIR.value
-            )
+            descendant_files.extend(child for child in nested_ordinary if child.file_type != FileType.DIR.value)
 
         direct_file_ids = [int(file.id) for file in ordinary_files]
         planned_file_ids = self._dedupe_ids([*direct_file_ids, *descendant_file_ids])
@@ -18479,9 +18500,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
 
         await self._apply_cascade_version_delete_plan(delete_plan)
-        distribution_files.sort(
-            key=lambda item: item.entry_type == KnowledgeFileEntryType.MANAGER.value
-        )
+        distribution_files.sort(key=lambda item: item.entry_type == KnowledgeFileEntryType.MANAGER.value)
         for file_record in distribution_files:
             await self._handle_distribution_file_delete(file_record)
 

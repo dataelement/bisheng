@@ -98,6 +98,8 @@ interface KnowledgeSpaceHeaderProps {
     onProcessSimilar?: () => void;
     /** Mirrors member-management gating: creators + members with manage_space_relation. */
     canManageMembers?: boolean;
+    /** 当前页文件总数（含子文件夹内文件数） */
+    totalFileCount?: number;
 }
 
 export function KnowledgeSpaceHeader({
@@ -150,6 +152,7 @@ export function KnowledgeSpaceHeader({
     pendingSimilarCount = 0,
     onProcessSimilar,
     canManageMembers = false,
+    totalFileCount = 0,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isNarrow576 = useMediaQuery("(max-width: 576px)");
@@ -313,6 +316,12 @@ export function KnowledgeSpaceHeader({
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+            )}
+
+            {showViewModeTabs && (
+                <span className="ml-2 text-sm text-[#86909c]">
+                    共计 {totalFileCount} 文件
+                </span>
             )}
         </div>
     );

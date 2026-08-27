@@ -18,6 +18,7 @@ def _department(
     path: str = "",
     sort_order: int = 0,
     dept_external_id: str = "",
+    org_level: str | None = None,
 ):
     return SimpleNamespace(
         id=dept_id,
@@ -27,11 +28,9 @@ def _department(
         path=path or f"/{dept_id}/",
         sort_order=sort_order,
         status="active",
+        org_level=org_level,
+        short_name=None,
     )
-
-
-def _user_department(department_id: int):
-    return SimpleNamespace(department_id=department_id)
 
 
 def _binding(department_id: int, space_id: int):
@@ -62,15 +61,36 @@ def mock_department_admin_grants():
         yield
 
 
+def _tree_ids(nodes: list) -> set[int]:
+    ids: set[int] = set()
+    for node in nodes:
+        ids.add(int(node["id"]))
+        ids |= _tree_ids(node.get("children") or [])
+    return ids
+
+
+def _find_node(nodes: list, dept_id: int):
+    for node in nodes:
+        if int(node["id"]) == dept_id:
+            return node
+        found = _find_node(node.get("children") or [], dept_id)
+        if found is not None:
+            return found
+    return None
+
+
 @pytest.mark.asyncio
-async def test_admin_sees_all_departments(mock_session) -> None:
+async def test_admin_tree_truncates_at_office_and_drops_unlabeled(mock_session) -> None:
     login_user = _login_user(is_admin=True)
     svc = KnowledgeSpaceService(request=None, login_user=login_user)
 
     departments = [
-        _department(1, name="研发部", path="/1/"),
-        _department(2, name="前端组", parent_id=1, path="/1/2/"),
-        _department(3, name="市场部", path="/3/"),
+        _department(1, name="公司", path="/1/", org_level="company"),
+        _department(2, name="炼铁部", parent_id=1, path="/1/2/", org_level="dept"),
+        _department(3, name="炼铁作业区", parent_id=2, path="/1/2/3/", org_level="office"),
+        _department(4, name="班组", parent_id=3, path="/1/2/3/4/", org_level="squad"),
+        _department(5, name="未打标", parent_id=2, path="/1/2/5/", org_level=None),
+        _department(6, name="市场部", path="/6/", org_level="dept"),
     ]
 
     with (
@@ -95,20 +115,21 @@ async def test_admin_sees_all_departments(mock_session) -> None:
 
     mock_user_depts.assert_not_awaited()
     assert result["bound_department_ids"] == []
-    assert len(result["data"]) == 2
-    ids = {node["id"] for node in result["data"]}
-    assert ids == {1, 3}
+    assert _tree_ids(result["data"]) == {1, 2, 3, 6}
+    office = _find_node(result["data"], 3)
+    assert office["org_level"] == "office"
+    assert office["children"] == []
 
 
 @pytest.mark.asyncio
-async def test_empty_when_user_has_no_departments(mock_session) -> None:
+async def test_empty_when_user_has_no_admin_grants(mock_session) -> None:
     login_user = _login_user()
     svc = KnowledgeSpaceService(request=None, login_user=login_user)
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
-            new=AsyncMock(return_value=[]),
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new=AsyncMock(return_value=[_department(1, name="公司", org_level="company")]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
@@ -121,21 +142,26 @@ async def test_empty_when_user_has_no_departments(mock_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_returns_user_department_subtree(mock_session) -> None:
+async def test_membership_does_not_expand_clinic_tree(mock_session) -> None:
     login_user = _login_user()
     svc = KnowledgeSpaceService(request=None, login_user=login_user)
 
-    # User belongs to department 1. Department 2 is a child of 1; department 3 is unrelated.
     departments = [
-        _department(1, name="研发部", path="/1/", sort_order=1),
-        _department(2, name="前端组", parent_id=1, path="/1/2/", sort_order=1),
-        _department(3, name="市场部", path="/3/", sort_order=1),
+        _department(1, name="炼铁部", path="/1/", org_level="dept"),
+        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", org_level="office"),
+        _department(3, name="设备处", path="/3/", org_level="dept"),
+        _department(4, name="设备检修室", parent_id=3, path="/3/4/", org_level="office"),
     ]
 
     with (
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
-            new=AsyncMock(return_value=[_user_department(1)]),
+            new=AsyncMock(return_value=[SimpleNamespace(department_id=1)]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[3]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
@@ -152,46 +178,34 @@ async def test_returns_user_department_subtree(mock_session) -> None:
     ):
         result = await svc.get_my_department_tree_for_create()
 
-    assert result["bound_department_ids"] == []
-    assert len(result["data"]) == 1
-    root = result["data"][0]
-    assert root["id"] == 1
-    assert root["name"] == "研发部"
-    assert len(root["children"]) == 1
-    assert root["children"][0]["id"] == 2
-    assert root["children"][0]["name"] == "前端组"
+    assert _tree_ids(result["data"]) == {3, 4}
 
 
 @pytest.mark.asyncio
-async def test_returns_union_of_user_and_admin_department_subtrees(mock_session) -> None:
+async def test_multiple_dept_admin_grants_are_unioned(mock_session) -> None:
     login_user = _login_user()
     svc = KnowledgeSpaceService(request=None, login_user=login_user)
 
     departments = [
-        _department(1, name="炼铁部", path="/1/", sort_order=1),
-        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", sort_order=1),
-        _department(3, name="设备处", path="/3/", sort_order=2),
-        _department(4, name="设备检修室", parent_id=3, path="/3/4/", sort_order=1),
-        _department(5, name="无关部门", path="/5/", sort_order=3),
+        _department(1, name="炼铁部", path="/1/", org_level="dept"),
+        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", org_level="office"),
+        _department(3, name="设备处", path="/3/", org_level="dept"),
+        _department(4, name="设备检修室", parent_id=3, path="/3/4/", org_level="office"),
+        _department(5, name="无关科室", path="/5/", org_level="office"),
     ]
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
-            new=AsyncMock(return_value=[_user_department(1)]),
-        ),
-        patch(
             "bisheng.knowledge.domain.services.knowledge_space_service."
             "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
-            new=AsyncMock(return_value=[3]),
+            new=AsyncMock(return_value=[1, 3]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
             new=AsyncMock(return_value=departments),
         ),
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service."
-            "DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_department_ids",
             new=AsyncMock(return_value=[]),
         ),
         patch(
@@ -201,25 +215,58 @@ async def test_returns_union_of_user_and_admin_department_subtrees(mock_session)
     ):
         result = await svc.get_my_department_tree_for_create()
 
-    assert [node["id"] for node in result["data"]] == [1, 3]
-    assert [child["id"] for child in result["data"][0]["children"]] == [2]
-    assert [child["id"] for child in result["data"][1]["children"]] == [4]
+    assert _tree_ids(result["data"]) == {1, 2, 3, 4}
 
 
 @pytest.mark.asyncio
-async def test_marks_bound_departments(mock_session) -> None:
+async def test_squad_only_admin_grant_returns_empty_tree(mock_session) -> None:
     login_user = _login_user()
     svc = KnowledgeSpaceService(request=None, login_user=login_user)
 
     departments = [
-        _department(1, name="研发部", path="/1/"),
-        _department(2, name="前端组", parent_id=1, path="/1/2/"),
+        _department(3, name="科室", path="/1/2/3/", org_level="office"),
+        _department(4, name="班组", parent_id=3, path="/1/2/3/4/", org_level="squad"),
     ]
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
-            new=AsyncMock(return_value=[_user_department(1)]),
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[4]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new=AsyncMock(return_value=departments),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+            return_value=mock_session,
+        ),
+    ):
+        result = await svc.get_my_department_tree_for_create()
+
+    assert result == {"data": [], "bound_department_ids": []}
+
+
+@pytest.mark.asyncio
+async def test_marks_bound_offices(mock_session) -> None:
+    login_user = _login_user()
+    svc = KnowledgeSpaceService(request=None, login_user=login_user)
+
+    departments = [
+        _department(1, name="炼铁部", path="/1/", org_level="dept"),
+        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", org_level="office"),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[1]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
@@ -240,19 +287,58 @@ async def test_marks_bound_departments(mock_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_does_not_mark_bound_non_office_nodes(mock_session) -> None:
+    login_user = _login_user()
+    svc = KnowledgeSpaceService(request=None, login_user=login_user)
+    bindings_mock = AsyncMock(return_value=[_binding(1, 200)])
+
+    departments = [
+        _department(1, name="炼铁部", path="/1/", org_level="dept"),
+        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", org_level="office"),
+    ]
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[1]),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
+            new=AsyncMock(return_value=departments),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentKnowledgeSpaceDao.aget_by_department_ids",
+            bindings_mock,
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service.get_async_db_session",
+            return_value=mock_session,
+        ),
+    ):
+        result = await svc.get_my_department_tree_for_create()
+
+    assert result["bound_department_ids"] == []
+    bindings_mock.assert_awaited_once()
+    queried_ids = set(bindings_mock.await_args.args[0])
+    assert queried_ids == {2}
+
+
+@pytest.mark.asyncio
 async def test_exclude_space_id_omits_current_binding(mock_session) -> None:
     login_user = _login_user()
     svc = KnowledgeSpaceService(request=None, login_user=login_user)
 
     departments = [
-        _department(1, name="研发部", path="/1/"),
-        _department(2, name="前端组", parent_id=1, path="/1/2/"),
+        _department(1, name="炼铁部", path="/1/", org_level="dept"),
+        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", org_level="office"),
     ]
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
-            new=AsyncMock(return_value=[_user_department(1)]),
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[1]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
@@ -278,14 +364,15 @@ async def test_exclude_space_id_keeps_other_bindings(mock_session) -> None:
     svc = KnowledgeSpaceService(request=None, login_user=login_user)
 
     departments = [
-        _department(1, name="研发部", path="/1/"),
-        _department(2, name="前端组", parent_id=1, path="/1/2/"),
+        _department(1, name="炼铁部", path="/1/", org_level="dept"),
+        _department(2, name="炼铁作业区", parent_id=1, path="/1/2/", org_level="office"),
     ]
 
     with (
         patch(
-            "bisheng.knowledge.domain.services.knowledge_space_service.UserDepartmentDao.aget_user_departments",
-            new=AsyncMock(return_value=[_user_department(1)]),
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "DepartmentAdminGrantDao.aget_department_ids_by_user_id",
+            new=AsyncMock(return_value=[1]),
         ),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_service.DepartmentDao.aget_active_by_tenant",
