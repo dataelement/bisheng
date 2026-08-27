@@ -32,23 +32,38 @@ def _normalize_sync_source(value: Optional[str]) -> Optional[str]:
     source = value.strip().lower()
     if source in {SSO_SOURCE, WECOM_SOURCE}:
         return source
-    raise ValueError(f'source must be one of: {SSO_SOURCE}, {WECOM_SOURCE}')
+    raise ValueError(f"source must be one of: {SSO_SOURCE}, {WECOM_SOURCE}")
 
 
 class UserAttrsDTO(BaseModel):
     """Soft user attributes pushed alongside SSO login. All fields optional
     because the upstream HR system may not populate every attribute."""
+
     #: Gateway pushes ``jobGrade`` in camelCase; keep snake_case internally.
     model_config = ConfigDict(populate_by_name=True)
 
     name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
-    job_grade: Optional[str] = Field(
+    job_grade: Optional[int] = Field(
         default=None,
-        alias='jobGrade',
-        description='Upstream HR job grade, stored as ``user.job_grade``.',
+        alias="jobGrade",
+        description="Upstream HR job grade flag (0/1); stored as ``user.job_grade``.",
     )
+
+    @field_validator("job_grade", mode="before")
+    @classmethod
+    def _coerce_job_grade(cls, v):
+        """Normalize jobGrade to a 0/1 flag: only an explicit 1 becomes 1;
+        anything else (0, other numbers, unparseable strings) becomes 0."""
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return 1 if v else 0
+        try:
+            return 1 if int(str(v).strip()) == 1 else 0
+        except (TypeError, ValueError):
+            return 0
 
 
 class TenantMappingItem(BaseModel):
@@ -57,6 +72,7 @@ class TenantMappingItem(BaseModel):
     payload referencing the same ``dept_external_id`` is ignored because
     bisheng's ``is_tenant_root`` flag wins.
     """
+
     dept_external_id: str
     tenant_code: str
     tenant_name: str
@@ -68,35 +84,35 @@ class LoginSyncRequest(BaseModel):
     source: Optional[str] = Field(
         default=None,
         description=(
-            'Optional upstream source override for single-user login-sync. '
-            'When omitted, bisheng defaults to ``sso``; send ``wecom`` to '
-            'bind against WeCom-synced departments/users.'
+            "Optional upstream source override for single-user login-sync. "
+            "When omitted, bisheng defaults to ``sso``; send ``wecom`` to "
+            "bind against WeCom-synced departments/users."
         ),
     )
     external_user_id: str = Field(
         ...,
         description=(
-            'Stable upstream user ID; paired with source on the user row (``sso`` '
-            'for generic HMAC sync, ``wecom`` for Gateway wecom batch in '
-            '``/internal/sso/gateway-wecom-org-sync``).'
+            "Stable upstream user ID; paired with source on the user row (``sso`` "
+            "for generic HMAC sync, ``wecom`` for Gateway wecom batch in "
+            "``/internal/sso/gateway-wecom-org-sync``)."
         ),
     )
     primary_dept_external_id: Optional[str] = Field(
         default=None,
         description=(
-            'Primary (main) department external_id. Absent = no HR dept, '
-            'user falls back to Root tenant (spec §3 tolerance rule).'
+            "Primary (main) department external_id. Absent = no HR dept, "
+            "user falls back to Root tenant (spec §3 tolerance rule)."
         ),
     )
     secondary_dept_external_ids: Optional[List[str]] = Field(
         default=None,
         description=(
-            'Secondary department external_ids (is_primary=0). When this key is '
-            'present in JSON (including []), secondary memberships under '
-            'departments whose source matches the sync provider are reconciled '
-            'to exactly this set (PRD: affiliate depts — unlink missing, '
-            'revoke FGA/grants). '
-            'When omitted, bisheng only adds missing secondaries (legacy Gateway).'
+            "Secondary department external_ids (is_primary=0). When this key is "
+            "present in JSON (including []), secondary memberships under "
+            "departments whose source matches the sync provider are reconciled "
+            "to exactly this set (PRD: affiliate depts — unlink missing, "
+            "revoke FGA/grants). "
+            "When omitted, bisheng only adds missing secondaries (legacy Gateway)."
         ),
     )
     #: 企微「部门负责人」对应的部门 external_id（与 departments/sync 中 id 字符串一致）；
@@ -107,39 +123,39 @@ class LoginSyncRequest(BaseModel):
     department_admin_external_ids: Optional[List[str]] = Field(
         default=None,
         description=(
-            'WeCom leader dept external_ids; when sent (including []), reconciles '
-            'FGA admin for SSO member departments, revoking only sso-tracked grants.'
+            "WeCom leader dept external_ids; when sent (including []), reconciles "
+            "FGA admin for SSO member departments, revoking only sso-tracked grants."
         ),
     )
     user_attrs: UserAttrsDTO = Field(default_factory=UserAttrsDTO)
     root_tenant_id: int = Field(
         default=1,
-        description='Gateway supplies Root id for validation; always 1 in MVP.',
+        description="Gateway supplies Root id for validation; always 1 in MVP.",
     )
     tenant_mapping: Optional[List[TenantMappingItem]] = Field(
         default=None,
-        description='Optional auto-mount directives (PRD §5.2.3).',
+        description="Optional auto-mount directives (PRD §5.2.3).",
     )
     ts: int = Field(
         ...,
-        description='Source system timestamp (seconds). Required by INV-T12.',
+        description="Source system timestamp (seconds). Required by INV-T12.",
     )
     #: 企微等上游账号是否已禁用。为 True 时同步 ``user.delete=1`` 并走短流程（不签发 JWT）；
     #: 为 False 时确保 ``user.delete=0``。省略时保持 bisheng 既有 ``delete`` 与校验逻辑（兼容旧 Gateway）。
     account_disabled: Optional[bool] = Field(
         default=None,
         description=(
-            'If True, mark user as disabled in bisheng and skip full login/JWT. '
-            'If False, ensure user is enabled. Omitted: legacy behavior (do not change delete).'
+            "If True, mark user as disabled in bisheng and skip full login/JWT. "
+            "If False, ensure user is enabled. Omitted: legacy behavior (do not change delete)."
         ),
     )
     #: 为 True 时不单独写 ``org_sync_log``（由 Gateway 批量接口统一落一条）。
     skip_org_sync_log: bool = Field(
         default=False,
-        description='Internal: suppress per-call org_sync_log flush (batch endpoint).',
+        description="Internal: suppress per-call org_sync_log flush (batch endpoint).",
     )
 
-    @field_validator('source')
+    @field_validator("source")
     @classmethod
     def _validate_source(cls, v: Optional[str]) -> Optional[str]:
         return _normalize_sync_source(v)
@@ -156,15 +172,12 @@ class DepartmentUpsertItem(BaseModel):
     name: str
     parent_external_id: Optional[str] = Field(
         default=None,
-        description='None = top-level (direct child of Root).',
+        description="None = top-level (direct child of Root).",
     )
     sort: int = 0
     ts: Optional[int] = Field(
         default=None,
-        description=(
-            'Per-item ts. Falls back to batch source_ts when absent so '
-            'legacy Gateway versions keep working.'
-        ),
+        description=("Per-item ts. Falls back to batch source_ts when absent so legacy Gateway versions keep working."),
     )
 
 
@@ -172,27 +185,24 @@ class DepartmentsSyncRequest(BaseModel):
     source: Optional[str] = Field(
         default=None,
         description=(
-            'Optional upstream source override for batch department sync. '
-            'When omitted, bisheng uses the same default source as single-user '
-            'login-sync.'
+            "Optional upstream source override for batch department sync. "
+            "When omitted, bisheng uses the same default source as single-user "
+            "login-sync."
         ),
     )
     upsert: List[DepartmentUpsertItem] = Field(default_factory=list)
     remove: List[str] = Field(default_factory=list)
     source_ts: Optional[int] = Field(
         default=None,
-        description=(
-            'Batch-level ts used as fallback when an individual upsert/remove '
-            'item carries no ts of its own.'
-        ),
+        description=("Batch-level ts used as fallback when an individual upsert/remove item carries no ts of its own."),
     )
     #: When True (Gateway full WeCom tree), archive active departments of the
     #: same ``row_source`` whose ``external_id`` is missing from ``upsert``.
     full_snapshot: bool = Field(
         default=False,
         description=(
-            'Authoritative full tree: after upsert/remove, archive synced '
-            'departments absent from upsert (PRD §5 absent third-party IDs).'
+            "Authoritative full tree: after upsert/remove, archive synced "
+            "departments absent from upsert (PRD §5 absent third-party IDs)."
         ),
     )
     #: WeCom ``department/list`` ids (flat). When set, absent reconcile uses
@@ -200,13 +210,14 @@ class DepartmentsSyncRequest(BaseModel):
     #: even if the tree DFS omitted nodes.
     snapshot_external_ids: Optional[List[str]] = Field(
         default=None,
-        description='Authoritative flat WeCom department id list for absent reconcile.',
+        description="Authoritative flat WeCom department id list for absent reconcile.",
     )
 
-    @field_validator('snapshot_external_ids', mode='before')
+    @field_validator("snapshot_external_ids", mode="before")
     @classmethod
     def _normalize_snapshot_external_ids(
-        cls, v: Optional[List[Union[str, int]]],
+        cls,
+        v: Optional[List[Union[str, int]]],
     ) -> Optional[List[str]]:
         if v is None:
             return None
@@ -219,7 +230,7 @@ class DepartmentsSyncRequest(BaseModel):
                 out.append(s)
         return out
 
-    @field_validator('source')
+    @field_validator("source")
     @classmethod
     def _validate_source(cls, v: Optional[str]) -> Optional[str]:
         return _normalize_sync_source(v)

@@ -77,9 +77,10 @@ CREATE TABLE IF NOT EXISTS user (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     password_update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
     token_version INTEGER NOT NULL DEFAULT 0,
-    -- F049: SSO-synced job grade; grant-subject candidate queries filter on it,
-    -- so the column has to exist here or those suites fail on a missing column.
-    job_grade VARCHAR(64)
+    -- F049: SSO-synced job grade flag (0/1); grant-subject candidate queries
+    -- filter on it, so the column has to exist here or those suites fail on a
+    -- missing column.
+    job_grade INTEGER NOT NULL DEFAULT 0
 )"""
 
 TABLE_GROUP = """\

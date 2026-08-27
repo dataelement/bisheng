@@ -22,12 +22,13 @@ class UserBase(SQLModelSerializable):
     user_name: str = Field(index=True)
     email: str | None = Field(default=None, index=True)
     phone_number: str | None = Field(default=None, index=True)
-    job_grade: str | None = Field(
-        default=None,
+    job_grade: int = Field(
+        default=0,
         sa_column=Column(
-            String(64),
-            nullable=True,
-            comment="Job grade (职级) synced from org sync payload jobGrade",
+            Integer,
+            nullable=False,
+            server_default=text("0"),
+            comment="Job grade flag (0/1) synced from org sync payload jobGrade; 1 only when upstream sends 1",
         ),
     )
     dept_id: str | None = Field(default=None, index=True)

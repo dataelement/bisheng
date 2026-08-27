@@ -32,11 +32,12 @@ def _payload(external_user_id='u1', name='Alice', email='alice@x.com',
 
 
 def _user(user_id=7, delete=0, source='local', external_id='u1',
-          user_name='Alice', email='a@x.com', phone_number=None):
+          user_name='Alice', email='a@x.com', phone_number=None,
+          job_grade=0):
     return SimpleNamespace(
         user_id=user_id, delete=delete, source=source,
         external_id=external_id, user_name=user_name, email=email,
-        phone_number=phone_number,
+        phone_number=phone_number, job_grade=job_grade,
     )
 
 

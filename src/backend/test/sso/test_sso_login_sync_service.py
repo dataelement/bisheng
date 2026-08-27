@@ -56,7 +56,7 @@ def _payload(
     return LoginSyncRequest(**kw)
 
 
-def _user(user_id=7, delete=0, source="sso", external_id="u1", user_name="Alice", email="a@x.com", phone_number=None):
+def _user(user_id=7, delete=0, source="sso", external_id="u1", user_name="Alice", email="a@x.com", phone_number=None, job_grade=0):
     return SimpleNamespace(
         user_id=user_id,
         delete=delete,
@@ -65,6 +65,7 @@ def _user(user_id=7, delete=0, source="sso", external_id="u1", user_name="Alice"
         user_name=user_name,
         email=email,
         phone_number=phone_number,
+        job_grade=job_grade,
     )
 
 

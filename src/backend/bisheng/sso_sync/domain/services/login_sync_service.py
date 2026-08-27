@@ -302,7 +302,7 @@ class LoginSyncService:
                     user_name=(attrs.name.strip() if attrs.name else "") or ext,
                     email=cls._normalize_contact_field(attrs.email),
                     phone_number=cls._normalize_contact_field(attrs.phone),
-                    job_grade=cls._normalize_contact_field(attrs.job_grade),
+                    job_grade=cls._coerce_job_grade_flag(attrs.job_grade),
                     external_id=ext,
                     source=row_source,
                     password="",
@@ -385,6 +385,12 @@ class LoginSyncService:
         s = val.strip()
         return s if s else None
 
+    @staticmethod
+    def _coerce_job_grade_flag(value) -> int:
+        """jobGrade is a 0/1 flag: only an explicit 1 is stored as 1;
+        every other case (absent, 0, anything else) is stored as 0."""
+        return 1 if value == 1 else 0
+
     @classmethod
     def _apply_user_attrs(cls, user: User, attrs) -> None:
         """Apply present HR attributes without clearing omitted fields."""
@@ -400,10 +406,12 @@ class LoginSyncService:
             np = cls._normalize_contact_field(attrs.phone)
             if user.phone_number != np:
                 user.phone_number = np
-        if attrs.job_grade is not None:
-            ng = cls._normalize_contact_field(attrs.job_grade)
-            if user.job_grade != ng:
-                user.job_grade = ng
+        # jobGrade is a 0/1 flag — always converge the row to it: only an
+        # explicit 1 stays 1, every other case (including an omitted field)
+        # is stored as 0.
+        ng = cls._coerce_job_grade_flag(attrs.job_grade)
+        if user.job_grade != ng:
+            user.job_grade = ng
 
     @classmethod
     def _touch_user_sync_time(cls, user: User) -> None:

@@ -25,8 +25,8 @@ async def engine():
             text(
                 'CREATE TABLE "user" ('
                 "user_id INTEGER PRIMARY KEY, user_name VARCHAR(256) NOT NULL, "
-                # F049: grant-subject queries filter leadership job grades out.
-                "job_grade VARCHAR(64), "
+                # F049: grant-subject queries filter leadership users (job_grade=1) out.
+                "job_grade INTEGER NOT NULL DEFAULT 0, "
                 'external_id VARCHAR(128), "delete" INTEGER NOT NULL DEFAULT 0)'
             )
         )
@@ -56,11 +56,18 @@ async def engine():
                 "(4, 'DisabledMember', 'd', 0), (5, 'Deleted', 'e', 1), (6, 'MultiDept', 'f', 0)"
             )
         )
+        # Leadership user: job_grade=1 must never appear among grant candidates.
+        await conn.execute(
+            text(
+                "INSERT INTO \"user\" (user_id, user_name, external_id, \"delete\", job_grade) VALUES (7, 'Leader', 'g', 0, 1)"
+            )
+        )
         await conn.execute(
             text(
                 "INSERT INTO user_tenant (id, user_id, tenant_id, status) VALUES "
                 "(1, 1, 1, 'active'), (2, 2, 1, 'active'), (3, 3, 2, 'active'), "
-                "(4, 4, 1, 'disabled'), (5, 5, 1, 'active'), (6, 6, 1, 'active')"
+                "(4, 4, 1, 'disabled'), (5, 5, 1, 'active'), (6, 6, 1, 'active'), "
+                "(7, 7, 1, 'active')"
             )
         )
         await conn.execute(

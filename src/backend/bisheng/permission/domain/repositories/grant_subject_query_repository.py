@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import or_
 from sqlmodel import col, select
 
 from bisheng.core import database as database_module
 from bisheng.core.context import tenant as tenant_context
 
-#: Job grades starting with this prefix are leadership grades, which must not be
-#: offered as grant subjects. Upstream guarantees the uppercase prefix.
-_LEADER_JOB_GRADE_PREFIX = "A"
+#: Users with this job_grade flag are leadership users, which must not be
+#: offered as grant subjects. Only an explicit upstream ``jobGrade=1`` is
+#: stored as 1; every other user carries 0.
+_LEADER_JOB_GRADE = 1
 
 
 @dataclass(frozen=True)
@@ -134,11 +134,8 @@ class GrantSubjectQueryRepository:
                     .where(
                         User.delete == 0,
                         active_member,
-                        # Leadership grades are never grantable; unset job_grade is.
-                        or_(
-                            User.job_grade.is_(None),
-                            ~User.job_grade.like(f"{_LEADER_JOB_GRADE_PREFIX}%"),
-                        ),
+                        # Leadership users (job_grade=1) are never grantable.
+                        User.job_grade != _LEADER_JOB_GRADE,
                     )
                     .order_by(User.user_id.desc())
                 )
@@ -749,8 +746,7 @@ class GrantSubjectQueryRepository:
                     )
                 ).all()
                 subjects.update(
-                    f"department:{int(row[0] if isinstance(row, tuple) else row)}#member"
-                    for row in department_ids
+                    f"department:{int(row[0] if isinstance(row, tuple) else row)}#member" for row in department_ids
                 )
 
                 group_rows = (
