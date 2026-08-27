@@ -415,7 +415,7 @@ const SortableHeader = ({
             className={cn(
                 "group relative my-2 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
                 "transition-colors hover:bg-[#f2f3f5]",
-                isSticky && "sticky z-20"
+                isSticky && "sticky top-0 z-20"
             )}
             style={{
                 width,
@@ -508,7 +508,7 @@ function FileTableHeader({
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
-                    className="sticky left-0 z-20 bg-[#F3F4F6] p-0 text-center"
+                    className="sticky left-0 top-0 z-20 bg-[#F3F4F6] p-0 text-center"
                     style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
                 >
                     <div className="flex h-full items-center justify-center">
