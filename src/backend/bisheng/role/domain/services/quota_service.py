@@ -634,7 +634,13 @@ class QuotaService:
         """
         if col not in ("user_id", "tenant_id"):
             return set()
-        from sqlalchemy import select
+        # sqlmodel's select, not sqlalchemy's: Session.exec() only unwraps the
+        # single selected column when the statement is a SelectOfScalar. Given a
+        # plain sqlalchemy Select it hands back Row tuples, so each "source_list"
+        # below would be a one-element Row and the comprehension would try to
+        # hash the JSON array itself — "unhashable type: 'list'" out of
+        # /quota/effective for any tenant whose channels carry sources.
+        from sqlmodel import select
 
         from bisheng.channel.domain.models.channel import Channel
         from bisheng.core.database import get_async_db_session
