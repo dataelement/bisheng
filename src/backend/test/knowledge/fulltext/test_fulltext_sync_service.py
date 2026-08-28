@@ -5,6 +5,7 @@ import pytest
 
 from bisheng.knowledge.domain.models.knowledge_fulltext_outbox import KnowledgeFulltextOutbox
 from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
+    KnowledgeFulltextChunkSource,
     KnowledgeFulltextEngagementCounts,
     KnowledgeFulltextFileSnapshot,
     KnowledgeFulltextRebuiltContent,
@@ -57,6 +58,11 @@ def snapshot(**updates):
 def service():
     outbox_repository = AsyncMock()
     source_repository = AsyncMock()
+    source_repository.get_chunk_source.return_value = KnowledgeFulltextChunkSource(
+        index_name="knowledge_9",
+        file_id=7,
+        knowledge_id=9,
+    )
     chunk_repository = AsyncMock()
     index_repository = AsyncMock()
     rebuild_service = MagicMock()
@@ -78,14 +84,19 @@ def service():
 async def test_file_sync_upserts_current_document_after_revision_preflight():
     sync, outbox_repo, source_repo, chunk_repo, index_repo = service()
     source_repo.get_current_snapshot.return_value = snapshot()
-    source_repo.get_knowledge_index_name.return_value = "knowledge_9"
     outbox_repo.is_current_lease.return_value = True
     outbox_repo.mark_success.return_value = True
 
     result = await sync.sync_claimed(outbox(), lease_owner="worker-a", now=datetime(2026, 1, 3))
 
     assert result == "upsert"
-    chunk_repo.list_all.assert_awaited_once_with(index_name="knowledge_9", file_id=7, knowledge_id=9)
+    chunk_repo.list_all.assert_awaited_once_with(
+        source=KnowledgeFulltextChunkSource(
+            index_name="knowledge_9",
+            file_id=7,
+            knowledge_id=9,
+        )
+    )
     index_repo.upsert.assert_awaited_once()
     assert index_repo.upsert.await_args.args[0].sync_revision == 2
     outbox_repo.mark_success.assert_awaited_once()
@@ -99,7 +110,6 @@ async def test_first_document_upsert_seeds_current_engagement_counts():
     }
     sync.engagement_repository = engagement_repository
     source_repo.get_current_snapshot.return_value = snapshot()
-    source_repo.get_knowledge_index_name.return_value = "knowledge_9"
     outbox_repo.is_current_lease.return_value = True
 
     await sync.sync_claimed(outbox(), lease_owner="worker-a", now=datetime(2026, 1, 3))
@@ -147,7 +157,7 @@ async def test_file_sync_keeps_current_index_when_projection_is_not_ready():
     result = await sync.sync_claimed(outbox(), lease_owner="worker-a", now=datetime(2026, 1, 3))
 
     assert result == "keep"
-    source_repo.get_knowledge_index_name.assert_not_awaited()
+    source_repo.get_chunk_source.assert_not_awaited()
     chunk_repo.list_all.assert_not_awaited()
     index_repo.upsert.assert_not_awaited()
     index_repo.delete.assert_not_awaited()
@@ -162,7 +172,7 @@ async def test_file_sync_retries_when_knowledge_rag_index_is_not_ready():
         entry_status="active",
         projection_status="ready",
     )
-    source_repo.get_knowledge_index_name.return_value = None
+    source_repo.get_chunk_source.return_value = None
 
     with pytest.raises(KnowledgeFulltextProjectionNotReadyError, match="knowledge RAG index is not ready"):
         await sync.sync_claimed(outbox(), lease_owner="worker-a", now=datetime(2026, 1, 3))
@@ -171,7 +181,6 @@ async def test_file_sync_retries_when_knowledge_rag_index_is_not_ready():
 async def test_stale_revision_never_writes_index():
     sync, outbox_repo, source_repo, _chunk_repo, index_repo = service()
     source_repo.get_current_snapshot.return_value = snapshot()
-    source_repo.get_knowledge_index_name.return_value = "knowledge_9"
     outbox_repo.is_current_lease.return_value = False
 
     result = await sync.sync_claimed(outbox(), lease_owner="worker-a", now=datetime(2026, 1, 3))

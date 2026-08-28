@@ -602,6 +602,8 @@ class KnowledgeDocumentProjectionService:
         self,
         entry: KnowledgeFile,
         target: ProjectionTarget,
+        *,
+        force_content_upsert: bool = False,
     ) -> None:
         """Shared-store dual projection for a live entry (F2.1-F2.4)."""
         document_id = int(target.document_id)
@@ -614,7 +616,7 @@ class KnowledgeDocumentProjectionService:
             )
             return
         knowledge_ids = normalise_membership_ids(knowledge_ids)
-        if not self._shared_content_converged(
+        if force_content_upsert or not self._shared_content_converged(
             entries, target.content_generation
         ):
             await self._shared_upsert_content(
@@ -660,6 +662,7 @@ class KnowledgeDocumentProjectionService:
         entry_id: int,
         lease_owner: str,
         now: datetime | None = None,
+        force_content_upsert: bool = False,
     ) -> ProjectionProcessResult:
         started_at = time.monotonic()
         now = now or datetime.now()
@@ -755,7 +758,11 @@ class KnowledgeDocumentProjectionService:
                 if self._use_shared_projection:
                     # 共享库双投影：primary 内容单份写入 + knowledge_ids
                     # metadata 重写；非本地 entry 不再 copy_vector（F2.5）。
-                    await self._process_shared_projection(claimed, target)
+                    await self._process_shared_projection(
+                        claimed,
+                        target,
+                        force_content_upsert=force_content_upsert,
+                    )
                 else:
                     source = await self._resolve_source(claimed)
                     await self.projection_writer(source, claimed, target)

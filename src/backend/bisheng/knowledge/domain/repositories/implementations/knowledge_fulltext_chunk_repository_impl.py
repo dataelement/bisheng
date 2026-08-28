@@ -7,7 +7,10 @@ from elasticsearch import AsyncElasticsearch
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_fulltext_chunk_repository import (
     KnowledgeFulltextChunkRepository,
 )
-from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import KnowledgeFulltextChunk
+from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
+    KnowledgeFulltextChunk,
+    KnowledgeFulltextChunkSource,
+)
 
 
 class KnowledgeFulltextChunkRepositoryImpl(KnowledgeFulltextChunkRepository):
@@ -22,30 +25,69 @@ class KnowledgeFulltextChunkRepositoryImpl(KnowledgeFulltextChunkRepository):
     async def list_all(
         self,
         *,
-        index_name: str,
-        file_id: int,
-        knowledge_id: int,
+        source: KnowledgeFulltextChunkSource,
     ) -> list[KnowledgeFulltextChunk]:
+        chunk_source = source
         chunks: list[KnowledgeFulltextChunk] = []
         search_after: list | None = None
-        pit_response = await self.client.open_point_in_time(
-            index=index_name,
-            keep_alive=self.PIT_KEEP_ALIVE,
-        )
+        pit_kwargs = {
+            "index": chunk_source.index_name,
+            "keep_alive": self.PIT_KEEP_ALIVE,
+        }
+        if chunk_source.routing:
+            pit_kwargs["routing"] = chunk_source.routing
+        pit_response = await self.client.open_point_in_time(**pit_kwargs)
         pit_id = pit_response.get("id")
         if not isinstance(pit_id, str) or not pit_id:
             raise ValueError("RAG chunk point in time has no id")
         try:
             while True:
+                if chunk_source.shared:
+                    query = {
+                        "bool": {
+                            "filter": [
+                                {"term": {"metadata.tenant_id": chunk_source.tenant_id}},
+                                {
+                                    "term": {
+                                        "metadata.canonical_document_id": (
+                                            chunk_source.canonical_document_id
+                                        )
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "metadata.canonical_version_id": (
+                                            chunk_source.canonical_version_id
+                                        )
+                                    }
+                                },
+                                {
+                                    "term": {
+                                        "metadata.content_generation": (
+                                            chunk_source.content_generation
+                                        )
+                                    }
+                                },
+                                {"term": {"metadata.knowledge_ids": chunk_source.knowledge_id}},
+                            ]
+                        }
+                    }
+                else:
+                    query = {"term": {"metadata.document_id": chunk_source.file_id}}
                 kwargs = {
                     "pit": {"id": pit_id, "keep_alive": self.PIT_KEEP_ALIVE},
-                    "query": {"term": {"metadata.document_id": file_id}},
+                    "query": query,
                     "sort": [
                         {"metadata.chunk_index": "asc"},
                         {"_shard_doc": "asc"},
                     ],
                     "size": self.page_size,
-                    "source": ["text", "metadata.document_id", "metadata.knowledge_id", "metadata.chunk_index"],
+                    "source": [
+                        "text",
+                        "metadata.document_id",
+                        "metadata.knowledge_id",
+                        "metadata.chunk_index",
+                    ],
                 }
                 if search_after is not None:
                     kwargs["search_after"] = search_after
@@ -57,17 +99,27 @@ class KnowledgeFulltextChunkRepositoryImpl(KnowledgeFulltextChunkRepository):
                 if not hits:
                     break
                 for hit in hits:
-                    source = hit.get("_source")
-                    if not isinstance(source, dict) or not isinstance(source.get("metadata"), dict):
+                    document_source = hit.get("_source")
+                    if not isinstance(document_source, dict) or not isinstance(
+                        document_source.get("metadata"), dict
+                    ):
                         raise ValueError("RAG chunk _source or metadata is invalid")
-                    metadata = source["metadata"]
+                    metadata = document_source["metadata"]
                     chunks.append(
                         KnowledgeFulltextChunk(
                             es_id=str(hit.get("_id", "")),
-                            document_id=int(metadata["document_id"]),
-                            knowledge_id=int(metadata["knowledge_id"]),
+                            document_id=(
+                                int(chunk_source.file_id)
+                                if chunk_source.shared
+                                else int(metadata["document_id"])
+                            ),
+                            knowledge_id=(
+                                int(chunk_source.knowledge_id)
+                                if chunk_source.shared
+                                else int(metadata["knowledge_id"])
+                            ),
                             chunk_index=int(metadata["chunk_index"]),
-                            text=str(source.get("text", "")),
+                            text=str(document_source.get("text", "")),
                         )
                     )
                 sort_value = hits[-1].get("sort")

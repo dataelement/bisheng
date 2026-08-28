@@ -378,6 +378,33 @@ class TestSharedDualProjection:
         assert loader.loaded == []
         legacy_writer.assert_not_awaited()
 
+    async def test_fulltext_repair_can_force_rewrite_converged_shared_content(
+        self, async_db_session: AsyncSession
+    ):
+        await _seed_shared_world(async_db_session)
+        writer = FakeSharedSpaceStorageWriter()
+        loader = _chunk_loader(_two_chunks())
+        service = _service(async_db_session, writer, chunk_loader=loader)
+
+        await service.process_entry(
+            tenant_id=TENANT,
+            entry_id=100,
+            lease_owner="initial",
+        )
+        writer.calls.clear()
+        loader.loaded.clear()
+
+        result = await service.process_entry(
+            tenant_id=TENANT,
+            entry_id=101,
+            lease_owner="fulltext-repair",
+            force_content_upsert=True,
+        )
+
+        assert result.status == "ready"
+        assert writer.calls == ["upsert_content", "update_membership"]
+        assert loader.loaded == [CONTENT_FILE_ID]
+
     async def test_share_withdraw_reaggregates_membership_without_content(
         self, async_db_session: AsyncSession
     ):

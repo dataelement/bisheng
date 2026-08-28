@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
     KnowledgeFulltextAutoRepairSource,
+    KnowledgeFulltextChunkSource,
     KnowledgeFulltextFileSnapshot,
 )
 
@@ -12,6 +13,11 @@ class KnowledgeFulltextSourceRepository(ABC):
 
     @abstractmethod
     async def get_auto_repair_source(self, file_id: int) -> KnowledgeFulltextAutoRepairSource | None: ...
+
+    @abstractmethod
+    async def get_chunk_source(
+        self, snapshot: KnowledgeFulltextFileSnapshot
+    ) -> KnowledgeFulltextChunkSource | None: ...
 
     @abstractmethod
     async def list_file_ids(
