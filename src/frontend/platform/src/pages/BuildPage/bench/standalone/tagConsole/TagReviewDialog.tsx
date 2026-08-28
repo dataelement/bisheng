@@ -114,25 +114,25 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
     }
 
     const field = (label: string, value: React.ReactNode) => (
-        <div className="flex items-start gap-3 py-1 text-sm">
+        <div className="flex min-w-0 items-start gap-3 py-1 text-sm">
             <span className="w-28 shrink-0 leading-6 text-muted-foreground">{label}</span>
-            <span className="min-w-0 flex-1 overflow-hidden leading-6">{value}</span>
+            <span className="w-0 min-w-0 flex-1 overflow-hidden leading-6">{value}</span>
         </div>
     )
 
     return (
         <Dialog open={Boolean(target)} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[640px] bg-background-login">
+            <DialogContent className="w-full max-w-[calc(100vw-2rem)] gap-0 p-0 sm:max-w-[640px] bg-background-login">
                 <DialogHeader className="border-b border-[#EBECF0] px-6 py-4">
                     <DialogTitle>{t("build.tagConsole.reviewTitle", "标签审核")}</DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-4 px-6 py-5">
+                <div className="min-w-0 space-y-4 px-6 py-5">
                     {loading ? (
                         <p className="py-6 text-center text-sm text-muted-foreground">{t("loading")}</p>
                     ) : (
                         <>
-                            <div className="overflow-hidden rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                            <div className="min-w-0 overflow-hidden rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
                                 {field(t("build.tagName", "标签名称"), detail?.name || "-")}
                                 {field(
                                     t("build.tagConsole.tagType", "标签类型"),
