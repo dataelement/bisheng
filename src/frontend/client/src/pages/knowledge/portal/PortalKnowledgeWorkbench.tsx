@@ -2219,15 +2219,18 @@ export default function PortalKnowledgeWorkbench() {
         setRestoringDeepLinkKey(null);
 
         // Return to the file's actual folder location instead of the entry position.
+        // If the file sits in a sub-folder, jump to the deepest folder that contains it.
         const file = selectedFile;
         if (!file?.spaceId) return;
         const spaceId = String(file.spaceId);
-        const folderId = file.parentId;
-        const folderName = selectedFileParentPath?.[selectedFileParentPath.length - 1]?.name;
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        const folderId = deepestFolder?.id || file.parentId;
+        const folderName = deepestFolder?.name;
         if (sourceSpace && activeSpace && String(sourceSpace.id) !== String(activeSpace.id)) {
             setActiveSpace(sourceSpace);
         }
-        setSearchParams((prev) => {
+        setSearchParams((prev: URLSearchParams) => {
             const next = new URLSearchParams(prev);
             next.set("spaceId", spaceId);
             if (folderId) {
