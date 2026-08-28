@@ -38,6 +38,14 @@ def snapshot(**updates):
         (snapshot(status="PROCESSING"), KnowledgeFulltextProjectionAction.KEEP),
         (snapshot(status="FAILED"), KnowledgeFulltextProjectionAction.DELETE),
         (
+            snapshot(
+                logical_document_id=None,
+                document_version_id=502,
+                is_primary_version=False,
+            ),
+            KnowledgeFulltextProjectionAction.DELETE,
+        ),
+        (
             snapshot(deleted_at=datetime(2026, 1, 3, tzinfo=timezone.utc)),
             KnowledgeFulltextProjectionAction.DELETE,
         ),

@@ -36,6 +36,8 @@ class KnowledgeFulltextDocumentService:
             return KnowledgeFulltextProjectionAction.KEEP
         if status not in cls.SUCCESS_STATUSES:
             return KnowledgeFulltextProjectionAction.DELETE
+        if snapshot.document_version_id is not None and not snapshot.is_primary_version:
+            return KnowledgeFulltextProjectionAction.DELETE
         if snapshot.logical_document_id is None:
             return KnowledgeFulltextProjectionAction.UPSERT
         if snapshot.entry_type not in cls.DISTRIBUTED_ENTRY_TYPES:
