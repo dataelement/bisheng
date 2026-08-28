@@ -28,6 +28,7 @@ from bisheng.knowledge.domain.models.knowledge_migration import (
     KnowledgeMigrationBatch,
     KnowledgeMigrationBatchStatus,
 )
+from bisheng.knowledge.domain.models.knowledge_space_scope import KnowledgeSpaceLevelEnum
 from bisheng.knowledge.domain.repositories.interfaces.knowledge_migration_repository import (
     KnowledgeMigrationRepository,
 )
@@ -49,6 +50,12 @@ from bisheng.knowledge.domain.services.file_migration.planner import (
     MigrationNode,
     MigrationSelection,
     normalize_selections,
+)
+from bisheng.knowledge.domain.services.migration_preserve_link_rules import (
+    PUBLIC_SOURCE_UNAVAILABLE_REASON,
+    normalize_level,
+    parent_levels_for,
+    validate_preserve_link_levels,
 )
 
 
@@ -230,28 +237,67 @@ class KnowledgeMigrationService:
         space_level: str | None,
         page: int,
         page_size: int,
+        purpose: str = "source",
+        preserve_link: bool = False,
+        source_level: str | None = None,
     ) -> MigrationPageResponse:
         require_system_admin(login_user)
+        levels: set[str] | None = None
+        if preserve_link and purpose == "target" and source_level:
+            # Publishing only goes up one rung, so the target list is that rung
+            # and nothing else. A source with no parent yields an empty list
+            # rather than a misleading full one.
+            levels = {level.value for level in parent_levels_for(source_level)}
+            if not levels:
+                return MigrationPageResponse(data=[], total=0, page=page, page_size=page_size)
+
         rows, total = await self.source_repository.list_spaces(
             keyword=keyword.strip() if keyword else None,
             level=space_level,
             offset=(page - 1) * page_size,
             limit=page_size,
+            levels=levels,
         )
         return MigrationPageResponse(
             data=[
-                MigrationSpaceResponse(
-                    id=int(row.space.id),
-                    name=row.space.name,
-                    level=row.level,
-                    owner_valid=row.owner_id > 0,
-                    selectable=row.owner_id > 0,
+                self._space_response(
+                    row,
+                    preserve_link=preserve_link,
+                    purpose=purpose,
                 ).model_dump()
                 for row in rows
             ],
             total=total,
             page=page,
             page_size=page_size,
+        )
+
+    @staticmethod
+    def _space_response(
+        row: MigrationSpaceRecord,
+        *,
+        preserve_link: bool,
+        purpose: str,
+    ) -> MigrationSpaceResponse:
+        selectable = row.owner_id > 0
+        reason = None if selectable else "knowledge space owner is invalid"
+        if (
+            selectable
+            and preserve_link
+            and purpose == "source"
+            and normalize_level(row.level) is KnowledgeSpaceLevelEnum.PUBLIC
+        ):
+            # Say why rather than silently omitting it: the operator is looking
+            # for a space they know exists.
+            selectable = False
+            reason = PUBLIC_SOURCE_UNAVAILABLE_REASON
+        return MigrationSpaceResponse(
+            id=int(row.space.id),
+            name=row.space.name,
+            level=row.level,
+            owner_valid=row.owner_id > 0,
+            selectable=selectable,
+            unavailable_reason=reason,
         )
 
     async def list_children(
@@ -338,6 +384,14 @@ class KnowledgeMigrationService:
             )
         if any(spaces_by_id[space_id].owner_id <= 0 for space_id in spaces_by_id):
             raise KnowledgeMigrationCandidateInvalidError(msg="knowledge space owner is invalid")
+        if request.preserve_link:
+            # Checked before any node work: the operator picked these spaces by
+            # hand, so tell them which constraint they hit rather than letting a
+            # publish fail file by file at execution time.
+            validate_preserve_link_levels(
+                source_levels=[spaces_by_id[space_id].level for space_id in source_space_ids],
+                target_level=spaces_by_id[request.target_space_id].level,
+            )
 
         normalized_inputs: list[MigrationSelection] = []
         nodes_by_space: dict[int, dict[int, Any]] = {}
@@ -455,6 +509,7 @@ class KnowledgeMigrationService:
             target_path_snapshot=normalized.target_path,
             conflict_strategy=request.conflict_strategy,
             preserve_structure=request.preserve_structure,
+            preserve_link=request.preserve_link,
         )
         saved, created = await self.repository.create_batch_idempotent(batch)
         await self.repository.commit()

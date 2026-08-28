@@ -18,6 +18,8 @@ import {
     Link2,
     FilePenLine,
     FileX2,
+    FolderTree,
+    Building2,
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -73,6 +75,8 @@ interface KnowledgeSpaceHeaderProps {
     onBatchDownload: () => void;
     canBatchDownload?: boolean;
     onBatchTag: () => void;
+    onBatchCategory?: () => void;
+    onBatchBusinessDomain?: () => void;
     onBatchRetry: () => void;
     onBatchDelete: () => void;
     canBatchDelete?: boolean;
@@ -130,6 +134,8 @@ export function KnowledgeSpaceHeader({
     onBatchDownload,
     canBatchDownload = false,
     onBatchTag,
+    onBatchCategory,
+    onBatchBusinessDomain,
     onBatchRetry,
     onBatchDelete,
     canBatchDelete = false,
@@ -376,6 +382,18 @@ export function KnowledgeSpaceHeader({
                             <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
                                 <Tag className="mr-2 size-4" />
                                 {localize("com_knowledge.batch_add_tags")}
+                            </DropdownMenuItem>
+                        )}
+                        {isAdmin && !hasFoldersSelected && onBatchCategory && (
+                            <DropdownMenuItem onClick={onBatchCategory} className="cursor-pointer">
+                                <FolderTree className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_category")}
+                            </DropdownMenuItem>
+                        )}
+                        {isAdmin && !hasFoldersSelected && onBatchBusinessDomain && (
+                            <DropdownMenuItem onClick={onBatchBusinessDomain} className="cursor-pointer">
+                                <Building2 className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_business_domain")}
                             </DropdownMenuItem>
                         )}
                         {isAdmin && hasFailedFiles && (

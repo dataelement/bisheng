@@ -55,6 +55,24 @@ PermissionSnapshotLoader = Callable[
 ]
 
 
+def publish_parent_user(target_file_level_path: str | None, target_space_id: int) -> str:
+    """The `parent` tuple subject for a file published into a target location.
+
+    The last folder id in the path is the parent; with no folder id the space
+    itself is. Testing the raw string for truthiness is not enough — a path
+    like "/" is truthy but holds no id, and yielded a malformed "folder:" that
+    OpenFGA rejects, which fails the publish and every unit of a batch with it.
+    """
+    folder_ids = [
+        part
+        for part in str(target_file_level_path or "").split("/")
+        if part.isdigit() and int(part) > 0
+    ]
+    if folder_ids:
+        return f"folder:{folder_ids[-1]}"
+    return f"knowledge_space:{int(target_space_id)}"
+
+
 class KnowledgeDocumentDistributionError(RuntimeError):
     """Raised when a publish/share lifecycle invariant would be violated."""
 
@@ -1526,10 +1544,9 @@ class KnowledgeDocumentDistributionService:
             manager = await self._prepare_manager_permission_transition(command)
             manager_target_parent = TupleOperation(
                 action="write",
-                user=(
-                    f"folder:{command.target_file_level_path.rstrip('/').split('/')[-1]}"
-                    if command.target_file_level_path
-                    else f"knowledge_space:{command.target_space_id}"
+                user=publish_parent_user(
+                    command.target_file_level_path,
+                    command.target_space_id,
                 ),
                 relation="parent",
                 object=f"knowledge_file:{command.source_entry_id}",

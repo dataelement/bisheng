@@ -17,7 +17,8 @@
 | F079 | [tag-management-console](./079-tag-management-console/) | P1 | 🔲 规格已生成，待评审 | F013 |
 | F082 | [department-short-name](./082-department-short-name/) | P1 | ⚠️ 主体实现完成，待环境验收 | F002, F009, F014/F015 |
 | F083 | [portal-department-display-name](./083-portal-department-display-name/) | P0 | ✅ 已实现，人工 E2E 待执行 | F082, F025, F060, F064, F065 |
-| F098 | [distribution-aware-container-delete](./098-distribution-aware-container-delete/) | P0 | 🔲 规格已评审，待实现 | F059, F071 |
+| F098 | [distribution-aware-container-delete](./098-distribution-aware-container-delete/) | P0 | ✅ 已实现并通过 171 端到端验证 | F059, F071 |
+| F100 | [migration-preserve-link](./100-migration-preserve-link/) | P1 | 🚧 实现中 | F059, F098, 知识迁移批次 |
 
 ---
 
