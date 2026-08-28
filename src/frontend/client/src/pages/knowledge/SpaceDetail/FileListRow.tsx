@@ -343,6 +343,13 @@ export function FileListRow({
         onPreview?.();
     };
 
+    // The whole row is a selection target; only the name (and rename input /
+    // action buttons, which stop propagation) opts out and opens the detail.
+    const handleRowClick = () => {
+        if (!isSelectable || isCreating || isRenaming) return;
+        onSelect(!isSelected);
+    };
+
     const showEncoding = shougangEnabled && !isFolder;
 
     return (
@@ -354,9 +361,11 @@ export function FileListRow({
             onDragLeave={isFolder && !isUploadingFolderPlaceholder ? onFolderDragLeave : undefined}
             onDrop={isFolder && !isUploadingFolderPlaceholder ? onFolderDrop : undefined}
             onContextMenu={handleRowContextMenu}
+            onClick={handleRowClick}
             className={cn(
                 // Zebra base (Figma 13198:75866) — selection / drag-over / hover paint over it.
                 "group relative flex h-14 items-center gap-2 px-4 transition-colors",
+                isSelectable && !isCreating && "cursor-pointer",
                 index % 2 === 1 ? "bg-[#fbfbfb]" : "bg-white",
                 isFolderDragOver && "bg-blue-100",
                 !isSelected && !isFolderDragOver && "hover:bg-fill-1",
@@ -369,6 +378,9 @@ export function FileListRow({
             <Checkbox
                 checked={isSelected}
                 onCheckedChange={onSelect}
+                // The row's own click also toggles selection — without this the
+                // two handlers would cancel each other out on a checkbox click.
+                onClick={(e) => e.stopPropagation()}
                 disabled={!isSelectable}
                 className={cn(
                     "size-4 shrink-0",
@@ -382,7 +394,6 @@ export function FileListRow({
                     "relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded",
                     isUploadingFolderPlaceholder && "opacity-50",
                 )}
-                onClick={handleOpen}
             >
                 <FileIconRenderer file={file} isFolder={isFolder} iconClassName="size-8 shrink-0" thumbBordered transparentBg />
             </div>
@@ -415,7 +426,13 @@ export function FileListRow({
                                         : "cursor-default text-text-3",
                                     isUploadingFolderPlaceholder && "opacity-50",
                                 )}
-                                onClick={(e) => { e.stopPropagation(); handleOpen(); }}
+                                // A name that can't open anything falls through to the
+                                // row's select-toggle instead of dead-ending the click.
+                                onClick={(e) => {
+                                    if (!namePreviewable || isUploadingFolderPlaceholder) return;
+                                    e.stopPropagation();
+                                    handleOpen();
+                                }}
                             >
                                 {renderHighlightedName(file.name, highlightKeyword)}
                             </span>
@@ -492,7 +509,11 @@ export function FileListRow({
             {/* The action slot keeps its width even when a row has one button or
                 none, so status pills line up down the column. 73px = two 32px
                 action buttons + the 9px divider between them. */}
-            <div className="flex min-w-[73px] shrink-0 items-center justify-end">
+            {/* stopPropagation: opening a row menu must not toggle the row's selection. */}
+            <div
+                className="flex min-w-[73px] shrink-0 items-center justify-end"
+                onClick={(e) => e.stopPropagation()}
+            >
                 {canDownload && (
                     <Tooltip>
                         <TooltipTrigger asChild>
