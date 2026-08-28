@@ -11,6 +11,7 @@
 
 - 入口上有未读、待办、新消息，用徽标挂在右上角。
 - 页签、菜单项后面要报条目数，用独立数字。
+- 列表每行要标「这条没看过」，用红点：挂在行内的头像上；行里没有可挂的东西就单独占一列。
 - 要说「这是什么 / 什么状态」——包括列表里那种小圆点 + 一个词——用标签，见 [组件-Tag标签.md](组件-Tag标签.md)。
 - 徽标只报事实，不做装饰：没有新东西就不显示，看过就清零——长期挂着的红点等于没有红点。
 
@@ -28,7 +29,7 @@
 | 类型 | 长什么样 | 挂在哪 |
 |---|---|---|
 | **数字** `count` | 16px 高的胶囊，有色底 + 数字 | 宿主右上角 |
-| **红点** `dot` | 6px 实心圆 | 宿主右上角 |
+| **红点** `dot` | 6px 实心圆 | 宿主右上角；没有可挂的宿主时（列表行没有图标 / 头像）单独立在行内，此时行本身就是宿主 |
 | **独立数字** | 同数字款，不挂角 | 文字右侧 |
 
 数字与独立数字按**语义**分两个色，不按位置分：
@@ -47,7 +48,7 @@
 
 | 类型 | 尺寸 | 字号 / 字重 | 圆角 | 内边距 |
 |---|---|---|---|---|
-| 数字 / 独立数字 | 高 16px、最小宽 16px | caption-sm 10px / 500，等宽数字 | 数字款 full（一位数是正圆）；独立数字 6px | 左右 4px |
+| 数字 / 独立数字 | 高 16px、最小宽 16px | caption-sm 10px / 500，等宽数字 | full：一位数是正圆，两位起拉成胶囊（两款同值） | 左右 4px |
 | 红点 | 6 × 6px | — | full | — |
 
 - 数字**不折算、不截断**：传多少显示多少，位数多了胶囊跟着变宽。一个入口攒到四位数未读，问题在通知策略，不在徽标。
@@ -91,19 +92,19 @@
 <!-- site-hide -->
 ## 给实现窗口
 
-1. 组件位置 `packages/ui/src/components/Badge/`（2026-08-28 已落地），props：`count` / `dot`、`color: danger | brand`、`showZero`、`circle`（圆形宿主）、`offset: [x, y]`、`disabled`。挂角款用 `relative inline-flex` 包宿主 + `absolute` 徽标；不传 `children` 即独立数字，渲染为 `inline-flex`。**没有 `standalone` prop**：挂角与独立只差一个宿主，调用点的形状已经说清楚了，再加一个布尔量只会多出「传了 standalone 又传了 children」这种没有答案的组合。
+1. 组件位置 `packages/ui/src/components/Badge/`（2026-08-28 已落地），props：`count` / `dot`、`color: danger | brand`、`showZero`、`circle`（圆形宿主）、`offset: [x, y]`、`disabled`。挂角款用 `relative inline-flex` 包宿主 + `absolute` 徽标；不传 `children` 即行内款（数字或红点），渲染为 `inline-flex`。默认色**按形态定、不按位置定**：红点恒为 danger（红点就是「有新的」），只有独立数字默认 brand——品牌 5% 透明底摊在 6px 的圆点上等于没有。**没有 `standalone` prop**：挂角与独立只差一个宿主，调用点的形状已经说清楚了，再加一个布尔量只会多出「传了 standalone 又传了 children」这种没有答案的组合。
 2. 颜色全走 token：danger `bg-danger text-white`；brand `bg-blue-500/5 text-blue-500`（同 Tabs 现行 `badge` 画法，随蓝⇄绿主题）；描边 `ring-1 ring-bg-page`；禁用 `bg-text-4`。
-3. 尺寸：`h-4 min-w-4 px-1 text-caption-sm font-medium tabular-nums leading-none`；数字款 `rounded-full`，独立数字 `rounded-md`（6px）；红点 `h-1.5 w-1.5 rounded-full`。
+3. 尺寸：`h-4 min-w-4 px-1 text-caption-sm font-medium tabular-nums leading-none`；数字款与独立数字同为 `rounded-full`；红点 `h-1.5 w-1.5 rounded-full`。
 4. 无障碍：挂角徽标对读屏是文字信息，宿主加 `aria-label="通知，3 条未读"` 之类的合并描述，徽标本体 `aria-hidden`。
 5. 迁移映射（本次只读扫描，2026-08-28，范围 `client/src`，排除 node_modules）：
-   - `pages/settings/SettingsPage.tsx` `NavCountBadge`（`h-4 min-w-[16px] rounded-full bg-[#f53f3f] text-[11px]`，`> 99 → 99+`）→ `<Badge color="danger" count={n} />`（独立数字：不传 `children`）；**去掉 99+ 折算**，字号 11 → caption-sm 10。**待迁**。
-   - Tabs 组件内置的 `badge`（16px、圆角 6、`bg-primary/5`、caption-sm/500）→ **已改**为渲染 `<Badge count={item.badge} />`，配色仍由 Tabs 的 `variant` 传入（墨色款不能长出品牌色），画法零变化，Tabs 文档 §4 已是指针。
+   - **已迁（2026-08-28）**：`pages/settings/SettingsPage.tsx` 的 `NavCountBadge`（桌面 + 移动两处导航行）→ `<Badge color="danger" count={n} />`。**去掉了 99+ 折算**，字号 11 → caption-sm 10，`#f53f3f` → danger token；圆角仍是正圆（这块页面正是设计师拍下「两款同为 full」的地方）。
+   - **已迁（2026-08-28）**：`components/messageApproval/NotificationRow.tsx` 的未读点（`size-2 bg-[#f53f3f]`）→ `<Badge dot />`，8 → 6px；`layouts/UserPopMenu.tsx` 头像右上角的红点（`absolute size-2.5 ring-2 ring-white`）→ `<Badge dot circle>{avatar}</Badge>`，10 → 6px，2px 白描边 → 1px 页面底色描边（深色模式下自动跟着走，原来那圈白在深色里是道亮边）。
+   - Tabs 组件内置的 `badge`（16px、原圆角 6、`bg-primary/5`、caption-sm/500）→ **已改**为渲染 `<Badge count={item.badge} />`，配色仍由 Tabs 的 `variant` 传入（墨色款不能长出品牌色）；圆角随本次统一从 6px 变为 full，Tabs §4 同步改写。
    - 其它手写红点 / 数字（侧栏未读、通知铃铛）未扫描，迁移窗口用 `rounded-full` + `bg-[#f5` / `bg-red` grep 后补附录。
 6. 站点接线（元规范 §5）：本文 + `components/badge.mdx` demo 页均已注册进 `rspress.config.ts` 侧栏，front matter `component: Badge` 已写（组件已进库）；00-总纲 §四 与 01-设计规范 §0 索引行随建档更新。client 侧仍有同名的 `components/ui/Badge.tsx`（实为标签），迁移顺序见 Tag 规范给实现窗口第 6 条。
 
 ## 待决策清单
 
-- 数字款圆角 full 与独立数字圆角 6px 是两个值：独立数字沿用 Tabs §4 现行画法（6px），挂角数字按业内惯例走正圆 / 胶囊。是否统一为一个值，待设计师在真实页面上看过再定；统一时以本文为准、Tabs §4 同步改指针。
 - 挂角描边 1px bg-page 为本次建档取值（antd 用 1px 白色 box-shadow），待验收，尤其是深色模式下 `#121212` 描边是否够用。
 - Ribbon 缎带、文字徽标（`text` 挂角）本期不做——Apple HIG 口径：角标只放数字。
 
@@ -111,6 +112,8 @@
 
 | 日期 | 改了什么 | 提交 |
 |---|---|---|
+| 2026-08-28 | **圆角统一为 full**（设计师在设置页导航上拍板）：独立数字原沿用 Tabs 的 6px，与挂角数字的正圆并存两个值；现在一律 full——一位数正圆、两位起胶囊。§3 尺寸表、§给实现窗口 3 同步，待决策清单第 1 条结案；Tabs §4 的画法描述随之改写（其计数徽标本就由本组件渲染） | 待 committer 窗口提交 |
+| 2026-08-28 | 红点补上**无宿主**的行内形态：列表行没有图标 / 头像可挂时，红点自己占一列（通知列表就是这个），行本身即宿主；默认色改为按形态定——红点恒 danger，只有独立数字默认 brand。§1 / §2 / §给实现窗口 1 同步；client 三处手写徽标（设置导航计数 ×2、通知未读点、头像红点）随之迁入组件 | 待 committer 窗口提交 |
 | 2026-08-28 | **状态点移出本文**，归口 [组件-Tag标签.md](组件-Tag标签.md) §5 `dot` 款（设计师拍板）：状态点说的是「这个对象是什么状态」，与徽标的「有没有新的 / 有多少」不是一件事，而它和标签本来就共用一套语义色、在真实页面（知识空间文件列表）里也一直是带色底的标签形态。本文剩数字 / 红点 / 独立数字三类；§1 判别表、§2 类型表、§3 尺寸表、§4 内容形态、§给实现窗口 1/2/4 同步；组件与 demo 页同步删 `status` / `text` prop | 待 committer 窗口提交 |
 | 2026-08-28 | 组件落地 `packages/ui/src/components/Badge/`：四类型 + 两色 + `showZero` / `circle` / `offset` / `disabled` 全部按本文实现；挂角与独立数字改由「有没有 `children`」区分，`standalone` prop 不做（§给实现窗口 1）；Tabs 的计数徽标改由本组件渲染，画法零变化；demo 页 `components/badge.mdx` 上线 | 待 committer 窗口提交 |
 | 2026-08-28 | 建档 v1：四类型（数字 / 红点 / 状态点 / 独立数字；状态点当日晚些移出，见上）；数字按语义分 danger 实底（要你处理，挂角默认）与 brand 5% 透明底（只报数量，独立默认）；尺寸单档 16px、caption-sm/500 等宽数字、红点 6px、挂角 1px bg-page 描边；**数字不折算不做 99+**、0 不显示（`showZero` 例外）；状态点五态不做动画；徽标不可点、无动画、随宿主禁用。归口 [组件-Tabs标签页.md](组件-Tabs标签页.md) §4 的计数徽标；与 [组件-Tag标签.md](组件-Tag标签.md) 同日建档 | 待 committer 窗口提交 |

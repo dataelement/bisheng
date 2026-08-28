@@ -1,3 +1,4 @@
+import { Badge } from "@bisheng/ui";
 import { useState } from "react";
 import type { MessageItem } from "~/api/message";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
@@ -211,8 +212,10 @@ export function NotificationRow({
           <span className="text-[12px] tabular-nums text-text-3">{formatTime(notification.create_time)}</span>
         </div>
 
-        {/* Unread marker on the right — read rows render nothing here. */}
-        {unread && <span className="mt-2 size-2 shrink-0 rounded-full bg-[#f53f3f]" aria-hidden />}
+        {/* Unread marker on the right — read rows render nothing here. The
+            hostless dot form (组件-Badge徽标.md §2): 6px, danger, no host to
+            hang off, `mt-2` drops it onto the first text line. */}
+        {unread && <Badge dot className="mt-2 shrink-0" />}
       </div>
 
       {showsCompletedPill && (

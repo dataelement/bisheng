@@ -9,10 +9,11 @@ import cn from '../../utils/cn';
  * that never clears is the same as no red dot at all. What says「what this
  * is」is a Tag (判别表 in §1 of the same doc).
  *
- * Three forms, one size — the badge does not grow with its host (§3):
+ * Four forms, one size — the badge does not grow with its host (§3):
  *   • `count` on a host      — 16px pill in the host's top-right corner (§2)
  *   • `dot` on a host        — 6px circle, same corner (§2)
  *   • `count` with no host   — the standalone number after a tab / menu label
+ *   • `dot` with no host     — the unread marker in its own column of a list row
  *
  * Reporting a STATE (「运行中」/「失败」) is not one of them: that is a dot
  * plus a word, which is a word about the object — a Tag with `dot` (§1, moved
@@ -50,7 +51,8 @@ const COLOR: Record<BadgeColor, string> = {
 const DISABLED_FILL = 'bg-text-4 text-white';
 
 
-/** §3 — one size, 16px tall, min 16px wide (a single digit is a circle), the
+/** §3 — one size, 16px tall, min 16px wide, full radius (a single digit is a
+ * circle, two digits stretch it into a pill), the
  * caption-sm rung the type scale keeps for exactly this, weight 500, tabular
  * figures. `leading-none` because the 18px line box of caption-sm would
  * otherwise fight the 16px height. */
@@ -75,7 +77,11 @@ export interface BadgeProps {
    * raw count straight through without guarding it.
    */
   count?: number;
-  /** §2 — 「there is something new」without a number. Ignored when `count` shows. */
+  /**
+   * §2 — 「there is something new」 without a number. On a host it rides the
+   * top-right corner; with no host it is the unread marker a list row keeps in
+   * its own column. Ignored when `count` shows.
+   */
   dot?: boolean;
   /**
    * §2 — defaults by position, because the two forms mean different things:
@@ -118,13 +124,28 @@ function Badge({
   // §4 — 0 is silence unless the caller says 0 is the answer.
   const showCount = count !== undefined && (count > 0 || (showZero && count === 0));
   const showDot = !showCount && dot;
-  const fill = disabled ? DISABLED_FILL : COLOR[color ?? (hasHost ? 'danger' : 'brand')];
+  // §2 — the default is per FORM, not per position: a dot always means
+  // 「something new」 and is therefore always red; only the standalone NUMBER
+  // defaults to the quiet brand tint, because that one is just reporting how
+  // many. (A brand-tinted dot would be a 5% wash 6px across — invisible.)
+  const fill = disabled ? DISABLED_FILL : COLOR[color ?? (hasHost || showDot ? 'danger' : 'brand')];
 
   if (!hasHost) {
-    // The standalone number: it sits in the text flow after a label, so it
-    // takes the 6px radius Tabs has been drawing rather than a full pill.
-    if (!showCount) return null;
-    return <span className={cn(PILL, 'rounded-md', fill, className, badgeClassName)}>{count}</span>;
+    // §3 (2026-08-28) — the standalone number is the SAME pill as the corner
+    // one: full radius, so a single digit is a circle. It shipped at the 6px
+    // radius Tabs had been drawing; the designer settled the open question on
+    // the settings nav — one number badge, one radius.
+    if (showCount) {
+      return <span className={cn(PILL, 'rounded-full', fill, className, badgeClassName)}>{count}</span>;
+    }
+    // §2 — the same red dot, in its own column: a list row whose unread marker
+    // has nowhere to hang (no icon, no avatar) still needs one, and the row is
+    // the host in every sense that matters. No page-colored ring here — there
+    // is nothing underneath it to separate from.
+    if (showDot) {
+      return <span aria-hidden className={cn(DOT, fill, className, badgeClassName)} />;
+    }
+    return null;
   }
 
   const [dx, dy] = offset ?? [0, 0];

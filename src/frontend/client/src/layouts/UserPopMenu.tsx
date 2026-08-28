@@ -1,3 +1,5 @@
+import { Badge } from "@bisheng/ui";
+import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Avatar, AvatarImage, AvatarName } from "~/components/ui/Avatar";
@@ -54,8 +56,14 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
         <AvatarName name={user?.username} />
     );
 
-    const unreadDot = (unreadCount > 0 || pendingApprovalCount > 0) && (
-        <div className="absolute -top-0.5 -right-0.5 z-20 size-2.5 bg-[#f53f3f] rounded-full ring-2 ring-white pointer-events-none" />
+    // 组件-Badge徽标.md §2/§5 — the corner dot on a round host: the badge pulls
+    // itself onto the circumference (`circle`) and carries the 1px page-colored
+    // ring, so it stays legible on any avatar art without a hand-placed offset.
+    const hasUnread = unreadCount > 0 || pendingApprovalCount > 0;
+    const withUnreadDot = (avatar: ReactNode) => (
+        <Badge dot={hasUnread} circle className="pointer-events-none">
+            {avatar}
+        </Badge>
     );
 
     if (isDrawer) {
@@ -69,8 +77,7 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
                 onClick={openSettings}
             >
                 <div className="relative shrink-0">
-                    <Avatar className="size-9 border border-fill-2">{avatarInner}</Avatar>
-                    {unreadDot}
+                    {withUnreadDot(<Avatar className="size-9 border border-fill-2">{avatarInner}</Avatar>)}
                 </div>
                 <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-medium text-text-1 truncate">{displayName}</p>
@@ -86,9 +93,9 @@ export function UserPopMenu({ variant = "rail" }: UserPopMenuProps) {
             className="relative size-10 cursor-pointer outline-none active:scale-95 transition-transform"
             onClick={openSettings}
         >
-            <Avatar className="size-10 hover:opacity-90 transition-opacity">{avatarInner}</Avatar>
-            {/* 头像右上角红点 */}
-            {unreadDot}
+            {withUnreadDot(
+                <Avatar className="size-10 hover:opacity-90 transition-opacity">{avatarInner}</Avatar>,
+            )}
         </button>
     );
 }

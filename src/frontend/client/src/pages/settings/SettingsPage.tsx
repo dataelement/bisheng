@@ -1,3 +1,4 @@
+import { Badge } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
@@ -25,15 +26,6 @@ import {
   SETTINGS_NAV_ITEMS,
   type SettingsPageSection,
 } from "./settingsSections";
-
-function NavCountBadge({ count }: { count: number }) {
-  if (count <= 0) return null;
-  return (
-    <span className="flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full bg-[#f53f3f] px-1 text-[11px] leading-none text-white tabular-nums">
-      {count > 99 ? "99+" : count}
-    </span>
-  );
-}
 
 /**
  * 设置 page — replaces the old SettingsDialog + MessageApprovalDialog pair with one
@@ -184,7 +176,14 @@ export default function SettingsPage() {
                       <ItemIcon className="size-5 shrink-0" />
                       <span className="truncate">{localize(item.labelKey)}</span>
                     </span>
-                    <NavCountBadge count={navBadge(item.key)} />
+                    {/* 组件-Badge徽标.md §2 — the standalone number, in danger:
+                        these counts are things waiting on the user, not a
+                        neutral item count. 0 renders nothing on its own, and
+                        the count is shown as-is (the old hand-rolled badge
+                        collapsed anything past 99 into 「99+」; §3 dropped that
+                        — a four-digit unread count is a notification-policy
+                        problem, not something to hide behind a plus sign). */}
+                    <Badge color="danger" count={navBadge(item.key)} className="shrink-0" />
                   </button>
                 );
               })}
@@ -325,7 +324,7 @@ export default function SettingsPage() {
                         <ItemIcon className="size-4 shrink-0" />
                         <span className="truncate">{localize(item.labelKey)}</span>
                       </span>
-                      <NavCountBadge count={navBadge(item.key)} />
+                      <Badge color="danger" count={navBadge(item.key)} className="shrink-0" />
                     </button>
                   );
                 })}
