@@ -463,7 +463,7 @@ class TestMembershipRewrite:
 
 
 class TestContentRewrite:
-    async def test_incomplete_same_generation_removes_stale_es_chunks(self):
+    async def test_complete_milvus_generation_still_removes_stale_es_chunks(self):
         writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
         writer.tenant_id = 1
         writer.schema_spec = sss.SharedStoreSchemaSpec(
@@ -479,7 +479,7 @@ class TestContentRewrite:
         async def milvus(method, *args, **kwargs):
             calls.append((method, args, kwargs))
             if method == "query":
-                return [{"chunk_index": 0}, {"chunk_index": 2}]
+                return [{"chunk_index": 0}, {"chunk_index": 1}]
             return None
 
         async def es(method, *args, **kwargs):
