@@ -9,15 +9,17 @@ import cn from '../../utils/cn';
  * so it is navigation. The same content shown a different way is a Segmented
  * (判别表 in 组件-Segmented分段控制器.md §1). Line type ONLY — no card tabs, no
  * closable tabs (§2). Baked in per spec: left-aligned tab row over a full-width
- * 1px divider, 24px between tabs, first tab flush with the content edge (§2);
+ * 1px divider (optional — `divider={false}`), 24px between tabs, first tab
+ * flush with the content edge (§2);
  * three sizes on the 24/32/40 ladder; unselected weight 400, selected 500 —
  * every tab reserves its width at 500 via an invisible bold copy of the label
  * (antd's trick), so bolding never moves the neighbors or the indicator (§3);
  * selected text + a 2px indicator sliding 200ms under the selected tab, in
  * the brand color by default or in ink via `variant="neutral"` (§5); content
  * swaps instantly, no transition (§5);
- * overflow scrolls horizontally with fading edges, never wraps, the selected
- * tab keeps itself visible (§4); ≥44px touch hot zones (§6). Accessibility is
+ * an optional count badge rides right of the label (§4); overflow scrolls
+ * horizontally with fading edges, never wraps, the selected tab keeps itself
+ * visible (§4); ≥44px touch hot zones (§6). Accessibility is
  * the WAI-ARIA tabs pattern in automatic mode: arrow keys move focus AND
  * activate, Home/End jump to the ends (§落地 2).
  */
@@ -34,6 +36,13 @@ export interface TabItem {
   label: React.ReactNode;
   /** Optional leading icon — all tabs in a set have one or none do (§4). */
   icon?: React.ReactNode;
+  /**
+   * §4 — count badge right of the label (unread / item count). 0 and
+   * undefined render nothing, so callers can pass a raw count straight
+   * through without guarding. Not capped: the tab grows with the digits,
+   * matching the channel module this was lifted from.
+   */
+  badge?: number;
   /** §5 — grays out and skips focus; prefer not rendering a dead tab at all. */
   disabled?: boolean;
   /** Panel content. Omit on every item to use Tabs as a bare bar (routing). */
@@ -63,7 +72,7 @@ const TAB_SIZE: Record<TabsSize, string> = {
  * (text-1 is the loudest text on either background). Selection then rests on
  * weight 500 + the indicator alone, so neutral is for surfaces where a brand
  * accent would fight nearby brand elements (§5). */
-const VARIANT: Record<TabsVariant, { tab: string; indicator: string }> = {
+const VARIANT: Record<TabsVariant, { tab: string; indicator: string; badge: string }> = {
   brand: {
     // Dark needs no override: blue-500 resolves through the dark brand ramp
     // (tokens.css .dark → #3C7EFF blue / #3CB062 green), bright AND saturated
@@ -71,10 +80,17 @@ const VARIANT: Record<TabsVariant, { tab: string; indicator: string }> = {
     // interim 400) was waiting for.
     tab: 'data-[state=active]:text-blue-500 data-[state=active]:hover:text-blue-500',
     indicator: 'bg-blue-500',
+    // §4 — the badge does NOT track selection: it reports "how many", not
+    // "which tab you are on", so it stays brand on selected and unselected
+    // tabs alike (the channel module reads this way and it is the point of
+    // the badge). It follows the VARIANT instead, or a neutral tab row would
+    // sprout the brand accent the variant exists to avoid.
+    badge: 'bg-blue-500/5 text-blue-500',
   },
   neutral: {
     tab: 'data-[state=active]:text-text-1 data-[state=active]:hover:text-text-1',
     indicator: 'bg-text-1',
+    badge: 'bg-text-1/5 text-text-1',
   },
 };
 
@@ -97,6 +113,12 @@ export interface TabsProps {
    * compete with nearby brand elements; selection rests on weight + indicator.
    */
   variant?: TabsVariant;
+  /**
+   * §2 — the 1px divider under the whole row. Default on. Turn it off when
+   * the surrounding container already draws that edge (a card border, a
+   * section rule) — two hairlines 1px apart read as a rendering bug.
+   */
+  divider?: boolean;
   /** Controlled selected key; use `defaultActiveKey` for uncontrolled. */
   activeKey?: string;
   defaultActiveKey?: string;
@@ -113,6 +135,7 @@ function Tabs({
   items,
   size = 'medium',
   variant = 'brand',
+  divider = true,
   activeKey,
   defaultActiveKey,
   onChange,
@@ -174,19 +197,23 @@ function Tabs({
 
   return (
     <TabsPrimitive.Root value={current} onValueChange={handleChange} activationMode="automatic" className={className}>
-      {/* §2 — one 1px divider under the WHOLE row, extra area included. */}
-      <div className="flex items-end border-b border-border-base">
+      {/* §2 — one 1px divider under the WHOLE row, extra area included;
+          `divider={false}` drops it when the container already draws that edge. */}
+      <div className={cn('flex items-end', divider && 'border-b border-border-base')}>
         <TabsPrimitive.List
           ref={listRef}
           onScroll={updateFade}
           className={cn(
             // §4 — overflow scrolls, never wraps; the scrollbar itself is
             // hidden (the fading edges are the affordance).
+            'relative flex min-w-0 flex-1 items-center gap-6 overflow-x-auto',
             // -mb-px sinks the list 1px onto the wrapper's border-b so the
             // bottom-0 indicator paints OVER the gray divider instead of
             // stacking above it (the indicator can't use -bottom-px itself:
             // overflow-x-auto forces overflow-y to auto, which would clip it).
-            'relative -mb-px flex min-w-0 flex-1 items-center gap-6 overflow-x-auto',
+            // Without a divider there is nothing to sink onto — keeping it
+            // would just pull the row 1px past the wrapper's own bottom.
+            divider && '-mb-px',
             '[-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
             ROW_SIZE[size],
           )}
@@ -225,6 +252,19 @@ function Tabs({
                 </span>
                 <span className="absolute inset-0 flex items-center justify-center">{item.label}</span>
               </span>
+              {/* §4 — count badge. Its own font-medium means the 400⇄500 flip on
+                  selection never resizes it, so the row cannot shift. Sits in the
+                  trigger's flex gap (4px small / 8px otherwise), same as the icon. */}
+              {item.badge !== undefined && item.badge > 0 && (
+                <span
+                  className={cn(
+                    'inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-md px-1 text-caption-sm font-medium',
+                    VARIANT[variant].badge,
+                  )}
+                >
+                  {item.badge}
+                </span>
+              )}
             </TabsPrimitive.Trigger>
           ))}
           {/* §5 — 2px brand indicator on the divider, text-wide, 200ms slide. */}

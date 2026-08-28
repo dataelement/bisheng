@@ -7,7 +7,7 @@ component: Tabs
 
 把**同一层级的几组内容**收进同一块区域,点谁看谁——切的是「内容区」,属于导航。只是同一份内容换个看法(列表还是卡片)的,用[分段控制器](/components/segmented);要随表单提交才生效的,用单选框。组件库 `@bisheng/ui` 导出 **`Tabs`**。规范全文见「文档 → 组件规范 → 标签页 Tabs」。
 
-**壳把规范写死的部分**:只有线型一种画法——标签行 + 2px 指示条 + 底部 1px 通栏分隔线;选中态两种配色经 `variant` 二选一:`brand`(默认,随蓝⇄绿主题)/ `neutral`(墨色,见下),不开放任意配色;三档高度 24/32/40;页签间距 24px、首个页签与内容区左缘对齐;未选中字重 400、选中 500(宽度按加粗态预留,切换零位移);指示条 200ms 滑动、内容区即时替换不加转场;溢出横向滚动 + 两端渐隐,选中页签自动保持可见;触屏热区 ≥44px。这些没有 prop。键盘走 WAI-ARIA tabs pattern 的 **automatic 模式**:左右方向键移动焦点即激活,Home/End 跳两端。
+**壳把规范写死的部分**:只有线型一种画法——标签行 + 2px 指示条 + 底部 1px 通栏分隔线(分隔线可经 `divider={false}` 关掉,见下);选中态两种配色经 `variant` 二选一:`brand`(默认,随蓝⇄绿主题)/ `neutral`(墨色,见下),不开放任意配色;三档高度 24/32/40;页签间距 24px、首个页签与内容区左缘对齐;未选中字重 400、选中 500(宽度按加粗态预留,切换零位移);指示条 200ms 滑动、内容区即时替换不加转场;溢出横向滚动 + 两端渐隐,选中页签自动保持可见;触屏热区 ≥44px。这些没有 prop。键盘走 WAI-ARIA tabs pattern 的 **automatic 模式**:左右方向键移动焦点即激活,Home/End 跳两端。
 
 ## 基础用法
 
@@ -70,6 +70,27 @@ export default () => (
 );
 ```
 
+## 无分隔线
+
+`divider={false}` 去掉标签行下方那条通栏灰线,指示条与页签保持原样。**只在外层容器已经画了这条边时用**——卡片描边、分区横线紧挨着页签下沿时,两条 1px 细线隔着 1px 并排,看起来像渲染出错。容器没画边就别关,页签会飘在内容上方失去归属。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+const items = [
+  { key: 'a', label: '详情' },
+  { key: 'b', label: '版本' },
+  { key: 'c', label: '权限' },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs items={items} />
+    <Tabs divider={false} items={items} />
+  </div>
+);
+```
+
 ## 前缀图标
 
 icon 随档 14/16/18px,与文字间距 8px(small 档 4px)。同组页签**要么都带 icon 要么都不带**,一半有一半没有的组读起来最累。icon 走 `currentColor` 跟随文字色,所以与配色款正交——墨色款下图标同样变墨色,无需额外处理。
@@ -81,6 +102,27 @@ import { Outlined } from 'bisheng-icons';
 const items = [
   { key: 'list', label: '列表', icon: <Outlined.List /> },
   { key: 'calendar', label: '日历', icon: <Outlined.Calendar /> },
+];
+
+export default () => (
+  <div style={{ display: 'grid', gap: 24 }}>
+    <Tabs items={items} />
+    <Tabs variant="neutral" items={items} />
+  </div>
+);
+```
+
+## 数字徽标
+
+`badge` 在文字右侧挂一个数字(未读数、条目数)。传 `0` 或不传都不渲染,所以业务侧可以把计数原样传进来,不必自己判空。徽标**不跟随选中态变色**——它报的是「有多少」,不是「你在哪一页」,选中与未选中一律同色;但它跟随配色款,墨色款下自然是墨色。数字不截断,位数多了页签跟着变宽。
+
+```tsx
+import { Tabs } from '@bisheng/ui';
+
+const items = [
+  { key: 'all', label: '全部', badge: 499 },
+  { key: 'agri', label: '农业', badge: 499 },
+  { key: 'read', label: '已读' },
 ];
 
 export default () => (
