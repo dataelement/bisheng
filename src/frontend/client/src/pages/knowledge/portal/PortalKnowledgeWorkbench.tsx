@@ -399,6 +399,11 @@ export default function PortalKnowledgeWorkbench() {
         setRestoringDeepLinkKey((current) => (current === targetKey ? null : current));
     }, []);
 
+    const handleDeepLinkOpenAiDrawer = useCallback(() => {
+        setAiDrawerOpen(true);
+        setActivePanel(null);
+    }, []);
+
     useEffect(() => {
         if (!preferredSpaceResolveFailed || !portalDeepLinkTarget?.spaceId) return;
         setRestoringDeepLinkKey((current) => (
@@ -1455,24 +1460,43 @@ export default function PortalKnowledgeWorkbench() {
                 ).trim();
                 const folderName = String(event.data?.folderName ?? event.data?.folder_name ?? "").trim();
                 const openNonce = String(event.data?.openNonce ?? "").trim() || String(Date.now());
-                setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.set("spaceId", spaceId);
-                    next.set("fileId", fileId);
-                    if (fileName) next.set("fileName", fileName);
-                    else next.delete("fileName");
-                    if (folderId) {
-                        next.set("folderId", folderId);
-                        if (folderName) next.set("folderName", folderName);
-                        else next.delete("folderName");
-                    } else {
-                        next.delete("folderId");
-                        next.delete("folderName");
-                    }
-                    // Prefer parent-provided nonce so retry bursts share one restore key.
-                    next.set("openNonce", openNonce);
-                    return next;
-                }, { replace: true });
+                const applyDeepLinkParams = (resolvedFolderId: string, resolvedFolderName: string) => {
+                    setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set("spaceId", spaceId);
+                        next.set("fileId", fileId);
+                        if (fileName) next.set("fileName", fileName);
+                        else next.delete("fileName");
+                        if (resolvedFolderId) {
+                            next.set("folderId", resolvedFolderId);
+                            if (resolvedFolderName) next.set("folderName", resolvedFolderName);
+                            else next.delete("folderName");
+                        } else {
+                            next.delete("folderId");
+                            next.delete("folderName");
+                        }
+                        // Prefer parent-provided nonce so retry bursts share one restore key.
+                        next.set("openNonce", openNonce);
+                        return next;
+                    }, { replace: true });
+                };
+                if (folderId) {
+                    applyDeepLinkParams(folderId, folderName);
+                    return;
+                }
+                // Parent didn't pass a folder id. Resolve the file's real folder first
+                // so the deep link lands on the final URL (with folderId) in a single hop.
+                // Otherwise the URL would jump from no-folder to with-folder once the
+                // file opens, restarting the deep-link restore and flickering the drawer.
+                void getFolderParentPathApi(spaceId, fileId)
+                    .then((parentPath) => {
+                        const deepest = parentPath?.[parentPath.length - 1];
+                        applyDeepLinkParams(deepest?.id ?? "", deepest?.name ?? "");
+                    })
+                    .catch(() => {
+                        // File at space root or lookup failed: open without folder id.
+                        applyDeepLinkParams("", "");
+                    });
             }
         };
         window.addEventListener("message", handlePortalMessage);
@@ -1658,8 +1682,32 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         setSummaryExpanded(false);
+        // Deep-link entry (e.g. "进入知识库") must keep the AI drawer open. The
+        // restore flow churns selectedFile (folder navigation clears it before
+        // re-opening), and once restored the deep-linked file stays selected —
+        // closing here would drop the drawer usePortalDeepLink opened.
+        if (isDeepLinkRestoring) return;
+        if (
+            portalDeepLinkTarget?.fileId
+            && selectedFile
+            && String(selectedFile.id) === portalDeepLinkTarget.fileId
+            && (
+                String(activeSpace?.id) === portalDeepLinkTarget.spaceId
+                || preservesCrossSpaceDeepLinkPreview
+            )
+        ) {
+            return;
+        }
         setAiDrawerOpen(false);
-    }, [selectedFile?.id]);
+    }, [
+        selectedFile?.id,
+        selectedFile,
+        isDeepLinkRestoring,
+        portalDeepLinkTarget?.fileId,
+        portalDeepLinkTarget?.spaceId,
+        activeSpace?.id,
+        preservesCrossSpaceDeepLinkPreview,
+    ]);
 
     useEffect(() => {
         if (currentFolderId && !findTreeNode(treeNodes, currentFolderId)) {
@@ -2200,7 +2248,7 @@ export default function PortalKnowledgeWorkbench() {
         placeholderData: (prev: KnowledgeSpace | undefined) => prev,
     });
 
-    const { data: selectedFileParentPath } = useQuery<Array<{ id: string; name: string }>>({
+    const { data: selectedFileParentPath, isLoading: isSelectedFileParentPathLoading } = useQuery<Array<{ id: string; name: string }>>({
         queryKey: ["portalSelectedFileParentPath", selectedFile?.spaceId, selectedFile?.id],
         queryFn: async () => {
             const spaceId = selectedFile?.spaceId;
@@ -2630,6 +2678,7 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFile,
         onNavigateFolder: handleNavigateFolder,
         onRestoreComplete: handleDeepLinkRestoreComplete,
+        onOpenAiDrawer: handleDeepLinkOpenAiDrawer,
         previewOnlyTargetSpace,
     });
 
