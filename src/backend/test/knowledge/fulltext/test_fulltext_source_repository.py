@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -5,8 +6,14 @@ from sqlalchemy import text
 
 from bisheng.core.context.tenant import current_tenant_id, set_current_tenant_id
 from bisheng.core.database.tenant_filter import register_tenant_filter_events
+from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
+    KnowledgeSpaceSharedStorageRouting,
+)
 from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_source_repository_impl import (
     KnowledgeFulltextSourceRepositoryImpl,
+)
+from bisheng.knowledge.domain.schemas.knowledge_fulltext_schema import (
+    KnowledgeFulltextFileSnapshot,
 )
 from bisheng.knowledge.domain.services.knowledge_fulltext_document_service import (
     KnowledgeFulltextDocumentService,
@@ -144,3 +151,59 @@ async def test_backfill_file_id_page_is_global_stable_and_scope_bounded(async_db
         knowledge_id=None,
         file_id=11,
     ) == [11]
+
+
+async def test_shared_space_chunk_source_uses_current_canonical_generation(
+    async_db_session,
+    monkeypatch,
+):
+    connection = await async_db_session.connection()
+    await connection.run_sync(
+        KnowledgeSpaceSharedStorageRouting.__table__.create,
+        checkfirst=True,
+    )
+    await async_db_session.exec(
+        text(
+            """
+            INSERT INTO knowledge_space_shared_storage_routing (
+                tenant_id, shared_enabled, routing_version, write_frozen,
+                index_name
+            ) VALUES (1, 1, 5, 0, 'idx_space_shared_1')
+            """
+        )
+    )
+    await async_db_session.commit()
+    repository = KnowledgeFulltextSourceRepositoryImpl(async_db_session)
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.repositories.implementations."
+        "knowledge_fulltext_source_repository_impl.get_shared_storage_conf",
+        lambda: SimpleNamespace(enabled=True, es_routing_enabled=False),
+    )
+
+    snapshot = KnowledgeFulltextFileSnapshot(
+        file_id=1829,
+        tenant_id=1,
+        knowledge_id=198,
+        knowledge_type=3,
+        file_type="FILE",
+        status="2",
+        logical_document_id=500,
+        document_version_id=501,
+        content_file_id=1800,
+        content_generation=3,
+        file_name="published.md",
+        file_source="publish",
+        knowledge_name="共享空间",
+        created_at=datetime(2026, 8, 28),
+        updated_at=datetime(2026, 8, 28),
+    )
+    source = await repository.get_chunk_source(snapshot)
+
+    assert source is not None
+    assert source.shared is True
+    assert source.index_name == "idx_space_shared_1"
+    assert source.file_id == 1829
+    assert source.knowledge_id == 198
+    assert source.canonical_document_id == 500
+    assert source.canonical_version_id == 501
+    assert source.content_generation == 3

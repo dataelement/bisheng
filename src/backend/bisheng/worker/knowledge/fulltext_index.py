@@ -554,6 +554,7 @@ async def _run_logical_entry_projection_repair(
             tenant_id=tenant_id,
             entry_id=file_id,
             lease_owner=f"fulltext-repair:{lease_owner}",
+            force_content_upsert=True,
         )
         return result.status == "ready"
 
