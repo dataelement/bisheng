@@ -1,8 +1,9 @@
 import { Download, Edit, FileSearch, GitBranch, History, Loader2, MoreVertical, RefreshCw, Send, Share2, Shield, Tag, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { FileStatus, FileType, KnowledgeFile, SpaceRole } from "~/api/knowledge";
 import { Button, Checkbox } from "~/components";
 import { Card, CardContent } from "~/components/ui/Card";
+import { useToastContext } from "~/Providers";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,7 +15,7 @@ import { cn } from "~/utils";
 import FileIconRenderer from "./FileIcon";
 import TagGroup from "./TagGroup";
 import { useInlineRename } from "../hooks/useInlineRename";
-import { formatTimeCard, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable } from "../knowledgeUtils";
+import { formatTimeCard, getKnowledgeApprovalStatusLabel, getUploadTransientStatusLabel, isKnowledgeApprovalRejected, isKnowledgeFileLockedByPublishApproval, isKnowledgeItemPreviewable, isKnowledgeFileReparseRetryable, notifyKnowledgeFileApprovalLocked } from "../knowledgeUtils";
 import { useLocalize, useMediaQuery } from "~/hooks";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { Badge } from "~/components/ui/Badge";
@@ -95,6 +96,7 @@ export function FileCard({
     retryActionLabel,
 }: FileCardProps) {
     const localize = useLocalize();
+    const { showToast } = useToastContext();
     /** True when primary input is mouse + hover: actions reveal on card hover. Touch / coarse pointer: keep actions visible (viewport width does not matter). */
     const revealCardActionsOnHoverOnly = useMediaQuery(
         "(hover: hover) and (pointer: fine)",
@@ -104,6 +106,11 @@ export function FileCard({
         file.entryType === "share"
         || file.entryType === "publish"
     );
+    // Active publish approval locks every action except download.
+    const fileLocked = isKnowledgeFileLockedByPublishApproval(file);
+    const handleHoverLock = useCallback(() => {
+        notifyKnowledgeFileApprovalLocked(showToast);
+    }, [showToast]);
     const [hovered, setHovered] = useState(false);
     const [moreMenuOpen, setMoreMenuOpen] = useState(false);
     // 触屏/无 hover 设备上操作按钮常驻显示、不会触发 hover，需在挂载时即请求该文件权限，
@@ -442,6 +449,14 @@ export function FileCard({
                                 </Button>
                             )}
                             {showMoreMenu && (
+                                fileLocked ? (
+                                    <span
+                                        className="inline-flex size-5 cursor-not-allowed items-center justify-center rounded-md opacity-50"
+                                        onMouseEnter={handleHoverLock}
+                                    >
+                                        <MoreVertical className="size-4 text-[#4e5969]" />
+                                    </span>
+                                ) : (
                                 <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
                                     <DropdownMenuTrigger asChild>
                                         <Button
@@ -560,6 +575,7 @@ export function FileCard({
                                         )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
+                                )
                             )}
                         </div>
                     )}
@@ -634,6 +650,14 @@ export function FileCard({
                         </Button>
                     )}
                     {showMoreMenu && (
+                        fileLocked ? (
+                            <span
+                                className="inline-flex size-5 cursor-not-allowed items-center justify-center rounded-md opacity-50"
+                                onMouseEnter={handleHoverLock}
+                            >
+                                <MoreVertical className="size-4 text-[#4e5969]" />
+                            </span>
+                        ) : (
                         <DropdownMenu open={moreMenuOpen} onOpenChange={setMoreMenuOpen}>
                             <DropdownMenuTrigger asChild>
                                 <Button
@@ -751,6 +775,7 @@ export function FileCard({
                                 )}
                             </DropdownMenuContent>
                         </DropdownMenu>
+                        )
                     )}
                     </div>
                 )}

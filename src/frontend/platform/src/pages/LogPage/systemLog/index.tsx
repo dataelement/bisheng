@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHeader, TableRow } from 
 import { getActionsApi, getActionsByModuleApi, getLogsApi, getModulesApi, getOperatorsApi, getResponsiblePersonsApi } from "@/controllers/API/log";
 import { getUserGroupsApi } from "@/controllers/API/user";
 import { useTable } from "@/util/hook";
-import { formatDate } from "@/util/utils";
+import { formatDate, formatUserDisplayLabel } from "@/util/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TooltipProvider } from "@/components/bs-ui/tooltip";
@@ -91,7 +91,7 @@ const renderResponsiblePerson = (log: any, t: (key: string, opts?: any) => strin
     const metadata = getAuditMetadata(log)
     const externalId = String(metadata.responsible_person_external_id || '').trim()
     const userName = String(metadata.responsible_user_name || '').trim()
-    if (externalId && userName && externalId !== userName) {
+    if (externalId && userName) {
         return `${externalId} (${userName})`
     }
     if (externalId || userName) {
@@ -128,6 +128,7 @@ export default function SystemLog() {
         () => [
             { defaultWidth: 200, minWidth: 80 },
             { defaultWidth: 160, minWidth: 80 },
+            { defaultWidth: 100, minWidth: 70 },
             { defaultWidth: 180, minWidth: 80 },
             { defaultWidth: 170, minWidth: 120 },
             { defaultWidth: 120, minWidth: 80 },
@@ -143,6 +144,7 @@ export default function SystemLog() {
     const headerLabels = [
         t('log.auditId'),
         t('log.username'),
+        t('log.externalId'),
         t('log.responsiblePerson'),
         t('log.operationTime'),
         t('log.systemModule'),
@@ -273,20 +275,21 @@ export default function SystemLog() {
                         <TableRow key={log.id}>
                             <TruncatedTableCell tdProps={rc.getTdProps(0)} text={String(log.id)} />
                             <TruncatedTableCell tdProps={rc.getTdProps(1)} text={log.operator_name || "-"} />
-                            <TruncatedTableCell tdProps={rc.getTdProps(2)} text={renderResponsiblePerson(log, t)} />
-                            <TruncatedTableCell tdProps={rc.getTdProps(3)} text={log.create_time.replace("T", " ")} />
-                            <TruncatedTableCell tdProps={rc.getTdProps(4)} text={renderSystemId(log, t)} />
-                            <TruncatedTableCell tdProps={rc.getTdProps(5)} text={renderEventType(log, t)} />
-                            <TruncatedTableCell tdProps={rc.getTdProps(6)} text={renderObjectType(log, t)} />
-                            <TruncatedTableCell tdProps={rc.getTdProps(7)} text={renderObjectName(log, t)} />
-                            <TruncatedTableCell tdProps={rc.getTdProps(8)} text={log.ip_address || "-"} />
-                            <TruncatedTableCell tdProps={rc.getTdProps(9)} text={renderRemark(log, t)} full />
+                            <TruncatedTableCell tdProps={rc.getTdProps(2)} text={log.operator_external_id || "-"} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(3)} text={renderResponsiblePerson(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(4)} text={log.create_time.replace("T", " ")} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(5)} text={renderSystemId(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(6)} text={renderEventType(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(7)} text={renderObjectType(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(8)} text={renderObjectName(log, t)} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(9)} text={log.ip_address || "-"} />
+                            <TruncatedTableCell tdProps={rc.getTdProps(10)} text={renderRemark(log, t)} full />
                         </TableRow>
                     ))}
                 </TableBody>
                 {!logs.length && <TableFooter>
                     <TableRow>
-                        <TableCell colSpan={10} className="text-center text-gray-400">{t('build.empty')}</TableCell>
+                        <TableCell colSpan={11} className="text-center text-gray-400">{t('build.empty')}</TableCell>
                     </TableRow>
                 </TableFooter>}
                 </Table>
@@ -320,7 +323,7 @@ const useUsers = () => {
     const loadUsers = () => {
         getOperatorsApi().then(res => {
             const options = (Array.isArray(res) ? res : []).map((u) => ({
-                label: u.label || u.user_name,
+                label: formatUserDisplayLabel(u.user_name, u.external_id),
                 value: u.user_id,
             }))
             userRef.current = options
@@ -349,7 +352,7 @@ const useResponsiblePersons = () => {
     const loadResponsiblePersons = () => {
         getResponsiblePersonsApi().then((res: any) => {
             const options = (Array.isArray(res) ? res : []).map((item: any) => ({
-                label: item.label,
+                label: formatUserDisplayLabel(item.user_name, item.external_id),
                 value: item.user_id,
             }))
             setResponsiblePersons(options)

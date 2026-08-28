@@ -197,3 +197,16 @@ class ApiRateLimitForbiddenError(BaseErrorCode):
     @property
     def http_status(self) -> int:
         return self.HttpStatus
+
+
+class OpenFgaOverloadedError(BaseErrorCode):
+    # HTTP 200 on purpose: callers already branch on the envelope's status_code,
+    # and a non-2xx status would make integrators' HTTP layers treat backpressure
+    # as a transport failure.
+    Code: int = 10046
+    Msg: str = '当前服务器资源使用率过高，请耐心等待几分钟后重新尝试'  # noqa: RUF001
+    HttpStatus: int = 200
+
+    @property
+    def http_status(self) -> int:
+        return self.HttpStatus

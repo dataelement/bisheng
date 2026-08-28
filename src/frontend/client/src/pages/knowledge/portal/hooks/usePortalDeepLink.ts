@@ -18,6 +18,8 @@ export interface PortalDeepLinkTarget {
     fileName: string;
     /** Forces re-apply when the same file is opened again via postMessage. */
     openNonce: string;
+    /** Set to "1" when the file was selected from the global search results. */
+    fromSearch?: string;
     key: string;
 }
 
@@ -39,6 +41,8 @@ interface UsePortalDeepLinkParams {
     setSelectedFile: Dispatch<SetStateAction<KnowledgeFile | null>>;
     onNavigateFolder: (folderId?: string, folderName?: string) => void | Promise<void>;
     onRestoreComplete?: (targetKey: string) => void;
+    /** Called when a deep-linked file is opened and the AI drawer should be shown. */
+    onOpenAiDrawer?: () => void;
     /** Out-of-sidebar personal space: open preview in place without switching sidebar/tree. */
     previewOnlyTargetSpace?: KnowledgeSpace | null;
 }
@@ -60,6 +64,7 @@ export const resolvePortalDeepLinkTarget = (searchParams: URLSearchParams): Port
     const fileId = getQueryValue(searchParams, ["fileId", "documentId", "document_id"]);
     const fileName = getQueryValue(searchParams, ["name", "fileName", "documentName", "document_name"]);
     const openNonce = getQueryValue(searchParams, ["openNonce", "open_nonce"]);
+    const fromSearch = getQueryValue(searchParams, ["fromSearch", "from_search"]);
     return {
         spaceId,
         folderId,
@@ -67,8 +72,9 @@ export const resolvePortalDeepLinkTarget = (searchParams: URLSearchParams): Port
         fileId,
         fileName,
         openNonce,
+        fromSearch,
         // openNonce lets postMessage re-open the same file after the preview was closed.
-        key: `${spaceId}:${folderId}:${folderName}:${fileId}:${fileName}:${openNonce}`,
+        key: `${spaceId}:${folderId}:${folderName}:${fileId}:${fileName}:${openNonce}:${fromSearch}`,
     };
 };
 
@@ -114,6 +120,7 @@ export function usePortalDeepLink({
     setSelectedFile,
     onNavigateFolder,
     onRestoreComplete,
+    onOpenAiDrawer,
     previewOnlyTargetSpace = null,
 }: UsePortalDeepLinkParams) {
     const deepLinkTarget = useMemo(
@@ -208,6 +215,9 @@ export function usePortalDeepLink({
         setSearchMode(false);
         setSearchResults([]);
         setSelectedFile(fallbackFile);
+        if (target.fromSearch !== "1") {
+            onOpenAiDrawer?.();
+        }
         deepLinkHandledRef.current = target.key;
 
         let cancelled = false;
@@ -278,6 +288,9 @@ export function usePortalDeepLink({
         setSearchMode(false);
         setSearchResults([]);
         setSelectedFile(file);
+        if (target.fromSearch !== "1") {
+            onOpenAiDrawer?.();
+        }
         deepLinkHandledRef.current = target.key;
         // Workbench clears the loading overlay after selectedFile matches (and preview settles).
         return true;

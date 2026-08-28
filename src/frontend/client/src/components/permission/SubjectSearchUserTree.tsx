@@ -28,6 +28,7 @@ interface SubjectSearchUserTreeProps {
   loadDepartments?: (config?: { signal?: AbortSignal }) => Promise<DepartmentNode[]>;
   grantDepartmentsApi?: typeof getResourceGrantDepartments;
   grantUsersApi?: typeof getResourceGrantUsers;
+  onBulkLoadingChange?: (loading: boolean) => void;
 }
 
 interface NodePageState {
@@ -77,6 +78,7 @@ export function SubjectSearchUserTree({
   loadDepartments,
   grantDepartmentsApi,
   grantUsersApi,
+  onBulkLoadingChange,
 }: SubjectSearchUserTreeProps) {
   const localize = useLocalize();
   const [tree, setTree] = useState<DepartmentNode[]>([]);
@@ -261,6 +263,10 @@ export function SubjectSearchUserTree({
   }, []);
 
   const [bulkLoadingDept, setBulkLoadingDept] = useState<Set<NodeKey>>(new Set());
+
+  useEffect(() => {
+    onBulkLoadingChange?.(bulkLoadingDept.size > 0);
+  }, [bulkLoadingDept, onBulkLoadingChange]);
 
   // 收集某部门(不含子部门)当前已加载的 users
   const getLoadedUsersOfDept = useCallback(

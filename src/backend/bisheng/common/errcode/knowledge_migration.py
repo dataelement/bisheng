@@ -39,3 +39,23 @@ class KnowledgeMigrationDispatchError(KnowledgeMigrationError):
     Code = 18904
     Msg = "knowledge_migration_dispatch_failed"
     HttpStatus = 503
+
+
+# The portal renders `status_message` verbatim — it has no mapping for the
+# key-style messages above — so these three carry text a user can act on.
+class MigrationPreserveLinkSourceLevelMixedError(KnowledgeMigrationError):
+    Code = 18905
+    Msg = "保留原位链接时，来源知识库必须属于同一层级，请分批迁移"  # noqa: RUF001
+    HttpStatus = 400
+
+
+class MigrationPreserveLinkPublicSourceError(KnowledgeMigrationError):
+    Code = 18906
+    Msg = "公共知识库没有上一级，无法在保留原位链接的模式下迁移"  # noqa: RUF001
+    HttpStatus = 400
+
+
+class MigrationPreserveLinkTargetLevelError(KnowledgeMigrationError):
+    Code = 18907
+    Msg = "保留原位链接时，目标知识库只能是来源的上一级"  # noqa: RUF001
+    HttpStatus = 400

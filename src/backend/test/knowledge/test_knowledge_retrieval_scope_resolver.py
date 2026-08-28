@@ -26,6 +26,7 @@ from bisheng.knowledge.domain.contracts.identifiers import (
 from bisheng.knowledge.domain.contracts.retrieval_scope import (
     BackendQueryFilter,
     CanonicalChunkHit,
+    CanonicalGenerationConstraint,
     EntryRef,
     MappedEntryHit,
     RetrievalScope,
@@ -89,7 +90,7 @@ class StubFileRepository:
         self.mapping_calls.append(
             (tenant_id, tuple(sorted(set(document_ids))), tuple(sorted(set(knowledge_ids))))
         )
-        docs = set(int(d) for d in document_ids)
+        docs = {int(d) for d in document_ids}
         spaces = set(int(k) for k in knowledge_ids)
         return [
             e
@@ -97,6 +98,22 @@ class StubFileRepository:
             if int(e.tenant_id or 0) == tenant_id
             and int(e.reference_document_id or 0) in docs
             and int(e.knowledge_id) in spaces
+            and e.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+            and e.entry_type in {"manager", "publish", "share"}
+        ]
+
+    async def find_active_entries_for_documents_any_space(
+        self,
+        *,
+        tenant_id: int,
+        document_ids: list[int],
+    ) -> list[KnowledgeFile]:
+        docs = set(int(d) for d in document_ids)
+        return [
+            e
+            for e in self.entries
+            if int(e.tenant_id or 0) == tenant_id
+            and int(e.reference_document_id or 0) in docs
             and e.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
             and e.entry_type in {"manager", "publish", "share"}
         ]
@@ -256,6 +273,8 @@ def hit(
     chunk_index: int = 0,
     score: float = 0.9,
     text: str | None = "chunk text",
+    content_generation: int = 1,
+    membership_generation: int = 1,
 ) -> CanonicalChunkHit:
     return CanonicalChunkHit(
         canonical_document_id=CanonicalDocumentId(document_id),
@@ -263,6 +282,8 @@ def hit(
         chunk_index=chunk_index,
         score=score,
         text=text,
+        content_generation=content_generation,
+        membership_generation=membership_generation,
     )
 
 
@@ -426,11 +447,18 @@ async def test_resolver_fails_closed_when_feature_disabled():
 async def test_build_backend_filter_carries_tenant_spaces_and_narrowing():
     resolver, _, _, _ = make_resolver()
     scope = make_scope(space_ids=(20, 10), explicit={20: (100,)})
+    generation_constraint = CanonicalGenerationConstraint(
+        canonical_document_id=CanonicalDocumentId(DOC),
+        canonical_version_id=CanonicalVersionId(V1),
+        content_generation=1,
+        membership_generation=2,
+    )
 
     query_filter = resolver.build_backend_filter(
         scope,
         canonical_document_ids=[CanonicalDocumentId(DOC), CanonicalDocumentId(DOC)],
         canonical_version_ids=[CanonicalVersionId(V1)],
+        generation_constraints=[generation_constraint],
     )
 
     assert isinstance(query_filter, BackendQueryFilter)
@@ -438,6 +466,7 @@ async def test_build_backend_filter_carries_tenant_spaces_and_narrowing():
     assert tuple(int(s) for s in query_filter.requested_space_ids) == (20, 10)
     assert query_filter.canonical_document_ids == (CanonicalDocumentId(DOC),)
     assert query_filter.canonical_version_ids == (CanonicalVersionId(V1),)
+    assert query_filter.generation_constraints == (generation_constraint,)
     assert query_filter.routing_version == scope.routing_version
 
 
@@ -447,6 +476,33 @@ async def test_build_backend_filter_rejects_stale_routing_version():
     with pytest.raises(SharedStorageContractError) as exc_info:
         resolver.build_backend_filter(make_scope(routing_version=0))
     assert exc_info.value.code == SharedStorageErrorCode.ROUTING_VERSION_MISMATCH
+
+
+async def test_current_generation_constraint_uses_all_active_memberships():
+    entries = [
+        make_entry(100, space_id=10, entry_type=KnowledgeFileEntryType.MANAGER.value),
+        make_entry(
+            200,
+            space_id=20,
+            entry_type=KnowledgeFileEntryType.PUBLISH.value,
+            desired_entry=3,
+            applied_entry=3,
+        ),
+    ]
+    resolver, _, _, _ = make_resolver(
+        entries=entries,
+        documents=[make_document(primary_version_id=V1)],
+    )
+
+    constraints = await resolver.resolve_current_generation_constraints(
+        make_scope(space_ids=(10,)),
+        [CanonicalDocumentId(DOC)],
+    )
+
+    assert len(constraints) == 1
+    assert int(constraints[0].canonical_version_id) == V1
+    assert constraints[0].content_generation == 1
+    assert constraints[0].membership_generation == 3
 
 
 async def test_render_milvus_expr_single_and_multi_space():

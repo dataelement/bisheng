@@ -1,7 +1,7 @@
 import { toast } from "@/components/bs-ui/toast/use-toast";
 import axios from "axios";
 import i18next from "i18next";
-import { API_RATE_LIMIT_CODE, shouldShowApiRateLimitNotice } from "./apiRateLimitNotice";
+import { API_RATE_LIMIT_CODE, isServerBusyCode, shouldShowApiRateLimitNotice } from "./apiRateLimitNotice";
 axios.defaults.withCredentials = true;
 const customAxios = axios.create({
     baseURL: import.meta.env.BASE_URL
@@ -112,10 +112,11 @@ function isEnvelope(data: any): boolean {
     return data && typeof data === "object" && typeof data.status_code === "number"
 }
 
-function showRateLimitNotice(envelope: any): void {
+function showServerBusyNotice(envelope: any): void {
     const message = coerceErrorMessage(envelope?.status_message)
         || i18next.t("system.apiRateLimit.defaultMessage")
-    if (!shouldShowApiRateLimitNotice(API_RATE_LIMIT_CODE, message)) return
+    const code = Number(envelope?.status_code) || API_RATE_LIMIT_CODE
+    if (!shouldShowApiRateLimitNotice(code, message)) return
     toast({
         title: `${i18next.t('prompt')}`,
         variant: 'error',
@@ -132,10 +133,10 @@ customAxios.interceptors.response.use(function (response) {
         return response.data;
     }
     const statusCode = response.data.status_code
-    if (statusCode === API_RATE_LIMIT_CODE) {
+    if (isServerBusyCode(statusCode)) {
         const errorMessage = decodeEnvelopeMessage(response.data)
-        showRateLimitNotice(response.data)
-        return Promise.reject({ code: API_RATE_LIMIT_CODE, message: errorMessage, response });
+        showServerBusyNotice(response.data)
+        return Promise.reject({ code: statusCode, message: errorMessage, response });
     }
     // Silent mode: skip all global error handling, let the caller handle it
     if (response.config.silent) {
@@ -200,9 +201,9 @@ customAxios.interceptors.response.use(function (response) {
     const envelope = error.response?.data
     if (
         isEnvelope(envelope)
-        && (error.response?.status === 429 || envelope.status_code === API_RATE_LIMIT_CODE)
+        && (error.response?.status === 429 || isServerBusyCode(envelope.status_code))
     ) {
-        showRateLimitNotice(envelope)
+        showServerBusyNotice(envelope)
         return Promise.reject(error)
     }
     // Silent mode: skip toast, let the caller handle it

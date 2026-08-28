@@ -19,6 +19,7 @@ import {
     sourceLibraryNames,
     selectLibrary,
     selectReviewEntry,
+    selectBlacklistEntry,
     type TagConsoleFilterState,
 } from "@/pages/BuildPage/bench/standalone/tagConsole/tagConsoleTypes"
 import {
@@ -49,6 +50,15 @@ describe("left panel selection", () => {
         const review = selectReviewEntry()
 
         expect(review).toEqual({ mode: "review", selectedLibraryIds: [] })
+        expect(withLibraries.selectedLibraryIds).toEqual([10, 20])
+    })
+
+    it("the blacklist entry clears library selection", () => {
+        const withLibraries = selectLibrary(selectLibrary(INITIAL_SELECTION, 10), 20)
+
+        const blacklist = selectBlacklistEntry()
+
+        expect(blacklist).toEqual({ mode: "blacklist", selectedLibraryIds: [] })
         expect(withLibraries.selectedLibraryIds).toEqual([10, 20])
     })
 

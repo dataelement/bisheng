@@ -12,7 +12,7 @@ Provenance lives on the file link instead — ``review_tag_link.resource_id`` ->
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -110,12 +110,54 @@ async def test_reject_does_not_need_a_source_space():
     """Rejecting never writes into a library, so it must work without one."""
     service, tags_service = _build_service(files_by_tag={}, briefs={})
 
-    result = await service.batch_reject([TAG], "不建议新增", TENANT_ID)
+    with patch(
+        "bisheng.workstation.domain.services.tag_console_service.TagBlacklistService.ensure_can_insert_async",
+        new=AsyncMock(),
+    ):
+        result = await service.batch_reject([TAG], "不建议新增", TENANT_ID)
 
     assert result.succeeded == 1
     request = tags_service.approve_or_reject_review_tag.await_args.args[0]
     assert request.status == ApproveOrRejectEnum.REJECT
     assert request.reject_reason == "不建议新增"
+    assert request.skip_blacklist is False
+
+
+@pytest.mark.asyncio
+async def test_reject_ignores_older_rejected_row_for_same_name():
+    """A previous reject leaves a soft-deleted row; a new pending proposal of the
+    same name must still be rejectable."""
+    pending = _review_row()
+    rejected = SimpleNamespace(**{**pending.__dict__, "id": 255, "review_status": 2})
+    service, tags_service = _build_service()
+    service.repository.load_review_group.return_value = {(TAG.name, TAG.resource_type): [pending, rejected]}
+
+    with patch(
+        "bisheng.workstation.domain.services.tag_console_service.TagBlacklistService.ensure_can_insert_async",
+        new=AsyncMock(),
+    ):
+        result = await service.batch_reject([TAG], "不建议新增", TENANT_ID)
+
+    assert result.succeeded == 1
+    assert not result.failed
+    tags_service.approve_or_reject_review_tag.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_reject_already_rejected_item_does_not_abort_batch():
+    rejected = SimpleNamespace(**{**_review_row().__dict__, "review_status": 2})
+    service, tags_service = _build_service()
+    service.repository.load_review_group.return_value = {(TAG.name, TAG.resource_type): [rejected]}
+
+    with patch(
+        "bisheng.workstation.domain.services.tag_console_service.TagBlacklistService.ensure_can_insert_async",
+        new=AsyncMock(),
+    ):
+        result = await service.batch_reject([TAG], "不建议新增", TENANT_ID)
+
+    assert result.succeeded == 0
+    assert [failure.reason for failure in result.failed] == ["该标签的当前状态不支持此操作"]
+    tags_service.approve_or_reject_review_tag.assert_not_awaited()
 
 
 @pytest.mark.asyncio

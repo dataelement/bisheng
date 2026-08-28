@@ -3,8 +3,10 @@ from typing import Any
 
 from bisheng.common.constants.enums.telemetry import BaseTelemetryTypeEnum
 from bisheng.common.constants.telemetry import (
+    HOME_STATS_EXTRA_QA_TYPES,
     KNOWLEDGE_SPACE_CONTENT_STAT_INDEX,
     KNOWLEDGE_SPACE_DASHBOARD_FILE_LEVELS,
+    REALTIME_QA_QUESTION_FACT_INDEX,
 )
 from bisheng.common.schemas.telemetry.event_data_schema import (
     PortalDocumentDownloadEventData,
@@ -98,9 +100,7 @@ class PortalTelemetryEventService:
                         {"term": {"event_type": BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value}},
                         {"term": {"event_data.portal_document_read_file_id": file_id}},
                     ],
-                    "must_not": [
-                        {"exists": {"field": "event_data.portal_document_read_content_stat_schema_version"}}
-                    ],
+                    "must_not": [{"exists": {"field": "event_data.portal_document_read_content_stat_schema_version"}}],
                 }
             },
         }
@@ -140,9 +140,7 @@ class PortalTelemetryEventService:
             "query": {
                 "bool": {
                     "filter": filters,
-                    "must_not": [
-                        {"exists": {"field": "event_data.portal_document_read_content_stat_schema_version"}}
-                    ],
+                    "must_not": [{"exists": {"field": "event_data.portal_document_read_content_stat_schema_version"}}],
                 }
             },
             "aggs": {
@@ -209,6 +207,11 @@ class PortalTelemetryEventService:
 
     @staticmethod
     async def count_home_events() -> dict[str, int]:
+        """首页阅读/收藏/问答计数.
+
+        问答 = 现有 portal_qa 事件(剔除已投影为智能问答的 smart_qa) + 看板事实表 expert/smart.
+        智能问答已写入 portal_qa, 剔除后再按事实表加回, 避免双计.
+        """
         event_values = [event_type.value for event_type in PORTAL_HOME_EVENT_TYPES]
         body = {
             "size": 0,
@@ -226,10 +229,7 @@ class PortalTelemetryEventService:
                                     },
                                     {
                                         "exists": {
-                                            "field": (
-                                                "event_data.portal_document_read_"
-                                                "content_stat_schema_version"
-                                            )
+                                            "field": ("event_data.portal_document_read_content_stat_schema_version")
                                         }
                                     },
                                 ]
@@ -243,12 +243,21 @@ class PortalTelemetryEventService:
                                             "event_type": BaseTelemetryTypeEnum.PORTAL_FAVORITE.value,
                                         }
                                     },
+                                    {"exists": {"field": ("event_data.portal_favorite_content_stat_schema_version")}},
+                                ]
+                            }
+                        },
+                        {
+                            "bool": {
+                                "filter": [
                                     {
-                                        "exists": {
-                                            "field": (
-                                                "event_data.portal_favorite_"
-                                                "content_stat_schema_version"
-                                            )
+                                        "term": {
+                                            "event_type": BaseTelemetryTypeEnum.PORTAL_QA.value,
+                                        }
+                                    },
+                                    {
+                                        "term": {
+                                            "event_data.portal_qa_scene": "smart_qa",
                                         }
                                     },
                                 ]
@@ -274,11 +283,42 @@ class PortalTelemetryEventService:
             key = str(bucket.get("key") or "")
             if key in counts:
                 counts[key] = int(bucket.get("doc_count") or 0)
+        extra_qa_count = await PortalTelemetryEventService.count_dashboard_qa_by_types(HOME_STATS_EXTRA_QA_TYPES)
         return {
             "read_count": counts[BaseTelemetryTypeEnum.PORTAL_DOCUMENT_READ.value],
             "favorite_count": counts[BaseTelemetryTypeEnum.PORTAL_FAVORITE.value],
-            "qa_count": counts[BaseTelemetryTypeEnum.PORTAL_QA.value],
+            "qa_count": counts[BaseTelemetryTypeEnum.PORTAL_QA.value] + extra_qa_count,
         }
+
+    @staticmethod
+    async def count_dashboard_qa_by_types(qa_types: tuple[str, ...]) -> int:
+        """按看板事实表统计指定 qa_type 的提问数, 口径与问答总数相同 (question_id value_count)."""
+        if not qa_types:
+            return 0
+        es_client = await get_statistics_es_connection()
+        response = await es_client.search(
+            index=REALTIME_QA_QUESTION_FACT_INDEX,
+            body={
+                "size": 0,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"terms": {"qa_type": list(qa_types)}},
+                        ]
+                    }
+                },
+                "aggs": {
+                    "qa_count": {
+                        "value_count": {
+                            "field": "question_id",
+                        }
+                    }
+                },
+            },
+            filter_path="aggregations.qa_count.value",
+        )
+        value = ((response.get("aggregations") or {}).get("qa_count") or {}).get("value")
+        return int(value or 0)
 
     @staticmethod
     async def count_dashboard_files() -> int:

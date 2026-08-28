@@ -184,8 +184,10 @@ class KnowledgeDocumentProjectionService:
         shared_storage_writer: SharedSpaceStorageWriter | None = None,
         shared_storage_enabled: bool = False,
         shared_content_chunk_loader: SharedContentChunkLoader | None = None,
+        shared_embedding_model_id: str | int | None = None,
         lease_seconds: int = 120,
         max_retry_seconds: int = 300,
+        max_retry_attempts: int = 8,
     ):
         self.session = session
         self.file_repository = file_repository
@@ -197,8 +199,14 @@ class KnowledgeDocumentProjectionService:
         self.shared_storage_writer = shared_storage_writer
         self.shared_storage_enabled = bool(shared_storage_enabled)
         self.shared_content_chunk_loader = shared_content_chunk_loader
+        self.shared_embedding_model_id = (
+            str(shared_embedding_model_id)
+            if shared_embedding_model_id is not None
+            else None
+        )
         self.lease_seconds = max(int(lease_seconds), 1)
         self.max_retry_seconds = max(int(max_retry_seconds), 1)
+        self.max_retry_attempts = max(int(max_retry_attempts), 1)
         track_fulltext_file_changes(self.session)
 
     async def _commit(self) -> None:
@@ -455,6 +463,7 @@ class KnowledgeDocumentProjectionService:
         *,
         entry: KnowledgeFile,
         target: ProjectionTarget,
+        entries: Sequence[KnowledgeFile],
         knowledge_ids: tuple[int, ...],
     ) -> None:
         """Content projection (spec 3.7-A).
@@ -503,8 +512,53 @@ class KnowledgeDocumentProjectionService:
             )
         chunks = await self.shared_content_chunk_loader(content_file)
         if not chunks:
+            tried_file_ids = {int(content_file.id)}
+            original_knowledge_id = int(
+                content_file.original_knowledge_id or 0
+            )
+            entry_type_priority = {
+                KnowledgeFileEntryType.PUBLISH.value: 0,
+                KnowledgeFileEntryType.MANAGER.value: 1,
+                KnowledgeFileEntryType.SHARE.value: 2,
+            }
+            candidates = sorted(
+                entries,
+                key=lambda candidate: (
+                    0
+                    if original_knowledge_id
+                    and int(candidate.knowledge_id) == original_knowledge_id
+                    else 1,
+                    entry_type_priority.get(str(candidate.entry_type), 99),
+                    int(candidate.id),
+                ),
+            )
+            for candidate in candidates:
+                candidate_id = int(candidate.id)
+                if candidate_id in tried_file_ids:
+                    continue
+                tried_file_ids.add(candidate_id)
+                chunks = await self.shared_content_chunk_loader(candidate)
+                if chunks:
+                    logger.info(
+                        "shared content projection recovered chunks from active entry "
+                        "tenant_id=%s document_id=%s content_file_id=%s "
+                        "source_entry_id=%s",
+                        target.tenant_id,
+                        target.document_id,
+                        content_file.id,
+                        candidate_id,
+                    )
+                    break
+        if not chunks:
             raise KnowledgeDocumentProjectionError(
-                "shared content projection received no chunks"
+                "shared content projection received no chunks "
+                f"tenant_id={target.tenant_id} document_id={target.document_id} "
+                f"version_id={version.id} content_file_id={content_file.id}"
+            )
+        if self.shared_embedding_model_id is None:
+            raise KnowledgeDocumentProjectionError(
+                "shared content projection embedding model is unavailable "
+                f"tenant_id={target.tenant_id} document_id={target.document_id}"
             )
         await self.shared_storage_writer.upsert_content(
             ContentUpsertRequest(
@@ -516,6 +570,7 @@ class KnowledgeDocumentProjectionService:
                     canonical_version_id=CanonicalVersionId(int(version.id)),
                     content_file_id=ContentFileId(int(content_file.id or 0)),
                     content_generation=int(target.content_generation),
+                    embedding_model_id=self.shared_embedding_model_id,
                 ),
                 knowledge_ids=knowledge_ids,
                 chunks=chunks,
@@ -586,6 +641,8 @@ class KnowledgeDocumentProjectionService:
         self,
         entry: KnowledgeFile,
         target: ProjectionTarget,
+        *,
+        force_content_upsert: bool = False,
     ) -> None:
         """Shared-store dual projection for a live entry (F2.1-F2.4)."""
         document_id = int(target.document_id)
@@ -598,12 +655,13 @@ class KnowledgeDocumentProjectionService:
             )
             return
         knowledge_ids = normalise_membership_ids(knowledge_ids)
-        if not self._shared_content_converged(
+        if force_content_upsert or not self._shared_content_converged(
             entries, target.content_generation
         ):
             await self._shared_upsert_content(
                 entry=entry,
                 target=target,
+                entries=entries,
                 knowledge_ids=knowledge_ids,
             )
         await self._shared_membership_rewrite(
@@ -644,6 +702,7 @@ class KnowledgeDocumentProjectionService:
         entry_id: int,
         lease_owner: str,
         now: datetime | None = None,
+        force_content_upsert: bool = False,
     ) -> ProjectionProcessResult:
         started_at = time.monotonic()
         now = now or datetime.now()
@@ -652,6 +711,7 @@ class KnowledgeDocumentProjectionService:
             lease_owner=lease_owner,
             lease_until=now + timedelta(seconds=self.lease_seconds),
             now=now,
+            max_retries=self.max_retry_attempts,
         )
         if claimed is None:
             await self.session.rollback()
@@ -738,7 +798,11 @@ class KnowledgeDocumentProjectionService:
                 if self._use_shared_projection:
                     # 共享库双投影：primary 内容单份写入 + knowledge_ids
                     # metadata 重写；非本地 entry 不再 copy_vector（F2.5）。
-                    await self._process_shared_projection(claimed, target)
+                    await self._process_shared_projection(
+                        claimed,
+                        target,
+                        force_content_upsert=force_content_upsert,
+                    )
                 else:
                     source = await self._resolve_source(claimed)
                     await self.projection_writer(source, claimed, target)
@@ -821,15 +885,23 @@ class KnowledgeDocumentProjectionService:
             )
         except Exception as exc:
             await self.session.rollback()
+            next_retry_count = retry_count + 1
+            exhausted = next_retry_count >= self.max_retry_attempts
             retry_delay = min(
-                2 ** min(retry_count + 1, 8),
+                2 ** min(next_retry_count, 8),
                 self.max_retry_seconds,
             )
+            detail = " ".join(str(exc).split()) or "projection failed"
+            error_summary = (
+                f"{type(exc).__name__}:{detail}"
+            )[:3500]
+            if exhausted:
+                error_summary = f"retry_exhausted:{error_summary}"[:3500]
             failed = await self.file_repository.fail_projection_lease(
                 entry_id=entry_id,
                 lease_owner=lease_owner,
                 next_retry_at=now + timedelta(seconds=retry_delay),
-                error_summary=f"{type(exc).__name__}:projection_failed",
+                error_summary=error_summary,
             )
             if not failed:
                 logger.info(
@@ -841,10 +913,12 @@ class KnowledgeDocumentProjectionService:
             await self._commit()
             logger.warning(
                 "F059 projection failed tenant_id=%s entry_id=%s "
-                "retry_count=%s error_type=%s duration_ms=%.2f",
+                "retry_count=%s retry_exhausted=%s error_type=%s "
+                "duration_ms=%.2f",
                 tenant_id,
                 entry_id,
-                retry_count + 1,
+                next_retry_count,
+                exhausted,
                 type(exc).__name__,
                 (time.monotonic() - started_at) * 1000,
             )
@@ -859,5 +933,6 @@ class KnowledgeDocumentProjectionService:
         candidates = await self.file_repository.find_projection_candidates(
             now=now or datetime.now(),
             limit=min(max(int(limit), 1), 500),
+            max_retries=self.max_retry_attempts,
         )
         return [int(candidate.id) for candidate in candidates]

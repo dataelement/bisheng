@@ -48,3 +48,20 @@ async def test_ensure_personal_spaces_ensures_both():
         await svc._ensure_personal_spaces()
         fav.assert_awaited_once()
         dft.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_ensure_personal_default_space_for_owner_switches_login_user():
+    svc = _svc()
+    original = svc.login_user
+    owner = type("U", (), {"user_id": 99, "user_name": "李四", "tenant_id": 1})()
+    created = Knowledge(id=301, name="李四的知识库", user_id=99, type=3)
+
+    async def _ensure(_self):
+        assert svc.login_user is owner
+        return created
+
+    with patch.object(KnowledgeSpaceService, "_ensure_personal_default_space", new=_ensure):
+        space = await svc.ensure_personal_default_space_for_owner(owner)
+    assert space.id == 301
+    assert svc.login_user is original

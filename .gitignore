@@ -9,6 +9,7 @@ yarn-error.log*
 lerna-debug.log*
 qdrant_storage
 autogen_coding/
+.coaligne/
 
 # Mac
 .DS_Store
@@ -299,4 +300,7 @@ src/backend/test/e2e_ui/
 # Local-only 门户联调 (do not commit)
 .cursor/rules/local-portal-dev-stack.mdc
 scripts/dev-stack.sh
+
+# Tag-library migration JSON snapshots (local / production ops)
+src/backend/scripts/backups/
 .cursor/

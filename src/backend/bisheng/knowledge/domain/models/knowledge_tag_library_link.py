@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, UniqueConstraint, delete, func, text, update
+from sqlalchemy import Column, DateTime, Integer, UniqueConstraint, delete, func, text
 from sqlmodel import Field, col, select
 
 from bisheng.common.models.base import SQLModelSerializable
@@ -226,26 +226,15 @@ class KnowledgeTagLibraryLinkDao:
     async def aremove_link(cls, library_id: int, knowledge_id: int) -> None:
         """Detach one space from this library.
 
-        Losing the last library also turns auto-tagging off: leaving the flag on
-        with nothing to tag against would run the scan every upload and produce
-        nothing.
+        Losing the last library no longer turns auto-tagging off: unbound
+        spaces can still pick tags from other public libraries.
         """
-        from bisheng.knowledge.domain.models.knowledge import Knowledge
-
         async with get_async_db_session() as session:
             await session.exec(
                 delete(KnowledgeTagLibraryLink).where(
                     col(KnowledgeTagLibraryLink.tag_library_id) == int(library_id),
                     col(KnowledgeTagLibraryLink.knowledge_id) == int(knowledge_id),
                 )
-            )
-            await session.commit()
-
-        if await cls.alist_library_ids_by_knowledge(int(knowledge_id)):
-            return
-        async with get_async_db_session() as session:
-            await session.exec(
-                update(Knowledge).where(Knowledge.id == int(knowledge_id)).values(auto_tag_enabled=False)
             )
             await session.commit()
 

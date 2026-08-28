@@ -291,6 +291,35 @@ Scope:
 - 仅处理真实文件、解析成功、未处理完成的文件：`file_type = FILE`、`status = SUCCESS`、`similar_status != 2`
 - 跳过没有有效 `simhash` 或没有有效前三段 `file_encoding` 的文件
 
+### `repair_false_positive_simhash_duplicates.py`
+
+修复跨文件 SimHash 撞号导致的"100% 相似文档"误报（根因未定位，见
+`bisheng/knowledge/rag/pipeline/transformer/simhash.py` 里的 `[simhash.diag]`
+诊断日志）。自动筛选同一个 `simhash` 下 `md5`（真实内容）互不相同的文件数
+达到阈值（默认 3）的可疑分组，逐个重新读取文件内容并按解析管线同款逻辑
+重算 SimHash；只写回 `knowledgefile.simhash` 一个字段，`status`、
+`split_rule` 等其余数据不动。重算失败的文件把 SimHash 清成算法自身定义的
+空文本零值（`"0"*16`，全仓库既有的"无有效 SimHash"占位），不留错误值。
+不论重算成功与否，都会清掉该文件在 `knowledge_file_similarity_candidate`
+里的候选记录（作为来源和作为候选两个方向都清），避免界面上继续挂着错误
+的"相似文档"提示。默认 dry-run，`--apply` 才写库；严格串行，不做任何并发。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/repair_false_positive_simhash_duplicates.py
+PYTHONPATH=./ .venv/bin/python scripts/repair_false_positive_simhash_duplicates.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/repair_false_positive_simhash_duplicates.py --apply --limit 50
+PYTHONPATH=./ .venv/bin/python scripts/repair_false_positive_simhash_duplicates.py --apply --min-distinct-content 5
+
+bash scripts/repair_false_positive_simhash_duplicates.sh --apply
+```
+
+说明：
+
+- `--min-distinct-content`：判定"可疑"的最小 distinct md5 数，默认 3，跟排查时用的 SQL 阈值一致。
+- `--limit`：最多处理多少个命中文件，用于先小批量验证。
+- 每个文件重算前后都会打印一行 `file_id/outcome/old_simhash/new_simhash`，方便核对。
+- 不重跑标签、分类、业务域、解析状态等任何其他字段，也不触发重新解析。
+
 ### `backfill_knowledge_fulltext.py`
 
 将当前存量可索引文件提交给既有全文索引 Outbox/Worker 链路。脚本只扫描 MySQL 当前事实并创建
@@ -433,6 +462,56 @@ python scripts/resync_tag_library_name_lists.py
 - **0 行标签、但清单非空** → **默认跳过**，必须 `--library <id>` 显式点名。这种状态有两种完全相反的来源，数据上无法区分：库被人为删空（清单该清），或该库当年没迁移过、标签只活在清单里（清空等于删光该库标签）。
 - 只改标签库那三个字段，不新增或删除任何 `tag` 行。
 - 需要带 `TagLibraryTagService.sync_library_name_lists` 的版本才能 `--apply`。
+
+### 公共标签库合并到「通用标签库」
+
+把其它**公共**标签库里的正式标签归属到「通用标签库」，并把全部知识空间绑定到该库。
+**不改 `tag.id`**（文件关联 `taglink` 不用动），**不改待审核表**，也不删除源标签库。
+
+必须按顺序跑三个脚本。工作目录均为 `src/backend`。脚本会绕过租户过滤器；连哪套库由当前 `config` 决定。备份是数据库内的 `*_bak` 表，不是文件。
+
+#### 1. `backup_tag_library_migration.py`
+
+把三张表整表复制为 `原表名_bak`：`tag_bak`、`knowledge_tag_library_link_bak`、`knowledge_space_tag_library_bak`。默认 dry-run，`--apply` 才建表。备份表已存在时必须加 `--force` 才会先删后重建。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/backup_tag_library_migration.py
+PYTHONPATH=./ .venv/bin/python scripts/backup_tag_library_migration.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/backup_tag_library_migration.py --apply --force
+bash scripts/backup_tag_library_migration.sh --apply
+```
+
+#### 2. `rollback_tag_library_migration.py`
+
+回滚时对每张表：现表改名为 `原表名_ori`，再把 `原表名_bak` 改回原名。默认 dry-run。若上次回滚留下了 `_ori`，加 `--force` 先删掉再改名。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/rollback_tag_library_migration.py
+PYTHONPATH=./ .venv/bin/python scripts/rollback_tag_library_migration.py --apply
+PYTHONPATH=./ .venv/bin/python scripts/rollback_tag_library_migration.py --apply --force
+bash scripts/rollback_tag_library_migration.sh --apply
+```
+
+回滚后 `_bak` 不再存在（已改回原名），`_ori` 里是迁移后的那份数据，确认无误后可手工 `DROP TABLE`。回滚只能做一次，除非再次备份。
+
+#### 3. `migrate_tags_to_general_library.py`
+
+每个租户必须已有一座名为「通用标签库」的公共库。将其余公共库的 `tag.business_id` 改到通用库；给所有 `type=知识空间` 的库补上通用库绑定，并去掉其它公共库绑定。默认 dry-run。
+
+```bash
+PYTHONPATH=./ .venv/bin/python scripts/migrate_tags_to_general_library.py
+PYTHONPATH=./ .venv/bin/python scripts/migrate_tags_to_general_library.py --tenant 1
+PYTHONPATH=./ .venv/bin/python scripts/migrate_tags_to_general_library.py --apply
+bash scripts/migrate_tags_to_general_library.sh --apply
+```
+
+说明：
+
+- 先跑备份 `--apply`，再迁移 dry-run，确认输出后再迁移 `--apply`。
+- 同名标签并入同一座库时**不会合并**（id 保持不变），dry-run 会打印警告。
+- 并入后超过 999 行会拒绝执行。
+- 私有库（`owner_knowledge_id` 非空）的标签和绑定不动。
+- 源库留空壳，便于待审行继续指向原 `business_id`；待审清完后再手工删库。
 
 ### `merge_duplicate_approved_tags.py`
 

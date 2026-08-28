@@ -34,6 +34,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FileCreateReq,
     FileEncodingUpdateReq,
     FileRenameReq,
+    FileTagRecommendReq,
     FolderCreateReq,
     FolderRenameReq,
     KnowledgeSpaceCreateReq,
@@ -277,6 +278,15 @@ async def reorder_folder(
         next_folder_id=next_folder_id,
     )
     return resp_200(data=True)
+
+
+@router.get("/{space_id}/delete-preflight")
+async def preflight_delete_space(
+    space_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """What deleting this space would do to files published or shared elsewhere."""
+    return resp_200(await svc.preflight_container_delete(space_id=space_id))
 
 
 @router.delete("/{space_id}")
@@ -746,6 +756,18 @@ async def move_folder(
     return resp_200(folder)
 
 
+@router.get("/{space_id}/folders/{folder_id}/delete-preflight")
+async def preflight_delete_folder(
+    space_id: int,
+    folder_id: int,
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """What deleting this folder would do to files published or shared elsewhere."""
+    return resp_200(
+        await svc.preflight_container_delete(space_id=space_id, folder_id=folder_id)
+    )
+
+
 @router.delete("/{space_id}/folders/{folder_id}")
 async def delete_folder(
     space_id: int,
@@ -945,6 +967,22 @@ async def get_file_download(
     )
 
 
+@router.post("/{space_id}/files/{file_id}/tag/recommend")
+async def recommend_file_tags(
+    space_id: int,
+    file_id: int,
+    req: FileTagRecommendReq = Body(default_factory=FileTagRecommendReq),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.recommend_file_tags(
+        space_id,
+        file_id,
+        req.exclude_names,
+        refresh=req.refresh,
+    )
+    return resp_200(result)
+
+
 @router.post("/{space_id}/files/{file_id}/tag")
 async def update_file_tags(
     space_id: int,
@@ -998,9 +1036,59 @@ async def batch_update_tags(
     review_tag_ids: list[int] = Body(default=[], embed=True, description="审核标签ID列表"),
     svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
 ) -> Any:
+    """批量编辑标签 - 增量模式：在文件现有标签基础上追加。"""
     if not tag_ids and not review_tag_ids:
         return resp_500(500, message="tag_ids or review_tag_ids is required")
     result = await svc.batch_add_file_tags(space_id, file_ids, tag_ids, review_tag_ids)
+    return resp_200(result)
+
+
+@router.post("/{space_id}/files/batch-tag-overwrite")
+async def batch_overwrite_tags(
+    space_id: int,
+    file_ids: list[int] = Body(..., embed=True, description="文件ID列表"),
+    tag_ids: list[int] = Body(default=[], embed=True, description="标签ID列表"),
+    review_tag_ids: list[int] = Body(default=[], embed=True, description="审核标签ID列表"),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """批量编辑标签 - 覆盖模式：每个文件的标签集合替换为传入的 tag_ids/review_tag_ids。"""
+    await svc.batch_overwrite_file_tags(space_id, file_ids, tag_ids, review_tag_ids)
+    return resp_200()
+
+
+@router.post("/{space_id}/files/batch-category")
+async def batch_update_file_category(
+    space_id: int,
+    file_ids: list[int] = Body(..., embed=True, description="文件ID列表"),
+    file_category_code: str | None = Body(default=None, embed=True, description="一级分类编码"),
+    file_subcategory_code: str | None = Body(default=None, embed=True, description="二级分类编码"),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """批量修改文件分类（一级/二级）。"""
+    if file_category_code is None and file_subcategory_code is None:
+        return resp_500(500, message="file_category_code or file_subcategory_code is required")
+    result = await svc.batch_update_file_encoding_fields(
+        space_id,
+        file_ids,
+        file_category_code=file_category_code,
+        file_subcategory_code=file_subcategory_code,
+    )
+    return resp_200(result)
+
+
+@router.post("/{space_id}/files/batch-business-domain")
+async def batch_update_file_business_domain(
+    space_id: int,
+    file_ids: list[int] = Body(..., embed=True, description="文件ID列表"),
+    business_domain_code: str = Body(..., embed=True, description="业务域编码"),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+) -> Any:
+    """批量修改文件业务域。"""
+    result = await svc.batch_update_file_encoding_fields(
+        space_id,
+        file_ids,
+        business_domain_code=business_domain_code,
+    )
     return resp_200(result)
 
 

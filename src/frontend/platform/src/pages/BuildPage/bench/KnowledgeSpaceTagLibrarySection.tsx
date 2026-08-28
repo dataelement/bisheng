@@ -702,11 +702,9 @@ export default function KnowledgeSpaceTagLibrarySection({
     }, [keyword]);
 
     useEffect(() => {
-        if (visible) {
-            setPage(1);
-            loadData(1);
-        }
-    }, [visible, keyword]);
+        setPage(1);
+        loadData(1);
+    }, [keyword]);
 
     useEffect(() => {
         setExpandedIds(new Set());
@@ -788,21 +786,33 @@ export default function KnowledgeSpaceTagLibrarySection({
                 <div className="flex items-center justify-between gap-4">
                     <div>
                         <p className="text-lg font-bold">
-                            {t("build.tagLibraryManagementTitle", "标签库管理")}
+                            {t("build.autoTagMasterTitle", "自动打标签")}
                         </p>
                         <p className="mt-1 text-sm text-[#86909C]">
                             {t(
-                                "build.tagLibraryManagementDesc",
-                                "维护平台标签库；知识空间可绑定一个或多个标签库，AI 打标从库中选取候选标签。",
+                                "build.autoTagMasterDesc",
+                                "关闭后所有知识库都不会自动打标签",
                             )}
                         </p>
                     </div>
                     <Switch checked={visible} onCheckedChange={onToggle} />
                 </div>
 
-                {visible && (
-                    <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
-                        <div className="mb-3 flex items-center gap-2">
+                <div className="mt-4 rounded-lg border border-[#ECECEC] bg-[#FAFBFC] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-4">
+                        <div>
+                            <p className="text-sm font-medium text-[#1D2129]">
+                                {t("build.tagLibraryManagementTitle", "标签库管理")}
+                            </p>
+                            <p className="mt-0.5 text-xs text-[#86909C]">
+                                {t(
+                                    "build.tagLibraryManagementDesc",
+                                    "维护平台标签库；知识空间可绑定一个或多个标签库，AI 打标优先从绑定库选取候选标签。",
+                                )}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="mb-3 flex items-center gap-2">
                             <div ref={searchRef} className="relative w-[280px]">
                                 <SearchInput
                                     className="w-full"
@@ -952,8 +962,7 @@ export default function KnowledgeSpaceTagLibrarySection({
                             </div>
                         )}
                     </div>
-                )}
-            </div>
+                </div>
 
             <TagLibraryFormDialog
                 open={formDialogOpen}

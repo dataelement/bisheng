@@ -167,9 +167,7 @@ export default function Files({ onPreview, canEditKb = false, canDeleteKb = fals
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [metadataFields, setMetadataFields] = useState<Array<{ field_name: string; field_type: string }>>([]);
     const [webLinkOpen, setWebLinkOpen] = useState(false);
-    const formatText = appConfig.enableEtl4lm
-        ? t('supportedFormatsWithImages', { ns: 'bs', maxSize: appConfig.uploadFileMaxSize })
-        : t('supportedFormatsWithoutImages', { ns: 'bs', maxSize: appConfig.uploadFileMaxSize })
+    const formatText = t('supportedFormatsWithoutImages', { ns: 'bs', maxSize: appConfig.uploadFileMaxSize })
 
     useEffect(() => {
         setEditable(canEditKb);

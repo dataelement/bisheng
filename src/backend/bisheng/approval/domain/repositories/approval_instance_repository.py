@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Sequence
 
+from sqlalchemy import or_
 from sqlmodel import select
 
 from bisheng.approval.domain.models.approval_instance import (
@@ -177,6 +179,45 @@ class ApprovalInstanceRepository:
             statement = statement.where(ApprovalInstance.applicant_user_id == exclude_applicant_user_id)
         async with get_async_db_session() as session:
             return (await session.exec(statement)).first()
+
+    @classmethod
+    async def find_active_resource_ids_by_prefixes(
+        cls,
+        *,
+        tenant_id: int,
+        scenario_code: str,
+        resource_id_prefixes: Sequence[str],
+        active_statuses: Sequence[str] | None = None,
+    ) -> list[str]:
+        """Return distinct business_resource_id values starting with any prefix
+        whose instance is still in an active (unfinished) status.
+
+        Used to flag business resources (e.g. knowledge files with a running
+        publish approval) so callers can lock operations on them. Prefixes must
+        already include their delimiter (e.g. "12:") to avoid id-prefix hits.
+        """
+        prefixes = [prefix for prefix in resource_id_prefixes if prefix]
+        if not prefixes:
+            return []
+        statuses = tuple(active_statuses) if active_statuses is not None else cls._DUPLICATE_ACTIVE_STATUSES
+        statement = (
+            select(ApprovalInstance.business_resource_id)
+            .where(
+                ApprovalInstance.tenant_id == tenant_id,
+                ApprovalInstance.scenario_code == scenario_code,
+                ApprovalInstance.status.in_(statuses),
+                or_(
+                    *[
+                        ApprovalInstance.business_resource_id.like(f"{prefix}%")
+                        for prefix in prefixes
+                    ]
+                ),
+            )
+            .distinct()
+        )
+        async with get_async_db_session() as session:
+            rows = (await session.execute(statement)).scalars().all()
+        return [str(row) for row in rows]
 
     @classmethod
     async def create_task(cls, row: ApprovalTask) -> ApprovalTask:

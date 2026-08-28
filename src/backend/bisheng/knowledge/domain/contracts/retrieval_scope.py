@@ -38,6 +38,7 @@ from bisheng.knowledge.domain.contracts.identifiers import (
 __all__ = [
     "EntryRef",
     "RetrievalScope",
+    "CanonicalGenerationConstraint",
     "BackendQueryFilter",
     "CanonicalChunkHit",
     "MappedEntryHit",
@@ -71,6 +72,16 @@ class RetrievalScope:
 
 
 @dataclass(frozen=True)
+class CanonicalGenerationConstraint:
+    """Current shared projection identity for one canonical document."""
+
+    canonical_document_id: CanonicalDocumentId
+    canonical_version_id: CanonicalVersionId
+    content_generation: int
+    membership_generation: int
+
+
+@dataclass(frozen=True)
 class BackendQueryFilter:
     """Backend-agnostic query description produced by the resolver.
 
@@ -86,6 +97,7 @@ class BackendQueryFilter:
     #: Primary-version constraint; None means "current primary versions only"
     #: is handled by the renderer via version metadata, not by the caller.
     canonical_version_ids: tuple[CanonicalVersionId, ...] | None = None
+    generation_constraints: tuple[CanonicalGenerationConstraint, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -97,6 +109,8 @@ class CanonicalChunkHit:
     chunk_index: int
     score: float
     text: str | None = None
+    content_generation: int | None = None
+    membership_generation: int | None = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +128,7 @@ class MappedEntryHit:
     chunk_index: int
     score: float
     text: str | None = None
+    document_name: str | None = None
     #: Which rule selected this entry among multiple visible candidates
     #: ("explicit" | "space_order" | "entry_type_priority").
     entry_selection_rule: str = "space_order"
@@ -140,6 +155,7 @@ class KnowledgeRetrievalScopeResolver(ABC):
         *,
         canonical_document_ids: Sequence[CanonicalDocumentId] | None = None,
         canonical_version_ids: Sequence[CanonicalVersionId] | None = None,
+        generation_constraints: Sequence[CanonicalGenerationConstraint] | None = None,
     ) -> BackendQueryFilter:
         """Build the backend-agnostic filter for the shared store query."""
 

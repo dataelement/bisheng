@@ -602,10 +602,11 @@ export function useFileUpload({
                     await renameFileApi(activeSpace.id, fileId, apiName);
                     setFiles(prev => prev.map(f => {
                         if (f.id !== fileId) return f;
-                        if (!isWebLink) return { ...f, name: displayName };
+                        if (!isWebLink) return { ...f, name: displayName, aliasName: undefined };
                         return {
                             ...f,
                             name: displayName,
+                            aliasName: undefined,
                             userMetadata: {
                                 ...f.userMetadata,
                                 web_title: displayName,

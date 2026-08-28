@@ -1,13 +1,18 @@
 """F4 shared-storage migration tests (open-box, no live Milvus/ES)."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from bisheng.knowledge.domain.contracts.errors import (
     SharedStorageContractError,
     SharedStorageErrorCode,
+)
+from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
+    KnowledgeSpaceSharedStorageRoutingDao,
 )
 from bisheng.knowledge.domain.services.file_migration.shared_storage_migration import (
     MIGRATION_STATE_FROZEN,
@@ -33,6 +38,29 @@ class TestSharedStorageMigrationCoordinator:
         assert progress.failed_spaces == 0
         assert progress.started_at is not None
         assert progress.completed_at is not None
+
+    def test_routing_row_concurrent_create_returns_winning_row(self):
+        session = MagicMock()
+        session.commit.side_effect = IntegrityError("insert", {}, Exception("duplicate"))
+        context = MagicMock()
+        context.__enter__.return_value = session
+        winner = SimpleNamespace(id=9, tenant_id=1)
+
+        with (
+            patch(
+                "bisheng.knowledge.domain.models.knowledge_space_shared_storage.get_sync_db_session",
+                return_value=context,
+            ),
+            patch.object(
+                KnowledgeSpaceSharedStorageRoutingDao,
+                "_get_by_tenant",
+                side_effect=[None, winner],
+            ),
+        ):
+            row = KnowledgeSpaceSharedStorageRoutingDao.ensure_row(1)
+
+        assert row is winner
+        session.rollback.assert_called_once_with()
 
     async def test_migration_scope_is_shared_storage(self):
         progress = SharedStorageMigrationProgress(tenant_id=1)
@@ -85,17 +113,19 @@ class TestSharedStorageMigrationCoordinator:
 
     async def test_rollback_clears_frozen_and_switches_to_legacy(self):
         coordinator = SharedStorageMigrationCoordinator()
+        calls = []
         with (
             patch(
                 "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.unfreeze_tenant_writes",
-                return_value=True,
+                side_effect=lambda tenant_id: calls.append("unfreeze") or True,
             ),
             patch(
                 "bisheng.knowledge.domain.services.file_migration.shared_storage_migration.KnowledgeSpaceSharedStorageRoutingDao"
             ) as mock_dao,
         ):
-            mock_dao.switch_to_legacy = lambda tid: True
+            mock_dao.switch_to_legacy = lambda tenant_id: calls.append("switch") or True
             progress = await coordinator.rollback_tenant(1)
+        assert calls == ["switch", "unfreeze"]
         assert progress.phase == "TENANT_MIGRATION_FAILED"
         assert progress.completed_at is not None
 

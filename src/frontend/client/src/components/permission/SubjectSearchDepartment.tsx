@@ -369,6 +369,10 @@ function TreeNode({
   const isBoundDisabled = disabledIds.has(node.id);
   const isLevelBlocked = Boolean(canSelectNode && !canSelectNode(node));
   const isDisabled = isBoundDisabled || isLevelBlocked;
+  const showBoundDisabledLabel =
+    isBoundDisabled &&
+    showAlreadyGrantedLabel &&
+    (!canSelectNode || canSelectNode(node));
   const isChecked = isExplicitlySelected || isImplicitlySelected;
   const isIndeterminate = !isChecked && indeterminateIds.has(node.id);
   const nextAncestorIncluded = ancestorIncluded || Boolean(explicitSelection?.include_children);
@@ -404,19 +408,23 @@ function TreeNode({
         ) : (
           <span className="w-5" />
         )}
-        <Checkbox
-          checked={isIndeterminate ? "indeterminate" : isChecked}
-          disabled={isDisabled}
-          onClick={(e) => e.stopPropagation()}
-          onCheckedChange={() => {
-            if (isDisabled) return;
-            if (isImplicitlySelected) {
-              onMaterializeInheritedSelection();
-              return;
-            }
-            onToggle(node);
-          }}
-        />
+        {isLevelBlocked ? (
+          <span className="h-4 w-4 shrink-0" aria-hidden />
+        ) : (
+          <Checkbox
+            checked={isIndeterminate ? "indeterminate" : isChecked}
+            disabled={isDisabled}
+            onClick={(e) => e.stopPropagation()}
+            onCheckedChange={() => {
+              if (isDisabled) return;
+              if (isImplicitlySelected) {
+                onMaterializeInheritedSelection();
+                return;
+              }
+              onToggle(node);
+            }}
+          />
+        )}
         <Building2 className="h-4 w-4 shrink-0 text-gray-400" />
         <span className="min-w-0 truncate text-sm" title={displayName}>
           {displayName}
@@ -439,7 +447,7 @@ function TreeNode({
             {localize("com_permission.covered_by_parent_department")}
           </span>
         )}
-        {isBoundDisabled && showAlreadyGrantedLabel && (
+        {showBoundDisabledLabel && (
           <span className="ml-auto shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
             {localize(boundDisabledLabelKey)}
           </span>

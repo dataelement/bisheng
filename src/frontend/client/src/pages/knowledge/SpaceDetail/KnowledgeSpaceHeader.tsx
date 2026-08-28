@@ -18,6 +18,8 @@ import {
     Link2,
     FilePenLine,
     FileX2,
+    FolderTree,
+    Building2,
 } from "lucide-react";
 import { KnowledgeSpace, FileStatus, SortType, SortDirection, SpaceRole, VisibilityType } from "~/api/knowledge";
 import { cn } from "~/utils";
@@ -73,6 +75,8 @@ interface KnowledgeSpaceHeaderProps {
     onBatchDownload: () => void;
     canBatchDownload?: boolean;
     onBatchTag: () => void;
+    onBatchCategory?: () => void;
+    onBatchBusinessDomain?: () => void;
     onBatchRetry: () => void;
     onBatchDelete: () => void;
     canBatchDelete?: boolean;
@@ -98,6 +102,8 @@ interface KnowledgeSpaceHeaderProps {
     onProcessSimilar?: () => void;
     /** Mirrors member-management gating: creators + members with manage_space_relation. */
     canManageMembers?: boolean;
+    /** 当前页文件总数（含子文件夹内文件数） */
+    totalFileCount?: number;
 }
 
 export function KnowledgeSpaceHeader({
@@ -128,6 +134,8 @@ export function KnowledgeSpaceHeader({
     onBatchDownload,
     canBatchDownload = false,
     onBatchTag,
+    onBatchCategory,
+    onBatchBusinessDomain,
     onBatchRetry,
     onBatchDelete,
     canBatchDelete = false,
@@ -150,6 +158,7 @@ export function KnowledgeSpaceHeader({
     pendingSimilarCount = 0,
     onProcessSimilar,
     canManageMembers = false,
+    totalFileCount = 0,
 }: KnowledgeSpaceHeaderProps) {
     const localize = useLocalize();
     const isNarrow576 = useMediaQuery("(max-width: 576px)");
@@ -314,6 +323,12 @@ export function KnowledgeSpaceHeader({
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
+
+            {showViewModeTabs && (
+                <span className="ml-2 text-sm text-[#86909c]">
+                    共计 {totalFileCount} 文件
+                </span>
+            )}
         </div>
     );
 
@@ -366,7 +381,19 @@ export function KnowledgeSpaceHeader({
                         {isAdmin && !hasFoldersSelected && (
                             <DropdownMenuItem onClick={onBatchTag} className="cursor-pointer">
                                 <Tag className="mr-2 size-4" />
-                                {localize("com_knowledge.batch_add_tags")}
+                                {localize("com_knowledge.batch_edit_tags")}
+                            </DropdownMenuItem>
+                        )}
+                        {isAdmin && !hasFoldersSelected && onBatchCategory && (
+                            <DropdownMenuItem onClick={onBatchCategory} className="cursor-pointer">
+                                <FolderTree className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_category")}
+                            </DropdownMenuItem>
+                        )}
+                        {isAdmin && !hasFoldersSelected && onBatchBusinessDomain && (
+                            <DropdownMenuItem onClick={onBatchBusinessDomain} className="cursor-pointer">
+                                <Building2 className="mr-2 size-4" />
+                                {localize("com_knowledge.batch_business_domain")}
                             </DropdownMenuItem>
                         )}
                         {isAdmin && hasFailedFiles && (

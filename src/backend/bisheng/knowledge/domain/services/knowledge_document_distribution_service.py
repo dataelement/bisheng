@@ -55,6 +55,24 @@ PermissionSnapshotLoader = Callable[
 ]
 
 
+def publish_parent_user(target_file_level_path: str | None, target_space_id: int) -> str:
+    """The `parent` tuple subject for a file published into a target location.
+
+    The last folder id in the path is the parent; with no folder id the space
+    itself is. Testing the raw string for truthiness is not enough — a path
+    like "/" is truthy but holds no id, and yielded a malformed "folder:" that
+    OpenFGA rejects, which fails the publish and every unit of a batch with it.
+    """
+    folder_ids = [
+        part
+        for part in str(target_file_level_path or "").split("/")
+        if part.isdigit() and int(part) > 0
+    ]
+    if folder_ids:
+        return f"folder:{folder_ids[-1]}"
+    return f"knowledge_space:{int(target_space_id)}"
+
+
 class KnowledgeDocumentDistributionError(RuntimeError):
     """Raised when a publish/share lifecycle invariant would be violated."""
 
@@ -122,6 +140,15 @@ class RemovePublishEntryResult:
     document_id: int
     publish_entry_id: int
     idempotent: bool
+
+
+@dataclass(frozen=True)
+class ForceDetachPublishEntryResult:
+    document_id: int
+    publish_entry_id: int
+    relinked_entry_ids: tuple[int, ...] = ()
+    document_pointer_moved: bool = False
+    idempotent: bool = False
 
 
 @dataclass(frozen=True)
@@ -369,10 +396,29 @@ class KnowledgeDocumentDistributionService:
             await self.session.rollback()
             raise KnowledgeDocumentDistributionError("source canonical document has changed")
 
+        if (
+            source_file.reference_document_id == int(document.id)
+            and source_file.entry_type == KnowledgeFileEntryType.MANAGER.value
+            and source_file.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        ):
+            await self._commit()
+            return CanonicalManagerSnapshot(
+                document_id=int(document.id),
+                manager_file_id=int(source_file.id),
+                manager_space_id=int(source_file.knowledge_id),
+                original_uploader_id=source_file.original_uploader_id,
+                original_knowledge_id=source_file.original_knowledge_id,
+            )
+
         source_file.reference_document_id = int(document.id)
         source_file.entry_type = KnowledgeFileEntryType.MANAGER.value
         source_file.entry_status = KnowledgeFileEntryStatus.ACTIVE.value
         source_file.projection_status = KnowledgeFileProjectionStatus.PENDING.value
+        source_file.projection_retry_count = 0
+        source_file.projection_next_retry_at = None
+        source_file.projection_lease_owner = None
+        source_file.projection_lease_until = None
+        source_file.projection_last_error = None
         source_file.desired_content_generation = document.content_generation
         source_file.applied_content_generation = 0
         source_file.desired_entry_generation += 1
@@ -1498,10 +1544,9 @@ class KnowledgeDocumentDistributionService:
             manager = await self._prepare_manager_permission_transition(command)
             manager_target_parent = TupleOperation(
                 action="write",
-                user=(
-                    f"folder:{command.target_file_level_path.rstrip('/').split('/')[-1]}"
-                    if command.target_file_level_path
-                    else f"knowledge_space:{command.target_space_id}"
+                user=publish_parent_user(
+                    command.target_file_level_path,
+                    command.target_space_id,
                 ),
                 relation="parent",
                 object=f"knowledge_file:{command.source_entry_id}",
@@ -1976,6 +2021,83 @@ class KnowledgeDocumentDistributionService:
             document_id=document_id,
             publish_entry_id=publish_entry_id,
             idempotent=False,
+        )
+
+    async def force_detach_publish_entry(
+        self,
+        *,
+        tenant_id: int,
+        document_id: int,
+        publish_entry_id: int,
+    ) -> ForceDetachPublishEntryResult:
+        """Drop a publish entry from the chain without proving the chain is sound.
+
+        ``remove_publish_entry`` refuses anything it cannot validate, which is
+        the right answer when a user deletes one shortcut by hand. A container
+        delete cannot stop there: a single unprovable chain would strand the
+        whole knowledge space in retirement with no way out. So this relinks
+        every successor — and the document pointer — onto whatever the entry
+        itself pointed at, and lets the entry go.
+
+        Use it only as the fallback after the strict path has refused.
+        """
+        document = await self.document_repository.find_by_id_for_update(document_id)
+        entries = await self.file_repository.find_distribution_entries_by_document_id(
+            document_id,
+            for_update=True,
+        )
+        entry_map = {int(entry.id): entry for entry in entries}
+        publish = entry_map.get(publish_entry_id)
+        if document is None or publish is None:
+            raise KnowledgeDocumentDistributionError("publish detach state no longer exists")
+        if (
+            int(document.tenant_id or 0) != tenant_id
+            or int(publish.tenant_id or 0) != tenant_id
+            or int(publish.reference_document_id or 0) != document_id
+            or publish.entry_type != KnowledgeFileEntryType.PUBLISH.value
+        ):
+            raise KnowledgeDocumentDistributionError("target entry is not a publish")
+        if publish.entry_status == KnowledgeFileEntryStatus.DELETING.value:
+            return ForceDetachPublishEntryResult(
+                document_id=document_id,
+                publish_entry_id=publish_entry_id,
+                idempotent=True,
+            )
+
+        target_predecessor_id = publish.predecessor_logic_file_id
+        relinked: list[int] = []
+        for entry in entries:
+            if int(entry.id) == publish_entry_id:
+                continue
+            if int(entry.predecessor_logic_file_id or 0) == publish_entry_id:
+                entry.predecessor_logic_file_id = target_predecessor_id
+                relinked.append(int(entry.id))
+        document_pointer_moved = int(document.predecessor_logic_file_id or 0) == publish_entry_id
+        if document_pointer_moved:
+            document.predecessor_logic_file_id = target_predecessor_id
+
+        self._mark_entry_for_manager_delete(publish, KnowledgeFileEntryStatus.DELETING)
+        self.session.add(document)
+        self.session.add_all(entries)
+        await self._commit()
+
+        try:
+            explicit_snapshot = list(await self.permission_snapshot_loader(publish_entry_id))
+            await self.permission_activation_service.revoke_deleting_entry(
+                entry_id=publish_entry_id,
+                explicit_operations=explicit_snapshot,
+            )
+        except Exception:
+            logger.exception(
+                "F098 forced detach permission revoke deferred: entry_id=%s",
+                publish_entry_id,
+            )
+
+        return ForceDetachPublishEntryResult(
+            document_id=document_id,
+            publish_entry_id=publish_entry_id,
+            relinked_entry_ids=tuple(sorted(relinked)),
+            document_pointer_moved=document_pointer_moved,
         )
 
     async def remove_invalid_entry(

@@ -371,18 +371,12 @@ export function isBoundLibraryTagName(
 
 export type SpaceTagAddHint = "under_review" | "exists_in_other_library";
 
-/** Hint when user adds a tag that is pending review or exists in an unbound library. */
+/** Hint when user adds a pending-review tag. Unbound library tags are allowed. */
 export function resolveSpaceTagAddHint(
     tag: SpaceTag,
-    recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
+    _recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
 ): SpaceTagAddHint | null {
     if (tag.review_status === 0) {
-        return "under_review";
-    }
-    if (isLibrarySpaceTag(tag) && !isBoundLibraryTagName(tag.name, recommendedTags)) {
-        return "exists_in_other_library";
-    }
-    if (!isLibrarySpaceTag(tag) && (tag.review_status === undefined || tag.review_status === null)) {
         return "under_review";
     }
     return null;
@@ -550,6 +544,8 @@ export interface KnowledgeFile {
     businessDomainCode?: string | null; // mapped from business_domain_code (file-level selection)
     summary?: string;
     isPendingApproval?: boolean;
+    /** True when the file has an active publish approval; UI locks every action except download. */
+    hasPendingPublishApproval?: boolean;
     version_no?: number;          // primary version number; absent for folders / legacy files
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
@@ -754,6 +750,7 @@ interface RawSpaceChild {
     approval_status?: string;
     approval_reason?: string;
     is_pending_approval?: boolean;
+    has_pending_publish_approval?: boolean;
     file_encoding?: string | null;
     abstract?: string | null;
     summary?: string | null;
@@ -1175,6 +1172,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         approvalStatus: raw?.approval_status ?? undefined,
         approvalReason: raw?.approval_reason ?? undefined,
         isPendingApproval: Boolean(raw?.is_pending_approval),
+        hasPendingPublishApproval: Boolean(raw?.has_pending_publish_approval),
         fileEncoding: raw?.file_encoding ?? null,
         fileSubcategoryCode: raw?.file_subcategory_code ?? null,
         businessDomainCode: raw?.business_domain_code ?? null,
@@ -2108,6 +2106,24 @@ export async function lookupSpaceTagApi(space_id: string, tag_name: string): Pro
 }
 
 /**
+ * Recommend up to 10 bound-library tags for a file.
+ * Uses parse-time cache unless refresh is true.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag/recommend
+ */
+export async function recommendFileTagsApi(
+    space_id: string,
+    file_id: string,
+    exclude_names: string[] = [],
+    refresh = false,
+): Promise<SpaceTag[]> {
+    const res = await request.post<ApiResponse<SpaceTag[]>>(
+        `/api/v1/knowledge/space/${space_id}/files/${file_id}/tag/recommend`,
+        { exclude_names, refresh },
+    );
+    return extractList<SpaceTag>(res?.data);
+}
+
+/**
  * Add a new space tag.
  * Backend: POST /api/v1/knowledge/space/{space_id}/tag
  */
@@ -2197,6 +2213,76 @@ export async function batchUpdateTagsApi(
 }
 
 /**
+ * Batch overwrite tags for files — replaces each file's tag set instead of appending.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-tag-overwrite
+ */
+export async function batchOverwriteTagsApi(
+    space_id: string,
+    data: { file_ids: number[]; tag_ids: number[]; review_tag_ids?: number[] }
+): Promise<void> {
+    return withKnowledgeMutationLog(
+        "batch-overwrite-tags",
+        {
+            method: "POST",
+            space_id,
+            file_ids: data.file_ids,
+            tag_ids: data.tag_ids,
+            review_tag_ids: data.review_tag_ids,
+        },
+        async () => {
+            await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-tag-overwrite`, {
+                file_ids: data.file_ids,
+                tag_ids: data.tag_ids,
+                review_tag_ids: data.review_tag_ids ?? [],
+            });
+        }
+    );
+}
+
+/**
+ * Batch update file classification (category / subcategory).
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-category
+ */
+export async function batchUpdateFileCategoryApi(
+    space_id: string,
+    data: { file_ids: number[]; file_category_code?: string | null; file_subcategory_code?: string | null }
+): Promise<{ updated_file_ids: number[]; skipped: { file_id: number; reason: string }[] }> {
+    return withKnowledgeMutationLog(
+        "batch-update-file-category",
+        { method: "POST", space_id, file_ids: data.file_ids },
+        async () => {
+            const res = await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-category`, {
+                file_ids: data.file_ids,
+                file_category_code: data.file_category_code ?? null,
+                file_subcategory_code: data.file_subcategory_code ?? null,
+            }) as any;
+            return res?.data ?? { updated_file_ids: [], skipped: [] };
+        }
+    );
+}
+
+/**
+ * Batch update file business domain.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/batch-business-domain
+ */
+export async function batchUpdateFileBusinessDomainApi(
+    space_id: string,
+    data: { file_ids: number[]; business_domain_code: string }
+): Promise<{ updated_file_ids: number[]; skipped: { file_id: number; reason: string }[] }> {
+    return withKnowledgeMutationLog(
+        "batch-update-file-business-domain",
+        { method: "POST", space_id, file_ids: data.file_ids },
+        async () => {
+            const res = await request.post(`/api/v1/knowledge/space/${space_id}/files/batch-business-domain`, {
+                file_ids: data.file_ids,
+                business_domain_code: data.business_domain_code,
+            }) as any;
+            return res?.data ?? { updated_file_ids: [], skipped: [] };
+        }
+    );
+}
+
+/**
  * Subscribe to a space
  * POST /api/v1/knowledge/space/{space_id}/subscribe
  */
@@ -2263,6 +2349,71 @@ export async function getFolderParentPathApi(
         id: String(item.id),
         name: item.name || item.file_name || String(item.id),
     }));
+}
+
+/**
+ * What deleting a container would do to files published or shared elsewhere.
+ *
+ * Distribution entries never reach the recycle bin, so a container holding any
+ * of them deletes irreversibly. Callers use this to say so before the user
+ * commits.
+ */
+export interface DeleteImpactSummary {
+    rollback_count: number;
+    permanent_delete_count: number;
+    soft_link_count: number;
+    share_count: number;
+    recyclable_count: number;
+    irreversible: boolean;
+    rollback_samples: Array<{ file_id: number; file_name: string }>;
+}
+
+const EMPTY_DELETE_IMPACT: DeleteImpactSummary = {
+    rollback_count: 0,
+    permanent_delete_count: 0,
+    soft_link_count: 0,
+    share_count: 0,
+    recyclable_count: 0,
+    irreversible: false,
+    rollback_samples: [],
+};
+
+function normalizeDeleteImpact(data: unknown): DeleteImpactSummary {
+    if (!data || typeof data !== "object") return EMPTY_DELETE_IMPACT;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = data as any;
+    return {
+        rollback_count: Number(raw.rollback_count) || 0,
+        permanent_delete_count: Number(raw.permanent_delete_count) || 0,
+        soft_link_count: Number(raw.soft_link_count) || 0,
+        share_count: Number(raw.share_count) || 0,
+        recyclable_count: Number(raw.recyclable_count) || 0,
+        irreversible: Boolean(raw.irreversible),
+        rollback_samples: Array.isArray(raw.rollback_samples) ? raw.rollback_samples : [],
+    };
+}
+
+/**
+ * GET /api/v1/knowledge/space/{space_id}/delete-preflight
+ */
+export async function getSpaceDeleteImpactApi(spaceId: string): Promise<DeleteImpactSummary> {
+    const res = await request.get<ApiResponse<DeleteImpactSummary>>(
+        `/api/v1/knowledge/space/${spaceId}/delete-preflight`
+    );
+    return normalizeDeleteImpact(res?.data);
+}
+
+/**
+ * GET /api/v1/knowledge/space/{space_id}/folders/{folder_id}/delete-preflight
+ */
+export async function getFolderDeleteImpactApi(
+    spaceId: string,
+    folderId: string
+): Promise<DeleteImpactSummary> {
+    const res = await request.get<ApiResponse<DeleteImpactSummary>>(
+        `/api/v1/knowledge/space/${spaceId}/folders/${folderId}/delete-preflight`
+    );
+    return normalizeDeleteImpact(res?.data);
 }
 
 /**

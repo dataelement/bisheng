@@ -103,6 +103,7 @@ export default function AppUseLog() {
         const cols = [
             { defaultWidth: 200, minWidth: 80 },
             { defaultWidth: 140, minWidth: 80 },
+            { defaultWidth: 100, minWidth: 70 },
             { defaultWidth: 180, minWidth: 80 },
             { defaultWidth: 170, minWidth: 120 },
             { defaultWidth: 160, minWidth: 120 },
@@ -118,6 +119,7 @@ export default function AppUseLog() {
     const headerItems = [
         { label: t('log.appName') },
         { label: t('log.userName') },
+        { label: t('log.externalId') },
         { label: t('log.userGroup') },
         { label: t('createTime') },
         { label: t('log.userFeedback') },
@@ -376,15 +378,16 @@ export default function AppUseLog() {
                     <TableBody>
                         {processedData.map((el: any) => {
                             const flowName = el.flow_type === 15 ? t('log.workbench_daily') : (el.flow_name || "-")
-                            const sensitiveIdx = appConfig.isPro ? 5 : -1
-                            const opsIdx = appConfig.isPro ? 6 : 5
+                            const sensitiveIdx = appConfig.isPro ? 6 : -1
+                            const opsIdx = appConfig.isPro ? 7 : 6
                             return (
                                 <TableRow key={el.id}>
                                     <TruncatedTableCell tdProps={rc.getTdProps(0)} text={flowName} />
                                     <TruncatedTableCell tdProps={rc.getTdProps(1)} text={el.user_name || "-"} />
-                                    <TruncatedTableCell tdProps={rc.getTdProps(2)} text={el.userGroupsString || "-"} />
-                                    <TruncatedTableCell tdProps={rc.getTdProps(3)} text={el.create_time.replace("T", " ")} />
-                                    <TableCell {...rc.getTdProps(4)}>
+                                    <TruncatedTableCell tdProps={rc.getTdProps(2)} text={el.user_external_id || "-"} />
+                                    <TruncatedTableCell tdProps={rc.getTdProps(3)} text={el.userGroupsString || "-"} />
+                                    <TruncatedTableCell tdProps={rc.getTdProps(4)} text={el.create_time.replace("T", " ")} />
+                                    <TableCell {...rc.getTdProps(5)}>
                                         <div className="flex gap-2 break-all">
                                             <div className="text-center text-xs relative">
                                                 <ThunmbIcon

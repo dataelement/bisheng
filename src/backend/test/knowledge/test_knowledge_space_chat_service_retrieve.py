@@ -18,6 +18,10 @@ from fastapi import HTTPException
 from langchain_core.documents import Document
 
 from bisheng.common.errcode.knowledge_space import SpacePermissionDeniedError
+from bisheng.knowledge.domain.contracts.errors import (
+    SharedStorageContractError,
+    SharedStorageErrorCode,
+)
 from bisheng.knowledge.domain.services import knowledge_space_chat_service as svc_mod
 from bisheng.knowledge.domain.services.knowledge_space_chat_service import KnowledgeSpaceChatService
 from bisheng.open_endpoints.api.dependencies import (
@@ -541,6 +545,154 @@ async def test_aretrieve_chunks_passes_filter_tags_to_kb_delegate():
     assert call.args == (7,)
     assert call.kwargs["tag_names"] == ["alpha", "beta"]
     assert call.kwargs["max_content"] == 8000
+
+
+async def test_aretrieve_chunks_passes_filters_to_shared_path_without_legacy_fallback():
+    svc = _make_service()
+    svc._is_shared_storage_active = AsyncMock(return_value=True)
+    svc._aretrieve_chunks_shared = AsyncMock(return_value=[])
+    svc._aretrieve_chunks_for_kb = AsyncMock(return_value=[])
+    kb_filters = {7: {"file_ids": [1001], "tags": ["alpha"], "tag_match_mode": "ANY"}}
+
+    result = await svc.aretrieve_chunks(
+        query="hello",
+        knowledge_base_ids=[7],
+        kb_filters=kb_filters,
+    )
+
+    assert result == []
+    svc._aretrieve_chunks_shared.assert_awaited_once()
+    assert svc._aretrieve_chunks_shared.await_args.kwargs["kb_filters"] == kb_filters
+    svc._aretrieve_chunks_for_kb.assert_not_awaited()
+
+
+async def test_shared_path_missing_dependencies_fails_closed(monkeypatch):
+    svc = _make_service()
+    svc._is_shared_storage_active = AsyncMock(return_value=True)
+    svc._aretrieve_chunks_for_kb = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        svc_mod.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(tenant_id=1, type=3)),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.shared_space_storage.resolve_space_shared_routing",
+        MagicMock(
+            return_value=SimpleNamespace(
+                routing_version=8,
+                collection_name="col_space_shared_1",
+                index_name="idx_space_shared_1",
+            )
+        ),
+    )
+
+    with pytest.raises(SharedStorageContractError) as exc:
+        await svc.aretrieve_chunks(query="hello", knowledge_base_ids=[7])
+
+    assert exc.value.code == SharedStorageErrorCode.RETRIEVAL_BACKEND_UNAVAILABLE
+    svc._aretrieve_chunks_for_kb.assert_not_awaited()
+
+
+async def test_shared_path_applies_space_scope_before_file_and_tag_filters(monkeypatch):
+    svc = _make_service()
+    svc.file_repo = MagicMock()
+    svc._resolve_kb_target_file_ids = AsyncMock(return_value=[10, 11])
+    svc._permission_service = MagicMock(
+        return_value=SimpleNamespace(
+            _user_can_read_space=AsyncMock(return_value=True),
+            _get_effective_permission_ids=AsyncMock(return_value={"view_file"}),
+        )
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeDao,
+        "aquery_by_id",
+        AsyncMock(return_value=SimpleNamespace(tenant_id=1, type=3)),
+    )
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.shared_space_storage.resolve_space_shared_routing",
+        MagicMock(
+            return_value=SimpleNamespace(
+                routing_version=8,
+                collection_name="col_space_shared_1",
+                index_name="idx_space_shared_1",
+            )
+        ),
+    )
+
+    resolver = MagicMock()
+    base_scope = SimpleNamespace(name="space-only")
+    filtered_scope = SimpleNamespace(name="space-and-entry")
+    resolver.resolve_request = AsyncMock(side_effect=[base_scope, filtered_scope])
+    resolver.resolve_explicit_canonical_constraints = AsyncMock(
+        return_value=((101,), (201,))
+    )
+    generation_constraint = SimpleNamespace(
+        canonical_document_id=101,
+        canonical_version_id=201,
+        content_generation=1,
+        membership_generation=1,
+    )
+    resolver.resolve_current_generation_constraints = AsyncMock(
+        return_value=(generation_constraint,)
+    )
+    backend_filter = SimpleNamespace(name="backend-filter")
+    resolver.build_backend_filter = MagicMock(return_value=backend_filter)
+    resolver.map_and_authorize_hits = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        "bisheng.knowledge.domain.services.knowledge_retrieval_scope_resolver.SqlKnowledgeRetrievalScopeResolver",
+        MagicMock(return_value=resolver),
+    )
+
+    reader = MagicMock()
+    reader.search_milvus = AsyncMock(return_value=[])
+    reader.search_es = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        "bisheng.knowledge.rag.shared_space_storage.SharedSpaceStorageReader",
+        MagicMock(return_value=reader),
+    )
+    monkeypatch.setattr(
+        svc_mod.LLMService,
+        "get_knowledge_default_embedding",
+        MagicMock(return_value=SimpleNamespace(embed_query=MagicMock(return_value=[0.1]))),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeRag,
+        "init_milvus_vectorstore",
+        MagicMock(return_value=SimpleNamespace(col=object())),
+    )
+    monkeypatch.setattr(
+        svc_mod.KnowledgeRag,
+        "init_es_vectorstore_sync",
+        MagicMock(return_value=SimpleNamespace(client=object())),
+    )
+
+    result = await svc._aretrieve_chunks_shared(
+        query="hello",
+        knowledge_base_ids=[7],
+        kb_filters={
+            7: {
+                "tags": ["alpha"],
+                "file_ids": [11, 12],
+                "tag_match_mode": "ANY",
+            }
+        },
+        top_k=5,
+        max_content=8000,
+    )
+
+    assert result == []
+    calls = resolver.resolve_request.await_args_list
+    assert [int(item) for item in calls[0].kwargs["space_ids"]] == [7]
+    assert "entry_refs" not in calls[0].kwargs
+    assert [int(ref.entry_file_id) for ref in calls[1].kwargs["entry_refs"]] == [11]
+    resolver.build_backend_filter.assert_called_once_with(
+        filtered_scope,
+        canonical_document_ids=[101],
+        canonical_version_ids=[201],
+        generation_constraints=(generation_constraint,),
+    )
+    reader.search_milvus.assert_awaited_once()
+    assert reader.search_milvus.await_args.kwargs["filter_"] is backend_filter
 
 
 # ---------------------------------------------------------------------------

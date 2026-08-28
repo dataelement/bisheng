@@ -3003,3 +3003,118 @@
     width: calc(100% - 32px);
   }
 }
+
+/* Portal file info edit modal */
+.infoEditModalBody {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 8px 0 4px;
+}
+
+.infoEditModalRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.infoEditModalLabel {
+  color: #4e5969;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.infoEditModalField {
+  min-width: 0;
+}
+
+.infoEditRenameDisplay {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.infoEditRenameDisplay:hover {
+  border-color: #dfe5ee;
+  background: #f8fafc;
+}
+
+.infoEditRenameName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1d2129;
+  font-size: 14px;
+}
+
+.infoEditRenameButton {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #165dff;
+  cursor: pointer;
+}
+
+.infoEditRenameButton:hover {
+  background: #eaf2ff;
+}
+
+.infoEditRenameWrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.infoEditRenameInput {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  font-size: 14px;
+}
+
+.infoEditRenameExt {
+  flex: 0 0 auto;
+  color: #86909c;
+  font-size: 14px;
+  user-select: none;
+}
+
+.infoEditModalLabelWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.infoEditRenameHint {
+  color: #f53f3f;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.infoEditModalOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(247, 248, 250, 0.72);
+  pointer-events: auto;
+}

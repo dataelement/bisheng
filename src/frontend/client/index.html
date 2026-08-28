@@ -31,7 +31,7 @@
   </style>
   <!-- <script src="http://192.168.2.224:9000/vditor.js" defer></script> -->
   <script>
-    document.title = window.BRAND_CONFIG.brandName.en
+    document.title = window.BRAND_CONFIG?.brandName?.en || "BISHENG"
 
     const theme = localStorage.getItem('color-theme');
     const loadingContainerStyle = document.createElement('style');

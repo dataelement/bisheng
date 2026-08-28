@@ -1,4 +1,5 @@
 """Generate AI-powered file alias names using an LLM."""
+# ruff: noqa: RUF001
 
 import json
 import os
@@ -11,6 +12,73 @@ from bisheng.common.constants.enums.telemetry import ApplicationTypeEnum
 from bisheng.core.prompts.manager import get_prompt_manager_sync
 from bisheng.knowledge.domain.services.file_title_extractor import sanitize_file_name
 from bisheng.llm.domain.services.llm import LLMService
+
+
+def _halfwidth(text: str) -> str:
+    """Convert common full-width alphanumerics to half-width for comparison."""
+    table = str.maketrans(
+        "０１２３４５６７８９ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ",
+        "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    )
+    return text.translate(table)
+
+
+def _normalize_name_for_compare(name: str) -> str:
+    """Drop spaces, brackets, separators and case for structural comparison."""
+    if not name:
+        return ""
+    name = _halfwidth(name).lower()
+    name = re.sub(r"[\s\-_《》（）()\[\]【】]", "", name)
+    return name
+
+
+def _extract_protected_info(name: str) -> list[str]:
+    """Return normalized standard numbers, dates and versions present in ``name``."""
+    protected: list[str] = []
+    search_name = name.replace("_", "-")
+    for match in re.finditer(
+        r"[A-Za-z]{1,6}(?:/[A-Za-z]{1,6})?\s*\d+(?:\.\d+)?\s*[—–\-]\s*\d{2,4}",
+        search_name,
+    ):
+        protected.append(_normalize_name_for_compare(match.group(0)))
+    for match in re.finditer(r"\d{4}[年/\-\.]\d{1,2}[月/\-\.]?\d{0,2}日?", search_name):
+        protected.append(_normalize_name_for_compare(match.group(0)))
+    for match in re.finditer(r"(?i)v\d+(?:\.\d+)*|第\s*\d+\s*版|版本\s*\d+", search_name):
+        protected.append(_normalize_name_for_compare(match.group(0)))
+    # Keep structural markers such as "第1部分" and "1号高炉".
+    for match in re.finditer(r"第\s*\d+\s*(?:部分|章|节|篇|册|卷)", search_name):
+        protected.append(_normalize_name_for_compare(match.group(0)))
+    for match in re.finditer(r"\d+\s*号\s*(?:设备|高炉|线|机组)", search_name):
+        protected.append(_normalize_name_for_compare(match.group(0)))
+    return [p for p in protected if p]
+
+
+def _extract_bracket_content(name: str) -> list[str]:
+    """Return normalized contents of Chinese book-title and parenthesis pairs."""
+    contents: list[str] = []
+    for left, right in (("《", "》"), ("（", "）"), ("(", ")")):
+        pattern = re.compile(re.escape(left) + r"(.*?)" + re.escape(right))
+        for match in pattern.finditer(name):
+            contents.append(_normalize_name_for_compare(match.group(1)))
+    return [c for c in contents if c]
+
+
+_AUXILIARY_PREFIX_RE = re.compile(
+    r"^(?:"
+    r"附件[一二三四五六七八九十0-9]*[：:.、\-—\s]+"
+    r"|[（(]\d+[)）]\s*"
+    r"|\d{1,2}[.．、：:]\s+"
+    r"|\d{1,2}\s+"
+    r"|[一二三四五六七八九十]+[、.．]\s+"
+    r")+",
+    re.UNICODE,
+)
+
+
+def _remove_auxiliary_prefix(name: str) -> str:
+    """Remove leading auxiliary text such as 'Attachment 1:' without harming real titles."""
+    cleaned = _AUXILIARY_PREFIX_RE.sub("", name)
+    return cleaned.strip() if cleaned.strip() else name.strip()
 
 
 class FileAliasNameGeneratorService:
@@ -71,9 +139,7 @@ class FileAliasNameGeneratorService:
         try:
             knowledge_llm = LLMService.get_knowledge_llm(tenant_id=tenant_id)
             file_alias_model_id = (
-                knowledge_llm.file_alias_model_id
-                if knowledge_llm and knowledge_llm.file_alias_model_id
-                else None
+                knowledge_llm.file_alias_model_id if knowledge_llm and knowledge_llm.file_alias_model_id else None
             )
             # Fallback to the extract-title model when no alias model is configured.
             if not file_alias_model_id and knowledge_llm and knowledge_llm.extract_title_model_id:
@@ -210,24 +276,71 @@ class FileAliasNameGeneratorService:
 
     @classmethod
     def _normalize_alias_name(cls, raw_alias: str, original_file_name: str) -> str | None:
-        """Sanitize the LLM output and force the original file extension."""
+        """Sanitize the LLM output, enforce deterministic rules and force the original extension."""
         original_ext = os.path.splitext(original_file_name)[1].lower()
         alias_base, alias_ext = os.path.splitext(raw_alias)
         alias_base = alias_base.strip()
         logger.info(
-            "alias normalize raw_alias=%s original_ext=%s alias_base=%s",
+            "alias normalize raw_alias=%s original_file_name=%s alias_base=%s",
             raw_alias,
-            original_ext,
+            original_file_name,
             alias_base,
         )
         if not alias_base:
             logger.info("alias normalize skipped, empty base")
             return None
 
-        # Always keep the original extension for consistency with file_name.
+        original_base = os.path.splitext(original_file_name)[0]
+
+        # 1. Deterministic removal of leading auxiliary prefixes.
+        cleaned_base = _remove_auxiliary_prefix(alias_base)
+
+        normalized_cleaned = _normalize_name_for_compare(cleaned_base)
+
+        # 2. Any standard number / date / version from the original must be preserved.
+        for token in _extract_protected_info(original_base):
+            if token and token not in normalized_cleaned:
+                logger.info(
+                    "alias normalize dropped, protected info missing original=%s alias=%s missing=%s",
+                    original_file_name,
+                    cleaned_base,
+                    token,
+                )
+                return None
+
+        # 3. Bracketed content from the original must not be silently dropped.
+        for content in _extract_bracket_content(original_base):
+            if not content or len(content) <= 1 or re.fullmatch(r"\d+", content):
+                continue
+            if content not in normalized_cleaned:
+                logger.info(
+                    "alias normalize dropped, bracket content missing original=%s alias=%s missing=%s",
+                    original_file_name,
+                    cleaned_base,
+                    content,
+                )
+                return None
+
+        # 4. Do not suggest a rename that is only a formatting difference.
+        if _normalize_name_for_compare(original_base) == normalized_cleaned:
+            logger.info(
+                "alias normalize dropped, only formatting difference original=%s alias=%s",
+                original_file_name,
+                cleaned_base,
+            )
+            return None
+
+        # 5. Normalize separators: never use underscores, use hyphen instead.
         ext = original_ext if original_ext else alias_ext.lower()
-        max_base_length = 200 - len(ext)
-        safe_base = sanitize_file_name(alias_base, max_length=max(max_base_length, 1))
-        result = f"{safe_base}{ext}" if safe_base else None
+        max_base_length = max(200 - len(ext), 1)
+        safe_base = sanitize_file_name(cleaned_base, max_length=max_base_length, use_hyphen=True)
+        if not safe_base:
+            return None
+        safe_base = re.sub(r"_+", "-", safe_base)
+        safe_base = re.sub(r"-+", "-", safe_base).strip("-")
+        if not safe_base:
+            return None
+
+        result = f"{safe_base}{ext}"
         logger.info("alias normalize result=%s", result)
         return result

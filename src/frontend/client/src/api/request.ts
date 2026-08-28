@@ -5,6 +5,7 @@ import { setTokenHeader } from '~/api/chat/headers-helpers';
 import { notifyPortalAuthRequired } from '~/api/portalAuthBridge';
 import {
   API_RATE_LIMIT_CODE,
+  isServerBusyCode,
   notifyPortalRateLimit,
 } from '~/api/portalRateLimitBridge';
 import { getPlatformAdminPanelUrl } from '~/utils/platformAdminUrl';
@@ -155,10 +156,10 @@ const handleRateLimitResponse = (data: any): void => {
 
 customAxios.interceptors.response.use(
   (response) => {
-    if (response.data?.status_code === API_RATE_LIMIT_CODE) {
+    if (isServerBusyCode(response.data?.status_code)) {
       handleRateLimitResponse(response.data);
       const error: any = new Error(formatApiErrorMessage(response.data));
-      error.status_code = API_RATE_LIMIT_CODE;
+      error.status_code = response.data.status_code;
       error.status_message = response.data.status_message;
       error.response = response;
       return Promise.reject(error);
@@ -207,7 +208,7 @@ customAxios.interceptors.response.use(
 
     if (
       error.response.status === 429
-      || error.response.data?.status_code === API_RATE_LIMIT_CODE
+      || isServerBusyCode(error.response.data?.status_code)
     ) {
       handleRateLimitResponse(error.response.data);
       return Promise.reject(error);

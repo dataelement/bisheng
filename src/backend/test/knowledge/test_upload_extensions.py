@@ -13,16 +13,48 @@ def test_extract_upload_file_extension_normalizes_case():
     assert extract_upload_file_extension(" notes.TXT ") == "txt"
 
 
-def test_resolve_knowledge_upload_extensions_respects_image_parser_flag():
-    with_images = resolve_knowledge_upload_extensions(image_parser_enabled=True)
-    without_images = resolve_knowledge_upload_extensions(image_parser_enabled=False)
+def test_extract_upload_file_extension_strips_presigned_url_query():
+    presigned = (
+        "abc123.pdf?x-amz-algorithm=aws4-hmac-sha256"
+        "&x-amz-credential=minioadmin%2f20260827%2fus-east-1%2fs3%2faws4_request"
+        "&x-amz-date=20260827t091645z&x-amz-expires=604800"
+        "&x-amz-signedheaders=host&x-amz-signature=deadbeef"
+    )
+    assert extract_upload_file_extension(presigned) == "pdf"
+    assert extract_upload_file_extension("notes.docx#section-1") == "docx"
 
-    assert "pdf" in with_images
-    assert "mp3" in with_images
-    assert "png" in with_images
-    assert "png" not in without_images
-    assert "pdf" in without_images
-    assert "mp3" in without_images
+
+@pytest.mark.parametrize(
+    "file_name",
+    [
+        "安全管理制度.pdf?x-amz-algorithm=aws4-hmac-sha256",
+        "report.docx?x-amz-expires=604800",
+    ],
+)
+def test_validate_knowledge_upload_file_extension_accepts_presigned_paths(file_name: str):
+    validate_knowledge_upload_file_extension(file_name, image_parser_enabled=True)
+
+
+def test_resolve_knowledge_upload_extensions_is_fixed_allowlist():
+    allowed = resolve_knowledge_upload_extensions(image_parser_enabled=True)
+    assert allowed == resolve_knowledge_upload_extensions(image_parser_enabled=False)
+    assert allowed == {
+        "pdf",
+        "txt",
+        "docx",
+        "ppt",
+        "pptx",
+        "md",
+        "xls",
+        "xlsx",
+        "doc",
+        "html",
+        "htm",
+    }
+    assert "csv" not in allowed
+    assert "png" not in allowed
+    assert "mp3" not in allowed
+    assert "wps" not in allowed
 
 
 @pytest.mark.parametrize(
@@ -30,18 +62,24 @@ def test_resolve_knowledge_upload_extensions_respects_image_parser_flag():
     [
         "安全管理制度.pdf",
         "report.docx",
-        "audio.mp3",
+        "notes.htm",
+        "sheet.xlsx",
     ],
 )
 def test_validate_knowledge_upload_file_extension_accepts_platform_formats(file_name: str):
     validate_knowledge_upload_file_extension(file_name, image_parser_enabled=True)
 
 
-def test_validate_knowledge_upload_file_extension_rejects_unknown_format():
+@pytest.mark.parametrize(
+    "file_name",
+    [
+        "archive.zip",
+        "audio.mp3",
+        "scan.png",
+        "data.csv",
+        "doc.wps",
+    ],
+)
+def test_validate_knowledge_upload_file_extension_rejects_removed_formats(file_name: str):
     with pytest.raises(UnsupportedUploadFileExtensionError):
-        validate_knowledge_upload_file_extension("archive.zip", image_parser_enabled=True)
-
-
-def test_validate_knowledge_upload_file_extension_rejects_images_when_parser_disabled():
-    with pytest.raises(UnsupportedUploadFileExtensionError):
-        validate_knowledge_upload_file_extension("scan.png", image_parser_enabled=False)
+        validate_knowledge_upload_file_extension(file_name, image_parser_enabled=True)

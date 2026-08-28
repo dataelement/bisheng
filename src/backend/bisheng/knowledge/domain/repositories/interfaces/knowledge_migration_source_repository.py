@@ -33,6 +33,7 @@ class KnowledgeMigrationSourceRepository(ABC):
         level: str | None,
         offset: int,
         limit: int,
+        levels: set[str] | None = None,
     ) -> tuple[list[MigrationSpaceRecord], int]: ...
 
     @abstractmethod

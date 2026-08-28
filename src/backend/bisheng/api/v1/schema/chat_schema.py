@@ -13,6 +13,7 @@ class AppChatList(BaseModel):
     flow_name: str
     user_name: str
     user_id: int
+    user_external_id: Optional[str] = None
     chat_id: str
     flow_id: str
     flow_type: int

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useRecoilValue } from "recoil";
@@ -18,6 +18,7 @@ import {
     deleteSpaceApi,
     downloadWatermarkedKnowledgeFileApi,
     getFilePreviewApi,
+    getFolderParentPathApi,
     getPortalFilePreviewApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
@@ -89,6 +90,7 @@ import { isFavoriteSpace } from "./favoriteView";
 import { buildPublicFileActionPermissions } from "./publicFilePermissions";
 import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
 import { PortalDialogs } from "./components/PortalDialogs";
+import { PortalFileInfoEditModal } from "./components/PortalFileInfoEditModal";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
 import { PortalPreviewWorkspace } from "./components/PortalPreviewWorkspace";
 import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawer";
@@ -317,6 +319,7 @@ export default function PortalKnowledgeWorkbench() {
     // Download permission for the currently previewed file, returned authoritatively
     // by the preview endpoint (same gate the download endpoint enforces).
     const [selectedFileDownloadable, setSelectedFileDownloadable] = useState(false);
+    const [editInfoModalOpen, setEditInfoModalOpen] = useState(false);
     const [downloadPending, setDownloadPending] = useState(false);
     const downloadPendingRef = useRef(false);
     const activeSpaceIdRef = useRef<string | undefined>();
@@ -396,6 +399,11 @@ export default function PortalKnowledgeWorkbench() {
         setRestoringDeepLinkKey((current) => (current === targetKey ? null : current));
     }, []);
 
+    const handleDeepLinkOpenAiDrawer = useCallback(() => {
+        setAiDrawerOpen(true);
+        setActivePanel(null);
+    }, []);
+
     useEffect(() => {
         if (!preferredSpaceResolveFailed || !portalDeepLinkTarget?.spaceId) return;
         setRestoringDeepLinkKey((current) => (
@@ -451,6 +459,11 @@ export default function PortalKnowledgeWorkbench() {
         if (!selectedFile || String(selectedFile.id) !== portalDeepLinkTarget.fileId) return;
         if (preview.loading) return;
         setRestoringDeepLinkKey(null);
+        // Deep-link file entry (e.g. "进入知识库") opens the AI drawer by default.
+        // Search-result previews mark the URL with fromSearch=1 and keep it closed.
+        if (portalDeepLinkTarget.fromSearch === "1") return;
+        setAiDrawerOpen(true);
+        setActivePanel(null);
     }, [
         portalDeepLinkTarget,
         preview.error,
@@ -458,6 +471,8 @@ export default function PortalKnowledgeWorkbench() {
         preview.loading,
         restoringDeepLinkKey,
         selectedFile,
+        setActivePanel,
+        setAiDrawerOpen,
     ]);
 
     useEffect(() => {
@@ -669,6 +684,21 @@ export default function PortalKnowledgeWorkbench() {
     }, [activeSpace?.id, confirm, getNextActiveSpace, queryClient, showToast]);
 
     const isActiveSpaceAdmin = activeSpace?.role === SpaceRole.CREATOR || activeSpace?.role === SpaceRole.ADMIN;
+    // Resolve the file's ancestor folder chain (used by postPortalLocation + URL
+    // sync effect). Defined early because both effects reference the result.
+    const { data: selectedFileParentPath, isLoading: isSelectedFileParentPathLoading } = useQuery<Array<{ id: string; name: string }>>({
+        queryKey: ["portalSelectedFileParentPath", selectedFile?.spaceId, selectedFile?.id],
+        queryFn: async () => {
+            const spaceId = selectedFile?.spaceId;
+            const fileId = selectedFile?.id;
+            if (!spaceId || !fileId) return [];
+            return getFolderParentPathApi(spaceId, fileId);
+        },
+        enabled: Boolean(selectedFile?.spaceId && selectedFile?.id),
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        placeholderData: (prev: Array<{ id: string; name: string }> | undefined) => prev,
+    });
     const currentFolderNode = useMemo(
         () => currentFolderId ? findTreeNode(treeNodes, currentFolderId) : null,
         [currentFolderId, treeNodes],
@@ -704,10 +734,31 @@ export default function PortalKnowledgeWorkbench() {
         ) {
             return;
         }
+        // When reporting a selected file, wait until the authoritative parent-path
+        // query has settled. Otherwise we report folderId="" first (because the
+        // deep link had no folder id and the tree hasn't navigated there yet)
+        // and then report the real folder id a moment later, which manifests to
+        // the user as TWO visible /knowledge-spaces?… URL jumps in the browser.
+        const isFilePreview = Boolean(selectedFile?.id && !isFolder(selectedFile));
+        if (isFilePreview && (isSelectedFileParentPathLoading || selectedFileParentPath === undefined)) {
+            return;
+        }
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        // When previewing a file, use the deepest folder returned by the
+        // parent-path API as the canonical folder id/name. It matches what the
+        // URL-sync effect writes into searchParams, so the parent frame gets
+        // the final address in ONE postMessage call (no intermediate URL jump).
+        const resolvedFolderId = isFilePreview
+            ? (deepestFolder?.id || currentFolderId)
+            : currentFolderId;
+        const resolvedFolderName = isFilePreview
+            ? (deepestFolder?.name || currentFolderNode?.file.name)
+            : (currentFolderId ? currentFolderNode?.file.name : undefined);
         const payload = {
             spaceId: String(activeSpace.id),
-            folderId: currentFolderId,
-            folderName: currentFolderId ? currentFolderNode?.file.name : undefined,
+            folderId: resolvedFolderId,
+            folderName: resolvedFolderId ? resolvedFolderName : undefined,
             fileId: selectedFile ? String(selectedFile.id) : undefined,
             fileName: selectedFile?.name,
         };
@@ -720,8 +771,10 @@ export default function PortalKnowledgeWorkbench() {
         currentFolderId,
         currentFolderNode,
         isDeepLinkRestoring,
+        isSelectedFileParentPathLoading,
         portalDeepLinkTarget?.fileId,
-        selectedFile?.id,
+        selectedFile,
+        selectedFileParentPath,
         selectedFile?.name,
         selectedFile?.spaceId,
     ]);
@@ -1445,24 +1498,43 @@ export default function PortalKnowledgeWorkbench() {
                 ).trim();
                 const folderName = String(event.data?.folderName ?? event.data?.folder_name ?? "").trim();
                 const openNonce = String(event.data?.openNonce ?? "").trim() || String(Date.now());
-                setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev);
-                    next.set("spaceId", spaceId);
-                    next.set("fileId", fileId);
-                    if (fileName) next.set("fileName", fileName);
-                    else next.delete("fileName");
-                    if (folderId) {
-                        next.set("folderId", folderId);
-                        if (folderName) next.set("folderName", folderName);
-                        else next.delete("folderName");
-                    } else {
-                        next.delete("folderId");
-                        next.delete("folderName");
-                    }
-                    // Prefer parent-provided nonce so retry bursts share one restore key.
-                    next.set("openNonce", openNonce);
-                    return next;
-                }, { replace: true });
+                const applyDeepLinkParams = (resolvedFolderId: string, resolvedFolderName: string) => {
+                    setSearchParams((prev) => {
+                        const next = new URLSearchParams(prev);
+                        next.set("spaceId", spaceId);
+                        next.set("fileId", fileId);
+                        if (fileName) next.set("fileName", fileName);
+                        else next.delete("fileName");
+                        if (resolvedFolderId) {
+                            next.set("folderId", resolvedFolderId);
+                            if (resolvedFolderName) next.set("folderName", resolvedFolderName);
+                            else next.delete("folderName");
+                        } else {
+                            next.delete("folderId");
+                            next.delete("folderName");
+                        }
+                        // Prefer parent-provided nonce so retry bursts share one restore key.
+                        next.set("openNonce", openNonce);
+                        return next;
+                    }, { replace: true });
+                };
+                if (folderId) {
+                    applyDeepLinkParams(folderId, folderName);
+                    return;
+                }
+                // Parent didn't pass a folder id. Resolve the file's real folder first
+                // so the deep link lands on the final URL (with folderId) in a single hop.
+                // Otherwise the URL would jump from no-folder to with-folder once the
+                // file opens, restarting the deep-link restore and flickering the drawer.
+                void getFolderParentPathApi(spaceId, fileId)
+                    .then((parentPath) => {
+                        const deepest = parentPath?.[parentPath.length - 1];
+                        applyDeepLinkParams(deepest?.id ?? "", deepest?.name ?? "");
+                    })
+                    .catch(() => {
+                        // File at space root or lookup failed: open without folder id.
+                        applyDeepLinkParams("", "");
+                    });
             }
         };
         window.addEventListener("message", handlePortalMessage);
@@ -1648,8 +1720,32 @@ export default function PortalKnowledgeWorkbench() {
 
     useEffect(() => {
         setSummaryExpanded(false);
+        // Deep-link entry (e.g. "进入知识库") must keep the AI drawer open. The
+        // restore flow churns selectedFile (folder navigation clears it before
+        // re-opening), and once restored the deep-linked file stays selected —
+        // closing here would drop the drawer usePortalDeepLink opened.
+        if (isDeepLinkRestoring) return;
+        if (
+            portalDeepLinkTarget?.fileId
+            && selectedFile
+            && String(selectedFile.id) === portalDeepLinkTarget.fileId
+            && (
+                String(activeSpace?.id) === portalDeepLinkTarget.spaceId
+                || preservesCrossSpaceDeepLinkPreview
+            )
+        ) {
+            return;
+        }
         setAiDrawerOpen(false);
-    }, [selectedFile?.id]);
+    }, [
+        selectedFile?.id,
+        selectedFile,
+        isDeepLinkRestoring,
+        portalDeepLinkTarget?.fileId,
+        portalDeepLinkTarget?.spaceId,
+        activeSpace?.id,
+        preservesCrossSpaceDeepLinkPreview,
+    ]);
 
     useEffect(() => {
         if (currentFolderId && !findTreeNode(treeNodes, currentFolderId)) {
@@ -2134,12 +2230,170 @@ export default function PortalKnowledgeWorkbench() {
                 setSelectedFile(null);
                 setActivePanel(null);
                 setAiDrawerOpen(false);
+                setSummaryExpanded(false);
                 return;
             }
+            // Normal file-list / tree click opens the AI chat drawer by default.
+            // Search-result previews keep it closed (see handleOpenSourceFile).
             setSelectedFile(file);
+            setActivePanel(null);
+            setAiDrawerOpen(true);
+            setSummaryExpanded(false);
         },
         [],
     );
+
+    const handleSelectSpace = useCallback(
+        (space: KnowledgeSpace) => {
+            setActiveSpace(space);
+            setSearchParams(
+                (prev: URLSearchParams) => {
+                    const next = new URLSearchParams(prev);
+                    next.set("spaceId", String(space.id));
+                    next.delete("folderId");
+                    next.delete("folderName");
+                    next.delete("fileId");
+                    next.delete("fileName");
+                    next.delete("fromSearch");
+                    next.delete("documentId");
+                    next.delete("name");
+                    next.delete("openNonce");
+                    return next;
+                },
+                { replace: true },
+            );
+        },
+        [setActiveSpace, setSearchParams],
+    );
+
+    const sourceSpaceFromActive = useMemo(() => {
+        if (selectedFile && activeSpace && String(selectedFile.spaceId) === String(activeSpace.id)) {
+            return activeSpace;
+        }
+        return null;
+    }, [activeSpace, selectedFile]);
+
+    const { data: sourceSpaceInfo } = useQuery<KnowledgeSpace>({
+        queryKey: ["portalSelectedFileSpaceInfo", selectedFile?.spaceId],
+        queryFn: async () => {
+            const spaceId = selectedFile?.spaceId;
+            if (!spaceId) throw new Error("spaceId is required");
+            return getSpaceInfoApi(spaceId);
+        },
+        enabled: Boolean(selectedFile?.spaceId) && !sourceSpaceFromActive,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        placeholderData: (prev: KnowledgeSpace | undefined) => prev,
+    });
+
+    const sourceSpace = sourceSpaceFromActive ?? sourceSpaceInfo;
+
+    const documentPath = useMemo(() => {
+        const root = "全部知识库";
+        if (selectedFile && sourceSpace) {
+            const levelLabel = (() => {
+                switch (sourceSpace.spaceLevel) {
+                    case SpaceLevel.PUBLIC:
+                        return "公共知识库";
+                    case SpaceLevel.DEPARTMENT:
+                        return "部门知识库";
+                    case SpaceLevel.TEAM:
+                    case SpaceLevel.TEAM_KS:
+                        return "团队/科室知识库";
+                    case SpaceLevel.PERSONAL:
+                        return "个人知识库";
+                    default:
+                        return undefined;
+                }
+            })();
+            const folderNames = selectedFileParentPath?.map((item: { id: string; name: string }) => item.name) ?? [];
+            const names = [root, levelLabel, sourceSpace.name, ...folderNames].filter(Boolean);
+            return names.join("/");
+        }
+        const names = [root, activeGroup?.title, activeSpace?.name].filter(Boolean);
+        return names.join("/");
+    }, [activeGroup?.title, activeSpace?.name, selectedFile, selectedFileParentPath, sourceSpace]);
+
+    // Keep the URL in sync with the currently previewed file so that back navigation
+    // returns to the file's real folder instead of the entry position.
+    //
+    // When a deep-link entry URL comes in without folderId/folderName (e.g. the
+    // 首钢门户 /knowledge-spaces?... page constructs the URL only with
+    // spaceId+fileId+fileName), we MUST wait until `selectedFileParentPath`
+    // finishes resolving before writing search params. Otherwise we write an
+    // intermediate, folder-less URL first, then write the real folder URL once
+    // the parent-path query settles, which changes `portalDeepLinkTarget.key`
+    // mid-restore, restarts the entire deep-link cycle, closes the AI drawer
+    // (because selectedFile churns), and causes TWO visible browser URL jumps
+    // via postPortalLocation reports to the parent frame.
+    useEffect(() => {
+        if (!selectedFile?.spaceId || !selectedFile?.id || isFolder(selectedFile)) return;
+        // Don't write a half-resolved URL when the file's real folder is still
+        // being looked up. `undefined` means the query hasn't fired yet; once
+        // enabled it transitions true→false exactly once per file, at which
+        // point selectedFileParentPath reflects the authoritative answer
+        // (empty array = file at space root, non-empty = deepest folder known).
+        if (isSelectedFileParentPathLoading || selectedFileParentPath === undefined) return;
+        const spaceId = String(selectedFile.spaceId);
+        const fileId = String(selectedFile.id);
+        const fileName = selectedFile.name;
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        const folderId = deepestFolder?.id || currentFolderId || "";
+        const folderName = deepestFolder?.name || currentFolderNode?.file.name || "";
+        const isFromSearch =
+            searchMode &&
+            searchResults.some(
+                (f) =>
+                    String(f.id) === String(selectedFile.id) &&
+                    String(f.spaceId) === String(selectedFile.spaceId),
+            );
+        if (
+            portalDeepLinkTarget &&
+            portalDeepLinkTarget.spaceId === spaceId &&
+            String(portalDeepLinkTarget.folderId || "") === String(folderId || "") &&
+            portalDeepLinkTarget.fileId === fileId &&
+            portalDeepLinkTarget.fileName === fileName &&
+            (portalDeepLinkTarget.fromSearch || "") === (isFromSearch ? "1" : "")
+        ) {
+            return;
+        }
+        setSearchParams(
+            (prev: URLSearchParams) => {
+                const next = new URLSearchParams(prev);
+                next.set("spaceId", spaceId);
+                if (folderId) {
+                    next.set("folderId", folderId);
+                    next.set("folderName", folderName);
+                } else {
+                    next.delete("folderId");
+                    next.delete("folderName");
+                }
+                next.set("fileId", fileId);
+                next.set("fileName", fileName);
+                if (isFromSearch) {
+                    next.set("fromSearch", "1");
+                } else {
+                    next.delete("fromSearch");
+                }
+                next.delete("documentId");
+                next.delete("name");
+                next.delete("openNonce");
+                return next;
+            },
+            { replace: true },
+        );
+    }, [
+        currentFolderId,
+        currentFolderNode?.file.name,
+        isSelectedFileParentPathLoading,
+        portalDeepLinkTarget,
+        searchMode,
+        searchResults,
+        selectedFile,
+        selectedFileParentPath,
+        setSearchParams,
+    ]);
 
     const handleBackToFileList = useCallback(() => {
         setSelectedFile(null);
@@ -2154,14 +2408,38 @@ export default function PortalKnowledgeWorkbench() {
         setSearchTagIds([]);
         // Early back during tag-review deep link must not stick on the restore overlay.
         setRestoringDeepLinkKey(null);
-        // Folder children may still be loading / wiped by a late root refresh — refetch.
-        const folderId = currentFolderIdRef.current;
-        if (!folderId) return;
-        const folderNode = findTreeNode(treeNodes, folderId);
-        if (!folderNode?.loaded || folderNode.loading) {
-            void reloadFilesRef.current();
+
+        // Return to the file's actual folder location instead of the entry position.
+        // If the file sits in a sub-folder, jump to the deepest folder that contains it.
+        const file = selectedFile;
+        if (!file?.spaceId) return;
+        const spaceId = String(file.spaceId);
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        const folderId = deepestFolder?.id || file.parentId;
+        const folderName = deepestFolder?.name;
+        if (sourceSpace && activeSpace && String(sourceSpace.id) !== String(activeSpace.id)) {
+            setActiveSpace(sourceSpace);
         }
-    }, [treeNodes]);
+        setSearchParams((prev: URLSearchParams) => {
+            const next = new URLSearchParams(prev);
+            next.set("spaceId", spaceId);
+            if (folderId) {
+                next.set("folderId", folderId);
+                if (folderName) next.set("folderName", folderName);
+            } else {
+                next.delete("folderId");
+                next.delete("folderName");
+            }
+            next.delete("fileId");
+            next.delete("fileName");
+            next.delete("fromSearch");
+            next.delete("documentId");
+            next.delete("name");
+            next.delete("openNonce");
+            return next;
+        });
+    }, [activeSpace, selectedFile, selectedFileParentPath, setActiveSpace, setSearchParams, sourceSpace]);
 
     // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
     // 以携带源空间 id 的合成文件项触发预览流程。预览/下载按 selectedFile.spaceId(源空间) 定位、
@@ -2441,6 +2719,7 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFile,
         onNavigateFolder: handleNavigateFolder,
         onRestoreComplete: handleDeepLinkRestoreComplete,
+        onOpenAiDrawer: handleDeepLinkOpenAiDrawer,
         previewOnlyTargetSpace,
     });
 
@@ -2698,14 +2977,7 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [editingSpace, queryClient, showToast]);
 
-    const documentPath = useMemo(() => {
-        const names = [
-            "全部知识库",
-            activeGroup?.title,
-            activeSpace?.name,
-        ].filter(Boolean);
-        return names.join("/");
-    }, [activeGroup?.title, activeSpace?.name]);
+
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
@@ -2735,7 +3007,7 @@ export default function PortalKnowledgeWorkbench() {
                         onCollapseSidebar={() => setSpaceSidebarCollapsed(true)}
                         onToggleGroup={(groupKey) => setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))}
                         onOpenCreateSpace={handleOpenCreateSpace}
-                        onSelectSpace={setActiveSpace}
+                        onSelectSpace={handleSelectSpace}
                         onSpaceMenuOpenChange={(spaceId, open) => {
                             setSpaceMenuOpenId(open ? spaceId : null);
                             // 打开菜单时才按需查询该空间的操作权限（懒查询）
@@ -2936,11 +3208,34 @@ export default function PortalKnowledgeWorkbench() {
                         if (!canEditSelectedFileEncoding) return;
                         setTagModalOpen(true);
                     }}
+                    onOpenEditInfo={() => {
+                        if (!canEditSelectedFileEncoding) return;
+                        setEditInfoModalOpen(true);
+                    }}
                     onPanelChange={setActivePanel}
                     onToggleSummary={() => {
                         setActivePanel(null);
                         setSummaryExpanded((expanded) => !expanded);
                     }}
+                />
+            ) : null}
+
+            {selectedFile && activeSpace ? (
+                <PortalFileInfoEditModal
+                    open={editInfoModalOpen}
+                    onOpenChange={setEditInfoModalOpen}
+                    file={selectedFile}
+                    spaceId={String(selectedFile.spaceId || activeSpace.id)}
+                    fileCategoryGroups={fileCategoryGroups}
+                    businessDomainOptions={activeSpaceBusinessDomainOptions}
+                    encodingPrefix={fileEncodingPrefix}
+                    canEdit={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
+                    onFileUpdated={(updater) => {
+                        if (selectedFile) {
+                            patchFileById(selectedFile.id, updater);
+                        }
+                    }}
+                    onUpdateEncoding={handleUpdateSelectedFileEncoding}
                 />
             ) : null}
 
@@ -2992,6 +3287,7 @@ export default function PortalKnowledgeWorkbench() {
                         ? false
                         : isSystemAdmin
                 }
+                isSystemAdmin={isSystemAdmin}
                 onViewCreatedSpace={() => setCreateDrawerOpen(false)}
                 onManageEditingSpaceMembers={() => {
                     setCreateDrawerOpen(false);

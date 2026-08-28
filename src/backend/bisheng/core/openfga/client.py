@@ -15,6 +15,7 @@ from typing import Any, Iterable, Optional
 
 import httpx
 
+from .concurrency import openfga_gate
 from .exceptions import FGAClientError, FGAConnectionError, FGAWriteError, FGAModelError
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,12 @@ class FGAClient:
             base_url=self._api_url,
             timeout=httpx.Timeout(timeout),
             trust_env=False,
+            # The connection pool is left unbounded on purpose: openfga_gate is
+            # the one place that decides how much load OpenFGA takes. A smaller
+            # pool would queue requests a second time and surface as a pool
+            # timeout, which reads as "OpenFGA unreachable" and hides the real
+            # cause.
+            limits=httpx.Limits(max_connections=None, max_keepalive_connections=64),
             event_hooks={'response': [self._log_response]},
         )
 
@@ -484,7 +491,8 @@ class FGAClient:
     async def _post(self, path: str, body: dict) -> dict:
         """POST JSON and return parsed response."""
         try:
-            resp = await self._http.post(path, json=body)
+            async with openfga_gate.slot():
+                resp = await self._http.post(path, json=body)
         except (httpx.ConnectError, httpx.TimeoutException) as e:
             raise FGAConnectionError(f'OpenFGA unreachable: {e}') from e
         except httpx.HTTPError as e:
@@ -516,7 +524,8 @@ class FGAClient:
     async def _get(self, path: str) -> dict:
         """GET and return parsed response."""
         try:
-            resp = await self._http.get(path)
+            async with openfga_gate.slot():
+                resp = await self._http.get(path)
         except (httpx.ConnectError, httpx.TimeoutException) as e:
             raise FGAConnectionError(f'OpenFGA unreachable: {e}') from e
         except httpx.HTTPError as e:

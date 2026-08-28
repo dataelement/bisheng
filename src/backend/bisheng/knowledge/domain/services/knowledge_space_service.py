@@ -36,6 +36,8 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeDepartmentFileUnavailableError,
     KnowledgeDepartmentFileViewApprovalRequiredError,
     KnowledgeDepartmentShareLoginRequiredError,
+    KnowledgeFileNotExistError,
+    KnowledgeFileNotSupportedError,
     KnowledgeInvalidCursorError,
     KnowledgeShareCreationDisabledError,
     KnowledgeSpaceTagLibraryInvalidError,
@@ -310,6 +312,10 @@ from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibrary
 from bisheng.knowledge.domain.services.web_link_import_service import (
     KnowledgeWebLinkImportService,
     WebLinkImportResult,
+)
+from bisheng.knowledge.domain.upload_extensions import (
+    UnsupportedUploadFileExtensionError,
+    validate_knowledge_upload_file_extension,
 )
 from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
 from bisheng.llm.domain import LLMService
@@ -709,6 +715,38 @@ class KnowledgeSpaceService(KnowledgeUtils):
         self.document_durable_reference_resolver: KnowledgeDocumentDurableReferenceResolver | None = None
 
     @staticmethod
+    def _split_distribution_entries(
+        files: list[KnowledgeFile],
+    ) -> tuple[list[KnowledgeFile], list[KnowledgeFile]]:
+        """Separate container children into distribution entries and plain files.
+
+        Plain files go to the recycle bin as before. Distribution entries must
+        not: the bin only sets a deleted flag, which the distribution state
+        machine cannot see, so a shortcut sitting in the bin would still count
+        as a live link and a manager delete would "roll back" into a folder
+        nobody can open. They go through the state machine instead, which also
+        means they cannot be restored.
+        """
+        live_statuses = {
+            KnowledgeFileEntryStatus.PREPARING.value,
+            KnowledgeFileEntryStatus.ACTIVE.value,
+            KnowledgeFileEntryStatus.DELETING.value,
+            KnowledgeFileEntryStatus.INVALID.value,
+        }
+        distribution: list[KnowledgeFile] = []
+        ordinary: list[KnowledgeFile] = []
+        for item in files:
+            is_entry = (
+                item.reference_document_id is not None
+                or item.entry_type == KnowledgeFileEntryType.PROJECTION_TOMBSTONE.value
+            )
+            if is_entry and item.entry_status in live_statuses:
+                distribution.append(item)
+            else:
+                ordinary.append(item)
+        return distribution, ordinary
+
+    @staticmethod
     def _ensure_container_has_no_distribution_entries(
         files: list[KnowledgeFile],
     ) -> None:
@@ -726,6 +764,31 @@ class KnowledgeSpaceService(KnowledgeUtils):
             for file in files
         ):
             raise KnowledgeDocumentStateConflictError()
+
+    async def _enqueue_container_distribution_cleanup(
+        self,
+        *,
+        tenant_id: int,
+        space_id: int,
+        folder_prefix: str | None = None,
+    ) -> None:
+        try:
+            from bisheng.worker.knowledge.document_projection import (
+                enqueue_container_distribution_cleanup,
+            )
+
+            enqueue_container_distribution_cleanup(
+                tenant_id=tenant_id,
+                space_id=space_id,
+                folder_prefix=folder_prefix,
+            )
+        except Exception:
+            logger.exception(
+                "F098 container cleanup enqueue failed: tenant_id=%s space_id=%s prefix=%s",
+                tenant_id,
+                space_id,
+                folder_prefix,
+            )
 
     async def _enqueue_document_distribution_projection(
         self,
@@ -879,7 +942,6 @@ class KnowledgeSpaceService(KnowledgeUtils):
             folder.knowledge_id,
             prefix,
         )
-        self._ensure_container_has_no_distribution_entries(children)
         for child in children:
             if child.file_type == FileType.DIR.value:
                 await self._require_permission_id(
@@ -895,6 +957,98 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     "delete_file",
                     space_id=space_id,
                 )
+
+    _PREFLIGHT_SAMPLE_LIMIT = 5
+
+    async def _container_children(
+        self,
+        *,
+        space_id: int,
+        folder: KnowledgeFile | None,
+    ) -> list[KnowledgeFile]:
+        if folder is None:
+            async with get_async_db_session() as session:
+                result = await session.exec(select(KnowledgeFile).where(KnowledgeFile.knowledge_id == space_id))
+                return list(result.all())
+        prefix = f"{folder.file_level_path}/{folder.id}"
+        return await SpaceFileDao.get_children_by_prefix(space_id, prefix)
+
+    async def preflight_container_delete(
+        self,
+        *,
+        space_id: int,
+        folder_id: int | None = None,
+    ) -> dict:
+        """Summarise what deleting this container would do to distributed files.
+
+        Read-only. Callers use it to warn before an irreversible step: files in
+        the container that were published elsewhere go back to where they came
+        from, the rest are destroyed, and neither can be undone from the
+        recycle bin.
+        """
+        from bisheng.knowledge.domain.services.knowledge_document_distribution_service import (
+            KnowledgeDocumentDistributionError,
+        )
+
+        if folder_id is None:
+            space = await KnowledgeDao.aquery_by_id(space_id)
+            if not space or space.type != KnowledgeTypeEnum.SPACE.value:
+                raise SpaceNotFoundError()
+            await self._require_permission_id("knowledge_space", space_id, "delete_space")
+            folder = None
+        else:
+            folder = await self._get_folder_for_action(space_id, folder_id)
+            await self._require_permission_id(
+                "folder",
+                folder_id,
+                "delete_folder",
+                space_id=space_id,
+            )
+
+        children = await self._container_children(space_id=space_id, folder=folder)
+        distribution, ordinary = self._split_distribution_entries(children)
+
+        soft_link_count = sum(1 for item in distribution if item.entry_type == KnowledgeFileEntryType.PUBLISH.value)
+        share_count = sum(1 for item in distribution if item.entry_type == KnowledgeFileEntryType.SHARE.value)
+        managers = [
+            item
+            for item in distribution
+            if item.entry_type == KnowledgeFileEntryType.MANAGER.value
+            and item.entry_status == KnowledgeFileEntryStatus.ACTIVE.value
+        ]
+
+        rollback_files: list[KnowledgeFile] = []
+        permanent_count = 0
+        for manager in managers:
+            action = "final_delete"
+            if self.document_distribution_service is not None:
+                try:
+                    action = await self.document_distribution_service.preflight_delete_entry(
+                        tenant_id=int(manager.tenant_id),
+                        document_id=int(manager.reference_document_id),
+                        entry_id=int(manager.id),
+                    )
+                except KnowledgeDocumentDistributionError:
+                    # An unresolvable chain cannot roll back, so report the
+                    # harsher outcome rather than promising a safe landing.
+                    action = "final_delete"
+            if action == "rollback":
+                rollback_files.append(manager)
+            else:
+                permanent_count += 1
+
+        return {
+            "rollback_count": len(rollback_files),
+            "permanent_delete_count": permanent_count,
+            "soft_link_count": soft_link_count,
+            "share_count": share_count,
+            "recyclable_count": sum(1 for item in ordinary if item.file_type != FileType.DIR.value),
+            "irreversible": bool(distribution),
+            "rollback_samples": [
+                {"file_id": int(item.id), "file_name": str(item.file_name or "")}
+                for item in rollback_files[: self._PREFLIGHT_SAMPLE_LIMIT]
+            ],
+        }
 
     @staticmethod
     def _require_distribution_manager(
@@ -1923,16 +2077,22 @@ class KnowledgeSpaceService(KnowledgeUtils):
     ) -> dict[str, Any]:
         """科室库绑定下拉: 部门管理员授权子树并集, 展示最多到 office.
 
-        超管看租户全部活跃组织后再裁剪. 已绑定 ID 只返回仍出现在树上的节点.
+        超管看租户全部活跃组织后再裁剪. 已绑定 ID 只返回树上的 office,
+        公司/部门即使已绑知识库也不标已绑定.
         """
         departments = filter_clinic_bind_tree_departments(await self._clinic_visible_departments())
         tree = await self._build_department_tree(departments)
 
-        filtered_ids = {int(dept.id) for dept in departments if getattr(dept, "id", None) is not None}
+        office_ids = {
+            int(dept.id)
+            for dept in departments
+            if getattr(dept, "id", None) is not None and is_clinic_bindable_department(dept)
+        }
         bound_ids = await self._bound_department_ids(
-            filtered_ids,
+            office_ids,
             exclude_space_id=exclude_space_id,
         )
+        bound_ids &= office_ids
 
         return {"data": tree, "bound_department_ids": sorted(bound_ids)}
 
@@ -4089,7 +4249,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             return True, int(private.id)
 
-        if validate_libraries:
+        if requested_ids and validate_libraries:
             await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
         await KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge(knowledge.id)
         await KnowledgeTagLibraryLinkDao.areplace_for_knowledge(
@@ -4147,14 +4307,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             normalized = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
             if not normalized:
                 raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须提供至少一个自定义标签")
-        else:
+        elif auto_tag_touched:
             requested_ids = self._resolve_requested_library_ids(
                 auto_tag_library_id,
                 auto_tag_library_ids,
             )
-            if not requested_ids:
-                raise KnowledgeSpaceTagLibraryInvalidError(msg="创建知识库时必须绑定标签库")
-            await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
+            if requested_ids:
+                await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
 
         return level, owner_type, owner_id
 
@@ -4226,9 +4385,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 auto_tag_library_id,
                 auto_tag_library_ids,
             )
-            if not requested_ids:
-                raise KnowledgeSpaceTagLibraryInvalidError(msg="创建知识库时必须绑定标签库")
-            await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
+            if requested_ids:
+                await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
         log_perf_stage("validate")
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
@@ -4600,6 +4758,19 @@ class KnowledgeSpaceService(KnowledgeUtils):
     async def ensure_personal_default_space(self) -> Knowledge:
         """Get or create the login user's default personal knowledge space."""
         return await self._ensure_personal_default_space()
+
+    async def ensure_personal_default_space_for_owner(self, owner: UserPayload) -> Knowledge:
+        """Get or create the default personal knowledge space for ``owner``.
+
+        Temporarily switches ``login_user`` so the space is named, owned, and
+        authorized as that user, then restores the previous identity.
+        """
+        previous = self.login_user
+        self.login_user = owner
+        try:
+            return await self._ensure_personal_default_space()
+        finally:
+            self.login_user = previous
 
     async def _ensure_personal_spaces(self) -> tuple[Knowledge, Knowledge]:
         """确保并返回当前用户固定的『我的收藏』和默认个人知识库。"""
@@ -5694,10 +5865,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 "discovery_snapshot": discovery.snapshot if discovery else "",
             }
 
-        if (
-            req.query_type == "browse"
-            and self._normalize_shougang_document_type_code(req.document_type)
-        ):
+        if req.query_type == "browse" and self._normalize_shougang_document_type_code(req.document_type):
             # 与列表一致：document_type 浏览走 ES 全文，不能用 MySQL file_encoding LIKE 计数。
             browse_payload = req.model_dump(
                 exclude={
@@ -5734,9 +5902,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 if not result.get("has_more") or not next_cursor:
                     break
                 if next_cursor in seen_cursors:
-                    logger.warning(
-                        "portal document_type browse count stopped on repeated cursor"
-                    )
+                    logger.warning("portal document_type browse count stopped on repeated cursor")
                     break
                 seen_cursors.add(next_cursor)
                 browse_payload["cursor"] = next_cursor
@@ -7765,7 +7931,21 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 space_level=None,
                 discovery_scope="public_and_department",
             )
-            return (file, spaces) if spaces else (None, [])
+            if spaces:
+                return file, spaces
+            if decision.source == DepartmentFileAccessSource.APPROVAL_GRANT:
+                # Clinic spaces are stored as team spaces with a department
+                # binding, so the legacy public/department discovery scope can
+                # omit them even after a file-view grant has been approved.
+                space = await KnowledgeDao.aquery_by_id(int(space_id))
+                if (
+                    space is not None
+                    and int(space.type) == KnowledgeTypeEnum.SPACE.value
+                    and int(getattr(space, "tenant_id", 0) or 0)
+                    == int(self.login_user.tenant_id)
+                ):
+                    return file, [space]
+            return None, []
 
         if decision.status == DepartmentFileAccessStatus.NOT_APPLICABLE:
             space = await KnowledgeDao.aquery_by_id(int(space_id))
@@ -11704,6 +11884,18 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if scope is not None and scope.level == KnowledgeSpaceLevelEnum.PERSONAL:
                 raise PersonalSpaceProtectedError()
             await self._require_permission_id("knowledge_space", space_id, "delete_space")
+            # B5.2: tenant-routed shared-storage SPACE must not be deleted while
+            # it holds active MANAGER entries that are the canonical content
+            # owner for documents distributed to other spaces. Deleting the
+            # manager would orphan the shared-store content projection (risk R7:
+            # shared store lifecycle is not per-space).
+            #
+            # Checked here rather than after the free-space branch below: that
+            # branch hands the delete to a Celery task and returns, so the caller
+            # was told the delete succeeded and only found out otherwise when the
+            # space reappeared in the list. One indexed LIMIT 1 up front buys an
+            # honest error instead.
+            await self._require_no_active_shared_managers(space)
             if migrate_free_space:
                 decision = await FreeSpaceMigrationService.pre_delete_guard(space)
                 if decision.action == "block":
@@ -11738,28 +11930,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
         original_member_ids = [member.user_id for member in original_members]
 
         if not force:
-            # B5.2: tenant-routed shared-storage SPACE must not be deleted
-            # while it holds active MANAGER entries that are the canonical
-            # content owner for documents distributed to other spaces.
-            # Deleting the manager would orphan the shared-store content
-            # projection (risk R7: shared store lifecycle is not per-space).
-            await self._require_no_active_shared_managers(space)
-
             if self.knowledge_space_retirement_service is None:
                 raise KnowledgeDocumentStateConflictError(msg="知识库退役服务不可用")
-            result = await self.knowledge_space_retirement_service.retire(
+            await self.knowledge_space_retirement_service.retire(
                 tenant_id=int(space.tenant_id),
                 space_id=space_id,
-            )
-            await self._enqueue_document_distribution_projection(
-                tenant_id=int(space.tenant_id),
-                entry_ids=result.entry_ids,
             )
             try:
                 from bisheng.worker.knowledge.document_projection import (
                     enqueue_knowledge_space_retirement,
                 )
 
+                # The retirement task sweeps the space's distribution entries
+                # itself — each one follows the same rule a single-file delete
+                # would — so this one enqueue covers both halves of the work.
                 enqueue_knowledge_space_retirement(
                     tenant_id=int(space.tenant_id),
                     space_id=space_id,
@@ -12050,6 +12234,10 @@ class KnowledgeSpaceService(KnowledgeUtils):
         await _require_not_write_frozen(int(getattr(space, "tenant_id", None) or DEFAULT_TENANT_ID))
         if getattr(space, "is_favorite", False):
             raise FavoriteSpaceProtectedError()
+
+        # 门户发现开关只允许平台系统管理员改；非 admin 只要带该字段就整单拒绝，避免其它字段先写库。
+        if portal_discovery_enabled is not None and not self.login_user.is_admin():
+            raise UnAuthorizedError(msg="仅系统管理员可以配置门户公开范围")
 
         rebind_scope = None
         target_department = None
@@ -14407,6 +14595,57 @@ class KnowledgeSpaceService(KnowledgeUtils):
             info[int(item.id)] = item_info
         return info
 
+    async def _find_pending_publish_approval_file_ids(self, res: list[KnowledgeFile]) -> set[int]:
+        """Return ids of files that have at least one active publish approval.
+
+        A publish approval instance keys its business resource as
+        ``"{canonical_document_id}:{target_space_id}"``, so files are matched
+        through their canonical document id (version row or
+        reference_document_id fallback). Any active status (pending /
+        exception / execute_failed) locks the file until the flow finishes.
+        """
+        file_items = [one for one in res if one.file_type != FileType.DIR.value]
+        if not file_items:
+            return set()
+
+        prefix_to_file_ids: dict[str, set[int]] = {}
+        doc_by_file: dict[int, int] = {}
+        if self.version_repo:
+            primary_versions = await self.version_repo.find_primary_versions_by_file_ids(
+                [int(one.id) for one in file_items]
+            )
+            doc_by_file = {
+                int(version.knowledge_file_id): int(version.document_id)
+                for version in primary_versions
+            }
+        for one in file_items:
+            document_id = doc_by_file.get(int(one.id))
+            if document_id is None and one.reference_document_id:
+                document_id = int(one.reference_document_id)
+            if document_id is None:
+                continue
+            # The trailing colon keeps "12:" from matching document "123".
+            prefix_to_file_ids.setdefault(f"{document_id}:", set()).add(int(one.id))
+        if not prefix_to_file_ids:
+            return set()
+
+        from bisheng.approval.domain.repositories.approval_instance_repository import (
+            ApprovalInstanceRepository,
+        )
+        from bisheng.approval.domain.services.shougang_approval_handler import FILE_PUBLISH_SCENARIO
+
+        matched_resource_ids = await ApprovalInstanceRepository.find_active_resource_ids_by_prefixes(
+            tenant_id=int(self.login_user.tenant_id),
+            scenario_code=FILE_PUBLISH_SCENARIO,
+            resource_id_prefixes=list(prefix_to_file_ids.keys()),
+        )
+        locked_file_ids: set[int] = set()
+        for resource_id in matched_resource_ids:
+            for prefix, file_ids in prefix_to_file_ids.items():
+                if resource_id.startswith(prefix):
+                    locked_file_ids.update(file_ids)
+        return locked_file_ids
+
     async def _handle_file_folder_extra_info(
         self,
         res: list[KnowledgeFile],
@@ -14457,6 +14696,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         file_tags_ms = (time.perf_counter() - file_tags_start) * 1000
 
+        pending_publish_start = time.perf_counter()
+        pending_publish_file_ids = (
+            await self._find_pending_publish_approval_file_ids(res)
+            if enrich_files and file_ids
+            else set()
+        )
+        pending_publish_ms = (time.perf_counter() - pending_publish_start) * 1000
+
         serialize_start = time.perf_counter()
         result = []
         for one in res:
@@ -14488,6 +14735,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     item["version_no"] = getattr(one, "_version_no", None)
                     item["is_multi_version"] = getattr(one, "_is_multi_version", False)
                     item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
+                    # UI lock: file has a running publish approval, only download stays available.
+                    item["has_pending_publish_approval"] = int(one.id) in pending_publish_file_ids
                     safe_distribution_info = dict(distribution_info.get(int(one.id), {}))
                     safe_distribution_info.pop(
                         "_tag_source_file_id",
@@ -14509,7 +14758,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         _logger.info(
             "knowledge_space_children_extra_info_perf items=%s folders=%s files=%s "
             "folder_count_mode=%s enrich_files=%s folder_counts_ms=%.1f "
-            "file_tags_ms=%.1f serialize_ms=%.1f total_ms=%.1f",
+            "file_tags_ms=%.1f pending_publish_ms=%.1f serialize_ms=%.1f total_ms=%.1f",
             len(res),
             len(folder_ids),
             len(file_ids),
@@ -14517,6 +14766,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             enrich_files,
             folder_counts_ms,
             file_tags_ms,
+            pending_publish_ms,
             (time.perf_counter() - serialize_start) * 1000,
             (time.perf_counter() - perf_start) * 1000,
         )
@@ -15273,7 +15523,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
 
         prefix = f"{folder.file_level_path}/{folder.id}"
         children = await SpaceFileDao.get_children_by_prefix(folder.knowledge_id, prefix)
-        self._ensure_container_has_no_distribution_entries(children)
+        distribution_children, ordinary_children = self._split_distribution_entries(children)
+        distribution_ids = {int(item.id) for item in distribution_children}
         folder_ids = [folder_id]
         file_ids = []
         for child in children:
@@ -15282,12 +15533,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 folder_ids.append(child.id)
             else:
                 await self._require_permission_id("knowledge_file", child.id, "delete_file", space_id=space_id)
-                file_ids.append(child.id)
+                if int(child.id) not in distribution_ids:
+                    file_ids.append(child.id)
 
         delete_plan = await self._plan_cascade_version_links_on_delete(file_ids)
         favorite_delete_events = await self._prepare_favorite_delete_events(
             delete_plan.expanded_file_ids,
-            source_files=[child for child in children if child.file_type != FileType.DIR.value],
+            source_files=[child for child in ordinary_children if child.file_type != FileType.DIR.value],
         )
         await self._apply_cascade_version_delete_plan(delete_plan)
         expanded_file_ids = delete_plan.expanded_file_ids
@@ -15303,6 +15555,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             folder_ids=folder_ids,
             list_entry_ids=[int(folder_id)],
         )
+
+        if distribution_children:
+            await self._enqueue_container_distribution_cleanup(
+                tenant_id=int(getattr(folder, "tenant_id", None) or DEFAULT_TENANT_ID),
+                space_id=int(folder.knowledge_id),
+                folder_prefix=prefix,
+            )
 
         await self.update_folder_update_time(folder.file_level_path)
         await KnowledgeDao.async_update_knowledge_update_time_by_id(folder.knowledge_id)
@@ -16400,6 +16659,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
         for fp in file_path:
             fname = fp.rsplit("/", 1)[-1] if "/" in fp else fp
             self._check_filename_sensitive_words(fname)
+            try:
+                validate_knowledge_upload_file_extension(fname)
+            except UnsupportedUploadFileExtensionError as exc:
+                extension = str(exc) or "unknown"
+                raise KnowledgeFileNotSupportedError(
+                    msg=f"file format is not supported: .{extension}",
+                ) from exc
 
         async def cleanup_created_files() -> None:
             created_file_ids = [created_file.id for created_file in created_files if getattr(created_file, "id", None)]
@@ -16634,6 +16900,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             raise SpaceFileNameDuplicateError()
 
         file_record.file_name = new_name
+        file_record.alias_name = None
         file_record.updater_id = self.login_user.user_id
         file_record.updater_name = self.login_user.user_name
         if file_record.file_source == FileSource.WEB_LINK.value:
@@ -16654,6 +16921,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     updater_id=int(self.login_user.user_id),
                     updater_name=self.login_user.user_name,
                     user_metadata=file_record.user_metadata,
+                    clear_alias=True,
                 )
             except Exception as exc:
                 if "name conflict" in str(exc):
@@ -17583,6 +17851,74 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 result.append(payload)
         return result
 
+    async def recommend_file_tags(
+        self,
+        space_id: int,
+        file_id: int,
+        exclude_names: list[str] | None = None,
+        refresh: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return cached recommendations. Only refresh=true re-runs the model."""
+        await self._require_read_permission(space_id)
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
+        if not file_record or int(file_record.knowledge_id) != int(space_id):
+            raise KnowledgeFileNotExistError()
+        knowledge = await KnowledgeDao.aquery_by_id(space_id)
+        if not knowledge:
+            raise NotFoundError()
+
+        from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
+            KnowledgeSpaceAutoTagService,
+        )
+
+        if not refresh:
+            cached = KnowledgeSpaceAutoTagService.read_recommended_tag_names(file_record)
+            return await self._map_recommended_tag_names(space_id, cached or [])
+
+        excluded = [name.strip() for name in (exclude_names or []) if str(name).strip()]
+        applied = await asyncio.to_thread(
+            KnowledgeSpaceAutoTagService._list_file_applied_tag_names,
+            file_id,
+        )
+        excluded_set = {name for name in [*excluded, *applied] if name}
+        names = await asyncio.to_thread(
+            KnowledgeSpaceAutoTagService.recommend_bound_library_tags_sync,
+            knowledge,
+            file_record,
+            exclude_names=list(excluded_set),
+        )
+        await asyncio.to_thread(
+            KnowledgeSpaceAutoTagService.persist_recommended_tag_names,
+            file_record,
+            names,
+        )
+        return await self._map_recommended_tag_names(space_id, names)
+
+    async def _map_recommended_tag_names(self, space_id: int, names: list[str]) -> list[dict[str, Any]]:
+        if not names:
+            return []
+        space_tags = await self.get_space_tags(space_id)
+        by_name: dict[str, dict[str, Any]] = {}
+        by_lower: dict[str, dict[str, Any]] = {}
+        for item in space_tags:
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            by_name.setdefault(name, item)
+            by_lower.setdefault(name.lower(), item)
+        result: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for name in names:
+            payload = by_name.get(name) or by_lower.get(name.lower())
+            if not payload:
+                continue
+            key = str(payload.get("name") or name).strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            result.append(payload)
+        return result
+
     async def _resolve_primary_library_for_space(self, space_id: int) -> int:
         library_id = TagLibraryTagService._first_library_id_for_space(space_id)
         if library_id is None:
@@ -17810,22 +18146,29 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._require_review_tag_feature_enabled()
             return existing
 
-        library_id = await self._resolve_primary_library_for_space(space_id)
         await self._require_review_tag_feature_enabled()
+        library_id = TagLibraryTagService._first_library_id_for_space(space_id)
+        if library_id is None:
+            business_type = TagBusinessTypeEnum.KNOWLEDGE_SPACE
+            business_id = str(space_id)
+        else:
+            business_type = TagBusinessTypeEnum.TAG_LIBRARY
+            business_id = str(library_id)
 
         new_tag = ReviewTag(
             name=normalized,
             user_id=self.login_user.user_id,
             tenant_id=int(self.login_user.tenant_id),
-            business_type=TagBusinessTypeEnum.TAG_LIBRARY,
-            business_id=str(library_id),
+            business_type=business_type,
+            business_id=business_id,
             resource_type=TagResourceTypeEnum.MANUAL_TAG,
             is_deleted=False,
             review_status=0,
             create_time=datetime.now(),
             update_time=datetime.now(),
         )
-        return await ReviewTagDao.ainsert_review_tag(new_tag)
+        created = await ReviewTagDao.ainsert_review_tag(new_tag)
+        return created
 
     async def _partition_file_tag_ids_for_update(
         self, tag_ids: list[int], review_tag_ids: list[int]
@@ -18010,6 +18353,132 @@ class KnowledgeSpaceService(KnowledgeUtils):
             if resolved_by_file_id[notified_file_id] is not None:
                 await self._mark_document_content_changed(notified_file)
         await KnowledgeSpaceContentStat.enqueue_file_stat_async([int(file_record.id) for file_record in files])
+
+    async def batch_overwrite_file_tags(
+        self, space_id: int, file_ids: list[int], tag_ids: list[int], review_tag_ids: list[int]
+    ):
+        """批量编辑标签(覆盖模式): Replace each file's tag set with the given ids.
+
+        Mirrors batch_add_file_tags but calls the *update* (full-replace) DAO
+        methods instead of the increment-only ``add_tags`` ones, so each file's
+        tag set becomes exactly ``tag_ids``/``review_tag_ids`` — dropping tags
+        not in the new set. ``TagDao.aupdate_resource_tags`` /
+        ``ReviewTagDao.aupdate_resource_tags`` already delete orphaned review
+        tags left with no remaining source file, so no extra cleanup is needed
+        here.
+        """
+        await self._require_read_permission(space_id)
+        if not file_ids:
+            return
+
+        files = await self._get_space_files_or_raise(space_id, file_ids)
+        before_tags_by_file = await self._load_file_tags_batch([int(file_record.id) for file_record in files])
+
+        resource_type = ResourceTypeEnum.SPACE_FILE
+        tenant_id = int(self.login_user.tenant_id)
+        normalized_tag_ids, normalized_review_tag_ids = await self._partition_file_tag_ids_for_update(
+            tag_ids, review_tag_ids
+        )
+        normalized_tag_ids, normalized_review_tag_ids = await self._promote_review_tags_existing_in_libraries(
+            normalized_tag_ids, normalized_review_tag_ids
+        )
+        if normalized_review_tag_ids:
+            await self._require_review_tag_feature_enabled()
+
+        resolved_by_file_id = {}
+        for file_record in files:
+            resolved = await self._require_file_metadata_edit_permission(file_record)
+            resolved_by_file_id[int(file_record.id)] = resolved
+
+        for file_record in files:
+            resource_id = str(file_record.id)
+            await TagDao.aupdate_resource_tags(normalized_tag_ids, resource_id, resource_type, self.login_user.user_id)
+            await ReviewTagDao.aupdate_resource_tags(
+                normalized_review_tag_ids,
+                resource_id,
+                resource_type,
+                self.login_user.user_id,
+                tenant_id=tenant_id,
+            )
+
+        await KnowledgeDao.async_update_knowledge_update_time_by_id(space_id)
+        after_tags_by_file = await self._load_file_tags_batch([int(file_record.id) for file_record in files])
+        for notified_file in files:
+            notified_file_id = int(notified_file.id)
+            await self._notify_favorite_source_changed(
+                source_space_id=space_id,
+                source_file_id=notified_file_id,
+                file_name=notified_file.file_name,
+                action_code=FAVORITE_SOURCE_TAGS_UPDATED,
+                before_value=[str(item.get("name") or "") for item in before_tags_by_file.get(notified_file_id, [])],
+                after_value=[str(item.get("name") or "") for item in after_tags_by_file.get(notified_file_id, [])],
+            )
+            if resolved_by_file_id[notified_file_id] is not None:
+                await self._mark_document_content_changed(notified_file)
+        await KnowledgeSpaceContentStat.enqueue_file_stat_async([int(file_record.id) for file_record in files])
+
+    async def batch_update_file_encoding_fields(
+        self,
+        space_id: int,
+        file_ids: list[int],
+        *,
+        file_category_code: str | None = None,
+        file_subcategory_code: str | None = None,
+        business_domain_code: str | None = None,
+    ) -> dict[str, list]:
+        """批量修改文件分类/业务域: batch-update the encoding segments shared by
+        the "modify classification" and "modify business domain" batch actions.
+
+        ``file_encoding`` has no standalone business-domain/category columns —
+        category and business domain are the 2nd/3rd segments of the composed
+        ``{prefix}-{category}-{domain}-{yyyymm}{seq}`` string. Each file keeps
+        its own prefix/year-month/seq segment; only the segment(s) the caller
+        passes get replaced, then the whole thing is routed through the
+        existing single-file ``update_file_encoding`` so permission checks,
+        business-domain whitelist validation, split_rule sync, document-
+        distribution metadata sync, favorite notifications and recommendation-
+        refresh enqueueing all stay identical to editing one file at a time.
+
+        Files whose current ``file_encoding`` can't be parsed (e.g. not yet
+        classified at upload time) are skipped rather than failing the whole
+        batch; they come back in ``skipped`` with a reason.
+        """
+        await self._require_read_permission(space_id)
+        result: dict[str, list] = {"updated_file_ids": [], "skipped": []}
+        if not file_ids:
+            return result
+        if file_category_code is None and file_subcategory_code is None and business_domain_code is None:
+            return result
+
+        files = await self._get_space_files_or_raise(space_id, file_ids)
+
+        normalized_category = (
+            self.normalize_file_category_code(file_category_code) if file_category_code is not None else None
+        )
+        normalized_domain = (
+            self._normalize_shougang_portal_business_domain_code(business_domain_code)
+            if business_domain_code is not None
+            else None
+        )
+        if business_domain_code is not None:
+            db_knowledge = await KnowledgeDao.aquery_by_id(space_id)
+            self._ensure_business_domain_allowed_for_space(db_knowledge, normalized_domain)
+
+        for file_record in files:
+            parsed = self._parse_shougang_file_encoding_parts(file_record.file_encoding or "")
+            if parsed is None:
+                result["skipped"].append(
+                    {"file_id": int(file_record.id), "reason": "file_encoding_unparseable_or_missing"}
+                )
+                continue
+            prefix, current_category, current_domain, year_month, seq = parsed
+            new_category = normalized_category if file_category_code is not None else current_category
+            new_domain = normalized_domain if business_domain_code is not None else current_domain
+            new_encoding = self._compose_shougang_file_encoding(prefix, new_category, new_domain, year_month, seq)
+            await self.update_file_encoding(int(file_record.id), new_encoding, file_subcategory_code)
+            result["updated_file_ids"].append(int(file_record.id))
+
+        return result
 
     async def retry_space_files(self, space_id: int, req_data: dict) -> list:
         """
@@ -18268,6 +18737,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         descendant_folder_ids: list[int] = []
         descendant_file_ids: list[int] = []
         descendant_files: list[KnowledgeFile] = []
+        distribution_folder_prefixes: list[str] = []
         for folder_id in unique_folder_ids:
             folder = await self._get_folder_for_action(knowledge_id, folder_id)
             folder_records.append(folder)
@@ -18276,9 +18746,20 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 knowledge_id,
                 prefix,
             )
-            descendant_folder_ids.extend(int(child.id) for child in children if child.file_type == FileType.DIR.value)
-            descendant_file_ids.extend(int(child.id) for child in children if child.file_type != FileType.DIR.value)
-            descendant_files.extend(child for child in children if child.file_type != FileType.DIR.value)
+            # Distribution entries nested inside a deleted folder must not reach
+            # the recycle bin — see _split_distribution_entries. They go to the
+            # async sweep instead, which applies the same rule a single-file
+            # delete would.
+            nested_distribution, nested_ordinary = self._split_distribution_entries(children)
+            if nested_distribution:
+                distribution_folder_prefixes.append(prefix)
+            descendant_folder_ids.extend(
+                int(child.id) for child in nested_ordinary if child.file_type == FileType.DIR.value
+            )
+            descendant_file_ids.extend(
+                int(child.id) for child in nested_ordinary if child.file_type != FileType.DIR.value
+            )
+            descendant_files.extend(child for child in nested_ordinary if child.file_type != FileType.DIR.value)
 
         direct_file_ids = [int(file.id) for file in ordinary_files]
         planned_file_ids = self._dedupe_ids([*direct_file_ids, *descendant_file_ids])
@@ -18332,6 +18813,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     unique_folder_ids,
                     e,
                 )
+
+        for prefix in distribution_folder_prefixes:
+            await self._enqueue_container_distribution_cleanup(
+                tenant_id=int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID),
+                space_id=int(knowledge_id),
+                folder_prefix=prefix,
+            )
 
         if unique_file_ids or unique_folder_ids:
             await KnowledgeDao.async_update_knowledge_update_time_by_id(knowledge.id)
