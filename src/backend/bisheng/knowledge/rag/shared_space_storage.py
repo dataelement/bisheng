@@ -953,7 +953,9 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise ValueError(
                 f"writer is bound to tenant {self.tenant_id}, got {request.tenant_id}"
             )
-        snapshot = self._assert_writable()
+        snapshot = self._assert_writable(
+            embedding_model_id=self.schema_spec.embedding_model_id
+        )
         knowledge_ids = validate_knowledge_ids(request.knowledge_ids, allow_empty=True)
 
         if not knowledge_ids:
@@ -1062,7 +1064,9 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
             raise ValueError(
                 f"writer is bound to tenant {self.tenant_id}, got {request.tenant_id}"
             )
-        snapshot = self._assert_writable()
+        snapshot = self._assert_writable(
+            embedding_model_id=self.schema_spec.embedding_model_id
+        )
         expr = self._doc_expr(
             tenant_id=request.tenant_id,
             canonical_document_id=request.canonical_document_id,
