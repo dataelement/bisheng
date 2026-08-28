@@ -51,6 +51,7 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
 
     async def get_current_snapshot(self, file_id: int) -> KnowledgeFulltextFileSnapshot | None:
         original_knowledge = aliased(Knowledge)
+        version_document = aliased(KnowledgeDocument)
         statement = (
             select(
                 KnowledgeFile,
@@ -58,6 +59,7 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
                 KnowledgeSpaceScope,
                 KnowledgeDocument,
                 KnowledgeDocumentVersion,
+                version_document,
                 original_knowledge.name,
             )
             .join(Knowledge, Knowledge.id == KnowledgeFile.knowledge_id)
@@ -83,12 +85,25 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
                     ),
                 ),
             )
+            .outerjoin(
+                version_document,
+                version_document.id == KnowledgeDocumentVersion.document_id,
+            )
             .where(KnowledgeFile.id == file_id)
         )
         row = (await self._execute(statement)).first()
         if row is None:
             return None
-        file, knowledge, scope, document, version, original_knowledge_name = row
+        (
+            file,
+            knowledge,
+            scope,
+            referenced_document,
+            version,
+            owning_document,
+            original_knowledge_name,
+        ) = row
+        document = referenced_document if referenced_document is not None else owning_document
         tags = await self._load_tags(file_id)
         original_uploader_name = await self._load_user_name(file.original_uploader_id)
         document_category_code = get_file_category_code_from_file(file)
@@ -120,8 +135,8 @@ class KnowledgeFulltextSourceRepositoryImpl(KnowledgeFulltextSourceRepository):
                 else int(file.applied_content_generation or 0)
             ),
             is_primary_version=(
-                True
-                if file.reference_document_id is None
+                file.reference_document_id is None
+                if version is None
                 else bool(
                     document is not None
                     and document.lifecycle_status == KnowledgeDocumentLifecycleStatus.ACTIVE.value

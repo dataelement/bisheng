@@ -108,6 +108,60 @@ async def test_legacy_success_file_snapshot_is_not_hidden_by_default_tenant_filt
         current_tenant_id.reset(token)
 
 
+async def test_historical_physical_version_snapshot_is_deleted(async_db_session, monkeypatch):
+    await async_db_session.exec(
+        text(
+            """
+            INSERT INTO knowledge (id, tenant_id, name, index_name, auth_type)
+            VALUES (198, 1, '测试知识库', 'col_test', 'PUBLIC')
+            """
+        )
+    )
+    await async_db_session.exec(
+        text(
+            """
+            INSERT INTO knowledgefile (
+                id, tenant_id, user_id, knowledge_id, file_name, file_type,
+                file_source, status, reference_document_id, projection_status
+            ) VALUES (1829, 1, 1, 198, 'history.md', 1, 'upload', 2, NULL, 'ready')
+            """
+        )
+    )
+    await async_db_session.exec(
+        text(
+            """
+            INSERT INTO knowledge_document (
+                id, tenant_id, knowledge_id, primary_version_id, lifecycle_status
+            ) VALUES (500, 1, 198, 501, 'active')
+            """
+        )
+    )
+    await async_db_session.exec(
+        text(
+            """
+            INSERT INTO knowledge_document_version (
+                id, document_id, knowledge_file_id, version_no, is_primary
+            ) VALUES (501, 500, 1830, 2, 1),
+                     (502, 500, 1829, 1, 0)
+            """
+        )
+    )
+    await async_db_session.commit()
+
+    repository = KnowledgeFulltextSourceRepositoryImpl(async_db_session)
+    monkeypatch.setattr(repository, "_load_tags", AsyncMock(return_value=[]))
+    monkeypatch.setattr(repository, "_load_user_name", AsyncMock(return_value=None))
+    monkeypatch.setattr(repository, "_load_category_names", AsyncMock(return_value=(None, None)))
+    monkeypatch.setattr(repository, "_load_folder_path", AsyncMock(return_value=None))
+
+    snapshot = await repository.get_current_snapshot(1829)
+
+    assert snapshot is not None
+    assert snapshot.document_version_id == 502
+    assert snapshot.is_primary_version is False
+    assert KnowledgeFulltextDocumentService.decide(snapshot).value == "delete"
+
+
 async def test_backfill_file_id_page_is_global_stable_and_scope_bounded(async_db_session):
     await async_db_session.exec(
         text(
