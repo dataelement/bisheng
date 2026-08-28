@@ -665,8 +665,8 @@ export function ApprovalCenterDialog({ open, onOpenChange, target }: ApprovalCen
   );
 }
 
-function DetailHeader({ title, status, scope, serialNo, scenarioName, createTime, localize, onBack }: {
-  title?: string; status?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>; onBack?: () => void;
+function DetailHeader({ title, status, instanceStatus, scope, serialNo, scenarioName, createTime, localize, onBack }: {
+  title?: string; status?: string; instanceStatus?: string; scope: "task" | "instance"; serialNo: string; scenarioName?: string; createTime?: string | null; localize: ReturnType<typeof useLocalize>; onBack?: () => void;
 }) {
   return (
     // Pinned to the top of the scrolling detail pane so the title/status/serial stay visible while the body scrolls.
@@ -720,7 +720,7 @@ function TaskDetailPanel({ detail, localize, onBack }: { detail: ApprovalTaskDet
 
   return (
     <div className="space-y-5">
-      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} scope="task"
+      <DetailHeader title={formatTitle(detail.scenario_code, detail.business_name, localize)} status={detail.status} instanceStatus={detail.instance_status} scope="task"
         serialNo={serialNo} scenarioName={detail.scenario_name || detail.scenario_code} createTime={detail.create_time} localize={localize} onBack={onBack} />
 
       <div>
