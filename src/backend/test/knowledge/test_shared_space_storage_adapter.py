@@ -8,7 +8,7 @@ change") is asserted throughout.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -23,7 +23,10 @@ from bisheng.knowledge.domain.contracts.retrieval_scope import (
 )
 from bisheng.knowledge.domain.contracts.shared_space_storage import (
     ContentDeleteRequest,
+    ContentProjectionIdentity,
+    ContentUpsertRequest,
     MembershipUpdateRequest,
+    SharedContentChunk,
 )
 from bisheng.knowledge.domain.models.knowledge import KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_space_shared_storage import (
@@ -457,6 +460,62 @@ class TestMembershipRewrite:
         )
 
         assert asserted_models == [7]
+
+
+class TestContentRewrite:
+    async def test_incomplete_same_generation_removes_stale_es_chunks(self):
+        writer = object.__new__(sss.MilvusEsSharedSpaceStorageWriter)
+        writer.tenant_id = 1
+        writer.schema_spec = sss.SharedStoreSchemaSpec(
+            embedding_model_id=7,
+            dimension=4,
+        )
+        writer._assert_writable = lambda **_kwargs: _snapshot()
+        writer._check_membership_limits = lambda _ids: None
+        writer._conf = lambda: _conf()
+        writer._current_membership_generation = AsyncMock(return_value=3)
+        calls = []
+
+        async def milvus(method, *args, **kwargs):
+            calls.append((method, args, kwargs))
+            if method == "query":
+                return [{"chunk_index": 0}, {"chunk_index": 2}]
+            return None
+
+        async def es(method, *args, **kwargs):
+            calls.append((f"es:{method}", args, kwargs))
+
+        writer._run_milvus = milvus
+        writer._run_es = es
+
+        await writer.upsert_content(
+            ContentUpsertRequest(
+                identity=ContentProjectionIdentity(
+                    tenant_id=1,
+                    canonical_document_id=8,
+                    canonical_version_id=9,
+                    content_file_id=10,
+                    content_generation=2,
+                    embedding_model_id="7",
+                ),
+                knowledge_ids=(10,),
+                chunks=(
+                    SharedContentChunk(chunk_index=0, text="first", vector=[0.1] * 4),
+                    SharedContentChunk(chunk_index=1, text="second", vector=[0.2] * 4),
+                ),
+            )
+        )
+
+        deletes = [call for call in calls if call[0] == "es:delete_by_query"]
+        assert deletes[0][2]["query"]["bool"]["must_not"] == [
+            {"terms": {"metadata.chunk_index": [0, 1]}}
+        ]
+        assert {
+            "term": {"metadata.content_generation": 2}
+        } in deletes[0][2]["query"]["bool"]["filter"]
+        assert {
+            "range": {"metadata.content_generation": {"lt": 2}}
+        } in deletes[1][2]["query"]["bool"]["filter"]
 
 
 class TestSharedCollectionBootstrap:

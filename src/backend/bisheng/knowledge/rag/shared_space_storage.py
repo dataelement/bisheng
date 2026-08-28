@@ -915,6 +915,27 @@ class MilvusEsSharedSpaceStorageWriter(SharedSpaceStorageWriter):
                 )
             await self._run_es("index", **es_kwargs)
 
+        if not generation_complete:
+            stale_same_gen_query = self._es_doc_query(
+                tenant_id=identity.tenant_id,
+                canonical_document_id=identity.canonical_document_id,
+                canonical_version_id=identity.canonical_version_id,
+                content_generation=identity.content_generation,
+            )
+            if expected_indexes:
+                stale_same_gen_query["bool"]["must_not"] = [
+                    {
+                        "terms": {
+                            "metadata.chunk_index": sorted(expected_indexes)
+                        }
+                    }
+                ]
+            await self._run_es(
+                "delete_by_query",
+                index=es_index,
+                query=stale_same_gen_query,
+            )
+
         # 3) delete the old generation now that the new one is durable
         await self._run_milvus("delete", expr=older_gen_expr)
         await self._run_es(
