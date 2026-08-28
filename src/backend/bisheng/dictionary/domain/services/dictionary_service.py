@@ -50,8 +50,10 @@ class DictionaryService:
 
     @staticmethod
     def _ensure_admin(user: UserPayload) -> None:
-        """校验当前用户是否为管理员,否则抛出权限错误"""
-        if not user.is_admin():
+        """校验当前用户是否具备运营写资格(超管或平台管理员)."""
+        from bisheng.user.domain.services.platform_operator import can_platform_operate
+
+        if not can_platform_operate(user):
             raise DictionaryPermissionDeniedError()
 
     def _validate_dict_key_format(self, dict_key: str) -> None:

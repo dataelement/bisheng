@@ -158,6 +158,8 @@ class UserRead(UserBase):
     has_admin_console: bool | None = None
     # ``platform`` | ``workspace`` — both areas open → platform (管理后台).
     default_entry: str | None = None
+    # 角色显示名列表; 供门户识别「平台管理员」等自定义角色, 不是新表字段.
+    role_names: list[str] | None = None
 
 
 class UserQuery(UserBase):

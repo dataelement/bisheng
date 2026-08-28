@@ -162,8 +162,14 @@ class DashboardService(BaseModel):
             for component in components
         )
 
+    def _can_operate_dashboards(self) -> bool:
+        """超管或运营岗: 看板列表/实时写与超管同一口径."""
+        from bisheng.user.domain.services.platform_operator import can_platform_operate
+
+        return can_platform_operate(self.login_user)
+
     async def _is_department_admin(self) -> bool:
-        if self.login_user.is_admin():
+        if self._can_operate_dashboards():
             return True
         from bisheng.database.models.department import DepartmentDao
 
@@ -178,7 +184,7 @@ class DashboardService(BaseModel):
         dashboard_id: int,
         incoming_components: Sequence[DashboardComponent] = (),
     ) -> None:
-        if self.login_user.is_admin():
+        if self._can_operate_dashboards():
             return
         existing_components = await DashboardDao.get_components(dashboard_id)
         if self._uses_realtime_dataset(
@@ -212,7 +218,7 @@ class DashboardService(BaseModel):
             filter_types = [DashboardType.PRESET_COMMERCIAL, DashboardType.CUSTOM]
         is_department_admin = False
         components_by_dashboard_id = {}
-        if self.login_user.is_admin():
+        if self._can_operate_dashboards():
             res = await DashboardDao.get_dashboards(keyword=keyword, dashboard_type=filter_types)
         else:
             # find extra dashboard ids
@@ -259,7 +265,7 @@ class DashboardService(BaseModel):
             if components is None:
                 components = await DashboardDao.get_components(one.id)
             uses_realtime = self._uses_realtime_dataset(components)
-            if uses_realtime and not self.login_user.is_admin():
+            if uses_realtime and not self._can_operate_dashboards():
                 if (
                     one.status != DashboardStatus.PUBLISHED.value
                     or not is_department_admin
@@ -274,7 +280,7 @@ class DashboardService(BaseModel):
                     tmp.user_id == self.login_user.user_id
                     or tmp.id in manage_ids
                 )
-            ) or self.login_user.is_admin():
+            ) or self._can_operate_dashboards():
                 tmp.write = True
             result.append(tmp)
         return result
@@ -398,6 +404,7 @@ class DashboardService(BaseModel):
             raise NotFoundError()
         if not is_commercial() and dashboard.dashboard_type != DashboardType.PRESET_OSS.value:
             raise NotFoundError()
+        can_operate = self._can_operate_dashboards()
         write_flag = await self.login_user.async_access_check(dashboard.user_id, target_id=str(dashboard.id),
                                                               access_type=AccessType.DASHBOARD_WRITE)
         read_flag = write_flag or await self.login_user.async_access_check(
@@ -405,12 +412,16 @@ class DashboardService(BaseModel):
             target_id=str(dashboard.id),
             access_type=AccessType.DASHBOARD,
         )
+        # 运营岗/超管列表已走 admin 口径; 详情与组件查询不能再卡 ReBAC 读 tuple.
+        if can_operate:
+            read_flag = True
+            write_flag = True
         components = await DashboardDao.get_components(dashboard_id)
         uses_realtime = self._uses_realtime_dataset(components)
         department_realtime_view = (
             uses_realtime
             and dashboard.status == DashboardStatus.PUBLISHED.value
-            and not self.login_user.is_admin()
+            and not self._can_operate_dashboards()
             and await self._is_department_admin()
         )
         if not read_flag and not department_realtime_view:
@@ -419,7 +430,7 @@ class DashboardService(BaseModel):
 
             raise UnAuthorizedError()
 
-        if uses_realtime and not self.login_user.is_admin():
+        if uses_realtime and not self._can_operate_dashboards():
             if (
                 dashboard.status != DashboardStatus.PUBLISHED.value
                 or not await self._is_department_admin()
@@ -427,7 +438,7 @@ class DashboardService(BaseModel):
                 raise UnAuthorizedError()
         result = DashboardRead.model_validate(dashboard)
         result.write = write_flag and (
-            self.login_user.is_admin() or not uses_realtime
+            self._can_operate_dashboards() or not uses_realtime
         )
         default_dashboard = await DashboardDao.get_default_dashboard(user_id=self.login_user.user_id)
         if default_dashboard and default_dashboard.dashboard_id == result.id:
@@ -539,7 +550,7 @@ class DashboardService(BaseModel):
         dashboard = await DashboardDao.get_one(dashboard_id)
         if not dashboard:
             raise NotFoundError()
-        read_flag = await self.login_user.async_access_check(
+        read_flag = True if self._can_operate_dashboards() else await self.login_user.async_access_check(
             dashboard.user_id,
             target_id=str(dashboard.id),
             access_type=AccessType.DASHBOARD,
@@ -564,7 +575,7 @@ class DashboardService(BaseModel):
             raise NotFoundError()
         if (
             component.dataset_code in self.REALTIME_DATASETS
-            and not self.login_user.is_admin()
+            and not self._can_operate_dashboards()
             and dashboard.status != DashboardStatus.PUBLISHED.value
         ):
             raise UnAuthorizedError()

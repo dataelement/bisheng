@@ -23,11 +23,22 @@ def test_system_admin_gate_uses_login_user_admin_role_only():
     assert require_system_admin(user) is user
 
 
+def test_system_admin_gate_allows_platform_operator_role_names():
+    user = SimpleNamespace(
+        is_admin=lambda: False,
+        is_global_super=False,
+        role_names=["平台管理员"],
+    )
+
+    assert require_system_admin(user) is user
+
+
 @pytest.mark.parametrize(
     "user",
     [
         FakeUser(False),
         SimpleNamespace(account="admin", user_role=["管理员"]),
+        SimpleNamespace(account="admin", is_admin=lambda: False, role_names=["管理员"]),
         None,
     ],
 )

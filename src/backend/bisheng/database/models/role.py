@@ -318,6 +318,24 @@ class RoleDao(RoleBase):
             return (await session.exec(stmt)).first()
 
     @classmethod
+    async def aget_role_by_exact_name_in_tenant(
+        cls,
+        tenant_id: int,
+        role_name: str,
+        exclude_id: Optional[int] = None,
+    ) -> Optional[Role]:
+        """租户内按显示名精确查找, 不限 role_type / department_id.
+
+        tenant_id 交给会话租户注入, 这里不再手写 WHERE tenant_id.
+        """
+        del tenant_id
+        stmt = select(Role).where(Role.role_name == role_name)
+        if exclude_id is not None:
+            stmt = stmt.where(Role.id != exclude_id)
+        async with get_async_db_session() as session:
+            return (await session.exec(stmt)).first()
+
+    @classmethod
     async def aget_user_count_by_role_ids(cls, role_ids: List[int]) -> dict:
         """Get user count for each role ID. Returns {role_id: count}."""
         if not role_ids:
