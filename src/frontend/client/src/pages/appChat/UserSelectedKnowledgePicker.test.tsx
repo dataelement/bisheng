@@ -39,7 +39,20 @@ describe("UserSelectedKnowledgePicker", () => {
                     spaceLevel: "team",
                 },
             ],
-            personalSpaces: [],
+            personalSpaces: [
+                {
+                    id: "40",
+                    name: "个人资料库",
+                    spaceLevel: "personal",
+                    isFavorite: false,
+                },
+                {
+                    id: "41",
+                    name: "我的收藏",
+                    spaceLevel: "personal",
+                    isFavorite: true,
+                },
+            ],
         });
         mockGetSpaceChildrenApi.mockImplementation(({ space_id }) => {
             if (String(space_id) === "13") {
@@ -140,6 +153,13 @@ describe("UserSelectedKnowledgePicker", () => {
                 effective_file_count: 1,
             });
         });
+    });
+
+    it("hides 我的收藏 from the personal knowledge list", async () => {
+        render(<UserSelectedKnowledgePicker value={null} onChange={jest.fn()} />);
+
+        expect(await screen.findByText("个人资料库")).toBeTruthy();
+        expect(screen.queryByText("我的收藏")).not.toBeInTheDocument();
     });
 
     it("reports over-limit folder scope before workflow execution", async () => {
