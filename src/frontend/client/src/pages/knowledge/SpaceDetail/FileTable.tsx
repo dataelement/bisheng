@@ -413,8 +413,9 @@ const SortableHeader = ({
     return (
         <TableHead
             className={cn(
-                "group sticky top-0 z-20 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
-                "transition-colors hover:bg-[#f2f3f5]"
+                "group sticky top-0 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
+                "transition-colors hover:bg-[#f2f3f5]",
+                isSticky ? "z-30" : "z-20"
             )}
             style={{
                 width,
@@ -507,7 +508,7 @@ function FileTableHeader({
             <TableRow className="hover:bg-transparent border-none">
                 {/* 复选框列 — 左侧固定 */}
                 <TableHead
-                    className="sticky left-0 top-0 z-20 bg-[#F3F4F6] p-0 text-center"
+                    className="sticky left-0 top-0 z-30 bg-[#F3F4F6] p-0 text-center"
                     style={{ width: columnWidths.checkbox, minWidth: columnWidths.checkbox, maxWidth: columnWidths.checkbox }}
                 >
                     <div className="flex h-full items-center justify-center">
@@ -693,13 +694,6 @@ function FileTableHeader({
                     headerAlignEnd
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
-
-
-                {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
-                <TableHead
-                    className="border-none bg-[#F3F4F6] p-0"
-                    style={{ width: 0, minWidth: 0, maxWidth: 0 }}
-                />
 
             </TableRow>
         </TableHeader>
