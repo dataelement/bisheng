@@ -290,6 +290,8 @@ export function PortalFileInfoEditModal({
     const domainSelectClassName =
         "h-10 w-full min-w-0 rounded-lg border border-input bg-transparent px-3 text-sm text-[#4e5969] outline-none transition-colors focus:border-[#165dff] disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-[#f7f8fa] disabled:text-[#86909c]";
 
+    const isLoading = renameSaving || savingCategory || savingDomain;
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[520px]">
@@ -297,8 +299,21 @@ export function PortalFileInfoEditModal({
                     <DialogTitle>修改信息</DialogTitle>
                 </DialogHeader>
                 <div className={s.infoEditModalBody}>
+                    {isLoading ? (
+                        <div className={s.infoEditModalOverlay}>
+                            <Loader2
+                                size={24}
+                                className="animate-spin text-[#165dff]"
+                            />
+                        </div>
+                    ) : null}
                     <div className={s.infoEditModalRow}>
-                        <label className={s.infoEditModalLabel}>文件名称</label>
+                        <div className={s.infoEditModalLabelWrap}>
+                            <label className={s.infoEditModalLabel}>文件名称</label>
+                            <span className={s.infoEditRenameHint}>
+                                * 编辑完成之后进行回车保存
+                            </span>
+                        </div>
                         <div className={s.infoEditModalField}>
                             {renaming ? (
                                 <div className={s.infoEditRenameWrap}>

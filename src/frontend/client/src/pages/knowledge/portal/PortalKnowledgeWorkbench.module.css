@@ -3006,6 +3006,7 @@
 
 /* Portal file info edit modal */
 .infoEditModalBody {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -3091,4 +3092,30 @@
   color: #86909c;
   font-size: 14px;
   user-select: none;
+}
+
+.infoEditModalLabelWrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.infoEditRenameHint {
+  color: #f53f3f;
+  font-size: 12px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.infoEditModalOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(247, 248, 250, 0.72);
+  pointer-events: auto;
 }
