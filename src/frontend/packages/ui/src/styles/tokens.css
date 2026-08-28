@@ -80,6 +80,18 @@
   --danger-tint: 255 236 232;  /* #FFECE8 (Arco red-1) — TAG bg only; buttons
                                   use alpha over the main red (bg-danger/10 …) */
 
+  /* Tag frozen exceptions (基础-色彩规范 §4 / 组件-Tag标签.md §3.1) — the two
+   * tag colors that must NOT follow the blue⇄green theme switch:「审批中」stays
+   * blue whatever the brand is, and「技能」purple has no seat in the palette at
+   * all. Same pairing rule as the functional tints: lightest step as the fill,
+   * main step as the text. Frozen VALUES, not references to --brand-*, which is
+   * the whole point. Nothing else may be added here — a new fixed color needs a
+   * spec change, not a token. */
+  --tag-approving-tint: 232 243 255; /* #E8F3FF — blue-50's value, pinned */
+  --tag-approving: 22 93 255;        /* #165DFF */
+  --tag-skill-tint: 245 232 255;     /* #F5E8FF */
+  --tag-skill: 114 46 209;           /* #722ED1 */
+
   /* ---------- Brand palette — default = design-system brand blue (Arco-style
    * ramp, primary-6 #165DFF / pressed #024DE3). RGB channels so Tailwind's
    * `blue-*` utilities support `/<alpha>`. 500 = main accent, 600 = button /
@@ -280,6 +292,16 @@
   --danger-hover: 245 78 78;    /* #F54E4E */
   --danger-active: 249 141 134; /* #F98D86 */
   --danger-tint: 77 0 10;       /* #4D000A */
+
+  /* Tag frozen exceptions, dark — same recipe as the functional tints above:
+     the fill goes deep and saturated (peak channel 77, as everywhere in this
+     block) and the text brightens to the dark main. Still theme-independent:
+     the blue one is pinned to the dark brand-blue VALUE so it stays blue under
+     .theme-green too. */
+  --tag-approving-tint: 0 13 77;  /* #000D4D — dark brand-50's value, pinned */
+  --tag-approving: 60 126 255;    /* #3C7EFF */
+  --tag-skill-tint: 51 0 77;      /* #33004D */
+  --tag-skill: 155 93 224;        /* #9B5DE0 */
 }
 
 /* Mobile (≤768px) remap of the SEMANTIC typography layer only:

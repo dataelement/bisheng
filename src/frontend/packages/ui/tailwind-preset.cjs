@@ -127,6 +127,17 @@ module.exports = {
           active: 'rgb(var(--danger-active) / <alpha-value>)',
           tint: 'rgb(var(--danger-tint) / <alpha-value>)',
         },
+        // Tag frozen exceptions (基础-色彩规范 §4) — `bg-tag-approving-tint
+        // text-tag-approving` and the skill pair. Same DEFAULT/tint shape as
+        // the functional colors above; these two never follow the brand theme.
+        'tag-approving': {
+          DEFAULT: 'rgb(var(--tag-approving) / <alpha-value>)',
+          tint: 'rgb(var(--tag-approving-tint) / <alpha-value>)',
+        },
+        'tag-skill': {
+          DEFAULT: 'rgb(var(--tag-skill) / <alpha-value>)',
+          tint: 'rgb(var(--tag-skill-tint) / <alpha-value>)',
+        },
       },
       // Radius token scale (rounded-md/lg used by Button sizes: 6/8px).
       borderRadius: {

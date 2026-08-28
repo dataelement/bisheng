@@ -216,15 +216,17 @@ const FUNCTIONAL = [
 
 /* ------------------------------------------------------------------ *
  * Tag pairs (§4) — light bg + strong text. Purple / approving-blue are
- * intentional fixed exceptions (not tokenized, never theme-switched).
+ * intentional fixed exceptions: they have their own tokens (--tag-skill*,
+ * --tag-approving*, light + dark) precisely so they can be pinned — nothing
+ * in .theme-green touches them.
  * ------------------------------------------------------------------ */
 
 const TAG = [
-  { label: '技能（紫 · 未 token 化）', bg: '#F5E8FF', fg: '#722ED1', note: '固定例外色' },
+  { label: '技能（紫 · 固定例外）', bg: '#F5E8FF', fg: '#722ED1', note: '--tag-skill-tint / --tag-skill，不换肤' },
   { label: '助手（橙 = warning 同值）', bg: '#FFF7E8', fg: '#FF7D00', note: 'warning tint' },
   { label: '已完成',                   bg: '#E8FFEA', fg: '#00B42A', note: 'success tint' },
   { label: '已驳回',                   bg: '#FFECE8', fg: '#F53F3F', note: 'danger tint' },
-  { label: '审批中（例外：永远蓝）',    bg: '#E8F3FF', fg: '#165DFF', note: '固定蓝，不换肤' },
+  { label: '审批中（例外：永远蓝）',    bg: '#E8F3FF', fg: '#165DFF', note: '--tag-approving-tint / --tag-approving，不换肤' },
 ];
 
 /* ------------------------------------------------------------------ *

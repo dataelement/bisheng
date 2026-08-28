@@ -148,6 +148,8 @@ export default defineConfig({
           text: '数据展示 Data Display',
           items: [
             { text: '分段控制器 Segmented', link: '/components/segmented' },
+            { text: '徽标 Badge', link: '/components/badge' },
+            { text: '标签 Tag', link: '/components/tag' },
             { text: '文字提示 Tooltip', link: '/components/tooltip' },
             { text: '气泡卡片 Popover', link: '/components/popover' },
           ],

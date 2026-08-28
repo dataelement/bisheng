@@ -1,6 +1,7 @@
 import * as React from 'react';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import cn from '../../utils/cn';
+import { Badge } from '../Badge';
 
 /**
  * Tabs — design-system base component (组件-Tabs标签页.md v1).
@@ -252,19 +253,13 @@ function Tabs({
                 </span>
                 <span className="absolute inset-0 flex items-center justify-center">{item.label}</span>
               </span>
-              {/* §4 — count badge. Its own font-medium means the 400⇄500 flip on
-                  selection never resizes it, so the row cannot shift. Sits in the
-                  trigger's flex gap (4px small / 8px otherwise), same as the icon. */}
-              {item.badge !== undefined && item.badge > 0 && (
-                <span
-                  className={cn(
-                    'inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-md px-1 text-caption-sm font-medium',
-                    VARIANT[variant].badge,
-                  )}
-                >
-                  {item.badge}
-                </span>
-              )}
+              {/* §4 — count badge, drawn by the Badge component's standalone form
+                  (组件-Badge徽标.md §2): same 16px pill, same caption-sm/500, so
+                  the 400⇄500 flip on selection cannot resize it and the row
+                  cannot shift. Sits in the trigger's flex gap (4px small / 8px
+                  otherwise), same as the icon. The color comes from the VARIANT,
+                  not from Badge's own default, so a neutral row stays neutral. */}
+              <Badge count={item.badge} className={cn('shrink-0', VARIANT[variant].badge)} />
             </TabsPrimitive.Trigger>
           ))}
           {/* §5 — 2px brand indicator on the divider, text-wide, 200ms slide. */}

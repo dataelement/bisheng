@@ -46,6 +46,17 @@ export * from './components/Tabs';
 // (组件-Segmented分段控制器.md). The gray track + sliding thumb, equal-width
 // segments and the touch rules are baked in; every label is a prop.
 export * from './components/Segmented';
+// Badge — 「is there anything new」 and 「how many」, in four forms: the corner
+// count, the corner dot, the standalone number after a label, and the inline
+// status dot (组件-Badge徽标.md). One 16px size, the two semantic colors, the
+// no-99+ rule and「0 shows nothing」are baked in; it is never clickable — the
+// host is. What says「what this is」is the Tag below (判别表 in Badge §1).
+export * from './components/Badge';
+// Tag — one word stuck on an object: what it is, what state it is in
+// (组件-Tag标签.md). Light tint + dark text only, the five semantic colors plus
+// the two frozen exceptions (审批中 blue / 技能 purple), display / closable /
+// checkable; a display tag deliberately has no hover, since it is not a button.
+export * from './components/Tag';
 // Breadcrumb — where the current page sits in the structure
 // (组件-Breadcrumb面包屑.md). The collapse rules, the 96px name cap and the
 // ellipsis menu are baked in; the page passes the full chain and the copy.
