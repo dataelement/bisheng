@@ -2142,6 +2142,68 @@ export default function PortalKnowledgeWorkbench() {
         [],
     );
 
+    const sourceSpaceFromActive = useMemo(() => {
+        if (selectedFile && activeSpace && String(selectedFile.spaceId) === String(activeSpace.id)) {
+            return activeSpace;
+        }
+        return null;
+    }, [activeSpace, selectedFile]);
+
+    const { data: sourceSpaceInfo } = useQuery<KnowledgeSpace>({
+        queryKey: ["portalSelectedFileSpaceInfo", selectedFile?.spaceId],
+        queryFn: async () => {
+            const spaceId = selectedFile?.spaceId;
+            if (!spaceId) throw new Error("spaceId is required");
+            return getSpaceInfoApi(spaceId);
+        },
+        enabled: Boolean(selectedFile?.spaceId) && !sourceSpaceFromActive,
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        placeholderData: (prev: KnowledgeSpace | undefined) => prev,
+    });
+
+    const { data: selectedFileParentPath } = useQuery<Array<{ id: string; name: string }>>({
+        queryKey: ["portalSelectedFileParentPath", selectedFile?.spaceId, selectedFile?.id],
+        queryFn: async () => {
+            const spaceId = selectedFile?.spaceId;
+            const fileId = selectedFile?.id;
+            if (!spaceId || !fileId) return [];
+            return getFolderParentPathApi(spaceId, fileId);
+        },
+        enabled: Boolean(selectedFile?.spaceId && selectedFile?.id),
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        placeholderData: (prev: Array<{ id: string; name: string }> | undefined) => prev,
+    });
+
+    const sourceSpace = sourceSpaceFromActive ?? sourceSpaceInfo;
+
+    const documentPath = useMemo(() => {
+        const root = "全部知识库";
+        if (selectedFile && sourceSpace) {
+            const levelLabel = (() => {
+                switch (sourceSpace.spaceLevel) {
+                    case SpaceLevel.PUBLIC:
+                        return "公共知识库";
+                    case SpaceLevel.DEPARTMENT:
+                        return "部门知识库";
+                    case SpaceLevel.TEAM:
+                    case SpaceLevel.TEAM_KS:
+                        return "团队/科室知识库";
+                    case SpaceLevel.PERSONAL:
+                        return "个人知识库";
+                    default:
+                        return undefined;
+                }
+            })();
+            const folderNames = selectedFileParentPath?.map((item: { id: string; name: string }) => item.name) ?? [];
+            const names = [root, levelLabel, sourceSpace.name, ...folderNames].filter(Boolean);
+            return names.join("/");
+        }
+        const names = [root, activeGroup?.title, activeSpace?.name].filter(Boolean);
+        return names.join("/");
+    }, [activeGroup?.title, activeSpace?.name, selectedFile, selectedFileParentPath, sourceSpace]);
+
     const handleBackToFileList = useCallback(() => {
         setSelectedFile(null);
         setActivePanel(null);
@@ -2155,14 +2217,34 @@ export default function PortalKnowledgeWorkbench() {
         setSearchTagIds([]);
         // Early back during tag-review deep link must not stick on the restore overlay.
         setRestoringDeepLinkKey(null);
-        // Folder children may still be loading / wiped by a late root refresh — refetch.
-        const folderId = currentFolderIdRef.current;
-        if (!folderId) return;
-        const folderNode = findTreeNode(treeNodes, folderId);
-        if (!folderNode?.loaded || folderNode.loading) {
-            void reloadFilesRef.current();
+
+        // Return to the file's actual folder location instead of the entry position.
+        const file = selectedFile;
+        if (!file?.spaceId) return;
+        const spaceId = String(file.spaceId);
+        const folderId = file.parentId;
+        const folderName = selectedFileParentPath?.[selectedFileParentPath.length - 1]?.name;
+        if (sourceSpace && activeSpace && String(sourceSpace.id) !== String(activeSpace.id)) {
+            setActiveSpace(sourceSpace);
         }
-    }, [treeNodes]);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set("spaceId", spaceId);
+            if (folderId) {
+                next.set("folderId", folderId);
+                if (folderName) next.set("folderName", folderName);
+            } else {
+                next.delete("folderId");
+                next.delete("folderName");
+            }
+            next.delete("fileId");
+            next.delete("fileName");
+            next.delete("documentId");
+            next.delete("name");
+            next.delete("openNonce");
+            return next;
+        });
+    }, [activeSpace, selectedFile, selectedFileParentPath, setActiveSpace, setSearchParams, sourceSpace]);
 
     // 从"我的收藏"只读面板打开源文件：#4 原地预览——不切换 activeSpace（不跳转到源知识空间），
     // 以携带源空间 id 的合成文件项触发预览流程。预览/下载按 selectedFile.spaceId(源空间) 定位、
@@ -2699,67 +2781,7 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [editingSpace, queryClient, showToast]);
 
-    const sourceSpaceFromActive = useMemo(() => {
-        if (selectedFile && activeSpace && String(selectedFile.spaceId) === String(activeSpace.id)) {
-            return activeSpace;
-        }
-        return null;
-    }, [activeSpace, selectedFile]);
 
-    const { data: sourceSpaceInfo } = useQuery<KnowledgeSpace>({
-        queryKey: ["portalSelectedFileSpaceInfo", selectedFile?.spaceId],
-        queryFn: async () => {
-            const spaceId = selectedFile?.spaceId;
-            if (!spaceId) throw new Error("spaceId is required");
-            return getSpaceInfoApi(spaceId);
-        },
-        enabled: Boolean(selectedFile?.spaceId) && !sourceSpaceFromActive,
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
-        placeholderData: (prev: KnowledgeSpace | undefined) => prev,
-    });
-
-    const { data: selectedFileParentPath } = useQuery<Array<{ id: string; name: string }>>({
-        queryKey: ["portalSelectedFileParentPath", selectedFile?.spaceId, selectedFile?.id],
-        queryFn: async () => {
-            const spaceId = selectedFile?.spaceId;
-            const fileId = selectedFile?.id;
-            if (!spaceId || !fileId) return [];
-            return getFolderParentPathApi(spaceId, fileId);
-        },
-        enabled: Boolean(selectedFile?.spaceId && selectedFile?.id),
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
-        placeholderData: (prev: Array<{ id: string; name: string }> | undefined) => prev,
-    });
-
-    const sourceSpace = sourceSpaceFromActive ?? sourceSpaceInfo;
-
-    const documentPath = useMemo(() => {
-        const root = "全部知识库";
-        if (selectedFile && sourceSpace) {
-            const levelLabel = (() => {
-                switch (sourceSpace.spaceLevel) {
-                    case SpaceLevel.PUBLIC:
-                        return "公共知识库";
-                    case SpaceLevel.DEPARTMENT:
-                        return "部门知识库";
-                    case SpaceLevel.TEAM:
-                    case SpaceLevel.TEAM_KS:
-                        return "团队/科室知识库";
-                    case SpaceLevel.PERSONAL:
-                        return "个人知识库";
-                    default:
-                        return undefined;
-                }
-            })();
-            const folderNames = selectedFileParentPath?.map((item: { id: string; name: string }) => item.name) ?? [];
-            const names = [root, levelLabel, sourceSpace.name, ...folderNames].filter(Boolean);
-            return names.join("/");
-        }
-        const names = [root, activeGroup?.title, activeSpace?.name].filter(Boolean);
-        return names.join("/");
-    }, [activeGroup?.title, activeSpace?.name, selectedFile, selectedFileParentPath, sourceSpace]);
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
