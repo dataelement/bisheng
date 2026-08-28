@@ -174,7 +174,7 @@ def test_review_tag_should_run_with_default_library_when_no_explicit_binding():
         status=KnowledgeFileStatus.SUCCESS.value,
     )
 
-    with patch(_LINK_DAO_PATCH, return_value=[1]):
+    with patch(_LINK_DAO_PATCH, return_value=[]):
         assert KnowledgeSpaceReviewTagService._should_run(knowledge, db_file)
 
 
@@ -227,7 +227,7 @@ def test_review_tag_cap_skips_when_file_already_has_five_ai_tags():
     append_pending.assert_not_called()
 
 
-def test_review_tag_dual_channel_write_for_approved_and_pending():
+def test_review_tag_writes_pending_only():
     module_path = "bisheng.knowledge.domain.services.knowledge_space_review_tag_service"
     knowledge = SimpleNamespace(id=1)
     db_file = SimpleNamespace(id=2, tenant_id=1, user_id=7, abstract="评审内容")
@@ -272,14 +272,7 @@ def test_review_tag_dual_channel_write_for_approved_and_pending():
     ):
         KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(knowledge, db_file)
 
-    append_approved.assert_called_once_with(
-        space_id=1,
-        file_id=2,
-        tag_names=["行业情报"],
-        user_id=7,
-        tenant_id=1,
-        resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
-    )
+    append_approved.assert_not_called()
     append_pending.assert_called_once_with(
         space_id=1,
         file_id=2,

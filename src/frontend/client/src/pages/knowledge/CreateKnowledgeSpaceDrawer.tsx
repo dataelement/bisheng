@@ -655,33 +655,21 @@ export function CreateKnowledgeSpaceDrawer({
             return;
         }
         const effectiveAutoTagEnabled = autoTagEnabled;
-        if (mode === "create" && autoTagLibraryIds.length === 0) {
-            showToast({
-                message: localize("com_knowledge.tag_library_required_on_create"),
-                severity: NotificationSeverity.WARNING,
-            });
-            return;
-        }
-        if (autoTagLibraryIds.length === 0) {
-            showToast({
-                message: localize("com_knowledge.auto_tag_library_required"),
-                severity: NotificationSeverity.WARNING,
-            });
-            return;
-        }
-        if (autoTagLibraryTagsLoading && allSelectedLibrariesReportZeroTags) {
-            showToast({
-                message: localize("com_knowledge.auto_tag_library_tags_loading"),
-                severity: NotificationSeverity.WARNING,
-            });
-            return;
-        }
-        if (!selectedLibrariesHaveTags) {
-            showToast({
-                message: localize("com_knowledge.auto_tag_library_empty"),
-                severity: NotificationSeverity.WARNING,
-            });
-            return;
+        if (autoTagLibraryIds.length > 0) {
+            if (autoTagLibraryTagsLoading && allSelectedLibrariesReportZeroTags) {
+                showToast({
+                    message: localize("com_knowledge.auto_tag_library_tags_loading"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                return;
+            }
+            if (!selectedLibrariesHaveTags) {
+                showToast({
+                    message: localize("com_knowledge.auto_tag_library_empty"),
+                    severity: NotificationSeverity.WARNING,
+                });
+                return;
+            }
         }
         const effectiveJoinPolicy: JoinPolicy = mode === "edit" ? originalEditJoinPolicy : "review";
         const isClinicSpace = isClinicContext && spaceLevel === SpaceLevel.DEPARTMENT;

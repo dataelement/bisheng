@@ -15,9 +15,10 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import delete, func, select, update
 
+from bisheng.common.errcode.knowledge_space import KnowledgeSpaceTagLibraryNotBoundError
 from bisheng.core.database import get_async_db_session, get_sync_db_session
 from bisheng.database.models.group_resource import ResourceTypeEnum
-from bisheng.database.models.review_tags import ReviewTag, ReviewTagLink
+from bisheng.database.models.review_tags import ReviewTag, ReviewTagDao, ReviewTagLink
 from bisheng.database.models.tag import (
     Tag,
     TagBusinessTypeEnum,
@@ -1008,11 +1009,9 @@ class TagLibraryTagService:
 
     @classmethod
     def _first_library_id_for_space(cls, space_id: int) -> int | None:
-        """Resolve the primary tag library for a space (same fallback chain as auto-tag)."""
+        """Resolve the first bound tag library for a space, if any."""
         library_ids = KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(space_id)
-        if library_ids:
-            return library_ids[0]
-        return 1
+        return library_ids[0] if library_ids else None
 
     @classmethod
     def _find_library_tag_in_session(
@@ -1146,20 +1145,22 @@ class TagLibraryTagService:
         tenant_id: int | None,
         resource_type: TagResourceTypeEnum = TagResourceTypeEnum.AI_AUTO_TAG,
     ) -> None:
-        """Create pending review tags in the first bound library and link them to a file."""
+        """Create pending review tags and link them to a file.
+
+        Binding is optional: with no bound library the row is scoped to the
+        knowledge space. Exact tenant pending names are reused (source file is added).
+        """
         normalized_names = cls._normalize_names(tag_names)
         if not normalized_names:
             return
 
         library_id = cls._first_library_id_for_space(space_id)
         if library_id is None:
-            logger.warning(
-                "skip_review_tag_insert_no_library space_id={} file_id={} tag_names={}",
-                space_id,
-                file_id,
-                normalized_names,
-            )
-            return
+            business_type = TagBusinessTypeEnum.KNOWLEDGE_SPACE.value
+            business_id = str(space_id)
+        else:
+            business_type = TagBusinessTypeEnum.TAG_LIBRARY.value
+            business_id = str(library_id)
 
         with get_sync_db_session() as session:
             tag_by_name: dict[str, ReviewTag] = {}
@@ -1182,8 +1183,8 @@ class TagLibraryTagService:
 
                 tag = ReviewTag(
                     name=tag_name,
-                    business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
-                    business_id=str(library_id),
+                    business_type=business_type,
+                    business_id=business_id,
                     resource_type=resource_type.value,
                     user_id=user_id,
                     tenant_id=tenant_id,
@@ -1369,36 +1370,38 @@ class TagLibraryTagService:
         resource_type: TagResourceTypeEnum = TagResourceTypeEnum.MANUAL_TAG,
     ) -> ReviewTag:
         normalized = (tag_name or "").strip()
+        with get_sync_db_session() as session:
+            tenant_pending = cls._find_tenant_pending_review_tag_exact_in_session(
+                session,
+                tenant_id=tenant_id,
+                tag_name=normalized,
+                resource_type=resource_type,
+            )
+        if tenant_pending:
+            return tenant_pending
+
         library_id = cls._first_library_id_for_space(space_id)
         if library_id is None:
-            raise KnowledgeSpaceTagLibraryNotBoundError()
-
-        pending_tags = await ReviewTagDao.get_tags_by_business(
-            TagBusinessTypeEnum.TAG_LIBRARY,
-            str(library_id),
-            name=normalized,
-        )
-        for review_tag in pending_tags:
-            if (
-                (review_tag.name or "").strip() == normalized
-                and review_tag.review_status == 0
-                and not review_tag.is_deleted
-            ):
-                return review_tag
+            business_type = TagBusinessTypeEnum.KNOWLEDGE_SPACE.value
+            business_id = str(space_id)
+        else:
+            business_type = TagBusinessTypeEnum.TAG_LIBRARY.value
+            business_id = str(library_id)
 
         new_tag = ReviewTag(
             name=normalized,
             user_id=user_id,
             tenant_id=tenant_id,
-            business_type=TagBusinessTypeEnum.TAG_LIBRARY.value,
-            business_id=str(library_id),
+            business_type=business_type,
+            business_id=business_id,
             resource_type=resource_type.value,
             is_deleted=False,
             review_status=0,
             create_time=datetime.now(),
             update_time=datetime.now(),
         )
-        return await ReviewTagDao.ainsert_review_tag(new_tag)
+        created = await ReviewTagDao.ainsert_review_tag(new_tag)
+        return created
 
     @classmethod
     async def list_tenant_library_tag_name_keys(cls, tenant_id: int | None) -> set[str]:

@@ -15,6 +15,7 @@ from bisheng.knowledge.domain.models.knowledge_file import (
     KnowledgeFileStatus,
 )
 from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
+    AUTO_TAG_MAX,
     AUTO_TAG_MAX_AI_TAGS_PER_FILE,
     KnowledgeSpaceAutoTagService,
 )
@@ -83,20 +84,13 @@ class KnowledgeSpaceReviewTagService:
         knowledge: Knowledge,
         db_file: KnowledgeFile,
         documents: Sequence[Document] | None = None,
+        max_new_tags: int | None = None,
     ) -> None:
         try:
             if not cls._should_run(knowledge, db_file):
                 return
-
-            library_ids = KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge)
-            manual_tags, ai_tags = KnowledgeSpaceAutoTagService._collect_library_tags(library_ids)
-            if not manual_tags and not ai_tags:
-                logger.info(
-                    "auto_tag_skip_empty_library space_id={} file_id={} library_ids={}",
-                    knowledge.id,
-                    db_file.id,
-                    library_ids,
-                )
+            remaining = AUTO_TAG_MAX if max_new_tags is None else int(max_new_tags)
+            if remaining <= 0:
                 return
 
             llm_config = LLMService.get_knowledge_llm(tenant_id=db_file.tenant_id)
@@ -140,12 +134,8 @@ class KnowledgeSpaceReviewTagService:
                 REVIEW_TAG_CONTEXT_INSTRUCTION,
             )
 
-            logger.info(
-                "review_tag_system_prompt space_id={} file_id={} system_prompt={}",
-                knowledge.id,
-                db_file.id,
-                system_prompt,
-            )
+            library_ids = KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge)
+            manual_tags, ai_tags = KnowledgeSpaceAutoTagService._collect_library_tags(library_ids)
             tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
 
             catalog = TagLibraryTagService.load_link_b_tenant_catalog_sync(
@@ -204,18 +194,8 @@ class KnowledgeSpaceReviewTagService:
                 return
 
             target_by_name = {entry.canonical_name: entry.target for entry in resolved.entries}
-            approved_names = [name for name in capped_names if target_by_name.get(name) == "approved"]
-            pending_names = [name for name in capped_names if target_by_name.get(name) == "pending"]
+            pending_names = [name for name in capped_names if target_by_name.get(name) == "pending"][:remaining]
 
-            if approved_names:
-                TagLibraryTagService.append_file_library_tags_sync(
-                    space_id=knowledge.id,
-                    file_id=db_file.id,
-                    tag_names=approved_names,
-                    user_id=db_file.user_id or 0,
-                    tenant_id=db_file.tenant_id,
-                    resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
-                )
             if pending_names:
                 TagLibraryTagService.append_file_library_review_tags_sync(
                     space_id=knowledge.id,
@@ -227,10 +207,9 @@ class KnowledgeSpaceReviewTagService:
                 )
 
             logger.info(
-                "review_tag_success space_id={} file_id={} approved_tags={} pending_tags={}",
+                "review_tag_success space_id={} file_id={} pending_tags={}",
                 knowledge.id,
                 db_file.id,
-                approved_names,
                 pending_names,
             )
         except Exception:
@@ -244,11 +223,10 @@ class KnowledgeSpaceReviewTagService:
     def _should_run(knowledge: Knowledge, db_file: KnowledgeFile) -> bool:
         if not knowledge or not db_file:
             return False
-        has_libraries = bool(KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge))
         return (
-            knowledge.type == KnowledgeTypeEnum.SPACE.value
+            KnowledgeSpaceAutoTagService.is_tenant_auto_tag_enabled()
+            and knowledge.type == KnowledgeTypeEnum.SPACE.value
             and knowledge.auto_tag_enabled
-            and has_libraries
             and db_file.file_type == FileType.FILE.value
             and db_file.status == KnowledgeFileStatus.SUCCESS.value
             and db_file.file_source in {FileSource.UPLOAD.value, FileSource.SPACE_UPLOAD.value}

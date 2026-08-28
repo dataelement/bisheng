@@ -416,7 +416,6 @@ class WorkStationTagsService(BaseService):
             if not data.tag_library_id or not data.knowledge_id:
                 raise KnowledgeSpaceTagLibraryInvalidError(msg="请选择导入的标签库")
             await self._ensure_knowledge_in_scope(data.knowledge_id, scope)
-            from bisheng.database.models.tag import TagBusinessTypeEnum
             from bisheng.knowledge.domain.services.knowledge_space_tag_library_service import (
                 KnowledgeSpaceTagLibraryService,
             )
@@ -435,21 +434,27 @@ class WorkStationTagsService(BaseService):
                 tenant_id=tenant_id,
                 ack_similar=bool(data.ack_similar),
             )
-            bound_ids = await KnowledgeSpaceTagLibraryService.resolve_bound_library_ids(int(data.knowledge_id))
-            tag_has_library = any(
-                getattr(tag, "business_type", None) == TagBusinessTypeEnum.TAG_LIBRARY.value
-                and str(getattr(tag, "business_id", "") or "").strip()
-                for tag in (review_tag_list or [])
-            )
-            require_bound_library = bool(bound_ids) and tag_has_library
-
             tag_library_service = KnowledgeSpaceTagLibraryService(self.login_user)
             await tag_library_service.append_review_tag(
                 library_id=int(data.tag_library_id),
                 knowledge_id=int(data.knowledge_id),
                 tag_name=data.tag_name,
                 review_resource_type=data.resource_type.value,
-                require_bound_library=require_bound_library,
+                require_bound_library=False,
+            )
+            source_knowledge_ids = await self._list_in_scope_source_knowledge_ids(
+                review_tag_list,
+                scope,
+                fallback_knowledge_id=int(data.knowledge_id),
+            )
+            from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
+                KnowledgeTagLibraryLinkDao,
+            )
+
+            await KnowledgeTagLibraryLinkDao.aadd_links(
+                library_id=int(data.tag_library_id),
+                knowledge_ids=source_knowledge_ids,
+                tenant_id=tenant_id,
             )
             existed_tag_list = await self.approve_tag_to_move_operation(
                 data.tag_name,
@@ -510,6 +515,53 @@ class WorkStationTagsService(BaseService):
             fallback_knowledge_id=data.knowledge_id,
         )
         return existed_tag_list
+
+    async def _list_in_scope_source_knowledge_ids(
+        self,
+        review_tags,
+        scope: ReviewTagScope | None,
+        *,
+        fallback_knowledge_id: int,
+    ) -> list[int]:
+        """Source knowledge spaces covered by this approval, filtered by reviewer scope."""
+        from sqlalchemy import Integer, cast
+        from sqlmodel import select
+
+        from bisheng.database.models.review_tags import ReviewTagLink
+        from bisheng.knowledge.domain.models.knowledge_file import KnowledgeFile
+
+        ids: list[int] = [int(fallback_knowledge_id)]
+        tag_ids = [int(tag.id) for tag in (review_tags or []) if getattr(tag, "id", None)]
+        if tag_ids:
+            try:
+                result = await self.session.exec(
+                    select(KnowledgeFile.knowledge_id)
+                    .select_from(ReviewTagLink)
+                    .join(
+                        KnowledgeFile,
+                        KnowledgeFile.id == cast(ReviewTagLink.resource_id, Integer),
+                    )
+                    .where(
+                        ReviewTagLink.tag_id.in_(tag_ids),
+                        ReviewTagLink.is_deleted == False,  # noqa: E712
+                    )
+                )
+                for knowledge_id in result.all():
+                    if knowledge_id:
+                        ids.append(int(knowledge_id))
+            except Exception:
+                logger.exception("list_source_knowledge_ids_failed fallback={}", fallback_knowledge_id)
+
+        unique: list[int] = []
+        full = scope is None or scope.full_tenant
+        role_ids = frozenset() if full else getattr(scope, "role_managed_space_ids", frozenset())
+        clinic = False if full else bool(getattr(scope, "clinic_admin_department_ids", None))
+        for knowledge_id in ids:
+            if knowledge_id in unique:
+                continue
+            if full or knowledge_id in role_ids or clinic:
+                unique.append(knowledge_id)
+        return unique or [int(fallback_knowledge_id)]
 
     async def approve_tag_to_move_operation(
         self,

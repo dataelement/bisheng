@@ -148,6 +148,15 @@ class KnowledgeSpaceTagLibraryDao:
             return (await session.exec(statement)).all()
 
     @classmethod
+    def list_public_ids_by_tenant_sync(cls, tenant_id: int | None) -> list[int]:
+        statement = select(KnowledgeSpaceTagLibrary.id).where(KnowledgeSpaceTagLibrary.owner_knowledge_id.is_(None))
+        if tenant_id is not None:
+            statement = statement.where(KnowledgeSpaceTagLibrary.tenant_id == int(tenant_id))
+        with get_sync_db_session() as session:
+            rows = session.exec(statement).all()
+        return [int(row) for row in rows]
+
+    @classmethod
     async def aupdate_sort_weights(cls, weights: dict[int, int]) -> None:
         if not weights:
             return
@@ -243,34 +252,15 @@ class KnowledgeSpaceTagLibraryDao:
 
     @classmethod
     async def aclear_space_bindings(cls, library_id: int) -> None:
-        from bisheng.knowledge.domain.models.knowledge import Knowledge
         from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
             KnowledgeTagLibraryLink,
-            KnowledgeTagLibraryLinkDao,
         )
 
         async with get_async_db_session() as session:
-            links = (
-                await session.exec(
-                    select(KnowledgeTagLibraryLink).where(KnowledgeTagLibraryLink.tag_library_id == library_id)
-                )
-            ).all()
-            knowledge_ids = list(dict.fromkeys(int(link.knowledge_id) for link in links))
             await session.exec(
                 delete(KnowledgeTagLibraryLink).where(col(KnowledgeTagLibraryLink.tag_library_id) == library_id)
             )
             await session.commit()
-
-        for knowledge_id in knowledge_ids:
-            # Losing the last library turns auto-tagging off; a space that still
-            # has others keeps it on and simply tags against what is left.
-            if await KnowledgeTagLibraryLinkDao.alist_library_ids_by_knowledge(knowledge_id):
-                continue
-            async with get_async_db_session() as session:
-                await session.exec(
-                    update(Knowledge).where(Knowledge.id == knowledge_id).values(auto_tag_enabled=False)
-                )
-                await session.commit()
 
     @classmethod
     async def aget_private_for_knowledge(cls, knowledge_id: int) -> KnowledgeSpaceTagLibrary | None:

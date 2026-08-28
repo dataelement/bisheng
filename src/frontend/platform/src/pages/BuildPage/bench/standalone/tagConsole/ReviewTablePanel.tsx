@@ -13,7 +13,7 @@ import {
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { cname } from "@/components/bs-ui/utils"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SourceFileLinks } from "./SourceFileLinks"
 import { BatchApproveLibraryPickerDialog, BatchResultDialog, RejectReasonDialog } from "./TagBatchDialogs"
@@ -30,7 +30,7 @@ import {
     type TagConsoleFilterState,
     type TagConsoleReviewTab,
 } from "./tagConsoleTypes"
-import { distinctSourceSpaceIds, useApprovableLibraries } from "./useApprovableLibraries"
+import { useApprovableLibraries } from "./useApprovableLibraries"
 
 const DEFAULT_PAGE_SIZE = 20
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
@@ -167,13 +167,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
         finishBatch(await captureAndAlertRequestErrorHoc(batchRejectTagConsoleApi(items, reason)))
     }
 
-    // One library is chosen for the whole batch, so only the ones bound to every
-    // selected tag's source can work — see useApprovableLibraries.
-    const approveSpaceIds = useMemo(
-        () => (approveOpen ? distinctSourceSpaceIds(actionableRows) : []),
-        [approveOpen, actionableRows],
-    )
-    const { libraries: approvableLibraries, loading: loadingLibraries } = useApprovableLibraries(approveSpaceIds)
+    const { libraries: approvableLibraries, loading: loadingLibraries } = useApprovableLibraries()
 
     const allChecked = rows.length > 0 && selectedKeys.length === rows.length
 
@@ -237,7 +231,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                             )}
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceLibrary", "标签来源库")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.sourceKnowledge", "标签来源知识")}</th>
-                            <th className="px-3 py-3 font-medium">{t("build.tagConsole.submitter", "提报者")}</th>
+                            <th className="px-3 py-3 font-medium">{t("build.creator", "创建者")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.reviewer", "审核者")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.rejectReason", "驳回原因")}</th>
                             <th className="px-3 py-3 font-medium">{t("build.tagConsole.createDate", "创建日期")}</th>
@@ -382,7 +376,7 @@ export function ReviewTablePanel({ libraries, onReviewed }: ReviewTablePanelProp
                 loading={loadingLibraries}
                 emptyHint={t(
                     "build.tagConsole.noSharedLibrary",
-                    "所选标签来自不同知识库，没有共同关联的标签库。请分批处理。",
+                    "当前租户暂无可用标签库。",
                 )}
                 saving={saving}
                 onOpenChange={setApproveOpen}

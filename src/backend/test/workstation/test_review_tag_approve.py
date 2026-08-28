@@ -98,6 +98,15 @@ async def test_approve_review_tag_imports_to_selected_library():
             "bisheng.workstation.domain.services.review_tag_notification_service.ReviewTagNotificationService.notify_after_decision",
             new=AsyncMock(),
         ) as notify_after_decision,
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_tag_library_link.KnowledgeTagLibraryLinkDao.aadd_links",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            service,
+            "_list_in_scope_source_knowledge_ids",
+            new=AsyncMock(return_value=[100]),
+        ),
     ):
         library_service_cls.return_value.append_review_tag = append_review_tag
         await service.approve_or_reject_review_tag(data, tenant_id=1)
@@ -110,7 +119,7 @@ async def test_approve_review_tag_imports_to_selected_library():
         knowledge_id=100,
         tag_name="AI助手功能",
         review_resource_type=TagResourceTypeEnum.AI_AUTO_TAG.value,
-        require_bound_library=True,
+        require_bound_library=False,
     )
     approve_tag_to_move.assert_awaited_once_with(
         "AI助手功能",
@@ -154,6 +163,15 @@ async def test_approve_review_tag_allows_any_library_when_tag_has_no_library_sco
         patch(
             "bisheng.workstation.domain.services.review_tag_notification_service.ReviewTagNotificationService.notify_after_decision",
             new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_tag_library_link.KnowledgeTagLibraryLinkDao.aadd_links",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            service,
+            "_list_in_scope_source_knowledge_ids",
+            new=AsyncMock(return_value=[100]),
         ),
     ):
         library_service_cls.return_value.append_review_tag = append_review_tag
