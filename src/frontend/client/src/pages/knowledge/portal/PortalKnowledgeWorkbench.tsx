@@ -2204,6 +2204,55 @@ export default function PortalKnowledgeWorkbench() {
         return names.join("/");
     }, [activeGroup?.title, activeSpace?.name, selectedFile, selectedFileParentPath, sourceSpace]);
 
+    // Keep the URL in sync with the currently previewed file so that back navigation
+    // returns to the file's real folder instead of the entry position.
+    useEffect(() => {
+        if (!selectedFile?.spaceId || !selectedFile?.id || isFolder(selectedFile)) return;
+        const spaceId = String(selectedFile.spaceId);
+        const fileId = String(selectedFile.id);
+        const fileName = selectedFile.name;
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        const folderId = deepestFolder?.id || currentFolderId || "";
+        const folderName = deepestFolder?.name || currentFolderNode?.file.name || "";
+        if (
+            portalDeepLinkTarget &&
+            portalDeepLinkTarget.spaceId === spaceId &&
+            portalDeepLinkTarget.folderId === folderId &&
+            portalDeepLinkTarget.fileId === fileId &&
+            portalDeepLinkTarget.fileName === fileName
+        ) {
+            return;
+        }
+        setSearchParams(
+            (prev: URLSearchParams) => {
+                const next = new URLSearchParams(prev);
+                next.set("spaceId", spaceId);
+                if (folderId) {
+                    next.set("folderId", folderId);
+                    next.set("folderName", folderName);
+                } else {
+                    next.delete("folderId");
+                    next.delete("folderName");
+                }
+                next.set("fileId", fileId);
+                next.set("fileName", fileName);
+                next.delete("documentId");
+                next.delete("name");
+                next.delete("openNonce");
+                return next;
+            },
+            { replace: true },
+        );
+    }, [
+        currentFolderId,
+        currentFolderNode?.file.name,
+        portalDeepLinkTarget,
+        selectedFile,
+        selectedFileParentPath,
+        setSearchParams,
+    ]);
+
     const handleBackToFileList = useCallback(() => {
         setSelectedFile(null);
         setActivePanel(null);
