@@ -405,6 +405,30 @@ class TestSharedDualProjection:
         assert writer.calls == ["upsert_content", "update_membership"]
         assert loader.loaded == [CONTENT_FILE_ID]
 
+    async def test_content_upsert_falls_back_to_active_entry_chunks(
+        self, async_db_session: AsyncSession
+    ):
+        await _seed_shared_world(async_db_session)
+        writer = FakeSharedSpaceStorageWriter()
+        loaded: list[int] = []
+
+        async def loader(source_file: KnowledgeFile):
+            loaded.append(int(source_file.id))
+            return _two_chunks() if int(source_file.id) == 101 else []
+
+        service = _service(async_db_session, writer, chunk_loader=loader)
+        result = await service.process_entry(
+            tenant_id=TENANT,
+            entry_id=101,
+            lease_owner="fulltext-repair-fallback",
+            force_content_upsert=True,
+        )
+
+        assert result.status == "ready"
+        assert loaded == [CONTENT_FILE_ID, 101]
+        assert writer.calls == ["upsert_content", "update_membership"]
+        assert writer.chunk_count(TENANT, DOCUMENT_ID) == 2
+
     async def test_share_withdraw_reaggregates_membership_without_content(
         self, async_db_session: AsyncSession
     ):

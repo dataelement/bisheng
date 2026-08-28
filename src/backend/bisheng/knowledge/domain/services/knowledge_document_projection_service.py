@@ -463,6 +463,7 @@ class KnowledgeDocumentProjectionService:
         *,
         entry: KnowledgeFile,
         target: ProjectionTarget,
+        entries: Sequence[KnowledgeFile],
         knowledge_ids: tuple[int, ...],
     ) -> None:
         """Content projection (spec 3.7-A).
@@ -510,6 +511,27 @@ class KnowledgeDocumentProjectionService:
                 "shared content chunk loader is unavailable"
             )
         chunks = await self.shared_content_chunk_loader(content_file)
+        source_file_id = int(content_file.id)
+        if not chunks:
+            tried_file_ids = {source_file_id}
+            for candidate in entries:
+                candidate_id = int(candidate.id)
+                if candidate_id in tried_file_ids:
+                    continue
+                tried_file_ids.add(candidate_id)
+                chunks = await self.shared_content_chunk_loader(candidate)
+                if chunks:
+                    source_file_id = candidate_id
+                    logger.info(
+                        "shared content projection recovered chunks from active entry "
+                        "tenant_id=%s document_id=%s content_file_id=%s "
+                        "source_entry_id=%s",
+                        target.tenant_id,
+                        target.document_id,
+                        content_file.id,
+                        candidate_id,
+                    )
+                    break
         if not chunks:
             raise KnowledgeDocumentProjectionError(
                 "shared content projection received no chunks "
@@ -622,6 +644,7 @@ class KnowledgeDocumentProjectionService:
             await self._shared_upsert_content(
                 entry=entry,
                 target=target,
+                entries=entries,
                 knowledge_ids=knowledge_ids,
             )
         await self._shared_membership_rewrite(
