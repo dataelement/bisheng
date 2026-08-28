@@ -684,6 +684,21 @@ export default function PortalKnowledgeWorkbench() {
     }, [activeSpace?.id, confirm, getNextActiveSpace, queryClient, showToast]);
 
     const isActiveSpaceAdmin = activeSpace?.role === SpaceRole.CREATOR || activeSpace?.role === SpaceRole.ADMIN;
+    // Resolve the file's ancestor folder chain (used by postPortalLocation + URL
+    // sync effect). Defined early because both effects reference the result.
+    const { data: selectedFileParentPath, isLoading: isSelectedFileParentPathLoading } = useQuery<Array<{ id: string; name: string }>>({
+        queryKey: ["portalSelectedFileParentPath", selectedFile?.spaceId, selectedFile?.id],
+        queryFn: async () => {
+            const spaceId = selectedFile?.spaceId;
+            const fileId = selectedFile?.id;
+            if (!spaceId || !fileId) return [];
+            return getFolderParentPathApi(spaceId, fileId);
+        },
+        enabled: Boolean(selectedFile?.spaceId && selectedFile?.id),
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        placeholderData: (prev: Array<{ id: string; name: string }> | undefined) => prev,
+    });
     const currentFolderNode = useMemo(
         () => currentFolderId ? findTreeNode(treeNodes, currentFolderId) : null,
         [currentFolderId, treeNodes],
@@ -719,10 +734,31 @@ export default function PortalKnowledgeWorkbench() {
         ) {
             return;
         }
+        // When reporting a selected file, wait until the authoritative parent-path
+        // query has settled. Otherwise we report folderId="" first (because the
+        // deep link had no folder id and the tree hasn't navigated there yet)
+        // and then report the real folder id a moment later, which manifests to
+        // the user as TWO visible /knowledge-spaces?… URL jumps in the browser.
+        const isFilePreview = Boolean(selectedFile?.id && !isFolder(selectedFile));
+        if (isFilePreview && (isSelectedFileParentPathLoading || selectedFileParentPath === undefined)) {
+            return;
+        }
+        const parentFolders = selectedFileParentPath ?? [];
+        const deepestFolder = parentFolders[parentFolders.length - 1];
+        // When previewing a file, use the deepest folder returned by the
+        // parent-path API as the canonical folder id/name. It matches what the
+        // URL-sync effect writes into searchParams, so the parent frame gets
+        // the final address in ONE postMessage call (no intermediate URL jump).
+        const resolvedFolderId = isFilePreview
+            ? (deepestFolder?.id || currentFolderId)
+            : currentFolderId;
+        const resolvedFolderName = isFilePreview
+            ? (deepestFolder?.name || currentFolderNode?.file.name)
+            : (currentFolderId ? currentFolderNode?.file.name : undefined);
         const payload = {
             spaceId: String(activeSpace.id),
-            folderId: currentFolderId,
-            folderName: currentFolderId ? currentFolderNode?.file.name : undefined,
+            folderId: resolvedFolderId,
+            folderName: resolvedFolderId ? resolvedFolderName : undefined,
             fileId: selectedFile ? String(selectedFile.id) : undefined,
             fileName: selectedFile?.name,
         };
@@ -735,8 +771,10 @@ export default function PortalKnowledgeWorkbench() {
         currentFolderId,
         currentFolderNode,
         isDeepLinkRestoring,
+        isSelectedFileParentPathLoading,
         portalDeepLinkTarget?.fileId,
-        selectedFile?.id,
+        selectedFile,
+        selectedFileParentPath,
         selectedFile?.name,
         selectedFile?.spaceId,
     ]);
@@ -2248,20 +2286,6 @@ export default function PortalKnowledgeWorkbench() {
         placeholderData: (prev: KnowledgeSpace | undefined) => prev,
     });
 
-    const { data: selectedFileParentPath, isLoading: isSelectedFileParentPathLoading } = useQuery<Array<{ id: string; name: string }>>({
-        queryKey: ["portalSelectedFileParentPath", selectedFile?.spaceId, selectedFile?.id],
-        queryFn: async () => {
-            const spaceId = selectedFile?.spaceId;
-            const fileId = selectedFile?.id;
-            if (!spaceId || !fileId) return [];
-            return getFolderParentPathApi(spaceId, fileId);
-        },
-        enabled: Boolean(selectedFile?.spaceId && selectedFile?.id),
-        staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,
-        placeholderData: (prev: Array<{ id: string; name: string }> | undefined) => prev,
-    });
-
     const sourceSpace = sourceSpaceFromActive ?? sourceSpaceInfo;
 
     const documentPath = useMemo(() => {
@@ -2292,8 +2316,24 @@ export default function PortalKnowledgeWorkbench() {
 
     // Keep the URL in sync with the currently previewed file so that back navigation
     // returns to the file's real folder instead of the entry position.
+    //
+    // When a deep-link entry URL comes in without folderId/folderName (e.g. the
+    // 首钢门户 /knowledge-spaces?... page constructs the URL only with
+    // spaceId+fileId+fileName), we MUST wait until `selectedFileParentPath`
+    // finishes resolving before writing search params. Otherwise we write an
+    // intermediate, folder-less URL first, then write the real folder URL once
+    // the parent-path query settles, which changes `portalDeepLinkTarget.key`
+    // mid-restore, restarts the entire deep-link cycle, closes the AI drawer
+    // (because selectedFile churns), and causes TWO visible browser URL jumps
+    // via postPortalLocation reports to the parent frame.
     useEffect(() => {
         if (!selectedFile?.spaceId || !selectedFile?.id || isFolder(selectedFile)) return;
+        // Don't write a half-resolved URL when the file's real folder is still
+        // being looked up. `undefined` means the query hasn't fired yet; once
+        // enabled it transitions true→false exactly once per file, at which
+        // point selectedFileParentPath reflects the authoritative answer
+        // (empty array = file at space root, non-empty = deepest folder known).
+        if (isSelectedFileParentPathLoading || selectedFileParentPath === undefined) return;
         const spaceId = String(selectedFile.spaceId);
         const fileId = String(selectedFile.id);
         const fileName = selectedFile.name;
@@ -2311,10 +2351,10 @@ export default function PortalKnowledgeWorkbench() {
         if (
             portalDeepLinkTarget &&
             portalDeepLinkTarget.spaceId === spaceId &&
-            portalDeepLinkTarget.folderId === folderId &&
+            String(portalDeepLinkTarget.folderId || "") === String(folderId || "") &&
             portalDeepLinkTarget.fileId === fileId &&
             portalDeepLinkTarget.fileName === fileName &&
-            portalDeepLinkTarget.fromSearch === (isFromSearch ? "1" : "")
+            (portalDeepLinkTarget.fromSearch || "") === (isFromSearch ? "1" : "")
         ) {
             return;
         }
@@ -2346,6 +2386,7 @@ export default function PortalKnowledgeWorkbench() {
     }, [
         currentFolderId,
         currentFolderNode?.file.name,
+        isSelectedFileParentPathLoading,
         portalDeepLinkTarget,
         searchMode,
         searchResults,
