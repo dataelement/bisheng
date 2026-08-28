@@ -257,7 +257,6 @@ export default function PortalKnowledgeWorkbench() {
     const [folderDraft, setFolderDraft] = useState("新建文件夹");
     const [activePanel, setActivePanel] = useState<PanelKey | null>(null);
     const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
-    const [openAiAfterDeepLinkRestore, setOpenAiAfterDeepLinkRestore] = useState(false);
     const [summaryExpanded, setSummaryExpanded] = useState(false);
     const [tagModalOpen, setTagModalOpen] = useState(false);
     const [permissionOpen, setPermissionOpen] = useState(false);
@@ -453,34 +452,17 @@ export default function PortalKnowledgeWorkbench() {
         if (!selectedFile || String(selectedFile.id) !== portalDeepLinkTarget.fileId) return;
         if (preview.loading) return;
         setRestoringDeepLinkKey(null);
+        // Deep-link file entry (e.g. "进入知识库") opens the AI drawer by default.
+        // Search-result previews mark the URL with fromSearch=1 and keep it closed.
+        if (portalDeepLinkTarget.fromSearch === "1") return;
+        setAiDrawerOpen(true);
+        setActivePanel(null);
     }, [
         portalDeepLinkTarget,
         preview.error,
         preview.fileUrl,
         preview.loading,
         restoringDeepLinkKey,
-        selectedFile,
-    ]);
-
-    // Parent-driven "进入知识库" file deep links should open the AI drawer once restore finishes,
-    // regardless of whether the file lives at the root or inside a sub-folder.
-    useEffect(() => {
-        if (!openAiAfterDeepLinkRestore) return;
-        if (!portalDeepLinkTarget?.fileId || isDeepLinkRestoring) return;
-        if (
-            !selectedFile ||
-            String(selectedFile.id) !== portalDeepLinkTarget.fileId ||
-            String(selectedFile.spaceId) !== portalDeepLinkTarget.spaceId
-        ) {
-            return;
-        }
-        setAiDrawerOpen(true);
-        setActivePanel(null);
-        setOpenAiAfterDeepLinkRestore(false);
-    }, [
-        openAiAfterDeepLinkRestore,
-        isDeepLinkRestoring,
-        portalDeepLinkTarget,
         selectedFile,
         setActivePanel,
         setAiDrawerOpen,
@@ -1489,7 +1471,6 @@ export default function PortalKnowledgeWorkbench() {
                     next.set("openNonce", openNonce);
                     return next;
                 }, { replace: true });
-                setOpenAiAfterDeepLinkRestore(true);
             }
         };
         window.addEventListener("message", handlePortalMessage);
@@ -2185,6 +2166,7 @@ export default function PortalKnowledgeWorkbench() {
                     next.delete("folderName");
                     next.delete("fileId");
                     next.delete("fileName");
+                    next.delete("fromSearch");
                     next.delete("documentId");
                     next.delete("name");
                     next.delete("openNonce");
@@ -2269,12 +2251,20 @@ export default function PortalKnowledgeWorkbench() {
         const deepestFolder = parentFolders[parentFolders.length - 1];
         const folderId = deepestFolder?.id || currentFolderId || "";
         const folderName = deepestFolder?.name || currentFolderNode?.file.name || "";
+        const isFromSearch =
+            searchMode &&
+            searchResults.some(
+                (f) =>
+                    String(f.id) === String(selectedFile.id) &&
+                    String(f.spaceId) === String(selectedFile.spaceId),
+            );
         if (
             portalDeepLinkTarget &&
             portalDeepLinkTarget.spaceId === spaceId &&
             portalDeepLinkTarget.folderId === folderId &&
             portalDeepLinkTarget.fileId === fileId &&
-            portalDeepLinkTarget.fileName === fileName
+            portalDeepLinkTarget.fileName === fileName &&
+            portalDeepLinkTarget.fromSearch === (isFromSearch ? "1" : "")
         ) {
             return;
         }
@@ -2291,6 +2281,11 @@ export default function PortalKnowledgeWorkbench() {
                 }
                 next.set("fileId", fileId);
                 next.set("fileName", fileName);
+                if (isFromSearch) {
+                    next.set("fromSearch", "1");
+                } else {
+                    next.delete("fromSearch");
+                }
                 next.delete("documentId");
                 next.delete("name");
                 next.delete("openNonce");
@@ -2302,6 +2297,8 @@ export default function PortalKnowledgeWorkbench() {
         currentFolderId,
         currentFolderNode?.file.name,
         portalDeepLinkTarget,
+        searchMode,
+        searchResults,
         selectedFile,
         selectedFileParentPath,
         setSearchParams,
@@ -2311,7 +2308,6 @@ export default function PortalKnowledgeWorkbench() {
         setSelectedFile(null);
         setActivePanel(null);
         setAiDrawerOpen(false);
-        setOpenAiAfterDeepLinkRestore(false);
         setSummaryExpanded(false);
         setPreview({ loading: false, fileUrl: "", fileType: "", error: "", previewData: null });
         // Deep-link open used to leave searchMode with a single-file result set.
@@ -2346,6 +2342,7 @@ export default function PortalKnowledgeWorkbench() {
             }
             next.delete("fileId");
             next.delete("fileName");
+            next.delete("fromSearch");
             next.delete("documentId");
             next.delete("name");
             next.delete("openNonce");
