@@ -51,7 +51,7 @@ class TestGenerateAliasName:
             invoke_user_id=1,
             tenant_id=1,
         )
-        assert result == "2024 Q3 Report_v3.pdf"
+        assert result == "2024 Q3 Report-v3.pdf"
 
     @patch("bisheng.knowledge.domain.services.file_alias_name_generator.LLMService.get_knowledge_llm")
     @patch("bisheng.knowledge.domain.services.file_alias_name_generator.LLMService.get_bisheng_llm_sync")
@@ -109,7 +109,7 @@ class TestGenerateAliasName:
             invoke_user_id=1,
             tenant_id=1,
         )
-        assert result == "Clean Name_v2.docx"
+        assert result == "Clean Name-v2.docx"
 
     @patch("bisheng.knowledge.domain.services.file_alias_name_generator.LLMService.get_knowledge_llm")
     @patch("bisheng.knowledge.domain.services.file_alias_name_generator.LLMService.get_bisheng_llm_sync")

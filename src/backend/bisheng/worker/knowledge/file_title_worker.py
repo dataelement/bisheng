@@ -57,7 +57,7 @@ def extract_and_generate_alias(file_id: int) -> str | None:
                 logger.warning("title extraction skipped, download failed file_id={}", file_id)
                 return None
 
-            raw_title = FileTitleExtractorService.extract_title(local_path)
+            raw_title = FileTitleExtractorService.extract_title(local_path, original_file_name=db_file.file_name)
             logger.info(
                 "title extraction result file_id={} file_name={} raw_title={}",
                 file_id,
