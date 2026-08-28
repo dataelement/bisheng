@@ -649,6 +649,9 @@ export function ArticleList({
                                     onChannelSquare={onGoChannelSquare}
                                     infoContent={
                                         <div className="space-y-1.5 text-sm text-gray-800">
+                                            <div><span className="text-gray-400">{localize("com_subscription.channel_name_colon")}</span>
+                                                <p>{channelDetail?.name || channel.name}</p>
+                                            </div>
                                             <div><span className="text-gray-400">{localize("com_subscription.channel_description_colon")}</span>
                                                 <p>{channelDetail?.description || channel.description || "-"}</p>
                                             </div>
@@ -666,7 +669,7 @@ export function ArticleList({
                                 />
                             ) : (
                                 <h1
-                                    className="mx-auto max-w-[min(60%,600px)] truncate text-[32px] font-bold leading-[40px] text-text-1"
+                                    className="min-w-0 flex-1 truncate text-center text-[32px] font-bold leading-[40px] text-text-1"
                                     style={{ fontFamily: SERIF_FONT_STACK }}
                                 >
                                     {channelDetail?.name || channel.name}

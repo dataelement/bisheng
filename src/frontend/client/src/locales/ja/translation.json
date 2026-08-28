@@ -1603,6 +1603,7 @@
     "wechat_link_copy_tip": "記事右上の「···」をタップして「リンクをコピー」を選ぶか、「ブラウザで開く」を選んでアドレスバーの URL をコピーしてください。",
     "channel_content_needs_approval": "このチャンネルのコンテンツを表示するには承認が必要です",
     "channel_create_success": "チャンネルの作成に成功しました",
+    "channel_name_colon": "チャンネル名:",
     "channel_description_colon": "チャンネル説明:",
     "channel_dissolved": "チャンネルは解散されました",
     "channel_invalid_or_inaccessible": "このチャンネルは利用できないか削除されました",

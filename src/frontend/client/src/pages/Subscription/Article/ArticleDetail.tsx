@@ -211,8 +211,9 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
         : true;
     return (
         <div className="flex px-4 pt-5 flex-col h-full">
-            {/* Top Toolbar */}
-            <div className="border-b border-black pb-4">
+            {/* Top Toolbar — closed by a newspaper-style thick-thin double rule:
+                2px bottom border here + the 1px sibling line below. */}
+            <div className="border-b-2 border-text-2 pb-4">
                 {/* Mobile-only back button; the article title is intentionally hidden here
                     (it already appears inside the article content). */}
                 {isNarrowShell && onBack ? (
@@ -282,6 +283,8 @@ export function ArticleDetail({ article, loading = false, screenFull = false, sh
                     </div>
                 </div>
             </div>
+            {/* Thin second line of the double rule, 2px below the 2px one. */}
+            <div aria-hidden className="mt-[2px] shrink-0 border-b border-text-2" />
 
             {/* Iframe Content Area */}
             <div className="flex-1 bg-white relative">

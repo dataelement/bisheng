@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/Popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/Tooltip2";
 import { useLocalize } from "~/hooks";
 import { cn } from "~/utils";
+import { ChannelSquareTabs } from "../ChannelSquareTabs";
 import { useChannelActions } from "../hooks/useChannelActions";
 
 interface ChannelSwitcherProps {
@@ -274,7 +275,7 @@ export function ChannelSwitcher({
     }
 
     return (
-        <div className="relative flex h-10 w-full min-w-0 items-center">
+        <div className="flex h-10 w-full min-w-0 items-center gap-6">
             {/* Borderless 切换频道 + 创建频道 group. -ml-2 cancels the buttons' own px-2
                 so their labels sit optically flush with the 40px content edge. */}
             <div className="-ml-2 flex shrink-0 items-center gap-1">
@@ -322,13 +323,15 @@ export function ChannelSwitcher({
                     </button>
                 ) : null}
             </div>
-            {/* Centered channel-name title. Info tooltip is scoped to the name; the name
-                itself is not clickable — switching lives on the left button. */}
-            <div className="pointer-events-none absolute left-1/2 top-1/2 flex max-w-[min(60%,600px)] -translate-x-1/2 -translate-y-1/2">
+            {/* Centered channel-name title — a real flex sibling (24px gaps via the row's
+                gap-6), so it truncates to exactly the space its neighbours leave. Info
+                tooltip is scoped to the name; the name itself is not clickable —
+                switching lives on the left button. */}
+            <div className="flex min-w-0 flex-1 justify-center">
                 <Tooltip open={Boolean(infoContent) && infoOpen && !open} onOpenChange={setInfoOpen}>
                     <TooltipTrigger asChild>
                         <span
-                            className="pointer-events-auto truncate text-[32px] font-bold leading-[40px] text-text-1"
+                            className="max-w-full truncate text-[32px] font-bold leading-[40px] text-text-1"
                             style={{ fontFamily: SERIF_FONT_STACK }}
                             onMouseEnter={() => setInfoOpen(true)}
                             onMouseLeave={() => setInfoOpen(false)}
@@ -337,11 +340,17 @@ export function ChannelSwitcher({
                         </span>
                     </TooltipTrigger>
                     {infoContent ? (
-                        <TooltipContent noArrow side="bottom" align="start" className="w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-md">
+                        <TooltipContent noArrow side="bottom" align="center" className="rounded-lg w-[240px] max-w-md bg-white px-3 py-2 text-gray-800 shadow-popup">
                             {infoContent}
                         </TooltipContent>
                     ) : null}
                 </Tooltip>
+            </div>
+            {/* Invisible clone of the persistent 频道/广场 toggle (overlaid at the row's
+                right edge by Subscription/index): reserves exactly its width, so the
+                title keeps a real 24px gap to it and never slides underneath. */}
+            <div className="invisible shrink-0" aria-hidden>
+                <ChannelSquareTabs active="channel" />
             </div>
         </div>
     );

@@ -10,6 +10,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { cn } from "~/utils";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { ChannelSquareCard } from "../ChannelSquareCard";
+import { ChannelSquareTabs } from "./ChannelSquareTabs";
 import { SERIF_FONT_STACK } from "./ArticleList/ChannelSwitcher";
 
 type DiscoverStatus = "join" | "joined" | "pending" | "private";
@@ -243,16 +244,37 @@ export function ChannelDiscoveryHome({
                 </div>
             );
         }
-        // Match the content-view header title (ChannelSwitcher): same pt-5 offset,
-        // 32px bold serif #212121, centered. With no channel to show, the centered
-        // title keeps the module name (资讯订阅) instead of a channel name.
+        // Match the content-view header (ChannelSwitcher): same px-10/pt-5 offsets,
+        // borderless action on the left, centered 32px bold serif title. With no
+        // channel to show, the title keeps the module name (资讯订阅) and only the
+        // 创建频道 action remains (nothing to switch to).
         return (
-            <h1
-                className="shrink-0 px-10 pt-5 pb-4 text-center text-[32px] font-bold leading-[40px] text-text-1"
-                style={{ fontFamily: SERIF_FONT_STACK }}
-            >
-                {menuNames.channel}
-            </h1>
+            <div className="shrink-0 px-10 pt-5 pb-4">
+                <div className="flex h-10 w-full min-w-0 items-center gap-6">
+                    {/* -ml-2 cancels the button's own px-2 so the label sits optically
+                        flush with the 40px content edge (same as the channel page). */}
+                    <button
+                        type="button"
+                        onClick={onCreateChannel}
+                        className="-ml-2 flex shrink-0 items-center gap-1 rounded-md px-2 py-[5px] text-sm leading-[22px] text-text-2 outline-none transition-colors fine-pointer:hover:bg-fill-1 fine-pointer:hover:text-text-1"
+                    >
+                        <Outlined.Plus className="size-4 shrink-0" />
+                        <span>{localize("com_subscription.create_channel")}</span>
+                    </button>
+                    <h1
+                        className="min-w-0 flex-1 truncate text-center text-[32px] font-bold leading-[40px] text-text-1"
+                        style={{ fontFamily: SERIF_FONT_STACK }}
+                    >
+                        {menuNames.channel}
+                    </h1>
+                    {/* Invisible clone of the persistent 频道/广场 toggle (overlaid at the
+                        row's right edge by Subscription/index) — reserves its width so the
+                        centered title keeps a real 24px gap to it. */}
+                    <div className="invisible shrink-0" aria-hidden>
+                        <ChannelSquareTabs active="channel" />
+                    </div>
+                </div>
+            </div>
         );
     };
 

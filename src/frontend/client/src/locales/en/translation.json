@@ -1680,6 +1680,7 @@
     "wechat_link_copy_tip": "Tap \"···\" in the top-right corner of the article and choose \"Copy Link\", or choose \"Open in Browser\" and copy the URL from the address bar.",
     "channel_content_needs_approval": "Channel content requires approval to view",
     "channel_create_success": "Channel created successfully",
+    "channel_name_colon": "Channel name:",
     "channel_description_colon": "Channel description:",
     "channel_dissolved": "Channel dissolved",
     "channel_invalid_or_inaccessible": "This channel is no longer available or has been deleted",

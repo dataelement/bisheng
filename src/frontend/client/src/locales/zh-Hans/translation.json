@@ -1607,6 +1607,7 @@
     "wechat_link_copy_tip": "点击文章右上角「···」，选择「复制链接」，或选择「在浏览器打开」后复制地址栏中的链接。",
     "channel_content_needs_approval": "该频道内容需申请通过后方可查看",
     "channel_create_success": "频道创建成功",
+    "channel_name_colon": "频道名称：",
     "channel_description_colon": "频道描述：",
     "channel_dissolved": "频道已解散",
     "channel_invalid_or_inaccessible": "该频道已失效或被删除",
