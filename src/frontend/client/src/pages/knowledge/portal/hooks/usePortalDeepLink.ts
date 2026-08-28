@@ -18,6 +18,8 @@ export interface PortalDeepLinkTarget {
     fileName: string;
     /** Forces re-apply when the same file is opened again via postMessage. */
     openNonce: string;
+    /** Set to "1" when the file was selected from the global search results. */
+    fromSearch?: string;
     key: string;
 }
 
@@ -60,6 +62,7 @@ export const resolvePortalDeepLinkTarget = (searchParams: URLSearchParams): Port
     const fileId = getQueryValue(searchParams, ["fileId", "documentId", "document_id"]);
     const fileName = getQueryValue(searchParams, ["name", "fileName", "documentName", "document_name"]);
     const openNonce = getQueryValue(searchParams, ["openNonce", "open_nonce"]);
+    const fromSearch = getQueryValue(searchParams, ["fromSearch", "from_search"]);
     return {
         spaceId,
         folderId,
@@ -67,8 +70,9 @@ export const resolvePortalDeepLinkTarget = (searchParams: URLSearchParams): Port
         fileId,
         fileName,
         openNonce,
+        fromSearch,
         // openNonce lets postMessage re-open the same file after the preview was closed.
-        key: `${spaceId}:${folderId}:${folderName}:${fileId}:${fileName}:${openNonce}`,
+        key: `${spaceId}:${folderId}:${folderName}:${fileId}:${fileName}:${openNonce}:${fromSearch}`,
     };
 };
 
