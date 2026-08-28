@@ -695,6 +695,14 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
 
+                <TableHead
+                    className="relative bg-[#F3F4F6] p-0 text-right font-normal text-[15px] text-[#545A60]"
+                    style={{ width: columnWidths.totalCount, minWidth: columnWidths.totalCount, maxWidth: columnWidths.totalCount }}
+                >
+                    <div className="flex h-full items-center justify-end border-l pl-3 pr-3">
+                        操作
+                    </div>
+                </TableHead>
             </TableRow>
         </TableHeader>
     );
