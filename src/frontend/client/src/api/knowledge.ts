@@ -544,6 +544,8 @@ export interface KnowledgeFile {
     businessDomainCode?: string | null; // mapped from business_domain_code (file-level selection)
     summary?: string;
     isPendingApproval?: boolean;
+    /** True when the file has an active publish approval; UI locks every action except download. */
+    hasPendingPublishApproval?: boolean;
     version_no?: number;          // primary version number; absent for folders / legacy files
     is_multi_version?: boolean;   // true when the document has >=2 versions
     has_similar?: boolean;        // true when similar_status === 1 (pending review)
@@ -748,6 +750,7 @@ interface RawSpaceChild {
     approval_status?: string;
     approval_reason?: string;
     is_pending_approval?: boolean;
+    has_pending_publish_approval?: boolean;
     file_encoding?: string | null;
     abstract?: string | null;
     summary?: string | null;
@@ -1169,6 +1172,7 @@ export function mapChild(raw: any, spaceId: string): KnowledgeFile {
         approvalStatus: raw?.approval_status ?? undefined,
         approvalReason: raw?.approval_reason ?? undefined,
         isPendingApproval: Boolean(raw?.is_pending_approval),
+        hasPendingPublishApproval: Boolean(raw?.has_pending_publish_approval),
         fileEncoding: raw?.file_encoding ?? null,
         fileSubcategoryCode: raw?.file_subcategory_code ?? null,
         businessDomainCode: raw?.business_domain_code ?? null,

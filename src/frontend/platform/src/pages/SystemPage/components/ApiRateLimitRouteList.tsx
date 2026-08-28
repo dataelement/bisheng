@@ -10,6 +10,7 @@ import {
   DialogTitle
 } from "@/components/bs-ui/dialog"
 import { Input } from "@/components/bs-ui/input"
+import { generateUUID } from "@/utils"
 import AutoPagination from "@/components/bs-ui/pagination/autoPagination"
 import {
   Select,
@@ -71,7 +72,10 @@ interface ApiRateLimitRouteListProps {
 
 function newRule(): ApiRateLimitRouteRule {
   return {
-    id: crypto.randomUUID(),
+    // Not crypto.randomUUID(): browsers only expose it in a secure context, so
+    // it is undefined over plain http and adding a rule threw. 32 hex chars
+    // still parse as a UUID on the backend, which is what the rule id is typed as.
+    id: generateUUID(32),
     match_type: "METHOD_PATH",
     method: "GET",
     path: "",

@@ -14595,6 +14595,57 @@ class KnowledgeSpaceService(KnowledgeUtils):
             info[int(item.id)] = item_info
         return info
 
+    async def _find_pending_publish_approval_file_ids(self, res: list[KnowledgeFile]) -> set[int]:
+        """Return ids of files that have at least one active publish approval.
+
+        A publish approval instance keys its business resource as
+        ``"{canonical_document_id}:{target_space_id}"``, so files are matched
+        through their canonical document id (version row or
+        reference_document_id fallback). Any active status (pending /
+        exception / execute_failed) locks the file until the flow finishes.
+        """
+        file_items = [one for one in res if one.file_type != FileType.DIR.value]
+        if not file_items:
+            return set()
+
+        prefix_to_file_ids: dict[str, set[int]] = {}
+        doc_by_file: dict[int, int] = {}
+        if self.version_repo:
+            primary_versions = await self.version_repo.find_primary_versions_by_file_ids(
+                [int(one.id) for one in file_items]
+            )
+            doc_by_file = {
+                int(version.knowledge_file_id): int(version.document_id)
+                for version in primary_versions
+            }
+        for one in file_items:
+            document_id = doc_by_file.get(int(one.id))
+            if document_id is None and one.reference_document_id:
+                document_id = int(one.reference_document_id)
+            if document_id is None:
+                continue
+            # The trailing colon keeps "12:" from matching document "123".
+            prefix_to_file_ids.setdefault(f"{document_id}:", set()).add(int(one.id))
+        if not prefix_to_file_ids:
+            return set()
+
+        from bisheng.approval.domain.repositories.approval_instance_repository import (
+            ApprovalInstanceRepository,
+        )
+        from bisheng.approval.domain.services.shougang_approval_handler import FILE_PUBLISH_SCENARIO
+
+        matched_resource_ids = await ApprovalInstanceRepository.find_active_resource_ids_by_prefixes(
+            tenant_id=int(self.login_user.tenant_id),
+            scenario_code=FILE_PUBLISH_SCENARIO,
+            resource_id_prefixes=list(prefix_to_file_ids.keys()),
+        )
+        locked_file_ids: set[int] = set()
+        for resource_id in matched_resource_ids:
+            for prefix, file_ids in prefix_to_file_ids.items():
+                if resource_id.startswith(prefix):
+                    locked_file_ids.update(file_ids)
+        return locked_file_ids
+
     async def _handle_file_folder_extra_info(
         self,
         res: list[KnowledgeFile],
@@ -14645,6 +14696,14 @@ class KnowledgeSpaceService(KnowledgeUtils):
         )
         file_tags_ms = (time.perf_counter() - file_tags_start) * 1000
 
+        pending_publish_start = time.perf_counter()
+        pending_publish_file_ids = (
+            await self._find_pending_publish_approval_file_ids(res)
+            if enrich_files and file_ids
+            else set()
+        )
+        pending_publish_ms = (time.perf_counter() - pending_publish_start) * 1000
+
         serialize_start = time.perf_counter()
         result = []
         for one in res:
@@ -14676,6 +14735,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                     item["version_no"] = getattr(one, "_version_no", None)
                     item["is_multi_version"] = getattr(one, "_is_multi_version", False)
                     item["has_similar"] = getattr(one, "_has_similar", (one.similar_status == 1))
+                    # UI lock: file has a running publish approval, only download stays available.
+                    item["has_pending_publish_approval"] = int(one.id) in pending_publish_file_ids
                     safe_distribution_info = dict(distribution_info.get(int(one.id), {}))
                     safe_distribution_info.pop(
                         "_tag_source_file_id",
@@ -14697,7 +14758,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
         _logger.info(
             "knowledge_space_children_extra_info_perf items=%s folders=%s files=%s "
             "folder_count_mode=%s enrich_files=%s folder_counts_ms=%.1f "
-            "file_tags_ms=%.1f serialize_ms=%.1f total_ms=%.1f",
+            "file_tags_ms=%.1f pending_publish_ms=%.1f serialize_ms=%.1f total_ms=%.1f",
             len(res),
             len(folder_ids),
             len(file_ids),
@@ -14705,6 +14766,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             enrich_files,
             folder_counts_ms,
             file_tags_ms,
+            pending_publish_ms,
             (time.perf_counter() - serialize_start) * 1000,
             (time.perf_counter() - perf_start) * 1000,
         )
