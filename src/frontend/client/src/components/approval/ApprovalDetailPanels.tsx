@@ -31,12 +31,12 @@ export function DetailHeader({ title, status, instanceStatus, scope, serialNo, s
 }) {
   return (
     // Pinned to the top of the scrolling detail pane so the title/status/serial stay visible while the body scrolls.
-    <div className="sticky top-0 z-10 -mx-5 mb-5 border-b border-fill-2 bg-white px-5 pb-3 pt-3">
+    <div className="sticky top-0 z-10 -mx-5 mb-5 border-b border-fill-2 bg-white px-5 pb-3 pt-4">
       <div className="flex items-start gap-3">
         {/* Compact-only back control — sits to the left of the detail title, split by a short vertical divider.
-            h-6 matches the title line so the arrow centers against it under items-start. */}
+            h-8 matches the title line so the arrow centers against it under items-start. */}
         {onBack && (
-          <div className="flex h-6 shrink-0 items-center gap-3 md:hidden">
+          <div className="flex h-8 shrink-0 items-center gap-3 md:hidden">
             <button type="button" onClick={onBack} aria-label={localize("com_approval_back")} className="flex items-center text-text-3">
               <Outlined.ArrowLeft className="h-4 w-4" />
             </button>
@@ -46,7 +46,9 @@ export function DetailHeader({ title, status, instanceStatus, scope, serialNo, s
         {/* Title + serial share one column so the serial line aligns with the title, not the back arrow. */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
-            <h3 className="min-w-0 flex-1 text-[16px] font-semibold text-text-primary leading-snug">{title || "--"}</h3>
+            {/* Same line box as the list column's section heading (text-base/leading-8 at pt-4),
+                so both titles sit on one line across the two columns. */}
+            <h3 className="min-w-0 flex-1 text-base font-semibold leading-8 text-text-primary">{title || "--"}</h3>
             <StatusBadge status={status} instanceStatus={instanceStatus} scope={scope} localize={localize} />
           </div>
           <p className="mt-1.5 text-[13px] text-text-3">

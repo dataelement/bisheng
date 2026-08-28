@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { Tabs } from "@bisheng/ui";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   decideApprovalTaskApi,
   getApprovalInstanceDetailApi,
@@ -40,6 +41,12 @@ export interface ApprovalPaneProps {
   setCompactView: (view: "list" | "detail") => void;
   /** Fired after any action that can change the pending-task count. */
   onPendingCountMaybeChanged?: () => void;
+  /**
+   * Rendered at the top of the LIST column, not above the whole pane — the detail
+   * column then runs the full height of its container instead of starting below a
+   * full-width header strip.
+   */
+  listHeader?: ReactNode;
 }
 
 export function ApprovalPane({
@@ -49,6 +56,7 @@ export function ApprovalPane({
   compactView,
   setCompactView,
   onPendingCountMaybeChanged,
+  listHeader,
 }: ApprovalPaneProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
@@ -292,26 +300,32 @@ export function ApprovalPane({
     <>
             {/* Left list — hidden in compact detail view */}
             <div className={cn("flex min-h-0 flex-col border-r border-fill-2 bg-white", compactView === "detail" && "hidden md:flex")}>
-              <div className="flex gap-2 px-3 pt-3 pb-2">
-                {activeTab === "my_tasks"
-                  ? (["pending_me", "processed"] as TaskFilter[]).map((f) => (
-                      <button key={f} type="button"
-                        className={cn(
-                          "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-text-1",
-                          taskFilter === f ? "border-[#212121] text-text-1 font-medium" : "text-text-3 font-normal")}
-                        onClick={() => setTaskFilter(f)}>
-                        {f === "pending_me" ? localize("com_approval_task_filter_pending") : localize("com_approval_task_filter_processed")}
-                      </button>
-                    ))
-                  : (["in_progress", "completed"] as RequestsFilter[]).map((f) => (
-                      <button key={f} type="button"
-                        className={cn(
-                          "h-auto whitespace-nowrap rounded-none border-0 border-b-2 border-transparent bg-transparent px-2 py-[5px] text-sm leading-none transition-colors fine-pointer:hover:text-text-1",
-                          requestsFilter === f ? "border-[#212121] text-text-1 font-medium" : "text-text-3 font-normal")}
-                        onClick={() => setRequestsFilter(f)}>
-                        {f === "in_progress" ? localize("com_approval_status_pending") : localize("com_approval_tab_completed")}
-                      </button>
-                    ))}
+              {listHeader}
+              {/* 待我处理/已处理 · 审批中/已完成 — design-system Tabs (line type, ink
+                  variant: the surrounding column already draws its own edges, so no
+                  divider, and an accent here would fight the status badges in the list). */}
+              <div className="px-3 pt-3 pb-2">
+                <Tabs
+                  size="medium"
+                  variant="neutral"
+                  divider={false}
+                  items={
+                    activeTab === "my_tasks"
+                      ? [
+                          { key: "pending_me", label: localize("com_approval_task_filter_pending") },
+                          { key: "processed", label: localize("com_approval_task_filter_processed") },
+                        ]
+                      : [
+                          { key: "in_progress", label: localize("com_approval_status_pending") },
+                          { key: "completed", label: localize("com_approval_tab_completed") },
+                        ]
+                  }
+                  activeKey={activeTab === "my_tasks" ? taskFilter : requestsFilter}
+                  onChange={(key) => {
+                    if (activeTab === "my_tasks") setTaskFilter(key as TaskFilter);
+                    else setRequestsFilter(key as RequestsFilter);
+                  }}
+                />
               </div>
 
               {/* Search box — reuse the app-center search field style (always expanded + clear button) */}

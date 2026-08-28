@@ -203,22 +203,22 @@ export default function SettingsPage() {
   const paneTitleClass = "text-base font-semibold leading-8 text-text-1";
 
   const content = isApproval ? (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <h2 className={cn("hidden shrink-0 px-5 pt-4 md:block", paneTitleClass)}>
-        {sectionTitle}
-      </h2>
-      <div
-        className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)]"
-      >
-        <ApprovalPane
-          open
-          activeTab={approvalTab}
-          target={deepLink ?? undefined}
-          compactView={compactView}
-          setCompactView={setCompactView}
-          onPendingCountMaybeChanged={refreshCount}
-        />
-      </div>
+    // The title rides inside the list column (via listHeader), so the detail column
+    // runs the full height of the content panel instead of starting below a header strip.
+    <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[300px_minmax(0,1fr)]">
+      <ApprovalPane
+        open
+        activeTab={approvalTab}
+        target={deepLink ?? undefined}
+        compactView={compactView}
+        setCompactView={setCompactView}
+        onPendingCountMaybeChanged={refreshCount}
+        listHeader={
+          <h2 className={cn("hidden shrink-0 px-3 pt-4 md:block", paneTitleClass)}>
+            {sectionTitle}
+          </h2>
+        }
+      />
     </div>
   ) : isNotifications ? (
     // Same single-block shell as 账号信息 / 通用: one padded pane with a centered
