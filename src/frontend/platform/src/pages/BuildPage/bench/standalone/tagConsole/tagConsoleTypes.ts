@@ -8,7 +8,7 @@ import type {
 import { getWorkspaceClientUrl } from "@/utils/workspaceUrl"
 
 /** Which table the right panel is showing. */
-export type TagConsoleMode = "library" | "review"
+export type TagConsoleMode = "library" | "review" | "blacklist"
 
 /** Which listing the review panel's tab bar is on. */
 export type TagConsoleReviewTab = "pending" | "reviewed"
@@ -80,6 +80,11 @@ export function selectLibrary(state: TagConsoleSelection, libraryId: number): Ta
 /** Click the fixed "pending review" entry: enters review mode, clears libraries. */
 export function selectReviewEntry(): TagConsoleSelection {
     return { mode: "review", selectedLibraryIds: [] }
+}
+
+/** Click the fixed blacklist entry: enters blacklist mode, clears libraries. */
+export function selectBlacklistEntry(): TagConsoleSelection {
+    return { mode: "blacklist", selectedLibraryIds: [] }
 }
 
 /** Drop empty values so the backend does not receive `""` as a real filter. */

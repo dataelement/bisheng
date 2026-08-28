@@ -90,6 +90,7 @@ import { isFavoriteSpace } from "./favoriteView";
 import { buildPublicFileActionPermissions } from "./publicFilePermissions";
 import PortalFavoritesPanel from "./components/PortalFavoritesPanel";
 import { PortalDialogs } from "./components/PortalDialogs";
+import { PortalFileInfoEditModal } from "./components/PortalFileInfoEditModal";
 import { PortalHeaderActions } from "./components/PortalHeaderActions";
 import { PortalPreviewWorkspace } from "./components/PortalPreviewWorkspace";
 import { PortalUploadedFilesDrawer } from "./components/PortalUploadedFilesDrawer";
@@ -318,6 +319,7 @@ export default function PortalKnowledgeWorkbench() {
     // Download permission for the currently previewed file, returned authoritatively
     // by the preview endpoint (same gate the download endpoint enforces).
     const [selectedFileDownloadable, setSelectedFileDownloadable] = useState(false);
+    const [editInfoModalOpen, setEditInfoModalOpen] = useState(false);
     const [downloadPending, setDownloadPending] = useState(false);
     const downloadPendingRef = useRef(false);
     const activeSpaceIdRef = useRef<string | undefined>();
@@ -3116,11 +3118,34 @@ export default function PortalKnowledgeWorkbench() {
                         if (!canEditSelectedFileEncoding) return;
                         setTagModalOpen(true);
                     }}
+                    onOpenEditInfo={() => {
+                        if (!canEditSelectedFileEncoding) return;
+                        setEditInfoModalOpen(true);
+                    }}
                     onPanelChange={setActivePanel}
                     onToggleSummary={() => {
                         setActivePanel(null);
                         setSummaryExpanded((expanded) => !expanded);
                     }}
+                />
+            ) : null}
+
+            {selectedFile && activeSpace ? (
+                <PortalFileInfoEditModal
+                    open={editInfoModalOpen}
+                    onOpenChange={setEditInfoModalOpen}
+                    file={selectedFile}
+                    spaceId={String(selectedFile.spaceId || activeSpace.id)}
+                    fileCategoryGroups={fileCategoryGroups}
+                    businessDomainOptions={activeSpaceBusinessDomainOptions}
+                    encodingPrefix={fileEncodingPrefix}
+                    canEdit={canEditSelectedFileEncoding && !isActiveSpaceFavorite}
+                    onFileUpdated={(updater) => {
+                        if (selectedFile) {
+                            patchFileById(selectedFile.id, updater);
+                        }
+                    }}
+                    onUpdateEncoding={handleUpdateSelectedFileEncoding}
                 />
             ) : null}
 

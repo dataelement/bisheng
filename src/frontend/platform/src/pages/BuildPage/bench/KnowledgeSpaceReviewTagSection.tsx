@@ -14,6 +14,7 @@ import { Check, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ApproveReviewTagDialog } from "./reviewTag/ApproveReviewTagDialog";
+import { confirmRejectSkipBlacklist } from "./standalone/tagConsole/tagBlacklistConfirm";
 
 const PAGE_SIZE = 5;
 
@@ -132,8 +133,15 @@ export default function KnowledgeSpaceReviewTagSection({
 
     const handleReject = async (row: ReviewTagItem) => {
         if (!row.tag_name?.length) return;
+        const decision = await confirmRejectSkipBlacklist([row.tag_name], t);
+        if (!decision) return;
         const res = await captureAndAlertRequestErrorHoc(
-            approveOrRejectReviewTagApi({ tag_name: row.tag_name || "", status: 2, resource_type: row.resource_type || "" }),
+            approveOrRejectReviewTagApi({
+                tag_name: row.tag_name || "",
+                status: 2,
+                resource_type: row.resource_type || "",
+                skip_blacklist: decision.skipBlacklist,
+            }),
         );
         if (res) {
             toast({ variant: "success", description: t("build.rejected", "已拒绝") });

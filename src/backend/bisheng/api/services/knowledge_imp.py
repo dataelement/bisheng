@@ -50,7 +50,10 @@ from bisheng.knowledge.domain.schemas.knowledge_rag_schema import QAKnowledgeMet
 from bisheng.knowledge.domain.services.knowledge_fulltext_parse_hook import (
     persist_parse_result_with_fulltext_intent,
 )
-from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import KnowledgeSpaceAutoTagService
+from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
+    AUTO_TAG_MAX,
+    KnowledgeSpaceAutoTagService,
+)
 from bisheng.knowledge.domain.services.knowledge_space_review_tag_service import KnowledgeSpaceReviewTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
@@ -132,42 +135,68 @@ def delete_vector_files(file_ids: list[int], knowledge: Knowledge) -> bool:
     """Delete vector data andesDATA"""
     if not file_ids:
         return True
-    # F1.7: legacy per-file expr deletes (document_id in [...]) target the
-    # per-space collection. For a tenant-routed SPACE knowledge base the
-    # collection is the shared store keyed by canonical identity - legacy
-    # expr deletes are skipped there; shared content cleanup goes through the
-    # document projection tombstone flow (writer.delete_content).
+    # F1.7: protect the shared targets from legacy document_id deletes. Spaces
+    # migrated in place may still keep independent per-space stores as the
+    # parse/projection staging source, so routing alone is not proof that a
+    # concrete collection or index is shared.
     from bisheng.core.context.tenant import DEFAULT_TENANT_ID
-    from bisheng.knowledge.rag.shared_space_storage import resolve_space_shared_routing
+    from bisheng.knowledge.rag.shared_space_storage import (
+        resolve_space_shared_routing,
+        shared_collection_name,
+        shared_index_name,
+    )
 
-    if resolve_space_shared_routing(
-        int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID), knowledge.type
-    ) is not None:
+    tenant_id = int(getattr(knowledge, "tenant_id", None) or DEFAULT_TENANT_ID)
+    routing = resolve_space_shared_routing(tenant_id, knowledge.type)
+    shared_collection = None
+    shared_index = None
+    if routing is not None:
+        shared_collection = routing.collection_name or shared_collection_name(tenant_id)
+        shared_index = routing.index_name or shared_index_name(tenant_id)
+    uses_shared_collection = shared_collection is not None and knowledge.collection_name == shared_collection
+    knowledge_index = knowledge.index_name or knowledge.collection_name
+    uses_shared_index = shared_index is not None and knowledge_index == shared_index
+    if uses_shared_collection and uses_shared_index:
         logger.info(
-            "act=skip_legacy_vector_delete file_ids=%s knowledge_id=%s "
-            "(tenant-routed shared store; projection cleanup applies)",
+            "act=skip_legacy_vector_delete file_ids={} knowledge_id={} "
+            "(both storage targets are shared; projection cleanup applies)",
             file_ids,
             knowledge.id,
         )
         return True
     logger.info(f"delete_files file_ids={file_ids} knowledge_id={knowledge.id}")
-    logger.info("start init Milvus")
-    vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-        0, knowledge=knowledge, embeddings=FakeEmbeddings()
-    )
-    logger.info("start init ES")
-    es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
-    # Automatically close purchase order aftercollectionIf it does not exist, it will not
-    if vector_client.col:
-        vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
-    logger.info(f"delete_milvus file_ids={file_ids}")
-
-    if es_client.client.indices.exists(index=knowledge.index_name):
-        res = es_client.client.delete_by_query(
-            index=knowledge.index_name,
-            query={"terms": {"metadata.document_id": file_ids}},
+    if uses_shared_collection:
+        logger.info(
+            "act=skip_shared_milvus_delete file_ids={} knowledge_id={} collection={}",
+            file_ids,
+            knowledge.id,
+            knowledge.collection_name,
         )
-        logger.info(f"act=delete_es file_ids={file_ids} res={res}")
+    else:
+        logger.info("start init Milvus")
+        vector_client = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+            0, knowledge=knowledge, embeddings=FakeEmbeddings()
+        )
+        if vector_client.col:
+            vector_client.col.delete(expr=f"document_id in {file_ids}", timeout=10)
+        logger.info(f"delete_milvus file_ids={file_ids}")
+
+    if uses_shared_index:
+        logger.info(
+            "act=skip_shared_es_delete file_ids={} knowledge_id={} index={}",
+            file_ids,
+            knowledge.id,
+            knowledge_index,
+        )
+    else:
+        logger.info("start init ES")
+        es_client = KnowledgeRag.init_knowledge_es_vectorstore_sync(knowledge=knowledge)
+        if es_client.client.indices.exists(index=knowledge_index):
+            res = es_client.client.delete_by_query(
+                index=knowledge_index,
+                query={"terms": {"metadata.document_id": file_ids}},
+            )
+            logger.info(f"act=delete_es file_ids={file_ids} res={res}")
 
     return True
 
@@ -338,31 +367,46 @@ def addEmbedding(
             pipeline_result = knowledge_file_pipeline.run()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
 
-            # Link A (approved tags): always attempt; gated inside _should_run (not by auto_tag_enabled).
-            link_a_applied_tag_count = KnowledgeSpaceAutoTagService.apply_after_upload_parse(
-                knowledge=knowledge_info,
-                db_file=db_file,
-                documents=pipeline_result.documents,
-            )
             from bisheng.api.services.workstation import WorkStationService
 
             cfg, inherited, source_tenant_id, has_override = WorkStationService.query_knowledge_space_config_with_meta()
+            enable_auto_tags = bool(getattr(cfg, "auto_tag_visible", True)) if cfg else True
             enable_pending_review_tags = bool(getattr(cfg, "review_tag_visible", True)) if cfg else True
-
-            if enable_pending_review_tags and KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(
-                link_a_applied_tag_count
-            ):
-                KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(
+            link_a_applied_tag_count = 0
+            if enable_auto_tags:
+                link_a_applied_tag_count = KnowledgeSpaceAutoTagService.apply_after_upload_parse(
                     knowledge=knowledge_info,
                     db_file=db_file,
                     documents=pipeline_result.documents,
                 )
-            elif enable_pending_review_tags:
+                if enable_pending_review_tags and KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(
+                    link_a_applied_tag_count
+                ):
+                    KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(
+                        knowledge=knowledge_info,
+                        db_file=db_file,
+                        documents=pipeline_result.documents,
+                        max_new_tags=max(0, AUTO_TAG_MAX - link_a_applied_tag_count),
+                    )
+                elif enable_pending_review_tags:
+                    logger.info(
+                        "review_tag_skip_link_a_tag_limit space_id={} file_id={} link_a_applied_tag_count={}",
+                        knowledge_info.id,
+                        db_file.id,
+                        link_a_applied_tag_count,
+                    )
+            else:
                 logger.info(
-                    "review_tag_skip_link_a_tag_limit space_id={} file_id={} link_a_applied_tag_count={}",
+                    "auto_tag_skip_master_switch_off space_id={} file_id={}",
                     knowledge_info.id,
                     db_file.id,
-                    link_a_applied_tag_count,
+                )
+            if knowledge_info.type == KnowledgeTypeEnum.SPACE.value:
+                KnowledgeSpaceAutoTagService.generate_recommended_tags_after_parse(
+                    knowledge=knowledge_info,
+                    db_file=db_file,
+                    documents=pipeline_result.documents,
+                    persist=True,
                 )
             status = "success"
         except EtlException as e:

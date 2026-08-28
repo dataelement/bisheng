@@ -14,7 +14,7 @@ import {
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
 import { cname } from "@/components/bs-ui/utils"
-import { ClipboardCheck, GripVertical, Pencil, Plus, Trash2 } from "lucide-react"
+import { Ban, ClipboardCheck, GripVertical, Pencil, Plus, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { DragDropContext, Draggable, Droppable, type DropResult } from "react-beautiful-dnd"
 import { useTranslation } from "react-i18next"
@@ -29,6 +29,7 @@ interface TagLibraryPanelProps {
     pendingCount: number
     onSelectLibrary: (libraryId: number) => void
     onSelectReviewEntry: () => void
+    onSelectBlacklistEntry: () => void
     /** Bubbles up so the right panel can drop a library that no longer exists. */
     onLibrariesChanged: (libraries: KnowledgeSpaceTagLibraryListItem[]) => void
     /**
@@ -47,6 +48,7 @@ export function TagLibraryPanel({
     pendingCount,
     onSelectLibrary,
     onSelectReviewEntry,
+    onSelectBlacklistEntry,
     onLibrariesChanged,
     refreshToken,
 }: TagLibraryPanelProps) {
@@ -193,6 +195,22 @@ export function TagLibraryPanel({
                 {pendingCount > 0 && (
                     <span className="rounded-full bg-[#F53F3F] px-2 py-0.5 text-xs text-white">{pendingCount}</span>
                 )}
+            </button>
+
+            <button
+                type="button"
+                onClick={onSelectBlacklistEntry}
+                className={cname(
+                    "flex items-center justify-between border-l-[3px] border-b border-b-[#E5E6EB] px-4 py-3 text-left text-sm transition-colors",
+                    mode === "blacklist"
+                        ? "border-l-primary bg-primary/10 font-medium text-primary"
+                        : "border-l-transparent hover:bg-[#F2F3F5]",
+                )}
+            >
+                <span className="flex items-center gap-2">
+                    <Ban className="size-4" />
+                    {t("build.tagConsole.blacklistEntry", "标签黑名单")}
+                </span>
             </button>
 
             <div className="flex-1 overflow-y-auto">
