@@ -42,24 +42,48 @@ from bisheng.shougang_portal_config.domain.repositories.interfaces.portal_admin_
 from bisheng.shougang_portal_config.domain.schemas.portal_config_schema import ShougangPortalAdminConfig
 
 AUTO_TAG_MAX_CONTENT = 3000
+AUTO_TAG_MIN = 3
+AUTO_TAG_MAX = 5
 AUTO_TAG_MAX_LIBRARY_MATCH = 5
 AUTO_TAG_MAX_AI_TAGS_PER_FILE = 5
 AUTO_TAG_LINK_B_MAX_LINK_A_TAGS = 3
+RECOMMEND_TAG_MAX = 10
+RECOMMENDED_TAGS_METADATA_KEY = "_recommended_tags"
 DEFAULT_AUTO_TAG_SYSTEM_PROMPT = (
     "你是文件自动标签分类器。只能从候选标签中选择最相关的标签，最多返回 5 个标签。\n"
     "请结合文件的业务域、文件分类与文件内容选择标签。\n"
     '输出格式要求严格遵循 JSON：有合适标签时输出 {"tags": ["标签名"]}；'
     '没有合适标签时输出 {"tags": []}。'
 )
+DEFAULT_RECOMMEND_TAG_SYSTEM_PROMPT = (
+    "你是文件标签推荐器。只能从候选标签中选择与文件内容最相关的标签，必须返回 10 个。\n"
+    "请结合文件的业务域、文件分类与文件内容选择标签。\n"
+    '输出格式要求严格遵循 JSON：输出 {"tags": ["标签名", ...]}，tags 必须恰好包含 10 个标签。'
+)
 AUTO_TAG_CONTEXT_INSTRUCTION = (
     '请结合上述业务域、文件分类与文件内容，从候选标签中选择最相关的标签；若无合适标签则输出 {"tags": []}。'
+)
+RECOMMEND_CONTEXT_INSTRUCTION = (
+    "请结合上述业务域、文件分类与文件内容，从候选标签中必须选出 10 个最相关的标签。"
 )
 
 
 class KnowledgeSpaceAutoTagService:
     @classmethod
+    def is_tenant_auto_tag_enabled(cls) -> bool:
+        """Tenant master switch (config key auto_tag_visible). Fail open on read errors."""
+        try:
+            from bisheng.api.services.workstation import WorkStationService
+
+            cfg, *_rest = WorkStationService.query_knowledge_space_config_with_meta()
+            return bool(getattr(cfg, "auto_tag_visible", True)) if cfg else True
+        except Exception:
+            logger.exception("auto_tag_master_switch_read_failed")
+            return True
+
+    @classmethod
     def should_run_link_b_after_link_a(cls, link_a_applied_tag_count: int) -> bool:
-        return link_a_applied_tag_count <= AUTO_TAG_LINK_B_MAX_LINK_A_TAGS
+        return link_a_applied_tag_count < AUTO_TAG_MIN
 
     @classmethod
     def apply_after_upload_parse(
@@ -70,17 +94,6 @@ class KnowledgeSpaceAutoTagService:
     ) -> int:
         try:
             if not cls._should_run(knowledge, db_file):
-                return 0
-
-            library_ids = cls._resolve_library_ids(knowledge)
-            manual_tags, ai_tags = cls._collect_library_tags(library_ids)
-            if not manual_tags and not ai_tags:
-                logger.info(
-                    "auto_tag_skip_empty_library space_id={} file_id={} library_ids={}",
-                    knowledge.id,
-                    db_file.id,
-                    library_ids,
-                )
                 return 0
 
             llm_config = LLMService.get_knowledge_llm(tenant_id=db_file.tenant_id)
@@ -109,46 +122,46 @@ class KnowledgeSpaceAutoTagService:
                 db_file,
             )
 
-            tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
-            selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
-            matched, ai_matched = cls._match_library_tags(selected, manual_tags, ai_tags)
-            if not matched and not ai_matched:
-                logger.info("auto_tag_no_match space_id={} file_id={}", knowledge.id, db_file.id)
-                return 0
-            applied_count = 0
-            # Write each resource type independently: an empty manual match must not
-            # prevent AI-tag matches (or vice versa) from being applied.
-            if matched:
-                cls._append_file_tags(
-                    space_id=knowledge.id,
-                    file_id=db_file.id,
-                    tag_names=matched,
-                    user_id=db_file.user_id or 0,
-                    tenant_id=db_file.tenant_id,
-                    resource_type=TagResourceTypeEnum.SYSTEM_TAG,
+            bound_ids = cls._resolve_library_ids(knowledge)
+            applied_names: list[str] = []
+            applied_names.extend(
+                cls._select_and_apply_from_library_ids(
+                    knowledge=knowledge,
+                    db_file=db_file,
+                    llm=llm,
+                    text=text,
+                    system_prompt=system_prompt,
+                    library_ids=bound_ids,
+                    exclude_names=applied_names,
+                    max_count=AUTO_TAG_MAX,
                 )
-                applied_count += len(matched)
-            if ai_matched:
-                ai_matched = cls._cap_ai_tags_for_file(db_file.id, ai_matched)
-            if ai_matched:
-                cls._append_file_tags(
-                    space_id=knowledge.id,
-                    file_id=db_file.id,
-                    tag_names=ai_matched,
-                    user_id=db_file.user_id or 0,
-                    tenant_id=db_file.tenant_id,
-                    resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+            )
+            if len(applied_names) >= AUTO_TAG_MIN:
+                return len(applied_names)
+
+            unbound_ids = cls._resolve_unbound_public_library_ids(knowledge, bound_ids)
+            remaining = AUTO_TAG_MAX - len(applied_names)
+            applied_names.extend(
+                cls._select_and_apply_from_library_ids(
+                    knowledge=knowledge,
+                    db_file=db_file,
+                    llm=llm,
+                    text=text,
+                    system_prompt=system_prompt,
+                    library_ids=unbound_ids,
+                    exclude_names=applied_names,
+                    max_count=remaining,
                 )
-                applied_count += len(ai_matched)
+            )
             logger.info(
-                "auto_tag_success space_id={} file_id={} matched={} ai_matched={} applied_count={}",
+                "auto_tag_waterfall_done space_id={} file_id={} applied_count={} bound_ids={} unbound_ids={}",
                 knowledge.id,
                 db_file.id,
-                matched,
-                ai_matched,
-                applied_count,
+                len(applied_names),
+                bound_ids,
+                unbound_ids,
             )
-            return applied_count
+            return len(applied_names)
         except Exception:
             logger.exception(
                 "auto_tag_failed space_id={} file_id={}",
@@ -158,11 +171,228 @@ class KnowledgeSpaceAutoTagService:
             return 0
 
     @classmethod
+    def recommend_bound_library_tags_sync(
+        cls,
+        knowledge: Knowledge,
+        db_file: KnowledgeFile,
+        *,
+        exclude_names: Sequence[str] | None = None,
+        documents: Sequence[Document] | None = None,
+        limit: int = RECOMMEND_TAG_MAX,
+    ) -> list[str]:
+        bound_ids = cls._resolve_library_ids(knowledge)
+        if not bound_ids:
+            return []
+        excluded = {name.strip() for name in (exclude_names or []) if str(name).strip()}
+        manual_tags, ai_tags = cls._collect_library_tags(bound_ids)
+        candidates = [tag for tag in dict.fromkeys(manual_tags + ai_tags) if tag and tag not in excluded]
+        if not candidates:
+            return []
+        if len(candidates) <= limit:
+            return list(candidates)
+
+        llm_config = LLMService.get_knowledge_llm(tenant_id=db_file.tenant_id)
+        if not llm_config.extract_title_model_id:
+            return []
+        text = cls._collect_content(documents, db_file)
+        if not text:
+            return []
+        llm = LLMService.get_bisheng_llm_sync(
+            model_id=llm_config.extract_title_model_id,
+            app_id=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+            app_name=ApplicationTypeEnum.KNOWLEDGE_BASE.value,
+            app_type=ApplicationTypeEnum.KNOWLEDGE_BASE,
+            user_id=db_file.user_id,
+            temperature=0,
+        )
+        system_prompt = cls._build_file_context_system_prompt(
+            DEFAULT_RECOMMEND_TAG_SYSTEM_PROMPT,
+            db_file,
+            RECOMMEND_CONTEXT_INSTRUCTION,
+        )
+        selected = cls._invoke_llm(llm, text, candidates, system_prompt)
+        allowed = set(candidates)
+        result: list[str] = []
+        for tag in selected:
+            if tag in allowed and tag not in result:
+                result.append(tag)
+            if len(result) >= limit:
+                break
+        if len(result) < limit:
+            for tag in candidates:
+                if tag not in result:
+                    result.append(tag)
+                if len(result) >= limit:
+                    break
+        return result
+
+    @classmethod
+    def generate_recommended_tags_after_parse(
+        cls,
+        knowledge: Knowledge,
+        db_file: KnowledgeFile,
+        documents: Sequence[Document] | None = None,
+        *,
+        persist: bool = False,
+    ) -> list[str]:
+        """Generate up to 10 bound-library recommendations after parse. Does not apply tags."""
+        try:
+            if not knowledge or not db_file or knowledge.type != KnowledgeTypeEnum.SPACE.value:
+                return []
+            if db_file.file_type != FileType.FILE.value:
+                return []
+            applied = cls._list_file_applied_tag_names(int(db_file.id)) if db_file.id else []
+            names = cls.recommend_bound_library_tags_sync(
+                knowledge,
+                db_file,
+                exclude_names=applied,
+                documents=documents,
+            )
+            if persist:
+                cls.persist_recommended_tag_names(db_file, names)
+            else:
+                cls._set_recommended_tag_names(db_file, names)
+            logger.info(
+                "recommend_tags_generated space_id={} file_id={} count={} excluded={}",
+                knowledge.id,
+                db_file.id,
+                len(names),
+                len(applied),
+            )
+            return names
+        except Exception:
+            # Best-effort: parse success must not depend on recommendation generation.
+            logger.exception(
+                "recommend_tags_generate_failed space_id={} file_id={}",
+                getattr(knowledge, "id", None),
+                getattr(db_file, "id", None),
+            )
+            return []
+
+    @classmethod
+    def read_recommended_tag_names(cls, db_file: KnowledgeFile) -> list[str] | None:
+        raw = (db_file.user_metadata or {}).get(RECOMMENDED_TAGS_METADATA_KEY)
+        if raw is None:
+            return None
+        if not isinstance(raw, list):
+            return []
+        return [str(name).strip() for name in raw if str(name).strip()]
+
+    @classmethod
+    def persist_recommended_tag_names(cls, db_file: KnowledgeFile, names: list[str]) -> None:
+        cls._set_recommended_tag_names(db_file, names)
+        file_id = getattr(db_file, "id", None)
+        if file_id is None:
+            return
+        with get_sync_db_session() as session:
+            row = session.get(KnowledgeFile, int(file_id))
+            if row is None:
+                return
+            metadata = dict(row.user_metadata or {})
+            metadata[RECOMMENDED_TAGS_METADATA_KEY] = list(names)
+            row.user_metadata = metadata
+            session.add(row)
+            session.commit()
+
+    @staticmethod
+    def _set_recommended_tag_names(db_file: KnowledgeFile, names: list[str]) -> None:
+        metadata = dict(db_file.user_metadata or {})
+        metadata[RECOMMENDED_TAGS_METADATA_KEY] = list(names)
+        db_file.user_metadata = metadata
+
+    @classmethod
+    def _list_file_applied_tag_names(cls, file_id: int) -> list[str]:
+        file_id_str = str(file_id)
+        names: list[str] = []
+        with get_sync_db_session() as session:
+            approved = session.exec(
+                select(Tag.name)
+                .join(TagLink, TagLink.tag_id == Tag.id)
+                .where(
+                    TagLink.resource_id == file_id_str,
+                    TagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                    Tag.name.is_not(None),
+                )
+            ).all()
+            pending = session.exec(
+                select(ReviewTag.name)
+                .join(ReviewTagLink, ReviewTagLink.tag_id == ReviewTag.id)
+                .where(
+                    ReviewTagLink.resource_id == file_id_str,
+                    ReviewTagLink.resource_type == ResourceTypeEnum.SPACE_FILE.value,
+                    ReviewTagLink.is_deleted == False,  # noqa: E712
+                    ReviewTag.review_status == 0,
+                    ReviewTag.is_deleted == False,  # noqa: E712
+                    ReviewTag.name.is_not(None),
+                )
+            ).all()
+        for raw in list(approved) + list(pending):
+            name = str(raw or "").strip()
+            if name and name not in names:
+                names.append(name)
+        return names
+
+    @classmethod
+    def _select_and_apply_from_library_ids(
+        cls,
+        *,
+        knowledge: Knowledge,
+        db_file: KnowledgeFile,
+        llm,
+        text: str,
+        system_prompt: str,
+        library_ids: list[int],
+        exclude_names: Sequence[str],
+        max_count: int,
+    ) -> list[str]:
+        if not library_ids or max_count <= 0:
+            return []
+        excluded = {name.strip() for name in exclude_names if str(name).strip()}
+        manual_tags, ai_tags = cls._collect_library_tags(library_ids)
+        manual_tags = [tag for tag in manual_tags if tag not in excluded]
+        ai_tags = [tag for tag in ai_tags if tag not in excluded]
+        if not manual_tags and not ai_tags:
+            return []
+        tags_list = list(dict.fromkeys(tag for tag in manual_tags + ai_tags if tag))
+        selected = cls._invoke_llm(llm, text, tags_list, system_prompt)
+        matched, ai_matched = cls._match_library_tags(selected, manual_tags, ai_tags)
+        matched = matched[:max_count]
+        remaining = max_count - len(matched)
+        ai_matched = ai_matched[:remaining]
+        applied: list[str] = []
+        if matched:
+            cls._append_file_tags(
+                space_id=knowledge.id,
+                file_id=db_file.id,
+                tag_names=matched,
+                user_id=db_file.user_id or 0,
+                tenant_id=db_file.tenant_id,
+                resource_type=TagResourceTypeEnum.SYSTEM_TAG,
+            )
+            applied.extend(matched)
+        if ai_matched:
+            ai_matched = cls._cap_ai_tags_for_file(db_file.id, ai_matched)
+        if ai_matched:
+            cls._append_file_tags(
+                space_id=knowledge.id,
+                file_id=db_file.id,
+                tag_names=ai_matched,
+                user_id=db_file.user_id or 0,
+                tenant_id=db_file.tenant_id,
+                resource_type=TagResourceTypeEnum.AI_AUTO_TAG,
+            )
+            applied.extend(ai_matched)
+        return applied
+
+    @classmethod
     def _resolve_library_ids(cls, knowledge: Knowledge) -> list[int]:
-        library_ids = KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(int(knowledge.id))
-        if library_ids:
-            return library_ids
-        return [1]
+        return KnowledgeTagLibraryLinkDao.list_library_ids_by_knowledge(int(knowledge.id))
+
+    @classmethod
+    def _resolve_unbound_public_library_ids(cls, knowledge: Knowledge, bound_ids: list[int]) -> list[int]:
+        bound = {int(library_id) for library_id in bound_ids}
+        public_ids = KnowledgeSpaceTagLibraryDao.list_public_ids_by_tenant_sync(getattr(knowledge, "tenant_id", None))
+        return [library_id for library_id in public_ids if library_id not in bound]
 
     @classmethod
     def _collect_library_tags(cls, library_ids: list[int]) -> tuple[list[str], list[str]]:
@@ -188,14 +418,11 @@ class KnowledgeSpaceAutoTagService:
     def _should_run(knowledge: Knowledge, db_file: KnowledgeFile) -> bool:
         if not knowledge or not db_file:
             return False
-        # Align with _resolve_library_ids: an explicit binding OR the default
-        # library fallback both provide candidate tags. Link A (approved tags)
-        # must run whenever candidates are resolvable, independent of the
-        # space-level "auto tag generation" switch (that switch gates link B).
-        has_libraries = bool(KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge))
+        # Link A runs whenever the tenant master switch is on. Binding is optional:
+        # unbound spaces still pick from other public libraries.
         return (
-            knowledge.type == KnowledgeTypeEnum.SPACE.value
-            and has_libraries
+            KnowledgeSpaceAutoTagService.is_tenant_auto_tag_enabled()
+            and knowledge.type == KnowledgeTypeEnum.SPACE.value
             and db_file.file_type == FileType.FILE.value
             and db_file.status == KnowledgeFileStatus.SUCCESS.value
             and db_file.file_source in {FileSource.UPLOAD.value, FileSource.SPACE_UPLOAD.value}

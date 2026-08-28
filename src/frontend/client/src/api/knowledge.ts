@@ -371,18 +371,12 @@ export function isBoundLibraryTagName(
 
 export type SpaceTagAddHint = "under_review" | "exists_in_other_library";
 
-/** Hint when user adds a tag that is pending review or exists in an unbound library. */
+/** Hint when user adds a pending-review tag. Unbound library tags are allowed. */
 export function resolveSpaceTagAddHint(
     tag: SpaceTag,
-    recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
+    _recommendedTags: Array<Pick<KnowledgeSpaceTagLibraryTagItem, "name">> = [],
 ): SpaceTagAddHint | null {
     if (tag.review_status === 0) {
-        return "under_review";
-    }
-    if (isLibrarySpaceTag(tag) && !isBoundLibraryTagName(tag.name, recommendedTags)) {
-        return "exists_in_other_library";
-    }
-    if (!isLibrarySpaceTag(tag) && (tag.review_status === undefined || tag.review_status === null)) {
         return "under_review";
     }
     return null;
@@ -2105,6 +2099,24 @@ export async function lookupSpaceTagApi(space_id: string, tag_name: string): Pro
         return null;
     }
     return raw as SpaceTag;
+}
+
+/**
+ * Recommend up to 10 bound-library tags for a file.
+ * Uses parse-time cache unless refresh is true.
+ * Backend: POST /api/v1/knowledge/space/{space_id}/files/{file_id}/tag/recommend
+ */
+export async function recommendFileTagsApi(
+    space_id: string,
+    file_id: string,
+    exclude_names: string[] = [],
+    refresh = false,
+): Promise<SpaceTag[]> {
+    const res = await request.post<ApiResponse<SpaceTag[]>>(
+        `/api/v1/knowledge/space/${space_id}/files/${file_id}/tag/recommend`,
+        { exclude_names, refresh },
+    );
+    return extractList<SpaceTag>(res?.data);
 }
 
 /**

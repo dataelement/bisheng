@@ -50,7 +50,10 @@ from bisheng.knowledge.domain.schemas.knowledge_rag_schema import QAKnowledgeMet
 from bisheng.knowledge.domain.services.knowledge_fulltext_parse_hook import (
     persist_parse_result_with_fulltext_intent,
 )
-from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import KnowledgeSpaceAutoTagService
+from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
+    AUTO_TAG_MAX,
+    KnowledgeSpaceAutoTagService,
+)
 from bisheng.knowledge.domain.services.knowledge_space_review_tag_service import KnowledgeSpaceReviewTagService
 from bisheng.knowledge.domain.services.knowledge_utils import KnowledgeUtils
 from bisheng.knowledge.rag.knowledge_file_pipeline import KnowledgeFilePipeline
@@ -364,31 +367,46 @@ def addEmbedding(
             pipeline_result = knowledge_file_pipeline.run()
             db_file.status = KnowledgeFileStatus.SUCCESS.value
 
-            # Link A (approved tags): always attempt; gated inside _should_run (not by auto_tag_enabled).
-            link_a_applied_tag_count = KnowledgeSpaceAutoTagService.apply_after_upload_parse(
-                knowledge=knowledge_info,
-                db_file=db_file,
-                documents=pipeline_result.documents,
-            )
             from bisheng.api.services.workstation import WorkStationService
 
             cfg, inherited, source_tenant_id, has_override = WorkStationService.query_knowledge_space_config_with_meta()
+            enable_auto_tags = bool(getattr(cfg, "auto_tag_visible", True)) if cfg else True
             enable_pending_review_tags = bool(getattr(cfg, "review_tag_visible", True)) if cfg else True
-
-            if enable_pending_review_tags and KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(
-                link_a_applied_tag_count
-            ):
-                KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(
+            link_a_applied_tag_count = 0
+            if enable_auto_tags:
+                link_a_applied_tag_count = KnowledgeSpaceAutoTagService.apply_after_upload_parse(
                     knowledge=knowledge_info,
                     db_file=db_file,
                     documents=pipeline_result.documents,
                 )
-            elif enable_pending_review_tags:
+                if enable_pending_review_tags and KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(
+                    link_a_applied_tag_count
+                ):
+                    KnowledgeSpaceReviewTagService.apply_after_review_upload_parse(
+                        knowledge=knowledge_info,
+                        db_file=db_file,
+                        documents=pipeline_result.documents,
+                        max_new_tags=max(0, AUTO_TAG_MAX - link_a_applied_tag_count),
+                    )
+                elif enable_pending_review_tags:
+                    logger.info(
+                        "review_tag_skip_link_a_tag_limit space_id={} file_id={} link_a_applied_tag_count={}",
+                        knowledge_info.id,
+                        db_file.id,
+                        link_a_applied_tag_count,
+                    )
+            else:
                 logger.info(
-                    "review_tag_skip_link_a_tag_limit space_id={} file_id={} link_a_applied_tag_count={}",
+                    "auto_tag_skip_master_switch_off space_id={} file_id={}",
                     knowledge_info.id,
                     db_file.id,
-                    link_a_applied_tag_count,
+                )
+            if knowledge_info.type == KnowledgeTypeEnum.SPACE.value:
+                KnowledgeSpaceAutoTagService.generate_recommended_tags_after_parse(
+                    knowledge=knowledge_info,
+                    db_file=db_file,
+                    documents=pipeline_result.documents,
+                    persist=True,
                 )
             status = "success"
         except EtlException as e:

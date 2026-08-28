@@ -11,14 +11,14 @@ import {
     type TagConsoleReviewRef,
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { captureAndAlertRequestErrorHoc } from "@/controllers/request"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ReviewTagSimilarBanner } from "../../reviewTag/ReviewTagSimilarBanner"
 import { ReviewTagSimilarConfirmDialog } from "../../reviewTag/ReviewTagSimilarConfirmDialog"
 import { useReviewTagSimilarCheck } from "../../reviewTag/useReviewTagSimilarCheck"
 import { SourceFileLinks } from "./SourceFileLinks"
 import { tagSourceLabel } from "./TagSourceIcon"
-import { distinctSourceSpaceIds, useApprovableLibraries } from "./useApprovableLibraries"
+import { useApprovableLibraries } from "./useApprovableLibraries"
 
 interface TagReviewDialogProps {
     /** Null closes the dialog. */
@@ -53,11 +53,10 @@ export function TagReviewDialog({ target, libraries, saving, onClose, onApprove,
         libraryId,
     )
 
-    // Only libraries bound to this tag's own knowledge base can take it; the
-    // rest are refused server-side with "该标签库未关联此知识空间".
-    const spaceIds = useMemo(() => (detail ? distinctSourceSpaceIds([detail]) : []), [detail])
-    const { libraries: approvable, loading: loadingLibraries } = useApprovableLibraries(spaceIds)
-    const selectable = spaceIds.length ? approvable : libraries
+    // Any public library in the tenant can receive the tag; approval binds
+    // in-scope source knowledge spaces afterwards.
+    const { libraries: approvable, loading: loadingLibraries } = useApprovableLibraries()
+    const selectable = approvable.length ? approvable : libraries
 
     useEffect(() => {
         if (!target) {

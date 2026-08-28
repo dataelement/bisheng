@@ -1118,7 +1118,7 @@ describe("resolveSpaceTagAddHint", () => {
         { id: 2, name: "全局标签", business_type: "tag_library", resource_type: "system_tag" },
         [{ name: "系统A" }],
       ),
-    ).toBe("exists_in_other_library");
+    ).toBeNull();
   });
 
   it("returns null for bound library tags", async () => {

@@ -1081,6 +1081,17 @@ class FileRenameReq(BaseModel):
     name: str = Field(..., description="New File Name")
 
 
+class FileTagRecommendReq(BaseModel):
+    exclude_names: list[str] = Field(
+        default_factory=list,
+        description="When refresh=true, skip these names in model generation",
+    )
+    refresh: bool = Field(
+        default=False,
+        description="Re-run the model instead of returning parse-time cached recommendations",
+    )
+
+
 class FileEncodingUpdateReq(BaseModel):
     encoding: str = Field(
         ...,

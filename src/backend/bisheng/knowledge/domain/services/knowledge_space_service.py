@@ -36,6 +36,7 @@ from bisheng.common.errcode.knowledge import (
     KnowledgeDepartmentFileUnavailableError,
     KnowledgeDepartmentFileViewApprovalRequiredError,
     KnowledgeDepartmentShareLoginRequiredError,
+    KnowledgeFileNotExistError,
     KnowledgeFileNotSupportedError,
     KnowledgeInvalidCursorError,
     KnowledgeShareCreationDisabledError,
@@ -4248,7 +4249,7 @@ class KnowledgeSpaceService(KnowledgeUtils):
             )
             return True, int(private.id)
 
-        if validate_libraries:
+        if requested_ids and validate_libraries:
             await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
         await KnowledgeSpaceTagLibraryDao.adelete_private_for_knowledge(knowledge.id)
         await KnowledgeTagLibraryLinkDao.areplace_for_knowledge(
@@ -4306,14 +4307,13 @@ class KnowledgeSpaceService(KnowledgeUtils):
             normalized = KnowledgeSpaceTagLibraryService.normalize_tags(auto_tag_custom_tags)
             if not normalized:
                 raise KnowledgeSpaceTagLibraryInvalidError(msg="开启自动标签时必须提供至少一个自定义标签")
-        else:
+        elif auto_tag_touched:
             requested_ids = self._resolve_requested_library_ids(
                 auto_tag_library_id,
                 auto_tag_library_ids,
             )
-            if not requested_ids:
-                raise KnowledgeSpaceTagLibraryInvalidError(msg="创建知识库时必须绑定标签库")
-            await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
+            if requested_ids:
+                await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
 
         return level, owner_type, owner_id
 
@@ -4385,9 +4385,8 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 auto_tag_library_id,
                 auto_tag_library_ids,
             )
-            if not requested_ids:
-                raise KnowledgeSpaceTagLibraryInvalidError(msg="创建知识库时必须绑定标签库")
-            await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
+            if requested_ids:
+                await KnowledgeSpaceTagLibraryService.validate_bindable_libraries(requested_ids)
         log_perf_stage("validate")
 
         # Library-id needs the freshly minted knowledge.id when we are upserting
@@ -17790,6 +17789,74 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 result.append(payload)
         return result
 
+    async def recommend_file_tags(
+        self,
+        space_id: int,
+        file_id: int,
+        exclude_names: list[str] | None = None,
+        refresh: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Return cached recommendations. Only refresh=true re-runs the model."""
+        await self._require_read_permission(space_id)
+        file_record = await KnowledgeFileDao.query_by_id(file_id)
+        if not file_record or int(file_record.knowledge_id) != int(space_id):
+            raise KnowledgeFileNotExistError()
+        knowledge = await KnowledgeDao.aquery_by_id(space_id)
+        if not knowledge:
+            raise NotFoundError()
+
+        from bisheng.knowledge.domain.services.knowledge_space_auto_tag_service import (
+            KnowledgeSpaceAutoTagService,
+        )
+
+        if not refresh:
+            cached = KnowledgeSpaceAutoTagService.read_recommended_tag_names(file_record)
+            return await self._map_recommended_tag_names(space_id, cached or [])
+
+        excluded = [name.strip() for name in (exclude_names or []) if str(name).strip()]
+        applied = await asyncio.to_thread(
+            KnowledgeSpaceAutoTagService._list_file_applied_tag_names,
+            file_id,
+        )
+        excluded_set = {name for name in [*excluded, *applied] if name}
+        names = await asyncio.to_thread(
+            KnowledgeSpaceAutoTagService.recommend_bound_library_tags_sync,
+            knowledge,
+            file_record,
+            exclude_names=list(excluded_set),
+        )
+        await asyncio.to_thread(
+            KnowledgeSpaceAutoTagService.persist_recommended_tag_names,
+            file_record,
+            names,
+        )
+        return await self._map_recommended_tag_names(space_id, names)
+
+    async def _map_recommended_tag_names(self, space_id: int, names: list[str]) -> list[dict[str, Any]]:
+        if not names:
+            return []
+        space_tags = await self.get_space_tags(space_id)
+        by_name: dict[str, dict[str, Any]] = {}
+        by_lower: dict[str, dict[str, Any]] = {}
+        for item in space_tags:
+            name = str(item.get("name") or "").strip()
+            if not name:
+                continue
+            by_name.setdefault(name, item)
+            by_lower.setdefault(name.lower(), item)
+        result: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for name in names:
+            payload = by_name.get(name) or by_lower.get(name.lower())
+            if not payload:
+                continue
+            key = str(payload.get("name") or name).strip().lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            result.append(payload)
+        return result
+
     async def _resolve_primary_library_for_space(self, space_id: int) -> int:
         library_id = TagLibraryTagService._first_library_id_for_space(space_id)
         if library_id is None:
@@ -18017,22 +18084,29 @@ class KnowledgeSpaceService(KnowledgeUtils):
                 await self._require_review_tag_feature_enabled()
             return existing
 
-        library_id = await self._resolve_primary_library_for_space(space_id)
         await self._require_review_tag_feature_enabled()
+        library_id = TagLibraryTagService._first_library_id_for_space(space_id)
+        if library_id is None:
+            business_type = TagBusinessTypeEnum.KNOWLEDGE_SPACE
+            business_id = str(space_id)
+        else:
+            business_type = TagBusinessTypeEnum.TAG_LIBRARY
+            business_id = str(library_id)
 
         new_tag = ReviewTag(
             name=normalized,
             user_id=self.login_user.user_id,
             tenant_id=int(self.login_user.tenant_id),
-            business_type=TagBusinessTypeEnum.TAG_LIBRARY,
-            business_id=str(library_id),
+            business_type=business_type,
+            business_id=business_id,
             resource_type=TagResourceTypeEnum.MANUAL_TAG,
             is_deleted=False,
             review_status=0,
             create_time=datetime.now(),
             update_time=datetime.now(),
         )
-        return await ReviewTagDao.ainsert_review_tag(new_tag)
+        created = await ReviewTagDao.ainsert_review_tag(new_tag)
+        return created
 
     async def _partition_file_tag_ids_for_update(
         self, tag_ids: list[int], review_tag_ids: list[int]

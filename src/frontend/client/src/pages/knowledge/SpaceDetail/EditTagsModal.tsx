@@ -1,6 +1,6 @@
 import { useState, KeyboardEvent, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X, Tag, Network, PencilLine } from "lucide-react";
+import { X, RefreshCw } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -23,12 +23,13 @@ import {
     batchUpdateTagsApi,
     batchOverwriteTagsApi,
     getKnowledgeSpaceReviewTagVisibilityApi,
+    recommendFileTagsApi,
     resolveSpaceTagAddHint,
     isPendingReviewSpaceTag,
-    isUnboundLibraryLookupTag,
 } from "~/api/knowledge";
 import { useLocalize } from "~/hooks";
 import { getFullWidthLength } from "~/utils";
+import { LibraryTagPicker } from "./LibraryTagPicker";
 
 interface EditTagsModalProps {
     isOpen: boolean;
@@ -306,6 +307,8 @@ export function EditTagsModal({
     const [spaceTagsLoading, setSpaceTagsLoading] = useState(false);
     const [reviewTagConfigLoading, setReviewTagConfigLoading] = useState(true);
     const [reviewTagEnabled, setReviewTagEnabled] = useState(false);
+    const [llmRecommendedTags, setLlmRecommendedTags] = useState<SpaceTag[]>([]);
+    const [recommendLoading, setRecommendLoading] = useState(false);
     const { showToast } = useToastContext();
     const queryClient = useQueryClient();
 
@@ -360,6 +363,7 @@ export function EditTagsModal({
         setSpaceTagsLoading(true);
         setReviewTagConfigLoading(true);
         setReviewTagEnabled(false);
+        setLlmRecommendedTags([]);
 
         getKnowledgeSpaceReviewTagVisibilityApi()
             .then(({ enabled }) => setReviewTagEnabled(enabled))
@@ -407,6 +411,33 @@ export function EditTagsModal({
         });
         syncSelectedReviewTagIds(new Set());
     }, [isOpen, reviewTagConfigLoading, spaceTagsLoading, reviewTagEnabled, spaceTags]);
+
+    const loadRecommendedTags = async (refresh = false) => {
+        if (isBatchMode || !fileId) {
+            setLlmRecommendedTags([]);
+            return;
+        }
+        setRecommendLoading(true);
+        try {
+            const tags = await recommendFileTagsApi(spaceId, fileId, [], refresh);
+            tags.forEach(rememberSpaceTag);
+            setLlmRecommendedTags(tags);
+        } catch {
+            setLlmRecommendedTags([]);
+        } finally {
+            setRecommendLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!isOpen || isBatchMode || !fileId || spaceTagsLoading) {
+            if (isBatchMode) setLlmRecommendedTags([]);
+            return;
+        }
+        void loadRecommendedTags();
+        // Initial load (and when the edited file changes) only — refresh is explicit.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, isBatchMode, fileId, spaceTagsLoading, editTargetKey]);
 
     const isRecommendedTagSelected = (item: KnowledgeSpaceTagLibraryTagItem) => {
         const normalized = item.name.trim().toLowerCase();
@@ -504,8 +535,8 @@ export function EditTagsModal({
     const notifyTagAddHint = (tag: SpaceTag) => {
         if (isDraftSpaceTagId(tag.id)) return;
         const hint = resolveSpaceTagAddHint(tag, recommendedTags);
+        // Pending tags merge onto the current file; do not block with a toast.
         if (hint === "under_review") {
-            showToast({ message: localize("com_knowledge.tag_under_review"), status: "warning" });
             return;
         }
         if (hint === "exists_in_other_library") {
@@ -568,11 +599,6 @@ export function EditTagsModal({
 
         const existing = findKnownSpaceTagByName(trimmed, spaceTags, tagMetaRef);
         if (existing) {
-            if (isPendingReviewSpaceTag(existing)) {
-                showToast({ message: localize("com_knowledge.tag_already_under_review"), status: "warning" });
-                setInputValue("");
-                return false;
-            }
             return applyExistingManualTag(existing, selectionMode);
         }
 
@@ -585,21 +611,6 @@ export function EditTagsModal({
         }
 
         if (serverTag) {
-            if (isPendingReviewSpaceTag(serverTag)) {
-                showToast({ message: localize("com_knowledge.tag_already_under_review"), status: "warning" });
-                setInputValue("");
-                return false;
-            }
-            if (isUnboundLibraryLookupTag(serverTag)) {
-                showToast({
-                    message: localize("com_knowledge.tag_exists_in_library_named", {
-                        libraryName: serverTag.tag_library_name || "",
-                    }),
-                    status: "warning",
-                });
-                setInputValue("");
-                return false;
-            }
             return applyExistingManualTag(serverTag, selectionMode);
         }
 
@@ -624,7 +635,9 @@ export function EditTagsModal({
             showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
             return;
         }
-        const existing = findKnownSpaceTagByName(item.name, spaceTags, tagMetaRef);
+        const existing =
+            findKnownSpaceTagByName(item.name, spaceTags, tagMetaRef)
+            ?? llmRecommendedTags.find((tag) => tag.name.trim().toLowerCase() === item.name.trim().toLowerCase());
         if (!existing) {
             showToast({ message: localize("com_knowledge.create_tag_failed"), status: "error" });
             return;
@@ -699,6 +712,10 @@ export function EditTagsModal({
         if (e.key !== "Enter") return;
         e.preventDefault();
         if (reviewTagConfigLoading || tagLookupLoading) return;
+        if (!reviewTagEnabled) {
+            showToast({ message: localize("com_knowledge.review_tag_feature_disabled"), status: "error" });
+            return;
+        }
         const trimmed = inputValue.trim();
         if (!trimmed) return;
         setTagLookupLoading(true);
@@ -818,6 +835,27 @@ export function EditTagsModal({
             t.resource_type === "manual_tag"
             || (t.resource_type !== "system_tag" && t.resource_type !== "ai_auto_tag"),
     );
+    const llmRecommendItems = useMemo(
+        () =>
+            llmRecommendedTags
+                .filter((tag) =>
+                    isVisibleRecommendedTag(
+                        {
+                            name: tag.name,
+                            resource_type: tag.resource_type || "manual_tag",
+                            review_status: tag.review_status,
+                        },
+                        spaceTags,
+                        reviewTagEnabled,
+                    ),
+                )
+                .map((tag) => ({
+                    name: tag.name,
+                    resource_type: tag.resource_type || "manual_tag",
+                    review_status: tag.review_status,
+                })),
+        [llmRecommendedTags, spaceTags, reviewTagEnabled],
+    );
 
     const renderRecommendedTagItem = (item: KnowledgeSpaceTagLibraryTagItem) => {
         const isSelected = isRecommendedTagSelected(item);
@@ -830,7 +868,10 @@ export function EditTagsModal({
         return (
             <span
                 key={`${item.resource_type}:${item.name}`}
+                data-testid={`recommended-tag-${item.name}`}
+                data-selected={isSelected ? "true" : "false"}
                 onClick={() => {
+                    if (isSelected) return;
                     selectExistingRecommendedTag(item);
                 }}
                 className={`px-2 h-7 flex items-center justify-center gap-1 text-[12px] leading-[20px] rounded-[4px] transition-colors ${isSelected
@@ -968,47 +1009,49 @@ export function EditTagsModal({
                         </span>
                     </div>
 
-                    {/* 推荐标签 */}
+                    {/* Recommended tags (LLM, single-file) + library picker */}
                     <div className="flex flex-col gap-3 pt-1">
-                        <div className="text-[14px] leading-5 font-medium text-[#212121]">{localize("com_knowledge.recommended_tags")}</div>
-                        {recommendedTagsLoading && (
-                            <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.loading")}</span>
-                        )}
-                        {!recommendedTagsLoading && visibleRecommendedTags.length === 0 && (
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <div className="text-[14px] leading-5 font-medium text-[#212121]">
+                                    {localize("com_knowledge.recommended_tags")}
+                                </div>
+                                {!isBatchMode && (
+                                    <button
+                                        type="button"
+                                        className="flex items-center text-[#86909c] hover:text-[#4e5969] disabled:opacity-50"
+                                        disabled={recommendLoading || spaceTagsLoading}
+                                        onClick={() => void loadRecommendedTags(true)}
+                                        aria-label={localize("com_knowledge.refresh_recommended_tags")}
+                                    >
+                                        <RefreshCw className={`size-3.5 ${recommendLoading ? "animate-spin" : ""}`} />
+                                    </button>
+                                )}
+                            </div>
+                            <LibraryTagPicker
+                                systemTags={systemTags}
+                                aiTags={aiTags}
+                                manualTags={manualTags}
+                                loading={recommendedTagsLoading}
+                                renderItem={renderRecommendedTagItem}
+                            />
+                        </div>
+                        {isBatchMode ? (
                             <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_tags")}</span>
-                        )}
-                        {!recommendedTagsLoading && systemTags.length > 0 && (
-                            <div className="flex flex-col gap-1.5">
-                                <div className="flex items-center gap-1 text-[12px] leading-5 text-[#86909c]">
-                                    <Network className="size-3.5 shrink-0" />
-                                    <span>{localize("com_knowledge.tag_type_system")}</span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1">
-                                    {systemTags.map(renderRecommendedTagItem)}
-                                </div>
-                            </div>
-                        )}
-                        {!recommendedTagsLoading && aiTags.length > 0 && (
-                            <div className="flex flex-col gap-1.5">
-                                <div className="flex items-center gap-1 text-[12px] leading-5 text-[#86909c]">
-                                    <Tag className="size-3.5 shrink-0" />
-                                    <span>{localize("com_knowledge.tag_type_ai")}</span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1">
-                                    {aiTags.map(renderRecommendedTagItem)}
-                                </div>
-                            </div>
-                        )}
-                        {!recommendedTagsLoading && manualTags.length > 0 && (
-                            <div className="flex flex-col gap-1.5">
-                                <div className="flex items-center gap-1 text-[12px] leading-5 text-[#86909c]">
-                                    <PencilLine className="size-3.5 shrink-0" />
-                                    <span>{localize("com_knowledge.tag_type_manual")}</span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1">
-                                    {manualTags.map(renderRecommendedTagItem)}
-                                </div>
-                            </div>
+                        ) : (
+                            <>
+                                {(recommendLoading || recommendedTagsLoading) && (
+                                    <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.loading")}</span>
+                                )}
+                                {!recommendLoading && !recommendedTagsLoading && llmRecommendItems.length === 0 && (
+                                    <span className="text-[12px] text-[#86909c]">{localize("com_knowledge.no_recommended_tags")}</span>
+                                )}
+                                {!recommendLoading && llmRecommendItems.length > 0 && (
+                                    <div data-testid="recommended-tags-list" className="flex flex-wrap items-center gap-1">
+                                        {llmRecommendItems.map(renderRecommendedTagItem)}
+                                    </div>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>

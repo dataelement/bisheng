@@ -16,19 +16,14 @@ interface TagFeatureState {
 }
 
 /**
- * The two switches from the workbench knowledge-space config, mirrored here.
+ * Tenant-level switches mirrored from the workbench knowledge-space config.
  *
- * Labels are taken from that page rather than from the field names: the section
- * `auto_tag_visible` belongs to is called 标签库管理 there. Naming it after the
- * field ("自动打标") reads as a master switch for tagging, which it is not —
- * that mistake produced a bug report and a round of wrong fixes.
- *
- * Turning one off hides nothing on this page: an admin still has to be able to
- * clear leftover tags and work the pending queue afterwards.
+ * `auto_tag_visible` is the auto-tagging master switch: off means Link A/B
+ * do not run for any knowledge space. Tag-library CRUD stays available.
+ * `review_tag_visible` independently gates the pending-review queue.
  *
  * Only a tenant admin may change them (the config endpoint requires it), so for
- * anyone else the block is not rendered rather than rendered disabled — a
- * department admin can reach this page but has nothing to do with these.
+ * anyone else the block is not rendered rather than rendered disabled.
  */
 export function TagFeatureToggles() {
     const { t } = useTranslation()
@@ -103,7 +98,7 @@ export function TagFeatureToggles() {
     return (
         <div className="flex shrink-0 items-center gap-5">
             <label className="flex items-center gap-2 text-xs text-[#4E5969]">
-                <span>{t("build.tagLibraryManagementTitle", "标签库管理")}</span>
+                <span>{t("build.autoTagMasterTitle", "自动打标签")}</span>
                 <Switch
                     checked={state.auto_tag_visible}
                     disabled={saving === "auto_tag_visible"}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditTagsModal } from "./EditTagsModal";
 import {
@@ -7,6 +7,7 @@ import {
     addSpaceTagApi,
     lookupSpaceTagApi,
     updateFileTagsApi,
+    recommendFileTagsApi,
 } from "~/api/knowledge";
 
 import { useToastContext } from "~/Providers";
@@ -35,6 +36,7 @@ jest.mock("~/api/knowledge", () => {
         lookupSpaceTagApi: jest.fn(),
         updateFileTagsApi: jest.fn(),
         batchUpdateTagsApi: jest.fn(),
+        recommendFileTagsApi: jest.fn(),
     };
 });
 
@@ -44,6 +46,12 @@ describe("EditTagsModal recommended tags", () => {
         jest.mocked(useToastContext).mockReturnValue({ showToast: mockShowToast });
         jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: true });
         jest.mocked(lookupSpaceTagApi).mockResolvedValue(null);
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([
+            { id: 1, name: "已有标签", business_type: "tag_library", resource_type: "manual_tag" },
+            { id: 10, name: "系统A", business_type: "tag_library", resource_type: "system_tag" },
+            { id: 11, name: "AI-B", business_type: "tag_library", resource_type: "ai_auto_tag" },
+            { id: 12, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
             { id: 1, name: "已有标签", business_type: "tag_library", resource_type: "manual_tag" },
             { id: 10, name: "系统A", business_type: "tag_library", resource_type: "system_tag" },
@@ -52,7 +60,61 @@ describe("EditTagsModal recommended tags", () => {
         ]);
     });
 
-    it("shows recommended tags grouped by type from bound tag libraries", async () => {
+    it("shows bound library tags grouped by type in the library picker", async () => {
+        const user = userEvent.setup();
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText("com_knowledge.pick_library_tags")).toBeEnabled());
+        await user.click(screen.getByText("com_knowledge.pick_library_tags"));
+
+        await waitFor(() => {
+            expect(screen.getByText("com_knowledge.tag_type_system")).toBeInTheDocument();
+            expect(screen.getAllByText("系统A").length).toBeGreaterThan(0);
+            expect(screen.getByText("com_knowledge.tag_type_ai")).toBeInTheDocument();
+            expect(screen.getAllByText("AI-B").length).toBeGreaterThan(0);
+            expect(screen.getByText("com_knowledge.tag_type_manual")).toBeInTheDocument();
+            expect(screen.getAllByText("人工C").length).toBeGreaterThan(0);
+        });
+
+        expect(getSpaceTagsApi).toHaveBeenCalledWith("100");
+    });
+
+    it("filters library tags in the picker as the user types", async () => {
+        const user = userEvent.setup();
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText("com_knowledge.pick_library_tags")).toBeEnabled());
+        await user.click(screen.getByText("com_knowledge.pick_library_tags"));
+
+        const picker = await screen.findByTestId("library-tag-picker");
+        const search = screen.getByPlaceholderText("com_knowledge.search_library_tags_placeholder");
+        await user.type(search, "系统");
+
+        expect(picker).toHaveTextContent("系统A");
+        expect(picker).not.toHaveTextContent("AI-B");
+        expect(picker).not.toHaveTextContent("人工C");
+        expect(screen.queryByText("com_knowledge.tag_type_ai")).not.toBeInTheDocument();
+        expect(screen.queryByText("com_knowledge.tag_type_manual")).not.toBeInTheDocument();
+    });
+
+    it("loads cached recommendations on open and refreshes with refresh=true", async () => {
+        const user = userEvent.setup();
         render(
             <EditTagsModal
                 isOpen
@@ -64,22 +126,21 @@ describe("EditTagsModal recommended tags", () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText("com_knowledge.tag_type_system")).toBeInTheDocument();
-            expect(screen.getByText("系统A")).toBeInTheDocument();
-            expect(screen.getByText("com_knowledge.tag_type_ai")).toBeInTheDocument();
-            expect(screen.getByText("AI-B")).toBeInTheDocument();
-            expect(screen.getByText("com_knowledge.tag_type_manual")).toBeInTheDocument();
-            expect(screen.getByText("人工C")).toBeInTheDocument();
+            expect(recommendFileTagsApi).toHaveBeenCalledWith("100", "1", [], false);
+            expect(recommendFileTagsApi).not.toHaveBeenCalledWith("100", "1", [], true);
+            expect(screen.getByLabelText("com_knowledge.refresh_recommended_tags")).toBeEnabled();
         });
 
-        expect(getSpaceTagsApi).toHaveBeenCalledWith("100");
+        await user.click(screen.getByLabelText("com_knowledge.refresh_recommended_tags"));
+
+        await waitFor(() => {
+            expect(recommendFileTagsApi).toHaveBeenCalledWith("100", "1", [], true);
+        });
     });
 
-    it("dedupes duplicate tag names across system and manual recommended tags", async () => {
-        jest.mocked(getSpaceTagsApi).mockResolvedValue([
-            { id: 10, name: "安全生产", business_type: "tag_library", resource_type: "system_tag" },
-            { id: 11, name: "安全生产", business_type: "tag_library", resource_type: "manual_tag" },
-        ]);
+    it("shows none when there is no cached recommendation list and generates only on refresh", async () => {
+        const user = userEvent.setup();
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
 
         render(
             <EditTagsModal
@@ -90,6 +151,40 @@ describe("EditTagsModal recommended tags", () => {
                 initialTagIds={[]}
             />,
         );
+
+        await waitFor(() => {
+            expect(recommendFileTagsApi).toHaveBeenCalledWith("100", "1", [], false);
+            expect(screen.getByText("com_knowledge.no_recommended_tags")).toBeInTheDocument();
+        });
+        expect(recommendFileTagsApi).not.toHaveBeenCalledWith("100", "1", [], true);
+
+        await user.click(screen.getByLabelText("com_knowledge.refresh_recommended_tags"));
+
+        await waitFor(() => {
+            expect(recommendFileTagsApi).toHaveBeenCalledWith("100", "1", [], true);
+        });
+    });
+
+    it("dedupes duplicate tag names across system and manual recommended tags", async () => {
+        const user = userEvent.setup();
+        jest.mocked(getSpaceTagsApi).mockResolvedValue([
+            { id: 10, name: "安全生产", business_type: "tag_library", resource_type: "system_tag" },
+            { id: 11, name: "安全生产", business_type: "tag_library", resource_type: "manual_tag" },
+        ]);
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
+
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[]}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByText("com_knowledge.pick_library_tags")).toBeEnabled());
+        await user.click(screen.getByText("com_knowledge.pick_library_tags"));
 
         await waitFor(() => {
             expect(screen.getByText("安全生产")).toBeInTheDocument();
@@ -115,12 +210,36 @@ describe("EditTagsModal recommended tags", () => {
             />,
         );
 
-        await waitFor(() => expect(screen.getByText("人工C")).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByTestId("recommended-tags-list")).toBeInTheDocument());
 
-        await user.click(screen.getByText("人工C"));
+        await user.click(within(screen.getByTestId("recommended-tags-list")).getByTestId("recommended-tag-人工C"));
 
         await waitFor(() => {
             expect(addSpaceTagApi).not.toHaveBeenCalled();
+        });
+
+        expect(
+            within(screen.getByTestId("recommended-tags-list")).getByTestId("recommended-tag-人工C"),
+        ).toHaveAttribute("data-selected", "true");
+    });
+
+    it("keeps already applied recommended tags visible with selected style", async () => {
+        render(
+            <EditTagsModal
+                isOpen
+                onClose={jest.fn()}
+                spaceId="100"
+                fileId="1"
+                initialTagIds={[12]}
+                initialTags={[{ id: 12, name: "人工C" }]}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(recommendFileTagsApi).toHaveBeenCalledWith("100", "1", [], false);
+            expect(
+                within(screen.getByTestId("recommended-tags-list")).getByTestId("recommended-tag-人工C"),
+            ).toHaveAttribute("data-selected", "true");
         });
     });
 
@@ -389,7 +508,7 @@ describe("EditTagsModal recommended tags", () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText("com_knowledge.no_tags")).toBeInTheDocument();
+            expect(screen.getByText("com_knowledge.no_recommended_tags")).toBeInTheDocument();
         });
 
         expect(screen.queryByText("AI-B")).not.toBeInTheDocument();
@@ -426,6 +545,7 @@ describe("EditTagsModal recommended tags", () => {
 
     it("removes pending tags from selection when review feature is disabled", async () => {
         jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: false });
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
             { id: 1, name: "已生效", resource_type: "manual_tag" },
             { id: 2, name: "待审核", review_status: 0, resource_type: "manual_tag" },
@@ -522,6 +642,7 @@ describe("EditTagsModal recommended tags", () => {
     it("shows disabled toast when pressing Enter with review feature off", async () => {
         const user = userEvent.setup();
         jest.mocked(getKnowledgeSpaceReviewTagVisibilityApi).mockResolvedValue({ enabled: false });
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
 
         render(
             <EditTagsModal
@@ -577,9 +698,10 @@ describe("EditTagsModal recommended tags", () => {
         });
     });
 
-    it("shows under-review hint when adding a pending tag", async () => {
+    it("selects a pending review tag so it can merge onto the current file", async () => {
         const user = userEvent.setup();
         jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
         jest.mocked(lookupSpaceTagApi).mockResolvedValue({
             id: 2,
             name: "待审核",
@@ -603,19 +725,19 @@ describe("EditTagsModal recommended tags", () => {
         await user.keyboard("{Enter}");
 
         await waitFor(() => {
-            expect(mockShowToast).toHaveBeenCalledWith({
-                message: "com_knowledge.tag_already_under_review",
-                status: "warning",
-            });
-            expect(input).toHaveValue("");
+            expect(lookupSpaceTagApi).toHaveBeenCalledWith("100", "待审核");
+            expect(screen.getByText("待审核")).toBeInTheDocument();
         });
-        expect(lookupSpaceTagApi).toHaveBeenCalledWith("100", "待审核");
+        expect(mockShowToast).not.toHaveBeenCalledWith(
+            expect.objectContaining({ message: "com_knowledge.tag_already_under_review" }),
+        );
         expect(addSpaceTagApi).not.toHaveBeenCalled();
     });
 
     it("calls lookup API on Enter for new tag names and skips create when duplicate on server", async () => {
         const user = userEvent.setup();
         jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
         jest.mocked(lookupSpaceTagApi).mockResolvedValue({
             id: 88,
             name: "服务端待审核",
@@ -640,18 +762,15 @@ describe("EditTagsModal recommended tags", () => {
 
         await waitFor(() => {
             expect(lookupSpaceTagApi).toHaveBeenCalledWith("100", "服务端待审核");
-            expect(mockShowToast).toHaveBeenCalledWith({
-                message: "com_knowledge.tag_already_under_review",
-                status: "warning",
-            });
-            expect(input).toHaveValue("");
+            expect(screen.getByText("服务端待审核")).toBeInTheDocument();
         });
         expect(addSpaceTagApi).not.toHaveBeenCalled();
     });
 
-    it("rejects lookup hits from unbound libraries and clears the input", async () => {
+    it("allows lookup hits from unbound libraries", async () => {
         const user = userEvent.setup();
         jest.mocked(getSpaceTagsApi).mockResolvedValue([]);
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
         jest.mocked(lookupSpaceTagApi).mockResolvedValue({
             id: 99,
             name: "其他库标签",
@@ -679,20 +798,20 @@ describe("EditTagsModal recommended tags", () => {
         await user.keyboard("{Enter}");
 
         await waitFor(() => {
-            expect(mockShowToast).toHaveBeenCalledWith({
-                message: "com_knowledge.tag_exists_in_library_named",
-                status: "warning",
-            });
-            expect(input).toHaveValue("");
+            expect(screen.getByText("其他库标签")).toBeInTheDocument();
         });
+        expect(mockShowToast).not.toHaveBeenCalledWith(
+            expect.objectContaining({ message: "com_knowledge.tag_exists_in_library_named" }),
+        );
         expect(addSpaceTagApi).not.toHaveBeenCalled();
     });
 
-    it("shows exists hint when add API returns an unbound library tag", async () => {
+    it("saves an unbound library tag returned by add API without blocking", async () => {
         const user = userEvent.setup();
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
             { id: 10, name: "系统A", business_type: "tag_library", resource_type: "system_tag" },
         ]);
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
         jest.mocked(addSpaceTagApi).mockResolvedValue({
             id: 99,
             name: "其他库标签",
@@ -720,14 +839,14 @@ describe("EditTagsModal recommended tags", () => {
 
         await waitFor(() => {
             expect(addSpaceTagApi).toHaveBeenCalledWith("100", "其他库标签");
-            expect(mockShowToast).toHaveBeenCalledWith({
-                message: "com_knowledge.tag_exists_in_other_library",
-                status: "warning",
-            });
         });
+        expect(mockShowToast).not.toHaveBeenCalledWith(
+            expect.objectContaining({ message: "com_knowledge.tag_exists_in_other_library" }),
+        );
     });
 
-    it("does not render knowledge_space tags from space tag API in recommended section", async () => {
+    it("does not render knowledge_space tags from space tag API in the library picker", async () => {
+        const user = userEvent.setup();
         jest.mocked(getSpaceTagsApi).mockResolvedValue([
             {
                 id: 2,
@@ -738,6 +857,7 @@ describe("EditTagsModal recommended tags", () => {
             },
             { id: 10, name: "人工C", business_type: "tag_library", resource_type: "manual_tag" },
         ]);
+        jest.mocked(recommendFileTagsApi).mockResolvedValue([]);
 
         render(
             <EditTagsModal
@@ -748,6 +868,9 @@ describe("EditTagsModal recommended tags", () => {
                 initialTagIds={[]}
             />,
         );
+
+        await waitFor(() => expect(screen.getByText("com_knowledge.pick_library_tags")).toBeEnabled());
+        await user.click(screen.getByText("com_knowledge.pick_library_tags"));
 
         await waitFor(() => {
             expect(screen.getByText("人工C")).toBeInTheDocument();

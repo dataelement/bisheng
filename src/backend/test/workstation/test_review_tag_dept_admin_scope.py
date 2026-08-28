@@ -326,6 +326,7 @@ async def test_approve_allows_personal_space_for_clinic_admin():
     )
 
     with (
+        patch.object(service, "ensure_review_tag_similar_acknowledged", new=AsyncMock()),
         patch(
             "bisheng.knowledge.domain.models.knowledge_space_scope.KnowledgeSpaceScopeDao.aget_by_space_id",
             new=AsyncMock(return_value=SimpleNamespace(level="personal")),
@@ -344,6 +345,15 @@ async def test_approve_allows_personal_space_for_clinic_admin():
         patch(
             "bisheng.knowledge.domain.services.tag_library_tag_service.TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async",
             new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_tag_library_link.KnowledgeTagLibraryLinkDao.aadd_links",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            service,
+            "_list_in_scope_source_knowledge_ids",
+            new=AsyncMock(return_value=[20]),
         ),
     ):
         library_service_cls.return_value.append_review_tag = AsyncMock()
@@ -377,6 +387,7 @@ async def test_approve_passes_scope_to_repository():
     )
 
     with (
+        patch.object(service, "ensure_review_tag_similar_acknowledged", new=AsyncMock()),
         patch(
             "bisheng.knowledge.domain.services.knowledge_space_tag_library_service.KnowledgeSpaceTagLibraryService",
         ) as library_service_cls,
@@ -391,6 +402,15 @@ async def test_approve_passes_scope_to_repository():
         patch(
             "bisheng.knowledge.domain.services.tag_library_tag_service.TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async",
             new=AsyncMock(),
+        ),
+        patch(
+            "bisheng.knowledge.domain.models.knowledge_tag_library_link.KnowledgeTagLibraryLinkDao.aadd_links",
+            new=AsyncMock(return_value=[]),
+        ),
+        patch.object(
+            service,
+            "_list_in_scope_source_knowledge_ids",
+            new=AsyncMock(return_value=[100]),
         ),
     ):
         library_service_cls.return_value.append_review_tag = AsyncMock()

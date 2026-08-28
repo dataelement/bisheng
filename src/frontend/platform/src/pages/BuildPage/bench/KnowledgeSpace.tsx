@@ -35,7 +35,7 @@ interface KnowledgeConfigForm {
     userPrompt: string;
     /** 知识空间检索结果最大字符数，对应接口 max_chunk_size */
     maxChunkSize: number;
-    /** 租户级"自动生成标签"功能可见性，对应接口 auto_tag_visible */
+    /** 租户级自动打标总开关，对应接口 auto_tag_visible */
     autoTagVisible: boolean;
     /** 租户级"待审核标签"功能可见性，对应接口 review_tag_visible */
     reviewTagVisible: boolean;
