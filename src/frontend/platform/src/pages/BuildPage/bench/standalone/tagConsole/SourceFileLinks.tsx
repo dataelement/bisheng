@@ -32,14 +32,14 @@ export function SourceFileLinks({ files, max = 3 }: { files: TagConsoleSourceFil
     const rest = files.length - shown.length
 
     return (
-        <div className="flex flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-0.5">
             {shown.map((file) => {
                 if (isViolationFile(file)) {
                     return (
                         <button
                             key={file.file_id}
                             type="button"
-                            className="truncate text-left text-[#F53F3F] hover:underline"
+                            className="block w-full truncate text-left text-[#F53F3F] hover:underline"
                             title={t("build.tagConsole.violationBlocked", "该文件包含违规内容，无法预览")}
                             onClick={() => setViolating(file)}
                         >
@@ -50,7 +50,7 @@ export function SourceFileLinks({ files, max = 3 }: { files: TagConsoleSourceFil
                 const url = buildTagFileDetailUrl(file)
                 if (!url) {
                     return (
-                        <span key={file.file_id} className="truncate">
+                        <span key={file.file_id} className="block truncate" title={file.file_name}>
                             {file.file_name}
                         </span>
                     )
@@ -61,7 +61,8 @@ export function SourceFileLinks({ files, max = 3 }: { files: TagConsoleSourceFil
                         href={url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="truncate text-blue-600 hover:underline"
+                        title={file.file_name}
+                        className="block truncate text-blue-600 hover:underline"
                     >
                         {file.file_name}
                     </a>

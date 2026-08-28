@@ -19,6 +19,12 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
 )
 
 
+@pytest.fixture(autouse=True)
+def _empty_tag_blacklist():
+    with patch.object(KnowledgeSpaceAutoTagService, "_blacklist_catalog", return_value=[]):
+        yield
+
+
 def test_tag_library_normalize_preserves_duplicates_and_rejects_over_limit():
     assert KnowledgeSpaceTagLibraryService.normalize_tags([" 政策 ", "", "政策", "制度"]) == ["政策", "政策", "制度"]
 
@@ -190,6 +196,7 @@ def test_auto_tag_llm_uses_zero_temperature():
         patch(f"{module_path}.LLMService.get_bisheng_llm_sync", return_value=object()) as get_llm,
         patch.object(KnowledgeSpaceAutoTagService, "_invoke_llm", return_value=["政策"]),
         patch.object(KnowledgeSpaceAutoTagService, "_append_file_tags") as append_file_tags,
+        patch.object(KnowledgeSpaceAutoTagService, "_resolve_unbound_public_library_ids", return_value=[]),
     ):
         KnowledgeSpaceAutoTagService.apply_after_upload_parse(knowledge, db_file)
 
@@ -218,8 +225,32 @@ def test_auto_tag_should_run_even_when_space_auto_tag_disabled():
         assert KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
 
 
+def test_auto_tag_should_skip_when_tenant_master_switch_off():
+    knowledge = Knowledge(
+        id=1,
+        name="space",
+        type=KnowledgeTypeEnum.SPACE.value,
+        auto_tag_enabled=True,
+        auto_tag_library_id=10,
+    )
+    db_file = KnowledgeFile(
+        id=2,
+        knowledge_id=1,
+        file_name="a.txt",
+        file_type=FileType.FILE.value,
+        file_source=FileSource.UPLOAD.value,
+        status=KnowledgeFileStatus.SUCCESS.value,
+    )
+
+    with (
+        patch.object(KnowledgeSpaceAutoTagService, "is_tenant_auto_tag_enabled", return_value=False),
+        patch(_LINK_DAO_PATCH, return_value=[10]),
+    ):
+        assert not KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
+
+
 def test_auto_tag_should_run_when_no_explicit_library_uses_default_fallback():
-    """Space with no bound library still runs link A via the default library fallback."""
+    """Space with no bound library still runs Link A; unbound public libraries fill in."""
     knowledge = Knowledge(
         id=1,
         name="space",
@@ -237,7 +268,7 @@ def test_auto_tag_should_run_when_no_explicit_library_uses_default_fallback():
     )
 
     with patch(_LINK_DAO_PATCH, return_value=[]):
-        assert KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge) == [1]
+        assert KnowledgeSpaceAutoTagService._resolve_library_ids(knowledge) == []
         assert KnowledgeSpaceAutoTagService._should_run(knowledge, db_file)
 
 
@@ -275,6 +306,7 @@ def test_auto_tag_writes_ai_matches_even_when_manual_match_empty():
         patch.object(KnowledgeSpaceAutoTagService, "_invoke_llm", return_value=["AI-标签"]),
         patch.object(KnowledgeSpaceAutoTagService, "_cap_ai_tags_for_file", side_effect=lambda _fid, tags: tags),
         patch.object(KnowledgeSpaceAutoTagService, "_append_file_tags") as append_file_tags,
+        patch.object(KnowledgeSpaceAutoTagService, "_resolve_unbound_public_library_ids", return_value=[]),
     ):
         KnowledgeSpaceAutoTagService.apply_after_upload_parse(knowledge, db_file)
 
@@ -304,7 +336,8 @@ def test_count_file_ai_auto_tags_includes_pending_review_tags():
 
 def test_should_run_link_b_after_link_a_respects_tag_limit():
     assert KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(0) is True
-    assert KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(3) is True
+    assert KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(2) is True
+    assert KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(3) is False
     assert KnowledgeSpaceAutoTagService.should_run_link_b_after_link_a(4) is False
 
 
@@ -348,6 +381,7 @@ def test_apply_after_upload_parse_returns_applied_tag_count():
             return_value=["政策", "制度", "项目", "市场"],
         ),
         patch.object(KnowledgeSpaceAutoTagService, "_append_file_tags"),
+        patch.object(KnowledgeSpaceAutoTagService, "_resolve_unbound_public_library_ids", return_value=[]),
     ):
         applied_count = KnowledgeSpaceAutoTagService.apply_after_upload_parse(knowledge, db_file)
 

@@ -12,6 +12,7 @@ from bisheng.workstation.domain.schemas.review_tags_schema import (
     ReviewTagSimilarBatchCheckRequest,
     ReviewTagSimilarCheckRequest,
 )
+from bisheng.workstation.domain.schemas.tag_console_schema import TagConsoleBlacklistPreviewReq
 from bisheng.workstation.domain.services.workstation_tags_service import WorkStationTagsService
 
 from ..dependencies import LoginUserDep
@@ -95,6 +96,14 @@ async def approve_or_reject_review_tags(
         raise ReviewTagParamIsEmptyError.http_exception()
     existed_tag_list = await tags_service.approve_or_reject_review_tag(data, login_user.tenant_id)
     return resp_200(existed_tag_list)
+
+
+@router.post("/blacklist/preview", summary="Preview tag blacklist insert capacity", response_model=UnifiedResponseModel)
+async def preview_tag_blacklist(
+    data: TagConsoleBlacklistPreviewReq = Body(...),
+    tags_service: WorkStationTagsService = Depends(get_workstation_tags_service),
+):
+    return resp_200(await tags_service.preview_tag_blacklist(data.names))
 
 
 # 删除-待审核标签

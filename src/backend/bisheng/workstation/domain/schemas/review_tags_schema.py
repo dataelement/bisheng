@@ -78,6 +78,7 @@ class ApproveOrRejectRequest(BaseModel):
     tag_library_id: int | None = None
     knowledge_id: int | None = None
     ack_similar: bool = False
+    skip_blacklist: bool = False
 
 
 class ReviewTagSimilarCheckRequest(BaseModel):

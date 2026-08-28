@@ -1,42 +1,30 @@
 import {
-    getKnowledgeSpaceTagLibrariesByKnowledgeApi,
+    getKnowledgeSpaceTagLibrariesApi,
     type KnowledgeSpaceTagLibraryListItem,
 } from "@/controllers/API/knowledgeSpaceTagLibrary"
 import { useEffect, useState } from "react"
 
 /**
- * Libraries a set of pending tags can legally be approved into.
+ * Libraries a pending tag can be approved into.
  *
- * Approving writes the tag into a library, and the backend refuses when that
- * library is not bound to the knowledge base the tag came from — the tag would
- * land somewhere its own knowledge base cannot draw from. The console spans
- * every knowledge base, so offering all libraries meant a batch could pick one
- * valid for none of the selection and fail on every row with
- * "该标签库未关联此知识空间".
- *
- * Only libraries bound to *every* selected tag's source is offered, since one
- * library is chosen for the whole batch. An empty result is meaningful, not an
- * error: the selection has no library in common and has to be split up.
+ * Approval no longer requires the target library to already be bound to the
+ * source knowledge space — the backend binds in-scope sources on success.
+ * Offer every public library in the tenant.
  */
-export function useApprovableLibraries(spaceIds: number[]) {
+export function useApprovableLibraries(_spaceIds?: number[]) {
     const [libraries, setLibraries] = useState<KnowledgeSpaceTagLibraryListItem[]>([])
     const [loading, setLoading] = useState(false)
-    // Joined so the effect compares by value — a fresh array each render would
-    // otherwise refetch forever.
-    const key = spaceIds.join(",")
 
     useEffect(() => {
-        const ids = key ? key.split(",").map(Number) : []
-        if (!ids.length) {
-            setLibraries([])
-            return
-        }
         let cancelled = false
         setLoading(true)
-        Promise.all(ids.map((id) => getKnowledgeSpaceTagLibrariesByKnowledgeApi(id).catch(() => [])))
-            .then((perSpace) => {
+        getKnowledgeSpaceTagLibrariesApi({ page: 1, page_size: 500 })
+            .then((res) => {
                 if (cancelled) return
-                setLibraries(intersectLibraries(perSpace))
+                setLibraries(res?.data || [])
+            })
+            .catch(() => {
+                if (!cancelled) setLibraries([])
             })
             .finally(() => {
                 if (!cancelled) setLoading(false)
@@ -44,7 +32,7 @@ export function useApprovableLibraries(spaceIds: number[]) {
         return () => {
             cancelled = true
         }
-    }, [key])
+    }, [])
 
     return { libraries, loading }
 }

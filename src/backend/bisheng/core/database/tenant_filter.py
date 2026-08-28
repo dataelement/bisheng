@@ -83,6 +83,7 @@ _TENANT_AWARE_MODEL_MODULES = (
     "bisheng.knowledge.domain.models.knowledge_file",
     "bisheng.knowledge.domain.models.knowledge_file_pdf_artifact",
     "bisheng.knowledge.domain.models.knowledge_file_similarity_candidate",
+    "bisheng.knowledge.domain.models.tag_blacklist",
     "bisheng.knowledge.domain.models.knowledge_fulltext_outbox",
     "bisheng.knowledge.domain.models.portal_recommendation_file_projection",
     "bisheng.knowledge.domain.models.portal_hot_search_snapshot",

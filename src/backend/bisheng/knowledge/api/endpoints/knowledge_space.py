@@ -34,6 +34,7 @@ from bisheng.knowledge.domain.schemas.knowledge_space_schema import (
     FileCreateReq,
     FileEncodingUpdateReq,
     FileRenameReq,
+    FileTagRecommendReq,
     FolderCreateReq,
     FolderRenameReq,
     KnowledgeSpaceCreateReq,
@@ -964,6 +965,22 @@ async def get_file_download(
         request=request,
         login_user=login_user,
     )
+
+
+@router.post("/{space_id}/files/{file_id}/tag/recommend")
+async def recommend_file_tags(
+    space_id: int,
+    file_id: int,
+    req: FileTagRecommendReq = Body(default_factory=FileTagRecommendReq),
+    svc: KnowledgeSpaceService = Depends(get_knowledge_space_service),
+):
+    result = await svc.recommend_file_tags(
+        space_id,
+        file_id,
+        req.exclude_names,
+        refresh=req.refresh,
+    )
+    return resp_200(result)
 
 
 @router.post("/{space_id}/files/{file_id}/tag")
