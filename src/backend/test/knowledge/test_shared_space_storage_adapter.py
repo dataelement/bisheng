@@ -222,6 +222,35 @@ class TestSharedSpaceStorageReader:
         assert hits[0].score == pytest.approx(0.42)
         assert hits[0].content_generation == 4
 
+    async def test_milvus_search_raises_ef_above_large_top_k(self):
+        reader = self._reader()
+        reader.collection.search = MagicMock(return_value=[[]])
+        filter_ = BackendQueryFilter(
+            tenant_id=1, requested_space_ids=(11,), routing_version=3
+        )
+
+        await reader.search_milvus(filter_, vector=[0.1] * 4, limit=100)
+
+        params = reader.collection.search.call_args.kwargs["param"]
+        assert params["params"]["ef"] == 101
+
+    async def test_milvus_search_preserves_larger_custom_ef(self):
+        reader = self._reader()
+        reader.collection.search = MagicMock(return_value=[[]])
+        filter_ = BackendQueryFilter(
+            tenant_id=1, requested_space_ids=(11,), routing_version=3
+        )
+
+        await reader.search_milvus(
+            filter_,
+            vector=[0.1] * 4,
+            limit=100,
+            search_params={"metric_type": "L2", "params": {"ef": 256}},
+        )
+
+        params = reader.collection.search.call_args.kwargs["param"]
+        assert params["params"]["ef"] == 256
+
     async def test_es_search_returns_canonical_hits(self):
         reader = self._reader()
         filter_ = BackendQueryFilter(
