@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useRecoilValue } from "recoil";
@@ -18,6 +18,7 @@ import {
     deleteSpaceApi,
     downloadWatermarkedKnowledgeFileApi,
     getFilePreviewApi,
+    getFolderParentPathApi,
     getPortalFilePreviewApi,
     getPublicSpaceFilePermissionsApi,
     getSpaceChildrenApi,
@@ -2698,28 +2699,35 @@ export default function PortalKnowledgeWorkbench() {
         }
     }, [editingSpace, queryClient, showToast]);
 
+    const { data: selectedFileParentPath } = useQuery<Array<{ id: string; name: string }>>({
+        queryKey: ["portalSelectedFileParentPath", selectedFile?.spaceId, selectedFile?.id],
+        queryFn: async () => {
+            const spaceId = selectedFile?.spaceId;
+            const fileId = selectedFile?.id;
+            if (!spaceId || !fileId) return [];
+            return getFolderParentPathApi(spaceId, fileId);
+        },
+        enabled: Boolean(selectedFile?.spaceId && selectedFile?.id),
+        staleTime: 5 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        placeholderData: (prev: Array<{ id: string; name: string }> | undefined) => prev,
+    });
+
     const documentPath = useMemo(() => {
         const root = "全部知识库";
-        if (selectedFile) {
-            const rawPath = selectedFile.sourcePath || selectedFile.folderPath;
-            if (rawPath) {
-                const parts = String(rawPath).split("/").filter(Boolean);
-                // The file name is already shown as the document title, so remove it from the path tail.
-                if (parts.length > 0 && parts[parts.length - 1] === selectedFile.name) {
-                    parts.pop();
-                }
-                if (parts.length > 0) {
-                    const spaceName = selectedFile.sourceSpaceName || activeSpace?.name;
-                    const groupTitle = selectedFile.spaceId === activeSpace?.id ? activeGroup?.title : undefined;
-                    const hasSpaceName = spaceName && parts[0] === spaceName;
-                    const pathParts = hasSpaceName ? parts : [spaceName, ...parts];
-                    return [root, groupTitle, ...pathParts].filter(Boolean).join("/");
-                }
-            }
+        if (selectedFile && selectedFileParentPath && selectedFileParentPath.length > 0) {
+            const folderNames = selectedFileParentPath.map((item) => item.name);
+            const spaceName = selectedFile.sourceSpaceName || activeSpace?.name;
+            const groupTitle = String(selectedFile.spaceId) === String(activeSpace?.id)
+                ? activeGroup?.title
+                : undefined;
+            const hasSpaceName = spaceName && folderNames[0] === spaceName;
+            const pathParts = hasSpaceName ? folderNames : [spaceName, ...folderNames];
+            return [root, groupTitle, ...pathParts].filter(Boolean).join("/");
         }
         const names = [root, activeGroup?.title, activeSpace?.name].filter(Boolean);
         return names.join("/");
-    }, [activeGroup?.title, activeSpace?.name, selectedFile]);
+    }, [activeGroup?.title, activeSpace?.name, selectedFile, selectedFileParentPath]);
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
