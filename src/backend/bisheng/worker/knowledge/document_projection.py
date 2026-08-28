@@ -94,8 +94,12 @@ async def _build_document_projection_service(
         load_shared_content_chunks_from_legacy,
         resolve_shared_space_storage_enabled,
     )
+    from bisheng.knowledge.rag.shared_space_storage import get_shared_storage_conf
 
-    kwargs = {}
+    shared_conf = get_shared_storage_conf()
+    kwargs = {
+        "max_retry_attempts": int(shared_conf.projection_max_retries),
+    }
     if await resolve_shared_space_storage_enabled():
         writer = None
         factory = shared_storage_writer_factory or _default_shared_storage_writer_factory
@@ -109,6 +113,8 @@ async def _build_document_projection_service(
                 "shared_storage_writer": writer,
                 "shared_storage_enabled": True,
                 "shared_content_chunk_loader": load_shared_content_chunks_from_legacy,
+                "shared_embedding_model_id": writer.schema_spec.embedding_model_id,
+                "max_retry_attempts": int(shared_conf.projection_max_retries),
             }
             logger.info(
                 "F059 projection using shared dual projection mode "
@@ -658,10 +664,17 @@ async def _scan_tenant_projection_async(tenant_id: int) -> int:
     )
 
     async with get_async_db_session() as session:
+        from bisheng.knowledge.rag.shared_space_storage import (
+            get_shared_storage_conf,
+        )
+
         repository = KnowledgeFileRepositoryImpl(session)
         service = KnowledgeDocumentProjectionService(
             session=session,
             file_repository=repository,
+            max_retry_attempts=int(
+                get_shared_storage_conf().projection_max_retries
+            ),
         )
         entry_ids = await service.list_due_entry_ids(
             limit=SCAN_PAGE_SIZE,

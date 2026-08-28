@@ -11,7 +11,10 @@ import {
 import { NotificationSeverity } from "~/common";
 import { useToastContext } from "~/Providers";
 import { useLocalize } from "~/hooks";
-import { extractKnowledgeActionErrorMessage } from "../errorUtils";
+import {
+    extractKnowledgeActionErrorMessage,
+    isKnowledgeActionErrorAlreadyNotified,
+} from "../errorUtils";
 import { applyPinOrderToSpaceList } from "../sidebar/spaceSort";
 
 interface UseSpaceActionsOptions {
@@ -100,7 +103,10 @@ export function useSpaceActions({
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
             showToast({ message: localize("com_knowledge.space_deleted"), severity: NotificationSeverity.SUCCESS });
         } catch (error) {
+            // The refetch restores the row the optimistic update removed, so a
+            // blocked delete leaves the list correct rather than silently short.
             queryClient.invalidateQueries({ queryKey: ["knowledgeSpaces"] });
+            if (isKnowledgeActionErrorAlreadyNotified(error)) return;
             showToast({
                 message: extractKnowledgeActionErrorMessage(error) || localize("com_knowledge.delete_space_failed"),
                 severity: NotificationSeverity.ERROR,

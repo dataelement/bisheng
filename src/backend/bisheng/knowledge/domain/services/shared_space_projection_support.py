@@ -95,56 +95,71 @@ async def load_shared_content_chunks_from_legacy(
     from bisheng.knowledge.domain.knowledge_rag import KnowledgeRag
     from bisheng.knowledge.domain.models.knowledge import KnowledgeDao
 
-    knowledge = await KnowledgeDao.aquery_by_id(int(content_file.knowledge_id))
-    if knowledge is None:
+    source_space_ids = [int(content_file.knowledge_id)]
+    if (
+        content_file.original_knowledge_id is not None
+        and int(content_file.original_knowledge_id) not in source_space_ids
+    ):
+        source_space_ids.append(int(content_file.original_knowledge_id))
+    source_spaces = []
+    for space_id in source_space_ids:
+        knowledge = await KnowledgeDao.aquery_by_id(space_id)
+        if knowledge is not None:
+            source_spaces.append(knowledge)
+    if not source_spaces:
         raise RuntimeError(
-            f"knowledge {content_file.knowledge_id} not found for content file {content_file.id}"
+            f"knowledge spaces {source_space_ids} not found for content file "
+            f"{content_file.id}"
         )
 
     def _load() -> list[SharedContentChunk]:
-        vector_store = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
-            0, knowledge=knowledge
-        )
-        collection = vector_store.col
-        output_fields = [field.name for field in collection.schema.fields]
-        expr = f"document_id == {int(content_file.id)}"
-        rows: list[dict] = []
-        if hasattr(collection, "query_iterator"):
-            iterator = collection.query_iterator(
-                expr=expr,
-                output_fields=output_fields,
-                batch_size=1000,
+        for knowledge in source_spaces:
+            vector_store = KnowledgeRag.init_knowledge_milvus_vectorstore_sync(
+                0, knowledge=knowledge
             )
-            try:
-                while batch := iterator.next():
-                    rows.extend(batch)
-            finally:
-                iterator.close()
-        else:
-            rows.extend(
-                collection.query(
+            collection = vector_store.col
+            output_fields = [field.name for field in collection.schema.fields]
+            expr = f"document_id == {int(content_file.id)}"
+            rows: list[dict] = []
+            if hasattr(collection, "query_iterator"):
+                iterator = collection.query_iterator(
                     expr=expr,
                     output_fields=output_fields,
-                    limit=16384,
+                    batch_size=1000,
                 )
-            )
+                try:
+                    while batch := iterator.next():
+                        rows.extend(batch)
+                finally:
+                    iterator.close()
+            else:
+                rows.extend(
+                    collection.query(
+                        expr=expr,
+                        output_fields=output_fields,
+                        limit=16384,
+                    )
+                )
 
-        chunks: list[SharedContentChunk] = []
-        for offset, row in enumerate(rows):
-            metadata = {
-                key: value
-                for key, value in row.items()
-                if key not in {"pk", "text", "vector"}
-            }
-            chunks.append(
-                SharedContentChunk(
-                    chunk_index=int(row.get("chunk_index", offset) or offset),
-                    text=str(row.get("text", "")),
-                    vector=row.get("vector"),
-                    metadata=metadata,
+            if not rows:
+                continue
+            chunks: list[SharedContentChunk] = []
+            for offset, row in enumerate(rows):
+                metadata = {
+                    key: value
+                    for key, value in row.items()
+                    if key not in {"pk", "text", "vector"}
+                }
+                chunks.append(
+                    SharedContentChunk(
+                        chunk_index=int(row.get("chunk_index", offset) or offset),
+                        text=str(row.get("text", "")),
+                        vector=row.get("vector"),
+                        metadata=metadata,
+                    )
                 )
-            )
-        return sorted(chunks, key=lambda chunk: chunk.chunk_index)
+            return sorted(chunks, key=lambda chunk: chunk.chunk_index)
+        return []
 
     return await asyncio.to_thread(_load)
 

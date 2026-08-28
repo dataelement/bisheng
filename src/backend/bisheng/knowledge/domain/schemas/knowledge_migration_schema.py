@@ -25,6 +25,9 @@ class MigrationBatchCreateRequest(BaseModel):
     target_folder_id: int | None = Field(default=None, gt=0)
     preserve_structure: bool = True
     conflict_strategy: Literal["skip", "overwrite"] = "skip"
+    # Leaving a link behind is a publish, so the batch follows publish's level
+    # ladder instead of the free placement a plain migration allows.
+    preserve_link: bool = False
 
     @field_validator("request_id")
     @classmethod
@@ -41,6 +44,7 @@ class MigrationSpaceResponse(BaseModel):
     level: str
     owner_valid: bool
     selectable: bool = True
+    unavailable_reason: str | None = None
 
 
 class MigrationChildResponse(BaseModel):

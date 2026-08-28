@@ -146,7 +146,6 @@ async def test_projection_rebuild_reopens_ready_share_without_changing_file_stat
     await async_db_session.commit()
 
     assert await repository.request_projection_rebuild(102)
-    assert not await repository.request_projection_rebuild(100)
 
     pending = await repository.find_by_id(102)
     assert pending.projection_status == KnowledgeFileProjectionStatus.PENDING.value
@@ -165,6 +164,26 @@ async def test_projection_rebuild_reopens_ready_share_without_changing_file_stat
     assert refreshed.status == KnowledgeFileStatus.SUCCESS.value
     assert refreshed.object_name is None
     assert refreshed.projection_status == KnowledgeFileProjectionStatus.READY.value
+
+
+@pytest.mark.asyncio
+async def test_projection_rebuild_reopens_failed_manager_and_resets_retry_state(
+    async_db_session: AsyncSession,
+):
+    await _seed_entries(async_db_session)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    manager = await repository.find_by_id(100)
+    manager.projection_status = KnowledgeFileProjectionStatus.FAILED.value
+    manager.projection_retry_count = 99
+    manager.projection_last_error = "retry_exhausted:missing chunks"
+    async_db_session.add(manager)
+    await async_db_session.commit()
+
+    assert await repository.request_projection_rebuild(100)
+    reopened = await repository.find_by_id(100)
+    assert reopened.projection_status == KnowledgeFileProjectionStatus.PENDING.value
+    assert reopened.projection_retry_count == 0
+    assert reopened.projection_last_error is None
 
 
 @pytest.mark.asyncio
@@ -291,7 +310,7 @@ async def test_projection_failure_preserves_applied_generation_and_backs_off(
     assert entry.projection_retry_count == 1
     assert entry.projection_next_retry_at > now
     assert entry.projection_lease_owner is None
-    assert "ES unavailable" not in (entry.projection_last_error or "")
+    assert entry.projection_last_error == "RuntimeError:ES unavailable"
 
 
 @pytest.mark.asyncio
@@ -382,3 +401,26 @@ async def test_expired_processing_lease_is_returned_by_due_scan(
     )
 
     assert 101 in due
+
+
+@pytest.mark.asyncio
+async def test_projection_retry_cap_removes_exhausted_entry_from_due_scan(
+    async_db_session: AsyncSession,
+):
+    await _seed_entries(async_db_session)
+    repository = KnowledgeFileRepositoryImpl(async_db_session)
+    entry = await repository.find_by_id(101)
+    entry.projection_status = KnowledgeFileProjectionStatus.FAILED.value
+    entry.projection_retry_count = 3
+    entry.projection_next_retry_at = datetime.now() - timedelta(seconds=1)
+    async_db_session.add(entry)
+    await async_db_session.commit()
+
+    service = KnowledgeDocumentProjectionService(
+        session=async_db_session,
+        file_repository=repository,
+        max_retry_attempts=3,
+    )
+    due = await service.list_due_entry_ids(now=datetime.now(), limit=10)
+
+    assert 101 not in due

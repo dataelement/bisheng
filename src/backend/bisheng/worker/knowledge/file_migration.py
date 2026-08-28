@@ -99,11 +99,18 @@ def execute_knowledge_migration(
     batch_id: int,
     round_no: int,
 ):
+    from bisheng.knowledge.domain.services.migration_preserve_link_operations import (
+        build_preserve_link_aware_operations,
+    )
+
     repository_factory = KnowledgeMigrationRepositoryContextFactoryImpl()
     service = KnowledgeMigrationExecutionService(
         repository_factory=repository_factory,
         lock_repository=KnowledgeMigrationLockRepositoryImpl(),
-        operations=KnowledgeMigrationOperationsImpl(),
+        # Batches are claimed one at a time, so the mode is decided per unit
+        # rather than here: a preserve-link batch publishes, everything else
+        # takes the copy path unchanged.
+        operations=build_preserve_link_aware_operations(KnowledgeMigrationOperationsImpl()),
         dispatcher=CeleryKnowledgeMigrationTaskDispatcher(),
     )
     return run_async_task(

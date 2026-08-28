@@ -42,6 +42,8 @@ import {
 import store from "~/store";
 import { SearchParams } from "./CompoundSearchInput";
 import { EditTagsModal } from "./EditTagsModal";
+import { BatchCategoryModal } from "./BatchCategoryModal";
+import { BatchBusinessDomainModal } from "./BatchBusinessDomainModal";
 import { FileCard } from "./FileCard";
 import { FilePublishDialog } from "./FilePublishDialog";
 import { FileShareDialog } from "./FileShareDialog";
@@ -65,6 +67,7 @@ import { knowledgeSpaceDropdownSurfaceClassName } from "~/components/SidebarList
 import { cn, getFullWidthLength } from "~/utils";
 import type { PortalFileCategoryGroupOption, PortalFileCategoryOption } from "../portal/types";
 import type { BusinessDomainOptionItem } from "../portal/uploadMetadata";
+import { DEFAULT_PORTAL_FILE_CATEGORY_GROUPS } from "../portal/constants";
 
 const WEB_LINK_DUPLICATE_ERROR_CODES = new Set([18021, 18023]);
 
@@ -264,6 +267,8 @@ export function KnowledgeSpaceContent({
     const [editingTagsFileId, setEditingTagsFileId] = useState<string | null>(null);
     const [violationFile, setViolationFile] = useState<KnowledgeFile | null>(null);
     const [isBatchTagging, setIsBatchTagging] = useState(false);
+    const [isBatchCategorying, setIsBatchCategorying] = useState(false);
+    const [isBatchSettingBusinessDomain, setIsBatchSettingBusinessDomain] = useState(false);
     const [contextMenuOpen, setContextMenuOpen] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
 
@@ -1245,6 +1250,22 @@ export function KnowledgeSpaceContent({
         setIsBatchTagging(true);
     };
 
+    const handleBatchCategory = () => {
+        setIsBatchCategorying(true);
+    };
+
+    const handleBatchBusinessDomain = () => {
+        setIsBatchSettingBusinessDomain(true);
+    };
+
+    // Both category and business-domain batch edits are routed through
+    // file_encoding, so there is no incremental patch to apply here (unlike
+    // tags) — just clear the selection and pull the fresh encoding/labels.
+    const handleBatchClassificationSaved = () => {
+        setSelectedFiles(new Set());
+        dispatchKnowledgeSpaceFilesRefresh(space.id);
+    };
+
     const handleSingleDownload = async (fileId: string) => {
         const file = displayFiles.find(f => f.id === fileId);
         const isFolder = file?.type === FileType.FOLDER;
@@ -1655,6 +1676,8 @@ export function KnowledgeSpaceContent({
                 onBatchDownload={handleBatchDownload}
                 canBatchDownload={canBatchDownload}
                 onBatchTag={handleBatchTag}
+                onBatchCategory={enableEncodingClassification ? handleBatchCategory : undefined}
+                onBatchBusinessDomain={enableEncodingClassification ? handleBatchBusinessDomain : undefined}
                 onBatchRetry={handleBatchRetry}
                 onBatchDelete={handleBatchDelete}
                 canBatchDelete={canBatchDelete}
@@ -1996,6 +2019,24 @@ export function KnowledgeSpaceContent({
                         ? (displayFiles.find(f => f.id === editingTagsFileId)?.tags || [])
                         : []
                 }
+            />
+
+            <BatchCategoryModal
+                open={isBatchCategorying}
+                onClose={() => setIsBatchCategorying(false)}
+                spaceId={space.id}
+                fileIds={Array.from(selectedFiles)}
+                fileCategoryGroups={fileCategoryGroups ?? DEFAULT_PORTAL_FILE_CATEGORY_GROUPS}
+                onSaved={handleBatchClassificationSaved}
+            />
+
+            <BatchBusinessDomainModal
+                open={isBatchSettingBusinessDomain}
+                onClose={() => setIsBatchSettingBusinessDomain(false)}
+                spaceId={space.id}
+                fileIds={Array.from(selectedFiles)}
+                businessDomainOptions={businessDomainOptions}
+                onSaved={handleBatchClassificationSaved}
             />
 
             <Dialog open={!!violationFile} onOpenChange={(open) => {

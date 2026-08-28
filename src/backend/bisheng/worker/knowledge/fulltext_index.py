@@ -47,9 +47,6 @@ from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_ou
 from bisheng.knowledge.domain.repositories.implementations.knowledge_fulltext_source_repository_impl import (
     KnowledgeFulltextSourceRepositoryImpl,
 )
-from bisheng.knowledge.domain.services.knowledge_document_projection_service import (
-    KnowledgeDocumentProjectionService,
-)
 from bisheng.knowledge.domain.services.knowledge_fulltext_auto_repair_service import (
     KnowledgeFulltextAutoRepairDecision,
     KnowledgeFulltextAutoRepairService,
@@ -541,11 +538,17 @@ async def _run_logical_entry_projection_repair(
         await session.commit()
 
     async with get_async_db_session() as session:
-        service = KnowledgeDocumentProjectionService(
+        from bisheng.worker.knowledge.document_projection import (
+            _build_document_projection_service,
+        )
+
+        file_repository = KnowledgeFileRepositoryImpl(session)
+        service = await _build_document_projection_service(
             session=session,
-            file_repository=KnowledgeFileRepositoryImpl(session),
+            file_repository=file_repository,
             document_repository=KnowledgeDocumentRepositoryImpl(session),
             version_repository=KnowledgeDocumentVersionRepositoryImpl(session),
+            tenant_id=tenant_id,
         )
         result = await service.process_entry(
             tenant_id=tenant_id,

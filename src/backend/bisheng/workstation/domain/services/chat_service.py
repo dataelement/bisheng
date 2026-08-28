@@ -900,12 +900,14 @@ def _join_retrieval_blocks_with_limit(blocks: list[str], max_chars: int) -> str:
 
 
 async def _retrieve_selected_knowledge_context(
-        question: str,
-        knowledge_bases_info: list[dict],
-        login_user: UserPayload,
-        max_token: int,
-        citation_collector: CitationRegistryCollector,
-        file_ids_by_space: dict[int, list[int]] | None = None,
+    question: str,
+    knowledge_bases_info: list[dict],
+    login_user: UserPayload,
+    max_token: int,
+    citation_collector: CitationRegistryCollector,
+    file_ids_by_space: dict[int, list[int]] | None = None,
+    request: Request | None = None,
+    department_file_view_access_service=None,
 ) -> str:
     """调用模型前先检索用户选择的知识库内容。
 
@@ -937,6 +939,10 @@ async def _retrieve_selected_knowledge_context(
             max_token=max_token,
             login_user=login_user,
             file_ids_by_space=file_ids_by_space,
+            request=request,
+            department_file_view_access_service=(
+                department_file_view_access_service
+            ),
         )
     except Exception as exc:
         logger.exception(f'[pre_retrieve_kb] queryChunksFromDB failed: {exc}')
@@ -1460,6 +1466,12 @@ async def _agent_stream_chat_completion(
                 max_token=getattr(ws_config, 'maxTokens', 15000) or 15000,
                 citation_collector=citation_collector,
                 file_ids_by_space=file_ids_by_space,
+                request=request,
+                department_file_view_access_service=(
+                    department_file_view_access_service
+                    if portal_context
+                    else None
+                ),
             )
             user_text = _build_user_content(
                 question=data.text or '',
