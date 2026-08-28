@@ -311,7 +311,7 @@ export function PortalFileInfoEditModal({
                         <div className={s.infoEditModalLabelWrap}>
                             <label className={s.infoEditModalLabel}>文件名称</label>
                             <span className={s.infoEditRenameHint}>
-                                * 编辑完成之后进行回车保存
+                                * 编辑完成之后回车进行保存
                             </span>
                         </div>
                         <div className={s.infoEditModalField}>

@@ -3096,16 +3096,15 @@
 
 .infoEditModalLabelWrap {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .infoEditRenameHint {
   color: #f53f3f;
   font-size: 12px;
   line-height: 20px;
-  white-space: nowrap;
 }
 
 .infoEditModalOverlay {
