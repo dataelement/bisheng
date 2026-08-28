@@ -27,6 +27,7 @@ import { RelationModelOption, RelationSelect } from "./RelationSelect";
 import { SubjectSearchDepartment } from "./SubjectSearchDepartment";
 import { SubjectSearchUser } from "./SubjectSearchUser";
 import { SubjectSearchUserTree } from "./SubjectSearchUserTree";
+import { Loader2 } from "lucide-react";
 
 const SUBJECT_TYPES: SubjectType[] = ["user", "department"];
 const DEFAULT_MODELS: RelationModelOption[] = [
@@ -144,6 +145,7 @@ interface PermissionGrantTabProps {
   allowedSubjectTypes?: SubjectType[];
   grantSubjectScopeSpaceId?: string;
   permissionApi?: PermissionGrantApiAdapter;
+  onBulkLoadingChange?: (loading: boolean) => void;
 }
 
 const DEFAULT_PERMISSION_API: PermissionGrantApiAdapter = {
@@ -169,6 +171,7 @@ export function PermissionGrantTab({
   allowedSubjectTypes,
   grantSubjectScopeSpaceId,
   permissionApi,
+  onBulkLoadingChange,
 }: PermissionGrantTabProps) {
   const localize = useLocalize();
   const { showToast } = useToastContext();
@@ -183,6 +186,7 @@ export function PermissionGrantTab({
     EMPTY_GRANTED_SUBJECT_IDS
   );
   const [submitting, setSubmitting] = useState(false);
+  const [userTreeBulkLoading, setUserTreeBulkLoading] = useState(false);
   const includeChildren = includeChildrenProp ?? internalIncludeChildren;
   const handleIncludeChildrenChange = onIncludeChildrenChange ?? setInternalIncludeChildren;
   const effectiveSubjectType = normalizeSubjectType(fixedSubjectType ?? subjectType);
@@ -337,6 +341,11 @@ export function PermissionGrantTab({
     setSelectedDepartmentSummary([]);
   };
 
+  const handleUserTreeBulkLoadingChange = useCallback((loading: boolean) => {
+    setUserTreeBulkLoading(loading);
+    onBulkLoadingChange?.(loading);
+  }, [onBulkLoadingChange]);
+
   const loadKnowledgeSpaceDepartments = useCallback(
     (config?: { signal?: AbortSignal }) =>
       getKnowledgeSpaceGrantDepartments(grantSubjectScopeResourceId || resourceId, config),
@@ -392,7 +401,12 @@ export function PermissionGrantTab({
   const selectedSummaryText = selectedSubjectList.map((subject) => subject.name).join("、");
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+      {userTreeBulkLoading && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[6px] bg-black/10">
+          <Loader2 className="size-8 animate-spin text-primary" />
+        </div>
+      )}
       {!fixedSubjectType && (
         <div className="flex items-center gap-3">
           <div className="flex w-fit gap-1 rounded-md bg-gray-100 p-1">
@@ -438,6 +452,7 @@ export function PermissionGrantTab({
             loadDepartments={grantSubjectScopeResourceId ? loadKnowledgeSpaceDepartments : undefined}
             grantDepartmentsApi={activePermissionApi.getGrantDepartments}
             grantUsersApi={activePermissionApi.getGrantUsers}
+            onBulkLoadingChange={handleUserTreeBulkLoadingChange}
           />
         )}
         {effectiveSubjectType === "user" && !usesKnowledgeUserTree && (

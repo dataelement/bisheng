@@ -413,7 +413,7 @@ const SortableHeader = ({
     return (
         <TableHead
             className={cn(
-                "group sticky top-0 z-20 my-2 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
+                "group sticky top-0 z-20 cursor-pointer select-none overflow-visible bg-[#F3F4F6] p-0 pr-3",
                 "transition-colors hover:bg-[#f2f3f5]"
             )}
             style={{
@@ -433,7 +433,7 @@ const SortableHeader = ({
         >
             <div
                 className={cn(
-                    "flex min-w-0 items-center gap-1.5 pl-3",
+                    "flex h-full min-w-0 items-center gap-1.5 pl-3",
                     leadingBorder && "border-l",
                     headerAlignEnd && "w-full justify-end"
                 )}
@@ -694,15 +694,6 @@ function FileTableHeader({
                 >
                     {localize("com_knowledge.file_size")}</SortableHeader>
 
-                {/* 当前页文件总数统计（含子文件夹） */}
-                <TableHead
-                    className="sticky top-0 z-20 bg-[#F3F4F6] p-0 text-right font-normal text-[15px] text-[#545A60]"
-                    style={{ width: columnWidths.totalCount, minWidth: columnWidths.totalCount, maxWidth: columnWidths.totalCount }}
-                >
-                    <div className="flex h-full items-center justify-end border-l pl-3 pr-3">
-                        共计 {totalFileCount} 文件
-                    </div>
-                </TableHead>
 
                 {/* 行末锚点列（零宽）— 与 tbody 列结构保持一致，避免首屏出现多余空白 */}
                 <TableHead

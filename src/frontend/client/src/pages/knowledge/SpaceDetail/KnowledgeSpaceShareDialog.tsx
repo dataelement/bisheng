@@ -21,6 +21,7 @@ import { useLocalize } from "~/hooks";
 import { copyText } from "~/utils";
 import { getGrantableRelationModels } from "~/api/permission";
 import type { RelationModel, ResourceType } from "~/api/permission";
+import { Loader2 } from "lucide-react";
 
 const SHARE_TAB = "share";
 const MEMBERS_TAB = "members";
@@ -81,6 +82,7 @@ export function KnowledgeSpaceShareDialog({
     const [grantableModels, setGrantableModels] = useState<RelationModel[]>([]);
     const [grantableModelsLoaded, setGrantableModelsLoaded] = useState(false);
     const [useDefaultModels, setUseDefaultModels] = useState(false);
+    const [grantBulkLoading, setGrantBulkLoading] = useState(false);
 
     useEffect(() => {
         if (open) {
@@ -275,13 +277,19 @@ export function KnowledgeSpaceShareDialog({
                         </DialogTitle>
                     </DialogHeader>
 
-                    <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="relative mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                        {grantBulkLoading && (
+                            <div className="absolute inset-0 z-50 flex items-center justify-center rounded-[6px] bg-black/10">
+                                <Loader2 className="size-8 animate-spin text-primary" />
+                            </div>
+                        )}
                         <div className="flex items-center gap-3">
                             <div className="inline-flex w-fit shrink-0 items-center justify-center rounded-[6px] border border-[#ECECEC] bg-white p-[3px]">
                                 {allowedSubjectTabs.map((tab) => (
                                     <button
                                         key={tab.value}
                                         type="button"
+                                        disabled={grantBulkLoading}
                                         className={[
                                             "min-w-0 rounded-[4px] px-3 py-0.5 text-[14px] leading-[22px] transition-colors",
                                             grantSubjectType === tab.value
@@ -299,6 +307,7 @@ export function KnowledgeSpaceShareDialog({
                                 <label className="flex shrink-0 cursor-pointer items-center gap-2 text-[14px] leading-[22px] text-[#212121]">
                                     <Checkbox
                                         checked={grantIncludeChildren}
+                                        disabled={grantBulkLoading}
                                         onCheckedChange={(value) => setGrantIncludeChildren(value === true)}
                                     />
                                     {localize("com_permission.include_children")}
@@ -321,6 +330,7 @@ export function KnowledgeSpaceShareDialog({
                                 onIncludeChildrenChange={setGrantIncludeChildren}
                                 hideDepartmentIncludeChildrenControl
                                 grantSubjectScopeSpaceId={grantSubjectScopeSpaceId}
+                                onBulkLoadingChange={setGrantBulkLoading}
                             />
                         </div>
                     </div>
