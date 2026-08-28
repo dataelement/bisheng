@@ -187,6 +187,47 @@ async def test_approval_grant_detail_projection_keeps_department_download_decisi
 
 
 @pytest.mark.asyncio
+async def test_approval_grant_keeps_clinic_file_when_legacy_discovery_omits_space():
+    service = _service()
+    file = _file()
+    space = SimpleNamespace(id=2, type=3, tenant_id=1)
+    service.department_file_view_access_service = SimpleNamespace(
+        evaluate_file=AsyncMock(
+            return_value=DepartmentFileAccessDecision(
+                file_id=21,
+                space_id=2,
+                status=DepartmentFileAccessStatus.ALLOWED,
+                source=DepartmentFileAccessSource.APPROVAL_GRANT,
+                can_download=False,
+                department_id=30,
+            )
+        )
+    )
+    service._get_shougang_portal_request_spaces = AsyncMock(return_value=[])
+
+    with (
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeFileDao.query_by_id",
+            new=AsyncMock(return_value=file),
+        ),
+        patch(
+            "bisheng.knowledge.domain.services.knowledge_space_service."
+            "KnowledgeDao.aquery_by_id",
+            new=AsyncMock(return_value=space),
+        ),
+    ):
+        authorized, spaces = await service._get_authorized_shougang_portal_file(
+            space_id=2,
+            file_id=21,
+        )
+
+    assert authorized is file
+    assert spaces == [space]
+    assert service._portal_file_download_map[21] is False
+
+
+@pytest.mark.asyncio
 async def test_approval_grant_can_preview_distributed_share_entry():
     service = _service()
     share = _file()
