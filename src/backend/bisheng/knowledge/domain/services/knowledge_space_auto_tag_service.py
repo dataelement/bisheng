@@ -32,6 +32,7 @@ from bisheng.knowledge.domain.models.knowledge_space_tag_library import (
 from bisheng.knowledge.domain.models.knowledge_tag_library_link import (
     KnowledgeTagLibraryLinkDao,
 )
+from bisheng.knowledge.domain.services.tag_blacklist_service import TagBlacklistService
 from bisheng.knowledge.domain.services.tag_library_tag_service import (
     TagLibraryTagService,
 )
@@ -186,6 +187,7 @@ class KnowledgeSpaceAutoTagService:
         excluded = {name.strip() for name in (exclude_names or []) if str(name).strip()}
         manual_tags, ai_tags = cls._collect_library_tags(bound_ids)
         candidates = [tag for tag in dict.fromkeys(manual_tags + ai_tags) if tag and tag not in excluded]
+        candidates = cls._exclude_blacklisted(candidates)
         if not candidates:
             return []
         if len(candidates) <= limit:
@@ -349,6 +351,9 @@ class KnowledgeSpaceAutoTagService:
             return []
         excluded = {name.strip() for name in exclude_names if str(name).strip()}
         manual_tags, ai_tags = cls._collect_library_tags(library_ids)
+        catalog = cls._blacklist_catalog()
+        manual_tags = TagBlacklistService.filter_unblocked_names(manual_tags, catalog)
+        ai_tags = TagBlacklistService.filter_unblocked_names(ai_tags, catalog)
         manual_tags = [tag for tag in manual_tags if tag not in excluded]
         ai_tags = [tag for tag in ai_tags if tag not in excluded]
         if not manual_tags and not ai_tags:
@@ -383,6 +388,14 @@ class KnowledgeSpaceAutoTagService:
             )
             applied.extend(ai_matched)
         return applied
+
+    @classmethod
+    def _blacklist_catalog(cls) -> list[tuple[str, str]]:
+        return TagBlacklistService.list_catalog_entries_sync()
+
+    @classmethod
+    def _exclude_blacklisted(cls, names: Sequence[str]) -> list[str]:
+        return TagBlacklistService.filter_unblocked_names(names, cls._blacklist_catalog())
 
     @classmethod
     def _resolve_library_ids(cls, knowledge: Knowledge) -> list[int]:

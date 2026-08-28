@@ -209,6 +209,42 @@ class TagConsoleBatchApproveReq(BaseModel):
 class TagConsoleBatchRejectReq(BaseModel):
     items: list[TagConsoleReviewRef]
     reject_reason: str
+    skip_blacklist: bool = False
+
+
+class TagConsoleBlacklistSearchReq(BaseModel):
+    keyword: str | None = None
+    page: int = 1
+    page_size: int = 20
+
+
+class TagConsoleBlacklistItem(BaseModel):
+    id: int
+    name: str
+    user_id: int = 0
+    create_time: datetime | None = None
+
+
+class TagConsoleBlacklistSearchResp(BaseModel):
+    data: list[TagConsoleBlacklistItem]
+    total: int
+    count: int
+    limit: int = 1000
+
+
+class TagConsoleBlacklistPreviewReq(BaseModel):
+    names: list[str] = Field(default_factory=list)
+
+
+class TagConsoleBlacklistCreateReq(BaseModel):
+    name: str
+
+
+class TagConsoleBlacklistPreviewResp(BaseModel):
+    count: int
+    limit: int = 1000
+    new_count: int
+    would_exceed: bool
 
 
 # --------------------------------------------------------------------------

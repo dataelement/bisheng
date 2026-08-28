@@ -81,3 +81,20 @@ class ReviewTagSimilarAckRequiredError(BaseErrorCode):
 
     Code: int = 10714
     Msg: str = "Similar tags exist in the target library; confirmation is required"
+
+
+class TagBlacklistLimitExceededError(BaseErrorCode):
+    """Inserting the rejected names would push the tenant blacklist past 1000 rows."""
+
+    Code: int = 10715
+    Msg: str = "Tag blacklist would exceed the 1000-item limit"
+
+
+class TagBlacklistNotFoundError(BaseErrorCode):
+    Code: int = 10716
+    Msg: str = "Tag blacklist entry not found"
+
+
+class TagBlacklistAlreadyExistError(BaseErrorCode):
+    Code: int = 10717
+    Msg: str = "Tag is already in the blacklist"

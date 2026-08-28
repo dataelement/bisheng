@@ -477,6 +477,11 @@ class WorkStationTagsService(BaseService):
             )
             if not pending:
                 raise ReviewTagNotFoundError.http_exception()
+            from bisheng.knowledge.domain.services.tag_blacklist_service import TagBlacklistService
+
+            skip_blacklist = bool(getattr(data, "skip_blacklist", False))
+            if not skip_blacklist:
+                await TagBlacklistService.ensure_can_insert_async([data.tag_name])
             await self.review_tags_repository.reject_review_tag(
                 data.tag_name,
                 data.reject_reason,
@@ -489,6 +494,11 @@ class WorkStationTagsService(BaseService):
             from bisheng.knowledge.domain.services.tag_library_tag_service import TagLibraryTagService
 
             await TagLibraryTagService.invalidate_link_b_tenant_catalog_cache_async(tenant_id)
+            if not skip_blacklist:
+                await TagBlacklistService.add_names_async(
+                    [data.tag_name],
+                    user_id=int(getattr(self.login_user, "user_id", 0) or 0),
+                )
         else:
             raise ReviewTagTypeMismatchError.http_exception()
 
@@ -515,6 +525,21 @@ class WorkStationTagsService(BaseService):
             fallback_knowledge_id=data.knowledge_id,
         )
         return existed_tag_list
+
+    async def preview_tag_blacklist(self, names: list[str]) -> dict:
+        """Reviewers need this before reject so they can skip insert when the cap would be hit."""
+        scope = await self.resolve_review_tag_scope()
+        if not scope.has_review_capacity():
+            raise ReviewTagPermissionDeniedError()
+        from bisheng.knowledge.domain.services.tag_blacklist_service import TagBlacklistService
+
+        preview = await TagBlacklistService.preview_insert_async(names)
+        return {
+            "count": preview.count,
+            "limit": preview.limit,
+            "new_count": preview.new_count,
+            "would_exceed": preview.would_exceed,
+        }
 
     async def _list_in_scope_source_knowledge_ids(
         self,

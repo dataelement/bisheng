@@ -225,6 +225,18 @@ CREATE TABLE IF NOT EXISTS review_tag (
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL
 )"""
 
+TABLE_TAG_BLACKLIST = """\
+CREATE TABLE IF NOT EXISTS tag_blacklist (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id INTEGER NOT NULL DEFAULT 1,
+    name VARCHAR(255) NOT NULL,
+    name_key VARCHAR(255) NOT NULL,
+    user_id INTEGER DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    UNIQUE(tenant_id, name_key)
+)"""
+
 TABLE_REVIEW_TAG_LINK = """\
 CREATE TABLE IF NOT EXISTS review_tag_link (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -941,6 +953,7 @@ TABLE_DEFINITIONS: dict[str, str] = {
     "taglink": TABLE_TAG_LINK,
     "review_tag": TABLE_REVIEW_TAG,
     "review_tag_link": TABLE_REVIEW_TAG_LINK,
+    "tag_blacklist": TABLE_TAG_BLACKLIST,
     "knowledge_space_tag_library": TABLE_KNOWLEDGE_SPACE_TAG_LIBRARY,
     "department": TABLE_DEPARTMENT,
     "user_department": TABLE_USER_DEPARTMENT,

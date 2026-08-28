@@ -19,6 +19,12 @@ from bisheng.knowledge.domain.services.knowledge_space_tag_library_service impor
 )
 
 
+@pytest.fixture(autouse=True)
+def _empty_tag_blacklist():
+    with patch.object(KnowledgeSpaceAutoTagService, "_blacklist_catalog", return_value=[]):
+        yield
+
+
 def test_tag_library_normalize_preserves_duplicates_and_rejects_over_limit():
     assert KnowledgeSpaceTagLibraryService.normalize_tags([" 政策 ", "", "政策", "制度"]) == ["政策", "政策", "制度"]
 

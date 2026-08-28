@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from bisheng.database.models.tag import TagResourceTypeEnum
 from bisheng.knowledge.domain.models.knowledge import Knowledge, KnowledgeTypeEnum
 from bisheng.knowledge.domain.models.knowledge_file import (
@@ -22,6 +24,12 @@ _LINK_DAO_PATCH = (
     "bisheng.knowledge.domain.services.knowledge_space_review_tag_service."
     "KnowledgeSpaceAutoTagService._resolve_library_ids"
 )
+
+
+@pytest.fixture(autouse=True)
+def _empty_tag_blacklist():
+    with patch.object(KnowledgeSpaceAutoTagService, "_blacklist_catalog", return_value=[]):
+        yield
 
 
 def test_build_review_tag_system_prompt_appends_business_domain_and_file_category():
