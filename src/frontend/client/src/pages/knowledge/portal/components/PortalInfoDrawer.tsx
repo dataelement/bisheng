@@ -174,7 +174,7 @@ export function PortalInfoDrawer({
         : "-";
     const sourcePath = isSharedFile
         ? (selectedFile?.sourcePath || "-")
-        : (selectedFile?.sourcePath || selectedFile?.folderPath || documentPath || "-");
+        : (selectedFile?.sourcePath || documentPath || selectedFile?.folderPath || "-");
     const detailTabs = DETAIL_TABS;
 
     const renderDetailItem = (label: string, value: string | number | null | undefined) => (
