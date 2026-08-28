@@ -1645,6 +1645,7 @@
     "crawl_error_19005": "检测到为单篇文章或非列表页。请提供有效的「栏目列表页」链接（例如，新闻或政策列表页）",
     "crawling_please_wait": "爬取中,可能需要1-2分钟,请耐心等待...",
     "create_channel": "创建频道",
+    "switch_channel": "切换频道",
     "create_channel_failed_retry": "频道创建失败，请稍后重试",
     "create_folder_failed": "创建文件夹失败",
     "created_by_me": "我创建的",

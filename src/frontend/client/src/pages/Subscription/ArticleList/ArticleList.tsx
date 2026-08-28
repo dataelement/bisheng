@@ -14,7 +14,7 @@ import { LoadingIcon } from "~/components/ui/icon/Loading";
 import { useDebounce } from "~/hooks";
 import { ArticleCard } from "./ArticleCard";
 import { ChannelActionsMenu } from "./ChannelActionsMenu";
-import { ChannelSwitcher } from "./ChannelSwitcher";
+import { ChannelSwitcher, SERIF_FONT_STACK } from "./ChannelSwitcher";
 import { MultiSourceSelect } from "./MultiSourceSelect";
 import { SearchInput } from "./SearchInput";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip2";
@@ -490,6 +490,7 @@ export function ArticleList({
                                         channel={channel}
                                         onChannelSelect={onChannelSelect}
                                         onChannelSettings={onChannelSettings}
+                                        onCreateChannel={onCreateChannel}
                                         onShare={canOpenChannelShare ? handleMobileShare : undefined}
                                         onOpenSourceFilter={
                                             sourceOptions.length > 0
@@ -529,47 +530,47 @@ export function ArticleList({
                                 />
                             </div>
                         ) : null}
-                        {/* Row 2: 频道名称（左，下拉切换频道） + 仅看未读（右） */}
+                        {/* Row 2: 频道名称（左，纯标题） + 切换频道 / 仅看未读（右） */}
                         <div className="flex h-11 items-center justify-between gap-3 px-4">
-                            {onChannelSelect ? (
-                                <ChannelSwitcher
-                                    variant="mobile"
-                                    mobileTriggerClassName="flex-1 justify-start"
-                                    activeChannelId={channel.id}
-                                    channelName={channelDetail?.name || channel.name}
-                                    onChannelSelect={onChannelSelect}
-                                    onCreateChannel={onCreateChannel}
-                                    onChannelSquare={onGoChannelSquare}
-                                    open={mobileDropdownOpen}
-                                    onOpenChange={(next) => {
-                                        if (next) setMobileSearchOpen(false);
-                                        setMobileDropdownOpen(next);
-                                    }}
-                                    mobileTopOffset={
-                                        mobileSearchOpen
-                                            ? "calc(env(safe-area-inset-top, 0px) + 148px)"
-                                            : "calc(env(safe-area-inset-top, 0px) + 96px)"
-                                    }
-                                />
-                            ) : (
-                                <h1 className="min-w-0 flex-1 truncate text-[16px] font-medium leading-6 text-text-1">
-                                    {channelDetail?.name || channel.name}
-                                </h1>
-                            )}
-                            <button
-                                type="button"
-                                onClick={handleToggleUnread}
-                                disabled={mobileDropdownOpen}
-                                className={cn(
-                                    "shrink-0 rounded-md border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
-                                    onlyUnread
-                                        ? "border-transparent bg-primary/20 text-primary"
-                                        : "border-border-base bg-white text-gray-800",
-                                    mobileDropdownOpen && "pointer-events-none opacity-20",
-                                )}
-                            >
-                                {localize("com_subscription.show_unread_only")}
-                            </button>
+                            <h1 className="min-w-0 flex-1 truncate text-[16px] font-medium leading-6 text-text-1">
+                                {channelDetail?.name || channel.name}
+                            </h1>
+                            <div className="flex shrink-0 items-center gap-3">
+                                {onChannelSelect ? (
+                                    <ChannelSwitcher
+                                        variant="mobile"
+                                        activeChannelId={channel.id}
+                                        channelName={channelDetail?.name || channel.name}
+                                        onChannelSelect={onChannelSelect}
+                                        onCreateChannel={onCreateChannel}
+                                        onChannelSquare={onGoChannelSquare}
+                                        open={mobileDropdownOpen}
+                                        onOpenChange={(next) => {
+                                            if (next) setMobileSearchOpen(false);
+                                            setMobileDropdownOpen(next);
+                                        }}
+                                        mobileTopOffset={
+                                            mobileSearchOpen
+                                                ? "calc(env(safe-area-inset-top, 0px) + 148px)"
+                                                : "calc(env(safe-area-inset-top, 0px) + 96px)"
+                                        }
+                                    />
+                                ) : null}
+                                <button
+                                    type="button"
+                                    onClick={handleToggleUnread}
+                                    disabled={mobileDropdownOpen}
+                                    className={cn(
+                                        "shrink-0 rounded-md border px-3 py-[3px] text-sm transition-colors whitespace-nowrap",
+                                        onlyUnread
+                                            ? "border-transparent bg-primary/20 text-primary"
+                                            : "border-border-base bg-white text-gray-800",
+                                        mobileDropdownOpen && "pointer-events-none opacity-20",
+                                    )}
+                                >
+                                    {localize("com_subscription.show_unread_only")}
+                                </button>
+                            </div>
                         </div>
                         {/* Row 3: 子频道（横向滚动；右侧渐变提示可滑动）。无子频道时整行隐藏。 */}
                         {subChannels.length > 0 ? (
@@ -590,13 +591,13 @@ export function ArticleList({
                                     <div
                                         ref={tabsScrollRef}
                                         onScroll={updateTabsScrollShadow}
-                                        className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
+                                        className="flex min-w-0 items-center gap-6 overflow-x-auto no-scrollbar"
                                     >
                                         <button
                                             type="button"
                                             onClick={() => handleSubChannelChange("all")}
                                             className={cn(
-                                                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
+                                                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 py-[3px] text-sm transition-colors",
                                                 !selectedSubChannelName
                                                     ? "border-blue-500 text-blue-500"
                                                     : "border-transparent text-text-1",
@@ -615,7 +616,7 @@ export function ArticleList({
                                                 sub={sub}
                                                 onClick={() => handleSubChannelChange(sub.name)}
                                                 className={cn(
-                                                    "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-[3px] text-sm transition-colors",
+                                                    "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 py-[3px] text-sm transition-colors",
                                                     selectedSubChannelName === sub.name
                                                         ? "border-blue-500 text-blue-500"
                                                         : "border-transparent text-text-1",
@@ -636,9 +637,9 @@ export function ArticleList({
                     // PC keeps 40px gutters whether grid or preview-open; H5 uses 16px.
                     isH5 ? "px-4" : "px-10",
                 )}>
-                    {/* 频道名 + 信息 */}
+                    {/* 切换频道（左，无边框按钮） + 频道名（居中） */}
                     <div className="flex items-center gap-3">
-                        <div className="flex min-w-0 flex-1 items-center gap-1 text-sm">
+                        <div className="flex min-w-0 flex-1 items-center">
                             {onChannelSelect ? (
                                 <ChannelSwitcher
                                     activeChannelId={channel.id}
@@ -664,7 +665,10 @@ export function ArticleList({
                                     }
                                 />
                             ) : (
-                                <h1 className="truncate text-base text-text-1">
+                                <h1
+                                    className="mx-auto max-w-[min(60%,600px)] truncate text-[32px] font-bold leading-[40px] text-text-1"
+                                    style={{ fontFamily: SERIF_FONT_STACK }}
+                                >
                                     {channelDetail?.name || channel.name}
                                 </h1>
                             )}
@@ -692,13 +696,13 @@ export function ArticleList({
                             <div
                                 ref={tabsScrollRef}
                                 onScroll={updateTabsScrollShadow}
-                                className="flex min-w-0 items-center gap-2 overflow-x-auto no-scrollbar"
+                                className="flex min-w-0 items-center gap-6 overflow-x-auto no-scrollbar"
                             >
                                 <button
                                     type="button"
                                     onClick={() => handleSubChannelChange("all")}
                                     className={cn(
-                                        "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
+                                        "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 py-[5px] text-sm transition-colors",
                                         !selectedSubChannelName
                                             ? "border-blue-500 text-blue-500"
                                             : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
@@ -717,7 +721,7 @@ export function ArticleList({
                                         sub={sub}
                                         onClick={() => handleSubChannelChange(sub.name)}
                                         className={cn(
-                                            "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-2 py-[5px] text-sm transition-colors",
+                                            "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 py-[5px] text-sm transition-colors",
                                             selectedSubChannelName === sub.name
                                                 ? "border-blue-500 text-blue-500"
                                                 : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",

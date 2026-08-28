@@ -1642,6 +1642,7 @@
     "crawled_content_preview": "クロール内容のプレビュー",
     "crawling_please_wait": "クロール中、1〜2分かかる場合があります。お待ちください...",
     "create_channel": "チャンネルを作成してください",
+    "switch_channel": "チャンネル切替",
     "create_channel_failed_retry": "チャンネルの作成に失敗しました。後でもう一度お試しください",
     "create_folder_failed": "フォルダーの作成に失敗しました",
     "created_by_me": "私が作成した",

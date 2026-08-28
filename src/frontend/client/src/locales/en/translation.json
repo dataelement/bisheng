@@ -1719,6 +1719,7 @@
     "crawled_content_preview": "Crawled content preview",
     "crawling_please_wait": "Crawling, this may take 1-2 minutes, please wait...",
     "create_channel": "create a channel",
+    "switch_channel": "Switch channel",
     "create_channel_failed_retry": "Failed to create channel, please try again later",
     "create_folder_failed": "Failed to create folder",
     "created_by_me": "Created by Me",

@@ -243,11 +243,12 @@ export function ChannelDiscoveryHome({
                 </div>
             );
         }
-        // Match the content-view header title (ChannelSwitcher): same px-10/pt-5 offset,
-        // 32px bold serif #212121.
+        // Match the content-view header title (ChannelSwitcher): same pt-5 offset,
+        // 32px bold serif #212121, centered. With no channel to show, the centered
+        // title keeps the module name (资讯订阅) instead of a channel name.
         return (
             <h1
-                className="shrink-0 px-10 pt-5 pb-4 text-[32px] font-bold leading-[40px] text-text-1"
+                className="shrink-0 px-10 pt-5 pb-4 text-center text-[32px] font-bold leading-[40px] text-text-1"
                 style={{ fontFamily: SERIF_FONT_STACK }}
             >
                 {menuNames.channel}
