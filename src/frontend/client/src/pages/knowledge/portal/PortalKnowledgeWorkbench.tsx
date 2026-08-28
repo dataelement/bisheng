@@ -2699,13 +2699,27 @@ export default function PortalKnowledgeWorkbench() {
     }, [editingSpace, queryClient, showToast]);
 
     const documentPath = useMemo(() => {
-        const names = [
-            "全部知识库",
-            activeGroup?.title,
-            activeSpace?.name,
-        ].filter(Boolean);
+        const root = "全部知识库";
+        if (selectedFile) {
+            const rawPath = selectedFile.sourcePath || selectedFile.folderPath;
+            if (rawPath) {
+                const parts = String(rawPath).split("/").filter(Boolean);
+                // The file name is already shown as the document title, so remove it from the path tail.
+                if (parts.length > 0 && parts[parts.length - 1] === selectedFile.name) {
+                    parts.pop();
+                }
+                if (parts.length > 0) {
+                    const spaceName = selectedFile.sourceSpaceName || activeSpace?.name;
+                    const groupTitle = selectedFile.spaceId === activeSpace?.id ? activeGroup?.title : undefined;
+                    const hasSpaceName = spaceName && parts[0] === spaceName;
+                    const pathParts = hasSpaceName ? parts : [spaceName, ...parts];
+                    return [root, groupTitle, ...pathParts].filter(Boolean).join("/");
+                }
+            }
+        }
+        const names = [root, activeGroup?.title, activeSpace?.name].filter(Boolean);
         return names.join("/");
-    }, [activeGroup?.title, activeSpace?.name]);
+    }, [activeGroup?.title, activeSpace?.name, selectedFile]);
     const aiContextLabel = currentFolderId ? "文件夹" : "知识库";
     const handleWorkbenchDrag = useCallback((event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
