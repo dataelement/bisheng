@@ -1,4 +1,4 @@
-import { Button } from "@bisheng/ui";
+import { Button, Tag } from "@bisheng/ui";
 import { Outlined } from "bisheng-icons";
 import { FileSearch, GitBranch, History } from "lucide-react";
 import { useState } from "react";
@@ -13,6 +13,7 @@ import { useInlineRename } from "../hooks/useInlineRename";
 import {
     formatTimeCard,
     getKnowledgeApprovalStatusLabel,
+    type KnowledgeStatusTone,
     isKnowledgeApprovalRejected,
     isKnowledgeItemPreviewable,
     isKnowledgeItemUploading,
@@ -47,12 +48,6 @@ const renderHighlightedName = (text: string, keyword?: string) => {
     );
 };
 
-type Tone = { bg: string; text: string; dot: string };
-
-const NEUTRAL_TONE: Tone = { bg: "bg-[#f2f4f7]", text: "text-[#6b7785]", dot: "bg-[#6b7785]" };
-const ERROR_TONE: Tone = { bg: "bg-[#fff2f0]", text: "text-[#f53f3f]", dot: "bg-[#f53f3f]" };
-const INFO_TONE: Tone = { bg: "bg-blue-50", text: "text-blue-500", dot: "bg-blue-500" };
-
 /**
  * Status pill shown on the right of the row, before the action buttons
  * (Figma 13199:86506). Successful files intentionally have no pill.
@@ -66,36 +61,36 @@ const StatusBadge = ({ file }: { file: KnowledgeFile }) => {
     if (status === FileStatus.SUCCESS && !approvalStatusLabel) return null;
 
     let label: string;
-    let tone: Tone;
+    let tone: KnowledgeStatusTone;
     if (approvalStatusLabel) {
         label = approvalStatusLabel;
-        tone = isKnowledgeApprovalRejected(file) ? ERROR_TONE : INFO_TONE;
+        // `finalize_failed` lands in `approving` blue with the rest of the
+        // non-rejected approval labels — that is what this row painted before
+        // the migration. It reads like a failure and probably wants `danger`;
+        // left alone here so the migration changes no state's meaning.
+        tone = isKnowledgeApprovalRejected(file) ? "danger" : "approving";
     } else {
-        const config: Record<string, { label: string; tone: Tone }> = {
-            [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: NEUTRAL_TONE },
-            [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: NEUTRAL_TONE },
-            [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: NEUTRAL_TONE },
-            [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: NEUTRAL_TONE },
-            [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: ERROR_TONE },
-            [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: ERROR_TONE },
-            [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: ERROR_TONE },
+        const config: Record<string, { label: string; tone: KnowledgeStatusTone }> = {
+            [FileStatus.PROCESSING]: { label: localize("com_knowledge.parsing_status"), tone: "default" },
+            [FileStatus.WAITING]: { label: localize("com_knowledge.queueing_status"), tone: "default" },
+            [FileStatus.REBUILDING]: { label: localize("com_knowledge.rebuilding_status"), tone: "default" },
+            [FileStatus.UPLOADING]: { label: localize("com_knowledge.uploading_status"), tone: "default" },
+            [FileStatus.FAILED]: { label: localize("com_knowledge.fail"), tone: "danger" },
+            [FileStatus.TIMEOUT]: { label: localize("com_knowledge.timeout"), tone: "danger" },
+            [FileStatus.VIOLATION]: { label: localize("com_knowledge.violation"), tone: "danger" },
         };
         const item = config[status] || config[FileStatus.WAITING];
         label = item.label;
         tone = item.tone;
     }
 
+    // 组件-Tag标签.md §5 — the status form: a dot the color of the text, in
+    // front of one word. `small` is the list-row rung. The row lays its
+    // children out in a flex line, so the tag keeps its own width.
     const pill = (
-        <div
-            className={cn(
-                "inline-flex shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-[4px] px-2 text-xs leading-5",
-                tone.bg,
-                tone.text,
-            )}
-        >
-            <span className={cn("size-1 shrink-0 rounded-full", tone.dot)} />
+        <Tag size="small" dot color={tone} className="shrink-0 whitespace-nowrap">
             {label}
-        </div>
+        </Tag>
     );
 
     // Queueing carries no actionable reason — skip the tooltip there.
