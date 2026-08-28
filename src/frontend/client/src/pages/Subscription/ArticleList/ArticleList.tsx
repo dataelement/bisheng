@@ -1,3 +1,4 @@
+import { Tabs } from "@bisheng/ui";
 import { useLocalize, usePrefersMobileLayout } from "~/hooks";
 import { EmptyStateIllustration } from "~/components/illustrations";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -103,19 +104,11 @@ export function mapToArticle(item: ArticleSearchResultItem, channelId: string): 
 }
 
 /**
- * Sub-channel tab whose tooltip only opens when the name is actually truncated
- * (max-w-[240px] + truncate). Avoids redundant tooltips on short names that fit
- * fully inside the tab. Truncation state re-checks on resize via ResizeObserver.
+ * Sub-channel tab label with a tooltip that only opens when the name is actually
+ * truncated (max-w-[240px]). Rendered inside the @bisheng/ui Tabs items — the tab
+ * button chrome, indicator and count badge all come from the library component.
  */
-function SubChannelTab({
-    sub,
-    className,
-    onClick,
-}: {
-    sub: { id: string; name: string; unreadCount?: number };
-    className: string;
-    onClick: () => void;
-}) {
+function TruncatedTabLabel({ name }: { name: string }) {
     const labelRef = useRef<HTMLSpanElement>(null);
     const [isTruncated, setIsTruncated] = useState(false);
     const [open, setOpen] = useState(false);
@@ -128,28 +121,20 @@ function SubChannelTab({
         const ro = new ResizeObserver(check);
         ro.observe(el);
         return () => ro.disconnect();
-    }, [sub.name]);
+    }, [name]);
 
     return (
         <Tooltip
             open={open}
             onOpenChange={(next) => {
-                // Suppress open events when the name fits — only truncated labels show a tooltip.
                 if (next && !isTruncated) return;
                 setOpen(next);
             }}
         >
             <TooltipTrigger asChild>
-                <button type="button" onClick={onClick} className={className}>
-                    <span ref={labelRef} className="block max-w-[240px] truncate">{sub.name}</span>
-                    {sub.unreadCount && sub.unreadCount > 0 ? (
-                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-caption-sm font-medium text-blue-500">
-                            {sub.unreadCount}
-                        </span>
-                    ) : null}
-                </button>
+                <span ref={labelRef} className="block max-w-[240px] truncate">{name}</span>
             </TooltipTrigger>
-            <TooltipContent>{sub.name}</TooltipContent>
+            <TooltipContent>{name}</TooltipContent>
         </Tooltip>
     );
 }
@@ -183,8 +168,6 @@ export function ArticleList({
     const [selectedSources, setSelectedSources] = useState<string[]>([]);
     const [isListScrolling, setIsListScrolling] = useState(false);
     const listScrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const tabsScrollRef = useRef<HTMLDivElement>(null);
-    const [tabsScrollShadow, setTabsScrollShadow] = useState({ left: false, right: false });
     /** H5: title-bar channel dropdown + search input visibility; menu-triggered source filter */
     const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false);
     const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -399,45 +382,11 @@ export function ArticleList({
         listScrollTimerRef.current = setTimeout(() => setIsListScrolling(false), 500);
     };
 
-    const updateTabsScrollShadow = useCallback(() => {
-        const el = tabsScrollRef.current;
-        if (!el) {
-            setTabsScrollShadow({ left: false, right: false });
-            return;
-        }
-        const { scrollLeft, scrollWidth, clientWidth } = el;
-        const overflow = scrollWidth - clientWidth;
-        const eps = 2;
-        setTabsScrollShadow({
-            left: scrollLeft > eps,
-            right: overflow > eps && scrollLeft < overflow - eps,
-        });
-    }, []);
-
     // 处理子频道切换（改为 name 模式）
     const handleSubChannelChange = (subChannelName: string) => {
         localStorage.setItem(`selectedSubChannelName-${channel.id}`, subChannelName === "all" ? "" : subChannelName);
         setSelectedSubChannelName(subChannelName === "all" ? undefined : subChannelName);
     };
-
-    useEffect(() => {
-        const id = requestAnimationFrame(() => updateTabsScrollShadow());
-        return () => cancelAnimationFrame(id);
-    }, [subChannels.length, channel.id, updateTabsScrollShadow]);
-
-    useEffect(() => {
-        const el = tabsScrollRef.current;
-        if (!el || typeof ResizeObserver === "undefined") {
-            return;
-        }
-        const ro = new ResizeObserver(() => updateTabsScrollShadow());
-        ro.observe(el);
-        window.addEventListener("resize", updateTabsScrollShadow);
-        return () => {
-            ro.disconnect();
-            window.removeEventListener("resize", updateTabsScrollShadow);
-        };
-    }, [channel.id, updateTabsScrollShadow]);
 
     return (
         <div className="flex h-full min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
@@ -572,59 +521,26 @@ export function ArticleList({
                                 </button>
                             </div>
                         </div>
-                        {/* Row 3: 子频道（横向滚动；右侧渐变提示可滑动）。无子频道时整行隐藏。 */}
+                        {/* Row 3: 子频道页签。无子频道时整行隐藏。横滚、两端渐隐、
+                            未读数徽标与底部通栏分隔线都由 @bisheng/ui Tabs 提供。 */}
                         {subChannels.length > 0 ? (
                             <div className="px-4 pb-2">
-                                <div className="relative min-w-0 border-b border-fill-2">
-                                    {tabsScrollShadow.left ? (
-                                        <div
-                                            className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0.15)_0%,rgba(153,153,153,0)_100%)]"
-                                            aria-hidden
-                                        />
-                                    ) : null}
-                                    {tabsScrollShadow.right ? (
-                                        <div
-                                            className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0)_0%,rgba(153,153,153,0.15)_100%)]"
-                                            aria-hidden
-                                        />
-                                    ) : null}
-                                    <div
-                                        ref={tabsScrollRef}
-                                        onScroll={updateTabsScrollShadow}
-                                        className="flex min-w-0 items-center gap-6 overflow-x-auto no-scrollbar"
-                                    >
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSubChannelChange("all")}
-                                            className={cn(
-                                                "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 py-[3px] text-sm transition-colors",
-                                                !selectedSubChannelName
-                                                    ? "border-blue-500 text-blue-500"
-                                                    : "border-transparent text-text-1",
-                                            )}
-                                        >
-                                            <span>{localize("com_subscription.all")}</span>
-                                            {channel.unreadCount > 0 && (
-                                                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-blue-500/5 px-1 text-caption-sm font-medium text-blue-500">
-                                                    {channel.unreadCount}
-                                                </span>
-                                            )}
-                                        </button>
-                                        {subChannels.map((sub) => (
-                                            <SubChannelTab
-                                                key={sub.id}
-                                                sub={sub}
-                                                onClick={() => handleSubChannelChange(sub.name)}
-                                                className={cn(
-                                                    "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 py-[3px] text-sm transition-colors",
-                                                    selectedSubChannelName === sub.name
-                                                        ? "border-blue-500 text-blue-500"
-                                                        : "border-transparent text-text-1",
-                                                )}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
+                                <Tabs
+                                    activeKey={selectedSubChannelName || "all"}
+                                    onChange={handleSubChannelChange}
+                                    items={[
+                                        {
+                                            key: "all",
+                                            label: localize("com_subscription.all"),
+                                            badge: channel.unreadCount,
+                                        },
+                                        ...subChannels.map((sub) => ({
+                                            key: sub.name,
+                                            label: <TruncatedTabLabel name={sub.name} />,
+                                            badge: sub.unreadCount,
+                                        })),
+                                    ]}
+                                />
                             </div>
                         ) : null}
                     </div>
@@ -687,56 +603,28 @@ export function ArticleList({
                         the tab row when there are no sub-channels (a lone 全部 tab adds no value). */}
                     <div className="flex flex-row items-center justify-between gap-3">
                         {subChannels.length > 0 && (
-                        <div className="relative min-w-0 flex-1">
-                            {tabsScrollShadow.left ? (
-                                <div
-                                    className="pointer-events-none absolute inset-y-0 left-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0.15)_0%,rgba(153,153,153,0)_100%)]"
-                                    aria-hidden
-                                />
-                            ) : null}
-                            {tabsScrollShadow.right ? (
-                                <div
-                                    className="pointer-events-none absolute inset-y-0 right-0 z-[1] w-2 bg-[linear-gradient(90deg,rgba(153,153,153,0)_0%,rgba(153,153,153,0.15)_100%)]"
-                                    aria-hidden
-                                />
-                            ) : null}
-                            <div
-                                ref={tabsScrollRef}
-                                onScroll={updateTabsScrollShadow}
-                                className="flex min-w-0 items-center gap-6 overflow-x-auto no-scrollbar"
-                            >
-                                <button
-                                    type="button"
-                                    onClick={() => handleSubChannelChange("all")}
-                                    className={cn(
-                                        "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 py-[5px] text-sm transition-colors",
-                                        !selectedSubChannelName
-                                            ? "border-blue-500 text-blue-500"
-                                            : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
-                                    )}
-                                >
-                                    <span>{localize("com_subscription.all")}</span>
-                                    {channel.unreadCount > 0 && (
-                                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-md bg-[rgb(var(--brand-500)/0.05)] px-1 text-caption-sm font-medium text-blue-500">
-                                            {channel.unreadCount}
-                                        </span>
-                                    )}
-                                </button>
-                                {subChannels.map(sub => (
-                                    <SubChannelTab
-                                        key={sub.id}
-                                        sub={sub}
-                                        onClick={() => handleSubChannelChange(sub.name)}
-                                        className={cn(
-                                            "flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 py-[5px] text-sm transition-colors",
-                                            selectedSubChannelName === sub.name
-                                                ? "border-blue-500 text-blue-500"
-                                                : "border-transparent text-text-1 fine-pointer:hover:text-blue-500",
-                                        )}
-                                    />
-                                ))}
-                            </div>
-                        </div>
+                            // Controlled @bisheng/ui Tabs used as a bare tab strip (no children —
+                            // the article list below is the content area). Overflow scroll +
+                            // edge fades and the count badges are built into the component.
+                            // divider off: this header row draws no full-width edge today.
+                            <Tabs
+                                className="min-w-0 flex-1"
+                                divider={false}
+                                activeKey={selectedSubChannelName || "all"}
+                                onChange={handleSubChannelChange}
+                                items={[
+                                    {
+                                        key: "all",
+                                        label: localize("com_subscription.all"),
+                                        badge: channel.unreadCount,
+                                    },
+                                    ...subChannels.map((sub) => ({
+                                        key: sub.name,
+                                        label: <TruncatedTabLabel name={sub.name} />,
+                                        badge: sub.unreadCount,
+                                    })),
+                                ]}
+                            />
                         )}
 
                         {/* ml-auto keeps the toolbar right-aligned even when the tab row is hidden.

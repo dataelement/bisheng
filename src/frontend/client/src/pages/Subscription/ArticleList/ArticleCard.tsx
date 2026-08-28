@@ -199,8 +199,8 @@ export function ArticleCard({
     const sensitiveViolated = article.sensitiveReview?.violated === true;
     const canViewArticle = article.sensitiveReview?.can_view !== false;
 
-    // Library icon button (default × text × medium, circle) with the card's own
-    // tint (text-3, whole-card hover → text-1) and the H5 compact bare-icon look.
+    // Library icon button (default × text × small) with the card's own tint
+    // (text-3, whole-card hover → text-1) and the H5 compact bare-icon look.
     const cardActionBtnClassName =
         "text-text-3 group-hover:text-text-1 max-[767px]:h-5 max-[767px]:w-5 max-[767px]:rounded-none max-[767px]:text-text-3 max-[767px]:hover:bg-transparent max-[767px]:[&_svg]:size-3.5";
 
@@ -255,7 +255,7 @@ export function ArticleCard({
                                                 <Button
                                                     color="default"
                                                     variant="text"
-                                                    size="medium"
+                                                    size="small"
                                                     iconOnly
                                                     aria-label={localize("com_subscription.add_to_knowledge_space")}
                                                     onClick={(e) => { e.stopPropagation(); setShowKnowledgeModal(true); }}
@@ -272,7 +272,7 @@ export function ArticleCard({
                                             <Button
                                                 color="default"
                                                 variant="text"
-                                                size="medium"
+                                                size="small"
                                                 iconOnly
                                                 aria-label={localize("com_subscription.share")}
                                                 onClick={(e) => {
